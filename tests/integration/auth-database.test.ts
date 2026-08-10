@@ -48,8 +48,6 @@ describe('Auth & Authorization Database Integration', () => {
   }, 30000);
 
   afterAll(async () => {
-    // Restore dev users for subsequent tests
-    await seedDatabase();
     await closeDbPool();
   });
 

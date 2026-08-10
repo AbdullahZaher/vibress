@@ -3,6 +3,7 @@ import { buildApp } from '../main';
 import { FastifyInstance } from 'fastify';
 import { getDb } from '@vibress/database';
 import { eq } from 'drizzle-orm';
+import crypto from 'node:crypto';
 import { hashPassword } from '@vibress/security';
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -18,8 +19,8 @@ async function ensureOwner(): Promise<void> {
   const rows = await db.select().from(users).where(eq(users.email, 'owner@example.com')).limit(1);
   if (rows.length > 0) return;
   const hash = await hashPassword('OwnerPass123!');
-  const ownerId = `owner-${Date.now()}`;
-  await db.insert(users).values({ id: ownerId, email: 'owner@example.com', name: 'Owner', slug: 'e2e-owner', passwordHash: hash, status: 'active' });
+  const ownerId = crypto.randomUUID();
+  await db.insert(users).values({ id: ownerId, email: 'owner@example.com', name: 'Owner', slug: 'e2e-owner', passwordHash: hash, status: 'active' }).onConflictDoNothing();
   const ownerRole = await db.select({ id: roles.id }).from(roles).where(eq(roles.key, 'owner')).limit(1);
   if (ownerRole[0]) await db.insert(userRoles).values({ userId: ownerId, roleId: ownerRole[0].id });
 }
@@ -33,7 +34,7 @@ async function seedIndexedPost(): Promise<string> {
   const existing = await db.select().from(posts).where(eq(posts.slug, 'intelligence-search-post')).limit(1);
   if (existing[0]) return existing[0].id;
   const [row] = await db.insert(posts).values({
-    id: `post-intel-${Date.now()}`,
+    id: crypto.randomUUID(),
     title: 'Intelligence Search Post',
     slug: 'intelligence-search-post',
     content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },
@@ -66,7 +67,7 @@ async function seedRestrictedPost(): Promise<string> {
   const ownerId = ownerRows[0]?.id || 'unknown';
   const { posts } = await import('@vibress/database');
   const [row] = await db.insert(posts).values({
-    id: `post-restricted-${Date.now()}`,
+    id: crypto.randomUUID(),
     title: 'Members Only Secret Content',
     slug: `members-only-${Date.now()}`,
     content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },

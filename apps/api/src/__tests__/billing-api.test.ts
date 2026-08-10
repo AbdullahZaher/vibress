@@ -41,6 +41,7 @@ import {
 import Stripe from 'stripe';
 import { getDb, users, userRoles, roles } from '@vibress/database';
 import { eq } from 'drizzle-orm';
+import crypto from 'node:crypto';
 import { hashPassword } from '@vibress/security';
 
 async function ensureOwner(): Promise<void> {
@@ -50,7 +51,7 @@ async function ensureOwner(): Promise<void> {
   const rows = await db.select().from(users).where(eq(users.email, 'owner@example.com')).limit(1);
   if (rows.length > 0) return;
   const hash = await hashPassword('OwnerPass123!');
-  const ownerId = `owner-${Date.now()}`;
+  const ownerId = crypto.randomUUID();
   await db.insert(users).values({
     id: ownerId,
     email: 'owner@example.com',
@@ -58,7 +59,7 @@ async function ensureOwner(): Promise<void> {
     slug: 'e2e-owner',
     passwordHash: hash,
     status: 'active',
-  });
+  }).onConflictDoNothing();
   // Grant the owner role if present
   const ownerRole = await db.select({ id: roles.id }).from(roles).where(eq(roles.key, 'owner')).limit(1);
   if (ownerRole[0]) {
