@@ -1,0 +1,32 @@
+{
+  "name": "@vibress/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p ${WEB_PORT:-7778}",
+    "build": "NX_WORKSPACE_ROOT= next build",
+    "start": "next start -p ${WEB_PORT:-7778}",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/api-contracts": "workspace:*",
+    "@vibress/theme-core": "workspace:*",
+    "@vibress/themes-registry": "workspace:*",
+    "next": "^15.5.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.11",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "eslint-config-next": "^15.5.23",
+    "typescript": "^5.5.3"
+  },
+  "nx": {
+    "tags": [
+      "type:app"
+    ]
+  }
+}

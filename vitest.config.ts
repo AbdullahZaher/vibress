@@ -1,0 +1,48 @@
+import { defineConfig } from 'vitest/config';
+import path from 'path';
+
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    fileParallelism: false,
+    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', 'references/**', '**/references/**', 'tests/e2e/**'],
+  },
+  resolve: {
+    alias: {
+      '@vibress/database': path.resolve(__dirname, './packages/database/src/index.ts'),
+      '@vibress/security': path.resolve(__dirname, './packages/security/src/index.ts'),
+      '@vibress/utils': path.resolve(__dirname, './packages/utils/src/index.ts'),
+      '@vibress/users': path.resolve(__dirname, './packages/domains/users/src/index.ts'),
+      '@vibress/roles': path.resolve(__dirname, './packages/domains/roles/src/index.ts'),
+      '@vibress/permissions': path.resolve(__dirname, './packages/domains/permissions/src/index.ts'),
+      '@vibress/audit': path.resolve(__dirname, './packages/domains/audit/src/index.ts'),
+      '@vibress/auth': path.resolve(__dirname, './packages/domains/auth/src/index.ts'),
+      '@vibress/tags': path.resolve(__dirname, './packages/domains/tags/src/index.ts'),
+      '@vibress/authors': path.resolve(__dirname, './packages/domains/authors/src/index.ts'),
+      '@vibress/revisions': path.resolve(__dirname, './packages/domains/revisions/src/index.ts'),
+      '@vibress/posts': path.resolve(__dirname, './packages/domains/posts/src/index.ts'),
+      '@vibress/pages': path.resolve(__dirname, './packages/domains/pages/src/index.ts'),
+      '@vibress/api-contracts': path.resolve(__dirname, './packages/api-contracts/src/index.ts'),
+      '@vibress/events': path.resolve(__dirname, './packages/events/src/index.ts'),
+      '@vibress/storage-core': path.resolve(__dirname, './packages/storage-core/src/index.ts'),
+      '@vibress/storage-domain': path.resolve(__dirname, './packages/domains/storage/src/index.ts'),
+      '@vibress/storage-s3': path.resolve(__dirname, '../vibress-plugins/storage/s3/src/index.ts'),
+      '@vibress/media': path.resolve(__dirname, './packages/domains/media/src/index.ts'),
+      '@vibress/studio-core': path.resolve(__dirname, '../vibress-studio/packages/studio-core/src/index.ts'),
+      '@vibress/studio-utils': path.resolve(__dirname, '../vibress-studio/packages/studio-utils/src/index.ts'),
+      '@vibress/studio-nodes': path.resolve(__dirname, '../vibress-studio/packages/studio-nodes/src/index.ts'),
+      '@vibress/studio-transforms': path.resolve(__dirname, '../vibress-studio/packages/studio-transforms/src/index.ts'),
+      '@vibress/studio-cards': path.resolve(__dirname, '../vibress-studio/packages/studio-cards/src/index.ts'),
+      '@vibress/studio-serializer': path.resolve(__dirname, '../vibress-studio/packages/studio-serializer/src/index.ts'),
+      '@vibress/studio-renderer': path.resolve(__dirname, '../vibress-studio/packages/studio-renderer/src/index.ts'),
+      '@vibress/studio-html': path.resolve(__dirname, '../vibress-studio/packages/studio-html/src/index.ts'),
+      '@vibress/studio-markdown': path.resolve(__dirname, '../vibress-studio/packages/studio-markdown/src/index.ts'),
+      '@vibress/studio-plugin-sdk': path.resolve(__dirname, '../vibress-studio/packages/studio-plugin-sdk/src/index.ts'),
+      '@vibress/studio-react': path.resolve(__dirname, '../vibress-studio/packages/studio-react/src/index.ts'),
+      '@vibress/theme-core': path.resolve(__dirname, './packages/theme-core/src/index.ts'),
+      '@vibress/themes-registry': path.resolve(__dirname, './packages/themes-registry/src/index.ts'),
+      '@vibress/themes': path.resolve(__dirname, './packages/domains/themes/src/index.ts'),
+    },
+  },
+});

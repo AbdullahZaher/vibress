@@ -1,0 +1,47 @@
+{
+  "name": "@vibress/worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/audit": "workspace:*",
+    "@vibress/authors": "workspace:*",
+    "@vibress/cache": "workspace:*",
+    "@vibress/config": "workspace:*",
+    "@vibress/database": "workspace:*",
+    "@vibress/pages": "workspace:*",
+    "@vibress/posts": "workspace:*",
+    "@vibress/queue": "workspace:*",
+    "@vibress/revisions": "workspace:*",
+    "bullmq": "^5.7.8",
+    "ioredis": "^5.4.1",
+    "@vibress/newsletters": "workspace:*",
+    "@vibress/email": "workspace:*",
+    "@vibress/members": "workspace:*",
+    "@vibress/subscriptions": "workspace:*",
+    "@vibress/webhooks": "workspace:*",
+    "@vibress/analytics": "workspace:*",
+    "@vibress/search": "workspace:*",
+    "@vibress/automations": "workspace:*",
+    "@vibress/security": "workspace:*",
+    "@vibress/tags": "workspace:*",
+    "@vibress/studio-renderer": "file:../../../vibress-studio/packages/studio-renderer"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.9.3",
+    "typescript": "^5.5.3",
+    "@types/react": "^18.3.3"
+  },
+  "nx": {
+    "tags": [
+      "type:app"
+    ]
+  }
+}

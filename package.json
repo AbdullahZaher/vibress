@@ -1,0 +1,56 @@
+{
+  "name": "vibress-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "nx run-many --target=dev --all --parallel=5",
+    "dev:infra": "docker-compose -f compose.dev.yml up -d",
+    "dev:infra:down": "docker-compose -f compose.dev.yml down",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "nx run-many --target=typecheck --all",
+    "test": "pnpm -r test",
+    "test:unit": "nx run-many --target=test:unit --all",
+    "test:integration": "nx run-many --target=test:integration --all",
+    "test:e2e": "nx run-many --target=test:e2e --all",
+    "db:generate": "pnpm --filter @vibress/database run db:generate",
+    "db:migrate": "pnpm --filter @vibress/database run db:migrate",
+    "db:seed": "pnpm --filter @vibress/database run db:seed",
+    "bootstrap:owner": "tsx scripts/bootstrap-owner.ts",
+    "owner:create": "tsx scripts/bootstrap-owner.ts",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,html,css}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@nx/eslint-plugin": "^23.1.1",
+    "@playwright/test": "^1.62.1",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^26.1.2",
+    "autocannon": "^8.0.0",
+    "eslint": "^10.8.0",
+    "jsdom": "^24.1.0",
+    "nx": "^23.1.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.9",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "approvedBuilds": [
+      "esbuild@0.21.5",
+      "esbuild@0.28.1",
+      "msgpackr-extract@3.0.4",
+      "nx@23.1.1"
+    ],
+    "overrides": {
+      "typescript": "~5.5.3"
+    }
+  },
+  "resolutions": {
+    "typescript": "~5.5.3"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

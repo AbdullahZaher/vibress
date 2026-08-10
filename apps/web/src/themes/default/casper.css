@@ -1,0 +1,603 @@
+/* ==========================================================================
+   VIBRESS DEFAULT THEME - Reference Design Match (Vibress Casper Overhaul)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --vb-accent-color: #ff2865;
+  --brand-pink: #ff2865;
+  --brand-pink-hover: #e01f53;
+  --brand-pink-light: rgba(255, 40, 101, 0.1);
+  
+  --bg-base: #fdfdfd;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f8fafc;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  
+  --border-hairline: rgba(15, 23, 42, 0.08);
+  --border-subtle: #e2e8f0;
+  
+  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --radius-full: 9999px;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+/* Layout Core */
+.viewport {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.outer {
+  width: 100%;
+  padding-left: clamp(1.25rem, 5vw, 3rem);
+  padding-right: clamp(1.25rem, 5vw, 3rem);
+}
+
+.inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ==========================================================================
+   Header Navigation (Top Bar)
+   ========================================================================== */
+.vb-head {
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-hairline);
+  padding-top: 1.15rem;
+  padding-bottom: 1.15rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.vb-head-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.vb-head-menu-left .nav {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vb-head-menu-left .nav a:hover {
+  color: var(--text-primary);
+}
+
+.vb-head-brand {
+  text-align: center;
+}
+
+.vb-head-logo {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.vb-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.25rem;
+}
+
+.vb-search-btn {
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.vb-search-btn:hover {
+  color: var(--text-primary);
+}
+
+.vb-head-signin {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vb-head-signin:hover {
+  color: var(--text-primary);
+}
+
+.vb-head-subscribe-btn {
+  background-color: var(--brand-pink);
+  color: #ffffff;
+  border: none;
+  padding: 0.55rem 1.35rem;
+  border-radius: var(--radius-full);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(255, 40, 101, 0.3);
+  transition: all 0.2s ease;
+}
+
+.vb-head-subscribe-btn:hover {
+  background-color: var(--brand-pink-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(255, 40, 101, 0.4);
+}
+
+/* ==========================================================================
+   Full-Bleed Hero Gradient Banner
+   ========================================================================== */
+.site-header-gradient {
+  background: linear-gradient(120deg, #1b1664 0%, #4a1362 45%, #9b1a5d 100%);
+  color: #ffffff;
+  padding-top: clamp(4rem, 8vw, 6rem);
+  padding-bottom: clamp(4rem, 8vw, 6rem);
+  text-align: center;
+}
+
+.site-header-gradient-title {
+  font-size: clamp(2.25rem, 5vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin: 0 0 2.25rem 0;
+  color: #ffffff;
+}
+
+/* Inline Email Form (Pill) */
+.inline-subscribe-form {
+  width: 100%;
+}
+
+.inline-subscribe-pill {
+  max-width: 480px;
+  margin: 0 auto;
+  background-color: #ffffff;
+  border-radius: var(--radius-full);
+  padding: 5px 5px 5px 22px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.inline-subscribe-pill input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: #0f172a;
+  background: transparent;
+}
+
+.inline-subscribe-pill input::placeholder {
+  color: #94a3b8;
+}
+
+.inline-subscribe-submit {
+  background-color: var(--brand-pink);
+  color: #ffffff;
+  border: none;
+  padding: 0.7rem 1.6rem;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.inline-subscribe-submit:hover {
+  background-color: var(--brand-pink-hover);
+}
+
+/* Footer Variant of Email Form */
+.inline-subscribe-form.is-footer .inline-subscribe-pill {
+  background-color: #f1f5f9;
+  box-shadow: none;
+  border: 1px solid var(--border-subtle);
+}
+
+/* ==========================================================================
+   Main Content Feed (Horizontal Cards)
+   ========================================================================== */
+.site-main {
+  flex-grow: 1;
+  padding-top: 3.5rem;
+  padding-bottom: 5rem;
+}
+
+.feed-section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.feed-section-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--border-hairline);
+}
+
+.post-feed-horizontal {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  max-width: 820px;
+}
+
+.post-card-horizontal {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  text-decoration: none;
+}
+
+.post-card-horizontal-image-link {
+  width: 280px;
+  height: 175px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #0f172a;
+}
+
+.post-card-horizontal-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.post-card-horizontal:hover .post-card-horizontal-image {
+  transform: scale(1.04);
+}
+
+.post-card-horizontal-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.post-card-horizontal-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  transition: color 0.2s ease;
+}
+
+.post-card-horizontal:hover .post-card-horizontal-title {
+  color: var(--text-secondary);
+}
+
+.post-card-horizontal-excerpt {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 0.85rem 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.post-card-horizontal-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Footer Newsletter Section & Social Links
+   ========================================================================== */
+.site-footer-newsletter {
+  padding-top: 5rem;
+  padding-bottom: 4rem;
+  text-align: center;
+}
+
+.footer-newsletter-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem 0;
+}
+
+.footer-newsletter-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin: 0 0 2rem 0;
+}
+
+.footer-social-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 2.5rem;
+}
+
+.footer-social-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  transition: transform 0.2s ease;
+}
+
+.footer-social-btn:hover {
+  transform: translateY(-2px);
+  color: var(--brand-pink);
+}
+
+/* Bottom Footer Bar */
+.site-footer-bottom {
+  border-top: 1px solid var(--border-hairline);
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.site-footer-bottom-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-footer-brand {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Subscribe Modal Backdrop & Dialog (Image 3 Match)
+   ========================================================================== */
+.subscribe-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: modalFadeIn 0.25s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.subscribe-modal-container {
+  background-color: #ffffff;
+  width: 100%;
+  max-width: 440px;
+  border-radius: 16px;
+  padding: 2.5rem 2rem 2.25rem 2rem;
+  position: relative;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: modalSlideUp 0.25s ease-out;
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.subscribe-modal-close {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  background: none;
+  border: none;
+  color: #f43f5e;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.subscribe-modal-close:hover {
+  transform: scale(1.1);
+}
+
+.subscribe-modal-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-align: center;
+  margin: 0 0 1.75rem 0;
+  color: #0f172a;
+}
+
+.subscribe-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.subscribe-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.subscribe-modal-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.subscribe-modal-field input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 0.85rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.subscribe-modal-field input:focus {
+  border-color: var(--brand-pink);
+}
+
+.subscribe-modal-submit {
+  width: 100%;
+  height: 48px;
+  background-color: var(--brand-pink);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: background-color 0.2s ease;
+}
+
+.subscribe-modal-submit:hover {
+  background-color: var(--brand-pink-hover);
+}
+
+.subscribe-modal-footer-text {
+  text-align: center;
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0.5rem 0 0 0;
+}
+
+.subscribe-modal-footer-text a {
+  color: var(--brand-pink);
+  font-weight: 600;
+}
+
+.subscribe-modal-success {
+  text-align: center;
+  padding: 1.5rem 0;
+  color: #0f172a;
+}
+
+/* Article View Styling */
+.article {
+  max-width: 820px;
+  margin: 0 auto;
+  padding-top: 3rem;
+  padding-bottom: 5rem;
+}
+
+.article-title {
+  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin: 0 0 1.25rem 0;
+}
+
+.article-excerpt {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 2rem;
+}
+
+.vb-content {
+  font-size: 1.15rem;
+  line-height: 1.8;
+}
+
+/* Responsive Rules */
+@media (max-width: 768px) {
+  .vb-head-inner {
+    grid-template-columns: auto 1fr;
+    row-gap: 1rem;
+  }
+  .vb-head-brand {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .vb-head-menu-left {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .vb-head-actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .post-card-horizontal {
+    flex-direction: column;
+  }
+  .post-card-horizontal-image-link {
+    width: 100%;
+    height: 220px;
+  }
+}

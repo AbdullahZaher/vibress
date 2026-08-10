@@ -1,0 +1,29 @@
+{
+  "name": "@vibress/storage-domain",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/audit": "workspace:*",
+    "@vibress/database": "workspace:*",
+    "@vibress/security": "workspace:*",
+    "@vibress/storage-core": "workspace:*",
+    "@vibress/storage-s3": "file:../../../../vibress-plugins/storage/s3",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3"
+  },
+  "nx": {
+    "tags": [
+      "type:domain"
+    ]
+  }
+}

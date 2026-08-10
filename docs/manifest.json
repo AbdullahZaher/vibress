@@ -1,0 +1,27 @@
+{
+  "project": "Vibress",
+  "architecture_version": "v1",
+  "format": "Markdown",
+  "document_count": 26,
+  "generated_sections": [
+    "01-architecture",
+    "02-apps",
+    "03-domains",
+    "04-data",
+    "05-platform",
+    "06-security",
+    "07-storage",
+    "08-plugins",
+    "09-studio",
+    "10-api",
+    "11-testing",
+    "12-infrastructure",
+    "13-roadmap",
+    "14-decisions",
+    "15-conventions",
+    "16-checklists"
+  ],
+  "decisions": [
+    "ADR-011-development-ports.md"
+  ]
+}

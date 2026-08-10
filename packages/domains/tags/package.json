@@ -1,0 +1,25 @@
+{
+  "name": "@vibress/tags",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/database": "workspace:*",
+    "@vibress/utils": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@types/node": "^20.14.10"
+  },
+  "nx": {
+    "tags": [
+      "type:domain"
+    ]
+  }
+}

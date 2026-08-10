@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+.nx/
+coverage/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+content/*
+!content/.gitkeep
+tmp/
+
+# Local third-party source references
+/references/
+
+# Runtime, logs, and backups
+*.backup
+*.dump
+postgres.dump
+playwright-report/
+test-results/
+.vite/
+logs/
+infrastructure/data/
+/tmp/vibress-*

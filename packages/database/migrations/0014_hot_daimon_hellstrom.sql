@@ -1,0 +1,1 @@
+CREATE INDEX "automations_status_trigger_idx" ON "automations" USING btree ("status","trigger_event");

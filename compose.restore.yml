@@ -1,0 +1,71 @@
+services:
+  postgres-restore:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    container_name: vibress-restore-postgres-1
+    environment:
+      POSTGRES_USER: vibress
+      POSTGRES_PASSWORD: vibress
+      POSTGRES_DB: vibress
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - restore_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibress -d vibress"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis-restore:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: vibress-restore-redis-1
+    ports:
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - restore_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-restore:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    container_name: vibress-restore-minio-1
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9010:9000"
+      - "127.0.0.1:9011:9001"
+    volumes:
+      - restore_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mailpit-restore:
+    image: axllent/mailpit:v1.26
+    restart: unless-stopped
+    container_name: vibress-restore-mailpit-1
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8025/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  restore_postgres_data:
+  restore_redis_data:
+  restore_minio_data:
