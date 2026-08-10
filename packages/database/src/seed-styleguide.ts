@@ -11,7 +11,7 @@ export const seedStyleGuide = async () => {
     console.error('No admin user found. Seed the db first.');
     return;
   }
-  const adminId = adminUsers[0].id;
+  const adminId = adminUsers[0]!.id;
   
   // delete existing if any
   await db.delete(pages).where(eq(pages.slug, 'style-guide'));
