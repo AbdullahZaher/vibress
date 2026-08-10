@@ -14,7 +14,7 @@
     "@vibress/events": "workspace:*",
     "@vibress/members": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "@vibress/studio-renderer": "file:../../../../vibress-studio/packages/studio-renderer",
+    "@vibress/studio-renderer": "workspace:*",
     "@vibress/subscriptions": "workspace:*"
   },
   "devDependencies": {

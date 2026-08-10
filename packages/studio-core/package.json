@@ -1,0 +1,23 @@
+{
+  "name": "@vibress/studio-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lexical/rich-text": "0.13.1",
+    "@lexical/selection": "0.13.1",
+    "@lexical/utils": "0.13.1",
+    "@vibress/studio-utils": "workspace:*",
+    "lexical": "0.13.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7"
+  }
+}

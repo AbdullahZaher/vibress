@@ -1,0 +1,22 @@
+{
+  "name": "@vibress/studio-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/studio-cards": "workspace:*",
+    "@vibress/studio-core": "workspace:*",
+    "@vibress/studio-nodes": "workspace:*",
+    "@vibress/studio-serializer": "workspace:*",
+    "@vibress/studio-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7"
+  }
+}

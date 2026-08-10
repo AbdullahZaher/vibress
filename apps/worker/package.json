@@ -31,7 +31,7 @@
     "@vibress/automations": "workspace:*",
     "@vibress/security": "workspace:*",
     "@vibress/tags": "workspace:*",
-    "@vibress/studio-renderer": "file:../../../vibress-studio/packages/studio-renderer"
+    "@vibress/studio-renderer": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
