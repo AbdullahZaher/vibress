@@ -37,7 +37,7 @@
     "@vibress/security": "workspace:*",
     "@vibress/storage-core": "workspace:*",
     "@vibress/storage-domain": "workspace:*",
-    "@vibress/storage-s3": "file:../../../vibress-plugins/storage/s3",
+    "@vibress/storage-s3": "workspace:*",
     "@vibress/studio-renderer": "workspace:*",
     "@vibress/tags": "workspace:*",
     "@vibress/theme-core": "workspace:*",

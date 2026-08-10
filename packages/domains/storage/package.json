@@ -14,7 +14,7 @@
     "@vibress/database": "workspace:*",
     "@vibress/security": "workspace:*",
     "@vibress/storage-core": "workspace:*",
-    "@vibress/storage-s3": "file:../../../../vibress-plugins/storage/s3",
+    "@vibress/storage-s3": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

@@ -27,7 +27,7 @@ export default defineConfig({
       '@vibress/events': path.resolve(__dirname, './packages/events/src/index.ts'),
       '@vibress/storage-core': path.resolve(__dirname, './packages/storage-core/src/index.ts'),
       '@vibress/storage-domain': path.resolve(__dirname, './packages/domains/storage/src/index.ts'),
-      '@vibress/storage-s3': path.resolve(__dirname, '../vibress-plugins/storage/s3/src/index.ts'),
+      '@vibress/storage-s3': path.resolve(__dirname, './packages/storage-s3/src/index.ts'),
       '@vibress/media': path.resolve(__dirname, './packages/domains/media/src/index.ts'),
       '@vibress/studio-core': path.resolve(__dirname, './packages/studio-core/src/index.ts'),
       '@vibress/studio-utils': path.resolve(__dirname, './packages/studio-utils/src/index.ts'),
