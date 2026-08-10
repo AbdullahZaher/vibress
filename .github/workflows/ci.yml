@@ -45,7 +45,7 @@ jobs:
         run: docker compose -f compose.dev.yml up -d --wait
 
       - name: Test
-        run: pnpm vitest run
+        run: pnpm vitest run --no-file-parallelism
 
       - name: Build
         run: pnpm build

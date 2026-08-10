@@ -79,7 +79,11 @@ export const SYSTEM_PERMISSIONS = [
   { key: 'system.manage', description: 'Run maintenance operations' },
 ];
 
-export const seedDatabase = async (): Promise<void> => {
+export interface SeedOptions {
+  skipDevUsers?: boolean;
+}
+
+export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
   const db = getDb();
   const now = new Date();
 
@@ -166,45 +170,47 @@ export const seedDatabase = async (): Promise<void> => {
   }
 
   // Seed default dev users idempotently
-  console.log('Seeding default dev staff users...');
-  const ownerRole = ownerRoleRows[0];
-  const adminRole = adminRoleRows[0];
-  const editorRole = editorRoleRows[0];
-  const authorRole = authorRoleRows[0];
+  if (!options?.skipDevUsers) {
+    console.log('Seeding default dev staff users...');
+    const ownerRole = ownerRoleRows[0];
+    const adminRole = adminRoleRows[0];
+    const editorRole = editorRoleRows[0];
+    const authorRole = authorRoleRows[0];
 
-  if (ownerRole) {
-    const devPassHash = await hashPassword('DevPassword123!');
-    const ownerPassHash = await hashPassword('OwnerPass123!');
+    if (ownerRole) {
+      const devPassHash = await hashPassword('DevPassword123!');
+      const ownerPassHash = await hashPassword('OwnerPass123!');
 
-    const devUsers = [
-      { email: 'owner@vibress.local', name: 'Owner', slug: 'owner-local', roleId: ownerRole.id, hash: devPassHash },
-      { email: 'owner@example.com', name: 'Owner', slug: 'owner-example', roleId: ownerRole.id, hash: ownerPassHash },
-      { email: 'admin@vibress.local', name: 'Admin', slug: 'admin-local', roleId: adminRole?.id || ownerRole.id, hash: devPassHash },
-      { email: 'admin@example.com', name: 'Admin', slug: 'admin-example', roleId: adminRole?.id || ownerRole.id, hash: devPassHash },
-      { email: 'editor@vibress.local', name: 'Editor', slug: 'editor-local', roleId: editorRole?.id || ownerRole.id, hash: devPassHash },
-      { email: 'author@vibress.local', name: 'Author', slug: 'author-local', roleId: authorRole?.id || ownerRole.id, hash: devPassHash },
-    ];
+      const devUsers = [
+        { email: 'owner@vibress.local', name: 'Owner', slug: 'owner-local', roleId: ownerRole.id, hash: devPassHash },
+        { email: 'owner@example.com', name: 'Owner', slug: 'owner-example', roleId: ownerRole.id, hash: ownerPassHash },
+        { email: 'admin@vibress.local', name: 'Admin', slug: 'admin-local', roleId: adminRole?.id || ownerRole.id, hash: devPassHash },
+        { email: 'admin@example.com', name: 'Admin', slug: 'admin-example', roleId: adminRole?.id || ownerRole.id, hash: devPassHash },
+        { email: 'editor@vibress.local', name: 'Editor', slug: 'editor-local', roleId: editorRole?.id || ownerRole.id, hash: devPassHash },
+        { email: 'author@vibress.local', name: 'Author', slug: 'author-local', roleId: authorRole?.id || ownerRole.id, hash: devPassHash },
+      ];
 
-    for (const devUser of devUsers) {
-      const existingUser = await db.select().from(users).where(eq(users.email, devUser.email)).limit(1);
-      let userId: string;
-      if (existingUser.length === 0) {
-        userId = crypto.randomUUID();
-        await db.insert(users).values({
-          id: userId,
-          email: devUser.email,
-          name: devUser.name,
-          slug: devUser.slug,
-          passwordHash: devUser.hash,
-          status: 'active',
-          createdAt: now,
-          updatedAt: now,
-        });
-        await db.insert(userRoles).values({
-          userId,
-          roleId: devUser.roleId,
-          createdAt: now,
-        }).onConflictDoNothing();
+      for (const devUser of devUsers) {
+        const existingUser = await db.select().from(users).where(eq(users.email, devUser.email)).limit(1);
+        let userId: string;
+        if (existingUser.length === 0) {
+          userId = crypto.randomUUID();
+          await db.insert(users).values({
+            id: userId,
+            email: devUser.email,
+            name: devUser.name,
+            slug: devUser.slug,
+            passwordHash: devUser.hash,
+            status: 'active',
+            createdAt: now,
+            updatedAt: now,
+          });
+          await db.insert(userRoles).values({
+            userId,
+            roleId: devUser.roleId,
+            createdAt: now,
+          }).onConflictDoNothing();
+        }
       }
     }
   }

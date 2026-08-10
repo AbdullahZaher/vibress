@@ -592,12 +592,20 @@ describe('Batch 9 — Billing Integration & Security', () => {
     const found = await subRepo.findByProviderSubscriptionId('stripe', `sub_run_${runSuffix}`);
     // Apply a newer event (cancelled at period end, current time)
     const newerTimestamp = Math.floor(Date.now() / 1000);
-    const { payload: p1 } = signedPayload('customer.subscription.updated', {
+    const { payload: p1, header: h1 } = signedPayload('customer.subscription.updated', {
       id: `sub_run_${runSuffix}`,
       status: 'active',
       cancel_at_period_end: true,
       current_period_start: newerTimestamp,
     });
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/api/webhooks/v1/billing/stripe',
+      headers: { 'content-type': 'application/json', 'stripe-signature': h1 },
+      payload: p1,
+    });
+    expect(res1.statusCode).toBe(200);
+
     // Older event with old timestamp arrives late — signature over identical payload
     const oldPayload = JSON.stringify({
       id: `evt_old_${Date.now()}`,

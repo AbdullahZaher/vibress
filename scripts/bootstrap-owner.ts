@@ -57,7 +57,7 @@ export async function bootstrapOwner(options?: {
   password?: string;
 }): Promise<void> {
   console.log('Ensuring database roles and permissions are seeded...');
-  await seedDatabase();
+  await seedDatabase({ skipDevUsers: true });
 
   const userRepo = new DrizzleUserRepository();
   const roleRepo = new DrizzleRoleRepository();

@@ -5,7 +5,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    globalSetup: './tests/global-setup.ts',
     fileParallelism: false,
+    poolOptions: {
+      threads: { singleThread: true },
+      forks: { singleFork: true }
+    },
     exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', 'references/**', '**/references/**', 'tests/e2e/**'],
   },
   resolve: {

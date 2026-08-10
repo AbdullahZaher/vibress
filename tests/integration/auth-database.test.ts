@@ -32,7 +32,7 @@ describe('Auth & Authorization Database Integration', () => {
     `);
 
     // Seed database
-    await seedDatabase();
+    await seedDatabase({ skipDevUsers: true });
 
     userRepo = new DrizzleUserRepository();
     roleRepo = new DrizzleRoleRepository();
@@ -48,6 +48,8 @@ describe('Auth & Authorization Database Integration', () => {
   }, 30000);
 
   afterAll(async () => {
+    // Restore dev users for subsequent tests
+    await seedDatabase();
     await closeDbPool();
   });
 
@@ -62,7 +64,7 @@ describe('Auth & Authorization Database Integration', () => {
     expect(permsList.map(p => p.key)).toContain('roles.read');
 
     // Run seed again to verify idempotency
-    await seedDatabase();
+    await seedDatabase({ skipDevUsers: true });
     const rolesList2 = await rolesService.listAll();
     expect(rolesList2.length).toBe(rolesList.length);
   });
