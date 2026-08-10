@@ -41,6 +41,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Start infrastructure
+        run: docker compose -f compose.dev.yml up -d --wait
+
       - name: Test
         run: pnpm vitest run
 
