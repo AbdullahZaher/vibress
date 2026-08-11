@@ -1,6 +1,4 @@
-import { Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
-import { EMAIL_QUEUE_NAME, EmailDeliveryJob } from '../queues/email-queue';
+import { Worker, Job, QUEUE_NAMES, EmailDeliveryJob, getBullMqRedisConnection } from '@vibress/queue';
 import {
   DrizzleEmailRecipientRepository,
   DrizzleEmailEventRepository,
@@ -14,6 +12,7 @@ import {
   NewslettersService,
   MemberAudienceRepository,
 } from '@vibress/newsletters';
+import { getConfig } from '@vibress/config';
 
 const BATCH_SIZE = 25;
 const MAX_ATTEMPTS_PER_RECIPIENT = 3;
@@ -25,14 +24,17 @@ class NoopAudienceRepository implements MemberAudienceRepository {
 }
 
 function getSmtpProvider(): SmtpEmailProvider {
+  const { smtp } = getConfig();
   return new SmtpEmailProvider({
-    host: process.env.SMTP_HOST || '127.0.0.1',
-    port: parseInt(process.env.SMTP_PORT || '1025', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || null,
-    pass: process.env.SMTP_PASS || null,
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    user: smtp.user,
+    pass: smtp.pass,
   });
 }
+
+const appConfig = getConfig();
 
 export class EmailDeliveryWorker {
   private worker: Worker<EmailDeliveryJob> | null = null;
@@ -46,14 +48,14 @@ export class EmailDeliveryWorker {
     sendRepo: this.sendRepo,
     audienceRepo: new NoopAudienceRepository(),
     isMemberSuppressed: (email) => this.suppressionRepo.isSuppressed(email),
-    unsubscribeSecret: process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || 'dev-unsub-secret',
-    portalUrl: process.env.PORTAL_URL || process.env.SITE_URL || 'http://localhost:7777',
+    unsubscribeSecret: appConfig.newsletters.unsubscribeSecret || 'dev-unsub-secret',
+    portalUrl: appConfig.site.portalUrl,
   });
   private provider = getSmtpProvider();
 
   async start(): Promise<void> {
     this.worker = new Worker<EmailDeliveryJob>(
-      EMAIL_QUEUE_NAME,
+      QUEUE_NAMES.EMAIL_DELIVERY,
       async (job) => this.processJob(job),
       {
         connection: getBullMqRedisConnection(),

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { t } from '../../../lib/i18n';
 
 interface InlineSubscribeFormProps {
   buttonText?: string;
@@ -9,8 +10,8 @@ interface InlineSubscribeFormProps {
 }
 
 export function InlineSubscribeForm({
-  buttonText = 'Subscribe',
-  placeholder = 'jamie@example.com',
+  buttonText = t('subscribe.button'),
+  placeholder = t('modal.emailPlaceholder'),
   variant = 'hero',
 }: InlineSubscribeFormProps) {
   const [email, setEmail] = useState('');
@@ -36,10 +37,10 @@ export function InlineSubscribeForm({
           placeholder={placeholder}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          aria-label="Email address"
+          aria-label={t('subscribe.emailLabel')}
         />
         <button type="submit" className="inline-subscribe-submit">
-          {status === 'success' ? 'Subscribed!' : buttonText}
+          {status === 'success' ? t('subscribe.buttonSuccess') : buttonText}
         </button>
       </div>
     </form>

@@ -1,10 +1,12 @@
 import { ThemeTagArchiveProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
+import { t } from '../../../lib/i18n';
 
 export async function TagArchive(props: ThemeTagArchiveProps) {
   const { tag, posts, pagination } = props;
   const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
   const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
+  const dateLocale = props.site.locale || 'en';
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -16,7 +18,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
 
         {posts.length === 0 ? (
           <div style={{ padding: '32px 0', color: '#64748b' }}>
-            <p>No published posts under this tag.</p>
+            <p>{t('home.tagEmpty')}</p>
           </div>
         ) : (
           <div className="posts-list">
@@ -28,7 +30,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                 <div className="article-meta">
                   {showPublicationDate && (
                     <span>
-                      {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                      {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -37,7 +39,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                   )}
                   {showAuthor && post.primaryAuthor && (
                     <span>
-                      by{' '}
+                      {t('archive.by')}{' '}
                       <a href={`/authors/${post.primaryAuthor.slug}`}>
                         {post.primaryAuthor.name}
                       </a>
@@ -51,20 +53,20 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
         )}
 
         {pagination.pages > 1 && (
-          <nav className="pagination" aria-label="Pagination">
+          <nav className="pagination" aria-label={t('home.pageInfo', { page: pagination.page, pages: pagination.pages })}>
             {pagination.page > 1 ? (
               <a
                 href={`/tags/${tag.slug}?page=${pagination.page - 1}`}
                 className="pagination-btn"
               >
-                ← Previous
+                ← {t('archive.previous')}
               </a>
             ) : (
-              <span className="pagination-btn disabled">← Previous</span>
+              <span className="pagination-btn disabled">← {t('archive.previous')}</span>
             )}
 
             <span style={{ fontSize: '14px', color: '#64748b' }}>
-              Page {pagination.page} of {pagination.pages}
+              {t('home.pageInfo', { page: pagination.page, pages: pagination.pages })}
             </span>
 
             {pagination.page < pagination.pages ? (
@@ -72,10 +74,10 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                 href={`/tags/${tag.slug}?page=${pagination.page + 1}`}
                 className="pagination-btn"
               >
-                Next →
+                {t('archive.next')} →
               </a>
             ) : (
-              <span className="pagination-btn disabled">Next →</span>
+              <span className="pagination-btn disabled">{t('archive.next')} →</span>
             )}
           </nav>
         )}

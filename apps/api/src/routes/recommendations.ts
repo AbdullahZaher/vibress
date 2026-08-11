@@ -28,7 +28,7 @@ export async function publicRecommendationRoutes(fastify: FastifyInstance) {
     try {
       await recommendationsService.recordClick(id, null, sessionId);
       return reply.status(200).send({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof RecommendationDomainError) {
         return reply.status(404).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
       }
@@ -58,7 +58,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.createRecommendation(parsed.data, req.user!.id);
         return reply.status(201).send({ recommendation });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof RecommendationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -74,7 +74,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.updateRecommendation(id, parsed.data, req.user!.id);
         return reply.status(200).send({ recommendation });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof RecommendationDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'RECOMMENDATION_NOT_FOUND' ? 404 : 400);
         }
@@ -90,7 +90,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.archiveRecommendation(id, req.user!.id);
         return reply.status(200).send({ recommendation });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof RecommendationDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -139,7 +139,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.hideComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -153,7 +153,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.restoreComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -167,7 +167,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.adminDeleteComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }

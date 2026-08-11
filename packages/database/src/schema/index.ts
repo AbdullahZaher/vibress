@@ -22,3 +22,4 @@ export * from './community';
 export * from './platform';
 export * from './intelligence';
 export * from './operations';
+export * from './outbox-events';

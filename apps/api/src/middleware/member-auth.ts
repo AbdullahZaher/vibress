@@ -1,8 +1,9 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { memberAuthService } from '../services';
 import { Member } from '@vibress/members';
+import { getConfig } from '@vibress/config';
 
-export const MEMBER_COOKIE_NAME = process.env.MEMBER_SESSION_COOKIE_NAME || 'vibress_member_session';
+export const MEMBER_COOKIE_NAME = getConfig().cookies.memberSessionName;
 
 export function extractMemberSessionToken(req: FastifyRequest): string | null {
   if (req.cookies && req.cookies[MEMBER_COOKIE_NAME]) {
@@ -52,13 +53,7 @@ export async function validateMemberOrigin(req: FastifyRequest, reply: FastifyRe
   if (!tokenInCookie) return;
 
   const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-  const allowedOrigins = [
-    'http://localhost:7777',
-    'http://localhost:7781',
-    'http://127.0.0.1:7777',
-    'http://127.0.0.1:7781',
-    process.env.PORTAL_ORIGIN,
-  ].filter(Boolean);
+  const allowedOrigins = getConfig().cors.memberAllowedOrigins;
 
   if (!origin || !allowedOrigins.includes(origin)) {
     return reply.status(403).send({

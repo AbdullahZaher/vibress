@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { SubscribeModal } from './SubscribeModal';
+import { t } from '../../../lib/i18n';
 
 interface HeaderNavProps {
   siteTitle: string;
@@ -17,8 +18,8 @@ export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
         <div className="vb-head-inner inner">
           <nav className="vb-head-menu-left">
             <ul className="nav">
-              <li className="nav-home nav-current"><a href="/">Home</a></li>
-              <li className="nav-about"><a href="/about">About</a></li>
+              <li className="nav-home nav-current"><a href="/">{t('nav.home')}</a></li>
+              <li className="nav-about"><a href="/about">{t('nav.about')}</a></li>
             </ul>
           </nav>
 
@@ -32,7 +33,7 @@ export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
           </div>
 
           <div className="vb-head-actions">
-            <button className="vb-search-btn" aria-label="Search" title="Search">
+            <button type="button" className="vb-search-btn" aria-label={t('search.label')} title={t('search.label')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -40,14 +41,15 @@ export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
             </button>
 
             <a href="#/portal/signin" className="vb-head-signin">
-              Sign in
+              {t('nav.signin')}
             </a>
 
             <button
+              type="button"
               className="vb-head-subscribe-btn"
               onClick={() => setIsModalOpen(true)}
             >
-              Subscribe
+              {t('nav.subscribe')}
             </button>
           </div>
         </div>

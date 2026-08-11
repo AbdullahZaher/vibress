@@ -1,5 +1,5 @@
 import React from 'react';
-// import { ThemePost } from '@vibress/theme-core';
+import { t } from '../../../lib/i18n';
 
 interface PostCardProps {
   post: any;
@@ -58,7 +58,7 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
         </div>
 
         <footer className="post-footer">
-          <span className="post-more">Read more</span>
+          <span className="post-more">{t('post.readMore')}</span>
 
           <div className="post-author">
             {authors.map((author, i) => {

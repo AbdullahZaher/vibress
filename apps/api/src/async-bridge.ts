@@ -1,6 +1,5 @@
 import { domainEvents } from '@vibress/events';
-import { Queue } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { IngestEventData } from '@vibress/analytics';
 import { SearchDocumentInput } from '@vibress/search';
 import { DrizzlePostRepository } from '@vibress/posts';
@@ -9,9 +8,10 @@ import { DrizzleTagRepository } from '@vibress/tags';
 import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
 import { getSiteUrl } from './helpers/public-content-helpers';
 import { automationsService } from './services';
+import { getConfig } from '@vibress/config';
 
-const ANALYTICS_QUEUE = 'vibress-analytics';
-const SEARCH_QUEUE = 'vibress-search';
+const ANALYTICS_QUEUE = QUEUE_NAMES.ANALYTICS;
+const SEARCH_QUEUE = QUEUE_NAMES.SEARCH;
 
 interface AnalyticsQueueJob { event: IngestEventData }
 interface SearchQueueJob {
@@ -77,24 +77,29 @@ export function startAsyncBridge(): void {
   }
 
   // ---------------- Search indexing ----------------
-  domainEvents.on('post.published', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('index', { op: 'upsert', doc: { entityType: 'post', entityId: postId, title: event.payload?.title || '', slug: event.payload?.slug || '' } }).catch(() => undefined);
-    }
-  });
-  domainEvents.on('post.unpublished', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
-    }
-  });
-  domainEvents.on('post.deleted', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
-    }
-  });
+  // EVENT_DELIVERY_MODE=direct opts into the legacy in-process relay. The
+  // default (outbox) mode delivers search events durably via the worker's
+  // outbox dispatcher; registering here would duplicate relay work.
+  if (getConfig().outbox.deliveryMode === 'direct') {
+    domainEvents.on('post.published', (event: any) => {
+      const postId = event.payload?.postId;
+      if (postId) {
+        getSearchQueue().add('index', { op: 'upsert', doc: { entityType: 'post', entityId: postId, title: event.payload?.title || '', slug: event.payload?.slug || '' } }).catch(() => undefined);
+      }
+    });
+    domainEvents.on('post.unpublished', (event: any) => {
+      const postId = event.payload?.postId;
+      if (postId) {
+        getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
+      }
+    });
+    domainEvents.on('post.deleted', (event: any) => {
+      const postId = event.payload?.postId;
+      if (postId) {
+        getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
+      }
+    });
+  }
 
   // ---------------- Automations ----------------
   for (const trigger of ['member.created', 'subscription.activated', 'subscription.cancelled', 'newsletter.sent', 'comment.created']) {

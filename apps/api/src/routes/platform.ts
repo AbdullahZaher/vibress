@@ -4,6 +4,7 @@ import { integrationsService, webhooksService, pluginsService } from '../service
 import { IntegrationDomainError } from '@vibress/integrations';
 import { WebhookDomainError } from '@vibress/webhooks';
 import { PluginDomainError } from '@vibress/plugins';
+import { getConfig } from '@vibress/config';
 
 const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
   reply.status(status).send({ errors: [{ code, message, requestId }] });
@@ -34,7 +35,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           secrets: body.secrets || {},
         }, req.user!.id);
         return reply.status(201).send({ integration: integrationsService.maskIntegration(integration) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -54,7 +55,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           secrets: body?.secrets,
         }, req.user!.id);
         return reply.status(200).send({ integration: integrationsService.maskIntegration(integration) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'INTEGRATION_NOT_FOUND' ? 404 : 400);
         }
@@ -100,7 +101,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         }, req.user!.id);
         // Raw secret returned exactly once
         return reply.status(201).send({ key: created });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -140,7 +141,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           eventTypes: body.eventTypes,
         }, req.user!.id);
         return reply.status(201).send({ endpoint: webhooksService.maskEndpoint(endpoint) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof WebhookDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -161,7 +162,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           eventTypes: body?.eventTypes,
         }, req.user!.id);
         return reply.status(200).send({ endpoint: webhooksService.maskEndpoint(endpoint) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof WebhookDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'WEBHOOK_NOT_FOUND' ? 404 : 400);
         }
@@ -223,7 +224,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.registerPlugin(body.manifest, req.user!.id);
         return reply.status(201).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -237,7 +238,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.activatePlugin(id, req.user!.id);
         return reply.status(200).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'PLUGIN_NOT_FOUND' ? 404 : 400);
         }
@@ -253,7 +254,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.deactivatePlugin(id, req.user!.id);
         return reply.status(200).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -271,7 +272,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         await pluginsService.setSettings(id, body.settings);
         return reply.status(200).send({ success: true });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -347,7 +348,7 @@ export async function machineApiRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/events', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 200 : 60, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 200 : 60, timeWindow: '1 minute' } },
     preHandler: [
       async (req, reply) => {
         const result = await requireMachineKey(req, reply);

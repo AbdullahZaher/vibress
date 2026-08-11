@@ -2,7 +2,7 @@
   "project": "Vibress",
   "architecture_version": "v1",
   "format": "Markdown",
-  "document_count": 26,
+  "document_count": 97,
   "generated_sections": [
     "01-architecture",
     "02-apps",
@@ -22,6 +22,16 @@
     "16-checklists"
   ],
   "decisions": [
-    "ADR-011-development-ports.md"
+    "ADR-011-development-ports.md",
+    "ADR-012-transaction-strategy.md",
+    "analytics-search-automation-boundary.md",
+    "billing-provider-boundary.md",
+    "community-boundary.md",
+    "email-provider-boundary.md",
+    "member-identity-boundary.md",
+    "plugin-trust-model.md",
+    "post-v1-hardening-scope.md",
+    "settings-system-tools-boundary.md",
+    "theme-engine.md"
   ]
 }

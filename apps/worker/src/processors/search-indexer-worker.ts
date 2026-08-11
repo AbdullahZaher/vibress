@@ -1,5 +1,4 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Worker, Job, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { SearchService, DrizzleSearchRepository, SearchDocumentInput } from '@vibress/search';
 import { DrizzlePostRepository } from '@vibress/posts';
 import { DrizzlePageRepository } from '@vibress/pages';
@@ -20,7 +19,7 @@ export interface IndexableContentProvider {
   listIndexableContent(): Promise<SearchDocumentInput[]>;
 }
 
-const SEARCH_QUEUE_NAME = 'vibress-search';
+const SEARCH_QUEUE_NAME = QUEUE_NAMES.SEARCH;
 
 /**
  * Event-driven indexer: publish → upsert, unpublish/delete → remove,

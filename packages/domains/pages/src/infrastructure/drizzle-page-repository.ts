@@ -1,7 +1,7 @@
 import { getDb, pages } from '@vibress/database';
 import { eq, and, isNull, ilike, count, lte, desc } from 'drizzle-orm';
 import { PageRepository } from '../domain/repository';
-import { Page, CreatePageData, ListPagesFilter, PageStatus, PageVisibility } from '../domain/page';
+import { Page, CreatePageData, ListPagesFilter, PageStatus, PageVisibility, PageDomainError } from '../domain/page';
 import crypto from 'node:crypto';
 
 export class DrizzlePageRepository implements PageRepository {
@@ -82,9 +82,7 @@ export class DrizzlePageRepository implements PageRepository {
     if (!current) throw new Error(`Page not found: ${id}`);
 
     if (current.version !== data.version) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
 
     const nextVersion = current.version + 1;
@@ -114,9 +112,7 @@ export class DrizzlePageRepository implements PageRepository {
 
     const [row] = await db.update(pages).set(updatePayload).where(and(eq(pages.id, id), eq(pages.version, current.version))).returning();
     if (!row) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
     return this.mapToDomain(row);
   }

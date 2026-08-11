@@ -5,6 +5,7 @@ import { enqueueSearchRebuild } from '../async-bridge';
 import { SearchDomainError } from '@vibress/search';
 import { AutomationDomainError } from '@vibress/automations';
 import { AnalyticsDomainError } from '@vibress/analytics';
+import { getConfig } from '@vibress/config';
 
 const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
   reply.status(status).send({ errors: [{ code, message, requestId }] });
@@ -12,7 +13,7 @@ const sendError = (reply: FastifyReply, code: string, message: string, requestId
 // ---------------- Public Search ----------------
 export async function publicSearchRoutes(fastify: FastifyInstance) {
   fastify.get('/search', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 200 : 30, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 200 : 30, timeWindow: '1 minute' } },
     handler: async (req, reply) => {
       const query = req.query as any;
       const q = typeof query.q === 'string' ? query.q : '';

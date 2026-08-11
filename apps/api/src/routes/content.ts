@@ -17,20 +17,21 @@ import {
   formatPublicTag,
   formatPublicAuthor,
 } from '../helpers/public-content-helpers';
+import { getConfig } from '@vibress/config';
 
 export async function publicContentRoutes(fastify: FastifyInstance) {
   // Public Site Metadata + Active Theme
   fastify.get('/site', {
     handler: async (req, reply) => {
-      const siteUrl = process.env.SITE_URL || 'http://localhost:7777';
+      const config = getConfig();
       const active = await themeService.getActiveTheme();
 
       return reply.status(200).send({
         site: {
-          title: process.env.SITE_NAME || 'Vibress',
-          description: process.env.SITE_DESCRIPTION || 'Publishing Platform',
-          url: siteUrl,
-          locale: process.env.SITE_LOCALE || 'en',
+          title: config.site.name,
+          description: config.site.description,
+          url: config.site.url,
+          locale: config.site.locale,
         },
         theme: {
           themeId: active?.manifest.id || 'vibress-default',

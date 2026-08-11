@@ -1,13 +1,7 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, Worker, QUEUE_NAMES, WebhookDeliveryJob, getBullMqRedisConnection } from '@vibress/queue';
 import { WebhooksService, DrizzleWebhookRepository } from '@vibress/webhooks';
 
-export interface WebhookDeliveryJob {
-  deliveryId: string;
-  endpointId: string;
-}
-
-const WEBHOOK_QUEUE_NAME = 'vibress-webhook-delivery';
+const WEBHOOK_QUEUE_NAME = QUEUE_NAMES.WEBHOOK_DELIVERY;
 
 class BullMqDispatcher {
   private queue: Queue<WebhookDeliveryJob> | null = null;

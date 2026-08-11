@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { CreatePageInputSchema, UpdatePageInputSchema, SchedulePageInputSchema } from '@vibress/api-contracts';
 import { pagesService, authorsService, revisionsService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
+import { PageDomainError } from '@vibress/pages';
 
 export async function pageRoutes(fastify: FastifyInstance) {
   // List pages
@@ -105,16 +106,18 @@ export async function pageRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({
           page: { ...page, authors },
         });
-      } catch (err: any) {
-        if (err.code === 'CONTENT_CONFLICT') {
-          return reply.status(409).send({
-            errors: [{ code: 'CONTENT_CONFLICT', message: err.message, requestId: req.id }],
-          });
-        }
-        if (err.code === 'PAGE_NOT_FOUND') {
-          return reply.status(404).send({
-            errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
-          });
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError) {
+          if (err.code === 'CONTENT_CONFLICT') {
+            return reply.status(409).send({
+              errors: [{ code: 'CONTENT_CONFLICT', message: err.message, requestId: req.id }],
+            });
+          }
+          if (err.code === 'PAGE_NOT_FOUND') {
+            return reply.status(404).send({
+              errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
+            });
+          }
         }
         throw err;
       }
@@ -129,8 +132,8 @@ export async function pageRoutes(fastify: FastifyInstance) {
       try {
         await pagesService.deletePage(id, req.user!.id);
         return reply.status(200).send({ success: true });
-      } catch (err: any) {
-        if (err.code === 'PAGE_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError && err.code === 'PAGE_NOT_FOUND') {
           return reply.status(404).send({
             errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
           });
@@ -148,16 +151,18 @@ export async function pageRoutes(fastify: FastifyInstance) {
       try {
         const page = await pagesService.publishPage(id, req.user!.id);
         return reply.status(200).send({ page });
-      } catch (err: any) {
-        if (err.code === 'PAGE_NOT_FOUND') {
-          return reply.status(404).send({
-            errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
-          });
-        }
-        if (err.code === 'VALIDATION_ERROR') {
-          return reply.status(400).send({
-            errors: [{ code: 'VALIDATION_ERROR', message: err.message, requestId: req.id }],
-          });
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError) {
+          if (err.code === 'PAGE_NOT_FOUND') {
+            return reply.status(404).send({
+              errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
+            });
+          }
+          if (err.code === 'VALIDATION_ERROR') {
+            return reply.status(400).send({
+              errors: [{ code: 'VALIDATION_ERROR', message: err.message, requestId: req.id }],
+            });
+          }
         }
         throw err;
       }
@@ -172,8 +177,8 @@ export async function pageRoutes(fastify: FastifyInstance) {
       try {
         const page = await pagesService.unpublishPage(id, req.user!.id);
         return reply.status(200).send({ page });
-      } catch (err: any) {
-        if (err.code === 'PAGE_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError && err.code === 'PAGE_NOT_FOUND') {
           return reply.status(404).send({
             errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
           });
@@ -199,16 +204,18 @@ export async function pageRoutes(fastify: FastifyInstance) {
         const scheduledAt = new Date(parseResult.data.scheduledAt);
         const page = await pagesService.schedulePage(id, scheduledAt, req.user!.id);
         return reply.status(200).send({ page });
-      } catch (err: any) {
-        if (err.code === 'INVALID_SCHEDULE_TIME') {
-          return reply.status(400).send({
-            errors: [{ code: 'INVALID_SCHEDULE_TIME', message: err.message, requestId: req.id }],
-          });
-        }
-        if (err.code === 'PAGE_NOT_FOUND') {
-          return reply.status(404).send({
-            errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
-          });
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError) {
+          if (err.code === 'INVALID_SCHEDULE_TIME') {
+            return reply.status(400).send({
+              errors: [{ code: 'INVALID_SCHEDULE_TIME', message: err.message, requestId: req.id }],
+            });
+          }
+          if (err.code === 'PAGE_NOT_FOUND') {
+            return reply.status(404).send({
+              errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
+            });
+          }
         }
         throw err;
       }
@@ -223,8 +230,8 @@ export async function pageRoutes(fastify: FastifyInstance) {
       try {
         const page = await pagesService.cancelSchedule(id, req.user!.id);
         return reply.status(200).send({ page });
-      } catch (err: any) {
-        if (err.code === 'PAGE_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof PageDomainError && err.code === 'PAGE_NOT_FOUND') {
           return reply.status(404).send({
             errors: [{ code: 'PAGE_NOT_FOUND', message: 'Page not found', requestId: req.id }],
           });

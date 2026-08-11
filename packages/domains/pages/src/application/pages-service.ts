@@ -1,10 +1,11 @@
 import { PageRepository } from '../domain/repository';
-import { Page, CreatePageData, UpdatePageData, ListPagesFilter } from '../domain/page';
+import { Page, CreatePageData, UpdatePageData, ListPagesFilter, PageDomainError } from '../domain/page';
 import { RevisionsService } from '@vibress/revisions';
 import { AuthorRepository } from '@vibress/authors';
 import { AuditRepository } from '@vibress/audit';
 import { extractMediaReferencesFromDocument, MediaService } from '@vibress/media';
 import { generateUniqueSlug } from '@vibress/utils';
+import { runInTransaction } from '@vibress/database';
 
 export class PagesService {
   constructor(
@@ -28,6 +29,10 @@ export class PagesService {
   }
 
   async createPage(data: CreatePageData, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.createPageTx(data, actorId));
+  }
+
+  private async createPageTx(data: CreatePageData, actorId: string): Promise<Page> {
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
       const existing = await this.pageRepo.findBySlug(candidate);
@@ -74,11 +79,13 @@ export class PagesService {
   }
 
   async updatePage(id: string, data: UpdatePageData, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.updatePageTx(id, data, actorId));
+  }
+
+  private async updatePageTx(id: string, data: UpdatePageData, actorId: string): Promise<Page> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     const expectedVersion = data.expectedVersion !== undefined ? data.expectedVersion : current.version;
@@ -140,17 +147,17 @@ export class PagesService {
   }
 
   async publishPage(id: string, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.publishPageTx(id, actorId));
+  }
+
+  private async publishPageTx(id: string, actorId: string): Promise<Page> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     if (!current.title || !current.title.trim()) {
-      const err = new Error('Page title is required to publish');
-      (err as any).code = 'VALIDATION_ERROR';
-      throw err;
+      throw new PageDomainError('VALIDATION_ERROR', 'Page title is required to publish');
     }
 
     const now = new Date();
@@ -189,11 +196,13 @@ export class PagesService {
   }
 
   async unpublishPage(id: string, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.unpublishPageTx(id, actorId));
+  }
+
+  private async unpublishPageTx(id: string, actorId: string): Promise<Page> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     const unpublished = await this.pageRepo.update(id, {
@@ -213,23 +222,21 @@ export class PagesService {
   }
 
   async schedulePage(id: string, scheduledAt: Date, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.schedulePageTx(id, scheduledAt, actorId));
+  }
+
+  private async schedulePageTx(id: string, scheduledAt: Date, actorId: string): Promise<Page> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     if (!(scheduledAt instanceof Date) || isNaN(scheduledAt.getTime())) {
-      const err = new Error('Invalid schedule timestamp');
-      (err as any).code = 'INVALID_SCHEDULE_TIME';
-      throw err;
+      throw new PageDomainError('INVALID_SCHEDULE_TIME', 'Invalid schedule timestamp');
     }
 
     if (scheduledAt.getTime() <= Date.now()) {
-      const err = new Error('Scheduled time must be in the future');
-      (err as any).code = 'INVALID_SCHEDULE_TIME';
-      throw err;
+      throw new PageDomainError('INVALID_SCHEDULE_TIME', 'Scheduled time must be in the future');
     }
 
     const scheduled = await this.pageRepo.update(id, {
@@ -251,11 +258,13 @@ export class PagesService {
   }
 
   async cancelSchedule(id: string, actorId: string): Promise<Page> {
+    return runInTransaction(() => this.cancelScheduleTx(id, actorId));
+  }
+
+  private async cancelScheduleTx(id: string, actorId: string): Promise<Page> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     const canceled = await this.pageRepo.update(id, {
@@ -276,11 +285,13 @@ export class PagesService {
   }
 
   async deletePage(id: string, actorId: string): Promise<void> {
+    return runInTransaction(() => this.deletePageTx(id, actorId));
+  }
+
+  private async deletePageTx(id: string, actorId: string): Promise<void> {
     const current = await this.pageRepo.findById(id);
     if (!current) {
-      const err = new Error('Page not found');
-      (err as any).code = 'PAGE_NOT_FOUND';
-      throw err;
+      throw new PageDomainError('PAGE_NOT_FOUND', 'Page not found');
     }
 
     await this.pageRepo.delete(id);

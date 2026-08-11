@@ -1,3 +1,13 @@
+export class PostDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'PostDomainError';
+    this.code = code;
+  }
+}
+
 export type PostStatus = 'draft' | 'scheduled' | 'published';
 export type PostVisibility = 'public' | 'members' | 'paid';
 

@@ -49,3 +49,54 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Verify clean Git tree
+        run: pnpm verify:clean-tree
+
+  container-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          tags: vibress-api:scan
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/worker.Dockerfile
+          tags: vibress-worker:scan
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: vibress-api:scan
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: vibress-worker:scan
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true

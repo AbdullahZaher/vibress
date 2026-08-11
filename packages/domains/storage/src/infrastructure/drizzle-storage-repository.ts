@@ -1,5 +1,6 @@
 import { getDb, storageConfigurations, uploadSessions, mediaAssets } from '@vibress/database';
 import { eq, and, desc, count, isNull } from 'drizzle-orm';
+import { StorageError } from '@vibress/storage-core';
 import {
   StorageConfiguration,
   CreateStorageConfigurationData,
@@ -133,9 +134,10 @@ export class DrizzleStorageRepository {
       .where(eq(uploadSessions.storageConfigurationId, id));
 
     if ((sessionCount[0]?.totalCount || 0) > 0) {
-      const err = new Error(`Storage configuration '${id}' is in use by active upload sessions`);
-      (err as any).code = 'STORAGE_PROVIDER_IN_USE';
-      throw err;
+      throw new StorageError(
+        `Storage configuration '${id}' is in use by active upload sessions`,
+        'STORAGE_PROVIDER_IN_USE'
+      );
     }
 
     await db.delete(storageConfigurations).where(eq(storageConfigurations.id, id));
@@ -233,8 +235,8 @@ export class DrizzleStorageRepository {
       originalFilename: row.originalFilename,
       declaredMime: row.declaredMime,
       expectedSize: row.expectedSize,
-      assetType: row.assetType as any,
-      state: row.state as any,
+      assetType: row.assetType as UploadSession['assetType'],
+      state: row.state as UploadSession['state'],
       expiresAt: row.expiresAt,
       multipartUploadId: row.multipartUploadId,
       createdAt: row.createdAt,

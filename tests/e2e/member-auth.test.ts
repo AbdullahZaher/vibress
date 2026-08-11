@@ -130,7 +130,7 @@ test.describe('Batch 8 Member Auth E2E Suite', () => {
 
     // Admin still works (staff session intact)
     await page.goto('http://localhost:7777/admin');
-    await expect(page.locator('body')).toContainText('Vibress Admin');
+    await expect(page.locator('body')).toContainText('owner@example.com');
   });
 
   test('[Staff Cookie Rejected by Member API]', async ({ request }) => {

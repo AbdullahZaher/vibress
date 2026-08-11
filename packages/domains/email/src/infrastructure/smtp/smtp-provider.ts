@@ -47,8 +47,8 @@ export class SmtpEmailProvider implements EmailProvider {
         headers: message.headers,
       });
       return { messageId: result.messageId || crypto.randomUUID() };
-    } catch (err: any) {
-      throw new EmailProviderError('SEND_FAILED', err.message || 'SMTP send failed', true);
+    } catch (err: unknown) {
+      throw new EmailProviderError('SEND_FAILED', (err as Error).message || 'SMTP send failed', true);
     }
   }
 

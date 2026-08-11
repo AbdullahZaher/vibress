@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { membersService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
+import { MemberNotFoundError, MemberStateError } from '@vibress/members';
 
 export async function adminMemberRoutes(fastify: FastifyInstance) {
   // List members (staff only)
@@ -80,13 +81,13 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
             disabledAt: updated.disabledAt ? updated.disabledAt.toISOString() : null,
           },
         });
-      } catch (err: any) {
-        if (err.code === 'MEMBER_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof MemberNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
           });
         }
-        if (err.code === 'MEMBER_ALREADY_DISABLED') {
+        if (err instanceof MemberStateError && err.code === 'MEMBER_ALREADY_DISABLED') {
           return reply.status(409).send({
             errors: [{ code: 'MEMBER_ALREADY_DISABLED', message: err.message, requestId: req.id }],
           });
@@ -110,13 +111,13 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
             disabledAt: null,
           },
         });
-      } catch (err: any) {
-        if (err.code === 'MEMBER_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof MemberNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
           });
         }
-        if (err.code === 'MEMBER_ALREADY_ACTIVE') {
+        if (err instanceof MemberStateError && err.code === 'MEMBER_ALREADY_ACTIVE') {
           return reply.status(409).send({
             errors: [{ code: 'MEMBER_ALREADY_ACTIVE', message: err.message, requestId: req.id }],
           });

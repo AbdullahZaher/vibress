@@ -6,7 +6,7 @@ test.describe('Batch 4 Media E2E — Delete Protection + Gallery', () => {
     await page.fill('#email', 'owner@example.com');
     await page.fill('#password', 'OwnerPass123!');
     await page.click('button[type="submit"]');
-    await page.waitForSelector('a:has-text("Posts")', { timeout: 15000 });
+    await page.getByRole('button', { name: 'Posts', exact: true }).waitFor({ timeout: 15000 });
   });
 
   test('[Delete Protection] referenced image → MEDIA_IN_USE in Media Library', async ({ page, request }) => {
@@ -21,8 +21,8 @@ test.describe('Batch 4 Media E2E — Delete Protection + Gallery', () => {
     const me = await (await request.get('http://localhost:7777/api/admin/v1/auth/me', { headers: { Origin: 'http://localhost:7777' } })).json();
     await request.post('http://localhost:7777/api/admin/v1/posts', { headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:7777' }, data: { title: 'DP Final', primaryAuthorId: me.user.id, content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [{ type: 'studio-card', cardType: 'image', cardData: { assetId, src: '/x.png', alt: 'dp' } }] } } } });
 
-    // Navigate to Media Library via SPA nav
-    await page.click('a:has-text("Media")');
+    // Navigate to Media Library via sidebar nav
+    await page.getByRole('button', { name: 'Media', exact: true }).click();
     await page.waitForTimeout(2500);
 
     // Click the image and try delete
@@ -56,16 +56,17 @@ test.describe('Batch 4 Media E2E — Delete Protection + Gallery', () => {
     await request.post('http://localhost:7777/api/admin/v1/media', { headers: { Origin: 'http://localhost:7777' }, multipart: { file: { name: 'gal-final-b.png', mimeType: 'image/png', buffer: png } } });
 
     // Navigate to Create Post
-    await page.click('a:has-text("Posts")');
+    await page.getByRole('button', { name: 'Posts', exact: true }).click();
     await page.waitForTimeout(800);
     await page.click('button:has-text("Create Post")');
     await page.waitForTimeout(800);
-    await page.locator('input[type="text"]').first().fill('Gallery Final Post');
+    await page.locator('textarea[aria-label="Post Title"]').fill('Gallery Final Post');
 
-    // Insert Gallery card
-    await page.click('button:has-text("+ Insert Card")');
-    await page.waitForTimeout(400);
-    await page.locator('button:has-text("gallery")').click();
+    // Insert Gallery card via Slash Menu (opens MediaPicker)
+    const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
+    await editorArea.click();
+    await page.keyboard.type(' /');
+    await page.locator('li:has-text("Gallery")').click();
 
     // Wait for the MediaPicker modal to open, then for its image grid to populate
     await page.waitForSelector('h3:has-text("Select Media Asset")', { timeout: 10000 });
@@ -79,17 +80,10 @@ test.describe('Batch 4 Media E2E — Delete Protection + Gallery', () => {
     await cfm.first().click({ timeout: 5000 });
     await page.waitForTimeout(1500);
 
-    // Close picker if still open
-    const closeX = page.locator('button:has-text("✕")');
-    if (await closeX.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await closeX.click();
-      await page.waitForTimeout(300);
-    }
-
-    // Submit — force:true for remaining overlay
-    await page.locator('button[type="submit"]').scrollIntoViewIfNeeded();
+    // Save draft
+    await page.locator('button:has-text("Save Draft")').scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
-    await page.locator('button[type="submit"]').click({ force: true, timeout: 5000 });
+    await page.locator('button:has-text("Save Draft")').click({ force: true, timeout: 5000 });
     await page.waitForTimeout(3000);
 
     // Verify references via authenticated browser fetch

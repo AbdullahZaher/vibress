@@ -4,6 +4,7 @@ import { billingService, subscriptionsService, plansService, productsService } f
 import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
 import { BillingDomainError } from '@vibress/billing';
 import { SubscriptionDomainError } from '@vibress/subscriptions';
+import { getConfig } from '@vibress/config';
 
 function formatSubscriptionDto(sub: any, planName: string) {
   return {
@@ -61,7 +62,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
   fastify.post('/billing/checkout', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 100 : 10,
+        max: getConfig().isTest ? 100 : 10,
         timeWindow: '1 minute',
       },
     },
@@ -94,7 +95,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
   fastify.post('/billing/portal', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 100 : 10,
+        max: getConfig().isTest ? 100 : 10,
         timeWindow: '1 minute',
       },
     },
@@ -118,7 +119,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
   fastify.post('/subscriptions/:id/cancel', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 100 : 10,
+        max: getConfig().isTest ? 100 : 10,
         timeWindow: '1 minute',
       },
     },
@@ -151,7 +152,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
   fastify.post('/subscriptions/:id/resume', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 100 : 10,
+        max: getConfig().isTest ? 100 : 10,
         timeWindow: '1 minute',
       },
     },

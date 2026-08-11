@@ -2,14 +2,16 @@ import React from 'react';
 import { ThemePostProps } from '../../types';
 import { ThemeLayout } from './Layout';
 import { PostCard } from './PostCard';
+import { t } from '../../../lib/i18n';
 
 export async function Post(props: ThemePostProps) {
   const { post, settings, site } = props;
   const primaryTag = post.tags?.[0];
   const authors = post.authors?.length > 0 ? post.authors : [post.primaryAuthor].filter(Boolean);
   const authorNames = authors.map(a => a?.name).join(', ');
+  const dateLocale = site.locale || 'en';
 
-  const dateFormatted = new Date(post.publishedAt || new Date()).toLocaleDateString('en-GB', {
+  const dateFormatted = new Date(post.publishedAt || new Date()).toLocaleDateString(dateLocale, {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
@@ -21,10 +23,10 @@ export async function Post(props: ThemePostProps) {
         <article className={`vb-article post`}>
           <header className="vb-article-header vb-canvas">
             <span className="vb-article-meta">
-              By {authorNames} 
+              {t('home.by')} {authorNames} 
               {primaryTag && (
                 <>
-                  {' '}in <a className="vb-article-tag" href={`/tag/${primaryTag.slug}`}>{primaryTag.name}</a>
+                  {' '}{t('post.in')} <a className="vb-article-tag" href={`/tag/${primaryTag.slug}`}>{primaryTag.name}</a>
                 </>
               )}
               {' '}—{' '}
@@ -47,7 +49,7 @@ export async function Post(props: ThemePostProps) {
             )}
           </header>
 
-          <div className="vb-content vb-canvas" dangerouslySetInnerHTML={{ __html: post.html || '' }} />
+          <div className="vb-content vb-canvas studio-html-content" dangerouslySetInnerHTML={{ __html: post.html || '' }} />
         </article>
 
         <div className="vb-canvas">
@@ -56,7 +58,7 @@ export async function Post(props: ThemePostProps) {
               {/* Previous post placeholder */}
             </div>
             <div className="navigation-middle">
-              <a href="#" className="vb-button-share">Share</a>
+              <a href="#" className="vb-button-share">{t('post.share')}</a>
             </div>
             <div className="navigation-next-wrapper">
               {/* Next post placeholder */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PenLine, ChevronDown, ChevronUp, Plus, File, Tag as TagIcon, Users, MessageSquare } from 'lucide-react';
+import { PenLine, ChevronDown, ChevronUp, Plus, File, Tag as TagIcon, Image as ImageIcon, Users, MessageSquare } from 'lucide-react';
 import { Badge } from '../../ui/badge';
 
 interface NavContentProps {
@@ -146,6 +146,20 @@ export const NavContent: React.FC<NavContentProps> = ({
       >
         <TagIcon className="h-4 w-4 shrink-0" />
         <span>Tags</span>
+      </button>
+
+      {/* Media */}
+      <button
+        type="button"
+        onClick={() => onNavigate('/admin/media')}
+        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+          currentPath.startsWith('/admin/media')
+            ? 'bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60'
+            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'
+        }`}
+      >
+        <ImageIcon className="h-4 w-4 shrink-0" />
+        <span>Media</span>
       </button>
 
       {/* Members */}

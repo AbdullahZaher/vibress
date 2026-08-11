@@ -277,6 +277,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Page Title"
+            aria-label="Page Title"
             className="w-full text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0"
             rows={1}
             onInput={(e) => {

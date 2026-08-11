@@ -16,9 +16,10 @@ import {
   PublicPostDetailDto,
   PublicPageDetailDto,
 } from '@vibress/api-contracts';
+import { getConfig } from '@vibress/config';
 
 export function getSiteUrl(): string {
-  const envUrl = process.env.SITE_URL || 'http://localhost:7777';
+  const envUrl = getConfig().site.url;
   try {
     const parsed = new URL(envUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {

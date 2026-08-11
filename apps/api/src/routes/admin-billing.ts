@@ -40,7 +40,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.createProduct(parsed.data, req.user!.id);
         return reply.status(201).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -56,7 +56,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.updateProduct(id, parsed.data, req.user!.id);
         return reply.status(200).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -70,7 +70,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.archiveProduct(id, req.user!.id);
         return reply.status(200).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -96,7 +96,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const plan = await plansService.createPlan(parsed.data as any, req.user!.id);
         return reply.status(201).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -112,7 +112,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const plan = await plansService.updatePlan(id, parsed.data as any, req.user!.id);
         return reply.status(200).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -126,7 +126,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const plan = await plansService.archivePlan(id, req.user!.id);
         return reply.status(200).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -154,7 +154,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           endsAt: parsed.data.endsAt ? new Date(parsed.data.endsAt) : null,
         } as any, req.user!.id);
         return reply.status(201).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -170,7 +170,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const offer = await offersService.updateOffer(id, parsed.data as any, req.user!.id);
         return reply.status(200).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -184,7 +184,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const offer = await offersService.disableOffer(id, req.user!.id);
         return reply.status(200).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -239,7 +239,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           data: { actorId: req.user!.id },
         });
         return reply.status(200).send({ subscription: toAdminSubscriptionDto(updated) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof SubscriptionDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }

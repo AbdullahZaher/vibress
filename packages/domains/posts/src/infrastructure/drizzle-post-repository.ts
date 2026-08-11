@@ -1,7 +1,7 @@
 import { getDb, posts, postTags, postAuthors, tags, users } from '@vibress/database';
 import { eq, and, or, isNull, ilike, count, lte, desc, asc, inArray } from 'drizzle-orm';
 import { PostRepository } from '../domain/repository';
-import { Post, CreatePostData, ListPostsFilter, PostStatus, PostVisibility } from '../domain/post';
+import { Post, CreatePostData, ListPostsFilter, PostStatus, PostVisibility, PostDomainError } from '../domain/post';
 import crypto from 'node:crypto';
 
 export class DrizzlePostRepository implements PostRepository {
@@ -83,9 +83,7 @@ export class DrizzlePostRepository implements PostRepository {
 
     // Optimistic concurrency check
     if (current.version !== data.version) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PostDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
 
     const nextVersion = current.version + 1;
@@ -115,9 +113,7 @@ export class DrizzlePostRepository implements PostRepository {
 
     const [row] = await db.update(posts).set(updatePayload).where(and(eq(posts.id, id), eq(posts.version, current.version))).returning();
     if (!row) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PostDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
     return this.mapToDomain(row);
   }

@@ -1,12 +1,11 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Worker, Job, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { AnalyticsService, DrizzleAnalyticsRepository, IngestEventData, validateAnalyticsEvent } from '@vibress/analytics';
 
 export interface AnalyticsJob {
   event: IngestEventData;
 }
 
-const ANALYTICS_QUEUE_NAME = 'vibress-analytics';
+const ANALYTICS_QUEUE_NAME = QUEUE_NAMES.ANALYTICS;
 
 /**
  * Consumes domain events asynchronously and ingests them into analytics.

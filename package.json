@@ -1,6 +1,7 @@
 {
   "name": "vibress-monorepo",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "nx run-many --target=dev --all --parallel=5",
     "dev:infra": "docker-compose -f compose.dev.yml up -d",
@@ -17,7 +18,11 @@
     "db:seed": "pnpm --filter @vibress/database run db:seed",
     "bootstrap:owner": "tsx scripts/bootstrap-owner.ts",
     "owner:create": "tsx scripts/bootstrap-owner.ts",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,html,css}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,html,css}\"",
+    "verify:clean-tree": "node scripts/verify-clean-tree.mjs",
+    "prod:up": "docker compose -f compose.prod.yml up -d --build",
+    "prod:down": "docker compose -f compose.prod.yml down",
+    "prod:migrate": "docker compose -f compose.prod.yml run --rm migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,5 +47,10 @@
   "dependencies": {
     "react": "18.3.1",
     "react-dom": "18.3.1"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.17.0"
   }
 }

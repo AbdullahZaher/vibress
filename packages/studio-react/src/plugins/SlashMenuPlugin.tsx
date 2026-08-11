@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LexicalTypeaheadMenuPlugin, MenuOption, useBasicTypeaheadTriggerMatch } from '@lexical/react/LexicalTypeaheadMenuPlugin';
-import { $getSelection, $isRangeSelection, TextNode } from 'lexical';
+import { $getSelection, $getNodeByKey, $isRangeSelection, TextNode } from 'lexical';
 import { STUDIO_CARD_DEFINITIONS } from '@vibress/studio-cards';
-import { $createReactStudioCardNode } from '../nodes/ReactStudioCardNode';
+import { $createReactStudioCardNode, $isReactStudioCardNode } from '../nodes/ReactStudioCardNode';
 import { createPortal } from 'react-dom';
 import { ImageIcon, Video, Images, File as FileIcon, Code, Minus, MessageSquare, Box, MousePointerClick } from 'lucide-react';
 
@@ -18,7 +18,11 @@ class CardMenuOption extends MenuOption {
   }
 }
 
-export function SlashMenuPlugin() {
+export function SlashMenuPlugin({
+  requestMedia,
+}: {
+  requestMedia?: ((req: { cardType: string }) => Promise<Record<string, unknown> | null>) | undefined;
+}) {
   const [editor] = useLexicalComposerContext();
   const [queryString, setQueryString] = useState<string | null>(null);
 
@@ -43,6 +47,9 @@ export function SlashMenuPlugin() {
 
   const onSelectOption = useCallback(
     (selectedOption: CardMenuOption, nodeToRemove: TextNode | null, closeMenu: () => void) => {
+      const cardType = selectedOption.cardType;
+      let insertedKey: string | null = null;
+
       editor.update(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection) || selectedOption == null) {
@@ -53,12 +60,26 @@ export function SlashMenuPlugin() {
           nodeToRemove.remove();
         }
 
-        const cardNode = $createReactStudioCardNode(selectedOption.cardType, {});
+        const cardNode = $createReactStudioCardNode(cardType, {});
         selection.insertNodes([cardNode]);
+        insertedKey = cardNode.getKey();
       });
       closeMenu();
+
+      if (requestMedia) {
+        requestMedia({ cardType }).then((payload) => {
+          if (!payload || insertedKey == null) return;
+          const nodeKey = insertedKey;
+          editor.update(() => {
+            const node = $getNodeByKey(nodeKey);
+            if ($isReactStudioCardNode(node)) {
+              node.setCardData(payload);
+            }
+          });
+        });
+      }
     },
-    [editor]
+    [editor, requestMedia]
   );
 
   return (
@@ -98,7 +119,10 @@ export function SlashMenuPlugin() {
             <div className="px-2 py-1 mb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
               Insert Card
             </div>
-            <ul className="list-none m-0 p-0 flex flex-col">
+            <ul
+              className="list-none m-0 p-0 flex flex-col"
+              onMouseDown={(e) => e.preventDefault()}
+            >
               {options.map((option, i: number) => (
                 <li
                   key={option.key}

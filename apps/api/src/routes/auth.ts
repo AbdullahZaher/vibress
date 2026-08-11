@@ -2,13 +2,15 @@ import { FastifyInstance } from 'fastify';
 import { LoginRequestSchema } from '@vibress/api-contracts';
 import { authService } from '../services';
 import { requireStaffSession, validateOrigin, COOKIE_NAME } from '../middleware/auth';
+import { getConfig } from '@vibress/config';
+import { AuthDomainError } from '@vibress/auth';
 
 export async function authRoutes(fastify: FastifyInstance) {
   // Login
   fastify.post('/login', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'production' ? 5 : 1000,
+        max: getConfig().isProduction ? 5 : 1000,
         timeWindow: '1 minute',
       },
     },
@@ -38,7 +40,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         });
 
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = getConfig().isProduction;
         reply.setCookie(COOKIE_NAME, result.sessionToken, {
           path: '/',
           httpOnly: true,
@@ -52,13 +54,14 @@ export async function authRoutes(fastify: FastifyInstance) {
             id: result.user.id,
             email: result.user.email,
             name: result.user.name,
+            slug: result.user.slug ?? null,
             status: result.user.status,
             roles: result.roles,
             permissions: result.permissions,
           },
         });
-      } catch (err: any) {
-        if (err.code === 'INVALID_CREDENTIALS') {
+      } catch (err: unknown) {
+        if (err instanceof AuthDomainError && err.code === 'INVALID_CREDENTIALS') {
           return reply.status(401).send({
             errors: [
               {
@@ -101,6 +104,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           id: req.user!.id,
           email: req.user!.email,
           name: req.user!.name,
+          slug: req.user!.slug ?? null,
           status: req.user!.status,
           roles: req.roles || [],
           permissions: req.permissions || [],

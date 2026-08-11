@@ -1,11 +1,12 @@
 import { PostRepository } from '../domain/repository';
-import { Post, CreatePostData, UpdatePostData, ListPostsFilter } from '../domain/post';
+import { Post, CreatePostData, UpdatePostData, ListPostsFilter, PostDomainError } from '../domain/post';
 import { RevisionsService } from '@vibress/revisions';
 import { AuthorRepository } from '@vibress/authors';
 import { AuditRepository } from '@vibress/audit';
 import { extractMediaReferencesFromDocument, MediaService } from '@vibress/media';
 import { generateUniqueSlug } from '@vibress/utils';
-import { domainEvents } from '@vibress/events';
+import { domainEvents, OutboxEventWriter, defaultOutboxEventWriter } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
 
 export class PostsService {
   constructor(
@@ -13,7 +14,8 @@ export class PostsService {
     private revisionService: RevisionsService,
     private authorRepo: AuthorRepository,
     private auditRepo: AuditRepository,
-    private mediaService?: MediaService
+    private mediaService?: MediaService,
+    private eventWriter: OutboxEventWriter = defaultOutboxEventWriter
   ) {}
 
   async findById(id: string): Promise<Post | null> {
@@ -29,6 +31,10 @@ export class PostsService {
   }
 
   async createPost(data: CreatePostData, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.createPostTx(data, actorId));
+  }
+
+  private async createPostTx(data: CreatePostData, actorId: string): Promise<Post> {
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
       const existing = await this.postRepo.findBySlug(candidate);
@@ -84,11 +90,13 @@ export class PostsService {
   }
 
   async updatePost(id: string, data: UpdatePostData, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.updatePostTx(id, data, actorId));
+  }
+
+  private async updatePostTx(id: string, data: UpdatePostData, actorId: string): Promise<Post> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     const expectedVersion = data.expectedVersion !== undefined ? data.expectedVersion : current.version;
@@ -155,17 +163,17 @@ export class PostsService {
   }
 
   async publishPost(id: string, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.publishPostTx(id, actorId));
+  }
+
+  private async publishPostTx(id: string, actorId: string): Promise<Post> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     if (!current.title || !current.title.trim()) {
-      const err = new Error('Post title is required to publish');
-      (err as any).code = 'VALIDATION_ERROR';
-      throw err;
+      throw new PostDomainError('VALIDATION_ERROR', 'Post title is required to publish');
     }
 
     const now = new Date();
@@ -201,16 +209,19 @@ export class PostsService {
     });
 
     domainEvents.emit('post.published', { postId: published.id, title: published.title, slug: published.slug });
+    await this.eventWriter.write('post.published', { postId: published.id, title: published.title, slug: published.slug });
 
     return published;
   }
 
   async unpublishPost(id: string, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.unpublishPostTx(id, actorId));
+  }
+
+  private async unpublishPostTx(id: string, actorId: string): Promise<Post> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     const unpublished = await this.postRepo.update(id, {
@@ -227,28 +238,27 @@ export class PostsService {
     });
 
     domainEvents.emit('post.unpublished', { postId: unpublished.id, slug: unpublished.slug });
+    await this.eventWriter.write('post.unpublished', { postId: unpublished.id, slug: unpublished.slug });
 
     return unpublished;
   }
 
   async schedulePost(id: string, scheduledAt: Date, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.schedulePostTx(id, scheduledAt, actorId));
+  }
+
+  private async schedulePostTx(id: string, scheduledAt: Date, actorId: string): Promise<Post> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     if (!(scheduledAt instanceof Date) || isNaN(scheduledAt.getTime())) {
-      const err = new Error('Invalid schedule timestamp');
-      (err as any).code = 'INVALID_SCHEDULE_TIME';
-      throw err;
+      throw new PostDomainError('INVALID_SCHEDULE_TIME', 'Invalid schedule timestamp');
     }
 
     if (scheduledAt.getTime() <= Date.now()) {
-      const err = new Error('Scheduled time must be in the future');
-      (err as any).code = 'INVALID_SCHEDULE_TIME';
-      throw err;
+      throw new PostDomainError('INVALID_SCHEDULE_TIME', 'Scheduled time must be in the future');
     }
 
     const scheduled = await this.postRepo.update(id, {
@@ -270,11 +280,13 @@ export class PostsService {
   }
 
   async cancelSchedule(id: string, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.cancelScheduleTx(id, actorId));
+  }
+
+  private async cancelScheduleTx(id: string, actorId: string): Promise<Post> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     const canceled = await this.postRepo.update(id, {
@@ -295,18 +307,18 @@ export class PostsService {
   }
 
   async restoreRevision(postId: string, revisionId: string, actorId: string): Promise<Post> {
+    return runInTransaction(() => this.restoreRevisionTx(postId, revisionId, actorId));
+  }
+
+  private async restoreRevisionTx(postId: string, revisionId: string, actorId: string): Promise<Post> {
     const post = await this.postRepo.findById(postId);
     if (!post) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     const rev = await this.revisionService.getRevisionById(revisionId);
     if (!rev || rev.resourceType !== 'post' || rev.resourceId !== postId) {
-      const err = new Error('Revision not found for this post');
-      (err as any).code = 'REVISION_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('REVISION_NOT_FOUND', 'Revision not found for this post');
     }
 
     const restored = await this.postRepo.update(postId, {
@@ -349,11 +361,13 @@ export class PostsService {
   }
 
   async deletePost(id: string, actorId: string): Promise<void> {
+    return runInTransaction(() => this.deletePostTx(id, actorId));
+  }
+
+  private async deletePostTx(id: string, actorId: string): Promise<void> {
     const current = await this.postRepo.findById(id);
     if (!current) {
-      const err = new Error('Post not found');
-      (err as any).code = 'POST_NOT_FOUND';
-      throw err;
+      throw new PostDomainError('POST_NOT_FOUND', 'Post not found');
     }
 
     await this.postRepo.delete(id);
@@ -366,6 +380,7 @@ export class PostsService {
     });
 
     domainEvents.emit('post.deleted', { postId: id });
+    await this.eventWriter.write('post.deleted', { postId: id });
   }
 
   async listPosts(filter?: ListPostsFilter): Promise<{ posts: Post[]; total: number }> {

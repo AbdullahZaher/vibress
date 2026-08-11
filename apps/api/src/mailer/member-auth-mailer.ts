@@ -1,22 +1,20 @@
 import nodemailer from 'nodemailer';
 import { MemberAuthMailer, MemberMagicLinkEmail } from '@vibress/members';
+import { getConfig } from '@vibress/config';
 
 export class SmtpMemberAuthMailer implements MemberAuthMailer {
   private transporter: nodemailer.Transporter;
   private from: string;
 
   constructor() {
-    const host = process.env.SMTP_HOST || '127.0.0.1';
-    const port = parseInt(process.env.SMTP_PORT || '1025', 10);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASSWORD;
-    const from = process.env.SMTP_FROM || 'Vibress <no-reply@vibress.local>';
+    const { smtp } = getConfig();
+    const { host, port, secure, user, pass, from } = smtp;
 
     this.from = from;
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465,
+      secure,
       ...(user && pass ? { auth: { user, pass } } : {}),
     });
   }

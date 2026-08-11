@@ -5,8 +5,6 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
-import path from 'node:path';
-import fs from 'node:fs';
 import { getDbPool, closeDbPool, seedDatabase } from '@vibress/database';
 import { getRedisClient, closeRedisClient } from '@vibress/cache';
 import { authRoutes } from './routes/auth';
@@ -34,29 +32,26 @@ import { memberNotificationRoutes } from './routes/notifications';
 import { publicRecommendationRoutes, adminRecommendationRoutes, adminCommentModerationRoutes } from './routes/recommendations';
 import { adminIntegrationRoutes, machineApiRoutes } from './routes/platform';
 import { publicSearchRoutes, adminAnalyticsRoutes, adminSearchRoutes, adminAutomationRoutes } from './routes/intelligence';
+import { healthRoutes } from './routes/health';
+import { mediaStreamRoutes } from './routes/media-stream';
 import { adminOperationsRoutes } from './routes/operations';
 import { storageService, themeService } from './services';
+import { getConfig } from '@vibress/config';
+import {
+  appLogger,
+  recordHttpError,
+  registerMetricsRoutes,
+  registerTraceHooks,
+  startObservabilityMonitors,
+} from './observability';
 
 export const buildApp = () => {
+  const config = getConfig();
   const fastify = Fastify({
-    logger: {
-      level: process.env.LOG_LEVEL || 'info',
-      redact: {
-        paths: [
-          'req.headers.cookie',
-          'req.headers.authorization',
-          'req.headers["set-cookie"]',
-          'req.body.password',
-          'password',
-          'password_hash',
-          'token',
-          'sessionToken',
-        ],
-        censor: '[REDACTED]',
-      },
-    },
+    logger: false,
     bodyLimit: 1048576, // 1MB body limit
     requestIdHeader: 'x-request-id',
+    trustProxy: true,
     genReqId: function (req) {
       return (req.headers['x-request-id'] as string) || crypto.randomUUID();
     },
@@ -72,27 +67,7 @@ export const buildApp = () => {
     },
   });
 
-  const mediaPath = path.resolve(process.cwd(), 'content', 'media');
-
-  // Manual media serving route — replaces @fastify/static to avoid its CVEs
-  fastify.get('/content/media/*', async (request, reply) => {
-    const rawKey = (request.params as Record<string, string>)['*'];
-    if (!rawKey || typeof rawKey !== 'string') return reply.status(404).send();
-    if (rawKey.includes('\0') || rawKey.includes('..') || rawKey.includes('\\') || path.isAbsolute(rawKey)) {
-      return reply.status(404).send();
-    }
-    const resolved = path.resolve(mediaPath, rawKey);
-    if (!resolved.startsWith(mediaPath + path.sep) && resolved !== mediaPath) {
-      return reply.status(404).send();
-    }
-    try {
-      const buf = await fs.promises.readFile(resolved);
-      reply.header('X-Content-Type-Options', 'nosniff');
-      return reply.send(buf);
-    } catch {
-      return reply.status(404).send();
-    }
-  });
+  fastify.register(mediaStreamRoutes);
 
   fastify.register(rateLimit, {
     global: false, // Apply per route as configured
@@ -107,81 +82,47 @@ export const buildApp = () => {
 
   fastify.register(helmet, {
     global: true,
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      reportOnly: true,
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
   });
 
   fastify.register(cors, {
-    origin: process.env.NODE_ENV === 'production'
-      ? ['https://vibress.com']
-      : true,
+    origin: config.cors.origin,
     credentials: true,
   });
 
   // Central error handler
   fastify.setErrorHandler(function (error: any, request, reply) {
-    this.log.error(error);
+    appLogger.error('request failed', { requestId: request.id, method: request.method, path: request.url }, error);
     const statusCode = error.statusCode || 500;
     const errorCode = error.code || 'INTERNAL_ERROR';
+    const isServerError = statusCode >= 500;
+    const responseCode = config.isProduction && isServerError ? 'INTERNAL_ERROR' : errorCode;
+    const message = config.isProduction && isServerError
+      ? 'Internal Server Error'
+      : error.message || 'Internal Server Error';
+    recordHttpError(statusCode, errorCode);
     reply.status(statusCode).send({
       errors: [
         {
-          code: errorCode,
-          message: error.message || 'Internal Server Error',
+          code: responseCode,
+          message,
           requestId: request.id,
         },
       ],
     });
   });
 
-  fastify.get('/health/live', async () => {
-    return { status: 'ok' };
-  });
-
-  fastify.get('/api/health/live', async () => {
-    return { status: 'ok' };
-  });
-
-  fastify.get('/health/ready', async (request, reply) => {
-    let isDbReady = false;
-    let isRedisReady = false;
-
-    try {
-      const pool = getDbPool();
-      const res = await pool.query('SELECT 1');
-      if (res.rowCount === 1) isDbReady = true;
-    } catch (e) {
-      fastify.log.error(e, 'DB readiness check failed');
-    }
-
-    try {
-      const redis = getRedisClient();
-      if (redis.status === 'ready') isRedisReady = true;
-    } catch (e) {
-      fastify.log.error(e, 'Redis readiness check failed');
-    }
-
-    if (!isDbReady || !isRedisReady) {
-      return reply.status(503).send({
-        status: 'not_ready',
-        checks: {
-          database: isDbReady ? 'up' : 'down',
-          redis: isRedisReady ? 'up' : 'down',
-        },
-      });
-    }
-
-    return {
-      status: 'ready',
-      checks: {
-        database: 'up',
-        redis: 'up',
-      },
-    };
-  });
-
-  fastify.get('/api', async () => {
-    return { name: 'Vibress API', status: 'ok' };
-  });
+  fastify.register(healthRoutes);
+  registerTraceHooks(fastify);
+  registerMetricsRoutes(fastify);
 
   // Register Admin & Auth Routes
   fastify.register(authRoutes, { prefix: '/api/admin/v1/auth' });
@@ -231,7 +172,7 @@ export const buildApp = () => {
 const start = async () => {
   const app = buildApp();
   try {
-    const port = process.env.API_PORT ? parseInt(process.env.API_PORT) : 7780;
+    const port = getConfig().ports.api;
 
     // Initialize clients eagerly on startup
     getDbPool();
@@ -242,13 +183,15 @@ const start = async () => {
     startWebhookEventBridge();
     // Bridge domain events to analytics, search indexing, and automations
     startAsyncBridge();
+    // Event-loop lag + process metrics (only if METRICS_ENABLED)
+    const observabilityMonitors = startObservabilityMonitors();
 
     // Ensure system database roles, permissions, and dev staff users are seeded
     try {
       await seedDatabase();
-      app.log.info('Seeded database roles, permissions, and dev staff users');
+      appLogger.info('Seeded database roles, permissions, and dev staff users');
     } catch (err) {
-      app.log.error(err, 'Failed to seed database users');
+      appLogger.error('Failed to seed database users', {}, err as Error);
     }
 
     // Ensure an active theme exists (idempotent seed → vibress-default)
@@ -256,26 +199,27 @@ const start = async () => {
       const active = await themeService.getActiveThemeConfiguration();
       if (!active) {
         await themeService.activateTheme('vibress-default', null);
-        app.log.info('Seeded default active theme (vibress-default)');
+        appLogger.info('Seeded default active theme (vibress-default)');
       }
     } catch (err) {
-      app.log.error(err, 'Failed to seed active theme');
+      appLogger.error('Failed to seed active theme', {}, err as Error);
     }
 
     await app.listen({ port, host: '0.0.0.0' });
-    app.log.info(`API listening on port ${port}`);
+    appLogger.info(`API listening on port ${port}`);
 
     // Graceful shutdown
     const shutdown = async (signal: string) => {
-      app.log.info(`Received ${signal}. Shutting down gracefully...`);
+      appLogger.info(`Received ${signal}. Shutting down gracefully...`);
       try {
+        observabilityMonitors.stop();
         await app.close();
         await closeDbPool();
         await closeRedisClient();
-        app.log.info('Closed out remaining connections.');
+        appLogger.info('Closed out remaining connections.');
         process.exit(0);
       } catch (err) {
-        app.log.error(err, 'Error during shutdown');
+        appLogger.error('Error during shutdown', {}, err as Error);
         process.exit(1);
       }
     };

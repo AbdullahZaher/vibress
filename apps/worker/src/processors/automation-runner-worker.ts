@@ -1,5 +1,4 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, Worker, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { AutomationsService, DrizzleAutomationRepository, AutomationAction } from '@vibress/automations';
 
 export interface AutomationRunJob {
@@ -12,7 +11,7 @@ export interface AutomationDelayedStepJob {
   resumeAt: number;
 }
 
-const AUTOMATIONS_QUEUE_NAME = 'vibress-automations';
+const AUTOMATIONS_QUEUE_NAME = QUEUE_NAMES.AUTOMATIONS_RUN;
 
 /**
  * Automation runner: executes run steps sequentially. Wait steps persist
@@ -33,7 +32,7 @@ export class AutomationRunnerWorker {
       connection,
       defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
     });
-    this.delayedQueue = new Queue<AutomationDelayedStepJob>(`${AUTOMATIONS_QUEUE_NAME}-delayed`, {
+    this.delayedQueue = new Queue<AutomationDelayedStepJob>(QUEUE_NAMES.AUTOMATIONS_DELAYED, {
       connection,
       defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
     });
@@ -65,7 +64,7 @@ export class AutomationRunnerWorker {
     );
 
     this.delayedWorker = new Worker<AutomationDelayedStepJob>(
-      `${AUTOMATIONS_QUEUE_NAME}-delayed`,
+      QUEUE_NAMES.AUTOMATIONS_DELAYED,
       async (job) => {
         await this.automationsService.resumeRun(job.data.runId);
       },

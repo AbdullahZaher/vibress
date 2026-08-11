@@ -24,3 +24,8 @@ class EventBus {
 }
 
 export const domainEvents = new EventBus();
+export * from './event-map';
+export * from './event-envelope';
+export * from './outbox-repository';
+export * from './event-writer';
+export * from './outbox-dispatcher';

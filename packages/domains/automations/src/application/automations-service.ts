@@ -259,15 +259,17 @@ export class AutomationsService {
             eventPayload: run.eventPayload,
           });
           await this.repo.updateStepStatus(step.id, 'completed', { result, executedAt: new Date() });
-        } catch (err: any) {
-          await this.repo.updateStepStatus(step.id, 'failed', { error: err.message || 'action failed' });
+        } catch (err: unknown) {
+          const errMsg = (err as Error).message || 'action failed';
+          await this.repo.updateStepStatus(step.id, 'failed', { error: errMsg });
           throw err;
         }
       }
 
       await this.repo.updateRunStatus(runId, 'completed', { completedAt: new Date() });
-    } catch (err: any) {
-      await this.repo.updateRunStatus(runId, 'failed', { error: err.message || 'run failed', completedAt: new Date() });
+    } catch (err: unknown) {
+      const errMsg = (err as Error).message || 'run failed';
+      await this.repo.updateRunStatus(runId, 'failed', { error: errMsg, completedAt: new Date() });
     }
   }
 

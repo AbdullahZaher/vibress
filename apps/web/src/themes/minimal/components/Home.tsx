@@ -1,20 +1,22 @@
 import React from 'react';
 import { ThemeHomeProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
+import { t } from '../../../lib/i18n';
 
 export async function Home(props: ThemeHomeProps) {
   const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
   const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
+  const dateLocale = props.site.locale || 'en';
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
       <main className="vb-main">
         <section className="vb-container vb-outer">
           <div className="vb-container-inner vb-inner">
-            <h2 className="vb-container-title">Latest Writing</h2>
+            <h2 className="vb-container-title">{t('home.latestWriting')}</h2>
 
             {props.posts.length === 0 ? (
-              <p style={{ opacity: 0.6, padding: '3rem 0' }}>No published posts yet.</p>
+              <p style={{ opacity: 0.6, padding: '3rem 0' }}>{t('home.emptyShort')}</p>
             ) : (
               <div className="vb-feed">
                 {props.posts.map((post) => (
@@ -43,7 +45,7 @@ export async function Home(props: ThemeHomeProps) {
                           )}
                           {showPublicationDate && (
                             <time dateTime={post.publishedAt}>
-                              {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                              {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
                                 year: 'numeric',
                                 month: 'short',
                                 day: 'numeric',
@@ -61,9 +63,9 @@ export async function Home(props: ThemeHomeProps) {
             {props.pagination.pages > 1 && (
               <div className="vb-more">
                 {props.pagination.page < props.pagination.pages ? (
-                  <a href={`/?page=${props.pagination.page + 1}`}>Older Articles &rarr;</a>
+                  <a href={`/?page=${props.pagination.page + 1}`}>{t('home.olderArticles')} &rarr;</a>
                 ) : (
-                  <a href={`/?page=${props.pagination.page - 1}`}>&larr; Newer Articles</a>
+                  <a href={`/?page=${props.pagination.page - 1}`}>&larr; {t('home.newerArticles')}</a>
                 )}
               </div>
             )}

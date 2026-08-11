@@ -21,6 +21,7 @@ export const MediaLibrary: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Detail Modal
   const [selectedAsset, setSelectedAsset] = useState<ApiMediaAsset | null>(null);
@@ -67,6 +68,11 @@ export const MediaLibrary: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
       setSelectedAsset(null);
+      setDeleteError(null);
+    },
+    onError: (err: unknown) => {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setDeleteError(e.message || 'Delete failed');
     },
   });
 
@@ -112,6 +118,12 @@ export const MediaLibrary: React.FC = () => {
       {uploadError && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
           {uploadError}
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
+          {deleteError}
         </div>
       )}
 

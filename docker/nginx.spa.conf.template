@@ -1,0 +1,9 @@
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    location /${APP}/ {
+        try_files $uri $uri/ /${APP}/index.html;
+    }
+}

@@ -1,3 +1,13 @@
+export class UserDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'UserDomainError';
+    this.code = code;
+  }
+}
+
 export type UserStatus = 'active' | 'disabled';
 
 export interface User {

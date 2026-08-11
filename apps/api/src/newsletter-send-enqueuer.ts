@@ -1,9 +1,8 @@
-import { Queue } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { NewslettersService } from '@vibress/newsletters';
 import { DrizzleEmailRecipientRepository } from '@vibress/email';
 
-const EMAIL_QUEUE_NAME = 'vibress-email-delivery';
+const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
 const BATCH_SIZE = 25;
 
 /**

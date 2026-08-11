@@ -247,6 +247,9 @@ importers:
       '@vibress/products':
         specifier: workspace:*
         version: link:../../packages/domains/products
+      '@vibress/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
       '@vibress/recommendations':
         specifier: workspace:*
         version: link:../../packages/domains/recommendations
@@ -366,6 +369,9 @@ importers:
       '@vibress/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@vibress/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@vibress/theme-core':
         specifier: workspace:*
         version: link:../../packages/theme-core
@@ -424,12 +430,18 @@ importers:
       '@vibress/email':
         specifier: workspace:*
         version: link:../../packages/domains/email
+      '@vibress/events':
+        specifier: workspace:*
+        version: link:../../packages/events
       '@vibress/members':
         specifier: workspace:*
         version: link:../../packages/domains/members
       '@vibress/newsletters':
         specifier: workspace:*
         version: link:../../packages/domains/newsletters
+      '@vibress/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@vibress/pages':
         specifier: workspace:*
         version: link:../../packages/domains/pages
@@ -495,6 +507,9 @@ importers:
 
   packages/cache:
     dependencies:
+      '@vibress/config':
+        specifier: workspace:*
+        version: link:../config
       ioredis:
         specifier: ^5.11.1
         version: 5.11.1(supports-color@7.2.0)
@@ -507,6 +522,10 @@ importers:
         version: 5.9.3
 
   packages/config:
+    dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^20.14.10
@@ -517,6 +536,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@vibress/config':
+        specifier: workspace:*
+        version: link:../config
       '@vibress/security':
         specifier: workspace:*
         version: link:../security
@@ -729,6 +751,13 @@ importers:
         version: 5.9.3
 
   packages/domains/files:
+    dependencies:
+      '@vibress/media':
+        specifier: workspace:*
+        version: link:../media
+      '@vibress/storage-core':
+        specifier: workspace:*
+        version: link:../../storage-core
     devDependencies:
       '@types/node':
         specifier: ^20.14.10
@@ -802,6 +831,9 @@ importers:
 
   packages/domains/members:
     dependencies:
+      '@vibress/config':
+        specifier: workspace:*
+        version: link:../../config
       '@vibress/database':
         specifier: workspace:*
         version: link:../../database
@@ -1273,6 +1305,13 @@ importers:
         version: 5.9.3
 
   packages/events:
+    dependencies:
+      '@vibress/database':
+        specifier: workspace:*
+        version: link:../database
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@types/pg@8.20.4)(pg@8.22.0)
     devDependencies:
       '@types/node':
         specifier: ^20.14.10
@@ -1300,6 +1339,10 @@ importers:
         version: 5.9.3
 
   packages/plugin-core:
+    dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^20.14.10
@@ -1318,6 +1361,13 @@ importers:
         version: 5.9.3
 
   packages/queue:
+    dependencies:
+      '@vibress/cache':
+        specifier: workspace:*
+        version: link:../cache
+      bullmq:
+        specifier: ^5.7.8
+        version: 5.81.3(supports-color@7.2.0)
     devDependencies:
       '@types/node':
         specifier: ^20.14.10
@@ -1328,6 +1378,9 @@ importers:
 
   packages/security:
     dependencies:
+      '@vibress/config':
+        specifier: workspace:*
+        version: link:../config
       argon2:
         specifier: ^0.45.1
         version: 0.45.1

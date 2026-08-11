@@ -95,6 +95,7 @@ export function VibressStudio({
   readOnly = false,
   placeholder = 'Write content with Vibress Studio...',
   onError,
+  requestMedia,
   className = '',
 }: VibressStudioProps) {
   const parsedDoc = useMemo(() => migrateDocument(value), [value]);
@@ -152,7 +153,7 @@ export function VibressStudio({
             <HistoryPlugin />
             <ListPlugin />
             <LinkPlugin />
-            <SlashMenuPlugin />
+            <SlashMenuPlugin requestMedia={requestMedia} />
             <FloatingFormatToolbarPlugin />
             <FloatingCardActionToolbarPlugin />
             <InitialStatePlugin document={parsedDoc} />

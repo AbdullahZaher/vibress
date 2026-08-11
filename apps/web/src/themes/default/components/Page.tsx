@@ -33,7 +33,7 @@ export async function Page(props: ThemePageProps) {
             )}
           </header>
 
-          <section className="vb-content">
+          <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: pageObj.html || '' }} />
           </section>
         </article>

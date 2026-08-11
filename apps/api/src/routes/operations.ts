@@ -214,7 +214,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       }
       // Artifact is stored as the envelope itself for v1; regenerate via the collector
       const { NativeExportCollector } = await import('../import-export-processors');
-      const collector = new NativeExportCollector();
+      const collector = new NativeExportCollector({ settingsService, redirectsService });
       const data = await collector.collect();
       const envelope = { format: 'vibress', version: 1, exportedAt: new Date().toISOString(), data };
       return reply.status(200).send(envelope);

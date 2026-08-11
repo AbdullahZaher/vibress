@@ -9,7 +9,7 @@ import {
   verifyPassword,
   dummyVerifyPassword,
 } from '@vibress/security';
-import { Session } from '../domain/session';
+import { Session, AuthDomainError } from '../domain/session';
 
 export interface RequestContext {
   ipAddress?: string | null;
@@ -48,9 +48,7 @@ export class AuthService {
         requestId,
         metadata: { email: normalizedEmail, reason: 'user_not_found' },
       });
-      const err = new Error('Invalid credentials');
-      (err as any).code = 'INVALID_CREDENTIALS';
-      throw err;
+      throw new AuthDomainError('INVALID_CREDENTIALS', 'Invalid credentials');
     }
 
     const isValidPassword = await verifyPassword(user.passwordHash, passwordInput);
@@ -63,9 +61,7 @@ export class AuthService {
         requestId,
         metadata: { email: normalizedEmail, reason: 'invalid_password' },
       });
-      const err = new Error('Invalid credentials');
-      (err as any).code = 'INVALID_CREDENTIALS';
-      throw err;
+      throw new AuthDomainError('INVALID_CREDENTIALS', 'Invalid credentials');
     }
 
     if (user.status === 'disabled') {
@@ -77,9 +73,7 @@ export class AuthService {
         requestId,
         metadata: { email: normalizedEmail, reason: 'user_disabled' },
       });
-      const err = new Error('Invalid credentials');
-      (err as any).code = 'INVALID_CREDENTIALS';
-      throw err;
+      throw new AuthDomainError('INVALID_CREDENTIALS', 'Invalid credentials');
     }
 
     const sessionToken = generateOpaqueToken();
@@ -113,6 +107,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
+        slug: user.slug ?? null,
         status: user.status,
       },
       sessionToken,
@@ -160,6 +155,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
+        slug: user.slug ?? null,
         status: user.status,
       },
       roles,

@@ -3,6 +3,7 @@ import { DrizzlePostRepository } from '@vibress/posts';
 import { DrizzlePageRepository } from '@vibress/pages';
 import { DrizzleTagRepository } from '@vibress/tags';
 import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
+import { getConfig } from '@vibress/config';
 
 /**
  * Worker-side content source for full index rebuilds.
@@ -16,7 +17,7 @@ export class WorkerSearchContentSource {
 
   async listIndexableContent(): Promise<SearchDocumentInput[]> {
     const docs: SearchDocumentInput[] = [];
-    const siteUrl = process.env.SITE_URL || 'http://localhost:7777';
+    const siteUrl = getConfig().site.url;
 
     const PAGE_SIZE = 100;
     let offset = 0;

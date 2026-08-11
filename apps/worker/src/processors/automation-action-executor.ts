@@ -2,10 +2,10 @@ import { AutomationAction } from '@vibress/automations';
 import { DrizzleEmailRecipientRepository, DrizzleEmailEventRepository, SmtpEmailProvider, EmailMessage } from '@vibress/email';
 import { WebhooksService, DrizzleWebhookRepository } from '@vibress/webhooks';
 import { DrizzleNewsletterPreferenceRepository } from '@vibress/newsletters';
-import { getBullMqRedisConnection } from '@vibress/cache';
-import { Queue } from 'bullmq';
+import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
+import { getConfig } from '@vibress/config';
 
-const WEBHOOK_QUEUE = 'vibress-webhook-delivery';
+const WEBHOOK_QUEUE = QUEUE_NAMES.WEBHOOK_DELIVERY;
 
 /**
  * Automation action executor. Actions delegate to domain services — the
@@ -14,12 +14,13 @@ const WEBHOOK_QUEUE = 'vibress-webhook-delivery';
  * are never re-executed), so retries cannot duplicate side effects.
  */
 export class AutomationActionExecutor {
+  private config = getConfig();
   private emailProvider = new SmtpEmailProvider({
-    host: process.env.SMTP_HOST || '127.0.0.1',
-    port: parseInt(process.env.SMTP_PORT || '1025', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || null,
-    pass: process.env.SMTP_PASS || null,
+    host: this.config.smtp.host,
+    port: this.config.smtp.port,
+    secure: this.config.smtp.secure,
+    user: this.config.smtp.user,
+    pass: this.config.smtp.pass,
   });
   private webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
     enqueue: async (deliveryId: string, endpointId: string) => {
@@ -43,7 +44,7 @@ export class AutomationActionExecutor {
         const message: EmailMessage = {
           to,
           toName: null,
-          from: process.env.SMTP_FROM || 'automations@vibress.test',
+          from: this.config.smtp.from,
           fromName: 'Vibress',
           replyTo: null,
           subject,

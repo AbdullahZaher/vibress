@@ -1,5 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { billingService } from '../services';
+import { getConfig } from '@vibress/config';
+import { appLogger } from '../observability';
 
 /**
  * Billing webhook endpoint.
@@ -21,7 +23,7 @@ export async function billingWebhookRoutes(fastify: FastifyInstance) {
     instance.post('/billing/:provider', {
       config: {
         rateLimit: {
-          max: process.env.NODE_ENV === 'test' ? 1000 : 600,
+          max: getConfig().isTest ? 1000 : 600,
           timeWindow: '1 minute',
         },
       },
@@ -43,7 +45,11 @@ export async function billingWebhookRoutes(fastify: FastifyInstance) {
           return reply.status(result.status).send({ received: true });
         } catch (err: any) {
           // Event was persisted; failed processing is retryable from the event record
-          req.log.warn({ event: 'webhook_processing_failed', provider }, err.message || 'processing failed');
+          appLogger.warn(
+            'webhook processing failed',
+            { event: 'webhook_processing_failed', provider, requestId: req.id },
+            err
+          );
           return reply.status(200).send({ received: true, processing: 'failed, retryable' });
         }
       },

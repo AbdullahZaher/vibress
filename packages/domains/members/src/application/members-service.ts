@@ -1,6 +1,7 @@
 import { MemberRepository, MemberSessionRepository } from '../domain/repository';
 import { Member, UpdateMemberData, ListMembersFilter, normalizeMemberEmail } from '../domain/member';
 import { domainEvents } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
 
 export class MemberNotFoundError extends Error {
   code = 'MEMBER_NOT_FOUND';
@@ -51,6 +52,10 @@ export class MembersService {
   }
 
   async disableMember(memberId: string, actorId: string | null): Promise<Member> {
+    return runInTransaction(() => this.disableMemberTx(memberId, actorId));
+  }
+
+  private async disableMemberTx(memberId: string, actorId: string | null): Promise<Member> {
     const member = await this.memberRepo.findById(memberId);
     if (!member) throw new MemberNotFoundError();
     if (member.status === 'disabled') {

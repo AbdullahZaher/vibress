@@ -3,6 +3,8 @@ import { Member, normalizeMemberEmail } from '../domain/member';
 import { MemberAuthMailer } from '../domain/mailer';
 import { generateOpaqueToken, hashToken } from '@vibress/security';
 import { domainEvents } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
+import { getConfig } from '@vibress/config';
 import crypto from 'node:crypto';
 
 export interface MemberAuthContext {
@@ -104,6 +106,14 @@ export class MemberAuthService {
     sessionToken: string;
     sessionExpiresAt: Date;
   }> {
+    return runInTransaction(() => this.verifyAndCreateSessionTx(rawToken, context));
+  }
+
+  private async verifyAndCreateSessionTx(rawToken: string, context: MemberAuthContext = {}): Promise<{
+    member: Member;
+    sessionToken: string;
+    sessionExpiresAt: Date;
+  }> {
     if (!rawToken) {
       throw new MemberAuthError('AUTH_TOKEN_INVALID', 'Invalid or missing token');
     }
@@ -190,8 +200,7 @@ export class MemberAuthService {
   }
 
   private buildMagicLinkUrl(rawToken: string): string {
-    const portalBase = process.env.PORTAL_URL || process.env.SITE_URL || 'http://localhost:7777';
-    const normalizedBase = portalBase.replace(/\/+$/, '');
+    const normalizedBase = getConfig().site.portalUrl;
     return `${normalizedBase}/portal/auth/verify?token=${encodeURIComponent(rawToken)}`;
   }
 }

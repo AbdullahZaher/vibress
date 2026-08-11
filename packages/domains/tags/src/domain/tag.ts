@@ -1,3 +1,13 @@
+export class TagDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'TagDomainError';
+    this.code = code;
+  }
+}
+
 export interface Tag {
   id: string;
   name: string;

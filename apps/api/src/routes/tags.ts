@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { CreateTagInputSchema, UpdateTagInputSchema } from '@vibress/api-contracts';
 import { tagsService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
+import { TagDomainError } from '@vibress/tags';
 
 export async function tagRoutes(fastify: FastifyInstance) {
   // List tags
@@ -72,8 +73,8 @@ export async function tagRoutes(fastify: FastifyInstance) {
       try {
         const tag = await tagsService.updateTag(id, parseResult.data);
         return reply.status(200).send({ tag });
-      } catch (err: any) {
-        if (err.code === 'TAG_NOT_FOUND') {
+      } catch (err: unknown) {
+        if (err instanceof TagDomainError && err.code === 'TAG_NOT_FOUND') {
           return reply.status(404).send({
             errors: [{ code: 'TAG_NOT_FOUND', message: 'Tag not found', requestId: req.id }],
           });

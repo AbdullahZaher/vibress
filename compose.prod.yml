@@ -1,0 +1,207 @@
+# Production deployment.
+#
+#   cp infrastructure/env.prod.example .env   # fill secrets
+#   docker compose -f compose.prod.yml up -d --build
+#
+# Network model:
+#   - `frontend`: gateway + apps (api/worker/web/admin/portal) — the only
+#     network with external exposure (gateway port only).
+#   - `backend`: internal-only network for postgres + redis. API and worker
+#     attach to it, but it has NO external routes, so databases are never
+#     reachable from outside the compose project.
+#
+# All containers run as non-root ("node" user for Node images, uid 101 for
+# the unprivileged nginx images, built-in non-root users for postgres/redis).
+
+name: vibress-prod
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vibress}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-vibress}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vibress} -d ${POSTGRES_DB:-vibress}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    restart: unless-stopped
+    environment: &app-environment
+      NODE_ENV: production
+      VIBRESS_VERSION: ${VIBRESS_VERSION:-0.0.0}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      TRACING_ENABLED: ${TRACING_ENABLED:-true}
+      API_PORT: "7780"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vibress}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-vibress}
+      REDIS_URL: redis://redis:6379
+      SITE_URL: ${SITE_URL:?set SITE_URL (public origin, e.g. https://example.com)}
+      PORTAL_URL: ${PORTAL_URL:-}
+      API_URL: ${API_URL:-}
+      SITE_NAME: ${SITE_NAME:-Vibress}
+      SITE_DESCRIPTION: ${SITE_DESCRIPTION:-Publishing Platform}
+      SITE_LOCALE: ${SITE_LOCALE:-en}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:?set ADMIN_ORIGIN}
+      PORTAL_ORIGIN: ${PORTAL_ORIGIN:?set PORTAL_ORIGIN}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-vibress_session}
+      MEMBER_SESSION_COOKIE_NAME: ${MEMBER_SESSION_COOKIE_NAME:-vibress_member_session}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
+      MEMBERS_SIGNUP_ENABLED: ${MEMBERS_SIGNUP_ENABLED:-true}
+      NEWSLETTER_UNSUBSCRIBE_SECRET: ${NEWSLETTER_UNSUBSCRIBE_SECRET:?set NEWSLETTER_UNSUBSCRIBE_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?set STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?set STRIPE_WEBHOOK_SECRET}
+      VIBRESS_ENCRYPTION_KEY: ${VIBRESS_ENCRYPTION_KEY:?set VIBRESS_ENCRYPTION_KEY}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      EVENT_DELIVERY_MODE: ${EVENT_DELIVERY_MODE:-outbox}
+    networks: [frontend, backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7780/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    restart: unless-stopped
+    environment: *app-environment
+    networks: [frontend, backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7782/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # One-shot database migration bootstrap (pnpm prod:migrate).
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment: *app-environment
+    command: ["sh", "-c", "pnpm --filter @vibress/database run db:migrate"]
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "7778"
+      HOSTNAME: 0.0.0.0
+    networks: [frontend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7778/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  admin:
+    build:
+      context: .
+      dockerfile: docker/spa.Dockerfile
+      args:
+        APP: admin
+    restart: unless-stopped
+    networks: [frontend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/admin/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  portal:
+    build:
+      context: .
+      dockerfile: docker/spa.Dockerfile
+      args:
+        APP: portal
+    restart: unless-stopped
+    networks: [frontend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/portal/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${VIBRESS_PORT:-7777}:8080"
+    networks: [frontend]
+    depends_on:
+      - api
+      - worker
+      - web
+      - admin
+      - portal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

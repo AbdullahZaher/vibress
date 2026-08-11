@@ -1,3 +1,13 @@
+export class AuthDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'AuthDomainError';
+    this.code = code;
+  }
+}
+
 export interface Session {
   id: string;
   userId: string;

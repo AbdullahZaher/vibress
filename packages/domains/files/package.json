@@ -8,7 +8,10 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@vibress/media": "workspace:*",
+    "@vibress/storage-core": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.5.3",
     "@types/node": "^20.14.10"

@@ -2,7 +2,7 @@ import { lookup } from 'node:dns/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { URL } from 'node:url';
-import { Socket } from 'node:net';
+import { Socket, isIP, isIPv4, isIPv6 } from 'node:net';
 
 export class SafeFetchError extends Error {
   code: string;
@@ -13,24 +13,94 @@ export class SafeFetchError extends Error {
   }
 }
 
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^0\./,
-  /^169\.254\./,
-  /^::1$/,
-  /^fc00:/i,
-  /^fe80:/i,
-  /^fd/i,
-  /^::$/,
-  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./i, // Carrier-grade NAT
-  /^2[23]\./, // CGNAT range
-];
+/**
+ * Normalizes IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 -> 127.0.0.1).
+ */
+export function normalizeIP(ip: string): string {
+  let cleaned = ip.trim();
+  // Strip surrounding brackets for IPv6 if present
+  if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  // IPv4-mapped IPv6: ::ffff:192.0.2.128
+  const match = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(cleaned);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return cleaned;
+}
 
-function isPrivateIP(ip: string): boolean {
-  return PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(ip));
+/**
+ * Checks whether an IPv4 or IPv6 address belongs to a private, loopback,
+ * link-local, multicast, or reserved range per RFCs.
+ */
+export function isPrivateIP(rawIp: string): boolean {
+  const ip = normalizeIP(rawIp);
+
+  if (isIPv4(ip)) {
+    const parts = ip.split('.').map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
+      return true; // Malformed IPv4 treated as unsafe
+    }
+
+    const [a, b, c] = parts as [number, number, number, number];
+
+    // 0.0.0.0/8 (Current network)
+    if (a === 0) return true;
+    // 10.0.0.0/8 (Private)
+    if (a === 10) return true;
+    // 100.64.0.0/10 (Carrier-grade NAT)
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    // 127.0.0.0/8 (Loopback)
+    if (a === 127) return true;
+    // 169.254.0.0/16 (Link-local / Cloud metadata 169.254.169.254)
+    if (a === 169 && b === 254) return true;
+    // 172.16.0.0/12 (Private 172.16.0.0 – 172.31.255.255)
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 192.0.0.0/24 (IETF Protocol Assignments)
+    if (a === 192 && b === 0 && c === 0) return true;
+    // 192.0.2.0/24 (TEST-NET-1)
+    if (a === 192 && b === 0 && c === 2) return true;
+    // 192.88.99.0/24 (6to4 Relay)
+    if (a === 192 && b === 88 && c === 99) return true;
+    // 192.168.0.0/16 (Private)
+    if (a === 192 && b === 168) return true;
+    // 198.18.0.0/15 (Benchmarking)
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    // 198.51.100.0/24 (TEST-NET-2)
+    if (a === 198 && b === 51 && c === 100) return true;
+    // 203.0.113.0/24 (TEST-NET-3)
+    if (a === 203 && b === 0 && c === 113) return true;
+    // 224.0.0.0/4 & 240.0.0.0/4 (Multicast & Reserved 224.0.0.0 - 255.255.255.255)
+    if (a >= 224) return true;
+
+    return false;
+  }
+
+  if (isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    // Unspecified :: or Loopback ::1
+    if (lower === '::' || lower === '::1' || lower === '0:0:0:0:0:0:0:0' || lower === '0:0:0:0:0:0:0:1') {
+      return true;
+    }
+    // Unique Local (fc00::/7 -> fc.. or fd..)
+    if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return true;
+    // Link-local (fe80::/10 -> fe8.., fe9.., fea.., feb..)
+    if (/^fe[89ab][0-9a-f]:/i.test(lower)) return true;
+    // Multicast (ff00::/8)
+    if (/^ff[0-9a-f]{2}:/i.test(lower)) return true;
+    // Documentation (2001:db8::/32)
+    if (lower.startsWith('2001:db8:')) return true;
+    // Discard (100::/64)
+    if (lower.startsWith('100:')) return true;
+    // IPv4-translated (64:ff9b::/96)
+    if (lower.startsWith('64:ff9b:')) return true;
+
+    return false;
+  }
+
+  // If not valid IPv4/IPv6, treat as unsafe
+  return true;
 }
 
 export interface SafeFetchOptions {
@@ -174,7 +244,7 @@ export async function safeFetch(
       // DNS rebinding guard: check the socket's remote IP after connect
       req.on('socket', (socket: Socket) => {
         socket.on('connect', () => {
-          const remoteIP = socket.remoteAddress?.replace(/^::ffff:/, '');
+          const remoteIP = socket.remoteAddress;
           if (remoteIP && isPrivateIP(remoteIP)) {
             socket.destroy();
             req.destroy();
@@ -214,12 +284,33 @@ export function isSafeUrl(urlInput: string): boolean {
   try {
     const parsed = new URL(urlInput);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    // Block obvious localhost / IP literals without DNS
-    const hostname = parsed.hostname;
-    if (isPrivateIP(hostname)) return false;
-    if (hostname === 'localhost') return false;
+
+    let hostname = parsed.hostname.toLowerCase();
+    // Strip surrounding brackets for IPv6 literals
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
+    // Strip trailing dot (FQDN form, e.g. 'localhost.')
+    hostname = hostname.replace(/\.$/, '');
+
+    // Block obvious local hostnames
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) {
+      return false;
+    }
+
+    // If hostname is an IP address, test if private
+    if (isIP(hostname)) {
+      if (isPrivateIP(hostname)) return false;
+    }
+
     return true;
   } catch {
     return false;
   }
 }
+

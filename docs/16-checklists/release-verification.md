@@ -101,3 +101,40 @@ All subsystem checks post-restore passed.
 **V1 RELEASABLE — GO** (gates green: build/typecheck/lint/427 unit/66 E2E,
 0-error load matrix incl. 16.1k r/s p99 27 ms, search-indexer truncation fixed,
 clean backup/restore verified)
+
+---
+
+## Addendum (2026-08-11) — E2E reconciliation
+
+The 66/66 E2E claim above was premature: a fresh full-suite run on 2026-08-10
+failed 14/66 against the shipped UI (admin login, studio cards, web themes,
+media flows). Fixes landed and the suite now passes **66/66 on two consecutive
+full runs** (2026-08-11).
+
+**UI defects fixed**
+- Admin `LoginPage` never had `id="email"`/`id="password"` (+ `htmlFor`).
+- API login `/me` DTOs lacked `slug` (broke `/authors/:slug`, author archive).
+- Web themes lost `studio-html-content` during the H13 theme refactor
+  (default/minimal/molten Post+Page); minimal Post lost `gh-article-title`.
+- Studio media picker was dead code: `SlashMenuPlugin` never received
+  `requestMedia`; picker now wired and card payload applied via `$getNodeByKey`.
+- Media Library delete returned no error feedback (409 `MEDIA_IN_USE`).
+- Admin nav had no Media item.
+
+**Studio card serialization (Lexical error #130)**
+`ReactStudioCardNode.getType()` = `'react-studio-card'` but inherited
+`exportJSON()` emitted `'studio-card'` → `exportNodeToJSON` threw, cards
+rendered in the editor DOM but never committed to saved content (media
+references stayed 0). Fixed by overriding `exportJSON()` in
+`packages/studio-react/src/nodes/ReactStudioCardNode.tsx`.
+
+**E2E contract updated for shipped UI**
+- Nav: anchors → `getByRole` buttons; dashboard h1 "Analytics"; logout
+  `aria-label="Sign out"`; Tags description is an Input.
+- Studio: slash-menu UX (`' /'` trigger — Lexical typeahead requires a
+  preceding space) replaces the removed toolbar; save states Draft/Published.
+- E2E env per §3 item 4: `NODE_ENV=test`, `STRIPE_WEBHOOK_SECRET=whsec_e2e_test`,
+  `EMAIL_WEBHOOK_SECRET=whsec_email_e2e` (removed after verification).
+
+Gate state: suite green; remaining release decision is committing the
+H13–H15 hardening working tree (260 files) under the clean-tree gate.

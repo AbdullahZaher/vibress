@@ -1,11 +1,12 @@
 {
   "name": "@vibress/api",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
-    "start": "node dist/main.js",
+    "start": "tsx src/main.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
@@ -54,6 +55,7 @@
     "@vibress/newsletters": "workspace:*",
     "@vibress/email": "workspace:*",
     "bullmq": "^5.7.8",
+    "@vibress/queue": "workspace:*",
     "@vibress/comments": "workspace:*",
     "@vibress/notifications": "workspace:*",
     "@vibress/recommendations": "workspace:*",
