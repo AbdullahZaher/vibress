@@ -50,7 +50,19 @@ export class DrizzleOutboxRepository implements OutboxRepository {
       )
       RETURNING *
     `);
-    return mapRows(result.rows);
+    const rows = mapRows(result.rows);
+    // PostgreSQL does not guarantee RETURNING row order, even when the
+    // selection subquery is ordered — rows come back in scan/update order.
+    // Restore the deterministic claim order (created_at, id) so dispatcher
+    // delivery order is stable regardless of the execution plan. Raw
+    // db.execute returns created_at as an ISO string, which compares
+    // correctly as text.
+    rows.sort((a, b) => {
+      const ta = String(a.createdAt);
+      const tb = String(b.createdAt);
+      return ta < tb ? -1 : ta > tb ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    return rows;
   }
 
   async markPublished(ids: string[]): Promise<void> {
