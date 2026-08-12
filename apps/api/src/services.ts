@@ -11,6 +11,7 @@ import { DrizzlePageRepository, PagesService } from '@vibress/pages';
 import { LocalStorageProvider, defaultStorageRegistry } from '@vibress/storage-core';
 import { DrizzleMediaRepository, MediaService } from '@vibress/media';
 import { getConfig } from '@vibress/config';
+import { SetupService, DrizzleInstallationRepository } from '@vibress/setup';
 
 import { DrizzleStorageRepository, StorageService } from '@vibress/storage-domain';
 import {
@@ -361,6 +362,7 @@ export const pagesService = new PagesService(pageRepo, revisionsService, authorR
 
 // ---------------- Operations: Settings, Redirects, Import/Export ----------------
 export const settingsService = new SettingsService(new DrizzleSettingRepository(), auditService);
+export const setupService = new SetupService(new DrizzleInstallationRepository());
 export const redirectsService = new RedirectsService(new DrizzleRedirectRepository());
 export const importExportService = new ImportExportService(
   new DrizzleImportExportJobRepository(),

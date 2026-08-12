@@ -9,6 +9,7 @@ import {
   authorsService,
   mediaService,
   themeService,
+  settingsService,
 } from '../services';
 import {
   buildPublicPostSummaryDto,
@@ -20,19 +21,48 @@ import {
 import type { Author } from '@vibress/authors';
 import { getConfig } from '@vibress/config';
 
+/**
+ * Wizard-managed site identity, precedence: DB setting → environment →
+ * built-in default. SITE_URL stays infrastructure-driven (canonical URLs,
+ * RSS, sitemap, cookies, CORS all depend on it) and is never overridden by
+ * the database.
+ */
+async function buildPublicSiteIdentity(): Promise<{
+  title: string;
+  description: string;
+  url: string;
+  locale: string;
+  tagline: string;
+}> {
+  const config = getConfig();
+  const stored = await settingsService.getPublicSettings();
+  const site = (stored.site ?? {}) as Record<string, unknown>;
+
+  const str = (v: unknown, fallback: string): string =>
+    typeof v === 'string' && v.trim() !== '' ? v : fallback;
+
+  return {
+    title: str(site.title, config.site.name),
+    description: str(site.description, config.site.description),
+    tagline: str(site.tagline, ''),
+    url: config.site.url,
+    locale: str(site.locale, config.site.locale),
+  };
+}
 export async function publicContentRoutes(fastify: FastifyInstance) {
   // Public Site Metadata + Active Theme
   fastify.get('/site', {
     handler: async (req, reply) => {
-      const config = getConfig();
+      const site = await buildPublicSiteIdentity();
       const active = await themeService.getActiveTheme();
 
       return reply.status(200).send({
         site: {
-          title: config.site.name,
-          description: config.site.description,
-          url: config.site.url,
-          locale: config.site.locale,
+          title: site.title,
+          description: site.description,
+          url: site.url,
+          locale: site.locale,
+          tagline: site.tagline,
         },
         theme: {
           themeId: active?.manifest.id || 'vibress-default',
