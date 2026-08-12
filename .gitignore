@@ -28,10 +28,23 @@ logs/
 infrastructure/data/
 /tmp/vibress-*
 
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+
+# Temporary logs
+*.log
+
+# Cache folders
+.eslintcache
+
 # Generated artifacts (build output, type info, dev logs)
 *.tsbuildinfo
+tsconfig.tsbuildinfo
 *.js.map
-server*.log
 vite.config.js
 vite.config.d.ts
 
