@@ -43,6 +43,7 @@ export interface AppConfig {
   members: { signupEnabled: boolean };
   billing: { stripeSecretKey: string | null; stripeWebhookSecret: string | null; portalUrl: string };
   secrets: { encryptionKey: string | null };
+  setup: { token: string | null };
   outbox: { deliveryMode: EventDeliveryMode; publishedRetentionDays: number; failedRetentionDays: number };
   system: { version: string; storageProvider: string };
   observability: {
@@ -127,6 +128,7 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: optionalNonEmptyString,
 
   VIBRESS_ENCRYPTION_KEY: optionalNonEmptyString,
+  VIBRESS_SETUP_TOKEN: optionalNonEmptyString,
   STORAGE_PROVIDER: nonEmptyString.default('local'),
 
   EVENT_DELIVERY_MODE: z.enum(['outbox', 'direct']).default('outbox'),
@@ -218,6 +220,7 @@ export function loadConfig(env: EnvSource): AppConfig {
       portalUrl,
     },
     secrets: { encryptionKey: raw.VIBRESS_ENCRYPTION_KEY || null },
+    setup: { token: raw.VIBRESS_SETUP_TOKEN || null },
     outbox: {
       deliveryMode: raw.EVENT_DELIVERY_MODE,
       publishedRetentionDays: raw.OUTBOX_PUBLISHED_RETENTION_DAYS,
@@ -262,9 +265,29 @@ function enforceProductionGuards(config: AppConfig): void {
   if (config.cors.origins.length === 0) {
     issues.push('CORS_ORIGINS, ADMIN_ORIGIN, or PORTAL_ORIGIN must define at least one production origin');
   }
+  // First-run setup bootstrap secret: production must fail closed. A missing
+  // or placeholder token would leave the setup endpoint unprotected on a
+  // fresh instance. (After installation the endpoint is permanently locked,
+  // but the variable must still be present at boot for a production stack.)
+  if (isSetupTokenInsecure(config.setup.token)) {
+    issues.push('VIBRESS_SETUP_TOKEN must be set to a secure value in production (at least 16 characters, not a placeholder)');
+  }
   if (issues.length > 0) {
     throw new ConfigError(`Invalid production configuration: ${issues.join('; ')}`, issues);
   }
+}
+
+/**
+ * Insecure bootstrap setup token detection (duplicated intentionally: config
+ * is a leaf package and cannot import from @vibress/security, which itself
+ * depends on config — this tiny check is mirrored in @vibress/setup).
+ */
+function isSetupTokenInsecure(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return true;
+  const trimmed = token.trim();
+  if (trimmed.length < 16) return true;
+  const lower = trimmed.toLowerCase();
+  return lower.includes('change-me') || lower.includes('changeme') || lower === 'dev' || lower === 'development';
 }
 
 function allowedOrigins(isProduction: boolean, localDefaults: string[], configured: Array<string | null>): string[] {

@@ -47,7 +47,7 @@ export class Logger {
     this.name = options.name || 'app';
     this.minLevelNum = LOG_LEVEL_ORDER[options.minLevel || 'info'];
     this.redactKeys = new Set(
-      (options.redactKeys || ['password', 'passwordHash', 'token', 'secret', 'authorization', 'cookie']).map((k) =>
+      (options.redactKeys || ['password', 'passwordHash', 'token', 'secret', 'authorization', 'cookie', 'x-vibress-setup-token', 'setup-token']).map((k) =>
         k.toLowerCase()
       )
     );
