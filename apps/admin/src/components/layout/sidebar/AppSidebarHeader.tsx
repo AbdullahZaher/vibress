@@ -1,34 +1,31 @@
 import React from 'react';
 import { Search, Sun, Moon } from 'lucide-react';
-import { ApiUser } from '../../../lib/api';
+import vibressLogo from '../../../assets/images/vibress-logo.png';
 
 interface AppSidebarHeaderProps {
-  user: ApiUser;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onNavigate: (path: string) => void;
 }
 
 export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
-  user,
   darkMode,
   onToggleDarkMode,
   onNavigate,
 }) => {
   return (
     <div className="space-y-3 px-4 pt-4 pb-2">
-      {/* Brand & User Title */}
+      {/* Brand Logo + Wordmark (centered) */}
       <div className="flex items-center justify-between px-1 pt-1 pb-1">
+        {/* Invisible spacer balancing the theme toggle so the brand is truly centered */}
+        <div className="w-6 shrink-0" aria-hidden="true" />
         <div
-          className="flex items-center gap-2.5 cursor-pointer min-w-0"
+          className="flex items-center gap-2 cursor-pointer min-w-0"
           onClick={() => onNavigate('/admin')}
+          title="Vibress"
         >
-          <div className="size-8 rounded-md bg-muted border border-border flex items-center justify-center text-xs font-bold text-foreground shrink-0 overflow-hidden shadow-xs">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-          <span className="font-semibold text-base tracking-tight text-foreground truncate">
-            {user.name}
-          </span>
+          <img src={vibressLogo} alt="" className="h-6 w-auto object-contain" />
+          <span className="font-bold text-lg tracking-tight text-foreground truncate">Vibress</span>
         </div>
 
         <button

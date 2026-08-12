@@ -31,7 +31,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       {/* Top Header */}
       <div className="shrink-0">
         <AppSidebarHeader
-          user={user}
           darkMode={darkMode}
           onToggleDarkMode={onToggleDarkMode}
           onNavigate={onNavigate}
