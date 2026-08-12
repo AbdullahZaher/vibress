@@ -33,6 +33,7 @@ infrastructure/data/
 *.js.map
 server*.log
 vite.config.js
+vite.config.d.ts
 
 # storage-s3 build emits alongside sources (no outDir)
 packages/storage-s3/src/*.js
