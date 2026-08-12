@@ -108,3 +108,57 @@ jobs:
           exit-code: '1'
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+  # End-to-end Playwright suite (existing 66 tests + First-Run Setup Wizard).
+  # Release gate on pushes to main; the dev stack (seeded -> installed) covers
+  # the existing suite and compose.setup-e2e.yml provides a fresh instance for
+  # the wizard spec on :8899.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: build
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start development infrastructure
+        run: docker compose -f compose.dev.yml -f compose.dev.ci.yml up -d --wait
+
+      - name: Run database migrations
+        run: pnpm --filter @vibress/database run db:migrate
+
+      - name: Start development applications
+        run: |
+          pnpm dev > /tmp/vibress-dev.log 2>&1 &
+          for i in $(seq 1 90); do
+            ok=1
+            for u in http://127.0.0.1:7780/health/ready http://127.0.0.1:7778 http://127.0.0.1:7779 http://127.0.0.1:7781; do
+              curl -sf -o /dev/null "$u" || ok=0
+            done
+            [ "$ok" = "1" ] && break
+            sleep 5
+          done
+          curl -sf -o /dev/null http://127.0.0.1:7780/health/ready || { echo 'dev apps failed to start'; tail -80 /tmp/vibress-dev.log; exit 1; }
+
+      - name: Start fresh-install stack (setup wizard E2E)
+        run: docker compose -f compose.setup-e2e.yml up -d --build --wait
+
+      - name: Install Playwright browser
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E suite
+        run: npx playwright test

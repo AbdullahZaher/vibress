@@ -1,0 +1,7 @@
+# CI override for the development stack on GitHub-hosted (Linux) runners.
+# Removes the macOS Docker Desktop host.docker.internal pin so Docker's
+# automatic Linux host resolution works (the dev gateway reaches host apps
+# on 7778/7779/7780/7781 through host.docker.internal).
+services:
+  gateway:
+    extra_hosts: []
