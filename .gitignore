@@ -39,3 +39,6 @@ packages/storage-s3/src/*.js
 packages/storage-s3/src/*.d.ts
 packages/storage-s3/src/__tests__/*.js
 packages/storage-s3/src/__tests__/*.d.ts
+
+# Local production env (never commit)
+.env.prod

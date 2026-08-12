@@ -73,3 +73,54 @@ API/worker network; do not expose `/metrics` publicly.
 - When debugging async jobs (queue/outbox), the worker logs identify the
   job type via `logger=worker`; the API side of the same work carries the
   originating `requestId` in events persisted to the outbox.
+## Optional OpenTelemetry exporter
+
+OpenTelemetry export is optional and fail-open: the app never depends on a
+collector being reachable.
+
+### Configuration (`@vibress/config` → `observability.tracing`)
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `TRACING_ENABLED` | `true` | Master switch; `false` → no exporter is initialized (zero OTel overhead) |
+| `OTEL_SERVICE_NAME` | `vibress` | Service name attribute (API overrides to `vibress-api`, worker to `vibress-worker`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | OTLP/HTTP endpoint (traces are exported to `<endpoint>/v1/traces`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | – | Optional comma-separated `Key=Value` list (e.g. auth headers) |
+| `OTEL_SAMPLING_RATIO` | `1` | 0..1 head-sampling ratio |
+| `OTEL_RESOURCE_ATTRIBUTES` | – | Optional `Key=Value` resource attributes |
+
+### Behavior
+
+- `OTEL_ENABLED=false` (i.e. `TRACING_ENABLED=false`) → `initTracing` returns a
+  noop handle; no provider, no exporter, no instrumentation.
+- Collector unavailable → exporter timeouts after 2 s, spans are dropped,
+  the app continues (fail-open). Verified by tests
+  (`platform-packages` suite).
+- The exporter is a `BatchSpanProcessor` (queue 1024 / batch 512 / 5 s flush)
+  and never blocks request handling.
+
+### Instrumentation surface
+
+- **HTTP request spans** — `@opentelemetry/auto-instrumentations-node`
+  (`instrumentation-http`) covers Fastify request lifecycle.
+- **Outbound `safeFetch` spans** — `packages/security` wraps `safeFetch` in
+  `safeFetch` span (`http.method`, `url.full` with query string stripped so
+  secrets never reach attributes).
+- **Queue enqueue spans** — `@vibress/queue`'s `enqueueTraced` wraps
+  `queue.add` and attaches a W3C `traceparent` to the job payload.
+- **Worker job spans** — each processor wraps jobs in
+  `worker.job.<name>` via `tracedProcessor`, continuing the producing
+  process's trace when the job carries a `traceparent`.
+- **Outbox dispatch spans** — the worker relay wraps delivery in
+  `outbox.relay.deliver` with `outboxId`/`eventType` attributes.
+- **Transaction spans** — `runInTransaction` wraps the DB transaction in a
+  `db.transaction` span.
+
+### Context propagation
+
+- HTTP `traceparent` → request ALS context → outbox envelope (`trace` field:
+  `{traceId, spanId}` written by `OutboxEventWriter`) → worker dispatcher
+  continues the remote trace → queue job `traceparent` → worker job span.
+- Correlation fields (`traceId`, `requestId`, `outboxEventId`, `jobId`) are
+  recorded as span attributes (`vibress.trace_id`) and log fields; secrets are
+  never added to span attributes.

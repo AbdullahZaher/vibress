@@ -404,3 +404,156 @@ Status: pending
 - [ ] Failure drills pass
 - [ ] Performance regression checked
 - [ ] Clean backup/restore passes
+
+## H16 — Final production polish (ISR fix, CSP enforcement, OTel exporter, Member /me benchmark, type safety)
+
+Status: complete (except container re-scan — see note)
+
+### 1. Public post-by-slug ISR / revalidation
+
+Root cause of the earlier "public post 404 (ISR)" report: the route was always
+configured dynamically (`revalidate = 0` + `cache: 'no-store'`), and dev/runtime
+verification confirms it is server-rendered on demand (`ƒ (Dynamic)` in the
+route table). No ISR revalidation path is needed and none is used. The earlier
+404 was a stale dev-server module graph after node_modules churn, not an ISR
+cache.
+
+Verified (dev + production compose):
+- draft → web 404; publish → web 200 with SSR content
+- title/content update → reflected immediately
+- slug change → old 404, new 200
+- unpublish → 404; delete → 404
+- members/paid visibility → 404 on public API/web (new enforcement, see below)
+
+Chosen strategy: **Option A — dynamic rendering** with explicit
+`revalidate = 0` and `cache: 'no-store'` fetches; runtime publish → 200 without
+rebuild. Documented in this file and verified against `compose.prod.yml` on a
+clean database (create → publish → `GET /posts/:slug` = 200).
+
+### 2. Restricted-content leak fix (new security finding)
+
+`findPublishedBySlug`/`list()` for posts AND pages did not filter
+`visibility` — members/paid content was served by the public content API and
+web routes. Fixed by adding `visibility: 'public'` enforcement:
+
+- `ListPostsFilter`/`ListPagesFilter` gained `visibility`
+- `findPublishedBySlug` (posts + pages repos) now requires `visibility = 'public'`
+- Public content routes pass `visibility: 'public'` (posts, pages, tag posts,
+  author posts)
+- Search content sources already filtered `visibility !== 'public'` (verified)
+
+Coverage: `tests/security/content-api.test.ts` gained a restricted-content
+non-leak test (post + page); runtime verification shows 404 on public routes
+while admin API still serves the entity.
+
+### 3. CSP enforcement
+
+CSP moved from report-only to enforced at all layers:
+
+- **API (Fastify Helmet):** `default-src 'none'` + explicit
+  `script-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`,
+  `base-uri 'none'`, `form-action 'none'` — no `unsafe-inline`, no `unsafe-eval`.
+- **Web (Next.js):** per-request nonce via `apps/web/src/middleware.ts`. Next.js
+  15.5 reads the nonce from the CSP request header and applies it to its inline
+  bootstrap scripts. `script-src 'self' 'nonce-…'` (no unsafe-inline, no
+  unsafe-eval); `style-src 'self' 'nonce-…' 'unsafe-inline'` (documented
+  exception for React inline style attributes in themes).
+- **Admin/Portal SPAs:** strict CSP in `docker/nginx.spa.conf.template`
+  (`script-src 'self'`, `style-src 'self' 'unsafe-inline'` — React style
+  attribute exception; Vite builds emit external scripts only).
+- **Gateway:** global CSP `add_header` removed (per-app policies replace it);
+  other security headers retained.
+
+Verified: header assertions in `apps/api/src/__tests__/api-hardening.test.ts`
+(enforced, no report-only header, no unsafe-inline); web headers carry
+matching nonces; E2E 66/66 (Admin, Portal, Web, themes, media, member portal,
+checkout redirect) pass with enforcement active; production compose header
+checks pass at all three layers.
+
+### 4. OpenTelemetry exporter
+
+`@vibress/observability` gained a full optional OTel exporter
+(`packages/observability/src/tracing.ts`):
+
+- Config: `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+  `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_SAMPLING_RATIO`,
+  `OTEL_RESOURCE_ATTRIBUTES` (typed via `@vibress/config`).
+- `TRACING_ENABLED=false` → no provider/exporter (noop handle).
+- Collector unavailable → fail-open (2 s export timeout, spans dropped, app
+  keeps serving).
+- Instrumentation: HTTP spans (auto-instrumentation), `safeFetch` outbound
+  spans, `queue.enqueue.*` spans via `enqueueTraced`, `worker.job.*` spans via
+  `tracedProcessor`, `outbox.relay.deliver` spans, `db.transaction` spans.
+- Context propagation: HTTP `traceparent` → ALS → outbox envelope `trace`
+  field → dispatcher continues remote trace → queue job `traceparent` →
+  worker job span. Runtime-verified: a request carrying
+  `traceparent: 00-4bf9…-01` produced an outbox row with the identical
+  traceId.
+- Secret redaction: `safeFetch` spans record `url.full` without query string;
+  span attributes never carry secrets.
+- Coverage: `tests/integration/platform-packages.test.ts` (trace context
+  helpers, remote continuation, invalid input no-op, fail-open) and
+  `tests/integration/outbox.test.ts` (envelope trace propagation).
+
+### 5. Type safety (explicit-any)
+
+- Previous count: 245 (42% reduction from 421 baseline).
+- Final count: **0** explicit-any type usages in production source
+  (15 `z.any()` → `z.unknown()`; remaining 9 `\bany\b` hits are comments).
+- Regression guard: `scripts/count-explicit-any.mjs` (`pnpm verify:explicit-any`,
+  wired into CI) fails above 120.
+- No `(err as any).code` mutations remain.
+
+### 6. Member `/me` benchmark (real member session)
+
+Benchmarked `GET /api/members/v1/me` with a REAL member session obtained via
+the full magic-link flow (Mailpit token extraction → verify → session cookie):
+
+| Concurrency | Duration | r/s | p50 | p90 | p97.5 | p99 | max | errors |
+|---|---|---|---|---|---|---|---|---|
+| 10 | 30 s | 2,867 | 16 ms | 29 | 33 | 34 | 60 | 0 |
+| 50 | 60 s | 3,058 | 35 ms | 65 | 70 | 74 | 98 | 0 |
+| 100 | 60 s | 3,008 | 37 ms | 68 | 72 | 77 | 298 | 0 |
+
+(autocannon JSON exposes p90/p97.5/p99, not p95.)
+
+Security regression: no cookie → 401; staff cookie → 401; member cookie → 200;
+revoked session (logout) → 401; disabled member → 401. API CPU ~115% at
+c100 (single-core bound), RSS stable ~758 MB.
+
+### 7. Dependency/container hygiene
+
+- `pnpm audit --prod`: **clean** after adding `sharp ^0.35.0` override
+  (CVE-2026-33327/33328/35590/35591 in libvips < 0.35.0; web app does not use
+  `next/image` so runtime impact is nil).
+- Container scan (Trivy, all 6 images, HIGH/CRITICAL + ignore-unfixed):
+  **clean (0 findings)** after three fixes:
+  1. Go-stdlib CVEs (CVE-2026-42499/42504) in esbuild binaries — esbuild
+     0.18.20 via deprecated `@esbuild-kit/core-utils` and 0.25.12 via
+     `drizzle-kit` → `esbuild: 0.28.1` override (0.28.1 ships a patched Go
+     toolchain).
+  2. npm-CLI-bundled deps (brace-expansion 5.0.6, ip-address 10.2.0,
+     tar 7.5.16, undici 6.26.0 in `/usr/local/lib/node_modules/npm` of the
+     node:24-alpine base) → runtime images now remove the bundled npm CLI
+     after pnpm bootstrap (`api`/`worker`/`web` Dockerfiles).
+  3. OS-level CVEs in the nginx alpine bases (openssl, zlib, musl, …) →
+     `apk upgrade --no-cache` added to `gateway`/`spa` Dockerfiles.
+  Verified locally: all 6 images scan 0 HIGH/CRITICAL; workspace lockfile
+  overrides (sharp ^0.35.0, brace-expansion ^5.0.9, uuid ^11.1.1) make
+  `pnpm audit` fully clean; hardened stack boots, migrates a fresh DB, serves
+  published posts, and passes all health checks.
+
+### Gates summary (this batch)
+
+- `pnpm typecheck` — pass (0 errors)
+- `pnpm lint` — pass (0 errors; pre-existing warnings unchanged)
+- `npx vitest run` — 554 tests pass
+- `pnpm build` — pass (all apps incl. 4 UI bundles + Next standalone)
+- `pnpm audit --prod` — clean (after sharp override)
+- Playwright E2E — 66/66 pass
+- Production compose: 8/8 healthy; runtime-created published post returns 200
+  on web route; unpublish/delete → 404; restricted → 404; CSP headers verified
+  at web/api/admin layers; migrations applied on a clean database.
+- `pnpm verify:explicit-any` — 0 (max 120)
+- Clean backup/restore: unchanged schema (no migrations added) — previous
+  hardened restore evidence remains valid (release-verification.md §4).
