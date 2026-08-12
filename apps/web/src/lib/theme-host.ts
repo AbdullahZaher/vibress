@@ -66,18 +66,46 @@ export async function resolveThemeHostState(
   };
 }
 
-export function getThemeSiteSettings(): {
+export interface ThemeSiteSettings {
   title: string;
   description: string;
   url: string;
   locale: string;
-} {
-  return {
+  tagline?: string;
+}
+
+/**
+ * Public site identity, precedence: DB setting (first-run wizard) →
+ * environment → built-in default. SITE_URL stays infrastructure-driven —
+ * it is only echoed from the content API, never redefined here.
+ */
+export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
+  const fallback: ThemeSiteSettings = {
     title: process.env.SITE_NAME || 'Vibress',
     description: process.env.SITE_DESCRIPTION || 'Publishing Platform',
     url: getPublicSiteUrl(),
     locale: process.env.SITE_LOCALE || 'en',
   };
+  try {
+    const baseUrl = process.env.API_URL || 'http://127.0.0.1:7780';
+    const res = await fetch(`${baseUrl}/api/content/v1/site`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return fallback;
+    const data = (await res.json()) as { site?: ThemeSiteSettings };
+    const site = data?.site;
+    if (!site || typeof site.title !== 'string') return fallback;
+    return {
+      title: site.title,
+      description: site.description || fallback.description,
+      url: site.url || fallback.url,
+      locale: site.locale || fallback.locale,
+      ...(typeof site.tagline === 'string' && site.tagline ? { tagline: site.tagline } : {}),
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 export async function getPreviewThemeIdFromHeaders(): Promise<string | null> {
