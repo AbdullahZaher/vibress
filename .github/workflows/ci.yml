@@ -155,7 +155,18 @@ jobs:
           curl -sf -o /dev/null http://127.0.0.1:7780/health/ready || { echo 'dev apps failed to start'; tail -80 /tmp/vibress-dev.log; exit 1; }
 
       - name: Start fresh-install stack (setup wizard E2E)
-        run: docker compose -f compose.setup-e2e.yml up -d --build --wait
+        # Note: no `--wait` — the one-shot `migrate` service exits (0) and
+        # `up --wait` treats any exited container as a failure. Poll health
+        # explicitly instead.
+        run: |
+          docker compose -f compose.setup-e2e.yml up -d --build
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:8899/nginx-health; then
+              curl -sf http://127.0.0.1:8899/api/setup/v1/status && break
+            fi
+            sleep 5
+          done
+          curl -sf http://127.0.0.1:8899/api/setup/v1/status || { echo 'setup-e2e stack failed to become ready'; exit 1; }
 
       - name: Install Playwright browser
         run: npx playwright install chromium --with-deps
