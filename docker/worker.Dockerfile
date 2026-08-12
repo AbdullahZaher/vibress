@@ -12,7 +12,10 @@ RUN pnpm --filter @vibress/worker build
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
-RUN npm install -g pnpm@11.17.0
+RUN npm install -g pnpm@11.17.0 && \
+    # Remove the bundled npm CLI (not needed at runtime; carries unpatched
+    # bundled deps: brace-expansion, tar, undici, ip-address)
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /repo
 COPY --from=builder --chown=node:node /repo /repo
 USER node

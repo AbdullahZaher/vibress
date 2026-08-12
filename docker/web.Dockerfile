@@ -14,6 +14,9 @@ RUN pnpm --filter @vibress/web build
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=7778
+# Remove the bundled npm CLI (not needed at runtime; carries unpatched
+# bundled deps: brace-expansion, tar, undici, ip-address)
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app
 COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /repo/apps/web/.next/static ./.next/static

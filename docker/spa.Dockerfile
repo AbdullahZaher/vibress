@@ -17,6 +17,10 @@ RUN pnpm --filter "@vibress/${APP}" build
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 ARG APP
 ENV APP=${APP}
+# Update alpine packages to patched builds (OS-level CVEs: openssl, zlib, etc.)
+USER root
+RUN apk upgrade --no-cache
+USER 101
 COPY docker/nginx.spa.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder --chown=101:101 /repo/apps/${APP}/dist /usr/share/nginx/html/${APP}
 USER 101
