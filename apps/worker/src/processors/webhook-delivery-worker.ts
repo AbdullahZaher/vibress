@@ -1,5 +1,6 @@
-import { Queue, Worker, QUEUE_NAMES, WebhookDeliveryJob, getBullMqRedisConnection } from '@vibress/queue';
+import { Queue, Worker, QUEUE_NAMES, WebhookDeliveryJob, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { WebhooksService, DrizzleWebhookRepository } from '@vibress/webhooks';
+import { tracedProcessor } from './trace-helper';
 
 const WEBHOOK_QUEUE_NAME = QUEUE_NAMES.WEBHOOK_DELIVERY;
 
@@ -21,7 +22,7 @@ class BullMqDispatcher {
   }
 
   async enqueue(deliveryId: string, endpointId: string): Promise<void> {
-    await this.getQueue().add('deliver', { deliveryId, endpointId }, {
+    await enqueueTraced(this.getQueue(), 'deliver', { deliveryId, endpointId }, {
       jobId: `delivery-${deliveryId}`,
       removeOnComplete: true,
       removeOnFail: 1000,
@@ -51,9 +52,9 @@ export class WebhookDeliveryWorker {
   async start(): Promise<void> {
     this.worker = new Worker<WebhookDeliveryJob>(
       WEBHOOK_QUEUE_NAME,
-      async (job) => {
+      tracedProcessor('worker.job.webhook-delivery', async (job) => {
         await this.webhooksService.deliver(job.data.deliveryId);
-      },
+      }),
       {
         connection: getBullMqRedisConnection(),
         concurrency: 4,

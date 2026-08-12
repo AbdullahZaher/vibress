@@ -45,7 +45,17 @@ export interface AppConfig {
   secrets: { encryptionKey: string | null };
   outbox: { deliveryMode: EventDeliveryMode; publishedRetentionDays: number; failedRetentionDays: number };
   system: { version: string; storageProvider: string };
-  observability: { metricsEnabled: boolean; tracingEnabled: boolean };
+  observability: {
+    metricsEnabled: boolean;
+    tracingEnabled: boolean;
+    tracing: {
+      otlpEndpoint: string;
+      otlpHeaders: Record<string, string>;
+      serviceName: string;
+      samplingRatio: number;
+      resourceAttributes: Record<string, string>;
+    };
+  };
 }
 
 const emptyToUndefined = (value: unknown): unknown => {
@@ -125,6 +135,17 @@ const envSchema = z.object({
 
   METRICS_ENABLED: boolString.default(true),
   TRACING_ENABLED: boolString.default(true),
+
+  OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrlString,
+  OTEL_EXPORTER_OTLP_HEADERS: optionalNonEmptyString,
+  OTEL_SERVICE_NAME: optionalNonEmptyString,
+  OTEL_SAMPLING_RATIO: z.preprocess((value) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'number') return value;
+    const parsed = Number.parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : value;
+  }, z.number().min(0).max(1).default(1)),
+  OTEL_RESOURCE_ATTRIBUTES: optionalNonEmptyString,
 });
 
 export function getConfig(): AppConfig {
@@ -209,6 +230,13 @@ export function loadConfig(env: EnvSource): AppConfig {
     observability: {
       metricsEnabled: raw.METRICS_ENABLED,
       tracingEnabled: raw.TRACING_ENABLED,
+      tracing: {
+        otlpEndpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://127.0.0.1:4318',
+        otlpHeaders: parseKeyValuePairs(raw.OTEL_EXPORTER_OTLP_HEADERS),
+        serviceName: raw.OTEL_SERVICE_NAME || 'vibress',
+        samplingRatio: raw.OTEL_SAMPLING_RATIO,
+        resourceAttributes: parseKeyValuePairs(raw.OTEL_RESOURCE_ATTRIBUTES),
+      },
     },
   };
 
@@ -253,6 +281,21 @@ function stripTrailingSlash(value: string): string {
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0)));
+}
+
+function parseKeyValuePairs(value: string | undefined): Record<string, string> {
+  if (!value) return {};
+  const result: Record<string, string> = {};
+  for (const pair of value.split(',')) {
+    const trimmed = pair.trim();
+    if (!trimmed) continue;
+    const equalsIndex = trimmed.indexOf('=');
+    if (equalsIndex <= 0) continue;
+    const key = trimmed.slice(0, equalsIndex).trim();
+    const val = trimmed.slice(equalsIndex + 1).trim();
+    if (key) result[key] = val;
+  }
+  return result;
 }
 
 function isUrl(value: string): boolean {

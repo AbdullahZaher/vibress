@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { runMigrations, seedDatabase, getDbPool, closeDbPool, runInTransaction } from '@vibress/database';
+import { withSpan, initTracing } from '@vibress/observability';
 import {
   DrizzleOutboxRepository,
   OutboxEventWriter,
@@ -15,6 +16,7 @@ import {
 describe('Transactional Outbox', () => {
   let repository: DrizzleOutboxRepository;
   let writer: OutboxEventWriter;
+  let tracingHandle: { stop: () => Promise<void> };
 
   beforeAll(async () => {
     await runMigrations();
@@ -23,9 +25,17 @@ describe('Transactional Outbox', () => {
     await seedDatabase();
     repository = new DrizzleOutboxRepository();
     writer = new OutboxEventWriter(repository);
+    // Register a real OTel provider so spans are sampled during this suite
+    // (exporter unreachable → fail-open, same as production without collector).
+    tracingHandle = initTracing({
+      enabled: true,
+      serviceName: 'outbox-test',
+      otlpEndpoint: 'http://127.0.0.1:1',
+    });
   }, 30000);
 
   afterAll(async () => {
+    await tracingHandle.stop();
     await closeDbPool();
   });
 
@@ -84,6 +94,23 @@ describe('Transactional Outbox', () => {
       expect(pendingUnpublish).toBeDefined();
       expect(pendingUnpublish!.status).toBe('delivering');
       await repository.markPublished([pendingUnpublish!.id]);
+    });
+
+    it('propagates the active OpenTelemetry traceId into the outbox envelope', async () => {
+      const postId = randomUUID();
+      await withSpan('test.outbox.trace', async () => {
+        await writer.write('post.published', { postId, title: 'Traced', slug: 'traced' });
+      });
+      const rows = await repository.claimReady({ limit: 50 });
+      const row = rows.find((r) => {
+        const env = parseEventEnvelope(r.payload);
+        return env.payload && typeof env.payload === 'object' && (env.payload as { postId?: string }).postId === postId;
+      });
+      expect(row).toBeDefined();
+      const envelope = parseEventEnvelope(row!.payload);
+      expect(envelope.trace).toBeDefined();
+      expect(envelope.trace!.traceId).toMatch(/^[0-9a-f]{32}$/);
+      await repository.markPublished([row!.id]);
     });
   });
 

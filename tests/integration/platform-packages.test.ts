@@ -6,6 +6,11 @@ import {
   exportMetricsText,
   setRequestTraceContext,
   getRequestTraceContext,
+  initTracing,
+  withSpan,
+  getTracer,
+  getActiveTraceContext,
+  withRemoteTraceContext,
 } from '@vibress/observability';
 import { createMockUser, createMockPost, createMockMember, withMockEnv } from '@vibress/testing';
 import { validatePluginManifest, VibressPlugin } from '@vibress/plugin-core';
@@ -69,6 +74,72 @@ describe('Platform Packages Suite (H7)', () => {
       metrics.counter('http_requests_total', 1, { path: '/weird"path\n' });
       const text = exportMetricsText();
       expect(text).toContain('path="/weird\\"path\\n"');
+    });
+
+    it('returns a noop stop handle when tracing is disabled', async () => {
+      const handle = initTracing({ enabled: false, serviceName: 'test', otlpEndpoint: 'http://127.0.0.1:1' });
+      await expect(handle.stop()).resolves.toBeUndefined();
+    });
+
+    it('starts tracing without crashing when the OTLP collector is unreachable', async () => {
+      const handle = initTracing({
+        enabled: true,
+        serviceName: 'test-service',
+        otlpEndpoint: 'http://127.0.0.1:1',
+        otlpHeaders: { Authorization: 'Bearer test-token' },
+        resourceAttributes: { env: 'test' },
+      });
+      await expect(handle.stop()).resolves.toBeUndefined();
+    });
+
+    it('provides a named tracer from the global provider', () => {
+      const tracer = getTracer('test');
+      const scope = (tracer as { instrumentationScope?: { name?: string } }).instrumentationScope;
+      expect(scope?.name).toBe('test');
+    });
+
+    it('wraps async work in a span and propagates success', async () => {
+      const result = await withSpan('test.operation', async () => 'ok', { key: 'value' });
+      expect(result).toBe('ok');
+    });
+
+    it('rethrows errors from spanned work', async () => {
+      await expect(withSpan('test.failure', async () => {
+        throw new Error('boom');
+      })).rejects.toThrow('boom');
+    });
+
+    it('returns undefined active trace context outside a span', () => {
+      expect(getActiveTraceContext()).toBeUndefined();
+    });
+
+    it('exposes a valid sampled trace context inside a span', async () => {
+      await withSpan('test.context', async () => {
+        const ctx = getActiveTraceContext();
+        expect(ctx).toBeDefined();
+        expect(ctx!.traceId).toMatch(/^[0-9a-f]{32}$/);
+        expect(ctx!.spanId).toMatch(/^[0-9a-f]{16}$/);
+      });
+    });
+
+    it('continues a remote trace from a W3C traceparent-shaped context', async () => {
+      const remoteTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+      const remoteSpanId = '00f067aa0ba902b7';
+      let activeTraceId: string | undefined;
+      await withRemoteTraceContext({ traceId: remoteTraceId, spanId: remoteSpanId }, async () => {
+        await withSpan('test.child', async () => {
+          activeTraceId = getActiveTraceContext()?.traceId;
+        });
+      });
+      expect(activeTraceId).toBe(remoteTraceId);
+    });
+
+    it('no-ops safely for invalid remote trace context', async () => {
+      let ran = false;
+      await withRemoteTraceContext({ traceId: 'not-a-valid-trace-id', spanId: 'xx' }, async () => {
+        ran = true;
+      });
+      expect(ran).toBe(true);
     });
   });
 

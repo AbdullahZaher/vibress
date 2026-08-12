@@ -257,7 +257,7 @@ export const integrationsService = new IntegrationsService(
 
 // Webhook dispatcher: enqueues into the shared BullMQ queue via a lightweight
 // API-side queue handle. The worker owns actual delivery.
-import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 const webhookQueueName = QUEUE_NAMES.WEBHOOK_DELIVERY;
 const webhookQueue = new Queue(webhookQueueName, {
   connection: getBullMqRedisConnection(),
@@ -265,7 +265,7 @@ const webhookQueue = new Queue(webhookQueueName, {
 });
 export const webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
   enqueue: async (deliveryId: string, endpointId: string) => {
-    await webhookQueue.add('deliver', { deliveryId, endpointId }, {
+    await enqueueTraced(webhookQueue, 'deliver', { deliveryId, endpointId }, {
       jobId: `delivery-${deliveryId}`,
       removeOnComplete: true,
       removeOnFail: 1000,
@@ -298,10 +298,10 @@ export const automationsService = new AutomationsService(
   new DrizzleAutomationRepository(),
   {
     enqueueRun: async (runId: string) => {
-      await automationRunQueue.add('run', { runId }, { jobId: `run-${runId}` });
+      await enqueueTraced(automationRunQueue, 'run', { runId }, { jobId: `run-${runId}` });
     },
     enqueueDelayedStep: async (runId: string, stepIndex: number, delayMs: number) => {
-      await automationDelayedQueue.add('resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
+      await enqueueTraced(automationDelayedQueue, 'resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
         delay: delayMs,
         jobId: `resume-${runId}-${stepIndex}`,
       });

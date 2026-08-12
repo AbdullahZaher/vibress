@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@vibress/config": "workspace:*",
-    "argon2": "^0.45.1"
+    "argon2": "^0.45.1",
+    "@vibress/observability": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

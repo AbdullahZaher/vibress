@@ -1,4 +1,4 @@
-import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { NewslettersService } from '@vibress/newsletters';
 import { DrizzleEmailRecipientRepository } from '@vibress/email';
 
@@ -49,7 +49,8 @@ export class NewsletterSendEnqueuer {
     }
 
     for (let i = 0; i < batches.length; i++) {
-      await queue.add(
+      await enqueueTraced(
+        queue,
         'deliver',
         { sendId, recipientIds: batches[i] },
         { jobId: `send-${sendId}-batch-${i}`, removeOnComplete: true, removeOnFail: 1000 }

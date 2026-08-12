@@ -1,5 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+export { initTracing, getTracer, withSpan, getActiveTraceContext, withRemoteTraceContext } from './tracing';
+export type { TracingOptions, TracingStopHandle } from './tracing';
+
 export interface RequestTraceContext {
   requestId?: string;
   traceId?: string;

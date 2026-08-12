@@ -1,7 +1,12 @@
 import { Queue, Worker, Processor, QueueOptions, WorkerOptions, Job } from 'bullmq';
 import { getBullMqRedisConnection } from '@vibress/cache';
+import { getActiveTraceContext, withSpan } from '@vibress/observability';
 
 export { Queue, Worker, Job, getBullMqRedisConnection };
+
+function buildTraceparent(traceCtx: { traceId: string; spanId: string }): string {
+  return `00-${traceCtx.traceId}-${traceCtx.spanId}-01`;
+}
 export type { Processor, QueueOptions, WorkerOptions };
 
 export const QUEUE_NAMES = {
@@ -18,11 +23,13 @@ export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
 export interface EmailDeliveryJob {
   sendId: string;
   recipientIds: string[];
+  traceparent?: string;
 }
 
 export interface WebhookDeliveryJob {
   deliveryId: string;
   endpointId: string;
+  traceparent?: string;
 }
 
 export interface SearchQueueJob {
@@ -37,6 +44,7 @@ export interface SearchQueueJob {
   };
   entityType?: string;
   entityId?: string;
+  traceparent?: string;
 }
 
 export interface AnalyticsQueueJob {
@@ -50,16 +58,19 @@ export interface AnalyticsQueueJob {
     entityId?: string | null;
     properties?: Record<string, unknown>;
   };
+  traceparent?: string;
 }
 
 export interface AutomationRunQueueJob {
   runId: string;
+  traceparent?: string;
 }
 
 export interface AutomationDelayedQueueJob {
   runId: string;
   stepIndex: number;
   resumeAt: number;
+  traceparent?: string;
 }
 
 export const QUEUE_DEFAULTS = {
@@ -96,4 +107,30 @@ export function createWorker<T = unknown>(
     concurrency: 1,
     ...options,
   });
+}
+
+/**
+ * Adds a job to a queue inside an OpenTelemetry span, attaching the active
+ * traceId to the job payload so the worker can continue the trace across
+ * process boundaries. When tracing is disabled this behaves exactly like
+ * queue.add with no overhead.
+ */
+export async function enqueueTraced<T extends { traceparent?: string }>(
+  queue: Queue<T>,
+  jobName: string,
+  payload: T,
+  options?: QueueOptions['defaultJobOptions'] & { jobId?: string }
+): Promise<unknown> {
+  const traceCtx = getActiveTraceContext();
+  const data = (traceCtx ? { ...payload, traceparent: buildTraceparent(traceCtx) } : payload) as T;
+  return withSpan(
+    `queue.enqueue.${jobName}`,
+    () => queue.add(jobName as never, data as Parameters<Queue<T>['add']>[1], options),
+    {
+      'messaging.system': 'bullmq',
+      'messaging.operation': 'enqueue',
+      'messaging.destination': queue.name,
+      ...(traceCtx ? { 'vibress.trace_id': traceCtx.traceId } : {}),
+    }
+  );
 }

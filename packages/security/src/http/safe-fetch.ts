@@ -3,6 +3,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { URL } from 'node:url';
 import { Socket, isIP, isIPv4, isIPv6 } from 'node:net';
+import { withSpan } from '@vibress/observability';
 
 export class SafeFetchError extends Error {
   code: string;
@@ -128,6 +129,23 @@ export interface SafeFetchResult {
  * - timeout + response-size limits
  */
 export async function safeFetch(
+  urlInput: string,
+  options: SafeFetchOptions = {}
+): Promise<SafeFetchResult> {
+  return withSpan(
+    'safeFetch',
+    async () => {
+      return safeFetchInner(urlInput, options);
+    },
+    {
+      'http.method': options.method || 'GET',
+      // Never record query strings or fragments: they can carry secrets.
+      'url.full': urlInput.split('?')[0],
+    }
+  );
+}
+
+async function safeFetchInner(
   urlInput: string,
   options: SafeFetchOptions = {}
 ): Promise<SafeFetchResult> {

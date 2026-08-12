@@ -1,4 +1,5 @@
 import { Worker, Job, QUEUE_NAMES, EmailDeliveryJob, getBullMqRedisConnection } from '@vibress/queue';
+import { tracedProcessor } from './trace-helper';
 import {
   DrizzleEmailRecipientRepository,
   DrizzleEmailEventRepository,
@@ -11,6 +12,7 @@ import {
   DrizzleSendRepository,
   NewslettersService,
   MemberAudienceRepository,
+  NewsletterSend,
 } from '@vibress/newsletters';
 import { getConfig } from '@vibress/config';
 
@@ -56,7 +58,7 @@ export class EmailDeliveryWorker {
   async start(): Promise<void> {
     this.worker = new Worker<EmailDeliveryJob>(
       QUEUE_NAMES.EMAIL_DELIVERY,
-      async (job) => this.processJob(job),
+      tracedProcessor('worker.job.email-delivery', (job) => this.processJob(job)),
       {
         connection: getBullMqRedisConnection(),
         concurrency: 4,
@@ -100,7 +102,7 @@ export class EmailDeliveryWorker {
     }
   }
 
-  private async sendOne(sendId: string, recipientId: string, send: any): Promise<void> {
+  private async sendOne(sendId: string, recipientId: string, send: NewsletterSend): Promise<void> {
     const recipient = await this.recipientRepo.findById(recipientId);
     if (!recipient) return;
     // Idempotency: only pending recipients are sent.

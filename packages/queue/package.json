@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@vibress/cache": "workspace:*",
-    "bullmq": "^5.7.8"
+    "bullmq": "^5.7.8",
+    "@vibress/observability": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.3",

@@ -11,13 +11,16 @@ export interface EventEnvelope<T = unknown> {
   version: typeof OUTBOX_EVENT_VERSION;
   eventType: OutboxEventName;
   payload: T;
+  /** Propagated OpenTelemetry trace context from the writing process (optional). */
+  trace?: { traceId: string; spanId: string };
 }
 
 export function buildEventEnvelope<E extends OutboxEventName>(
   eventType: E,
-  payload: OutboxEventPayloadMap[E]
+  payload: OutboxEventPayloadMap[E],
+  trace?: { traceId: string; spanId: string }
 ): EventEnvelope<OutboxEventPayloadMap[E]> {
-  return { version: OUTBOX_EVENT_VERSION, eventType, payload };
+  return { version: OUTBOX_EVENT_VERSION, eventType, payload, ...(trace ? { trace } : {}) };
 }
 
 export class EnvelopeValidationError extends Error {

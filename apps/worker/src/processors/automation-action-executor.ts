@@ -2,7 +2,7 @@ import { AutomationAction } from '@vibress/automations';
 import { DrizzleEmailRecipientRepository, DrizzleEmailEventRepository, SmtpEmailProvider, EmailMessage } from '@vibress/email';
 import { WebhooksService, DrizzleWebhookRepository } from '@vibress/webhooks';
 import { DrizzleNewsletterPreferenceRepository } from '@vibress/newsletters';
-import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { getConfig } from '@vibress/config';
 
 const WEBHOOK_QUEUE = QUEUE_NAMES.WEBHOOK_DELIVERY;
@@ -25,7 +25,7 @@ export class AutomationActionExecutor {
   private webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
     enqueue: async (deliveryId: string, endpointId: string) => {
       const queue = new Queue(WEBHOOK_QUEUE, { connection: getBullMqRedisConnection() });
-      await queue.add('deliver', { deliveryId, endpointId }, { jobId: `delivery-${deliveryId}` });
+      await enqueueTraced(queue, 'deliver', { deliveryId, endpointId }, { jobId: `delivery-${deliveryId}` });
       await queue.close();
     },
   });

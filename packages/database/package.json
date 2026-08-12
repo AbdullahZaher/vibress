@@ -16,7 +16,8 @@
     "@vibress/config": "workspace:*",
     "@vibress/security": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "@vibress/observability": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

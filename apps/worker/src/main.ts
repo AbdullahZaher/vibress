@@ -1,3 +1,4 @@
+import './tracing-init';
 import { getRedisClient, closeRedisClient } from '@vibress/cache';
 import { closeDbPool } from '@vibress/database';
 import { ContentSchedulerWorker } from './scheduler';
@@ -111,6 +112,8 @@ const shutdown = async (signal: string) => {
     });
     await closeRedisClient();
     await closeDbPool();
+    const { tracingHandle } = await import('./tracing-init');
+    await tracingHandle.stop();
     appLogger.info('Worker closed remaining connections.');
     process.exit(0);
   } catch (err) {

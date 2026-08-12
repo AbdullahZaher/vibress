@@ -3,16 +3,19 @@ import { SearchService, DrizzleSearchRepository, SearchDocumentInput } from '@vi
 import { DrizzlePostRepository } from '@vibress/posts';
 import { DrizzlePageRepository } from '@vibress/pages';
 import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
+import { tracedProcessor } from './trace-helper';
 
 export interface SearchIndexJob {
   op: 'upsert' | 'remove';
   doc?: SearchDocumentInput;
   entityType?: string;
   entityId?: string;
+  traceparent?: string;
 }
 
 export interface SearchRebuildJob {
   op: 'rebuild';
+  traceparent?: string;
 }
 
 export interface IndexableContentProvider {
@@ -41,7 +44,7 @@ export class SearchIndexerWorker {
   async start(): Promise<void> {
     this.worker = new Worker<SearchIndexJob | SearchRebuildJob>(
       SEARCH_QUEUE_NAME,
-      async (job) => this.process(job),
+      tracedProcessor('worker.job.search', (job) => this.process(job)),
       { connection: getBullMqRedisConnection(), concurrency: 1 }
     );
     this.worker.on('failed', (job, err) => {
