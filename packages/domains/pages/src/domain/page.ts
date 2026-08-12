@@ -16,7 +16,7 @@ export interface Page {
   title: string;
   slug: string;
   excerpt: string | null;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
   contentVersion: number;
   status: PageStatus;
   visibility: PageVisibility;
@@ -40,7 +40,7 @@ export interface CreatePageData {
   title: string;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
-  content?: Record<string, any> | undefined;
+  content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   status?: PageStatus | undefined;
   visibility?: PageVisibility | undefined;
@@ -57,7 +57,7 @@ export interface UpdatePageData {
   title?: string | undefined;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
-  content?: Record<string, any> | undefined;
+  content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   visibility?: PageVisibility | undefined;
   primaryAuthorId?: string | undefined;
@@ -70,6 +70,7 @@ export interface UpdatePageData {
 
 export interface ListPagesFilter {
   status?: PageStatus | undefined;
+  visibility?: PageVisibility | undefined;
   publishedOnly?: boolean | undefined;
   search?: string | undefined;
   limit?: number | undefined;

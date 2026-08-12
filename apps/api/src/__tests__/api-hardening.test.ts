@@ -82,6 +82,25 @@ describe('API hardening', () => {
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
   });
 
+  it('enforces a strict Content Security Policy on API responses (not report-only)', async () => {
+    app = buildApp();
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api' });
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toBeDefined();
+    // Enforced, not report-only
+    expect(res.headers['content-security-policy-report-only']).toBeUndefined();
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("form-action 'none'");
+    // No unsafe wildcards on an API that returns JSON only
+    expect(csp).not.toContain('unsafe-inline');
+    expect(csp).not.toContain('unsafe-eval');
+  });
+
   it('exposes Prometheus metrics when metrics are enabled', async () => {
     app = buildApp();
     await app.ready();

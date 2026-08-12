@@ -1,3 +1,4 @@
+import './tracing-init';
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
@@ -83,10 +84,16 @@ export const buildApp = () => {
   fastify.register(helmet, {
     global: true,
     contentSecurityPolicy: {
-      reportOnly: true,
       directives: {
         defaultSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
         frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
       },
@@ -99,15 +106,17 @@ export const buildApp = () => {
   });
 
   // Central error handler
-  fastify.setErrorHandler(function (error: any, request, reply) {
-    appLogger.error('request failed', { requestId: request.id, method: request.method, path: request.url }, error);
-    const statusCode = error.statusCode || 500;
-    const errorCode = error.code || 'INTERNAL_ERROR';
+  fastify.setErrorHandler(function (error, request, reply) {
+    const errObj = error instanceof Error ? error : undefined;
+    appLogger.error('request failed', { requestId: request.id, method: request.method, path: request.url }, errObj);
+    const e = error as Error & { statusCode?: number; code?: string };
+    const statusCode = e.statusCode || 500;
+    const errorCode = e.code || 'INTERNAL_ERROR';
     const isServerError = statusCode >= 500;
     const responseCode = config.isProduction && isServerError ? 'INTERNAL_ERROR' : errorCode;
     const message = config.isProduction && isServerError
       ? 'Internal Server Error'
-      : error.message || 'Internal Server Error';
+      : e.message || 'Internal Server Error';
     recordHttpError(statusCode, errorCode);
     reply.status(statusCode).send({
       errors: [
@@ -216,6 +225,8 @@ const start = async () => {
         await app.close();
         await closeDbPool();
         await closeRedisClient();
+        const { tracingHandle } = await import('./tracing-init');
+        await tracingHandle.stop();
         appLogger.info('Closed out remaining connections.');
         process.exit(0);
       } catch (err) {

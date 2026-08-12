@@ -1,7 +1,16 @@
+# Enforced CSP for the Vite React SPAs (admin/portal).
+# - script-src 'self': builds emit external scripts only (no inline scripts).
+# - style-src 'unsafe-inline': React inline style attributes (non-executable
+#   CSS exception, documented; no inline <style> injection from users).
+# - connect-src 'self': SPAs call the API same-origin via the gateway.
 server {
     listen 8080;
     server_name _;
     root /usr/share/nginx/html;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" always;
 
     location /${APP}/ {
         try_files $uri $uri/ /${APP}/index.html;

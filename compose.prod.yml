@@ -147,6 +147,7 @@ services:
       NODE_ENV: production
       PORT: "7778"
       HOSTNAME: 0.0.0.0
+      API_URL: "http://api:7780"
     networks: [frontend]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7778/"]

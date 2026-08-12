@@ -172,4 +172,82 @@ describe('Admin Content API & Permissions Security', () => {
     expect(update2.statusCode).toBe(409);
     expect(update2.json().errors[0].code).toBe('CONTENT_CONFLICT');
   });
+
+  it('does not leak members/paid visibility content through public content API or lists', async () => {
+    const editorCookie = await getCookieFor('editor@vibress.test', editorPassword);
+
+    // Create + publish a members-only post
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/posts',
+      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+      payload: {
+        title: 'Members Only Post',
+        slug: `members-only-${Date.now()}`,
+        visibility: 'members',
+        primaryAuthorId: editorUser.id,
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const post = createRes.json().post;
+    expect(post.visibility).toBe('members');
+
+    const publishRes = await app.inject({
+      method: 'POST',
+      url: `/api/admin/v1/posts/${post.id}/publish`,
+      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+    });
+    expect(publishRes.statusCode).toBe(200);
+
+    // Public content API must not serve it
+    const publicBySlug = await app.inject({
+      method: 'GET',
+      url: `/api/content/v1/posts/${post.slug}`,
+    });
+    expect(publicBySlug.statusCode).toBe(404);
+
+    // Public list must not include it
+    const publicList = await app.inject({
+      method: 'GET',
+      url: '/api/content/v1/posts?limit=100',
+    });
+    const listSlugs = publicList.json().posts.map((p: { slug: string }) => p.slug);
+    expect(listSlugs).not.toContain(post.slug);
+
+    // Admin API still sees it
+    const adminGet = await app.inject({
+      method: 'GET',
+      url: `/api/admin/v1/posts/${post.id}`,
+      headers: { cookie: editorCookie },
+    });
+    expect(adminGet.statusCode).toBe(200);
+
+    // Same for a members-only page
+    const pageRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/pages',
+      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+      payload: {
+        title: 'Members Only Page',
+        slug: `members-page-${Date.now()}`,
+        visibility: 'members',
+        primaryAuthorId: editorUser.id,
+      },
+    });
+    expect(pageRes.statusCode).toBe(201);
+    const page = pageRes.json().page;
+
+    const pagePublish = await app.inject({
+      method: 'POST',
+      url: `/api/admin/v1/pages/${page.id}/publish`,
+      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+    });
+    expect(pagePublish.statusCode).toBe(200);
+
+    const publicPage = await app.inject({
+      method: 'GET',
+      url: `/api/content/v1/pages/${page.slug}`,
+    });
+    expect(publicPage.statusCode).toBe(404);
+  });
 });

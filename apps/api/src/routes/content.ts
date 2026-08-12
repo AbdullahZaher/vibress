@@ -17,6 +17,7 @@ import {
   formatPublicTag,
   formatPublicAuthor,
 } from '../helpers/public-content-helpers';
+import type { Author } from '@vibress/authors';
 import { getConfig } from '@vibress/config';
 
 export async function publicContentRoutes(fastify: FastifyInstance) {
@@ -53,6 +54,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
+        visibility: 'public',
         tagSlug: filter.tag,
         authorSlug: filter.author,
         limit,
@@ -131,6 +133,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { pages, total } = await pagesService.listPages({
         publishedOnly: true,
+        visibility: 'public',
         limit,
         offset,
       });
@@ -236,6 +239,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
+        visibility: 'public',
         tagSlug: slug,
         limit,
         offset,
@@ -273,10 +277,10 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
   // Public Authors List
   fastify.get('/authors', {
-    handler: async (req, reply) => {
-      const authorRepo = (authorsService as any).authorRepo;
+    handler: async (_req, reply) => {
+      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
       const authorList = await authorRepo.listAuthors();
-      const formatted = authorList.map((a: any) => formatPublicAuthor(a));
+      const formatted = authorList.map((a) => formatPublicAuthor(a as Author));
       return reply.status(200).send({ authors: formatted });
     },
   });
@@ -285,7 +289,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get('/authors/:slug', {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (authorsService as any).authorRepo;
+      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
       const author = await authorRepo.findAuthorBySlug(slug);
 
       if (!author) {
@@ -300,7 +304,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return reply.status(200).send({ author: formatPublicAuthor(author) });
+      return reply.status(200).send({ author: formatPublicAuthor(author as Author) });
     },
   });
 
@@ -308,7 +312,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get('/authors/:slug/posts', {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (authorsService as any).authorRepo;
+      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
       const author = await authorRepo.findAuthorBySlug(slug);
 
       if (!author) {
@@ -332,6 +336,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
+        visibility: 'public',
         authorSlug: slug,
         limit,
         offset,
@@ -355,7 +360,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       const totalPages = Math.ceil(total / limit) || 1;
 
       return reply.status(200).send({
-        author: formatPublicAuthor(author),
+        author: formatPublicAuthor(author as Author),
         posts: summaries,
         pagination: {
           page,
