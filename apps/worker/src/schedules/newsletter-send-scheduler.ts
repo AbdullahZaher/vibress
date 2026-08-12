@@ -80,9 +80,10 @@ export class NewsletterSendSchedulerWorker {
         await this.startSendAndEnqueue(send.id);
         started++;
         console.log(`[SendScheduler] Started scheduled send ${send.id} ("${send.subject}")`);
-      } catch (err: any) {
-        console.error(`[SendScheduler] Failed to start send ${send.id}:`, err.message || err);
-        await this.newslettersService.failSend(send.id, err.message || 'scheduler failure');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'scheduler failure';
+        console.error(`[SendScheduler] Failed to start send ${send.id}:`, message);
+        await this.newslettersService.failSend(send.id, message);
       }
     }
     return { started };
