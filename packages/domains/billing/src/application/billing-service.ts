@@ -293,7 +293,7 @@ export class BillingService {
     event: { id: string; type: string; created: number; data: Record<string, unknown> }
   ): Promise<void> {
     // Provider event objects are heterogeneous; treated as opaque records
-    const object = event.data as Record<string, any>;
+    const object = event.data as Record<string, unknown>;
     // Invoice-type events carry the subscription id in object.subscription
     const providerSubscriptionId =
       typeof object.subscription === 'string'
@@ -349,10 +349,10 @@ export class BillingService {
         amountMinor: typeof object.amount === 'number' ? object.amount : plan.amountMinor,
         billingInterval: plan.billingInterval || 'month',
         intervalCount: plan.intervalCount,
-        currentPeriodStart: object.current_period_start ? new Date(object.current_period_start * 1000) : null,
-        currentPeriodEnd: object.current_period_end ? new Date(object.current_period_end * 1000) : null,
-        trialStart: object.trial_start ? new Date(object.trial_start * 1000) : null,
-        trialEnd: object.trial_end ? new Date(object.trial_end * 1000) : null,
+        currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : null,
+        currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : null,
+        trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : null,
+        trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : null,
         cancelAtPeriodEnd: !!object.cancel_at_period_end,
         offerId: typeof metadata.offerId === 'string' ? metadata.offerId : null,
         providerEventTimestamp: eventTimestamp,
@@ -363,10 +363,10 @@ export class BillingService {
         subscription.id,
         {
           status: this.mapProviderStatus((object.status as string) || subscription.status),
-          currentPeriodStart: object.current_period_start ? new Date(object.current_period_start * 1000) : undefined,
-          currentPeriodEnd: object.current_period_end ? new Date(object.current_period_end * 1000) : undefined,
-          trialStart: object.trial_start ? new Date(object.trial_start * 1000) : undefined,
-          trialEnd: object.trial_end ? new Date(object.trial_end * 1000) : undefined,
+          currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : undefined,
+          currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : undefined,
+          trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : undefined,
+          trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : undefined,
           cancelAtPeriodEnd: typeof object.cancel_at_period_end === 'boolean' ? object.cancel_at_period_end : undefined,
           providerEventTimestamp: eventTimestamp,
         },

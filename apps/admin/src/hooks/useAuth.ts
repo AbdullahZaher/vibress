@@ -60,7 +60,7 @@ export function useAuth() {
       const primaryPass = trimmedEmail === 'owner@example.com' ? 'OwnerPass123!' : 'DevPassword123!';
       try {
         return await loginMutation.mutateAsync({ email: trimmedEmail, password: primaryPass });
-      } catch (err: any) {
+      } catch (err) {
         if (primaryPass === 'DevPassword123!') {
           return await loginMutation.mutateAsync({ email: trimmedEmail, password: 'OwnerPass123!' });
         }

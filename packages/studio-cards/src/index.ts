@@ -15,7 +15,7 @@ export const ImageCardSchema = z.object({
   assetId: z.string().optional(),
   src: z.string(),
   alt: z.string().default(''),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
   captionHtml: z.string().optional(),
   width: z.enum(['regular', 'wide', 'full']).optional().default('regular'),
   height: z.number().optional(),
@@ -48,7 +48,7 @@ export const ImageCardDefinition: StudioCardDefinition<ImageCardData> = {
 // 2. Gallery Card
 export const GalleryCardSchema = z.object({
   images: z.array(ImageCardSchema),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
   captionHtml: z.string().optional(),
   width: z.enum(['regular', 'wide', 'full']).optional().default('regular'),
 });
@@ -74,7 +74,7 @@ export const GalleryCardDefinition: StudioCardDefinition<GalleryCardData> = {
 export const VideoCardSchema = z.object({
   assetId: z.string().optional(),
   src: z.string(),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
   captionHtml: z.string().optional(),
   poster: z.string().optional(),
   loop: z.boolean().default(false),
@@ -106,7 +106,7 @@ export const AudioCardSchema = z.object({
   assetId: z.string().optional(),
   src: z.string(),
   title: z.string().default(''),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
 });
 export type AudioCardData = z.infer<typeof AudioCardSchema>;
 
@@ -131,7 +131,7 @@ export const FileCardSchema = z.object({
   src: z.string(),
   fileName: z.string(),
   fileSize: z.string().default(''),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
 });
 export type FileCardData = z.infer<typeof FileCardSchema>;
 
@@ -181,7 +181,7 @@ export const EmbedCardSchema = z.object({
   url: z.string(),
   embedType: z.string().default('video'),
   html: z.string().optional(),
-  caption: z.union([z.string(), z.record(z.any())]).default(''),
+  caption: z.union([z.string(), z.record(z.unknown())]).default(''),
 });
 export type EmbedCardData = z.infer<typeof EmbedCardSchema>;
 
@@ -303,7 +303,7 @@ export const DividerCardDefinition: StudioCardDefinition<DividerCardData> = {
   renderPlainText: () => '---',
 };
 
-export const STUDIO_CARD_DEFINITIONS: Record<string, StudioCardDefinition<any>> = {
+export const STUDIO_CARD_DEFINITIONS: Record<string, StudioCardDefinition> = {
   image: ImageCardDefinition,
   gallery: GalleryCardDefinition,
   video: VideoCardDefinition,

@@ -18,7 +18,7 @@ export interface Session {
   revokedAt: Date | null;
   ipAddress: string | null;
   userAgent: string | null;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface CreateSessionData {
@@ -28,5 +28,5 @@ export interface CreateSessionData {
   expiresAt: Date;
   ipAddress?: string | null | undefined;
   userAgent?: string | null | undefined;
-  metadata?: Record<string, any> | null | undefined;
+  metadata?: Record<string, unknown> | null | undefined;
 }

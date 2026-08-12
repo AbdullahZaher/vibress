@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
 import {
   newslettersService,
@@ -10,21 +10,28 @@ import {
   AdminNewsletterSendInputSchema,
   AdminTestEmailInputSchema,
 } from '@vibress/api-contracts';
-import { NewsletterDomainError } from '@vibress/newsletters';
-import { EmailDomainError, EmailProviderError } from '@vibress/email';
+import { NewsletterDomainError, UpdateNewsletterData, NewsletterSend, SendStatus } from '@vibress/newsletters';
+import { EmailDomainError, EmailProviderError, SuppressionReason } from '@vibress/email';
 import { DrizzleEmailRecipientRepository } from '@vibress/email';
 
 const recipientRepo = new DrizzleEmailRecipientRepository();
 
+const zNewsletterAudience = AdminNewsletterSendInputSchema.pick({ newsletterId: true, audience: true });
+
+type NewsletterListQuery = { includeArchived?: string };
+type NewsletterSendListQuery = { status?: string; newsletterId?: string; limit?: string; offset?: string };
+type EmailSuppressionListQuery = { limit?: string; offset?: string };
+
 export async function adminNewsletterRoutes(fastify: FastifyInstance) {
-  const sendError = (reply: any, code: string, message: string, requestId: string, status = 400) =>
+  const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
     reply.status(status).send({ errors: [{ code, message, requestId }] });
 
   // ---------------- Newsletters ----------------
   fastify.get('/newsletters', {
     preHandler: [requireStaffSession, requirePermission('newsletters.read')],
     handler: async (req, reply) => {
-      const includeArchived = String((req.query as any).includeArchived) === 'true';
+      const query = (req.query ?? {}) as NewsletterListQuery;
+      const includeArchived = String(query.includeArchived) === 'true';
       const newsletters = await newslettersService.listNewsletters({ includeArchived });
       return reply.status(200).send({ newsletters });
     },
@@ -38,7 +45,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       try {
         const newsletter = await newslettersService.createNewsletter(parsed.data, req.user!.id);
         return reply.status(201).send({ newsletter });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -52,9 +59,9 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       const parsed = AdminNewsletterInputSchema.omit({ key: true }).partial().safeParse(req.body);
       if (!parsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid newsletter payload', req.id);
       try {
-        const newsletter = await newslettersService.updateNewsletter(id, parsed.data as any, req.user!.id);
+        const newsletter = await newslettersService.updateNewsletter(id, parsed.data as UpdateNewsletterData, req.user!.id);
         return reply.status(200).send({ newsletter });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -68,7 +75,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       try {
         const newsletter = await newslettersService.archiveNewsletter(id, req.user!.id);
         return reply.status(200).send({ newsletter });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -79,13 +86,14 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
   fastify.get('/newsletter-sends', {
     preHandler: [requireStaffSession, requirePermission('newsletters.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
-      const result = await newslettersService.listSends({
-        status: query.status || undefined,
-        newsletterId: query.newsletterId || undefined,
+      const query = (req.query ?? {}) as NewsletterSendListQuery;
+      const params: { status?: SendStatus; newsletterId?: string; limit: number; offset: number } = {
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
-      });
+      };
+      if (query.status) params.status = query.status as SendStatus;
+      if (query.newsletterId) params.newsletterId = query.newsletterId;
+      const result = await newslettersService.listSends(params);
       return reply.status(200).send(result);
     },
   });
@@ -138,7 +146,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         }
 
         return reply.status(201).send({ send, audienceCount });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -152,7 +160,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       try {
         const result = await newsletterSendEnqueuer.startSendAndEnqueue(id);
         return reply.status(200).send(result);
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -166,7 +174,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       try {
         const send = await newslettersService.cancelSend(id);
         return reply.status(200).send({ send });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
@@ -194,12 +202,12 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         senderName: newsletter.senderName,
         senderEmail: newsletter.senderEmail,
         replyTo: newsletter.replyTo,
-      };
+      } as NewsletterSend;
 
       const results: Array<{ email: string; messageId: string | null; error: string | null }> = [];
       for (const to of recipients) {
         try {
-          const { html, text } = newslettersService.renderEmailHtml(pseudoSend as any, 'test', 'test-token');
+          const { html, text } = newslettersService.renderEmailHtml(pseudoSend, 'test', 'test-token');
           const result = await emailService.sendDirect({
             to,
             toName: null,
@@ -211,8 +219,9 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
             text,
           });
           results.push({ email: to, messageId: result.messageId, error: null });
-        } catch (err: any) {
-          results.push({ email: to, messageId: null, error: err.message || 'send failed' });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'send failed';
+          results.push({ email: to, messageId: null, error: message || 'send failed' });
         }
       }
 
@@ -241,7 +250,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
   fastify.get('/email-suppressions', {
     preHandler: [requireStaffSession, requirePermission('email.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
+      const query = (req.query ?? {}) as EmailSuppressionListQuery;
       const result = await emailService.listSuppressions(
         query.limit ? parseInt(query.limit, 10) : 50,
         query.offset ? parseInt(query.offset, 10) : 0
@@ -255,12 +264,10 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const list = await emailService.listSuppressions(100, 0);
-      const target = (list.suppressions as Array<{ id: string; email: string; reason: string }>).find((s) => s.id === id);
+      const target = (list.suppressions as Array<{ id: string; email: string; reason: SuppressionReason }>).find((s) => s.id === id);
       if (!target) return sendError(reply, 'SUPPRESSION_NOT_FOUND', 'Suppression not found', req.id, 404);
-      await emailService.removeSuppression(target.email, target.reason as any);
+      await emailService.removeSuppression(target.email, target.reason);
       return reply.status(200).send({ success: true });
     },
   });
 }
-
-const zNewsletterAudience = AdminNewsletterSendInputSchema.pick({ newsletterId: true, audience: true });

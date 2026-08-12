@@ -132,8 +132,11 @@ export class S3StorageProvider implements StorageProvider {
       if (res.LastModified) result.lastModified = res.LastModified;
 
       return result;
-    } catch (err: any) {
-      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err as { name?: string }).name === 'NotFound'
+      ) {
         return null;
       }
       return null;

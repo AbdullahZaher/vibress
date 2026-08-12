@@ -14,5 +14,10 @@ declare module 'fastify' {
     sessionToken?: string;
     member?: import('@vibress/members').Member;
     memberSessionToken?: string;
+    machineAuth?: {
+      keyId: string;
+      name: string;
+      scopes: string[];
+    };
   }
 }

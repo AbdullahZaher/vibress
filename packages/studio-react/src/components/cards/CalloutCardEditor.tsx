@@ -2,7 +2,8 @@ import { useRef, useEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { CalloutCardData } from '@vibress/studio-cards';
+import { CalloutCardData, StudioCardNode } from '@vibress/studio-cards';
+
 
 interface Props {
   nodeKey: NodeKey;
@@ -31,8 +32,8 @@ export function CalloutCardEditor({ nodeKey, cardData }: Props) {
   const updateCardData = (updates: Partial<CalloutCardData>) => {
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           ...updates,
         });
@@ -83,7 +84,7 @@ export function CalloutCardEditor({ nodeKey, cardData }: Props) {
           onKeyPress={(e) => e.stopPropagation()}
         />
       </div>
-      
+
       <div className="flex-1 min-w-0">
         <textarea
            ref={textareaRef}

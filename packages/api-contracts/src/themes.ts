@@ -16,7 +16,7 @@ export type ThemeManifestDto = z.infer<typeof ThemeManifestDtoSchema>;
 
 export const ThemeSummaryDtoSchema = z.object({
   manifest: ThemeManifestDtoSchema,
-  settingsSchema: z.record(z.any()),
+  settingsSchema: z.record(z.unknown()),
   isActive: z.boolean(),
 });
 export type ThemeSummaryDto = z.infer<typeof ThemeSummaryDtoSchema>;
@@ -24,12 +24,12 @@ export type ThemeSummaryDto = z.infer<typeof ThemeSummaryDtoSchema>;
 export const ActiveThemeDtoSchema = z.object({
   themeId: z.string(),
   themeVersion: z.string(),
-  settings: z.record(z.any()),
+  settings: z.record(z.unknown()),
   settingsSchemaVersion: z.number(),
 });
 export type ActiveThemeDto = z.infer<typeof ActiveThemeDtoSchema>;
 
-export const ThemeSettingsUpdateSchema = z.record(z.any());
+export const ThemeSettingsUpdateSchema = z.record(z.unknown());
 export type ThemeSettingsUpdateInput = z.infer<typeof ThemeSettingsUpdateSchema>;
 
 export const ThemeActivationResponseSchema = z.object({

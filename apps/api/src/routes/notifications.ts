@@ -7,7 +7,7 @@ export async function memberNotificationRoutes(fastify: FastifyInstance) {
   fastify.get('/notifications', {
     preHandler: [requireMemberSession],
     handler: async (req, reply) => {
-      const query = req.query as any;
+      const query = (req.query ?? {}) as { unread?: string; limit?: string; offset?: string };
       const result = await notificationsService.listNotifications({
         recipientId: req.member!.id,
         unreadOnly: query.unread === 'true',

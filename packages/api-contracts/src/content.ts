@@ -4,7 +4,7 @@ export const CreatePostInputSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(255),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.unknown()).optional(),
   visibility: z.enum(['public', 'members', 'paid']).optional(),
   primaryAuthorId: z.string().min(1, 'Primary author ID is required'),
   authorIds: z.array(z.string()).optional(),
@@ -20,7 +20,7 @@ export const UpdatePostInputSchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.unknown()).optional(),
   visibility: z.enum(['public', 'members', 'paid']).optional(),
   primaryAuthorId: z.string().optional(),
   authorIds: z.array(z.string()).optional(),
@@ -41,7 +41,7 @@ export const CreatePageInputSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(255),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.unknown()).optional(),
   visibility: z.enum(['public', 'members', 'paid']).optional(),
   primaryAuthorId: z.string().min(1, 'Primary author ID is required'),
   authorIds: z.array(z.string()).optional(),
@@ -56,7 +56,7 @@ export const UpdatePageInputSchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.unknown()).optional(),
   visibility: z.enum(['public', 'members', 'paid']).optional(),
   primaryAuthorId: z.string().optional(),
   authorIds: z.array(z.string()).optional(),
@@ -138,7 +138,7 @@ export const PublicPostSummarySchema = z.object({
 export type PublicPostSummaryDto = z.infer<typeof PublicPostSummarySchema>;
 
 export const PublicPostDetailSchema = PublicPostSummarySchema.extend({
-  content: z.record(z.any()),
+  content: z.record(z.unknown()),
   html: z.string(),
 });
 export type PublicPostDetailDto = z.infer<typeof PublicPostDetailSchema>;
@@ -148,7 +148,7 @@ export const PublicPageDetailSchema = z.object({
   title: z.string(),
   slug: z.string(),
   excerpt: z.string().nullable(),
-  content: z.record(z.any()),
+  content: z.record(z.unknown()),
   html: z.string(),
   featureImage: PublicMediaSchema.nullable().optional(),
   publishedAt: z.string(),

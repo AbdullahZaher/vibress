@@ -18,7 +18,7 @@ import { MarkdownCardEditor } from './cards/MarkdownCardEditor';
 import { HtmlCardEditor } from './cards/HtmlCardEditor';
 
 // Registry of cards that have rich interactive React editors
-const INTERACTIVE_CARDS: Record<string, React.FC<{ nodeKey: NodeKey; cardData: any }>> = {
+const INTERACTIVE_CARDS = {
   image: ImageCardEditor,
   video: VideoCardEditor,
   gallery: GalleryCardEditor,
@@ -31,7 +31,7 @@ const INTERACTIVE_CARDS: Record<string, React.FC<{ nodeKey: NodeKey; cardData: a
   toggle: ToggleCardEditor,
   markdown: MarkdownCardEditor,
   html: HtmlCardEditor,
-};
+} as unknown as Record<string, React.FC<{ nodeKey: NodeKey; cardData: Record<string, unknown> }>>;
 
 export function StudioCardComponent({
   cardType,

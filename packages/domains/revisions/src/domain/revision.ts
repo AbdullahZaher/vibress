@@ -8,10 +8,10 @@ export interface Revision {
   title: string;
   slug: string;
   excerpt: string | null;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
   contentVersion: number;
   createdBy: string;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
 
@@ -22,8 +22,8 @@ export interface CreateRevisionData {
   title: string;
   slug: string;
   excerpt?: string | null;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
   contentVersion?: number;
   createdBy: string;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, unknown> | null;
 }

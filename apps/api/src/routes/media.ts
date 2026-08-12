@@ -11,6 +11,7 @@ import {
   MediaTooLargeError,
   MediaTypeNotAllowedError,
 } from '@vibress/media';
+import { asCodedError, errorMessage } from '../helpers/errors';
 
 export async function mediaRoutes(fastify: FastifyInstance) {
   // Upload media asset
@@ -20,12 +21,12 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       let fileData;
       try {
         fileData = await req.file();
-      } catch (err: any) {
+      } catch (err) {
         return reply.status(400).send({
           errors: [
             {
               code: 'MEDIA_UPLOAD_FAILED',
-              message: err.message || 'Failed to parse multipart upload',
+              message: errorMessage(err) || 'Failed to parse multipart upload',
               requestId: req.id,
             },
           ],
@@ -47,12 +48,12 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       let buffer: Buffer;
       try {
         buffer = await fileData.toBuffer();
-      } catch (err: any) {
+      } catch (err) {
         return reply.status(400).send({
           errors: [
             {
               code: 'MEDIA_UPLOAD_FAILED',
-              message: `Failed to read file buffer: ${err.message}`,
+              message: `Failed to read file buffer: ${errorMessage(err)}`,
               requestId: req.id,
             },
           ],
@@ -81,7 +82,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             url,
           },
         });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof MediaTooLargeError) {
           return reply.status(413).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
@@ -148,7 +149,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({
           media: { ...asset, url },
         });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
@@ -186,7 +187,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({
           media: { ...updated, url },
         });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
@@ -205,14 +206,15 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       try {
         await mediaService.deleteMedia(id, req.user!.id);
         return reply.status(200).send({ success: true });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof MediaInUseError) {
+          const inUse = err as MediaInUseError & { referenceCount?: number };
           return reply.status(409).send({
             errors: [
               {
                 code: 'MEDIA_IN_USE',
                 message: err.message,
-                referenceCount: err.referenceCount,
+                referenceCount: inUse.referenceCount,
                 requestId: req.id,
               },
             ],
@@ -236,7 +238,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       try {
         const summary = await mediaService.getMediaReferences(id);
         return reply.status(200).send({ summary });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],

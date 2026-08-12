@@ -41,6 +41,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Verify explicit-any regression guard
+        run: pnpm verify:explicit-any
+
       - name: Start infrastructure
         run: docker compose -f compose.dev.yml up -d --wait
 

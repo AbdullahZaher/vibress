@@ -43,12 +43,12 @@ export async function billingWebhookRoutes(fastify: FastifyInstance) {
           const result = await billingService.handleWebhook(provider, rawBody, signatureHeader);
           // Safe acknowledgement: processing is synchronous and durable before ACK
           return reply.status(result.status).send({ received: true });
-        } catch (err: any) {
+        } catch (err) {
           // Event was persisted; failed processing is retryable from the event record
           appLogger.warn(
             'webhook processing failed',
             { event: 'webhook_processing_failed', provider, requestId: req.id },
-            err
+            err instanceof Error ? err : undefined
           );
           return reply.status(200).send({ received: true, processing: 'failed, retryable' });
         }

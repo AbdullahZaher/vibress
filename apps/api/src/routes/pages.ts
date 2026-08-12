@@ -2,23 +2,28 @@ import { FastifyInstance } from 'fastify';
 import { CreatePageInputSchema, UpdatePageInputSchema, SchedulePageInputSchema } from '@vibress/api-contracts';
 import { pagesService, authorsService, revisionsService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { PageDomainError } from '@vibress/pages';
+import { PageDomainError, ListPagesFilter } from '@vibress/pages';
 
 export async function pageRoutes(fastify: FastifyInstance) {
   // List pages
   fastify.get('/pages', {
     preHandler: [requireStaffSession, requirePermission('pages.read')],
     handler: async (req, reply) => {
-      const { status, search, limit, offset } = req.query as any;
-      const result = await pagesService.listPages({
-        status,
-        search,
-        limit: limit ? parseInt(limit, 10) : undefined,
-        offset: offset ? parseInt(offset, 10) : undefined,
-      });
+      const { status, search, limit, offset } = (req.query ?? {}) as {
+        status?: string;
+        search?: string;
+        limit?: string;
+        offset?: string;
+      };
+      const params: ListPagesFilter = {};
+      if (status) params.status = status as ListPagesFilter['status'];
+      if (search) params.search = search;
+      if (limit) params.limit = parseInt(limit, 10);
+      if (offset) params.offset = parseInt(offset, 10);
+      const result = await pagesService.listPages(params);
 
       const pagesWithAuthors = await Promise.all(
-        result.pages.map(async (p: Record<string, any>) => {
+        result.pages.map(async (p) => {
           const authors = await authorsService.getPageAuthors(p.id);
           return { ...p, authors };
         })

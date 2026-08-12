@@ -3,10 +3,10 @@ import { MemberCheckoutRequestSchema } from '@vibress/api-contracts';
 import { billingService, subscriptionsService, plansService, productsService } from '../services';
 import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
 import { BillingDomainError } from '@vibress/billing';
-import { SubscriptionDomainError } from '@vibress/subscriptions';
+import { SubscriptionDomainError, Subscription } from '@vibress/subscriptions';
 import { getConfig } from '@vibress/config';
 
-function formatSubscriptionDto(sub: any, planName: string) {
+function formatSubscriptionDto(sub: Subscription, planName: string) {
   return {
     id: sub.id,
     productId: sub.productId,
@@ -79,7 +79,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
       try {
         const result = await billingService.createCheckoutSession(req.member!.id, planId, offerKey);
         return reply.status(200).send({ checkoutUrl: result.checkoutUrl });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof BillingDomainError) {
           const status = err.code === 'BILLING_AUTH_REQUIRED' ? 401 : 400;
           return reply.status(status).send({
@@ -104,7 +104,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
       try {
         const result = await billingService.createBillingPortalSession(req.member!.id);
         return reply.status(200).send({ url: result.url });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof BillingDomainError) {
           return reply.status(400).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
@@ -137,7 +137,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
         const updated = await subscriptionsService.cancelAtPeriodEnd(id);
         const plan = await plansService.getPlan(updated.planId);
         return reply.status(200).send({ subscription: formatSubscriptionDto(updated, plan?.name || 'Plan') });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof SubscriptionDomainError) {
           return reply.status(400).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
@@ -170,7 +170,7 @@ export async function memberBillingRoutes(fastify: FastifyInstance) {
         const updated = await subscriptionsService.resume(id);
         const plan = await plansService.getPlan(updated.planId);
         return reply.status(200).send({ subscription: formatSubscriptionDto(updated, plan?.name || 'Plan') });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof SubscriptionDomainError) {
           return reply.status(400).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],

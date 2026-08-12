@@ -72,7 +72,7 @@ function InitialStatePlugin({ document }: { document: StudioDocument }) {
       const root = $getRoot();
       if (document && document.root) {
         try {
-          const editorState = editor.parseEditorState({ root: { ...document.root, version: 1 } } as any);
+          const editorState = editor.parseEditorState({ root: { ...document.root, version: 1 } } as never);
           editor.setEditorState(editorState);
         } catch (err) {
           console.error("Failed to parse editor state", err);

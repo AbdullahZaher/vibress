@@ -73,7 +73,7 @@ export class AutomationsService {
   // ---------------- CRUD ----------------
 
   async createAutomation(data: CreateAutomationData, actorId: string | null): Promise<Automation> {
-    if (!ALLOWED_TRIGGERS.includes(data.triggerEvent as any)) {
+    if (typeof data.triggerEvent !== 'string' || !ALLOWED_TRIGGERS.includes(data.triggerEvent as (typeof ALLOWED_TRIGGERS)[number])) {
       throw new AutomationDomainError('INVALID_TRIGGER', `Trigger ${data.triggerEvent} is not allowed`);
     }
     if (!data.name.trim()) throw new AutomationDomainError('VALIDATION_ERROR', 'Name is required');
@@ -96,7 +96,7 @@ export class AutomationsService {
   async updateAutomation(id: string, data: Partial<CreateAutomationData>, actorId: string | null): Promise<Automation> {
     const existing = await this.repo.findById(id);
     if (!existing) throw new AutomationDomainError('AUTOMATION_NOT_FOUND', 'Automation not found');
-    if (data.triggerEvent && !ALLOWED_TRIGGERS.includes(data.triggerEvent as any)) {
+    if (data.triggerEvent && (typeof data.triggerEvent !== 'string' || !ALLOWED_TRIGGERS.includes(data.triggerEvent as (typeof ALLOWED_TRIGGERS)[number]))) {
       throw new AutomationDomainError('INVALID_TRIGGER', `Trigger ${data.triggerEvent} is not allowed`);
     }
 

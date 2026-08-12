@@ -14,13 +14,41 @@ import { validateAndDetectFile } from '@vibress/media';
 import { defaultStorageRegistry, StorageError } from '@vibress/storage-core';
 import crypto from 'node:crypto';
 
+type CodedError = Error & { code?: string };
+
+function asCodedError(err: unknown): CodedError {
+  if (err instanceof Error) return err as CodedError;
+  return new Error(typeof err === 'string' ? err : 'Unknown error') as CodedError;
+}
+
+type StorageConnectionTestBody = {
+  id?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  credentials?: { accessKeyId?: string; secretAccessKey?: string };
+  providerType?: string;
+  region?: string;
+  bucket?: string;
+  endpoint?: string;
+  publicBaseUrl?: string;
+  forcePathStyle?: boolean;
+};
+
+// Access the storage service's internal repository (used for upload session lifecycle)
+function storageRepoOf(svc: typeof storageService) {
+  return (svc as unknown as { storageRepo: import('@vibress/storage-domain').DrizzleStorageRepository }).storageRepo;
+}
+function mediaRepoOf(svc: typeof mediaService) {
+  return (svc as unknown as { mediaRepo: import('@vibress/media').DrizzleMediaRepository }).mediaRepo;
+}
+
 export async function storageRoutes(fastify: FastifyInstance) {
   // List storage configurations
   fastify.get('/storage/configurations', {
     preHandler: [requireStaffSession, requirePermission('storage.read')],
     handler: async (req, reply) => {
       const configs = await storageService.listConfigurations();
-      const sanitized = configs.map((c: any) => ({
+      const sanitized = configs.map((c) => ({
         id: c.id,
         name: c.name,
         providerType: c.providerType,
@@ -133,10 +161,11 @@ export async function storageRoutes(fastify: FastifyInstance) {
             updatedAt: updated.updatedAt,
           },
         });
-      } catch (err: any) {
-        if (err.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
+      } catch (err) {
+        const e = asCodedError(err);
+        if (e.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
           return reply.status(404).send({
-            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: e.message, requestId: req.id }],
           });
         }
         throw err;
@@ -148,9 +177,9 @@ export async function storageRoutes(fastify: FastifyInstance) {
   fastify.post('/storage/test', {
     preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
+      const body = (req.body ?? {}) as StorageConnectionTestBody;
       try {
-        const input = 'id' in body && body.id
+        const input: Parameters<typeof storageService.testConnection>[0] = 'id' in body && body.id
           ? { id: body.id }
           : {
               ...body,
@@ -158,15 +187,16 @@ export async function storageRoutes(fastify: FastifyInstance) {
                 accessKeyId: body.accessKeyId || body.credentials?.accessKeyId,
                 secretAccessKey: body.secretAccessKey || body.credentials?.secretAccessKey,
               },
-            };
+            } as Parameters<typeof storageService.testConnection>[0];
         const result = await storageService.testConnection(input, req.user!.id);
         return reply.status(200).send({ result });
-      } catch (err: any) {
+      } catch (err) {
+        const e = asCodedError(err);
         return reply.status(400).send({
           errors: [
             {
-              code: err.code || 'STORAGE_CONNECTION_FAILED',
-              message: err.message || 'Connection test failed',
+              code: e.code || 'STORAGE_CONNECTION_FAILED',
+              message: e.message || 'Connection test failed',
               requestId: req.id,
             },
           ],
@@ -191,12 +221,13 @@ export async function storageRoutes(fastify: FastifyInstance) {
             isActive: true,
           },
         });
-      } catch (err: any) {
+      } catch (err) {
+        const e = asCodedError(err);
         return reply.status(400).send({
           errors: [
             {
-              code: err.code || 'STORAGE_CONFIGURATION_INVALID',
-              message: err.message || 'Activation failed',
+              code: e.code || 'STORAGE_CONFIGURATION_INVALID',
+              message: e.message || 'Activation failed',
               requestId: req.id,
             },
           ],
@@ -213,15 +244,16 @@ export async function storageRoutes(fastify: FastifyInstance) {
       try {
         await storageService.deleteConfiguration(id, req.user!.id);
         return reply.status(200).send({ success: true });
-      } catch (err: any) {
-        if (err.code === 'STORAGE_PROVIDER_IN_USE') {
+      } catch (err) {
+        const e = asCodedError(err);
+        if (e.code === 'STORAGE_PROVIDER_IN_USE') {
           return reply.status(409).send({
-            errors: [{ code: 'STORAGE_PROVIDER_IN_USE', message: err.message, requestId: req.id }],
+            errors: [{ code: 'STORAGE_PROVIDER_IN_USE', message: e.message, requestId: req.id }],
           });
         }
-        if (err.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
+        if (e.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
           return reply.status(404).send({
-            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: e.message, requestId: req.id }],
           });
         }
         throw err;
@@ -270,12 +302,13 @@ export async function storageRoutes(fastify: FastifyInstance) {
           buffer: dummyBuf,
           mimeType: inputData.declaredMime,
         });
-      } catch (validationErr: any) {
+      } catch (validationErr) {
+        const ve = asCodedError(validationErr);
         return reply.status(400).send({
           errors: [
             {
-              code: validationErr.code || 'MEDIA_INVALID_FILE',
-              message: validationErr.message,
+              code: ve.code || 'MEDIA_INVALID_FILE',
+              message: ve.message,
               requestId: req.id,
             },
           ],
@@ -291,7 +324,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
         expiresInSeconds: 900,
       });
 
-      const session = await (storageService as any).storageRepo.createUploadSession({
+      const session = await storageRepoOf(storageService).createUploadSession({
         actorId: req.user!.id,
         storageKey,
         originalFilename: inputData.originalFilename,
@@ -329,7 +362,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       }
 
       const { uploadSessionId } = parseResult.data;
-      const repo = (storageService as any).storageRepo;
+      const repo = storageRepoOf(storageService);
       const session = await repo.findUploadSessionById(uploadSessionId);
 
       if (!session) {
@@ -389,14 +422,15 @@ export async function storageRoutes(fastify: FastifyInstance) {
               mimeType: session.declaredMime,
             });
           }
-        } catch (valErr: any) {
+        } catch (valErr) {
+          const ve = asCodedError(valErr);
           await repo.updateUploadSessionState(uploadSessionId, 'failed');
           await activeProvider.delete(session.storageKey).catch(() => {});
           return reply.status(400).send({
             errors: [
               {
-                code: valErr.code || 'MEDIA_MIME_MISMATCH',
-                message: `Direct upload signature verification failed: ${valErr.message}`,
+                code: ve.code || 'MEDIA_MIME_MISMATCH',
+                message: `Direct upload signature verification failed: ${ve.message}`,
                 requestId: req.id,
               },
             ],
@@ -408,7 +442,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       const assetId = session.storageKey.split('/')[1] || crypto.randomUUID();
       const ext = session.originalFilename.split('.').pop() || '';
 
-      const mediaAsset = await (mediaService as any).mediaRepo.create({
+      const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
         storageProvider: activeProvider.name,
         storageKey: session.storageKey,
@@ -473,7 +507,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
         contentType: inputData.declaredMime,
       });
 
-      const session = await (storageService as any).storageRepo.createUploadSession({
+      const session = await storageRepoOf(storageService).createUploadSession({
         actorId: req.user!.id,
         storageKey,
         originalFilename: inputData.originalFilename,
@@ -504,7 +538,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       }
 
       const { uploadSessionId, partNumber } = parseResult.data;
-      const repo = (storageService as any).storageRepo;
+      const repo = storageRepoOf(storageService);
       const session = await repo.findUploadSessionById(uploadSessionId);
 
       if (!session || !session.multipartUploadId) {
@@ -548,7 +582,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       }
 
       const { uploadSessionId, parts } = parseResult.data;
-      const repo = (storageService as any).storageRepo;
+      const repo = storageRepoOf(storageService);
       const session = await repo.findUploadSessionById(uploadSessionId);
 
       if (!session || !session.multipartUploadId) {
@@ -573,7 +607,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       const assetId = session.storageKey.split('/')[1] || crypto.randomUUID();
       const ext = session.originalFilename.split('.').pop() || '';
 
-      const mediaAsset = await (mediaService as any).mediaRepo.create({
+      const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
         storageProvider: activeProvider.name,
         storageKey: session.storageKey,
@@ -602,7 +636,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
     handler: async (req, reply) => {
       const { uploadSessionId } = req.body as { uploadSessionId: string };
-      const repo = (storageService as any).storageRepo;
+      const repo = storageRepoOf(storageService);
       const session = await repo.findUploadSessionById(uploadSessionId);
 
       if (session && session.multipartUploadId) {

@@ -2,26 +2,34 @@ import { FastifyInstance } from 'fastify';
 import { CreatePostInputSchema, UpdatePostInputSchema, SchedulePostInputSchema } from '@vibress/api-contracts';
 import { postsService, authorsService, revisionsService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { PostDomainError } from '@vibress/posts';
+import { PostDomainError, ListPostsFilter } from '@vibress/posts';
 
 export async function postRoutes(fastify: FastifyInstance) {
   // List posts
   fastify.get('/posts', {
     preHandler: [requireStaffSession, requirePermission('posts.read')],
     handler: async (req, reply) => {
-      const { status, authorId, search, limit, offset, sortBy, sortOrder } = req.query as any;
-      const result = await postsService.listPosts({
-        status,
-        authorId,
-        search,
-        limit: limit ? parseInt(limit, 10) : undefined,
-        offset: offset ? parseInt(offset, 10) : undefined,
-        sortBy,
-        sortOrder,
-      });
+      const { status, authorId, search, limit, offset, sortBy, sortOrder } = (req.query ?? {}) as {
+        status?: string;
+        authorId?: string;
+        search?: string;
+        limit?: string;
+        offset?: string;
+        sortBy?: string;
+        sortOrder?: string;
+      };
+      const params: ListPostsFilter = {};
+      if (status) params.status = status as ListPostsFilter['status'];
+      if (authorId) params.authorId = authorId;
+      if (search) params.search = search;
+      if (limit) params.limit = parseInt(limit, 10);
+      if (offset) params.offset = parseInt(offset, 10);
+      if (sortBy) params.sortBy = sortBy as ListPostsFilter['sortBy'];
+      if (sortOrder) params.sortOrder = sortOrder as ListPostsFilter['sortOrder'];
+      const result = await postsService.listPosts(params);
 
       const postsWithDetails = await Promise.all(
-        result.posts.map(async (p: Record<string, any>) => {
+        result.posts.map(async (p) => {
           const authors = await authorsService.getPostAuthors(p.id);
           const tagIds = await postsService.getPostTagIds(p.id);
           return { ...p, authors, tagIds };

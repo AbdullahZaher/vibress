@@ -58,7 +58,7 @@ export function buildPageMetadata(options: {
   return meta;
 }
 
-export function buildPostJsonLd(post: PublicPostDetailDto): Record<string, any> {
+export function buildPostJsonLd(post: PublicPostDetailDto): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
   const canonicalUrl = post.seo?.canonicalUrl || `${siteUrl}/posts/${post.slug}`;
 
@@ -81,7 +81,7 @@ export function buildPostJsonLd(post: PublicPostDetailDto): Record<string, any> 
   };
 }
 
-export function buildPageJsonLd(page: PublicPageDetailDto): Record<string, any> {
+export function buildPageJsonLd(page: PublicPageDetailDto): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
   const canonicalUrl = page.seo?.canonicalUrl || `${siteUrl}/pages/${page.slug}`;
 
@@ -96,7 +96,7 @@ export function buildPageJsonLd(page: PublicPageDetailDto): Record<string, any> 
   };
 }
 
-export function safeJsonLdScript(data: Record<string, any>): string {
+export function safeJsonLdScript(data: Record<string, unknown>): string {
   const json = JSON.stringify(data);
   // Prevent </script> tag breakout security injection
   return json.replace(/</g, '\\u003c');

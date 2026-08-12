@@ -83,7 +83,7 @@ export class DrizzleStorageRepository {
     const db = getDb();
     const now = new Date();
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       updatedAt: now,
     };
 

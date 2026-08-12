@@ -1,4 +1,4 @@
-import { domainEvents } from '@vibress/events';
+import { domainEvents, DomainEvent } from '@vibress/events';
 import { webhooksService } from './services';
 
 /**
@@ -20,7 +20,7 @@ const SUBSCRIBED_EVENTS = [
 
 export function startWebhookEventBridge(): void {
   for (const eventName of SUBSCRIBED_EVENTS) {
-    domainEvents.on(eventName, (event: any) => {
+    domainEvents.on(eventName, (event: DomainEvent) => {
       webhooksService
         .dispatchEvent(event.name, event.payload)
         .catch((err: unknown) => {

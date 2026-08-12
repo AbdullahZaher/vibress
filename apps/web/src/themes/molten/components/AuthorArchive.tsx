@@ -11,8 +11,8 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
       <main className="site-main">
         <header className="vb-page-head">
           <div className="vb-page-head-inner vb-inner">
-            {(author as any).profileImage && (
-              <img className="vb-page-head-image" src={(author as any).profileImage} alt={author.name} />
+            {(author as { profileImage?: string }).profileImage && (
+              <img className="vb-page-head-image" src={(author as { profileImage?: string }).profileImage} alt={author.name} />
             )}
             <h1 className="vb-page-head-title">{author.name}</h1>
             <p className="vb-page-head-description">

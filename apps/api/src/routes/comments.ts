@@ -2,10 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { commentsService } from '../services';
 import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
 import { CreateCommentSchema, UpdateCommentSchema, ReportCommentSchema } from '@vibress/api-contracts';
-import { CommentDomainError } from '@vibress/comments';
+import { CommentDomainError, Comment } from '@vibress/comments';
 import { getConfig } from '@vibress/config';
 
-function publicCommentDto(c: any) {
+type CommentListQuery = { limit?: string; offset?: string };
+
+function publicCommentDto(c: Comment) {
   return {
     id: c.id,
     postId: c.postId,
@@ -25,7 +27,7 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
   // Public: list published comments for a post
   fastify.get('/posts/:postId/comments', async (req, reply) => {
     const { postId } = req.params as { postId: string };
-    const query = req.query as any;
+    const query = (req.query ?? {}) as CommentListQuery;
     const limit = query.limit ? parseInt(query.limit, 10) : 50;
     const offset = query.offset ? parseInt(query.offset, 10) : 0;
     const result = await commentsService.listPublicCommentsForPost(postId, limit, offset);

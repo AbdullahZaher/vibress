@@ -180,11 +180,14 @@ export function SubscriptionsList() {
             <div className="space-y-2">
               <h4 className="font-bold text-muted-foreground uppercase tracking-wider text-[11px]">Audit Lifecycle Events</h4>
               <div className="space-y-1 max-h-40 overflow-y-auto font-mono text-[11px]">
-                {events.map((ev: any, idx) => (
+                {events.map((ev, idx) => {
+                  const event = ev as { eventType?: string; createdAt?: string };
+                  return (
                   <div key={idx} className="p-2 rounded border border-border bg-card">
-                    <span className="text-emerald-500 font-bold">{ev.eventType || 'event'}</span> – {new Date(ev.createdAt).toLocaleString()}
+                    <span className="text-emerald-500 font-bold">{event.eventType || 'event'}</span> – {new Date(event.createdAt || Date.now()).toLocaleString()}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

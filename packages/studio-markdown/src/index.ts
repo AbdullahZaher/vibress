@@ -11,19 +11,20 @@ export function studioDocumentToMarkdown(docInput: unknown): string {
   }
 
   return doc.root.children
-    .map((node: any) => renderNodeToMarkdown(node))
+    .map((node: unknown) => renderNodeToMarkdown(node))
     .filter(Boolean)
     .join('\n\n');
 }
 
-function renderNodeToMarkdown(node: any): string {
+function renderNodeToMarkdown(node: unknown): string {
   if (!node || typeof node !== 'object') return '';
+  const n = node as { type?: string; text?: string; format?: number; children?: unknown[]; tag?: string; listType?: string; url?: string; src?: string; alt?: string; cardType?: string; caption?: string; cardData?: Record<string, unknown>; } & Record<string, unknown>;
 
-  const type = node.type;
+  const type = n.type;
 
   if (type === 'text') {
-    let text = node.text || '';
-    const format = typeof node.format === 'number' ? node.format : 0;
+    let text = n.text || '';
+    const format = typeof n.format === 'number' ? n.format : 0;
     if (format & 16) text = `\`${text}\``;
     if (format & 1) text = `**${text}**`;
     if (format & 2) text = `*${text}*`;
@@ -32,8 +33,8 @@ function renderNodeToMarkdown(node: any): string {
   }
 
   const renderChildren = () => {
-    if (Array.isArray(node.children)) {
-      return node.children.map((child: any) => renderNodeToMarkdown(child)).join('');
+    if (Array.isArray(n.children)) {
+      return n.children.map((child: unknown) => renderNodeToMarkdown(child)).join('');
     }
     return '';
   };
@@ -43,7 +44,7 @@ function renderNodeToMarkdown(node: any): string {
       return renderChildren();
 
     case 'heading': {
-      const tag = (node.tag || 'h2').toLowerCase();
+      const tag = (n.tag || 'h2').toLowerCase();
       const hashes = tag === 'h1' ? '#' : tag === 'h2' ? '##' : tag === 'h3' ? '###' : '####';
       return `${hashes} ${renderChildren()}`;
     }
@@ -58,15 +59,15 @@ function renderNodeToMarkdown(node: any): string {
       return `- ${renderChildren()}`;
 
     case 'link':
-      return `[${renderChildren()}](${node.url || '#'})`;
+      return `[${renderChildren()}](${n.url || '#'})`;
 
     case 'code':
       return `\`\`\`\n${renderChildren()}\n\`\`\``;
 
     case 'studio-card': {
-      if (node.cardType === 'divider') return '---';
-      if (node.cardType === 'markdown') return node.cardData?.markdown || '';
-      return `[Card: ${node.cardType}]`;
+      if (n.cardType === 'divider') return '---';
+      if (n.cardType === 'markdown') return (n.cardData?.markdown as string | undefined) || '';
+      return `[Card: ${n.cardType}]`;
     }
 
     default:

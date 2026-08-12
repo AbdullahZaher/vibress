@@ -39,8 +39,8 @@ export async function emailWebhookRoutes(fastify: FastifyInstance) {
         try {
           const result = await emailService.handleWebhook(provider, rawBody, signatureHeader);
           return reply.status(result.status).send({ received: true });
-        } catch (err: any) {
-          appLogger.warn('email webhook processing failed', { event: 'email_webhook_processing_failed', provider, requestId: req.id }, err);
+        } catch (err) {
+          appLogger.warn('email webhook processing failed', { event: 'email_webhook_processing_failed', provider, requestId: req.id }, err instanceof Error ? err : undefined);
           return reply.status(200).send({ received: true, processing: 'failed, retryable' });
         }
       },

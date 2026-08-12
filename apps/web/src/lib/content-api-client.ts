@@ -13,7 +13,15 @@ function getApiBaseUrl(): string {
   if (process.env.API_PORT) {
     return `http://127.0.0.1:${process.env.API_PORT}`;
   }
+  console.warn('[ContentApiClient] No API_URL or API_PORT set — falling back to http://127.0.0.1:7780 (may not work inside containers)');
   return 'http://127.0.0.1:7780';
+}
+
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
 }
 
 async function fetchContentApi<T>(
@@ -31,27 +39,29 @@ async function fetchContentApi<T>(
     });
   }
 
+  let res: Response;
   try {
-    const res = await fetch(url.toString(), {
-      cache: 'no-store', // Request-time fresh fetch for CMS content
+    res = await fetch(url.toString(), {
+      cache: 'no-store',
       headers: {
         Accept: 'application/json',
       },
     });
-
-    if (res.status === 404) {
-      return null;
-    }
-
-    if (!res.ok) {
-      return null;
-    }
-
-    return (await res.json()) as T;
   } catch (error) {
-    console.error(`[ContentApiClient Error] Fetching ${path} failed:`, error);
+    console.error(`[ContentApiClient Error] Network failure fetching ${path}:`, error);
+    throw new Error(`Content API unreachable at ${baseUrl}`, { cause: error });
+  }
+
+  if (res.status === 404) {
     return null;
   }
+
+  if (!res.ok) {
+    console.error(`[ContentApiClient Error] ${res.status} from ${path}`);
+    throw new Error(`Content API returned ${res.status}`);
+  }
+
+  return (await res.json()) as T;
 }
 
 export interface PaginatedPostsResult {
@@ -91,8 +101,8 @@ export const ContentApiClient = {
   async getPages(options?: {
     page?: number;
     limit?: number;
-  }): Promise<{ pages: PublicPageDetailDto[]; pagination: any } | null> {
-    return fetchContentApi<{ pages: PublicPageDetailDto[]; pagination: any }>('/pages', options);
+  }): Promise<{ pages: PublicPageDetailDto[]; pagination: PaginationInfo } | null> {
+    return fetchContentApi<{ pages: PublicPageDetailDto[]; pagination: PaginationInfo }>('/pages', options);
   },
 
   async getTags(): Promise<PublicTagDto[]> {
@@ -110,7 +120,7 @@ export const ContentApiClient = {
   async getTagPosts(
     slug: string,
     options?: { page?: number; limit?: number }
-  ): Promise<{ tag: PublicTagDto; posts: PublicPostSummaryDto[]; pagination: any } | null> {
+  ): Promise<{ tag: PublicTagDto; posts: PublicPostSummaryDto[]; pagination: PaginationInfo } | null> {
     return fetchContentApi(`/tags/${encodeURIComponent(slug)}/posts`, options);
   },
 
@@ -129,7 +139,7 @@ export const ContentApiClient = {
   async getAuthorPosts(
     slug: string,
     options?: { page?: number; limit?: number }
-  ): Promise<{ author: PublicAuthorDto; posts: PublicPostSummaryDto[]; pagination: any } | null> {
+  ): Promise<{ author: PublicAuthorDto; posts: PublicPostSummaryDto[]; pagination: PaginationInfo } | null> {
     return fetchContentApi(`/authors/${encodeURIComponent(slug)}/posts`, options);
   },
 };

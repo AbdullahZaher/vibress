@@ -22,8 +22,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
     try {
       await loginFn(email, password);
       onLoginSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Failed to login. Check credentials.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to login. Check credentials.');
     } finally {
       setIsLoading(false);
     }

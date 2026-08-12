@@ -54,7 +54,7 @@ export class DrizzleUserRepository implements UserRepository {
 
   async update(id: string, data: Partial<Pick<User, 'name' | 'slug' | 'bio' | 'email' | 'passwordHash' | 'status' | 'lastLoginAt' | 'deletedAt'>>): Promise<User> {
     const db = getDb();
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       updatedAt: new Date(),
     };
 

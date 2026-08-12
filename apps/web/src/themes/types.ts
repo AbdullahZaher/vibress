@@ -71,7 +71,7 @@ export function themeSetting(
   settings: Record<string, unknown>,
   key: string,
   fallback: unknown
-): any {
+): unknown {
   const value = settings[key];
   return value === undefined ? fallback : value;
 }

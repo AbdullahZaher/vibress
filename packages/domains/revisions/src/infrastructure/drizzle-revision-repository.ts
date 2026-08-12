@@ -69,10 +69,10 @@ export class DrizzleRevisionRepository implements RevisionRepository {
       title: row.title,
       slug: row.slug,
       excerpt: row.excerpt,
-      content: row.content as Record<string, any>,
+      content: row.content as Record<string, unknown>,
       contentVersion: row.contentVersion,
       createdBy: row.createdBy,
-      metadata: row.metadata as Record<string, any> | null,
+      metadata: row.metadata as Record<string, unknown> | null,
       createdAt: row.createdAt,
     };
   }

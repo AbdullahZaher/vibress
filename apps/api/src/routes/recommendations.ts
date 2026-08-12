@@ -1,9 +1,12 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { recommendationsService, commentsService } from '../services';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
 import { CreateRecommendationSchema, UpdateRecommendationSchema } from '@vibress/api-contracts';
 import { RecommendationDomainError } from '@vibress/recommendations';
 import { CommentDomainError } from '@vibress/comments';
+
+const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
+  reply.status(status).send({ errors: [{ code, message, requestId }] });
 
 export async function publicRecommendationRoutes(fastify: FastifyInstance) {
   // Public: list active recommendations
@@ -24,11 +27,12 @@ export async function publicRecommendationRoutes(fastify: FastifyInstance) {
   // Public: record a click
   fastify.post('/recommendations/:id/click', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const sessionId = (req.body as any)?.sessionId || null;
+    const body = req.body as { sessionId?: string } | undefined;
+    const sessionId = body?.sessionId || null;
     try {
       await recommendationsService.recordClick(id, null, sessionId);
       return reply.status(200).send({ success: true });
-    } catch (err: unknown) {
+    } catch (err) {
       if (err instanceof RecommendationDomainError) {
         return reply.status(404).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
       }
@@ -38,13 +42,11 @@ export async function publicRecommendationRoutes(fastify: FastifyInstance) {
 }
 
 export async function adminRecommendationRoutes(fastify: FastifyInstance) {
-  const sendError = (reply: any, code: string, message: string, requestId: string, status = 400) =>
-    reply.status(status).send({ errors: [{ code, message, requestId }] });
-
   fastify.get('/recommendations', {
     preHandler: [requireStaffSession, requirePermission('recommendations.read')],
     handler: async (req, reply) => {
-      const includeArchived = String((req.query as any).includeArchived) === 'true';
+      const query = (req.query ?? {}) as { includeArchived?: string };
+      const includeArchived = String(query.includeArchived) === 'true';
       const recommendations = await recommendationsService.listRecommendations({ includeArchived });
       return reply.status(200).send({ recommendations });
     },
@@ -58,7 +60,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.createRecommendation(parsed.data, req.user!.id);
         return reply.status(201).send({ recommendation });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof RecommendationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -74,7 +76,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.updateRecommendation(id, parsed.data, req.user!.id);
         return reply.status(200).send({ recommendation });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof RecommendationDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'RECOMMENDATION_NOT_FOUND' ? 404 : 400);
         }
@@ -90,7 +92,7 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
       try {
         const recommendation = await recommendationsService.archiveRecommendation(id, req.user!.id);
         return reply.status(200).send({ recommendation });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof RecommendationDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -107,20 +109,21 @@ export async function adminRecommendationRoutes(fastify: FastifyInstance) {
   });
 }
 
-export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
-  const sendError = (reply: any, code: string, message: string, requestId: string, status = 400) =>
-    reply.status(status).send({ errors: [{ code, message, requestId }] });
+type AdminCommentListQuery = { status?: string; postId?: string; limit?: string; offset?: string };
+type CommentReportListQuery = { status?: string; limit?: string; offset?: string };
 
+export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
   fastify.get('/comments', {
     preHandler: [requireStaffSession, requirePermission('comments.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
-      const result = await commentsService.listCommentsForModeration({
-        status: query.status,
-        postId: query.postId,
+      const query = (req.query ?? {}) as AdminCommentListQuery;
+      const params: { status?: string; postId?: string; limit: number; offset: number } = {
         limit: query.limit ? parseInt(query.limit, 10) : 50,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
-      });
+      };
+      if (query.status) params.status = query.status;
+      if (query.postId) params.postId = query.postId;
+      const result = await commentsService.listCommentsForModeration(params);
       return reply.status(200).send({
         comments: result.comments.map((c) => ({
           id: c.id, postId: c.postId, memberId: c.memberId, parentId: c.parentId,
@@ -139,7 +142,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.hideComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -153,7 +156,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.restoreComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -167,7 +170,7 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.adminDeleteComment(id);
         return reply.status(200).send({ comment: { id: comment.id, status: comment.status } });
-      } catch (err: unknown) {
+      } catch (err) {
         if (err instanceof CommentDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -177,12 +180,13 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
   fastify.get('/comment-reports', {
     preHandler: [requireStaffSession, requirePermission('comments.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
-      const result = await commentsService.listReports({
-        status: query.status,
+      const query = (req.query ?? {}) as CommentReportListQuery;
+      const params: { status?: string; limit: number; offset: number } = {
         limit: query.limit ? parseInt(query.limit, 10) : 50,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
-      });
+      };
+      if (query.status) params.status = query.status;
+      const result = await commentsService.listReports(params);
       return reply.status(200).send(result);
     },
   });
@@ -191,7 +195,8 @@ export async function adminCommentModerationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('comments.moderate'), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const action = (req.body as any)?.action || 'resolved';
+      const body = req.body as { action?: string } | undefined;
+      const action = body?.action || 'resolved';
       await commentsService.resolveReport(id, action, req.user!.id);
       return reply.status(200).send({ success: true });
     },

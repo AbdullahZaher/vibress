@@ -307,7 +307,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       {/* Media Modal */}
       <Dialog isOpen={showPicker} onClose={handlePickerClose} title="Select Asset">
         <MediaPicker
-          allowedTypes={pickerConfig?.cardType === 'gallery' ? ['image'] : [pickerConfig?.cardType as any]}
+          allowedTypes={pickerConfig?.cardType === 'gallery' ? ['image'] : [pickerConfig?.cardType as 'image' | 'video' | 'audio' | 'file']}
           multiple={pickerConfig?.cardType === 'gallery'}
           onSelectAsset={handlePickerSelectAsset}
           onSelectAssets={handlePickerSelectAssets}

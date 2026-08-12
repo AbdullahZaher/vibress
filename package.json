@@ -22,7 +22,8 @@
     "verify:clean-tree": "node scripts/verify-clean-tree.mjs",
     "prod:up": "docker compose -f compose.prod.yml up -d --build",
     "prod:down": "docker compose -f compose.prod.yml down",
-    "prod:migrate": "docker compose -f compose.prod.yml run --rm migrate"
+    "prod:migrate": "docker compose -f compose.prod.yml run --rm migrate",
+    "verify:explicit-any": "node scripts/count-explicit-any.mjs --max 120"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -40,7 +41,6 @@
     "typescript-eslint": "^8.66.0",
     "vitest": "^4.1.10"
   },
-
   "resolutions": {
     "typescript": "~5.5.3"
   },
