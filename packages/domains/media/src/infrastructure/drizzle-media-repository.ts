@@ -1,4 +1,4 @@
-import { getDb, mediaAssets, mediaReferences, MediaAssetRow } from '@vibress/database';
+import { getDb, mediaAssets, mediaReferences, MediaAssetRow, runInTransaction } from '@vibress/database';
 import { eq, and, isNull, ilike, count, desc, asc } from 'drizzle-orm';
 import { MediaRepository, ListMediaFilter } from '../domain/repository';
 import { AssetType, MediaAsset, MediaReference, MediaReferenceSummary } from '../domain/asset';
@@ -222,30 +222,31 @@ export class DrizzleMediaRepository implements MediaRepository {
     resourceId: string,
     mediaIdsWithPaths: Array<{ mediaId: string; fieldPath?: string }>
   ): Promise<void> {
-    const db = getDb();
-    // Transactionally wipe old references for resource and insert new ones
-    await db
-      .delete(mediaReferences)
-      .where(
-        and(
-          eq(mediaReferences.resourceType, resourceType),
-          eq(mediaReferences.resourceId, resourceId)
-        )
-      );
+    await runInTransaction(async () => {
+      const db = getDb();
+      await db
+        .delete(mediaReferences)
+        .where(
+          and(
+            eq(mediaReferences.resourceType, resourceType),
+            eq(mediaReferences.resourceId, resourceId)
+          )
+        );
 
-    if (mediaIdsWithPaths.length > 0) {
-      const now = new Date();
-      const insertValues = mediaIdsWithPaths.map((item) => ({
-        id: crypto.randomUUID(),
-        mediaId: item.mediaId,
-        resourceType,
-        resourceId,
-        fieldPath: item.fieldPath || '',
-        createdAt: now,
-      }));
+      if (mediaIdsWithPaths.length > 0) {
+        const now = new Date();
+        const insertValues = mediaIdsWithPaths.map((item) => ({
+          id: crypto.randomUUID(),
+          mediaId: item.mediaId,
+          resourceType,
+          resourceId,
+          fieldPath: item.fieldPath || '',
+          createdAt: now,
+        }));
 
-      await db.insert(mediaReferences).values(insertValues).onConflictDoNothing();
-    }
+        await db.insert(mediaReferences).values(insertValues).onConflictDoNothing();
+      }
+    });
   }
 
   private mapToDomain(row: MediaAssetRow): MediaAsset {

@@ -10,9 +10,9 @@ import { createEditor, EditorState } from 'lexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
 
 export interface NestedCaptionEditorProps {
-  initialCaptionJSON?: Record<string, any> | undefined;
+  initialCaptionJSON?: Record<string, unknown> | undefined;
   placeholder?: string;
-  onChange: (captionJSON: Record<string, any>, captionHtml: string) => void;
+  onChange: (captionJSON: Record<string, unknown>, captionHtml: string) => void;
 }
 
 export function NestedCaptionEditor({
@@ -31,7 +31,7 @@ export function NestedCaptionEditor({
 
     if (initialCaptionJSON && Object.keys(initialCaptionJSON).length > 0) {
       try {
-        const parsed = editor.parseEditorState(initialCaptionJSON as any);
+        const parsed = editor.parseEditorState(initialCaptionJSON as never);
         editor.setEditorState(parsed);
       } catch (e) {
         console.error('Failed to parse caption JSON', e);
@@ -58,7 +58,7 @@ export function NestedCaptionEditor({
           onChange={(editorState: EditorState, editor) => {
             editorState.read(() => {
               const html = $generateHtmlFromNodes(editor, null);
-              onChange(editorState.toJSON(), html);
+              onChange(editorState.toJSON() as unknown as Record<string, unknown>, html);
             });
           }}
         />

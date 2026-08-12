@@ -6,6 +6,7 @@ declare module 'fastify' {
       id: string;
       email: string;
       name: string;
+      slug?: string | null;
       status?: string;
     };
     roles?: string[];
@@ -13,5 +14,10 @@ declare module 'fastify' {
     sessionToken?: string;
     member?: import('@vibress/members').Member;
     memberSessionToken?: string;
+    machineAuth?: {
+      keyId: string;
+      name: string;
+      scopes: string[];
+    };
   }
 }

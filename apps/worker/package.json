@@ -1,11 +1,12 @@
 {
   "name": "@vibress/worker",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
-    "start": "node dist/main.js",
+    "start": "tsx src/main.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +16,8 @@
     "@vibress/cache": "workspace:*",
     "@vibress/config": "workspace:*",
     "@vibress/database": "workspace:*",
+    "@vibress/events": "workspace:*",
+    "@vibress/observability": "workspace:*",
     "@vibress/pages": "workspace:*",
     "@vibress/posts": "workspace:*",
     "@vibress/queue": "workspace:*",

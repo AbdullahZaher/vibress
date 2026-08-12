@@ -106,11 +106,11 @@ export class LocalStorageProvider implements StorageProvider {
     const targetPath = this.resolveKeyPath(key);
     try {
       await fs.promises.unlink(targetPath);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error) {
+      if (error instanceof Error && (error as { code?: string }).code === 'ENOENT') {
         return; // Idempotent deletion
       }
-      throw new StorageError(`Failed to delete local storage object '${key}': ${error.message}`);
+      throw new StorageError(`Failed to delete local storage object '${key}': ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

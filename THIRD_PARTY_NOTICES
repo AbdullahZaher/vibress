@@ -1,0 +1,60 @@
+Vibress Third-Party Notices
+============================
+
+Vibress incorporates work from the following third-party packages.
+All packages are listed with their respective licenses as declared in
+their package metadata. Full license texts are available in each
+package's repository or via `pnpm licenses list`.
+
+License Summary
+---------------
+
+The following license types appear across Vibress dependencies:
+
+  MIT               (majority of dependencies)
+  Apache-2.0        (AWS SDK, others)
+  BSD-2-Clause
+  BSD-3-Clause
+  ISC
+  0BSD
+  BlueOak-1.0.0
+  CC-BY-4.0
+  CC0-1.0
+  MIT-0
+  MPL-2.0
+  Python-2.0
+  Unlicense
+  (MIT AND Zlib)    (pako)
+
+All licenses are permissive and compatible with the MIT license under
+which Vibress is distributed.
+
+Key Dependencies
+----------------
+
+The following are the primary runtime dependencies (non-dev):
+
+- react / react-dom                           — MIT
+- fastify / @fastify/*                        — MIT
+- drizzle-orm / drizzle-zod                   — Apache-2.0
+- postgres (node-postgres)                    — MIT
+- ioredis / bullmq                            — MIT
+- next                                        — MIT
+- vite                                        — MIT
+- zod                                         — MIT
+- argon2                                      — MIT
+- @aws-sdk/client-s3 et al.                   — Apache-2.0
+- sharp                                       — Apache-2.0
+- markdown-it                                 — MIT
+- stripe                                      — MIT
+- nodemailer                                  — MIT
+- lexical                                     — MIT
+
+Full List
+---------
+
+To regenerate the complete list of all dependencies and their licenses:
+
+    pnpm licenses list
+
+Generated: 2026-08-11

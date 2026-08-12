@@ -1,8 +1,9 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { authService } from '../services';
 import { hasPermission } from '@vibress/security';
+import { getConfig } from '@vibress/config';
 
-export const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'vibress_session';
+export const COOKIE_NAME = getConfig().cookies.staffSessionName;
 
 export function extractSessionToken(req: FastifyRequest): string | null {
   if (req.cookies && req.cookies[COOKIE_NAME]) {
@@ -91,13 +92,7 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
   }
 
   const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-  const allowedOrigins = [
-    'http://localhost:7777',
-    'http://localhost:7780',
-    'http://127.0.0.1:7777',
-    'http://127.0.0.1:7780',
-    process.env.ADMIN_ORIGIN,
-  ].filter(Boolean);
+  const allowedOrigins = getConfig().cors.staffAllowedOrigins;
 
   if (!origin || !allowedOrigins.includes(origin)) {
     return reply.status(403).send({

@@ -1,9 +1,8 @@
-import { Queue } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { NewslettersService } from '@vibress/newsletters';
 import { DrizzleEmailRecipientRepository } from '@vibress/email';
 
-const EMAIL_QUEUE_NAME = 'vibress-email-delivery';
+const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
 const BATCH_SIZE = 25;
 
 /**
@@ -50,7 +49,8 @@ export class NewsletterSendEnqueuer {
     }
 
     for (let i = 0; i < batches.length; i++) {
-      await queue.add(
+      await enqueueTraced(
+        queue,
         'deliver',
         { sendId, recipientIds: batches[i] },
         { jobId: `send-${sendId}-batch-${i}`, removeOnComplete: true, removeOnFail: 1000 }

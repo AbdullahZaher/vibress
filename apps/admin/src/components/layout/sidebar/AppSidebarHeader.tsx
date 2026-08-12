@@ -35,6 +35,7 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           onClick={onToggleDarkMode}
           className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors shrink-0 cursor-pointer"
           title="Toggle theme"
+          aria-label="Toggle theme"
         >
           {darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
         </button>

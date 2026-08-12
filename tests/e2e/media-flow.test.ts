@@ -11,28 +11,27 @@ test.describe('Admin Media Library & Studio Media Integration E2E', () => {
   });
 
   test('Media Library upload, browse, and details view', async ({ page }) => {
-    await page.waitForSelector('a:has-text("Media")');
-    await page.click('a:has-text("Media")');
+    await page.getByRole('button', { name: 'Media', exact: true }).click();
     await expect(page).toHaveURL(/.*\/admin\/media/);
-    await expect(page.locator('h2')).toContainText('Media Library');
+    await expect(page.locator('h1')).toContainText('Media Asset Library');
 
     // Verify upload button and search input present
     await expect(page.locator('input[type="file"]')).toBeAttached();
-    await expect(page.locator('input[placeholder*="Search"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="Filter assets"]')).toBeVisible();
   });
 
   test('Studio Post Editor Media Picker integration', async ({ page }) => {
-    await page.waitForSelector('a:has-text("Posts")');
-    await page.click('a:has-text("Posts")');
+    await page.getByRole('button', { name: 'Posts', exact: true }).click();
     await page.click('button:has-text("Create Post")');
     await expect(page).toHaveURL(/.*\/admin\/posts\/new/);
 
-    await page.fill('input[type="text"]', 'Media E2E Test Post');
+    await page.fill('textarea[aria-label="Post Title"]', 'Media E2E Test Post');
 
-    // Click Insert Card button
-    await page.click('button:has-text("+ Insert Card")');
-    // Click image card button
-    await page.click('button:has-text("Image")');
+    // Open Slash Menu and insert an Image card (opens MediaPicker)
+    const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
+    await editorArea.click();
+    await page.keyboard.type(' /');
+    await page.click('li:has-text("Image")');
 
     // Verify card node is added to editor
     await expect(page.locator('.vibress-studio-editor')).toBeVisible();

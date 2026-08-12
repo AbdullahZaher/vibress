@@ -1,6 +1,7 @@
 {
   "name": "@vibress/web",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev -p ${WEB_PORT:-7778}",
@@ -11,6 +12,7 @@
   },
   "dependencies": {
     "@vibress/api-contracts": "workspace:*",
+    "@vibress/i18n": "workspace:*",
     "@vibress/theme-core": "workspace:*",
     "@vibress/themes-registry": "workspace:*",
     "next": "^15.5.23",

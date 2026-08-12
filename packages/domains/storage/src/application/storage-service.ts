@@ -14,6 +14,7 @@ import {
   StorageError,
 } from '@vibress/storage-core';
 import { S3StorageProvider, S3StorageConfig, S3ProviderType } from '@vibress/storage-s3';
+import { runInTransaction } from '@vibress/database';
 
 export class StorageService {
   constructor(
@@ -35,6 +36,13 @@ export class StorageService {
   }
 
   async createConfiguration(
+    data: CreateStorageConfigurationData,
+    actorId: string
+  ): Promise<StorageConfiguration> {
+    return runInTransaction(() => this.createConfigurationTx(data, actorId));
+  }
+
+  private async createConfigurationTx(
     data: CreateStorageConfigurationData,
     actorId: string
   ): Promise<StorageConfiguration> {
@@ -61,6 +69,14 @@ export class StorageService {
   }
 
   async updateConfiguration(
+    id: string,
+    data: UpdateStorageConfigurationData,
+    actorId: string
+  ): Promise<StorageConfiguration> {
+    return runInTransaction(() => this.updateConfigurationTx(id, data, actorId));
+  }
+
+  private async updateConfigurationTx(
     id: string,
     data: UpdateStorageConfigurationData,
     actorId: string
@@ -101,6 +117,10 @@ export class StorageService {
   }
 
   async activateConfiguration(id: string, actorId: string): Promise<StorageConfiguration> {
+    return runInTransaction(() => this.activateConfigurationTx(id, actorId));
+  }
+
+  private async activateConfigurationTx(id: string, actorId: string): Promise<StorageConfiguration> {
     const config = await this.storageRepo.findConfigurationById(id);
     if (!config) {
       throw new StorageError(`Storage configuration not found: ${id}`, 'STORAGE_CONFIGURATION_NOT_FOUND');
@@ -126,6 +146,10 @@ export class StorageService {
   }
 
   async deleteConfiguration(id: string, actorId: string): Promise<void> {
+    return runInTransaction(() => this.deleteConfigurationTx(id, actorId));
+  }
+
+  private async deleteConfigurationTx(id: string, actorId: string): Promise<void> {
     const existing = await this.storageRepo.findConfigurationById(id);
     if (!existing) {
       throw new StorageError(`Storage configuration not found: ${id}`, 'STORAGE_CONFIGURATION_NOT_FOUND');

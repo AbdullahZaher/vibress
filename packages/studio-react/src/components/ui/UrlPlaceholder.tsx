@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bookmark, Link } from 'lucide-react';
 
-const ICONS: Record<string, React.FC<any>> = {
+const ICONS: Record<string, React.FC<Record<string, unknown>>> = {
   bookmark: Bookmark,
   embed: Link,
 };

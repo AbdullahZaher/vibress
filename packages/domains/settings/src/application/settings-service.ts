@@ -1,4 +1,5 @@
 import { SettingRepository, SettingDefinition, SettingNamespaceDefinition, SettingRecord, AuditRecorder } from '../domain/setting';
+import { runInTransaction } from '@vibress/database';
 
 export class SettingsDomainError extends Error {
   code: string;
@@ -139,6 +140,10 @@ export class SettingsService {
    * when the setting is secret).
    */
   async updateSetting(namespace: string, key: string, value: unknown, actorId: string | null): Promise<SettingRecord> {
+    return runInTransaction(() => this.updateSettingTx(namespace, key, value, actorId));
+  }
+
+  private async updateSettingTx(namespace: string, key: string, value: unknown, actorId: string | null): Promise<SettingRecord> {
     const ns = NAMESPACE_MAP.get(namespace);
     if (!ns) throw new SettingsDomainError('UNKNOWN_NAMESPACE', `Unknown settings namespace: ${namespace}`);
     const def = ns.settings.find((s) => s.key === key);

@@ -7,6 +7,7 @@ import { Product } from '@vibress/products';
 import { Member } from '@vibress/members';
 import { Offer, OffersService } from '@vibress/offers';
 import { domainEvents } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
 import crypto from 'node:crypto';
 
 export class BillingDomainError extends Error {
@@ -118,28 +119,14 @@ export class BillingService {
 
     // Free plan flow: no external provider records
     if (plan.billingType === 'free') {
-      const subscription = await this.deps.subscriptionsService.createSubscription({
-        memberId: member.id,
-        productId: product.id,
-        planId: plan.id,
-        provider: null,
-        status: 'active',
-        currency: 'USD',
-        amountMinor: 0,
-        billingInterval: 'month',
-        intervalCount: 1,
-        offerId: offer ? offer.id : null,
-      });
-      if (offer) {
-        await this.deps.offersService.redeemOffer(offer.id, new Date());
-        domainEvents.emit('offer.redeemed', { offerId: offer.id, memberId: member.id });
-      }
-      await this.deps.billingEventRepo.record({
-        subscriptionId: subscription.id,
-        memberId: member.id,
-        type: 'subscription.created',
-        data: { planId: plan.id, productId: product.id, free: true },
-      });
+      const subscription = await runInTransaction(() =>
+        this.createFreeSubscriptionTx({
+          memberId: member.id,
+          productId: product.id,
+          planId: plan.id,
+          offer: offer as Offer | null,
+        })
+      );
       return { checkoutUrl: `${this.deps.portalUrl}/account`, checkoutSessionId: `free-${subscription.id}` };
     }
 
@@ -191,6 +178,37 @@ export class BillingService {
     });
 
     return { checkoutUrl: result.url, checkoutSessionId: result.checkoutSessionId };
+  }
+
+  private async createFreeSubscriptionTx(params: {
+    memberId: string;
+    productId: string;
+    planId: string;
+    offer: Offer | null;
+  }): Promise<{ id: string }> {
+    const subscription = await this.deps.subscriptionsService.createSubscription({
+      memberId: params.memberId,
+      productId: params.productId,
+      planId: params.planId,
+      provider: null,
+      status: 'active',
+      currency: 'USD',
+      amountMinor: 0,
+      billingInterval: 'month',
+      intervalCount: 1,
+      offerId: params.offer ? params.offer.id : null,
+    });
+    if (params.offer) {
+      await this.deps.offersService.redeemOffer(params.offer.id, new Date());
+      domainEvents.emit('offer.redeemed', { offerId: params.offer.id, memberId: params.memberId });
+    }
+    await this.deps.billingEventRepo.record({
+      subscriptionId: subscription.id,
+      memberId: params.memberId,
+      type: 'subscription.created',
+      data: { planId: params.planId, productId: params.productId, free: true },
+    });
+    return { id: subscription.id };
   }
 
   async createBillingPortalSession(memberId: string): Promise<{ url: string }> {
@@ -267,9 +285,15 @@ export class BillingService {
     eventRecordId: string,
     event: { id: string; type: string; created: number; data: Record<string, unknown> }
   ): Promise<void> {
+    return runInTransaction(() => this.processEventTx(eventRecordId, event));
+  }
+
+  private async processEventTx(
+    eventRecordId: string,
+    event: { id: string; type: string; created: number; data: Record<string, unknown> }
+  ): Promise<void> {
     // Provider event objects are heterogeneous; treated as opaque records
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const object = event.data as Record<string, any>;
+    const object = event.data as Record<string, unknown>;
     // Invoice-type events carry the subscription id in object.subscription
     const providerSubscriptionId =
       typeof object.subscription === 'string'
@@ -325,10 +349,10 @@ export class BillingService {
         amountMinor: typeof object.amount === 'number' ? object.amount : plan.amountMinor,
         billingInterval: plan.billingInterval || 'month',
         intervalCount: plan.intervalCount,
-        currentPeriodStart: object.current_period_start ? new Date(object.current_period_start * 1000) : null,
-        currentPeriodEnd: object.current_period_end ? new Date(object.current_period_end * 1000) : null,
-        trialStart: object.trial_start ? new Date(object.trial_start * 1000) : null,
-        trialEnd: object.trial_end ? new Date(object.trial_end * 1000) : null,
+        currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : null,
+        currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : null,
+        trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : null,
+        trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : null,
         cancelAtPeriodEnd: !!object.cancel_at_period_end,
         offerId: typeof metadata.offerId === 'string' ? metadata.offerId : null,
         providerEventTimestamp: eventTimestamp,
@@ -339,10 +363,10 @@ export class BillingService {
         subscription.id,
         {
           status: this.mapProviderStatus((object.status as string) || subscription.status),
-          currentPeriodStart: object.current_period_start ? new Date(object.current_period_start * 1000) : undefined,
-          currentPeriodEnd: object.current_period_end ? new Date(object.current_period_end * 1000) : undefined,
-          trialStart: object.trial_start ? new Date(object.trial_start * 1000) : undefined,
-          trialEnd: object.trial_end ? new Date(object.trial_end * 1000) : undefined,
+          currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : undefined,
+          currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : undefined,
+          trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : undefined,
+          trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : undefined,
           cancelAtPeriodEnd: typeof object.cancel_at_period_end === 'boolean' ? object.cancel_at_period_end : undefined,
           providerEventTimestamp: eventTimestamp,
         },

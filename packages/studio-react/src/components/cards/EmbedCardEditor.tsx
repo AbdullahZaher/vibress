@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { EmbedCardData } from '@vibress/studio-cards';
+import { EmbedCardData, StudioCardNode } from '@vibress/studio-cards';
+
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { UrlPlaceholder } from '../ui/UrlPlaceholder';
 
@@ -20,8 +21,8 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
   const onUrlSubmit = (url: string) => {
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           url,
         });
@@ -30,11 +31,11 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
   };
 
   const onCaptionChange = useCallback(
-    (captionJSON: Record<string, any>, captionHtml: string) => {
+    (captionJSON: Record<string, unknown>, captionHtml: string) => {
       editor.update(() => {
         const node = $getNodeByKey(nodeKey);
-        if (node && 'setCardData' in node) {
-          (node as any).setCardData({
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
             ...cardData,
             caption: captionJSON,
             captionHtml,

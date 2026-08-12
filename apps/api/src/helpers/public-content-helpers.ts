@@ -16,9 +16,10 @@ import {
   PublicPostDetailDto,
   PublicPageDetailDto,
 } from '@vibress/api-contracts';
+import { getConfig } from '@vibress/config';
 
 export function getSiteUrl(): string {
-  const envUrl = process.env.SITE_URL || 'http://localhost:7777';
+  const envUrl = getConfig().site.url;
   try {
     const parsed = new URL(envUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -33,21 +34,23 @@ export function getSiteUrl(): string {
 export async function resolveDocumentMedia(
   docInput: unknown,
   mediaService: MediaService
-): Promise<Record<string, any>> {
+): Promise<Record<string, unknown>> {
   if (!docInput || typeof docInput !== 'object') {
     return { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } };
   }
 
-  const doc = JSON.parse(JSON.stringify(docInput));
-  if (!doc.root || !Array.isArray(doc.root.children)) {
+  const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
+  const root = doc.root as { type?: string; children?: unknown[] } | undefined;
+  if (!root || !Array.isArray(root.children)) {
     return doc;
   }
 
-  async function processNode(node: any): Promise<void> {
+  async function processNode(node: unknown): Promise<void> {
     if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
 
-    if (node.type === 'studio-card' && node.cardData) {
-      const data = node.cardData;
+    if (n.type === 'studio-card' && n.cardData) {
+      const data = n.cardData as Record<string, unknown>;
 
       // Handle singular assetId (image, video, audio, file)
       if (typeof data.assetId === 'string' && data.assetId.trim()) {
@@ -55,7 +58,7 @@ export async function resolveDocumentMedia(
           const asset = await mediaService.getMediaById(data.assetId.trim());
           if (asset) {
             data.src = await mediaService.getMediaUrl(asset);
-            if (data.cardType === 'image' || node.cardType === 'image') {
+            if (data.cardType === 'image' || n.cardType === 'image') {
               if (asset.width) data.width = asset.width;
               if (asset.height) data.height = asset.height;
               if (asset.displayName && !data.alt) data.alt = asset.displayName;
@@ -69,12 +72,13 @@ export async function resolveDocumentMedia(
       // Handle gallery assetIds / images array
       if (Array.isArray(data.images)) {
         for (const imgItem of data.images) {
-          if (imgItem && typeof imgItem === 'object' && typeof imgItem.assetId === 'string') {
+          const img = imgItem as Record<string, unknown> | null;
+          if (img && typeof img === 'object' && typeof img.assetId === 'string') {
             try {
-              const asset = await mediaService.getMediaById(imgItem.assetId.trim());
+              const asset = await mediaService.getMediaById(img.assetId.trim());
               if (asset) {
-                imgItem.src = await mediaService.getMediaUrl(asset);
-                if (asset.displayName && !imgItem.alt) imgItem.alt = asset.displayName;
+                img.src = await mediaService.getMediaUrl(asset);
+                if (asset.displayName && !img.alt) img.alt = asset.displayName;
               }
             } catch {
               // Fallback
@@ -84,14 +88,14 @@ export async function resolveDocumentMedia(
       }
     }
 
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
+    if (Array.isArray(n.children)) {
+      for (const child of n.children) {
         await processNode(child);
       }
     }
   }
 
-  for (const child of doc.root.children) {
+  for (const child of root.children) {
     await processNode(child);
   }
 
@@ -99,41 +103,44 @@ export async function resolveDocumentMedia(
 }
 
 export function extractFeatureImage(
-  resolvedDoc: Record<string, any>
+  resolvedDoc: Record<string, unknown>
 ): PublicMediaDto | null {
-  if (!resolvedDoc || !resolvedDoc.root || !Array.isArray(resolvedDoc.root.children)) {
+  const root = resolvedDoc.root as { type?: string; children?: unknown[] } | undefined;
+  if (!resolvedDoc || !root || !Array.isArray(root.children)) {
     return null;
   }
 
   let found: PublicMediaDto | null = null;
 
-  function findImage(node: any) {
+  function findImage(node: unknown) {
     if (found || !node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
 
-    if (node.type === 'studio-card' && node.cardType === 'image' && node.cardData) {
-      const src = node.cardData.src;
+    if (n.type === 'studio-card' && n.cardType === 'image' && n.cardData) {
+      const cardData = n.cardData as Record<string, unknown>;
+      const src = cardData.src;
       if (src && typeof src === 'string') {
         found = {
-          id: node.cardData.assetId || 'embedded-img',
+          id: (cardData.assetId as string) || 'embedded-img',
           url: src,
-          alt: node.cardData.alt || null,
+          alt: (cardData.alt as string | null) || null,
           assetType: 'image',
-          width: typeof node.cardData.width === 'number' ? node.cardData.width : null,
-          height: typeof node.cardData.height === 'number' ? node.cardData.height : null,
+          width: typeof cardData.width === 'number' ? cardData.width : null,
+          height: typeof cardData.height === 'number' ? cardData.height : null,
         };
         return;
       }
     }
 
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
+    if (Array.isArray(n.children)) {
+      for (const child of n.children) {
         findImage(child);
         if (found) return;
       }
     }
   }
 
-  for (const child of resolvedDoc.root.children) {
+  for (const child of root.children) {
     findImage(child);
     if (found) break;
   }

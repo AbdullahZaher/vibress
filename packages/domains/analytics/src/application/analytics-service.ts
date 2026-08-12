@@ -24,7 +24,7 @@ export function validateAnalyticsEvent(data: IngestEventData): IngestEventData {
   if (!data.eventId || typeof data.eventId !== 'string' || data.eventId.length > 128) {
     throw new AnalyticsDomainError('INVALID_EVENT', 'eventId must be a non-empty string');
   }
-  if (!ALLOWED_EVENT_NAMES.includes(data.eventName as any)) {
+  if (typeof data.eventName !== 'string' || !ALLOWED_EVENT_NAMES.includes(data.eventName as (typeof ALLOWED_EVENT_NAMES)[number])) {
     throw new AnalyticsDomainError('INVALID_EVENT', `Unknown analytics event: ${data.eventName}`);
   }
   if (data.context && Object.keys(data.context).length > MAX_PROPERTY_KEYS) {

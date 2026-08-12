@@ -15,8 +15,10 @@ import {
   DrizzleEmailSuppressionRepository,
 } from '@vibress/email';
 import { getEmailQueue } from '../queues/email-queue';
+import { getConfig } from '@vibress/config';
 
 const BATCH_SIZE = 25;
+const appConfig = getConfig();
 
 /**
  * Durable scheduled-send scheduler: polls the database for due sends and
@@ -33,8 +35,8 @@ export class NewsletterSendSchedulerWorker {
     sendRepo: this.sendRepo,
     audienceRepo: new BillingAwareMemberAudienceRepository(new DrizzleMemberRepository(), new DrizzleSubscriptionRepository()),
     isMemberSuppressed: (email) => this.suppressionRepo.isSuppressed(email),
-    unsubscribeSecret: process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || 'dev-unsub-secret',
-    portalUrl: process.env.PORTAL_URL || process.env.SITE_URL || 'http://localhost:7777',
+    unsubscribeSecret: appConfig.newsletters.unsubscribeSecret || 'dev-unsub-secret',
+    portalUrl: appConfig.site.portalUrl,
   });
   private intervalTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
@@ -78,9 +80,10 @@ export class NewsletterSendSchedulerWorker {
         await this.startSendAndEnqueue(send.id);
         started++;
         console.log(`[SendScheduler] Started scheduled send ${send.id} ("${send.subject}")`);
-      } catch (err: any) {
-        console.error(`[SendScheduler] Failed to start send ${send.id}:`, err.message || err);
-        await this.newslettersService.failSend(send.id, err.message || 'scheduler failure');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'scheduler failure';
+        console.error(`[SendScheduler] Failed to start send ${send.id}:`, message);
+        await this.newslettersService.failSend(send.id, message);
       }
     }
     return { started };

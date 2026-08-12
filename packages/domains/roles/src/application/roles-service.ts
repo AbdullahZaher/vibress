@@ -1,5 +1,5 @@
 import { RoleRepository } from '../domain/repository';
-import { Role, CreateRoleData } from '../domain/role';
+import { Role, CreateRoleData, RoleDomainError } from '../domain/role';
 
 export class RolesService {
   constructor(private roleRepo: RoleRepository) {}
@@ -29,9 +29,7 @@ export class RolesService {
     if (role && role.key === 'owner' && activeOwnerCountProvider) {
       const activeOwners = await activeOwnerCountProvider();
       if (activeOwners <= 1) {
-        const err = new Error('Cannot remove owner role from the only active owner');
-        (err as any).code = 'OWNER_REQUIRED';
-        throw err;
+        throw new RoleDomainError('OWNER_REQUIRED', 'Cannot remove owner role from the only active owner');
       }
     }
     await this.roleRepo.removeRoleFromUser(userId, roleId);

@@ -1,18 +1,20 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Queue, Worker, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { AutomationsService, DrizzleAutomationRepository, AutomationAction } from '@vibress/automations';
+import { tracedProcessor } from './trace-helper';
 
 export interface AutomationRunJob {
   runId: string;
+  traceparent?: string;
 }
 
 export interface AutomationDelayedStepJob {
   runId: string;
   stepIndex: number;
   resumeAt: number;
+  traceparent?: string;
 }
 
-const AUTOMATIONS_QUEUE_NAME = 'vibress-automations';
+const AUTOMATIONS_QUEUE_NAME = QUEUE_NAMES.AUTOMATIONS_RUN;
 
 /**
  * Automation runner: executes run steps sequentially. Wait steps persist
@@ -33,7 +35,7 @@ export class AutomationRunnerWorker {
       connection,
       defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
     });
-    this.delayedQueue = new Queue<AutomationDelayedStepJob>(`${AUTOMATIONS_QUEUE_NAME}-delayed`, {
+    this.delayedQueue = new Queue<AutomationDelayedStepJob>(QUEUE_NAMES.AUTOMATIONS_DELAYED, {
       connection,
       defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
     });
@@ -44,11 +46,11 @@ export class AutomationRunnerWorker {
   }
 
   async enqueueRun(runId: string): Promise<void> {
-    await this.runQueue!.add('run', { runId }, { jobId: `run-${runId}` });
+    await enqueueTraced(this.runQueue!, 'run', { runId }, { jobId: `run-${runId}` });
   }
 
   private async enqueueDelayed(runId: string, stepIndex: number, delayMs: number): Promise<void> {
-    await this.delayedQueue!.add('resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
+    await enqueueTraced(this.delayedQueue!, 'resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
       delay: delayMs,
       jobId: `resume-${runId}-${stepIndex}`,
     });
@@ -58,17 +60,17 @@ export class AutomationRunnerWorker {
     // Standard BullMQ Worker accepts a single queue name — use one per queue.
     this.worker = new Worker<AutomationRunJob>(
       AUTOMATIONS_QUEUE_NAME,
-      async (job) => {
+      tracedProcessor('worker.job.automation-run', async (job) => {
         await this.automationsService.executeRun(job.data.runId);
-      },
+      }),
       { connection: getBullMqRedisConnection(), concurrency: 2 }
     );
 
     this.delayedWorker = new Worker<AutomationDelayedStepJob>(
-      `${AUTOMATIONS_QUEUE_NAME}-delayed`,
-      async (job) => {
+      QUEUE_NAMES.AUTOMATIONS_DELAYED,
+      tracedProcessor('worker.job.automation-resume', async (job) => {
         await this.automationsService.resumeRun(job.data.runId);
-      },
+      }),
       { connection: getBullMqRedisConnection(), concurrency: 2 }
     );
 

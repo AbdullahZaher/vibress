@@ -6,6 +6,41 @@ import { SettingsDomainError } from '@vibress/settings';
 import { RedirectDomainError } from '@vibress/redirects';
 import { ImportExportDomainError, validateImportEnvelope, MAX_IMPORT_FILE_SIZE } from '@vibress/import-export';
 
+type CodedError = Error & { code?: string };
+
+function asCodedError(err: unknown): CodedError {
+  if (err instanceof Error) return err as CodedError;
+  return new Error(typeof err === 'string' ? err : 'Unknown error') as CodedError;
+}
+
+type AuditListQuery = {
+  actorUserId?: string;
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  requestId?: string;
+  from?: string;
+  to?: string;
+  limit?: string;
+  offset?: string;
+};
+
+type RedirectBody = {
+  source?: string;
+  destination?: string;
+  statusCode?: number;
+  enabled?: boolean;
+};
+
+type ImportExportJobQuery = {
+  type?: string;
+  status?: string;
+  limit?: string;
+  offset?: string;
+};
+
+type MaintenanceBody = { operation?: string };
+
 const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
   reply.status(status).send({ errors: [{ code, message, requestId }] });
 
@@ -23,12 +58,12 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('settings.manage'), validateOrigin],
     handler: async (req, reply) => {
       const { namespace, key } = req.params as { namespace: string; key: string };
-      const body = req.body as any;
-      if (!('value' in (body || {}))) return sendError(reply, 'VALIDATION_ERROR', 'value is required', req.id);
+      const body = req.body as { value?: unknown } | undefined;
+      if (!body || !('value' in body)) return sendError(reply, 'VALIDATION_ERROR', 'value is required', req.id);
       try {
         const record = await settingsService.updateSetting(namespace, key, body.value, req.user!.id);
         return reply.status(200).send({ setting: { namespace, key, value: settingsService.maskForStaff(record.value, record.classification), classification: record.classification } });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof SettingsDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'UNKNOWN_NAMESPACE' || err.code === 'UNKNOWN_SETTING' ? 404 : 400);
         }
@@ -48,7 +83,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   fastify.get('/audit', {
     preHandler: [requireStaffSession, requirePermission('audit.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
+      const query = (req.query ?? {}) as AuditListQuery;
       const result = await auditService.list({
         actorUserId: query.actorUserId,
         action: query.action,
@@ -88,7 +123,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   fastify.post('/redirects', {
     preHandler: [requireStaffSession, requirePermission('redirects.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
+      const body = req.body as RedirectBody | undefined;
       if (!body?.source || !body?.destination) return sendError(reply, 'VALIDATION_ERROR', 'source and destination are required', req.id);
       try {
         const redirect = await redirectsService.createRedirect({
@@ -98,7 +133,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
           enabled: body.enabled,
         }, req.user!.id);
         return reply.status(201).send({ redirect });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof RedirectDomainError) return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
@@ -109,11 +144,11 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('redirects.manage'), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as any;
+      const body = req.body as Record<string, unknown> | undefined;
       try {
-        const redirect = await redirectsService.updateRedirect(id, body || {}, req.user!.id);
+        const redirect = await redirectsService.updateRedirect(id, body ?? {}, req.user!.id);
         return reply.status(200).send({ redirect });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof RedirectDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'REDIRECT_NOT_FOUND' ? 404 : 400);
         }
@@ -135,12 +170,12 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   fastify.post('/imports/validate', {
     preHandler: [requireStaffSession, requirePermission('imports.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
+      const body = req.body as unknown;
       const raw = typeof body === 'string' ? JSON.parse(body) : body;
       try {
         const result = validateImportEnvelope(raw);
         return reply.status(200).send({ valid: true, format: result.format, version: result.version });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof ImportExportDomainError) {
           return reply.status(400).send({ valid: false, errors: [{ code: err.code, message: err.message }] });
         }
@@ -153,11 +188,11 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('imports.manage'), validateOrigin],
     handler: async (req, reply) => {
       // Body size bound at the HTTP layer; envelope validated here
-      const body = req.body as any;
+      const body = req.body as unknown;
       const raw = typeof body === 'string' ? JSON.parse(body) : body;
       try {
         validateImportEnvelope(raw);
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof ImportExportDomainError) return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
@@ -165,7 +200,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       // Process synchronously in v1 (bounded, small data); stored in job record
       try {
         await importExportService.runImport(job.id, raw);
-      } catch (err: any) {
+      } catch {
         // Job marked failed; still report 202 with the job id
       }
       const finalJob = await importExportService.getJob(job.id);
@@ -179,7 +214,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       const job = await importExportService.createExportJob(req.user!.id);
       try {
         await importExportService.runExport(job.id);
-      } catch (err: any) {
+      } catch {
         // Job marked failed; report job id
       }
       const finalJob = await importExportService.getJob(job.id);
@@ -190,13 +225,14 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   fastify.get('/import-export-jobs', {
     preHandler: [requireStaffSession, requirePermission('exports.manage')],
     handler: async (req, reply) => {
-      const query = req.query as any;
-      const result = await importExportService.listJobs({
-        type: query.type,
-        status: query.status,
+      const query = (req.query ?? {}) as ImportExportJobQuery;
+      const params: { type?: string; status?: string; limit?: number; offset?: number } = {
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
-      });
+      };
+      if (query.type) params.type = query.type;
+      if (query.status) params.status = query.status;
+      const result = await importExportService.listJobs(params);
       return reply.status(200).send(result);
     },
   });
@@ -214,7 +250,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       }
       // Artifact is stored as the envelope itself for v1; regenerate via the collector
       const { NativeExportCollector } = await import('../import-export-processors');
-      const collector = new NativeExportCollector();
+      const collector = new NativeExportCollector({ settingsService, redirectsService });
       const data = await collector.collect();
       const envelope = { format: 'vibress', version: 1, exportedAt: new Date().toISOString(), data };
       return reply.status(200).send(envelope);
@@ -233,13 +269,13 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   fastify.post('/system/maintenance', {
     preHandler: [requireStaffSession, requirePermission('system.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
+      const body = req.body as MaintenanceBody | undefined;
       if (!body?.operation) return sendError(reply, 'VALIDATION_ERROR', 'operation is required', req.id);
       try {
         const result = await runMaintenanceOperation(body.operation, req.user!.id);
         return reply.status(200).send(result);
-      } catch (err: any) {
-        return sendError(reply, 'UNKNOWN_OPERATION', err.message, req.id, 400);
+      } catch (err) {
+        return sendError(reply, 'UNKNOWN_OPERATION', asCodedError(err).message, req.id, 400);
       }
     },
   });

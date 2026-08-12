@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { apiRequest, ApiMediaAsset } from '../lib/api';
+import { apiRequest, ApiMediaAsset, ApiError } from '../lib/api';
 import { VibressStudio } from '@vibress/studio-react';
 import { StudioDocument, migrateDocument, createEmptyStudioDocument } from '@vibress/studio-core';
 import { MediaPicker } from './MediaPicker';
@@ -16,6 +16,22 @@ import {
   Settings
 } from 'lucide-react';
 import { PostSettingsSidebar } from './editor/PostSettingsSidebar';
+
+interface AdminPostDetail {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  status: string;
+  scheduledAt: string | null;
+  version: number;
+  content: unknown;
+  contentJson: unknown;
+  tags?: Tag[];
+}
 
 interface PostEditorProps {
   postId?: string | undefined;
@@ -132,7 +148,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     const fetchPost = async () => {
       setLoading(true);
       try {
-        const res = await apiRequest<{ post: any }>(`/posts/${postId}`);
+        const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`);
         const p = res.post;
         setTitle(p.title || '');
         setSlug(p.slug || '');
@@ -154,11 +170,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         if (p.content || p.contentJson) {
           setStudioDoc(migrateDocument(p.content || p.contentJson));
         }
-      } catch (err: any) {
-        if (err.path && Array.isArray(err.path) && err.path.length > 0) {
+      } catch (err) {
+        if (err instanceof ApiError && err.path && Array.isArray(err.path) && err.path.length > 0) {
           setErrorMsg(`${err.path.join('.')}: ${err.message}`);
         } else {
-          setErrorMsg(err.message || 'Failed to load post');
+          setErrorMsg(err instanceof Error ? err.message : 'Failed to load post');
         }
       } finally {
         setLoading(false);
@@ -195,7 +211,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         expectedVersion: version,
       };
 
-      const res = await apiRequest<{ post: any }>(`/posts/${postId}`, {
+      const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
@@ -203,8 +219,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setVersion(res.post.version);
       setAutosaveState('saved');
       hasUnsavedChangesRef.current = false;
-    } catch (err: any) {
-      if (err.status === 409 || err.message?.includes('Version conflict')) {
+    } catch (err) {
+      if (err instanceof ApiError && (err.statusCode === 409 || err.message.includes('Version conflict'))) {
         setAutosaveState('conflict');
         setErrorMsg('Autosave conflict: Post was modified elsewhere. Please refresh.');
       } else {
@@ -271,7 +287,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       };
 
       if (postId) {
-        const res = await apiRequest<{ post: any }>(`/posts/${postId}`, {
+        const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
@@ -279,17 +295,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setAutosaveState('saved');
         hasUnsavedChangesRef.current = false;
       } else {
-        const res = await apiRequest<{ post: any }>('/posts', {
+        const res = await apiRequest<{ post: AdminPostDetail }>('/posts', {
           method: 'POST',
           body: JSON.stringify({ ...payload, primaryAuthorId: currentUserId, authorIds: [currentUserId] }),
         });
         onNavigate(`/admin/posts/${res.post.id}`);
       }
-    } catch (err: any) {
-      if (err.path && Array.isArray(err.path) && err.path.length > 0) {
+    } catch (err) {
+      if (err instanceof ApiError && err.path && Array.isArray(err.path) && err.path.length > 0) {
         setErrorMsg(`${err.path.join('.')}: ${err.message}`);
       } else {
-        setErrorMsg(err.message || 'Save failed');
+        setErrorMsg(err instanceof Error ? err.message : 'Save failed');
       }
     } finally {
       setSaving(false);
@@ -301,8 +317,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     try {
       await apiRequest(`/posts/${postId}/publish`, { method: 'POST' });
       setStatus('published');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Publish failed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Publish failed');
     }
   };
 
@@ -311,8 +327,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     try {
       await apiRequest(`/posts/${postId}/unpublish`, { method: 'POST' });
       setStatus('draft');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Unpublish failed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Unpublish failed');
     }
   };
 
@@ -325,8 +341,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         body: JSON.stringify({ scheduledAt }),
       });
       setStatus('scheduled');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Schedule failed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Schedule failed');
     }
   };
 
@@ -334,7 +350,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     if (!postId) return;
     if (!confirm('Restore this revision? Unsaved changes will be overwritten.')) return;
     try {
-      const res = await apiRequest<{ post: any }>(`/posts/${postId}/revisions/${revisionId}/restore`, {
+      const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}/revisions/${revisionId}/restore`, {
         method: 'POST',
       });
       const p = res.post;
@@ -342,8 +358,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setStudioDoc(migrateDocument(p.content || p.contentJson));
       setVersion(p.version);
       alert('Revision restored successfully');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Restore revision failed');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Restore revision failed');
     }
   };
 
@@ -463,6 +479,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="Post Title"
+            aria-label="Post Title"
             className="w-full text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0"
             rows={1}
             onInput={(e) => {
@@ -500,7 +517,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       {/* Media Picker Modal Host */}
       <Dialog isOpen={showPicker} onClose={handlePickerClose} title="Select Media Asset">
         <MediaPicker
-          allowedTypes={pickerConfig?.cardType === 'gallery' ? ['image'] : [pickerConfig?.cardType as any]}
+          allowedTypes={pickerConfig?.cardType === 'gallery' ? ['image'] : [pickerConfig?.cardType as 'image' | 'video' | 'audio' | 'file']}
           multiple={pickerConfig?.cardType === 'gallery'}
           onSelectAsset={handlePickerSelectAsset}
           onSelectAssets={handlePickerSelectAssets}

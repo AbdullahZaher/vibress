@@ -2,9 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { commentsService } from '../services';
 import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
 import { CreateCommentSchema, UpdateCommentSchema, ReportCommentSchema } from '@vibress/api-contracts';
-import { CommentDomainError } from '@vibress/comments';
+import { CommentDomainError, Comment } from '@vibress/comments';
+import { getConfig } from '@vibress/config';
 
-function publicCommentDto(c: any) {
+type CommentListQuery = { limit?: string; offset?: string };
+
+function publicCommentDto(c: Comment) {
   return {
     id: c.id,
     postId: c.postId,
@@ -24,7 +27,7 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
   // Public: list published comments for a post
   fastify.get('/posts/:postId/comments', async (req, reply) => {
     const { postId } = req.params as { postId: string };
-    const query = req.query as any;
+    const query = (req.query ?? {}) as CommentListQuery;
     const limit = query.limit ? parseInt(query.limit, 10) : 50;
     const offset = query.offset ? parseInt(query.offset, 10) : 0;
     const result = await commentsService.listPublicCommentsForPost(postId, limit, offset);
@@ -45,7 +48,7 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
 export async function memberCommentRoutes(fastify: FastifyInstance) {
   // Member: create comment or reply
   fastify.post('/comments', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 100 : 20, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 100 : 20, timeWindow: '1 minute' } },
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
       const parsed = CreateCommentSchema.safeParse(req.body);
@@ -53,7 +56,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.createComment({ ...parsed.data, memberId: req.member!.id });
         return reply.status(201).send({ comment: publicCommentDto(comment) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           const status = err.code === 'COMMENT_NOT_FOUND' ? 404 : 400;
           return reply.status(status).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
@@ -73,7 +76,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.updateComment(id, req.member!.id, parsed.data.body);
         return reply.status(200).send({ comment: publicCommentDto(comment) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           const status = err.code === 'COMMENT_NOT_FOUND' ? 404 : err.code === 'FORBIDDEN' ? 403 : 400;
           return reply.status(status).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
@@ -91,7 +94,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
       try {
         const comment = await commentsService.deleteComment(id, req.member!.id);
         return reply.status(200).send({ comment: publicCommentDto(comment) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           const status = err.code === 'COMMENT_NOT_FOUND' ? 404 : err.code === 'FORBIDDEN' ? 403 : 400;
           return reply.status(status).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
@@ -103,14 +106,14 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
 
   // Member: toggle like
   fastify.post('/comments/:id/like', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 200 : 50, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 200 : 50, timeWindow: '1 minute' } },
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         const result = await commentsService.toggleLike(id, req.member!.id);
         return reply.status(200).send(result);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           return reply.status(400).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
         }
@@ -121,7 +124,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
 
   // Member: report comment
   fastify.post('/comments/:id/report', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 50 : 10, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 50 : 10, timeWindow: '1 minute' } },
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
@@ -130,7 +133,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
       try {
         const report = await commentsService.reportComment(id, req.member!.id, parsed.data.reason);
         return reply.status(201).send(report);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           return reply.status(400).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
         }

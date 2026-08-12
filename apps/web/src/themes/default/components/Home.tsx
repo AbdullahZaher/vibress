@@ -2,12 +2,14 @@ import React from 'react';
 import { ThemeHomeProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
 import { InlineSubscribeForm } from './InlineSubscribeForm';
+import { t } from '../../../lib/i18n';
 
 export async function Home(props: ThemeHomeProps) {
   const showPublicationCover = themeSetting(props.settings, 'showPublicationCover', true) as boolean;
   const posts = props.posts || [];
 
-  const heroHeadline = props.site.description || 'Thoughts, stories and ideas.';
+  const heroHeadline = props.site.description || t('home.heroFallback');
+  const dateLocale = props.site.locale || 'en';
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -16,7 +18,7 @@ export async function Home(props: ThemeHomeProps) {
         <section className="site-header-gradient outer">
           <div className="inner">
             <h1 className="site-header-gradient-title">{heroHeadline}</h1>
-            <InlineSubscribeForm variant="hero" buttonText="Subscribe" placeholder="jamie@example.com" />
+            <InlineSubscribeForm variant="hero" />
           </div>
         </section>
       )}
@@ -24,11 +26,11 @@ export async function Home(props: ThemeHomeProps) {
       {/* Main Content Feed (Horizontal Cards) */}
       <main id="site-main" className="site-main outer">
         <div className="inner">
-          <div className="feed-section-header">Latest</div>
+          <div className="feed-section-header">{t('home.latest')}</div>
 
           {posts.length === 0 ? (
             <div style={{ padding: '4rem 0', opacity: 0.7 }}>
-              <p>No published posts available yet.</p>
+              <p>{t('home.empty')}</p>
             </div>
           ) : (
             <div className="post-feed-horizontal">
@@ -55,9 +57,9 @@ export async function Home(props: ThemeHomeProps) {
                       <p className="post-card-horizontal-excerpt">{post.excerpt}</p>
                     )}
                     <div className="post-card-horizontal-meta">
-                      By {post.primaryAuthor?.name || props.site.title} &mdash;{' '}
+                      {t('home.by')} {post.primaryAuthor?.name || props.site.title} &mdash;{' '}
                       <time dateTime={post.publishedAt}>
-                        {new Date(post.publishedAt).toLocaleDateString('en-GB', {
+                        {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
                           day: '2-digit',
                           month: 'short',
                           year: 'numeric',
@@ -74,17 +76,17 @@ export async function Home(props: ThemeHomeProps) {
             <nav style={{ marginTop: '3.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               {props.pagination.page > 1 ? (
                 <a href={`/?page=${props.pagination.page - 1}`} style={{ fontWeight: 700, color: 'var(--brand-pink)' }}>
-                  &larr; Newer Posts
+                  &larr; {t('home.newer')}
                 </a>
               ) : (
                 <span />
               )}
               <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                Page {props.pagination.page} of {props.pagination.pages}
+                {t('home.pageInfo', { page: props.pagination.page, pages: props.pagination.pages })}
               </span>
               {props.pagination.page < props.pagination.pages ? (
                 <a href={`/?page=${props.pagination.page + 1}`} style={{ fontWeight: 700, color: 'var(--brand-pink)' }}>
-                  Older Posts &rarr;
+                  {t('home.older')} &rarr;
                 </a>
               ) : (
                 <span />
@@ -100,7 +102,7 @@ export async function Home(props: ThemeHomeProps) {
           <h2 className="footer-newsletter-title">{props.site.title}</h2>
           <p className="footer-newsletter-subtitle">{heroHeadline}</p>
 
-          <InlineSubscribeForm variant="footer" buttonText="Subscribe" placeholder="jamie@example.com" />
+          <InlineSubscribeForm variant="footer" />
 
           <div className="footer-social-links">
             <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="footer-social-btn" aria-label="X (Twitter)">

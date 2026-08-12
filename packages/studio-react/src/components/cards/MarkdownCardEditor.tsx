@@ -2,7 +2,8 @@ import { useRef, useEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { MarkdownCardData } from '@vibress/studio-cards';
+import { MarkdownCardData, StudioCardNode } from '@vibress/studio-cards';
+
 
 interface Props {
   nodeKey: NodeKey;
@@ -20,8 +21,8 @@ export function MarkdownCardEditor({ nodeKey, cardData }: Props) {
     const value = e.target.value;
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           markdown: value,
         });

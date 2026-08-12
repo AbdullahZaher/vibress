@@ -41,7 +41,7 @@ export class DrizzleTagRepository implements TagRepository {
 
   async update(id: string, data: UpdateTagData): Promise<Tag> {
     const db = getDb();
-    const payload: Record<string, any> = { updatedAt: new Date() };
+    const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.slug !== undefined) payload.slug = data.slug;
     if (data.description !== undefined) payload.description = data.description;
@@ -58,11 +58,10 @@ export class DrizzleTagRepository implements TagRepository {
 
   async listAll(search?: string): Promise<Tag[]> {
     const db = getDb();
-    let query = db.select().from(tags);
-    if (search && search.trim()) {
-      query = query.where(ilike(tags.name, `%${search.trim()}%`)) as any;
-    }
-    const rows = await query;
+    const base = db.select().from(tags);
+    const rows = search && search.trim()
+      ? await base.where(ilike(tags.name, `%${search.trim()}%`))
+      : await base;
     return rows.map(r => this.mapToDomain(r));
   }
 

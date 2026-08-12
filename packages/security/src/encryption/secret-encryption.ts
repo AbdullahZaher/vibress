@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getConfig } from '@vibress/config';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96-bit IV recommended for GCM
@@ -22,7 +23,7 @@ export class SecretEncryptionError extends Error {
  * Derives a 32-byte key buffer from the VIBRESS_ENCRYPTION_KEY string or env var.
  */
 export function getMasterKeyBuffer(customKey?: string): Buffer {
-  const rawKey = customKey || process.env.VIBRESS_ENCRYPTION_KEY;
+  const rawKey = customKey || getConfig().secrets.encryptionKey;
   if (!rawKey || !rawKey.trim()) {
     throw new SecretEncryptionError(
       'VIBRESS_ENCRYPTION_KEY is missing. Master encryption key is required for secret operations.',

@@ -1,7 +1,8 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { BookmarkCardData } from '@vibress/studio-cards';
+import { BookmarkCardData, StudioCardNode } from '@vibress/studio-cards';
+
 import { UrlPlaceholder } from '../ui/UrlPlaceholder';
 
 interface Props {
@@ -20,8 +21,8 @@ export function BookmarkCardEditor({ nodeKey, cardData }: Props) {
     // For now, we mock some metadata based on the URL
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           url,
           title: new URL(url).hostname,

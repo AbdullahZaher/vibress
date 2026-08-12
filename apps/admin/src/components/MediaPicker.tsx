@@ -92,7 +92,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         <div style={headerStyle}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Select Media Asset</h3>
           {onClose && (
-            <button onClick={onClose} style={closeButtonStyle}>
+            <button type="button" onClick={onClose} style={closeButtonStyle} aria-label="Close">
               ✕
             </button>
           )}
@@ -106,6 +106,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={inputStyle}
+              aria-label="Search media"
             />
 
             {!allowedTypes && (
@@ -113,6 +114,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
                 style={selectStyle}
+                aria-label="Filter by media type"
               >
                 <option value="all">All Types</option>
                 <option value="image">Images</option>

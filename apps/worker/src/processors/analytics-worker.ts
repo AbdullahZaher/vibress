@@ -1,12 +1,13 @@
-import { Queue, Worker, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { Worker, Job, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
+import { tracedProcessor } from './trace-helper';
 import { AnalyticsService, DrizzleAnalyticsRepository, IngestEventData, validateAnalyticsEvent } from '@vibress/analytics';
 
 export interface AnalyticsJob {
   event: IngestEventData;
+  traceparent?: string;
 }
 
-const ANALYTICS_QUEUE_NAME = 'vibress-analytics';
+const ANALYTICS_QUEUE_NAME = QUEUE_NAMES.ANALYTICS;
 
 /**
  * Consumes domain events asynchronously and ingests them into analytics.
@@ -20,7 +21,7 @@ export class AnalyticsWorker {
   async start(): Promise<void> {
     this.worker = new Worker<AnalyticsJob>(
       ANALYTICS_QUEUE_NAME,
-      async (job) => this.process(job),
+      tracedProcessor('worker.job.analytics', (job) => this.process(job)),
       { connection: getBullMqRedisConnection(), concurrency: 2 }
     );
     this.worker.on('failed', (job, err) => {
@@ -32,8 +33,8 @@ export class AnalyticsWorker {
     try {
       validateAnalyticsEvent(job.data.event);
       await this.analyticsService.ingest(job.data.event);
-    } catch (err: any) {
-      console.error(`[AnalyticsWorker] Dropped invalid event ${job.data.event?.eventName}:`, err.message);
+    } catch (err) {
+      console.error(`[AnalyticsWorker] Dropped invalid event ${job.data.event?.eventName}:`, err instanceof Error ? err.message : err);
       // Never retry invalid events; core correctness unaffected
     }
   }

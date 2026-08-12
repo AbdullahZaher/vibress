@@ -27,3 +27,18 @@ test-results/
 logs/
 infrastructure/data/
 /tmp/vibress-*
+
+# Generated artifacts (build output, type info, dev logs)
+*.tsbuildinfo
+*.js.map
+server*.log
+vite.config.js
+
+# storage-s3 build emits alongside sources (no outDir)
+packages/storage-s3/src/*.js
+packages/storage-s3/src/*.d.ts
+packages/storage-s3/src/__tests__/*.js
+packages/storage-s3/src/__tests__/*.d.ts
+
+# Local production env (never commit)
+.env.prod

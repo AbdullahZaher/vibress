@@ -1,6 +1,5 @@
-import { domainEvents } from '@vibress/events';
-import { Queue } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
+import { domainEvents, DomainEvent } from '@vibress/events';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
 import { IngestEventData } from '@vibress/analytics';
 import { SearchDocumentInput } from '@vibress/search';
 import { DrizzlePostRepository } from '@vibress/posts';
@@ -9,16 +8,18 @@ import { DrizzleTagRepository } from '@vibress/tags';
 import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
 import { getSiteUrl } from './helpers/public-content-helpers';
 import { automationsService } from './services';
+import { getConfig } from '@vibress/config';
 
-const ANALYTICS_QUEUE = 'vibress-analytics';
-const SEARCH_QUEUE = 'vibress-search';
+const ANALYTICS_QUEUE = QUEUE_NAMES.ANALYTICS;
+const SEARCH_QUEUE = QUEUE_NAMES.SEARCH;
 
-interface AnalyticsQueueJob { event: IngestEventData }
+interface AnalyticsQueueJob { event: IngestEventData; traceparent?: string }
 interface SearchQueueJob {
   op: 'upsert' | 'remove' | 'rebuild';
   doc?: SearchDocumentInput;
   entityType?: string;
   entityId?: string;
+  traceparent?: string;
 }
 
 let analyticsQueue: Queue<AnalyticsQueueJob> | null = null;
@@ -60,8 +61,8 @@ const TRIGGER_MAP: Record<string, string> = {
 export function startAsyncBridge(): void {
   // ---------------- Analytics ingestion ----------------
   for (const [domainEvent, analyticsEvent] of Object.entries(TRIGGER_MAP)) {
-    domainEvents.on(domainEvent, (event: any) => {
-      const payload = event.payload || {};
+    domainEvents.on(domainEvent, (event: DomainEvent) => {
+      const payload = (event.payload || {}) as Record<string, unknown>;
       const analyticsData: IngestEventData = {
         eventId: `${domainEvent}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
         eventName: analyticsEvent,
@@ -72,45 +73,55 @@ export function startAsyncBridge(): void {
         entityId: typeof payload.entityId === 'string' ? payload.entityId : (typeof payload.postId === 'string' ? payload.postId : null),
         properties: sanitizeForAnalytics(payload),
       };
-      getAnalyticsQueue().add('ingest', { event: analyticsData }).catch(() => undefined);
+      enqueueTraced(getAnalyticsQueue(), 'ingest', { event: analyticsData }).catch(() => undefined);
     });
   }
 
   // ---------------- Search indexing ----------------
-  domainEvents.on('post.published', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('index', { op: 'upsert', doc: { entityType: 'post', entityId: postId, title: event.payload?.title || '', slug: event.payload?.slug || '' } }).catch(() => undefined);
-    }
-  });
-  domainEvents.on('post.unpublished', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
-    }
-  });
-  domainEvents.on('post.deleted', (event: any) => {
-    const postId = event.payload?.postId;
-    if (postId) {
-      getSearchQueue().add('remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
-    }
-  });
+  // EVENT_DELIVERY_MODE=direct opts into the legacy in-process relay. The
+  // default (outbox) mode delivers search events durably via the worker's
+  // outbox dispatcher; registering here would duplicate relay work.
+  if (getConfig().outbox.deliveryMode === 'direct') {
+    domainEvents.on('post.published', (event: DomainEvent) => {
+      const payload = (event.payload || {}) as Record<string, unknown>;
+      const postId = payload.postId;
+      const title = typeof payload.title === 'string' ? payload.title : '';
+      const slug = typeof payload.slug === 'string' ? payload.slug : '';
+      if (typeof postId === 'string') {
+        enqueueTraced(getSearchQueue(), 'index', { op: 'upsert', doc: { entityType: 'post', entityId: postId, title, slug } }).catch(() => undefined);
+      }
+    });
+    domainEvents.on('post.unpublished', (event: DomainEvent) => {
+      const payload = (event.payload || {}) as Record<string, unknown>;
+      const postId = payload.postId;
+      if (typeof postId === 'string') {
+        enqueueTraced(getSearchQueue(), 'remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
+      }
+    });
+    domainEvents.on('post.deleted', (event: DomainEvent) => {
+      const payload = (event.payload || {}) as Record<string, unknown>;
+      const postId = payload.postId;
+      if (typeof postId === 'string') {
+        enqueueTraced(getSearchQueue(), 'remove', { op: 'remove', entityType: 'post', entityId: postId }).catch(() => undefined);
+      }
+    });
+  }
 
   // ---------------- Automations ----------------
   for (const trigger of ['member.created', 'subscription.activated', 'subscription.cancelled', 'newsletter.sent', 'comment.created']) {
-    domainEvents.on(trigger, (event: any) => {
-      automationsService.handleEvent(trigger, event.payload || {})
+    domainEvents.on(trigger, (event: DomainEvent) => {
+      automationsService.handleEvent(trigger, (event.payload || {}) as Record<string, unknown>)
         .catch((err: unknown) => console.error(`[AutomationBridge] ${trigger} dispatch failed:`, err instanceof Error ? err.message : String(err)));
     });
   }
 }
 
 export async function enqueueSearchRebuild(): Promise<void> {
-  await getSearchQueue().add('rebuild', { op: 'rebuild' });
+  await enqueueTraced(getSearchQueue(), 'rebuild', { op: 'rebuild' });
 }
 
 export async function enqueueSearchUpsert(doc: SearchDocumentInput): Promise<void> {
-  await getSearchQueue().add('index', { op: 'upsert', doc });
+  await enqueueTraced(getSearchQueue(), 'index', { op: 'upsert', doc });
 }
 
 function inferEntityType(eventName: string): string | null {

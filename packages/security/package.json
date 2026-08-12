@@ -1,6 +1,7 @@
 {
   "name": "@vibress/security",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -9,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "argon2": "^0.45.1"
+    "@vibress/config": "workspace:*",
+    "argon2": "^0.45.1",
+    "@vibress/observability": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

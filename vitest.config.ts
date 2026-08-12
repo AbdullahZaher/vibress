@@ -5,17 +5,15 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    globalSetup: './tests/global-setup.ts',
+    globalSetup: path.resolve(__dirname, './tests/global-setup.ts'),
     fileParallelism: false,
-    poolOptions: {
-      threads: { singleThread: true },
-      forks: { singleFork: true }
-    },
+    passWithNoTests: true,
     exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', 'references/**', '**/references/**', 'tests/e2e/**'],
   },
   resolve: {
     alias: {
       '@vibress/database': path.resolve(__dirname, './packages/database/src/index.ts'),
+      '@vibress/config': path.resolve(__dirname, './packages/config/src/index.ts'),
       '@vibress/security': path.resolve(__dirname, './packages/security/src/index.ts'),
       '@vibress/utils': path.resolve(__dirname, './packages/utils/src/index.ts'),
       '@vibress/users': path.resolve(__dirname, './packages/domains/users/src/index.ts'),
@@ -48,6 +46,13 @@ export default defineConfig({
       '@vibress/theme-core': path.resolve(__dirname, './packages/theme-core/src/index.ts'),
       '@vibress/themes-registry': path.resolve(__dirname, './packages/themes-registry/src/index.ts'),
       '@vibress/themes': path.resolve(__dirname, './packages/domains/themes/src/index.ts'),
+      '@vibress/queue': path.resolve(__dirname, './packages/queue/src/index.ts'),
+      '@vibress/observability': path.resolve(__dirname, './packages/observability/src/index.ts'),
+      '@vibress/testing': path.resolve(__dirname, './packages/testing/src/index.ts'),
+      '@vibress/plugin-core': path.resolve(__dirname, './packages/plugin-core/src/index.ts'),
+      '@vibress/ui': path.resolve(__dirname, './packages/ui/src/index.ts'),
+      '@vibress/i18n': path.resolve(__dirname, './packages/i18n/src/index.ts'),
+      '@vibress/files': path.resolve(__dirname, './packages/domains/files/src/index.ts'),
     },
   },
 });

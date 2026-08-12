@@ -1,6 +1,7 @@
 import React from 'react';
 import { ThemePostProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
+import { t } from '../../../lib/i18n';
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
@@ -9,6 +10,7 @@ export async function Post(props: ThemePostProps) {
   const showTags = themeSetting(props.settings, 'showTags', true) as boolean;
 
   const primaryTag = post.tags?.[0];
+  const dateLocale = props.site.locale || 'en';
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -65,7 +67,7 @@ export async function Post(props: ThemePostProps) {
                 <div className="byline-meta-content" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                   {showPublicationDate && (
                     <time className="byline-meta-date" dateTime={post.publishedAt}>
-                      {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                      {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
@@ -73,7 +75,7 @@ export async function Post(props: ThemePostProps) {
                     </time>
                   )}
                   <span style={{ opacity: 0.4 }}>&bull;</span>
-                  <span className="byline-meta-date">{readTimeMins} min read</span>
+                  <span className="byline-meta-date">{t('post.readTime', { minutes: readTimeMins })}</span>
                 </div>
               </section>
             </div>
@@ -85,7 +87,7 @@ export async function Post(props: ThemePostProps) {
             )}
           </header>
 
-          <section className="vb-content">
+          <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: post.html || '' }} />
           </section>
         </article>

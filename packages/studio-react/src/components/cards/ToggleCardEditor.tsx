@@ -2,7 +2,8 @@ import { useRef, useEffect, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { ToggleCardData } from '@vibress/studio-cards';
+import { ToggleCardData, StudioCardNode } from '@vibress/studio-cards';
+
 import { ChevronRight } from 'lucide-react';
 
 interface Props {
@@ -14,7 +15,7 @@ export function ToggleCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
   const [isOpen, setIsOpen] = useState(true); // Default open in editor
-  
+
   const headingRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,8 +25,8 @@ export function ToggleCardEditor({ nodeKey, cardData }: Props) {
   const updateCardData = (updates: Partial<ToggleCardData>) => {
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           ...updates,
         });
@@ -78,7 +79,7 @@ export function ToggleCardEditor({ nodeKey, cardData }: Props) {
              rows={1}
              onFocus={(e) => e.stopPropagation()}
           />
-          
+
           {isOpen && (
             <div className="mt-2 pt-2 border-t border-gray-100">
                <textarea

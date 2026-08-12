@@ -1,7 +1,7 @@
 import { getDb, pages } from '@vibress/database';
 import { eq, and, isNull, ilike, count, lte, desc } from 'drizzle-orm';
 import { PageRepository } from '../domain/repository';
-import { Page, CreatePageData, ListPagesFilter, PageStatus, PageVisibility } from '../domain/page';
+import { Page, CreatePageData, ListPagesFilter, PageStatus, PageVisibility, PageDomainError } from '../domain/page';
 import crypto from 'node:crypto';
 
 export class DrizzlePageRepository implements PageRepository {
@@ -31,6 +31,7 @@ export class DrizzlePageRepository implements PageRepository {
         and(
           eq(pages.slug, slug),
           eq(pages.status, 'published'),
+          eq(pages.visibility, 'public'),
           lte(pages.publishedAt, now),
           isNull(pages.deletedAt)
         )
@@ -41,7 +42,7 @@ export class DrizzlePageRepository implements PageRepository {
     return this.mapToDomain(row);
   }
 
-  async create(data: CreatePageData & { slug: string; content: Record<string, any> }): Promise<Page> {
+  async create(data: CreatePageData & { slug: string; content: Record<string, unknown> }): Promise<Page> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
@@ -82,15 +83,13 @@ export class DrizzlePageRepository implements PageRepository {
     if (!current) throw new Error(`Page not found: ${id}`);
 
     if (current.version !== data.version) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
 
     const nextVersion = current.version + 1;
     const now = new Date();
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       version: nextVersion,
       updatedAt: now,
     };
@@ -114,9 +113,7 @@ export class DrizzlePageRepository implements PageRepository {
 
     const [row] = await db.update(pages).set(updatePayload).where(and(eq(pages.id, id), eq(pages.version, current.version))).returning();
     if (!row) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
     return this.mapToDomain(row);
   }
@@ -137,6 +134,9 @@ export class DrizzlePageRepository implements PageRepository {
       conditions.push(lte(pages.publishedAt, new Date()));
     } else if (filter.status) {
       conditions.push(eq(pages.status, filter.status));
+    }
+    if (filter.visibility) {
+      conditions.push(eq(pages.visibility, filter.visibility));
     }
     if (filter.search && filter.search.trim()) {
       conditions.push(ilike(pages.title, `%${filter.search.trim()}%`));
@@ -187,7 +187,7 @@ export class DrizzlePageRepository implements PageRepository {
       title: row.title,
       slug: row.slug,
       excerpt: row.excerpt,
-      content: row.content as Record<string, any>,
+      content: row.content as Record<string, unknown>,
       contentVersion: row.contentVersion,
       status: row.status as PageStatus,
       visibility: row.visibility as PageVisibility,

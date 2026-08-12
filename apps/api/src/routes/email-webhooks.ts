@@ -1,5 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { emailService } from '../services';
+import { getConfig } from '@vibress/config';
+import { appLogger } from '../observability';
 
 /**
  * Email provider webhook endpoint.
@@ -18,7 +20,7 @@ export async function emailWebhookRoutes(fastify: FastifyInstance) {
     instance.post('/:provider', {
       config: {
         rateLimit: {
-          max: process.env.NODE_ENV === 'test' ? 1000 : 600,
+          max: getConfig().isTest ? 1000 : 600,
           timeWindow: '1 minute',
         },
       },
@@ -37,8 +39,8 @@ export async function emailWebhookRoutes(fastify: FastifyInstance) {
         try {
           const result = await emailService.handleWebhook(provider, rawBody, signatureHeader);
           return reply.status(result.status).send({ received: true });
-        } catch (err: any) {
-          req.log.warn({ event: 'email_webhook_processing_failed', provider }, err.message || 'processing failed');
+        } catch (err) {
+          appLogger.warn('email webhook processing failed', { event: 'email_webhook_processing_failed', provider, requestId: req.id }, err instanceof Error ? err : undefined);
           return reply.status(200).send({ received: true, processing: 'failed, retryable' });
         }
       },

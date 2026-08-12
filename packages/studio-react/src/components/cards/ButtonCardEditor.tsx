@@ -1,7 +1,8 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { ButtonCardData } from '@vibress/studio-cards';
+import { ButtonCardData, StudioCardNode } from '@vibress/studio-cards';
+
 
 interface Props {
   nodeKey: NodeKey;
@@ -19,8 +20,8 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
   const updateCardData = (updates: Partial<ButtonCardData>) => {
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node && 'setCardData' in node) {
-        (node as any).setCardData({
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
           ...cardData,
           ...updates,
         });
@@ -28,7 +29,7 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
     });
   };
 
-  
+
 
   const alignClass = alignment === 'left' ? 'justify-start' : alignment === 'right' ? 'justify-end' : 'justify-center';
 

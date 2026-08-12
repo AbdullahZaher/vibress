@@ -1,4 +1,5 @@
-import { getDb, roles, permissions, rolePermissions, users, userRoles, closeDbPool } from './index';
+import { getDb, closeDbPool } from './connection';
+import { roles, permissions, rolePermissions, users, userRoles } from './schema';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { hashPassword } from '@vibress/security';

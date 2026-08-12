@@ -63,7 +63,7 @@ export class DrizzleAuditRepository implements AuditRepository {
       ipAddress: row.ipAddress,
       userAgent: row.userAgent,
       requestId: row.requestId,
-      metadata: row.metadata as Record<string, any> | null,
+      metadata: row.metadata as Record<string, unknown> | null,
       createdAt: row.createdAt,
     };
   }

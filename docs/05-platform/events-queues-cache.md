@@ -22,10 +22,11 @@ media.uploaded
 ```text
 packages/events/
 ├── src/
-│   ├── event-bus.ts
-│   ├── event-handler.ts
-│   ├── event-registry.ts
-│   ├── events/
+│   ├── event-envelope.ts
+│   ├── event-map.ts
+│   ├── event-writer.ts
+│   ├── outbox-dispatcher.ts
+│   ├── outbox-repository.ts
 │   └── index.ts
 └── package.json
 ```
@@ -53,6 +54,19 @@ mark delivered
 ```
 
 This prevents losing important events between database commit and queue publication.
+
+Current durable events:
+
+```text
+post.published
+post.unpublished
+post.deleted
+```
+
+The default delivery mode is `EVENT_DELIVERY_MODE=outbox`: post lifecycle
+events are written to `outbox_events` inside the same business transaction and
+the worker dispatcher relays them to the search queue. `EVENT_DELIVERY_MODE=direct`
+keeps the legacy in-process API search relay for local fallback only.
 
 ## Queues
 

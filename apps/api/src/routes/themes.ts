@@ -12,6 +12,7 @@ import {
   ThemeActivationFailedError,
 } from '@vibress/themes';
 import { validateThemeId } from '@vibress/theme-core';
+import { asCodedError } from '../helpers/errors';
 
 const PREVIEW_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const PREVIEW_TOKENS = new Map<string, { themeId: string; expiresAt: number }>();
@@ -38,9 +39,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
       const { id } = req.params as { id: string };
       try {
         validateThemeId(id);
-      } catch (err: any) {
+      } catch (err) {
+        const e = asCodedError(err);
         return reply.status(404).send({
-          errors: [{ code: err.code || 'THEME_NOT_FOUND', message: err.message, requestId: req.id }],
+          errors: [{ code: e.code || 'THEME_NOT_FOUND', message: e.message, requestId: req.id }],
         });
       }
       const theme = getThemeMetadata(id);
@@ -96,7 +98,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
             settingsSchemaVersion: config.settingsSchemaVersion,
           },
         });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof ThemeNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
@@ -107,9 +109,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
           });
         }
-        if (err?.code === 'THEME_NOT_FOUND') {
+        const e = asCodedError(err);
+        if (e.code === 'THEME_NOT_FOUND') {
           return reply.status(404).send({
-            errors: [{ code: 'THEME_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [{ code: 'THEME_NOT_FOUND', message: e.message, requestId: req.id }],
           });
         }
         throw err;
@@ -140,7 +143,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
             settingsSchemaVersion: config.settingsSchemaVersion,
           },
         });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof ThemeNotFoundError) {
           return reply.status(404).send({
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
@@ -151,8 +154,9 @@ export async function themeRoutes(fastify: FastifyInstance) {
             errors: [{ code: err.code, message: err.message, requestId: req.id }],
           });
         }
+        const e = asCodedError(err);
         return reply.status(400).send({
-          errors: [{ code: err.code || 'THEME_SETTINGS_INVALID', message: err.message, requestId: req.id }],
+          errors: [{ code: e.code || 'THEME_SETTINGS_INVALID', message: e.message, requestId: req.id }],
         });
       }
     },
@@ -165,9 +169,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
       const { id } = req.params as { id: string };
       try {
         validateThemeId(id);
-      } catch (err: any) {
+      } catch (err) {
+        const e = asCodedError(err);
         return reply.status(404).send({
-          errors: [{ code: err.code || 'THEME_NOT_FOUND', message: err.message, requestId: req.id }],
+          errors: [{ code: e.code || 'THEME_NOT_FOUND', message: e.message, requestId: req.id }],
         });
       }
       const theme = getThemeMetadata(id);

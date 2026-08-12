@@ -35,8 +35,8 @@ The core technology stack includes:
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) (v20+)
-- [pnpm](https://pnpm.io/) (v9+)
+- [Node.js](https://nodejs.org/) (v24+ — `>=24.0.0 <25`, pinned in `engines`)
+- [pnpm](https://pnpm.io/) (v11.17.0 — pinned via `packageManager`)
 - [Docker & Docker Compose](https://www.docker.com/)
 
 ## Development Setup
@@ -103,3 +103,7 @@ Comprehensive architecture documentation can be found in [`docs/README.md`](./do
 ## Production/Deployment Documentation
 
 For production guidelines, scaling, and deployment, please refer to [`docs/12-infrastructure/production.md`](./docs/12-infrastructure/production.md).
+
+## License
+
+Vibress is distributed under the [MIT License](./LICENSE).

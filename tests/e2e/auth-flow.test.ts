@@ -16,12 +16,11 @@ test.describe('Admin Identity & Authorization E2E Flow', () => {
 
     // 3. Successful login should navigate to /admin
     await page.waitForURL('**/admin');
-    await expect(page.locator('h1')).toContainText('Vibress Admin');
     await expect(page.locator('body')).toContainText('owner@example.com');
-    await expect(page.locator('body')).toContainText('Assigned Roles');
+    await expect(page.getByRole('button', { name: 'Posts', exact: true })).toBeVisible();
 
     // 4. Click Logout
-    await page.click('button:has-text("Logout")');
+    await page.click('button[aria-label="Sign out"]');
 
     // Should redirect back to /admin/login
     await page.waitForURL('**/admin/login**');

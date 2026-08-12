@@ -4,6 +4,7 @@ import { getRedisClient } from '@vibress/cache';
 import { redirectsService, searchService, postsService, pagesService, tagsService, settingsService, importExportService, webhooksService, emailService } from './services';
 import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
 import { getSiteUrl } from './helpers/public-content-helpers';
+import { getConfig } from '@vibress/config';
 
 /**
  * System diagnostics: safe operational information only. Never exposes DSNs,
@@ -14,23 +15,24 @@ export async function getSystemDiagnostics(): Promise<Record<string, unknown>> {
   const pgStatus = await checkPg();
   const redisStatus = await checkRedis();
   const migrationVersion = await checkMigrationVersion();
+  const config = getConfig();
 
   const searchCount = await searchService.indexCount().catch(() => 0);
 
   return {
-    vibressVersion: process.env.VIBRESS_VERSION || '0.0.0',
+    vibressVersion: config.system.version,
     nodeVersion: process.version,
-    environment: process.env.NODE_ENV || 'development',
+    environment: config.env,
     migrationVersion,
     postgres: pgStatus,
     redis: redisStatus,
     searchIndexDocuments: searchCount,
-    storageProvider: process.env.STORAGE_PROVIDER || 'local',
-    emailProvider: process.env.SMTP_HOST ? 'smtp' : 'disabled',
-    billingProvider: process.env.STRIPE_SECRET_KEY ? 'stripe' : 'unconfigured',
+    storageProvider: config.system.storageProvider,
+    emailProvider: config.smtp.host ? 'smtp' : 'disabled',
+    billingProvider: config.billing.stripeSecretKey ? 'stripe' : 'unconfigured',
     uptimeSeconds: Math.round(process.uptime()),
     buildMetadata: {
-      nodeEnv: process.env.NODE_ENV || 'development',
+      nodeEnv: config.env,
     },
   };
 }
@@ -53,8 +55,8 @@ export async function runIntegrityChecks(): Promise<Array<{ check: string; statu
       status: orphaned.length === 0 ? 'ok' : 'warning',
       detail: orphaned.length === 0 ? 'All mappings reference valid plans' : `${orphaned.length} mapping(s) reference missing plans`,
     });
-  } catch (err: any) {
-    results.push({ check: 'billing_plan_mappings', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'billing_plan_mappings', status: 'error', detail: (err as Error).message });
   }
 
   // 2. Search index: count vs published public posts
@@ -69,8 +71,8 @@ export async function runIntegrityChecks(): Promise<Array<{ check: string; statu
       status: indexed >= publishedPublic ? 'ok' : 'warning',
       detail: `Index has ${indexed} documents; ${publishedPublic} published public posts expected`,
     });
-  } catch (err: any) {
-    results.push({ check: 'search_index', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'search_index', status: 'error', detail: (err as Error).message });
   }
 
   // 3. Orphan media references (media rows referencing missing storage)
@@ -82,8 +84,8 @@ export async function runIntegrityChecks(): Promise<Array<{ check: string; statu
       status: unknownProviders.length === 0 ? 'ok' : 'warning',
       detail: unknownProviders.length === 0 ? 'All media reference known providers' : `${unknownProviders.length} media row(s) reference unknown providers`,
     });
-  } catch (err: any) {
-    results.push({ check: 'media_storage', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'media_storage', status: 'error', detail: (err as Error).message });
   }
 
   // 4. Recommendations referencing missing entities (posts)
@@ -94,8 +96,8 @@ export async function runIntegrityChecks(): Promise<Array<{ check: string; statu
       status: 'ok',
       detail: `${recs.length} recommendation(s) present`,
     });
-  } catch (err: any) {
-    results.push({ check: 'recommendations', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'recommendations', status: 'error', detail: (err as Error).message });
   }
 
   // 5. Invalid theme configuration (no active theme)
@@ -106,22 +108,22 @@ export async function runIntegrityChecks(): Promise<Array<{ check: string; statu
       status: themes.length >= 1 ? 'ok' : 'warning',
       detail: themes.length >= 1 ? 'Theme configuration present' : 'No theme configuration found',
     });
-  } catch (err: any) {
-    results.push({ check: 'theme_configuration', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'theme_configuration', status: 'error', detail: (err as Error).message });
   }
 
   // 6. Stuck automation runs (running for > 1 hour)
   try {
     const pool = getDbPool();
     const res = await pool.query(`SELECT count(*)::int AS total FROM automation_runs WHERE status = 'running' AND started_at < now() - interval '1 hour'`);
-    const stuck = Number(res.rows[0]?.total || 0);
+    const stuck = Number((res as { rows: Array<{ total?: number }> }).rows[0]?.total || 0);
     results.push({
       check: 'automation_runs',
       status: stuck === 0 ? 'ok' : 'warning',
       detail: stuck === 0 ? 'No stuck automation runs' : `${stuck} automation run(s) running > 1 hour`,
     });
-  } catch (err: any) {
-    results.push({ check: 'automation_runs', status: 'error', detail: err.message });
+  } catch (err: unknown) {
+    results.push({ check: 'automation_runs', status: 'error', detail: (err as Error).message });
   }
 
   return results;

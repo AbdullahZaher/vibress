@@ -25,6 +25,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout }) => {
       <button
         onClick={onLogout}
         title="Sign out"
+        aria-label="Sign out"
         className="text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
       >
         <ChevronsUpDown className="h-4 w-4" />

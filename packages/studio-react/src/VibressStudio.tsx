@@ -72,7 +72,7 @@ function InitialStatePlugin({ document }: { document: StudioDocument }) {
       const root = $getRoot();
       if (document && document.root) {
         try {
-          const editorState = editor.parseEditorState({ root: { ...document.root, version: 1 } } as any);
+          const editorState = editor.parseEditorState({ root: { ...document.root, version: 1 } } as never);
           editor.setEditorState(editorState);
         } catch (err) {
           console.error("Failed to parse editor state", err);
@@ -95,6 +95,7 @@ export function VibressStudio({
   readOnly = false,
   placeholder = 'Write content with Vibress Studio...',
   onError,
+  requestMedia,
   className = '',
 }: VibressStudioProps) {
   const parsedDoc = useMemo(() => migrateDocument(value), [value]);
@@ -152,7 +153,7 @@ export function VibressStudio({
             <HistoryPlugin />
             <ListPlugin />
             <LinkPlugin />
-            <SlashMenuPlugin />
+            <SlashMenuPlugin requestMedia={requestMedia} />
             <FloatingFormatToolbarPlugin />
             <FloatingCardActionToolbarPlugin />
             <InitialStatePlugin document={parsedDoc} />

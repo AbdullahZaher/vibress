@@ -10,6 +10,7 @@ import { DrizzlePostRepository, PostsService } from '@vibress/posts';
 import { DrizzlePageRepository, PagesService } from '@vibress/pages';
 import { LocalStorageProvider, defaultStorageRegistry } from '@vibress/storage-core';
 import { DrizzleMediaRepository, MediaService } from '@vibress/media';
+import { getConfig } from '@vibress/config';
 
 import { DrizzleStorageRepository, StorageService } from '@vibress/storage-domain';
 import {
@@ -125,6 +126,8 @@ import {
   ImportExportService,
 } from '@vibress/import-export';
 
+const config = getConfig();
+
 const themeDefinitionRegistry = {
   has: (id: string) => listThemeMetadata().some((t) => t.manifest.id === id),
   get: (id: string) => {
@@ -173,7 +176,7 @@ export const memberAuthService = new MemberAuthService(
   memberAuthTokenRepo,
   memberSessionRepo,
   new SmtpMemberAuthMailer(),
-  () => process.env.MEMBERS_SIGNUP_ENABLED !== 'false'
+  () => getConfig().members.signupEnabled
 );
 
 export const productsService = new ProductsService(productRepo);
@@ -195,12 +198,12 @@ const emailSuppressionRepo = new DrizzleEmailSuppressionRepository();
 const emailProviderEventRepo = new DrizzleProviderEventRepository();
 
 export const emailProvider = new SmtpEmailProvider({
-  host: process.env.SMTP_HOST || '127.0.0.1',
-  port: parseInt(process.env.SMTP_PORT || '1025', 10),
-  secure: process.env.SMTP_SECURE === 'true',
-  user: process.env.SMTP_USER || null,
-  pass: process.env.SMTP_PASS || null,
-  webhookSecret: process.env.EMAIL_WEBHOOK_SECRET || null,
+  host: config.smtp.host,
+  port: config.smtp.port,
+  secure: config.smtp.secure,
+  user: config.smtp.user,
+  pass: config.smtp.pass,
+  webhookSecret: config.email.webhookSecret,
 });
 
 export let emailService = new EmailService({
@@ -226,8 +229,8 @@ export const newslettersService = new NewslettersService({
   sendRepo: newsletterSendRepo,
   audienceRepo: new BillingAwareMemberAudienceRepository(memberRepo, subscriptionRepo),
   isMemberSuppressed: (email) => emailSuppressionRepo.isSuppressed(email),
-  unsubscribeSecret: process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || 'dev-unsub-secret',
-  portalUrl: process.env.PORTAL_URL || process.env.SITE_URL || 'http://localhost:7777',
+  unsubscribeSecret: config.newsletters.unsubscribeSecret || 'dev-unsub-secret',
+  portalUrl: config.site.portalUrl,
 });
 
 export const newsletterSendEnqueuer = new NewsletterSendEnqueuer(newslettersService);
@@ -254,16 +257,15 @@ export const integrationsService = new IntegrationsService(
 
 // Webhook dispatcher: enqueues into the shared BullMQ queue via a lightweight
 // API-side queue handle. The worker owns actual delivery.
-import { Queue } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
-const webhookQueueName = 'vibress-webhook-delivery';
+import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
+const webhookQueueName = QUEUE_NAMES.WEBHOOK_DELIVERY;
 const webhookQueue = new Queue(webhookQueueName, {
   connection: getBullMqRedisConnection(),
   defaultJobOptions: { attempts: 1, removeOnComplete: 500, removeOnFail: 1000 },
 });
 export const webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
   enqueue: async (deliveryId: string, endpointId: string) => {
-    await webhookQueue.add('deliver', { deliveryId, endpointId }, {
+    await enqueueTraced(webhookQueue, 'deliver', { deliveryId, endpointId }, {
       jobId: `delivery-${deliveryId}`,
       removeOnComplete: true,
       removeOnFail: 1000,
@@ -281,12 +283,12 @@ export const pluginsService = new PluginsService(
 export const analyticsService = new AnalyticsService(new DrizzleAnalyticsRepository());
 export const searchService = new SearchService(new DrizzleSearchRepository());
 
-const automationRunQueueName = 'vibress-automations';
+const automationRunQueueName = QUEUE_NAMES.AUTOMATIONS_RUN;
 const automationRunQueue = new Queue(automationRunQueueName, {
   connection: getBullMqRedisConnection(),
   defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
 });
-const automationDelayedQueueName = 'vibress-automations-delayed';
+const automationDelayedQueueName = QUEUE_NAMES.AUTOMATIONS_DELAYED;
 const automationDelayedQueue = new Queue(automationDelayedQueueName, {
   connection: getBullMqRedisConnection(),
   defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
@@ -296,10 +298,10 @@ export const automationsService = new AutomationsService(
   new DrizzleAutomationRepository(),
   {
     enqueueRun: async (runId: string) => {
-      await automationRunQueue.add('run', { runId }, { jobId: `run-${runId}` });
+      await enqueueTraced(automationRunQueue, 'run', { runId }, { jobId: `run-${runId}` });
     },
     enqueueDelayedStep: async (runId: string, stepIndex: number, delayMs: number) => {
-      await automationDelayedQueue.add('resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
+      await enqueueTraced(automationDelayedQueue, 'resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
         delay: delayMs,
         jobId: `resume-${runId}-${stepIndex}`,
       });
@@ -314,8 +316,8 @@ export const automationsService = new AutomationsService(
 );
 
 export const billingProvider = new StripeBillingProvider({
-  secretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_missing',
-  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  secretKey: config.billing.stripeSecretKey || 'sk_test_missing',
+  webhookSecret: config.billing.stripeWebhookSecret || '',
 });
 
 export let billingService = new BillingService({
@@ -330,7 +332,7 @@ export let billingService = new BillingService({
   productRepository: productRepo,
   memberRepository: memberRepo,
   memberEmailProvider: (member) => member.email,
-  portalUrl: process.env.PORTAL_URL || process.env.SITE_URL || 'http://localhost:7777',
+  portalUrl: config.billing.portalUrl,
   successPath: '/account',
   cancelPath: '/plans',
 });
@@ -362,6 +364,6 @@ export const settingsService = new SettingsService(new DrizzleSettingRepository(
 export const redirectsService = new RedirectsService(new DrizzleRedirectRepository());
 export const importExportService = new ImportExportService(
   new DrizzleImportExportJobRepository(),
-  new NativeImportProcessor(),
-  new NativeExportCollector()
+  new NativeImportProcessor({ settingsService, redirectsService }),
+  new NativeExportCollector({ settingsService, redirectsService })
 );

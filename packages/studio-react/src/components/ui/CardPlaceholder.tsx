@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { ImageIcon, Video, Images, File as FileIcon, Headphones } from 'lucide-react';
 
-const ICONS: Record<string, React.FC<any>> = {
+const ICONS: Record<string, React.FC<Record<string, unknown>>> = {
   image: ImageIcon,
   gallery: Images,
   video: Video,

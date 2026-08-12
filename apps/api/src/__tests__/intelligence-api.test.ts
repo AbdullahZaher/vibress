@@ -32,20 +32,22 @@ async function seedIndexedPost(): Promise<string> {
   const ownerId = ownerRows[0]?.id || 'unknown';
   const { posts } = await import('@vibress/database');
   const existing = await db.select().from(posts).where(eq(posts.slug, 'intelligence-search-post')).limit(1);
-  if (existing[0]) return existing[0].id;
-  const [row] = await db.insert(posts).values({
-    id: crypto.randomUUID(),
-    title: 'Intelligence Search Post',
-    slug: 'intelligence-search-post',
-    content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },
-    status: 'published',
-    visibility: 'public',
-    primaryAuthorId: ownerId,
-    createdBy: ownerId,
-    updatedBy: ownerId,
-  }).returning();
-  const postId = row!.id;
-  // Index it directly (as the worker would)
+  const postId = existing[0]?.id || crypto.randomUUID();
+  if (!existing[0]) {
+    await db.insert(posts).values({
+      id: postId,
+      title: 'Intelligence Search Post',
+      slug: 'intelligence-search-post',
+      content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },
+      status: 'published',
+      visibility: 'public',
+      primaryAuthorId: ownerId,
+      createdBy: ownerId,
+      updatedBy: ownerId,
+    }).onConflictDoNothing();
+  }
+  // Index directly (as the worker would); retried on every run so a
+  // previous interrupted run cannot leave the post unindexed.
   await db.insert(searchDocuments).values({
     id: `sd-${postId}`,
     entityType: 'post',

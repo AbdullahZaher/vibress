@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vibress/config": "workspace:*",
     "@vibress/database": "workspace:*",
     "@vibress/events": "workspace:*",
     "@vibress/security": "workspace:*",

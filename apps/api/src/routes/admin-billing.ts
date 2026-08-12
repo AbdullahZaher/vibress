@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
 import {
   productsService,
@@ -14,19 +14,23 @@ import {
   AdminSubscriptionFilterSchema,
 } from '@vibress/api-contracts';
 import { ProductDomainError } from '@vibress/products';
-import { PlanDomainError } from '@vibress/plans';
-import { OfferDomainError } from '@vibress/offers';
-import { SubscriptionDomainError, SubscriptionStatus } from '@vibress/subscriptions';
+import { PlanDomainError, CreatePlanData, UpdatePlanData } from '@vibress/plans';
+import { OfferDomainError, CreateOfferData, UpdateOfferData } from '@vibress/offers';
+import { SubscriptionDomainError, SubscriptionStatus, Subscription } from '@vibress/subscriptions';
+
+type ProductListQuery = { includeArchived?: string };
+type PlanListQuery = { productId?: string; includeArchived?: string };
+
+const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
+  reply.status(status).send({ errors: [{ code, message, requestId }] });
 
 export async function adminBillingRoutes(fastify: FastifyInstance) {
-  const sendError = (reply: any, code: string, message: string, requestId: string, status = 400) =>
-    reply.status(status).send({ errors: [{ code, message, requestId }] });
-
   // ---------------- Products ----------------
   fastify.get('/products', {
     preHandler: [requireStaffSession, requirePermission('products.read')],
     handler: async (req, reply) => {
-      const includeArchived = String((req.query as any).includeArchived) === 'true';
+      const query = (req.query ?? {}) as ProductListQuery;
+      const includeArchived = String(query.includeArchived) === 'true';
       const products = await productsService.listProducts({ includeArchived });
       return reply.status(200).send({ products });
     },
@@ -40,7 +44,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.createProduct(parsed.data, req.user!.id);
         return reply.status(201).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -56,7 +60,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.updateProduct(id, parsed.data, req.user!.id);
         return reply.status(200).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -70,7 +74,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const product = await productsService.archiveProduct(id, req.user!.id);
         return reply.status(200).send({ product });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProductDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -81,8 +85,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
   fastify.get('/plans', {
     preHandler: [requireStaffSession, requirePermission('plans.read')],
     handler: async (req, reply) => {
-      const productId = (req.query as any).productId as string | undefined;
-      const includeArchived = (req.query as any).includeArchived === 'true';
+      const query = (req.query ?? {}) as PlanListQuery;
+      const productId = query.productId as string | undefined;
+      const includeArchived = query.includeArchived === 'true';
       const plans = productId ? await plansService.listPlansByProduct(productId) : [];
       return reply.status(200).send({ plans });
     },
@@ -94,9 +99,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       const parsed = AdminPlanInputSchema.safeParse(req.body);
       if (!parsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid plan payload', req.id);
       try {
-        const plan = await plansService.createPlan(parsed.data as any, req.user!.id);
+        const plan = await plansService.createPlan(parsed.data as CreatePlanData, req.user!.id);
         return reply.status(201).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -110,9 +115,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       const parsed = AdminPlanInputSchema.partial().safeParse(req.body);
       if (!parsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid plan payload', req.id);
       try {
-        const plan = await plansService.updatePlan(id, parsed.data as any, req.user!.id);
+        const plan = await plansService.updatePlan(id, parsed.data as UpdatePlanData, req.user!.id);
         return reply.status(200).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -126,7 +131,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const plan = await plansService.archivePlan(id, req.user!.id);
         return reply.status(200).send({ plan });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PlanDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -152,9 +157,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           ...parsed.data,
           startsAt: parsed.data.startsAt ? new Date(parsed.data.startsAt) : null,
           endsAt: parsed.data.endsAt ? new Date(parsed.data.endsAt) : null,
-        } as any, req.user!.id);
+        } as CreateOfferData, req.user!.id);
         return reply.status(201).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -168,9 +173,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       const parsed = AdminOfferInputSchema.partial().safeParse(req.body);
       if (!parsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid offer payload', req.id);
       try {
-        const offer = await offersService.updateOffer(id, parsed.data as any, req.user!.id);
+        const offer = await offersService.updateOffer(id, parsed.data as UpdateOfferData, req.user!.id);
         return reply.status(200).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -184,7 +189,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       try {
         const offer = await offersService.disableOffer(id, req.user!.id);
         return reply.status(200).send({ offer });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof OfferDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -239,7 +244,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           data: { actorId: req.user!.id },
         });
         return reply.status(200).send({ subscription: toAdminSubscriptionDto(updated) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof SubscriptionDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -260,7 +265,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
   });
 }
 
-function toAdminSubscriptionDto(sub: any) {
+function toAdminSubscriptionDto(sub: Subscription) {
   return {
     id: sub.id,
     memberId: sub.memberId,

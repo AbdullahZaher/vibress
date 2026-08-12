@@ -1,7 +1,7 @@
 import { getDb, posts, postTags, postAuthors, tags, users } from '@vibress/database';
 import { eq, and, or, isNull, ilike, count, lte, desc, asc, inArray } from 'drizzle-orm';
 import { PostRepository } from '../domain/repository';
-import { Post, CreatePostData, ListPostsFilter, PostStatus, PostVisibility } from '../domain/post';
+import { Post, CreatePostData, ListPostsFilter, PostStatus, PostVisibility, PostDomainError } from '../domain/post';
 import crypto from 'node:crypto';
 
 export class DrizzlePostRepository implements PostRepository {
@@ -31,6 +31,7 @@ export class DrizzlePostRepository implements PostRepository {
         and(
           eq(posts.slug, slug),
           eq(posts.status, 'published'),
+          eq(posts.visibility, 'public'),
           lte(posts.publishedAt, now),
           isNull(posts.deletedAt)
         )
@@ -41,7 +42,7 @@ export class DrizzlePostRepository implements PostRepository {
     return this.mapToDomain(row);
   }
 
-  async create(data: CreatePostData & { slug: string; content: Record<string, any> }): Promise<Post> {
+  async create(data: CreatePostData & { slug: string; content: Record<string, unknown> }): Promise<Post> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
@@ -83,15 +84,13 @@ export class DrizzlePostRepository implements PostRepository {
 
     // Optimistic concurrency check
     if (current.version !== data.version) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PostDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
 
     const nextVersion = current.version + 1;
     const now = new Date();
 
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = {
       version: nextVersion,
       updatedAt: now,
     };
@@ -115,9 +114,7 @@ export class DrizzlePostRepository implements PostRepository {
 
     const [row] = await db.update(posts).set(updatePayload).where(and(eq(posts.id, id), eq(posts.version, current.version))).returning();
     if (!row) {
-      const err = new Error('Content has been modified by another request');
-      (err as any).code = 'CONTENT_CONFLICT';
-      throw err;
+      throw new PostDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
     }
     return this.mapToDomain(row);
   }
@@ -138,6 +135,10 @@ export class DrizzlePostRepository implements PostRepository {
       conditions.push(lte(posts.publishedAt, new Date()));
     } else if (filter.status) {
       conditions.push(eq(posts.status, filter.status));
+    }
+
+    if (filter.visibility) {
+      conditions.push(eq(posts.visibility, filter.visibility));
     }
 
     if (filter.authorId) {
@@ -246,7 +247,7 @@ export class DrizzlePostRepository implements PostRepository {
       title: row.title,
       slug: row.slug,
       excerpt: row.excerpt,
-      content: row.content as Record<string, any>,
+      content: row.content as Record<string, unknown>,
       contentVersion: row.contentVersion,
       status: row.status as PostStatus,
       visibility: row.visibility as PostVisibility,

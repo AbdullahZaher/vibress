@@ -1,10 +1,12 @@
 import { ThemeAuthorArchiveProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
+import { t as translate } from '../../../lib/i18n';
 
 export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
   const { author, posts, pagination } = props;
   const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
   const showTags = themeSetting(props.settings, 'showTags', true) as boolean;
+  const dateLocale = props.site.locale || 'en';
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -16,7 +18,7 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
 
         {posts.length === 0 ? (
           <div style={{ padding: '32px 0', color: '#64748b' }}>
-            <p>No published posts by this author.</p>
+            <p>{translate('home.authorEmpty')}</p>
           </div>
         ) : (
           <div className="posts-list">
@@ -28,7 +30,7 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                 <div className="article-meta">
                   {showPublicationDate && (
                     <span>
-                      {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                      {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -49,20 +51,20 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
         )}
 
         {pagination.pages > 1 && (
-          <nav className="pagination" aria-label="Pagination">
+          <nav className="pagination" aria-label={translate('home.pageInfo', { page: pagination.page, pages: pagination.pages })}>
             {pagination.page > 1 ? (
               <a
                 href={`/authors/${author.slug}?page=${pagination.page - 1}`}
                 className="pagination-btn"
               >
-                ← Previous
+                ← {translate('archive.previous')}
               </a>
             ) : (
-              <span className="pagination-btn disabled">← Previous</span>
+              <span className="pagination-btn disabled">← {translate('archive.previous')}</span>
             )}
 
             <span style={{ fontSize: '14px', color: '#64748b' }}>
-              Page {pagination.page} of {pagination.pages}
+              {translate('home.pageInfo', { page: pagination.page, pages: pagination.pages })}
             </span>
 
             {pagination.page < pagination.pages ? (
@@ -70,10 +72,10 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                 href={`/authors/${author.slug}?page=${pagination.page + 1}`}
                 className="pagination-btn"
               >
-                Next →
+                {translate('archive.next')} →
               </a>
             ) : (
-              <span className="pagination-btn disabled">Next →</span>
+              <span className="pagination-btn disabled">{translate('archive.next')} →</span>
             )}
           </nav>
         )}

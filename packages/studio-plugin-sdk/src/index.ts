@@ -3,7 +3,7 @@ import { StudioCardDefinition } from '@vibress/studio-cards';
 export interface StudioPlugin {
   name: string;
   version: string;
-  cards?: StudioCardDefinition<any>[];
+  cards?: StudioCardDefinition[];
   toolbarItems?: StudioToolbarItem[];
 }
 
@@ -16,7 +16,7 @@ export interface StudioToolbarItem {
 
 export class StudioPluginRegistry {
   private plugins: Map<string, StudioPlugin> = new Map();
-  private cards: Map<string, StudioCardDefinition<any>> = new Map();
+  private cards: Map<string, StudioCardDefinition> = new Map();
 
   registerPlugin(plugin: StudioPlugin): void {
     if (this.plugins.has(plugin.name)) {
@@ -31,7 +31,7 @@ export class StudioPluginRegistry {
     }
   }
 
-  getCard(type: string): StudioCardDefinition<any> | undefined {
+  getCard(type: string): StudioCardDefinition | undefined {
     return this.cards.get(type);
   }
 

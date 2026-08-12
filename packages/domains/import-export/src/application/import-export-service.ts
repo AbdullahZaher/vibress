@@ -122,12 +122,13 @@ export class ImportExportService {
       });
       domainEvents.emit('import.job_completed', { jobId, result });
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       await this.jobRepo.updateStatus(jobId, 'failed', {
-        errorSummary: err.message ? err.message.slice(0, 500) : 'Import failed',
+        errorSummary: errMsg.slice(0, 500) || 'Import failed',
         completedAt: new Date(),
       });
-      domainEvents.emit('import.job_failed', { jobId, error: err.message });
+      domainEvents.emit('import.job_failed', { jobId, error: errMsg });
       throw err;
     }
   }
@@ -160,9 +161,10 @@ export class ImportExportService {
       });
       domainEvents.emit('export.job_completed', { jobId });
       return { envelope, artifactKey };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       await this.jobRepo.updateStatus(jobId, 'failed', {
-        errorSummary: err.message ? err.message.slice(0, 500) : 'Export failed',
+        errorSummary: errMsg.slice(0, 500) || 'Export failed',
         completedAt: new Date(),
       });
       throw err;

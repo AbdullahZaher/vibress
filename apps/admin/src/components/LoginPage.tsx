@@ -22,8 +22,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
     try {
       await loginFn(email, password);
       onLoginSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Failed to login. Check credentials.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to login. Check credentials.');
     } finally {
       setIsLoading(false);
     }
@@ -58,10 +58,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground">Email Address</label>
+                <label htmlFor="email" className="text-xs font-medium text-foreground">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
+                    id="email"
                     type="email"
                     required
                     value={email}
@@ -73,10 +74,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground">Password</label>
+                <label htmlFor="password" className="text-xs font-medium text-foreground">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
+                    id="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}

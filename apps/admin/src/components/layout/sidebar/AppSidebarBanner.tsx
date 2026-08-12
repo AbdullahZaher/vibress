@@ -10,7 +10,7 @@ export const AppSidebarBanner: React.FC = () => {
   return (
     <div className="relative group">
       {/* Vibress Signature Wide Spread Ambient Glow (Behind Card) */}
-      <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-600 rounded-2xl opacity-50 dark:opacity-60 blur-xl group-hover:opacity-85 group-hover:blur-2xl transition-all duration-500" />
+      <div className="absolute -inset-1.5 bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-600 rounded-2xl opacity-20 dark:opacity-25 blur-lg group-hover:opacity-40 group-hover:blur-xl transition-all duration-500" />
 
       {/* Card Content Container */}
       <div className="relative p-3.5 rounded-xl bg-card border border-border text-card-foreground shadow-sm space-y-1.5 transition-all overflow-hidden">
@@ -26,6 +26,7 @@ export const AppSidebarBanner: React.FC = () => {
             onClick={() => setVisible(false)}
             className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer p-0.5"
             title="Dismiss banner"
+            aria-label="Dismiss banner"
           >
             <X className="h-3 w-3" />
           </button>

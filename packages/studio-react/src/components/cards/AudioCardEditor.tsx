@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
-import { AudioCardData } from '@vibress/studio-cards';
+import { AudioCardData, StudioCardNode } from '@vibress/studio-cards';
+
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { CardPlaceholder } from '../ui/CardPlaceholder';
 
@@ -21,11 +22,11 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
     const file = files[0];
     if (!file) return;
     const url = URL.createObjectURL(file); // Temporary URL until API is integrated
-      
+
       editor.update(() => {
         const node = $getNodeByKey(nodeKey);
-        if (node && 'setCardData' in node) {
-          (node as any).setCardData({
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
             ...cardData,
             src: url,
             title: file.name
@@ -35,11 +36,11 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
   };
 
   const onCaptionChange = useCallback(
-    (captionJSON: Record<string, any>, captionHtml: string) => {
+    (captionJSON: Record<string, unknown>, captionHtml: string) => {
       editor.update(() => {
         const node = $getNodeByKey(nodeKey);
-        if (node && 'setCardData' in node) {
-          (node as any).setCardData({
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
             ...cardData,
             caption: captionJSON,
             captionHtml,

@@ -36,12 +36,12 @@ export class ContentSchedulerWorker {
           await this.postsService.publishPost(post.id, actorId);
           publishedPostsCount++;
           console.log(`[Scheduler] Automatically published post ${post.id} ("${post.title}")`);
-        } catch (err: any) {
-          console.error(`[Scheduler] Failed to publish post ${post.id}:`, err.message || err);
+        } catch (err) {
+          console.error(`[Scheduler] Failed to publish post ${post.id}:`, err instanceof Error ? err.message : err);
         }
       }
-    } catch (err: any) {
-      console.error('[Scheduler] Error fetching due posts:', err.message || err);
+    } catch (err) {
+      console.error('[Scheduler] Error fetching due posts:', err instanceof Error ? err.message : err);
     }
 
     // 2. Process due pages
@@ -53,12 +53,12 @@ export class ContentSchedulerWorker {
           await this.pagesService.publishPage(page.id, actorId);
           publishedPagesCount++;
           console.log(`[Scheduler] Automatically published page ${page.id} ("${page.title}")`);
-        } catch (err: any) {
-          console.error(`[Scheduler] Failed to publish page ${page.id}:`, err.message || err);
+        } catch (err) {
+          console.error(`[Scheduler] Failed to publish page ${page.id}:`, err instanceof Error ? err.message : err);
         }
       }
-    } catch (err: any) {
-      console.error('[Scheduler] Error fetching due pages:', err.message || err);
+    } catch (err) {
+      console.error('[Scheduler] Error fetching due pages:', err instanceof Error ? err.message : err);
     }
 
     return { publishedPostsCount, publishedPagesCount };

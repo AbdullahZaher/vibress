@@ -8,13 +8,15 @@ import {
   extractMemberSessionToken,
 } from '../middleware/member-auth';
 import { MemberAuthError } from '@vibress/members';
+import { getConfig } from '@vibress/config';
+import { appLogger } from '../observability';
 
 export async function memberRoutes(fastify: FastifyInstance) {
   // Request sign-in link (enumeration-safe; unified signup/login)
   fastify.post('/auth/request', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 100 : 10,
+        max: getConfig().isTest ? 100 : 10,
         timeWindow: '1 minute',
       },
     },
@@ -36,15 +38,16 @@ export async function memberRoutes(fastify: FastifyInstance) {
           userAgent: req.headers['user-agent'] || null,
           requestId: req.id,
         });
-      } catch (err: any) {
-        if (err.code === 'MAIL_DELIVERY_FAILED') {
-          req.log.warn({ requestId: req.id }, 'Member auth mail delivery failed');
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if (code === 'MAIL_DELIVERY_FAILED') {
+          appLogger.warn('Member auth mail delivery failed', { requestId: req.id, code });
           // Do not leak token state; keep generic response but log failure.
           return reply.status(200).send({
             message: 'If this email can receive a sign-in link, we have sent one.',
           });
         }
-        req.log.error({ requestId: req.id, code: err.code }, 'Member auth request failed');
+        appLogger.error('Member auth request failed', { requestId: req.id, code });
         return reply.status(200).send({
           message: 'If this email can receive a sign-in link, we have sent one.',
         });
@@ -60,7 +63,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
   fastify.post('/auth/verify', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 200 : 20,
+        max: getConfig().isTest ? 200 : 20,
         timeWindow: '1 minute',
       },
     },
@@ -80,7 +83,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         });
 
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = getConfig().isProduction;
         reply.setCookie(MEMBER_COOKIE_NAME, result.sessionToken, {
           path: '/',
           httpOnly: true,
@@ -98,7 +101,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
             createdAt: result.member.createdAt.toISOString(),
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof MemberAuthError) {
           const status = err.code === 'MEMBER_DISABLED' ? 401 : 400;
           return reply.status(status).send({
@@ -114,7 +117,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
   fastify.get('/auth/verify', {
     config: {
       rateLimit: {
-        max: process.env.NODE_ENV === 'test' ? 200 : 20,
+        max: getConfig().isTest ? 200 : 20,
         timeWindow: '1 minute',
       },
     },
@@ -133,7 +136,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         });
 
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = getConfig().isProduction;
         reply.setCookie(MEMBER_COOKIE_NAME, result.sessionToken, {
           path: '/',
           httpOnly: true,
@@ -151,7 +154,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
             createdAt: result.member.createdAt.toISOString(),
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof MemberAuthError) {
           const status = err.code === 'MEMBER_DISABLED' ? 401 : 400;
           return reply.status(status).send({
@@ -202,8 +205,8 @@ export async function memberRoutes(fastify: FastifyInstance) {
             createdAt: updated.createdAt.toISOString(),
           },
         });
-      } catch (err: any) {
-        if (err.code === 'VALIDATION_ERROR') {
+      } catch (err: unknown) {
+        if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'VALIDATION_ERROR') {
           return reply.status(400).send({
             errors: [{ code: 'VALIDATION_ERROR', message: err.message, requestId: req.id }],
           });

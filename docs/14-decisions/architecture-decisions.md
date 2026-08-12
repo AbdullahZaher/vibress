@@ -68,6 +68,14 @@
 
 See `ADR-011-development-ports.md`.
 
+## ADR-012: Database transaction strategy
+
+**Decision:** Use an AsyncLocalStorage-based transaction context in `@vibress/database`; application use cases wrap multi-record workflows in `runInTransaction(work)`, and `getDb()` transparently returns the transaction-scoped executor while active.
+
+**Reason:** Virtually every repository accesses the database through `getDb()`; the ALS approach lets existing repositories join the active transaction automatically without threading Drizzle types through public domain contracts.
+
+See `ADR-012-transaction-strategy.md`.
+
 ## ADR-014: Billing provider boundary
 
 **Decision:** Member ID is the subscription identity; billing lives behind a

@@ -14,7 +14,6 @@ packages/domains/
 ├── authors/
 ├── revisions/
 ├── media/
-├── files/
 ├── members/
 ├── comments/
 ├── products/
@@ -53,7 +52,7 @@ Content classification and authorship.
 ### Revisions
 Immutable or append-only history of editable content.
 
-### Media / Files
+### Media
 Media metadata and storage references.
 
 ### Members

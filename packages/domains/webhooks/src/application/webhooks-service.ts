@@ -150,13 +150,14 @@ export class WebhooksService {
         return { status: 'delivered', responseStatus: result.status };
       }
       throw new WebhookDomainError('DELIVERY_FAILED', `Receiver returned HTTP ${result.status}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = (err as Error).message || 'delivery failed';
       const attempt = deliveryRow.attemptCount + 1;
       if (attempt >= MAX_RETRIES) {
-        await this.repo.markDeadLetter(deliveryRow.id, err.message || 'delivery failed');
+        await this.repo.markDeadLetter(deliveryRow.id, errMsg);
         return { status: 'dead_letter', responseStatus: null };
       }
-      await this.repo.markFailed(deliveryRow.id, err.message || 'delivery failed', attempt);
+      await this.repo.markFailed(deliveryRow.id, errMsg, attempt);
       await this.dispatcher.enqueue(deliveryRow.id, endpoint.id);
       return { status: 'failed', responseStatus: null };
     }

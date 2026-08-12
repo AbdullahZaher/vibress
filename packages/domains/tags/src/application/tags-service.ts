@@ -1,5 +1,5 @@
 import { TagRepository } from '../domain/repository';
-import { Tag, CreateTagData, UpdateTagData } from '../domain/tag';
+import { Tag, CreateTagData, UpdateTagData, TagDomainError } from '../domain/tag';
 import { slugify, generateUniqueSlug } from '@vibress/utils';
 
 export class TagsService {
@@ -29,9 +29,7 @@ export class TagsService {
   async updateTag(id: string, data: UpdateTagData): Promise<Tag> {
     const existing = await this.tagRepo.findById(id);
     if (!existing) {
-      const err = new Error('Tag not found');
-      (err as any).code = 'TAG_NOT_FOUND';
-      throw err;
+      throw new TagDomainError('TAG_NOT_FOUND', 'Tag not found');
     }
 
     let updatedSlug = existing.slug;

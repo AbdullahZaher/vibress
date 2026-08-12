@@ -1,3 +1,13 @@
+export class AuthDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'AuthDomainError';
+    this.code = code;
+  }
+}
+
 export interface Session {
   id: string;
   userId: string;
@@ -8,7 +18,7 @@ export interface Session {
   revokedAt: Date | null;
   ipAddress: string | null;
   userAgent: string | null;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface CreateSessionData {
@@ -18,5 +28,5 @@ export interface CreateSessionData {
   expiresAt: Date;
   ipAddress?: string | null | undefined;
   userAgent?: string | null | undefined;
-  metadata?: Record<string, any> | null | undefined;
+  metadata?: Record<string, unknown> | null | undefined;
 }

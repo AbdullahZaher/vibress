@@ -73,7 +73,7 @@ export class DrizzleSessionRepository implements SessionRepository {
       revokedAt: row.revokedAt,
       ipAddress: row.ipAddress,
       userAgent: row.userAgent,
-      metadata: row.metadata as Record<string, any> | null,
+      metadata: row.metadata as Record<string, unknown> | null,
     };
   }
 }

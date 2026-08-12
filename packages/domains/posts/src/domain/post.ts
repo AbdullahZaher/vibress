@@ -1,3 +1,13 @@
+export class PostDomainError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'PostDomainError';
+    this.code = code;
+  }
+}
+
 export type PostStatus = 'draft' | 'scheduled' | 'published';
 export type PostVisibility = 'public' | 'members' | 'paid';
 
@@ -6,7 +16,7 @@ export interface Post {
   title: string;
   slug: string;
   excerpt: string | null;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
   contentVersion: number;
   status: PostStatus;
   visibility: PostVisibility;
@@ -30,7 +40,7 @@ export interface CreatePostData {
   title: string;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
-  content?: Record<string, any> | undefined;
+  content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   status?: PostStatus | undefined;
   visibility?: PostVisibility | undefined;
@@ -48,7 +58,7 @@ export interface UpdatePostData {
   title?: string | undefined;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
-  content?: Record<string, any> | undefined;
+  content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   visibility?: PostVisibility | undefined;
   primaryAuthorId?: string | undefined;
@@ -65,6 +75,7 @@ export interface ListPostsFilter {
   authorId?: string | undefined;
   authorSlug?: string | undefined;
   tagSlug?: string | undefined;
+  visibility?: PostVisibility | undefined;
   publishedOnly?: boolean | undefined;
   search?: string | undefined;
   limit?: number | undefined;

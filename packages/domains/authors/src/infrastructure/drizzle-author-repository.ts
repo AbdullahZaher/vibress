@@ -1,4 +1,4 @@
-import { getDb, postAuthors, pageAuthors, users } from '@vibress/database';
+import { getDb, postAuthors, pageAuthors, users, runInTransaction } from '@vibress/database';
 import { eq, asc, and, isNull } from 'drizzle-orm';
 import { AuthorRepository } from '../domain/repository';
 import { Author } from '../domain/author';
@@ -30,21 +30,23 @@ export class DrizzleAuthorRepository implements AuthorRepository {
   }
 
   async setPostAuthors(postId: string, authorIds: string[], primaryAuthorId: string): Promise<void> {
-    const db = getDb();
-    await db.delete(postAuthors).where(eq(postAuthors.postId, postId));
+    await runInTransaction(async () => {
+      const db = getDb();
+      await db.delete(postAuthors).where(eq(postAuthors.postId, postId));
 
-    const uniqueAuthorIds = Array.from(new Set([primaryAuthorId, ...authorIds]));
-    const insertValues = uniqueAuthorIds.map((userId, index) => ({
-      postId,
-      userId,
-      sortOrder: index,
-      isPrimary: userId === primaryAuthorId,
-      createdAt: new Date(),
-    }));
+      const uniqueAuthorIds = Array.from(new Set([primaryAuthorId, ...authorIds]));
+      const insertValues = uniqueAuthorIds.map((userId, index) => ({
+        postId,
+        userId,
+        sortOrder: index,
+        isPrimary: userId === primaryAuthorId,
+        createdAt: new Date(),
+      }));
 
-    if (insertValues.length > 0) {
-      await db.insert(postAuthors).values(insertValues);
-    }
+      if (insertValues.length > 0) {
+        await db.insert(postAuthors).values(insertValues);
+      }
+    });
   }
 
   async getPageAuthors(pageId: string): Promise<Author[]> {
@@ -72,21 +74,23 @@ export class DrizzleAuthorRepository implements AuthorRepository {
   }
 
   async setPageAuthors(pageId: string, authorIds: string[], primaryAuthorId: string): Promise<void> {
-    const db = getDb();
-    await db.delete(pageAuthors).where(eq(pageAuthors.pageId, pageId));
+    await runInTransaction(async () => {
+      const db = getDb();
+      await db.delete(pageAuthors).where(eq(pageAuthors.pageId, pageId));
 
-    const uniqueAuthorIds = Array.from(new Set([primaryAuthorId, ...authorIds]));
-    const insertValues = uniqueAuthorIds.map((userId, index) => ({
-      pageId,
-      userId,
-      sortOrder: index,
-      isPrimary: userId === primaryAuthorId,
-      createdAt: new Date(),
-    }));
+      const uniqueAuthorIds = Array.from(new Set([primaryAuthorId, ...authorIds]));
+      const insertValues = uniqueAuthorIds.map((userId, index) => ({
+        pageId,
+        userId,
+        sortOrder: index,
+        isPrimary: userId === primaryAuthorId,
+        createdAt: new Date(),
+      }));
 
-    if (insertValues.length > 0) {
-      await db.insert(pageAuthors).values(insertValues);
-    }
+      if (insertValues.length > 0) {
+        await db.insert(pageAuthors).values(insertValues);
+      }
+    });
   }
 
   async findAuthorBySlug(slug: string): Promise<{ id: string; name: string; slug: string; bio: string | null } | null> {

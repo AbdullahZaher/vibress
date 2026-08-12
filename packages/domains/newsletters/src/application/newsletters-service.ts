@@ -2,6 +2,7 @@ import { NewsletterRepository } from '../domain/repository';
 import { Newsletter, CreateNewsletterData, UpdateNewsletterData, NewsletterPreference, NewsletterPreferenceRepository } from '../domain/newsletter';
 import { SendRepository, NewsletterSend, CreateSendData, SendStatus, AudienceDefinition } from '../domain/send';
 import { domainEvents } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
 import crypto from 'node:crypto';
 import { renderStudioDocumentToHtml, renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
 
@@ -180,6 +181,10 @@ export class NewslettersService {
    * Called by the worker for due scheduled sends and by the API for send-now.
    */
   async startSend(sendId: string, createRecipients: (rows: Array<{ memberId: string | null; email: string; name: string | null; unsubscribeToken: string }>) => Promise<number>): Promise<{ send: NewsletterSend; recipientCount: number }> {
+    return runInTransaction(() => this.startSendTx(sendId, createRecipients));
+  }
+
+  private async startSendTx(sendId: string, createRecipients: (rows: Array<{ memberId: string | null; email: string; name: string | null; unsubscribeToken: string }>) => Promise<number>): Promise<{ send: NewsletterSend; recipientCount: number }> {
     const send = await this.deps.sendRepo.findById(sendId);
     if (!send) throw new NewsletterDomainError('SEND_NOT_FOUND', 'Send not found');
     if (send.status === 'sending' || send.status === 'sent') {

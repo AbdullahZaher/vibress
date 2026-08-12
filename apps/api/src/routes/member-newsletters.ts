@@ -29,7 +29,7 @@ export async function memberNewsletterRoutes(fastify: FastifyInstance) {
           parsed.data.subscribed
         );
         return reply.status(200).send({ preference });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError) {
           return reply.status(404).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
         }
@@ -50,7 +50,7 @@ export async function publicUnsubscribeRoutes(fastify: FastifyInstance) {
       try {
         const result = await newslettersService.unsubscribeWithToken(body.token);
         return reply.status(200).send({ unsubscribed: true, newsletterId: result.newsletterId });
-      } catch (err: any) {
+      } catch (err) {
         if (err instanceof NewsletterDomainError && err.code === 'INVALID_UNSUBSCRIBE_TOKEN') {
           return reply.status(400).send({ errors: [{ code: err.code, message: err.message, requestId: req.id }] });
         }

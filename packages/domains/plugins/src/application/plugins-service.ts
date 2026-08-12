@@ -32,8 +32,8 @@ export class PluginsService {
     let manifest: PluginManifest;
     try {
       manifest = validateManifest(manifestInput);
-    } catch (err: any) {
-      throw new PluginDomainError('INVALID_MANIFEST', err.message || 'Invalid plugin manifest');
+    } catch (err: unknown) {
+      throw new PluginDomainError('INVALID_MANIFEST', (err as Error).message || 'Invalid plugin manifest');
     }
 
     const existing = await this.pluginRepo.findByManifestId(manifest.id);
@@ -93,10 +93,11 @@ export class PluginsService {
         },
       };
       await module.activate(context);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = (err as Error).message || 'activation failed';
       await this.pluginRepo.updateStatus(id, 'error');
-      domainEvents.emit('plugin.activation_failed', { pluginId: id, error: err.message || 'activation failed' });
-      throw new PluginDomainError('PLUGIN_ACTIVATION_FAILED', err.message || 'Plugin activation failed');
+      domainEvents.emit('plugin.activation_failed', { pluginId: id, error: errMsg });
+      throw new PluginDomainError('PLUGIN_ACTIVATION_FAILED', errMsg);
     }
 
     const activated = await this.pluginRepo.updateStatus(id, 'active');

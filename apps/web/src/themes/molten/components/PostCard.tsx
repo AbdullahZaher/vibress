@@ -1,16 +1,17 @@
 import React from 'react';
-// import { ThemePost } from '@vibress/theme-core';
+import { t } from '../../../lib/i18n';
+import type { PublicPostSummaryDto } from '@vibress/api-contracts';
 
 interface PostCardProps {
-  post: any;
+  post: PublicPostSummaryDto;
   isFeatured?: boolean;
 }
 
 export function PostCard({ post, isFeatured = false }: PostCardProps) {
-  const primaryTag = post.tags?.[0];
-  const authors = [post.primaryAuthor].filter(Boolean);
+  const primaryTag = post.tags?.[0] as ({ accentColor?: string; name?: string } | undefined);
+  const authors = [(post as { primaryAuthor?: { profileImage?: string; name?: string } }).primaryAuthor].filter(Boolean);
 
-  const isActuallyFeatured = isFeatured || (post as any).featured;
+  const isActuallyFeatured = isFeatured || (post as { featured?: boolean }).featured;
   const postClass = `post ${isActuallyFeatured ? 'featured' : ''}`;
   
   // Use post.featureImage or fallback to a default thumbnail
@@ -58,7 +59,7 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
         </div>
 
         <footer className="post-footer">
-          <span className="post-more">Read more</span>
+          <span className="post-more">{t('post.readMore')}</span>
 
           <div className="post-author">
             {authors.map((author, i) => {

@@ -27,7 +27,7 @@ export async function Page(props: ThemePageProps) {
             )}
           </header>
 
-          <div className="vb-content vb-canvas" dangerouslySetInnerHTML={{ __html: page.html || '' }} />
+          <div className="vb-content vb-canvas studio-html-content" dangerouslySetInnerHTML={{ __html: page.html || '' }} />
         </article>
       </main>
     </ThemeLayout>

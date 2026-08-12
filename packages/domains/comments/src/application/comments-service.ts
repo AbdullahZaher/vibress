@@ -1,6 +1,7 @@
 import { CommentRepository, CommentLikeRepository, CommentReportRepository } from '../domain/repository';
 import { Comment, CreateCommentData, MAX_COMMENT_DEPTH, MAX_COMMENT_BODY_LENGTH, CommentStatus } from '../domain/comment';
 import { domainEvents } from '@vibress/events';
+import { runInTransaction } from '@vibress/database';
 
 export class CommentDomainError extends Error {
   code: string;
@@ -51,6 +52,10 @@ export class CommentsService {
   constructor(private deps: CommentsServiceDeps) {}
 
   async createComment(data: CreateCommentData): Promise<Comment> {
+    return runInTransaction(() => this.createCommentTx(data));
+  }
+
+  private async createCommentTx(data: CreateCommentData): Promise<Comment> {
     const body = sanitizeCommentBody(data.body);
     if (!body) throw new CommentDomainError('VALIDATION_ERROR', 'Comment body is empty');
     if (body.length > MAX_COMMENT_BODY_LENGTH) {

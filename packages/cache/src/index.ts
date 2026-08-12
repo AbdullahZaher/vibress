@@ -1,11 +1,12 @@
 import Redis, { type RedisOptions } from 'ioredis';
+import { getConfig } from '@vibress/config';
 
 let redisClient: Redis | null = null;
 let bullMqClient: Redis | null = null;
 
 export const getRedisClient = (): Redis => {
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380';
+    const redisUrl = getConfig().redis.url;
     
     const options: RedisOptions = {
       retryStrategy(times) {
@@ -32,7 +33,7 @@ export const getRedisClient = (): Redis => {
  */
 export const getBullMqRedisConnection = (): Redis => {
   if (!bullMqClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380';
+    const redisUrl = getConfig().redis.url;
 
     const options: RedisOptions = {
       retryStrategy(times) {

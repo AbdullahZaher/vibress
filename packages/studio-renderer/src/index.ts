@@ -15,15 +15,16 @@ export function renderStudioDocumentToHtml(docInput: unknown, options: RenderOpt
   return doc.root.children.map((node) => renderNodeToHtml(node, options)).join('');
 }
 
-function renderNodeToHtml(node: any, options: RenderOptions): string {
+function renderNodeToHtml(node: unknown, options: RenderOptions): string {
   if (!node || typeof node !== 'object') return '';
+  const n = node as { type?: string; text?: string; format?: number; children?: unknown[]; tag?: string; listType?: string; url?: string; src?: string; alt?: string; cardType?: string; caption?: string; rel?: string; target?: string; cardData?: Record<string, unknown>; } & Record<string, unknown>;
 
-  const type = node.type;
+  const type = n.type;
 
   // Handle TextNode
   if (type === 'text') {
-    let text = escapeHtml(node.text || '');
-    const format = typeof node.format === 'number' ? node.format : 0;
+    let text = escapeHtml(n.text || '');
+    const format = typeof n.format === 'number' ? n.format : 0;
 
     // Lexical format bitmask: 1=Bold, 2=Italic, 4=Strikethrough, 8=Underline, 16=Code, 32=Subscript, 64=Superscript
     if (format & 16) text = `<code>${text}</code>`;
@@ -37,8 +38,8 @@ function renderNodeToHtml(node: any, options: RenderOptions): string {
 
   // Render children helper
   const renderChildren = () => {
-    if (Array.isArray(node.children)) {
-      return node.children.map((child: any) => renderNodeToHtml(child, options)).join('');
+    if (Array.isArray(n.children)) {
+      return n.children.map((child: unknown) => renderNodeToHtml(child, options)).join('');
     }
     return '';
   };
@@ -51,7 +52,7 @@ function renderNodeToHtml(node: any, options: RenderOptions): string {
     }
 
     case 'heading': {
-      const tag = node.tag || 'h2';
+      const tag = n.tag || 'h2';
       const level = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag.toLowerCase())
         ? tag.toLowerCase()
         : 'h2';
@@ -62,7 +63,7 @@ function renderNodeToHtml(node: any, options: RenderOptions): string {
       return `<blockquote>${renderChildren()}</blockquote>`;
 
     case 'list': {
-      const listType = node.listType === 'number' ? 'ol' : 'ul';
+      const listType = n.listType === 'number' ? 'ol' : 'ul';
       return `<${listType}>${renderChildren()}</${listType}>`;
     }
 
@@ -70,9 +71,9 @@ function renderNodeToHtml(node: any, options: RenderOptions): string {
       return `<li>${renderChildren()}</li>`;
 
     case 'link': {
-      const url = sanitizeUrl(node.url || '#');
-      const relAttr = node.rel ? ` rel="${escapeHtml(node.rel)}"` : '';
-      const targetAttr = node.target ? ` target="${escapeHtml(node.target)}"` : '';
+      const url = sanitizeUrl(n.url || '#');
+      const relAttr = n.rel ? ` rel="${escapeHtml(n.rel)}"` : '';
+      const targetAttr = n.target ? ` target="${escapeHtml(n.target)}"` : '';
       return `<a href="${url}"${relAttr}${targetAttr}>${renderChildren()}</a>`;
     }
 
@@ -81,18 +82,18 @@ function renderNodeToHtml(node: any, options: RenderOptions): string {
 
     // Handle Studio Card Nodes
     case 'studio-card': {
-      const cardType = node.cardType;
-      const cardData = node.cardData || {};
-      const def = STUDIO_CARD_DEFINITIONS[cardType];
+      const cardType = n.cardType;
+      const cardData = n.cardData || {};
+      const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
       if (def) {
         try {
           const validated = def.validate(cardData);
           return def.renderHtml(validated);
         } catch {
-          return `<!-- Error rendering card: ${escapeHtml(cardType)} -->`;
+          return `<!-- Error rendering card: ${escapeHtml(cardType || '')} -->`;
         }
       }
-      return `<!-- Unknown card: ${escapeHtml(cardType)} -->`;
+      return `<!-- Unknown card: ${escapeHtml(cardType || '')} -->`;
     }
 
     default:
@@ -113,17 +114,18 @@ export function renderStudioDocumentToPlainText(docInput: unknown): string {
     .join('\n\n');
 }
 
-function renderNodeToPlainText(node: any): string {
+function renderNodeToPlainText(node: unknown): string {
   if (!node || typeof node !== 'object') return '';
+  const n = node as { type?: string; text?: string; format?: number; children?: unknown[]; tag?: string; listType?: string; url?: string; src?: string; alt?: string; cardType?: string; caption?: string; rel?: string; target?: string; cardData?: Record<string, unknown>; } & Record<string, unknown>;
 
-  if (node.type === 'text') {
-    return node.text || '';
+  if (n.type === 'text') {
+    return n.text || '';
   }
 
-  if (node.type === 'studio-card') {
-    const cardType = node.cardType;
-    const cardData = node.cardData || {};
-    const def = STUDIO_CARD_DEFINITIONS[cardType];
+  if (n.type === 'studio-card') {
+    const cardType = n.cardType;
+    const cardData = n.cardData || {};
+    const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
     if (def) {
       try {
         const validated = def.validate(cardData);
@@ -135,8 +137,8 @@ function renderNodeToPlainText(node: any): string {
     return '';
   }
 
-  if (Array.isArray(node.children)) {
-    return node.children.map((child: any) => renderNodeToPlainText(child)).join('');
+  if (Array.isArray(n.children)) {
+    return n.children.map((child: unknown) => renderNodeToPlainText(child)).join('');
   }
 
   return '';

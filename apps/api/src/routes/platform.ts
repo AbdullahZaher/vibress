@@ -1,9 +1,57 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
 import { integrationsService, webhooksService, pluginsService } from '../services';
-import { IntegrationDomainError } from '@vibress/integrations';
+import { IntegrationDomainError, IntegrationStatus } from '@vibress/integrations';
 import { WebhookDomainError } from '@vibress/webhooks';
 import { PluginDomainError } from '@vibress/plugins';
+import { getConfig } from '@vibress/config';
+
+type IntegrationCreateBody = {
+  key?: string;
+  type?: string;
+  name?: string;
+  config?: Record<string, unknown>;
+  secrets?: Record<string, string>;
+};
+
+type IntegrationUpdateBody = {
+  name?: string;
+  status?: IntegrationStatus;
+  config?: Record<string, unknown>;
+  secrets?: Record<string, string>;
+};
+
+type ApiKeyCreateBody = {
+  name?: string;
+  scopes?: string[];
+  integrationId?: string;
+  expiresAt?: string;
+};
+
+type WebhookEndpointCreateBody = {
+  name?: string;
+  url?: string;
+  secret?: string;
+  eventTypes?: string[];
+};
+
+type WebhookEndpointUpdateBody = {
+  name?: string;
+  url?: string;
+  secret?: string;
+  enabled?: boolean;
+  eventTypes?: string[];
+};
+
+type WebhookDeliveryListQuery = {
+  endpointId?: string;
+  status?: string;
+  limit?: string;
+  offset?: string;
+};
+
+type PluginRegisterBody = { manifest?: unknown };
+type PluginSettingsBody = { settings?: Record<string, unknown> };
 
 const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
   reply.status(status).send({ errors: [{ code, message, requestId }] });
@@ -21,8 +69,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.post('/integrations', {
     preHandler: [requireStaffSession, requirePermission('integrations.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
-      if (!body?.key || !body?.type || !body?.name) {
+      const body = (req.body ?? {}) as IntegrationCreateBody;
+      if (!body.key || !body.type || !body.name) {
         return sendError(reply, 'VALIDATION_ERROR', 'key, type, and name are required', req.id);
       }
       try {
@@ -34,7 +82,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           secrets: body.secrets || {},
         }, req.user!.id);
         return reply.status(201).send({ integration: integrationsService.maskIntegration(integration) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -45,16 +93,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('integrations.manage'), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as any;
+      const body = req.body as IntegrationUpdateBody | undefined;
       try {
-        const integration = await integrationsService.updateIntegration(id, {
-          name: body?.name,
-          status: body?.status,
-          config: body?.config,
-          secrets: body?.secrets,
-        }, req.user!.id);
+        const update: Parameters<typeof integrationsService.updateIntegration>[1] = {};
+        if (body?.name !== undefined) update.name = body.name;
+        if (body?.status !== undefined) update.status = body.status;
+        if (body?.config !== undefined) update.config = body.config;
+        if (body?.secrets !== undefined) update.secrets = body.secrets;
+        const integration = await integrationsService.updateIntegration(id, update, req.user!.id);
         return reply.status(200).send({ integration: integrationsService.maskIntegration(integration) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'INTEGRATION_NOT_FOUND' ? 404 : 400);
         }
@@ -87,8 +135,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.post('/api-keys', {
     preHandler: [requireStaffSession, requirePermission('api_keys.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
-      if (!body?.name || !Array.isArray(body?.scopes) || body.scopes.length === 0) {
+      const body = (req.body ?? {}) as ApiKeyCreateBody;
+      if (!body.name || !Array.isArray(body.scopes) || body.scopes.length === 0) {
         return sendError(reply, 'VALIDATION_ERROR', 'name and at least one scope are required', req.id);
       }
       try {
@@ -100,7 +148,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         }, req.user!.id);
         // Raw secret returned exactly once
         return reply.status(201).send({ key: created });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof IntegrationDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -128,8 +176,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.post('/webhook-endpoints', {
     preHandler: [requireStaffSession, requirePermission('webhooks.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
-      if (!body?.name || !body?.url || !Array.isArray(body?.eventTypes) || body.eventTypes.length === 0) {
+      const body = (req.body ?? {}) as WebhookEndpointCreateBody;
+      if (!body.name || !body.url || !Array.isArray(body.eventTypes) || body.eventTypes.length === 0) {
         return sendError(reply, 'VALIDATION_ERROR', 'name, url, and eventTypes are required', req.id);
       }
       try {
@@ -140,7 +188,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           eventTypes: body.eventTypes,
         }, req.user!.id);
         return reply.status(201).send({ endpoint: webhooksService.maskEndpoint(endpoint) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof WebhookDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -151,17 +199,17 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('webhooks.manage'), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as any;
+      const body = req.body as WebhookEndpointUpdateBody | undefined;
       try {
-        const endpoint = await webhooksService.updateEndpoint(id, {
-          name: body?.name,
-          url: body?.url,
-          secret: body?.secret,
-          enabled: body?.enabled,
-          eventTypes: body?.eventTypes,
-        }, req.user!.id);
+        const update: Parameters<typeof webhooksService.updateEndpoint>[1] = {};
+        if (body?.name !== undefined) update.name = body.name;
+        if (body?.url !== undefined) update.url = body.url;
+        if (body?.secret !== undefined) update.secret = body.secret;
+        if (body?.enabled !== undefined) update.enabled = body.enabled;
+        if (body?.eventTypes !== undefined) update.eventTypes = body.eventTypes;
+        const endpoint = await webhooksService.updateEndpoint(id, update, req.user!.id);
         return reply.status(200).send({ endpoint: webhooksService.maskEndpoint(endpoint) });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof WebhookDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'WEBHOOK_NOT_FOUND' ? 404 : 400);
         }
@@ -182,13 +230,14 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.get('/webhook-deliveries', {
     preHandler: [requireStaffSession, requirePermission('webhooks.read')],
     handler: async (req, reply) => {
-      const query = req.query as any;
-      const result = await webhooksService.listDeliveries({
-        endpointId: query.endpointId,
-        status: query.status,
+      const query = (req.query ?? {}) as WebhookDeliveryListQuery;
+      const params: { endpointId?: string; status?: string; limit: number; offset: number } = {
         limit: query.limit ? parseInt(query.limit, 10) : 50,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
-      });
+      };
+      if (query.endpointId) params.endpointId = query.endpointId;
+      if (query.status) params.status = query.status;
+      const result = await webhooksService.listDeliveries(params);
       return reply.status(200).send({
         deliveries: result.deliveries.map((d) => ({
           id: d.id,
@@ -218,12 +267,12 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.post('/plugins/register', {
     preHandler: [requireStaffSession, requirePermission('plugins.manage'), validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as any;
-      if (!body?.manifest) return sendError(reply, 'VALIDATION_ERROR', 'manifest is required', req.id);
+      const body = (req.body ?? {}) as PluginRegisterBody;
+      if (!body.manifest) return sendError(reply, 'VALIDATION_ERROR', 'manifest is required', req.id);
       try {
         const plugin = await pluginsService.registerPlugin(body.manifest, req.user!.id);
         return reply.status(201).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
@@ -237,7 +286,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.activatePlugin(id, req.user!.id);
         return reply.status(200).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id, err.code === 'PLUGIN_NOT_FOUND' ? 404 : 400);
         }
@@ -253,7 +302,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.deactivatePlugin(id, req.user!.id);
         return reply.status(200).send({ plugin });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -264,14 +313,14 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('plugins.manage'), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as any;
-      if (!body?.settings || typeof body.settings !== 'object') {
+      const body = (req.body ?? {}) as PluginSettingsBody;
+      if (!body.settings || typeof body.settings !== 'object') {
         return sendError(reply, 'VALIDATION_ERROR', 'settings object is required', req.id);
       }
       try {
         await pluginsService.setSettings(id, body.settings);
         return reply.status(200).send({ success: true });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof PluginDomainError) return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
@@ -322,7 +371,7 @@ export async function requireMachineKey(req: FastifyRequest, reply: FastifyReply
 
 export function requireMachineScope(scope: string) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
-    const auth = (req as any).machineAuth as MachineAuthResult | undefined;
+    const auth = req.machineAuth;
     if (!auth) {
       reply.status(401).send({ errors: [{ code: 'AUTHENTICATION_REQUIRED', message: 'Machine authentication required', requestId: req.id }] });
       return;
@@ -339,23 +388,23 @@ export async function machineApiRoutes(fastify: FastifyInstance) {
   fastify.get('/status', {
     preHandler: [async (req, reply) => {
       const result = await requireMachineKey(req, reply);
-      if (result) (req as any).machineAuth = result;
+      if (result) req.machineAuth = result;
     }],
     handler: async (req, reply) => {
-      return reply.status(200).send({ status: 'ok', principal: (req as any).machineAuth.name });
+      return reply.status(200).send({ status: 'ok', principal: req.machineAuth!.name });
     },
   });
 
   fastify.post('/events', {
-    config: { rateLimit: { max: process.env.NODE_ENV === 'test' ? 200 : 60, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: getConfig().isTest ? 200 : 60, timeWindow: '1 minute' } },
     preHandler: [
       async (req, reply) => {
         const result = await requireMachineKey(req, reply);
-        if (result) (req as any).machineAuth = result;
+        if (result) req.machineAuth = result;
       },
       requireMachineScope('content.read'),
     ],
-    handler: async (req, reply) => {
+    handler: async (_req, reply) => {
       return reply.status(200).send({ accepted: true });
     },
   });
