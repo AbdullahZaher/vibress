@@ -48,6 +48,16 @@ describe('First-run setup', () => {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    // Restore the shared development database to its expected state (dev
+    // users seeded + classified as installed) so later suites (and the dev
+    // stack) do not see an uninstalled instance.
+    try {
+      await seedDatabase();
+      await new SetupService(new DrizzleInstallationRepository()).classifyLegacyInstallation();
+    } catch (err) {
+      // Best-effort cleanup — never mask the actual test results.
+      console.error('setup.test cleanup warning:', err instanceof Error ? err.message : String(err));
+    }
     await closeDbPool();
   });
 

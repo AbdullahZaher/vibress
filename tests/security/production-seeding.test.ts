@@ -19,6 +19,12 @@ describe('Production seeding security (P0)', () => {
   }, 30000);
 
   afterAll(async () => {
+    // Restore the shared dev database (seeded dev users) for later suites.
+    try {
+      await seedDatabase({ skipDevUsers: false });
+    } catch (err) {
+      console.error('production-seeding cleanup warning:', err instanceof Error ? err.message : String(err));
+    }
     await closeDbPool();
   });
 
