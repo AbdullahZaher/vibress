@@ -557,3 +557,14 @@ c100 (single-core bound), RSS stable ~758 MB.
 - `pnpm verify:explicit-any` — 0 (max 120)
 - Clean backup/restore: unchanged schema (no migrations added) — previous
   hardened restore evidence remains valid (release-verification.md §4).
+
+## Final verdict (accepted)
+
+**VIBRESS PRODUCTION: PASS WITH ACCEPTED TECHNICAL DEBT**
+
+Accepted on 2026-08-12 at `main` = `ef0895e`. Remaining debt (documented):
+CSP `style-src 'unsafe-inline'` exception (React inline style attributes,
+non-executable CSS; `script-src` uses nonces/external scripts only),
+timing-sensitive outbox/worker-scheduling tests under app↔DB clock skew
+(test-only), Nx + Next.js dev `.next` collision (dev-only, pre-existing),
+and pre-existing lint warnings. No release blockers.
