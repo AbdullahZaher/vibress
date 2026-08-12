@@ -82,8 +82,20 @@ Vibress uses a modern, full-stack JavaScript/TypeScript ecosystem:
 
 6. **Access URLs**:
    - Website: http://localhost:7778
-   - Admin Dashboard: http://localhost:8080/admin/
+   - Admin Dashboard: http://localhost:7779/admin/ (development) or
+     http://localhost:8080/admin/ (production build)
    - API: http://localhost:7780
+
+7. **First-run setup**: On a fresh database, open the Admin Dashboard and the
+   First-Run Setup Wizard appears. Enter the setup key (in development, the
+   API prints a one-time ephemeral token to its console if `VIBRESS_SETUP_TOKEN`
+   is unset), then configure your site and create the owner account. After
+   installation the wizard is permanently locked.
+
+   Production: generate a secret and set it before starting —
+   ```bash
+   openssl rand -hex 32   # → set VIBRESS_SETUP_TOKEN=<value> in .env
+   ```
 
 _(To stop the infrastructure, run `pnpm dev:infra:down`)_
 
