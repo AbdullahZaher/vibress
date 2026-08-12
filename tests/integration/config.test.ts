@@ -27,6 +27,7 @@ describe('Typed configuration', () => {
       expect(issues).toContain('STRIPE_SECRET_KEY');
       expect(issues).toContain('STRIPE_WEBHOOK_SECRET');
       expect(issues).toContain('CORS_ORIGINS');
+      expect(issues).toContain('VIBRESS_SETUP_TOKEN');
     }
   });
 
@@ -40,6 +41,7 @@ describe('Typed configuration', () => {
       CORS_ORIGINS: 'https://admin.example.com,https://portal.example.com',
       ADMIN_ORIGIN: 'https://admin.example.com/',
       PORTAL_ORIGIN: 'https://portal.example.com/',
+      VIBRESS_SETUP_TOKEN: 'prod-setup-token-0123456789abcdef0123456789abcdef',
     });
 
     expect(config.isProduction).toBe(true);

@@ -43,6 +43,21 @@ describe('Platform Packages Suite (H7)', () => {
       }).not.toThrow();
     });
 
+    it('never logs the setup token header or passwords (default redaction)', () => {
+      const logs: unknown[] = [];
+      const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => logs.push(args));
+      const logger = createLogger('setup-redaction-test');
+      logger.info('setup attempt', {
+        'x-vibress-setup-token': 'super-secret-setup-token-0123456789abcdef',
+        password: 'hunter2-secret',
+      });
+      spy.mockRestore();
+      const text = JSON.stringify(logs);
+      expect(text).not.toContain('super-secret-setup-token-0123456789abcdef');
+      expect(text).not.toContain('hunter2-secret');
+      expect(text).toContain('[REDACTED]');
+    });
+
     it('records metric counters and gauges', () => {
       metrics.clear();
       metrics.counter('http_requests_total', 1, { path: '/api/health' });
