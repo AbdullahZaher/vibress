@@ -11,6 +11,7 @@ const PROD_ENV = {
   CORS_ORIGINS: 'https://admin.example.com,https://portal.example.com',
   ADMIN_ORIGIN: 'https://admin.example.com',
   PORTAL_ORIGIN: 'https://portal.example.com',
+  VIBRESS_SETUP_TOKEN: 'prod-setup-token-0123456789abcdef0123456789abcdef',
 };
 
 describe('API hardening', () => {

@@ -46,7 +46,7 @@ export default async function RootLayout({
     hostState = null;
   }
 
-  const site = getThemeSiteSettings();
+  const site = await getThemeSiteSettings();
   const themeCss = hostState?.theme.cssPath || '/theme-assets/vibress-default/1.0.0/default.css';
 
   return (

@@ -81,6 +81,11 @@ export const SYSTEM_PERMISSIONS = [
 ];
 
 export interface SeedOptions {
+  /**
+   * Skip creation of development staff users (owner@example.com etc.).
+   * Defaults to true in production — development/demo accounts with known
+   * credentials must NEVER be created on a production instance.
+   */
   skipDevUsers?: boolean;
 }
 
@@ -170,8 +175,11 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     }
   }
 
-  // Seed default dev users idempotently
-  if (!options?.skipDevUsers) {
+  // Seed default dev users idempotently. Production must never receive
+  // development/demo staff accounts with known credentials — gate the
+  // default on NODE_ENV so a fresh production boot creates ZERO dev users.
+  const skipDevUsers = options?.skipDevUsers ?? process.env.NODE_ENV === 'production';
+  if (!skipDevUsers) {
     console.log('Seeding default dev staff users...');
     const ownerRole = ownerRoleRows[0];
     const adminRole = adminRoleRows[0];

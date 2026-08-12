@@ -1,0 +1,30 @@
+{
+  "name": "@vibress/setup",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/audit": "workspace:*",
+    "@vibress/database": "workspace:*",
+    "@vibress/roles": "workspace:*",
+    "@vibress/security": "workspace:*",
+    "@vibress/settings": "workspace:*",
+    "@vibress/users": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "@vibress/cache": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@types/node": "^20.14.10"
+  },
+  "nx": {
+    "tags": [
+      "type:domain"
+    ]
+  }
+}

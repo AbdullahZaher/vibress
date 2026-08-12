@@ -53,7 +53,7 @@ export default async function TagArchivePage({
 
   const previewThemeId = await getPreviewThemeIdFromHeaders();
   const hostState = await resolveThemeHostState(!!previewThemeId, previewThemeId);
-  const site = getThemeSiteSettings();
+  const site = await getThemeSiteSettings();
 
   return hostState.theme.components.TagArchive({
     tag: result.tag,

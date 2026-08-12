@@ -34,6 +34,8 @@ import { publicRecommendationRoutes, adminRecommendationRoutes, adminCommentMode
 import { adminIntegrationRoutes, machineApiRoutes } from './routes/platform';
 import { publicSearchRoutes, adminAnalyticsRoutes, adminSearchRoutes, adminAutomationRoutes } from './routes/intelligence';
 import { healthRoutes } from './routes/health';
+import { setupRoutes, ensureSetupTokenConfigured } from './routes/setup';
+import { setupService } from './services';
 import { mediaStreamRoutes } from './routes/media-stream';
 import { adminOperationsRoutes } from './routes/operations';
 import { storageService, themeService } from './services';
@@ -130,6 +132,7 @@ export const buildApp = () => {
   });
 
   fastify.register(healthRoutes);
+  fastify.register(setupRoutes, { prefix: '/api/setup/v1' });
   registerTraceHooks(fastify);
   registerMetricsRoutes(fastify);
 
@@ -195,13 +198,25 @@ const start = async () => {
     // Event-loop lag + process metrics (only if METRICS_ENABLED)
     const observabilityMonitors = startObservabilityMonitors();
 
-    // Ensure system database roles, permissions, and dev staff users are seeded
+    // Ensure system database roles, permissions, and dev staff users are
+    // seeded (dev users are automatically skipped in production)
     try {
       await seedDatabase();
-      appLogger.info('Seeded database roles, permissions, and dev staff users');
+      appLogger.info('Seeded database roles, permissions, and staff users');
     } catch (err) {
       appLogger.error('Failed to seed database users', {}, err as Error);
     }
+
+    // Classify legacy databases as installed BEFORE accepting setup traffic:
+    // existing Vibress installations must never be exposed to the wizard.
+    try {
+      await setupService.classifyLegacyInstallation();
+    } catch (err) {
+      appLogger.error('Failed to classify legacy installation state', {}, err as Error);
+    }
+
+    // Dev-only: print an ephemeral setup token when one is not configured.
+    ensureSetupTokenConfigured();
 
     // Ensure an active theme exists (idempotent seed → vibress-default)
     try {

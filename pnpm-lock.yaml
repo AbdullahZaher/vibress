@@ -274,6 +274,9 @@ importers:
       '@vibress/settings':
         specifier: workspace:*
         version: link:../../packages/domains/settings
+      '@vibress/setup':
+        specifier: workspace:*
+        version: link:../../packages/domains/setup
       '@vibress/storage-core':
         specifier: workspace:*
         version: link:../../packages/storage-core
@@ -1176,6 +1179,40 @@ importers:
       '@vibress/events':
         specifier: workspace:*
         version: link:../../events
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.4)(pg@8.22.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.10
+        version: 20.19.43
+      typescript:
+        specifier: ^5.5.3
+        version: 5.9.3
+
+  packages/domains/setup:
+    dependencies:
+      '@vibress/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@vibress/cache':
+        specifier: workspace:*
+        version: link:../../cache
+      '@vibress/database':
+        specifier: workspace:*
+        version: link:../../database
+      '@vibress/roles':
+        specifier: workspace:*
+        version: link:../roles
+      '@vibress/security':
+        specifier: workspace:*
+        version: link:../../security
+      '@vibress/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@vibress/users':
+        specifier: workspace:*
+        version: link:../users
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.4)(pg@8.22.0)

@@ -53,14 +53,43 @@ validates the build inside the image.
 
 ```bash
 cp infrastructure/env.prod.example .env   # fill every value
+openssl rand -hex 32                      # generate a setup secret
+# set VIBRESS_SETUP_TOKEN=<generated value> in .env
 pnpm prod:up                              # build images + start all services
 pnpm prod:migrate                         # one-shot drizzle migrations
-pnpm bootstrap:owner                      # create the first staff owner
 ```
 
 `migrate` reuses the API image with `command: db:migrate`, attaches only to
 the `backend` network, and exits (`restart: "no"`). Follow-up rollouts of
 schema changes run the same command.
+
+### First-run setup wizard
+
+Open `http(s)://<host>/admin`. On a fresh database the First-Run Setup Wizard
+appears (the old CLI `pnpm bootstrap:owner` flow is superseded; it still works
+for manual/scripted owner creation but is no longer required).
+
+1. Enter `VIBRESS_SETUP_TOKEN`.
+2. Configure site name, description, tagline (optional), and locale.
+3. Create the owner account (existing `owner` system role, argon2id password).
+4. Installation commits atomically; the owner is signed in automatically.
+
+Rules:
+
+- Production fails closed at boot if `VIBRESS_SETUP_TOKEN` is missing or a
+  placeholder. The value becomes inert once installed, but must remain present
+  for production startup.
+- After installation the setup surface is permanently locked: `POST
+  /api/setup/v1/complete` returns `409 SETUP_ALREADY_COMPLETED` even with the
+  original token, and `/admin/setup` redirects away.
+- The setup secret travels only in the `X-Vibress-Setup-Token` header; it is
+  never stored in the database, never sent in a request body, and never logged.
+- Legacy databases (any active owner, site settings, or content) are
+  classified as installed at API boot and never see the wizard.
+- Migrations are never run from the browser; run them via the `migrate`
+  service / `pnpm db:migrate` before the wizard.
+- There is no web-based reset. A full re-install requires destroying the
+  database volumes (`docker compose down -v`) and starting fresh.
 
 ## Required environment
 

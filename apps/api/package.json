@@ -36,6 +36,7 @@
     "@vibress/revisions": "workspace:*",
     "@vibress/roles": "workspace:*",
     "@vibress/security": "workspace:*",
+    "@vibress/setup": "workspace:*",
     "@vibress/storage-core": "workspace:*",
     "@vibress/storage-domain": "workspace:*",
     "@vibress/storage-s3": "workspace:*",

@@ -1,4 +1,5 @@
 export * from './users';
+export * from './installation';
 export * from './roles';
 export * from './permissions';
 export * from './user-roles';

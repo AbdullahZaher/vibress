@@ -22,6 +22,13 @@ export const SETTING_NAMESPACES: SettingNamespaceDefinition[] = [
       { key: 'title', type: 'string', classification: 'public', default: 'Vibress' },
       { key: 'tagline', type: 'string', classification: 'public', default: '' },
       { key: 'description', type: 'string', classification: 'public', default: '' },
+      {
+        key: 'locale',
+        type: 'string',
+        classification: 'public',
+        default: 'en',
+        validate: (v) => (/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/.test(String(v)) ? null : 'Invalid locale'),
+      },
     ],
   },
   {

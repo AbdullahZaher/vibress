@@ -27,7 +27,7 @@ export default async function HomePage({
   const posts = postsData?.posts || [];
   const pagination = postsData?.pagination || { page: 1, limit: 10, total: 0, pages: 1 };
 
-  const site = getThemeSiteSettings();
+  const site = await getThemeSiteSettings();
 
   return hostState.theme.components.Home({
     posts,

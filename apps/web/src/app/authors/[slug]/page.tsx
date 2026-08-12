@@ -53,7 +53,7 @@ export default async function AuthorArchivePage({
 
   const previewThemeId = await getPreviewThemeIdFromHeaders();
   const hostState = await resolveThemeHostState(!!previewThemeId, previewThemeId);
-  const site = getThemeSiteSettings();
+  const site = await getThemeSiteSettings();
 
   return hostState.theme.components.AuthorArchive({
     author: result.author,
