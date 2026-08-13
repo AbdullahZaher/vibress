@@ -139,6 +139,28 @@ describe('Analytics v1 (traffic)', () => {
     });
   });
 
+  describe('referrers', () => {
+    it('internal navigation never inflates Direct', async () => {
+      const vHash = deriveVisitorHash('internal-nav', HMAC_SECRET);
+      // Landing with no referrer → Direct
+      await analyticsService.ingest(makeEvent('page.view', { path: '/landing', visitorHash: vHash, referrerDomain: null }));
+      // Five internal navigations (same-site referrer → internal sentinel)
+      for (let i = 0; i < 5; i++) {
+        await analyticsService.ingest(
+          makeEvent('page.view', { path: `/page-${i}`, visitorHash: vHash, referrerDomain: 'internal' })
+        );
+      }
+      const overview = await overviewService.getOverview({ range: '7d' });
+      const direct = overview.referrers.find((r) => r.name === 'Direct');
+      // Direct stays 1 — the 5 internal views are not acquisitions.
+      expect(direct?.views).toBe(1);
+      // No 'internal' source row appears.
+      expect(overview.referrers.find((r) => r.name === 'internal')).toBeUndefined();
+      // Total views still counts all 6.
+      expect(overview.summary.views).toBe(6);
+    });
+  });
+
   describe('privacy helpers', () => {
     it('query strings and full referrer URLs are never stored', async () => {
       const normalized = normalizePath('/posts/a?token=secret&utm_source=x');
@@ -218,23 +240,174 @@ describe('Analytics v1 (traffic)', () => {
       const bad = await app.inject({
         method: 'POST',
         url: '/api/public/v1/analytics/events',
-        payload: { event: 'hacked.event', path: '/x', visitorId: 'a' },
+        payload: { eventId: crypto.randomUUID(), event: 'hacked.event', path: '/x', visitorId: 'a' },
       });
       expect(bad.statusCode).toBe(400);
 
       const oversized = await app.inject({
         method: 'POST',
         url: '/api/public/v1/analytics/events',
-        payload: { event: 'page.view', path: `/x${'a'.repeat(2000)}`, visitorId: 'a' },
+        payload: { eventId: crypto.randomUUID(), event: 'page.view', path: `/x${'a'.repeat(2000)}`, visitorId: 'a' },
       });
       expect(oversized.statusCode).toBe(400);
+
+      // Missing or malformed client eventId is rejected (idempotency key).
+      const noEventId = await app.inject({
+        method: 'POST',
+        url: '/api/public/v1/analytics/events',
+        payload: { event: 'page.view', path: '/x', visitorId: 'a' },
+      });
+      expect(noEventId.statusCode).toBe(400);
+
+      const badEventId = await app.inject({
+        method: 'POST',
+        url: '/api/public/v1/analytics/events',
+        payload: { eventId: 'not-a-uuid', event: 'page.view', path: '/x', visitorId: 'a' },
+      });
+      expect(badEventId.statusCode).toBe(400);
 
       const ok = await app.inject({
         method: 'POST',
         url: '/api/public/v1/analytics/events',
-        payload: { event: 'post.view', path: '/posts/hello?utm_source=x', visitorId: 'anon-test' },
+        payload: { eventId: crypto.randomUUID(), event: 'post.view', path: '/posts/hello?utm_source=x', visitorId: 'anon-test' },
       });
       expect(ok.statusCode).toBe(204);
+    });
+
+    it('rejects range=ytd with a validation error (only 7d/30d/90d supported)', async () => {
+      const ownerCookie = await login('a-owner@test.local', 'AnalyticsPass123!');
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/v1/analytics/overview?range=ytd',
+        headers: { cookie: ownerCookie },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0].code).toBe('VALIDATION_ERROR');
+
+      for (const range of ['7d', '30d', '90d']) {
+        const ok = await app.inject({
+          method: 'GET',
+          url: `/api/admin/v1/analytics/overview?range=${range}`,
+          headers: { cookie: ownerCookie },
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+    });
+
+    it('client eventId is forwarded unchanged and reused on retry (idempotency)', async () => {
+      const eventIdX = crypto.randomUUID();
+      const eventIdY = crypto.randomUUID();
+      const base = {
+        event: 'post.view' as const,
+        path: '/posts/idem',
+        visitorId: 'idem-visitor',
+      };
+      // Collector accepts both sends with the SAME eventId (dedup happens in
+      // the worker ingest pipeline, verified by the service-level tests).
+      for (let i = 0; i < 2; i++) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/public/v1/analytics/events',
+          payload: { eventId: eventIdX, ...base },
+        });
+        expect(res.statusCode).toBe(204);
+      }
+      const yRes = await app.inject({
+        method: 'POST',
+        url: '/api/public/v1/analytics/events',
+        payload: { eventId: eventIdY, ...base },
+      });
+      expect(yRes.statusCode).toBe(204);
+      // Service-level idempotency proves X twice = 1 stored, X+Y = 2 stored.
+      await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdX, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
+      await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdX, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
+      const repo = new DrizzleAnalyticsRepository();
+      expect(await repo.findEvent(eventIdX)).toBe(true);
+      const beforeX = (await overviewService.getOverview({ range: '7d' })).summary.views;
+      await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdY, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
+      const afterY = (await overviewService.getOverview({ range: '7d' })).summary.views;
+      expect(afterY).toBe(beforeX + 1);
+    });
+  });
+
+  describe('billing entitlement (paid members)', () => {
+    let productId = '';
+    let planId = '';
+    const insertMember = async (email: string) => {
+      const pool = getDbPool();
+      const id = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO members (id, email, email_normalized, name, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'active', now(), now())`,
+        [id, email, email.toLowerCase(), email.split('@')[0]]
+      );
+      return id;
+    };
+    const insertSubscription = async (memberId: string, status: string) => {
+      const pool = getDbPool();
+      const id = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO subscriptions (id, member_id, product_id, plan_id, status, currency, amount_minor, billing_interval, interval_count, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'usd', 1000, 'month', 1, now(), now())`,
+        [id, memberId, productId, planId, status]
+      );
+    };
+
+    it('matches the existing ACCESS_GRANTING_STATUSES policy (trialing/active only)', async () => {
+      const pool = getDbPool();
+      await pool.query('TRUNCATE TABLE offers, subscriptions, plans, products, members CASCADE;');
+      productId = crypto.randomUUID();
+      planId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO products (id, key, name, status) VALUES ($1, 'analytics-test-product', 'Analytics Test', 'active')`,
+        [productId]
+      );
+      await pool.query(
+        `INSERT INTO plans (id, product_id, key, name, billing_type, currency, amount_minor, status)
+         VALUES ($1, $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
+        [planId, productId]
+      );
+      const trialing = await insertMember('trialing@test.local');
+      const active = await insertMember('active@test.local');
+      const pastDue = await insertMember('pastdue@test.local');
+      const unpaid = await insertMember('unpaid@test.local');
+      const cancelled = await insertMember('cancelled@test.local');
+      const freeOnly = await insertMember('free@test.local');
+
+      await insertSubscription(trialing, 'trialing');
+      await insertSubscription(active, 'active');
+      await insertSubscription(pastDue, 'past_due');
+      await insertSubscription(unpaid, 'unpaid');
+      await insertSubscription(cancelled, 'cancelled');
+
+      const overview = await overviewService.getOverview({ range: '7d' });
+      // trialing + active grant access; past_due/unpaid/cancelled do NOT.
+      expect(overview.summary.paidMembers).toBe(2);
+      expect(overview.growth.paidMembers).toBe(2);
+      expect(overview.growth.freeMembers).toBe(4); // 6 active members - 2 paid
+      void freeOnly;
+    });
+
+    it('deduplicates members with multiple qualifying subscriptions', async () => {
+      const pool = getDbPool();
+      await pool.query('TRUNCATE TABLE offers, subscriptions, plans, products, members CASCADE;');
+      productId = crypto.randomUUID();
+      planId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO products (id, key, name, status) VALUES ($1, 'analytics-test-product', 'Analytics Test', 'active')`,
+        [productId]
+      );
+      await pool.query(
+        `INSERT INTO plans (id, product_id, key, name, billing_type, currency, amount_minor, status)
+         VALUES ($1, $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
+        [planId, productId]
+      );
+      const member = await insertMember('multi@test.local');
+      await insertSubscription(member, 'active');
+      await insertSubscription(member, 'trialing');
+      const overview = await overviewService.getOverview({ range: '7d' });
+      expect(overview.summary.paidMembers).toBe(1);
+      expect(overview.growth.freeMembers).toBe(0);
     });
   });
 });

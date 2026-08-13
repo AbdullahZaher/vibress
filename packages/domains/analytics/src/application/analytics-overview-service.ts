@@ -8,6 +8,7 @@ import {
 } from '@vibress/database';
 import { and, eq, gte, lte, sql, inArray, isNull, desc, count, isNotNull } from 'drizzle-orm';
 import { AnalyticsRepository } from '../domain/analytics';
+import { ACCESS_GRANTING_STATUSES } from '@vibress/subscriptions';
 import {
   resolveDateRange,
   computePercentageChange,
@@ -15,8 +16,11 @@ import {
   AnalyticsRange,
 } from './analytics-helpers';
 
-/** Subscription statuses that count as a currently active paid subscription. */
-const PAID_SUBSCRIPTION_STATUSES = ['trialing', 'active', 'past_due', 'unpaid'];
+// Paid entitlement reuses the existing subscriptions domain policy:
+// ACCESS_GRANTING_STATUSES (trialing/active) is what Vibress uses to decide
+// whether a member currently has paid access. past_due/unpaid/cancelled/
+// expired/incomplete intentionally do NOT grant access. Never invent an
+// Analytics-specific status list.
 const SENT_RECIPIENT_STATUSES = ['sent', 'delivered'];
 
 export interface AnalyticsTimeseriesPoint {
@@ -163,7 +167,7 @@ export class AnalyticsOverviewService {
     const rows = await db
       .select({ total: sql<number>`count(distinct ${subscriptions.memberId})::int` })
       .from(subscriptions)
-      .where(inArray(subscriptions.status, PAID_SUBSCRIPTION_STATUSES));
+      .where(inArray(subscriptions.status, ACCESS_GRANTING_STATUSES));
     return Number(rows[0]?.total || 0);
   }
 

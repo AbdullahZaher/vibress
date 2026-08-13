@@ -579,6 +579,9 @@ importers:
       '@vibress/events':
         specifier: workspace:*
         version: link:../../events
+      '@vibress/subscriptions':
+        specifier: workspace:*
+        version: link:../subscriptions
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.4)(pg@8.22.0)
