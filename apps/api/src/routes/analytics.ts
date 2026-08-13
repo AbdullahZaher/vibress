@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { requireStaffSession, requirePermission } from '../middleware/auth';
 import { analyticsOverviewService } from '../services';
 import { appLogger } from '../observability';
@@ -14,6 +15,14 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission('analytics.read')],
     handler: async (req, reply) => {
       const { range } = req.query as { range?: string };
+      if (range !== undefined) {
+        const parsed = z.enum(['7d', '30d', '90d']).safeParse(range);
+        if (!parsed.success) {
+          return reply.status(400).send({
+            errors: [{ code: 'VALIDATION_ERROR', message: 'range must be one of 7d, 30d, 90d', requestId: req.id }],
+          });
+        }
+      }
       const started = performance.now();
       try {
         const params: { range?: string; limit?: number } = { limit: 10 };

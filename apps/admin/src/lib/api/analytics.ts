@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 
-export type AnalyticsRange = '7d' | '30d' | '90d' | 'ytd';
+export type AnalyticsRange = '7d' | '30d' | '90d';
 
 export interface AnalyticsTimeseriesPoint {
   date: string;

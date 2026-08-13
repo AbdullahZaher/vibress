@@ -21,7 +21,6 @@ const DATE_OPTIONS: Array<{ label: string; range: AnalyticsRange }> = [
   { label: 'Last 7 days', range: '7d' },
   { label: 'Last 30 days', range: '30d' },
   { label: 'Last 90 days', range: '90d' },
-  { label: 'Year to date', range: 'ytd' },
 ];
 
 function ChangeBadge({ change }: { change: { percentage: number | null; isNew: boolean } }) {
