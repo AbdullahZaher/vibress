@@ -120,6 +120,13 @@
       "when": 1786554295355,
       "tag": "0016_first_run_installation",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786582270569,
+      "tag": "0017_analytics_traffic",
+      "breakpoints": true
     }
   ]
 }

@@ -33,6 +33,22 @@ export function validateAnalyticsEvent(data: IngestEventData): IngestEventData {
   if (data.properties && Object.keys(data.properties).length > MAX_PROPERTY_KEYS) {
     throw new AnalyticsDomainError('INVALID_EVENT', 'properties has too many keys');
   }
+  // Bounded traffic fields (public web tracking)
+  if (data.path !== undefined && data.path !== null) {
+    if (typeof data.path !== 'string' || data.path.length > 512 || !data.path.startsWith('/')) {
+      throw new AnalyticsDomainError('INVALID_EVENT', 'path must be a short normalized path');
+    }
+  }
+  if (data.visitorHash !== undefined && data.visitorHash !== null) {
+    if (typeof data.visitorHash !== 'string' || data.visitorHash.length > 64 || !/^[0-9a-f]{64}$/.test(data.visitorHash)) {
+      throw new AnalyticsDomainError('INVALID_EVENT', 'visitorHash must be a 64-char hex digest');
+    }
+  }
+  if (data.referrerDomain !== undefined && data.referrerDomain !== null) {
+    if (typeof data.referrerDomain !== 'string' || data.referrerDomain.length > 253) {
+      throw new AnalyticsDomainError('INVALID_EVENT', 'referrerDomain must be a short domain');
+    }
+  }
   // Bounded string values
   const checkValues = (obj: Record<string, unknown> | null | undefined) => {
     if (!obj) return;
@@ -73,18 +89,22 @@ export class AnalyticsService {
     await this.repo.ingest(validated);
 
     // Daily aggregation (date bucket = UTC date). occurredAt may arrive as a
-    // JSON string after queue serialization — coerce defensively.
+    // JSON string after queue serialization — coerce defensively. Bot events
+    // are persisted raw (for diagnostics) but never counted in aggregates, so
+    // bots cannot distort dashboard statistics.
     const occurredAt = validated.occurredAt ? new Date(validated.occurredAt) : new Date();
     const dateBucket = occurredAt.toISOString().slice(0, 10);
-    await this.repo.upsertDailyMetric({
-      metricDate: dateBucket,
-      metricName: validated.eventName,
-      dimensionKey: 'total',
-      dimensionValue: 'total',
-      count: 1,
-    });
+    if (!validated.isBot) {
+      await this.repo.upsertDailyMetric({
+        metricDate: dateBucket,
+        metricName: validated.eventName,
+        dimensionKey: 'total',
+        dimensionValue: 'total',
+        count: 1,
+      });
+    }
 
-    domainEvents.emit('analytics.event_ingested', { eventId: validated.eventId, eventName: validated.eventName });
+    domainEvents.emit('analytics.event_ingested', { eventId: validated.eventId, eventName: validated.eventName, isBot: !!validated.isBot });
   }
 
   /**

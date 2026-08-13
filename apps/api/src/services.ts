@@ -105,6 +105,7 @@ import {
   DrizzleAnalyticsRepository,
   AnalyticsService,
 } from '@vibress/analytics';
+import { AnalyticsOverviewService } from '@vibress/analytics';
 import {
   DrizzleSearchRepository,
   SearchService,
@@ -282,6 +283,7 @@ export const pluginsService = new PluginsService(
 
 // ---------------- Intelligence: Analytics, Search, Automations ----------------
 export const analyticsService = new AnalyticsService(new DrizzleAnalyticsRepository());
+export const analyticsOverviewService = new AnalyticsOverviewService(new DrizzleAnalyticsRepository());
 export const searchService = new SearchService(new DrizzleSearchRepository());
 
 const automationRunQueueName = QUEUE_NAMES.AUTOMATIONS_RUN;

@@ -2,6 +2,7 @@ import './globals.css';
 import { Metadata } from 'next';
 import { getPublicSiteUrl } from '../lib/seo-helpers';
 import { resolveThemeHostState, getThemeSiteSettings, getPreviewThemeIdFromHeaders } from '../lib/theme-host';
+import { AnalyticsTracker } from '../components/analytics-tracker';
 
 const siteName = process.env.SITE_NAME || 'Vibress';
 const siteDescription = process.env.SITE_DESCRIPTION || 'Publishing Platform';
@@ -54,7 +55,10 @@ export default async function RootLayout({
       <head>
         <link rel="stylesheet" href={themeCss} />
       </head>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        {children}
+        <AnalyticsTracker />
+      </body>
     </html>
   );
 }

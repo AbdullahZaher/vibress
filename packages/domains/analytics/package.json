@@ -12,7 +12,8 @@
   "dependencies": {
     "@vibress/database": "workspace:*",
     "@vibress/events": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "@vibress/subscriptions": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.3",

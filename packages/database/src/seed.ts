@@ -77,6 +77,7 @@ export const SYSTEM_PERMISSIONS = [
   { key: 'redirects.read', description: 'Read redirect rules' },
   { key: 'redirects.manage', description: 'Create, edit, and manage redirects' },
   { key: 'system.read', description: 'Read system diagnostics' },
+  { key: 'analytics.read', description: 'Read analytics dashboards' },
   { key: 'system.manage', description: 'Run maintenance operations' },
 ];
 
@@ -159,12 +160,20 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     contributorRoleRows[0]?.id,
   ].filter(Boolean) as string[];
 
+  // Permissions reserved for owner + administrator only.
+  const ADMIN_ONLY_PERMISSIONS = new Set(['analytics.read']);
+  const isEditor = (roleId: string) => roleId === editorRoleRows[0]?.id;
+
   for (const roleId of targetRoleIds) {
     for (const [permKey, permId] of permMap.entries()) {
       if (roleId === authorRoleRows[0]?.id || roleId === contributorRoleRows[0]?.id) {
         if (!permKey.startsWith('media.read') && !permKey.startsWith('media.upload') && !permKey.startsWith('posts.') && !permKey.startsWith('pages.') && !permKey.startsWith('tags.read')) {
           continue;
         }
+      }
+      // analytics.read is owner/administrator-only
+      if (ADMIN_ONLY_PERMISSIONS.has(permKey) && (isEditor(roleId) || roleId === authorRoleRows[0]?.id || roleId === contributorRoleRows[0]?.id)) {
+        continue;
       }
 
       await db.insert(rolePermissions).values({

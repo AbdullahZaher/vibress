@@ -56,7 +56,13 @@ export interface AnalyticsQueueJob {
     actorId?: string | null;
     entityType?: string | null;
     entityId?: string | null;
-    properties?: Record<string, unknown>;
+    /** Public web traffic fields (privacy-safe). */
+    path?: string | null;
+    visitorHash?: string | null;
+    referrerDomain?: string | null;
+    isBot?: boolean | null;
+    context?: Record<string, unknown> | null;
+    properties?: Record<string, unknown> | null;
   };
   traceparent?: string;
 }

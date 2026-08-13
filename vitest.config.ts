@@ -50,6 +50,7 @@ export default defineConfig({
       '@vibress/cache': path.resolve(__dirname, './packages/cache/src/index.ts'),
       '@vibress/settings': path.resolve(__dirname, './packages/domains/settings/src/index.ts'),
       '@vibress/setup': path.resolve(__dirname, './packages/domains/setup/src/index.ts'),
+      '@vibress/analytics': path.resolve(__dirname, './packages/domains/analytics/src/index.ts'),
       '@vibress/observability': path.resolve(__dirname, './packages/observability/src/index.ts'),
       '@vibress/testing': path.resolve(__dirname, './packages/testing/src/index.ts'),
       '@vibress/plugin-core': path.resolve(__dirname, './packages/plugin-core/src/index.ts'),
