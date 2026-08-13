@@ -63,6 +63,16 @@ function mainEditor(page: Page) {
   );
 }
 
+/** Click the non-interactive chrome of the last card of a type to select it. */
+async function selectCard(page: Page, cardSelector: string) {
+  const card = page.locator(cardSelector).last();
+  await card.scrollIntoViewIfNeeded();
+  const box = await card.boundingBox();
+  if (!box) throw new Error(`card not visible: ${cardSelector}`);
+  await page.mouse.click(box.x + box.width - 15, box.y + box.height - 10);
+  await page.waitForTimeout(400);
+}
+
 async function insertCard(page: Page, label: string) {
   const editor = mainEditor(page);
   await editor.scrollIntoViewIfNeeded();
@@ -99,6 +109,9 @@ async function pickAsset(page: Page, title: string) {
 test.describe('Studio public rendering', () => {
   let postSlug = '';
   let pageSlug = '';
+  // The 13-card Post flow inserts + configures every card through the real
+  // Studio UI and publishes — allow it more time than the default 30s.
+  test.setTimeout(180 * 1000);
 
   test.beforeAll(async ({ request }) => {
     await request.post(`${BASE}/api/admin/v1/auth/login`, {
@@ -169,12 +182,13 @@ test.describe('Studio public rendering', () => {
     await page.locator('button:has-text("Save")').last().click();
     await page.waitForTimeout(400);
 
-    // --- button (interactive form requires node selection, which the editor
-    //     does not activate on click — a pre-existing editor defect. The card
-    //     is inserted here through the real UI; its cardData is filled via a
-    //     minimal API patch before publishing, documented below.) ---
+    // --- button (select the card → interactive form opens via the real UI) ---
     await insertCard(page, 'Button');
     await closePicker(page);
+    await selectCard(page, '.vb-button-card');
+    await page.locator('.vb-button-card input[placeholder="Add button text"]').fill('Buy now');
+    await page.locator('.vb-button-card input[type="url"]').fill('https://store.example/product');
+    await page.waitForTimeout(300);
 
     // --- callout ---
     await insertCard(page, 'Callout');
@@ -189,11 +203,19 @@ test.describe('Studio public rendering', () => {
     await page.locator('textarea[placeholder="Toggle content..."]').last().fill('This is the answer.');
     await page.waitForTimeout(300);
 
-    // --- markdown / html (both selection-gated like the button card) ---
+    // --- markdown (selection-gated textarea — real UI flow) ---
     await insertCard(page, 'Markdown');
     await closePicker(page);
+    await selectCard(page, '.vb-markdown-card');
+    await page.locator('textarea[placeholder="Type your markdown here..."]').last().fill('**bold text** and _italic_');
+    await page.waitForTimeout(300);
+
+    // --- html (selection-gated textarea — real UI flow) ---
     await insertCard(page, 'Html');
     await closePicker(page);
+    await selectCard(page, '.vb-html-card');
+    await page.locator('.vb-html-card textarea').last().fill('<div class="widget">A <strong>safe</strong> widget</div>');
+    await page.waitForTimeout(300);
 
     // --- divider (no configuration) ---
     await insertCard(page, 'Divider');
@@ -204,47 +226,16 @@ test.describe('Studio public rendering', () => {
     await page.locator('button:has-text("Save Draft")').click({ force: true, timeout: 5000 });
     await page.waitForTimeout(4000);
 
-    // Resolve the saved post from the admin API.
+    // Publish through the real UI.
+    await page.locator('button:has-text("Publish Now")').click({ timeout: 8000 });
+    await page.waitForTimeout(3000);
+
+    // Resolve the published post slug from the admin API.
     const list = await request.get(`${BASE}/api/admin/v1/posts?search=${encodeURIComponent(title)}`, { headers: { Origin: 'http://localhost:7777' } });
     expect(list.status()).toBe(200);
     const found = (await list.json()).posts.find((p: { title: string }) => p.title === title);
     expect(found).toBeTruthy();
     postSlug = found.slug;
-    const postId = found.id;
-
-    // Fixture step: fill cardData for the three selection-gated cards
-    // (button/markdown/html) that the editor cannot configure without node
-    // selection. Every card was inserted through the real Studio UI.
-    const detail = await (await request.get(`${BASE}/api/admin/v1/posts/${postId}`, { headers: { Origin: 'http://localhost:7777' } })).json();
-    // Cards saved by the editor are nested inside paragraph nodes — walk
-    // recursively to patch their cardData.
-    const visit = (nodes: Array<Record<string, unknown>>) => {
-      for (const node of nodes) {
-        if (node.type === 'studio-card') {
-          if (node.cardType === 'button') {
-            node.cardData = { text: 'Buy now', url: 'https://store.example/product', alignment: 'center' };
-          } else if (node.cardType === 'markdown') {
-            node.cardData = { markdown: '**bold text** and _italic_' };
-          } else if (node.cardType === 'html') {
-            node.cardData = { html: '<div class="widget">A <strong>safe</strong> widget</div>' };
-          }
-        }
-        if (Array.isArray(node.children)) visit(node.children as Array<Record<string, unknown>>);
-      }
-    };
-    visit(detail.post.content.root.children as Array<Record<string, unknown>>);
-    const putRes = await request.put(`${BASE}/api/admin/v1/posts/${postId}`, {
-      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:7777' },
-      data: { content: detail.post.content, expectedVersion: detail.post.version },
-    });
-    expect(putRes.status()).toBe(200);
-
-    // Publish through the admin API.
-    const pubRes = await request.post(`${BASE}/api/admin/v1/posts/${postId}/publish`, {
-      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:7777' },
-      data: {},
-    });
-    expect(pubRes.status()).toBe(200);
 
     // Open the public page and assert every card renders semantically.
     await page.goto(`${BASE}/posts/${postSlug}`);
