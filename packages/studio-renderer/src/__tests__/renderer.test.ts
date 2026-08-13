@@ -217,6 +217,35 @@ describe('unknown/corrupt cards — graceful failure', () => {
     expect(html).toContain('survives');
   });
 
+  it('never leaks card payloads for unknown/corrupt/transient cards (HTML + plain text)', () => {
+    const secret = 'secret-user-content';
+    const internalUrl = 'https://private.example/internal';
+    const assetSecret = 'asset-secret-id';
+    const sensitive = [secret, internalUrl, assetSecret];
+
+    const input = doc([
+      { type: 'studio-card', cardType: 'mystery-type', cardData: { secret, url: internalUrl, assetId: assetSecret, nested: { inner: secret } }, version: 1 },
+      { type: 'studio-card', cardType: 'image', cardData: { secret, src: 12345, assetId: assetSecret, url: internalUrl }, version: 1 },
+      { type: 'studio-card', cardType: 'video', cardData: { src: 'blob:http://localhost/xyz', secret }, version: 1 },
+      { type: 'paragraph', children: [{ type: 'text', text: 'rest of article', format: 0, mode: 'normal', version: 1 }], version: 1 },
+    ]);
+
+    const html = renderStudioDocumentToHtml(input);
+    expect(html).toContain('rest of article');
+    for (const value of sensitive) {
+      expect(html, `HTML must not leak ${value}`).not.toContain(value);
+    }
+    // No internal diagnostic comments reach the public HTML (sanitizer strips them).
+    expect(html).not.toContain('<!--');
+
+    const text = renderStudioDocumentToPlainText(input);
+    expect(text).toContain('rest of article');
+    for (const value of sensitive) {
+      expect(text, `plain text must not leak ${value}`).not.toContain(value);
+    }
+    expect(text).not.toContain('blob:');
+  });
+
   it('renders nothing for empty documents', () => {
     expect(renderStudioDocumentToHtml({ root: { type: 'root', children: [] } })).toBe('');
   });

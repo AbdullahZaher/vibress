@@ -157,6 +157,10 @@ function renderNodeToPlainText(node: unknown): string {
   if (n.type === 'studio-card') {
     const cardType = n.cardType;
     const cardData = n.cardData || {};
+    // Transient blob: media must never surface in excerpts/search text.
+    if (hasTransientMedia(cardData)) {
+      return '';
+    }
     const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
     if (def) {
       try {
