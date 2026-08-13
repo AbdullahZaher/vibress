@@ -57,16 +57,18 @@ function classifyPath(path: string): { event: 'post.view' | 'page.view'; path: s
   return { event: 'page.view', path };
 }
 
-function send(path: string): void {
+function send(path: string, eventId: string): void {
   const visitorId = getVisitorId();
   const { event, path: cleanPath } = classifyPath(path);
+  // The referrer is sent as-is; the collector decides whether it is external
+  // (stored domain), same-site (ignored), or absent (Direct). Same-site
+  // navigation must never be recorded as a Direct acquisition.
   const payload = JSON.stringify({
+    eventId,
     event,
     path: cleanPath,
     visitorId,
-    referrer: document.referrer && document.referrer.startsWith(window.location.origin)
-      ? undefined
-      : document.referrer || undefined,
+    referrer: document.referrer || undefined,
   });
 
   try {
@@ -103,7 +105,11 @@ export function AnalyticsTracker(): null {
     if (lastTracked && lastTracked.path === path && now - lastTracked.at < DEDUP_MS) return;
     lastTracked = { path, at: now };
 
-    send(path);
+    // The eventId is generated once per logical page view and reused if this
+    // same event is ever retried, so the server-side idempotency key makes a
+    // duplicate delivery count exactly once.
+    const eventId = randomId();
+    send(path, eventId);
   }, []);
 
   return null;

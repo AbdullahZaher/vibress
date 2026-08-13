@@ -22,14 +22,23 @@ const WWW_RE = /^www\./;
 const TRACKING_DOMAINS = new Set(['localhost', '127.0.0.1']);
 
 /**
- * Normalize a referrer URL to a bare external domain. Returns null for
- * direct (no referrer or same-site referrer), otherwise the hostname with
- * the `www.` prefix stripped. Never retains query strings or paths.
+ * Sentinel stored for same-site referrers. It is never surfaced as a source
+ * row and never counted as Direct — internal navigation must not inflate
+ * acquisition metrics.
+ */
+export const INTERNAL_REFERRER = 'internal';
+
+/**
+ * Normalize a referrer URL:
+ *   - missing/empty referrer  → null (Direct acquisition)
+ *   - external referrer       → bare domain (query strings/paths stripped)
+ *   - same-site referrer      → 'internal' sentinel (ignored by queries)
+ * Never retains full URLs, query strings, or fragments.
  */
 export function normalizeReferrerDomain(
   referrer: string | null | undefined,
   currentOrigin?: string | null
-): string | null {
+): string | null | typeof INTERNAL_REFERRER {
   if (!referrer || typeof referrer !== 'string') return null;
   let url: URL;
   try {
@@ -40,11 +49,11 @@ export function normalizeReferrerDomain(
   const host = url.hostname;
   if (!host) return null;
   const lower = host.toLowerCase();
-  if (TRACKING_DOMAINS.has(lower)) return null;
-  // Same-site navigation is internal — treat as direct.
+  if (TRACKING_DOMAINS.has(lower)) return INTERNAL_REFERRER;
+  // Same-site navigation is internal — never an acquisition source.
   if (currentOrigin) {
     try {
-      if (new URL(currentOrigin).hostname.toLowerCase() === lower) return null;
+      if (new URL(currentOrigin).hostname.toLowerCase() === lower) return INTERNAL_REFERRER;
     } catch {
       // ignore malformed origin
     }
@@ -97,7 +106,7 @@ export function classifyBot(userAgent: string | null | undefined): boolean {
   return BOT_PATTERNS.some((re) => re.test(userAgent));
 }
 
-export type AnalyticsRange = '7d' | '30d' | '90d' | 'ytd';
+export type AnalyticsRange = '7d' | '30d' | '90d';
 
 export interface ResolvedRange {
   range: AnalyticsRange;
@@ -111,9 +120,10 @@ export interface ResolvedRange {
  * Resolve a UI date range into the current period and the immediately
  * preceding period of the same length (UTC).
  *
- * YTD semantics: current = Jan 1 → today; comparison = same date span in the
- * previous calendar year (Jan 1 → same day of year, previous year), which
- * matches how a year-to-date "growth" comparison is naturally understood.
+ * Supported ranges are 7d / 30d / 90d only. YTD is intentionally not
+ * supported: unique visitors are computed from retained raw events
+ * (90-day retention), so a year-to-date window could never be accurate and
+ * its previous-year comparison would be impossible.
  */
 export function resolveDateRange(range: string | undefined, now: Date = new Date()): ResolvedRange {
   const r = (range || '30d').toLowerCase() as AnalyticsRange;
@@ -135,12 +145,6 @@ export function resolveDateRange(range: string | undefined, now: Date = new Date
       const previousTo = new Date(from.getTime() - dayMs);
       const previousFrom = new Date(previousTo.getTime() - 89 * dayMs);
       return { range: '90d', from, to: end, previousFrom, previousTo };
-    }
-    case 'ytd': {
-      const from = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
-      const prevFrom = new Date(Date.UTC(end.getUTCFullYear() - 1, 0, 1));
-      const prevTo = new Date(prevFrom.getTime() + (end.getTime() - from.getTime()));
-      return { range: 'ytd', from, to: end, previousFrom: prevFrom, previousTo: prevTo };
     }
     case '30d':
     default: {

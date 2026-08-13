@@ -33,14 +33,15 @@ describe('normalizeReferrerDomain', () => {
     expect(normalizeReferrerDomain('https://github.com/foo/bar?ref=x')).toBe('github.com');
   });
 
-  it('returns null for direct/no referrer', () => {
+  it('returns null (Direct) only for a genuinely missing referrer', () => {
     expect(normalizeReferrerDomain(null)).toBeNull();
     expect(normalizeReferrerDomain(undefined)).toBeNull();
     expect(normalizeReferrerDomain('')).toBeNull();
   });
 
-  it('treats same-site referrers as direct', () => {
-    expect(normalizeReferrerDomain('https://localhost:7777/posts/x', 'http://localhost:7777')).toBeNull();
+  it('marks same-site referrers as internal (never Direct)', () => {
+    expect(normalizeReferrerDomain('https://localhost:7777/posts/x', 'http://localhost:7777')).toBe('internal');
+    expect(normalizeReferrerDomain('https://example.com/post-a', 'https://example.com/post-b')).toBe('internal');
   });
 });
 
@@ -96,12 +97,13 @@ describe('resolveDateRange', () => {
     expect(toUtcDay(r90.from)).toBe('2026-05-13');
   });
 
-  it('YTD compares the same span of the previous year', () => {
+  it('does not support YTD (raw retention is 90 days)', () => {
+    // YTD is intentionally unsupported: unique visitors come from raw events
+    // retained for 90 days, so YTD accuracy and previous-year comparison are
+    // impossible. Unknown values fall back to the 30d default.
     const r = resolveDateRange('ytd', now);
-    expect(toUtcDay(r.from)).toBe('2026-01-01');
-    expect(toUtcDay(r.to)).toBe('2026-08-10');
-    expect(toUtcDay(r.previousFrom)).toBe('2025-01-01');
-    expect(toUtcDay(r.previousTo)).toBe('2025-08-10');
+    expect(r.range).toBe('30d');
+    expect(toUtcDay(r.from)).toBe('2026-07-12');
   });
 });
 

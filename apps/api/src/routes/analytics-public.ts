@@ -26,7 +26,14 @@ const TRAFFIC_EVENTS = new Set(['post.view', 'page.view']);
  * public availability is never affected.
  */
 
+const EVENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 const CollectorBodySchema = z.object({
+  // Client-generated idempotency key: the tracker generates it per logical
+  // event and reuses it on retries, so a duplicate delivery is de-duplicated
+  // by the existing eventId UNIQUE + ingest idempotency. The collector never
+  // replaces it. It authorizes nothing — only format/length are validated.
+  eventId: z.string().min(1).max(64).regex(EVENT_ID_RE),
   event: z.enum(['post.view', 'page.view']),
   path: z.string().min(1).max(512),
   contentId: z.string().max(64).optional(),
@@ -83,7 +90,10 @@ export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
       if (isBot) metrics.counter('analytics.events.bot', 1);
 
       const event: IngestEventData = {
-        eventId: crypto.randomUUID(), // server-generated; idempotency key
+        // Client-supplied eventId is the idempotency key; the server must not
+        // replace it, otherwise a retry would produce a different id and the
+        // same logical event could be counted twice.
+        eventId: input.eventId,
         eventName: input.event,
         occurredAt: new Date(), // server receive time — clients cannot inject history
         path: normalizePath(input.path),

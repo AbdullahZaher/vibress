@@ -2,6 +2,7 @@ import { getDb, analyticsEvents, analyticsDailyMetrics, AnalyticsEventRow, Analy
 import { eq, and, gte, lte, sql, inArray, isNotNull, isNull } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { AnalyticsRepository, IngestEventData, DailyMetric, TrafficTopRow } from '../domain/analytics';
+import { INTERNAL_REFERRER } from '../application/analytics-helpers';
 
 /** Traffic event names used for public web page/post views. */
 export const TRAFFIC_EVENT_NAMES = ['post.view', 'page.view'] as const;
@@ -197,6 +198,9 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
       .where(and(
         inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
         eq(analyticsEvents.isBot, false),
+        // Same-site referrers are stored as the internal sentinel and never
+        // become a source row nor inflate the Direct bucket.
+        sql`${analyticsEvents.referrerDomain} IS DISTINCT FROM ${INTERNAL_REFERRER}`,
         gte(analyticsEvents.occurredAt, from),
         lte(analyticsEvents.occurredAt, to),
       ))
