@@ -4,6 +4,7 @@ import {
   CURRENT_STUDIO_VERSION,
   validateStudioDocument,
   migrateDocument,
+  normalizeStudioDocument,
 } from '@vibress/studio-core';
 
 export function serializeStudioDocument(root: unknown): StudioDocument {
@@ -13,7 +14,12 @@ export function serializeStudioDocument(root: unknown): StudioDocument {
     editor: {
       lexicalVersion: '0.13.1',
     },
-    root: (root && typeof root === 'object' && 'type' in root ? root : { type: 'root', children: [] }) as StudioDocument['root'],
+    // Canonicalization boundary: normalize legacy react-studio-card nodes to
+    // studio-card so freshly saved documents only ever persist the canonical
+    // representation.
+    root: normalizeStudioDocument(
+      root && typeof root === 'object' && 'type' in root ? root : { type: 'root', children: [] }
+    ) as StudioDocument['root'],
   };
 
   return validateStudioDocument(doc);
