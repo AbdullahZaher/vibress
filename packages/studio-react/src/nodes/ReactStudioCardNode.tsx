@@ -20,6 +20,12 @@ export class ReactStudioCardNode extends StudioCardNode {
     return new ReactStudioCardNode(node.__cardType, node.__cardData, node.__key);
   }
 
+  static importJSON(serializedNode: SerializedReactStudioCardNode): ReactStudioCardNode {
+    // Imported (possibly canonical 'studio-card') nodes must become the
+    // interactive editor node, not the base static node.
+    return new ReactStudioCardNode(serializedNode.cardType, serializedNode.cardData);
+  }
+
   constructor(cardType: string, cardData: Record<string, unknown>, key?: NodeKey) {
     super(cardType, cardData, key);
   }

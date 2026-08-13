@@ -113,8 +113,12 @@ export function VibressStudio({
         ReactStudioCardNode,
         {
           replace: StudioCardNode,
+          // IMPORTANT: do not pass the original node's key. $setNodeKey
+          // already registered the original under that key; a replacement
+          // with the same key never enters the node map. A fresh key makes
+          // the replacement the real rendered node.
           with: (node: StudioCardNode) => {
-            return new ReactStudioCardNode(node.getCardType(), node.getCardData(), node.getKey());
+            return new ReactStudioCardNode(node.getCardType(), node.getCardData());
           },
         },
       ],

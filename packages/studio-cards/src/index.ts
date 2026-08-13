@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { escapeHtml, sanitizeHtml, sanitizeUrl, stripHtml, getEmbedProvider, parseMarkdownToHtml } from '@vibress/studio-utils';
-import { DecoratorNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
+import { $applyNodeReplacement, DecoratorNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
 
 export interface StudioCardDefinition<TData = Record<string, unknown>> {
   type: string;
@@ -384,7 +384,13 @@ export class StudioCardNode extends DecoratorNode<JSX.Element | string> {
   }
 
   static importJSON(serializedNode: SerializedStudioCardNode): StudioCardNode {
-    return $createStudioCardNode(serializedNode.cardType, serializedNode.cardData);
+    // $applyNodeReplacement honors the editor's replacement config (e.g.
+    // StudioCardNode -> ReactStudioCardNode). The replacement factory must
+    // NOT reuse the original node's key (see $setNodeKey): a fresh key gives
+    // the replacement its own node-map entry so it actually renders.
+    return $applyNodeReplacement(
+      $createStudioCardNode(serializedNode.cardType, serializedNode.cardData)
+    ) as StudioCardNode;
   }
 
   createDOM(): HTMLElement {
