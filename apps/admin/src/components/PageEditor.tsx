@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { apiRequest, ApiMediaAsset } from '../lib/api';
+import { apiRequest, ApiMediaAsset, uploadMediaApi } from '../lib/api';
 import { VibressStudio } from '@vibress/studio-react';
 import { StudioDocument, migrateDocument, createEmptyStudioDocument } from '@vibress/studio-core';
 import { MediaPicker } from './MediaPicker';
@@ -53,6 +53,31 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       setPickerConfig({ cardType: req.cardType, resolve });
       setShowPicker(true);
     });
+  }, []);
+
+  // Durable upload adapter for Studio card editors (drag/drop/file select).
+  const handleUploadMedia = useCallback(async (file: File, cardType: string) => {
+    try {
+      const { media } = await uploadMediaApi(file);
+      if (cardType === 'image') {
+        return { assetId: media.id, src: media.url, alt: media.displayName, width: media.width || undefined, height: media.height || undefined };
+      }
+      if (cardType === 'gallery') {
+        return { assetId: media.id, src: media.url, alt: media.displayName };
+      }
+      if (cardType === 'video') {
+        return { assetId: media.id, src: media.url, caption: media.displayName };
+      }
+      if (cardType === 'audio') {
+        return { assetId: media.id, src: media.url, title: media.displayName };
+      }
+      if (cardType === 'file') {
+        return { assetId: media.id, src: media.url, fileName: media.originalFilename, fileSize: `${(media.sizeBytes / (1024 * 1024)).toFixed(2)} MB` };
+      }
+      return { assetId: media.id, src: media.url };
+    } catch {
+      return null;
+    }
   }, []);
 
   const handlePickerSelectAsset = (asset: ApiMediaAsset) => {
@@ -290,6 +315,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             value={studioDoc}
             onChange={handleStudioChange}
             requestMedia={handleRequestMedia}
+            uploadMedia={handleUploadMedia}
           />
         </div>
       </main>

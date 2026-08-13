@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { escapeHtml, sanitizeHtml, sanitizeUrl, parseMarkdownToHtml } from '@vibress/studio-utils';
+import { escapeHtml, sanitizeHtml, sanitizeUrl, stripHtml, getEmbedProvider, parseMarkdownToHtml } from '@vibress/studio-utils';
 import { DecoratorNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
 
 export interface StudioCardDefinition<TData = Record<string, unknown>> {
@@ -17,7 +17,11 @@ export const ImageCardSchema = z.object({
   alt: z.string().default(''),
   caption: z.union([z.string(), z.record(z.unknown())]).default(''),
   captionHtml: z.string().optional(),
-  width: z.enum(['regular', 'wide', 'full']).optional().default('regular'),
+  // `width` is the LAYOUT width ('regular'|'wide'|'full'), but the media
+  // pipeline also records the asset's pixel width here (number). Both are
+  // accepted; only the enum drives layout, numeric values are used as
+  // intrinsic dimensions for CLS.
+  width: z.union([z.enum(['regular', 'wide', 'full']), z.number()]).optional(),
   height: z.number().optional(),
   href: z.string().optional(),
 });
@@ -32,12 +36,18 @@ export const ImageCardDefinition: StudioCardDefinition<ImageCardData> = {
     const alt = escapeHtml(data.alt || '');
     const capStr = data.captionHtml || (typeof data.caption === 'string' ? data.caption : '');
     const caption = capStr ? `<figcaption>${sanitizeHtml(capStr)}</figcaption>` : '';
-    const img = `<img src="${src}" alt="${alt}" />`;
-    const layoutClass = data.width && data.width !== 'regular' ? ` kg-width-${data.width}` : '';
+    // Numeric width/height (pixel dimensions from the media asset) are emitted
+    // as intrinsic attributes to reduce CLS; the layout enum drives kg-width-*.
+    const layout = typeof data.width === 'string' && data.width !== 'regular' ? ` kg-width-${data.width}` : '';
+    const dims =
+      typeof data.width === 'number' && typeof data.height === 'number'
+        ? ` width="${data.width}" height="${data.height}"`
+        : '';
+    const img = `<img src="${src}" alt="${alt}"${dims} />`;
     if (data.href) {
-      return `<figure class="kg-card kg-image-card${layoutClass}"><a href="${sanitizeUrl(data.href)}">${img}</a>${caption}</figure>`;
+      return `<figure class="kg-card kg-image-card${layout}"><a href="${sanitizeUrl(data.href)}">${img}</a>${caption}</figure>`;
     }
-    return `<figure class="kg-card kg-image-card${layoutClass}">${img}${caption}</figure>`;
+    return `<figure class="kg-card kg-image-card${layout}">${img}${caption}</figure>`;
   },
   renderPlainText: (data) => {
     const capStr = data.captionHtml || (typeof data.caption === 'string' ? data.caption : '');
@@ -190,11 +200,16 @@ export const EmbedCardDefinition: StudioCardDefinition<EmbedCardData> = {
   version: 1,
   validate: (data) => EmbedCardSchema.parse(data),
   renderHtml: (data) => {
-    const url = sanitizeUrl(data.url);
-    if (data.html) {
-      return `<figure class="kg-card kg-embed-card">${sanitizeHtml(data.html)}</figure>`;
+    // Only approved providers produce an iframe; everything else becomes a
+    // safe external link. Arbitrary user-supplied iframe markup is never
+    // trusted — the final output sanitizer enforces this a second time.
+    const provider = getEmbedProvider(data.url);
+    const caption = typeof data.caption === 'string' ? data.caption : '';
+    const captionHtml = caption ? `<figcaption>${sanitizeHtml(caption)}</figcaption>` : '';
+    if (provider) {
+      return `<figure class="kg-card kg-embed-card"><iframe src="${escapeHtml(provider.embedUrl)}" title="${escapeHtml(data.url)}" loading="lazy" allowfullscreen></iframe>${captionHtml}</figure>`;
     }
-    return `<figure class="kg-card kg-embed-card"><iframe src="${url}"></iframe></figure>`;
+    return `<figure class="kg-card kg-embed-card"><a href="${sanitizeUrl(data.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(data.url)}</a>${captionHtml}</figure>`;
   },
   renderPlainText: (data) => {
     const capStr = typeof data.caption === 'string' ? data.caption : '';
@@ -286,7 +301,7 @@ export const HtmlCardDefinition: StudioCardDefinition<HtmlCardData> = {
   version: 1,
   validate: (data) => HtmlCardSchema.parse(data),
   renderHtml: (data) => data.html,
-  renderPlainText: (data) => data.html || '',
+  renderPlainText: (data) => stripHtml(data.html || ''),
 };
 
 // 13. Divider Card

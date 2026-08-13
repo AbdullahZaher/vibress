@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey } from 'lexical';
@@ -7,6 +7,7 @@ import { VideoCardData, StudioCardNode } from '@vibress/studio-cards';
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { $getNodeByKey } from 'lexical';
 import { CardPlaceholder } from '../ui/CardPlaceholder';
+import { useStudioUpload } from '../../upload-context';
 
 interface Props {
   nodeKey: NodeKey;
@@ -16,24 +17,26 @@ interface Props {
 export function VideoCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const { uploadMedia } = useStudioUpload();
+  const [uploading, setUploading] = useState(false);
 
   const isPopulated = !!cardData.src;
 
   const onFileSelect = (files: File[]) => {
     const file = files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-
-    editor.update(() => {
-      const node = $getNodeByKey(nodeKey);
-      if (node instanceof StudioCardNode) {
-        node.setCardData({
-          ...cardData,
-          src: url,
-          fileName: file.name
+    if (!file || !uploadMedia) return;
+    setUploading(true);
+    uploadMedia(file, 'video')
+      .then((payload) => {
+        if (!payload) return;
+        editor.update(() => {
+          const node = $getNodeByKey(nodeKey);
+          if (node instanceof StudioCardNode) {
+            node.setCardData({ ...cardData, ...payload, fileName: file.name });
+          }
         });
-      }
-    });
+      })
+      .finally(() => setUploading(false));
   };
 
   const onCaptionChange = useCallback(
@@ -61,6 +64,7 @@ export function VideoCardEditor({ nodeKey, cardData }: Props) {
         title="Video"
         description="Click to select a video, or drag and drop"
         onFileSelect={onFileSelect}
+        uploading={uploading}
         isSelected={isSelected}
         onClick={() => {
           clearSelection();

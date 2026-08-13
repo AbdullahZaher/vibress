@@ -319,14 +319,20 @@ describe('Analytics v1 (traffic)', () => {
       });
       expect(yRes.statusCode).toBe(204);
       // Service-level idempotency proves X twice = 1 stored, X+Y = 2 stored.
+      // (The collector's async worker may also ingest these eventIds — the
+      // dedup guarantee means exactly one row per eventId either way.)
       await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdX, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
       await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdX, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
       const repo = new DrizzleAnalyticsRepository();
       expect(await repo.findEvent(eventIdX)).toBe(true);
-      const beforeX = (await overviewService.getOverview({ range: '7d' })).summary.views;
+      const pool = getDbPool();
+      const countFor = async (eventId: string): Promise<number> => {
+        const { rows } = await pool.query<{ n: string }>('SELECT count(*)::text AS n FROM analytics_events WHERE event_id = $1', [eventId]);
+        return Number(rows[0]?.n || 0);
+      };
       await analyticsService.ingest(makeEvent('post.view', { eventId: eventIdY, visitorHash: deriveVisitorHash('idem-visitor', HMAC_SECRET) }));
-      const afterY = (await overviewService.getOverview({ range: '7d' })).summary.views;
-      expect(afterY).toBe(beforeX + 1);
+      expect(await countFor(eventIdX)).toBe(1); // retried twice, stored once
+      expect(await countFor(eventIdY)).toBe(1); // distinct id, stored once
     });
   });
 

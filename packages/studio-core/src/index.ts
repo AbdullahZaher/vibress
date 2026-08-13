@@ -79,6 +79,47 @@ export function createEmptyStudioDocument(): StudioDocument {
   };
 }
 
+/**
+ * LEGACY_CARD_NODE_TYPE and CANONICAL_CARD_NODE_TYPE
+ *
+ * The React/Lexical editor historically serialized its interactive card node
+ * as `react-studio-card`. The canonical persisted/public schema uses
+ * `studio-card`. The single normalization layer below converts legacy nodes
+ * to canonical nodes at every read boundary, so downstream systems only ever
+ * need to understand `studio-card`.
+ */
+export const LEGACY_CARD_NODE_TYPE = 'react-studio-card';
+export const CANONICAL_CARD_NODE_TYPE = 'studio-card';
+
+/**
+ * Recursively normalize a Studio document to the canonical representation:
+ *   react-studio-card → studio-card
+ * preserving cardType, cardData, version, children, and every other field.
+ * Canonical documents pass through unchanged. Unknown nodes are preserved
+ * untouched (the renderer decides how to handle unknown types).
+ */
+export function normalizeStudioDocument<T>(rawDoc: T): T {
+  if (Array.isArray(rawDoc)) {
+    return rawDoc.map((item) => normalizeStudioDocument(item)) as unknown as T;
+  }
+  if (rawDoc && typeof rawDoc === 'object') {
+    const obj = rawDoc as Record<string, unknown>;
+    if (obj.type === LEGACY_CARD_NODE_TYPE) {
+      return {
+        ...obj,
+        type: CANONICAL_CARD_NODE_TYPE,
+        children: obj.children ? normalizeStudioDocument(obj.children) : obj.children,
+      } as unknown as T;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      out[key] = normalizeStudioDocument(value);
+    }
+    return out as unknown as T;
+  }
+  return rawDoc;
+}
+
 export function createDefaultStudioDocument(text = ''): StudioDocument {
   if (!text) return createEmptyStudioDocument();
 
@@ -137,9 +178,10 @@ export function migrateDocument(rawDoc: unknown): StudioDocument {
   if (typeof rawDoc === 'object' && rawDoc !== null) {
     const obj = rawDoc as Record<string, unknown>;
 
-    // If it is already a valid Studio document
+    // If it is already a valid Studio document, normalize legacy card nodes
+    // to the canonical representation (react-studio-card → studio-card).
     if (obj.schema === 'vibress-studio' && obj.root) {
-      return validateStudioDocument(rawDoc);
+      return validateStudioDocument(normalizeStudioDocument(rawDoc));
     }
 
     // Legacy Batch 2 format: { text: "..." } or { root: ... } without schema envelope
@@ -152,7 +194,7 @@ export function migrateDocument(rawDoc: unknown): StudioDocument {
         schema: STUDIO_SCHEMA_NAME,
         version: CURRENT_STUDIO_VERSION,
         editor: { lexicalVersion: '0.13.1' },
-        root: obj.root as StudioDocument['root'],
+        root: normalizeStudioDocument(obj.root as StudioDocument['root']),
       };
     }
   }

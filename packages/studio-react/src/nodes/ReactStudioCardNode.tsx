@@ -25,6 +25,11 @@ export class ReactStudioCardNode extends StudioCardNode {
   }
 
   exportJSON(): SerializedReactStudioCardNode {
+    // Lexical 0.13 enforces exportJSON().type === getType(), so the editor's
+    // internal node type stays 'react-studio-card'. Canonicalization to the
+    // persisted 'studio-card' type happens once, in serializeStudioDocument()
+    // (studio-serializer), and on every read via normalizeStudioDocument()
+    // (studio-core) — the single normalization layer.
     return {
       type: 'react-studio-card',
       cardType: this.__cardType,

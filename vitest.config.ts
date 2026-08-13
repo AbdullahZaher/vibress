@@ -43,6 +43,7 @@ export default defineConfig({
       '@vibress/studio-markdown': path.resolve(__dirname, './packages/studio-markdown/src/index.ts'),
       '@vibress/studio-plugin-sdk': path.resolve(__dirname, './packages/studio-plugin-sdk/src/index.ts'),
       '@vibress/studio-react': path.resolve(__dirname, './packages/studio-react/src/index.ts'),
+      '@vibress/studio-testing': path.resolve(__dirname, './packages/studio-testing/src/index.ts'),
       '@vibress/theme-core': path.resolve(__dirname, './packages/theme-core/src/index.ts'),
       '@vibress/themes-registry': path.resolve(__dirname, './packages/themes-registry/src/index.ts'),
       '@vibress/themes': path.resolve(__dirname, './packages/domains/themes/src/index.ts'),

@@ -7,6 +7,7 @@ import {
   renderStudioDocumentToHtml,
   renderStudioDocumentToPlainText,
 } from '@vibress/studio-renderer';
+import { normalizeStudioDocument } from '@vibress/studio-core';
 import { slugify } from '@vibress/utils';
 import {
   PublicAuthorDto,
@@ -39,10 +40,14 @@ export async function resolveDocumentMedia(
     return { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } };
   }
 
+  // Canonicalization first: legacy react-studio-card nodes become
+  // studio-card, so media resolution only ever needs to understand the
+  // canonical representation (no permanent dual branches).
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
-  const root = doc.root as { type?: string; children?: unknown[] } | undefined;
+  const canonical = normalizeStudioDocument(doc) as Record<string, unknown>;
+  const root = canonical.root as { type?: string; children?: unknown[] } | undefined;
   if (!root || !Array.isArray(root.children)) {
-    return doc;
+    return canonical;
   }
 
   async function processNode(node: unknown): Promise<void> {
@@ -58,7 +63,7 @@ export async function resolveDocumentMedia(
           const asset = await mediaService.getMediaById(data.assetId.trim());
           if (asset) {
             data.src = await mediaService.getMediaUrl(asset);
-            if (data.cardType === 'image' || n.cardType === 'image') {
+            if (n.cardType === 'image') {
               if (asset.width) data.width = asset.width;
               if (asset.height) data.height = asset.height;
               if (asset.displayName && !data.alt) data.alt = asset.displayName;
@@ -99,7 +104,7 @@ export async function resolveDocumentMedia(
     await processNode(child);
   }
 
-  return doc;
+  return canonical;
 }
 
 export function extractFeatureImage(
