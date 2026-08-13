@@ -70,9 +70,11 @@ test.describe('Batch 4 Media E2E — Delete Protection + Gallery', () => {
 
     // Wait for the MediaPicker modal to open, then for its image grid to populate
     await page.waitForSelector('h3:has-text("Select Media Asset")', { timeout: 10000 });
-    await page.waitForFunction(() => document.querySelectorAll('img[alt]').length >= 2, null, { timeout: 10000 });
+    // Media thumbnails carry a non-empty alt (display name); the sidebar
+    // logo is an <img alt=""> and must never be selected as a media asset.
+    await page.waitForFunction(() => document.querySelectorAll('img[alt]:not([alt=""])').length >= 2, null, { timeout: 10000 });
 
-    const pickerImgs = page.locator('img[alt]');
+    const pickerImgs = page.locator('img[alt]:not([alt=""])');
     await pickerImgs.nth(0).click();
     await pickerImgs.nth(1).click();
 
