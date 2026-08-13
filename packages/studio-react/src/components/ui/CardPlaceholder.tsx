@@ -16,11 +16,12 @@ interface CardPlaceholderProps {
   onFileSelect: (files: File[]) => void;
   multiple?: boolean;
   isSelected?: boolean;
+  uploading?: boolean;
   onClick?: (e: React.MouseEvent) => void;
 }
 
 export function CardPlaceholder({ 
-  iconType, title, description, onFileSelect, multiple = false, isSelected = false, onClick
+  iconType, title, description, onFileSelect, multiple = false, isSelected = false, uploading = false, onClick
 }: CardPlaceholderProps) {
   const Icon = ICONS[iconType] || ImageIcon;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +55,7 @@ export function CardPlaceholder({
       <div className="flex flex-col items-center justify-center w-full h-full" onClick={handleContainerClick}>
         <Icon className="w-12 h-12 text-gray-400 group-hover:text-blue-500 transition-colors mb-4" strokeWidth={1.5} />
         <p className="text-sm font-medium text-gray-700 mb-1">{title}</p>
-        <p className="text-xs text-gray-500">{description}</p>
+        <p className="text-xs text-gray-500">{uploading ? 'Uploading...' : description}</p>
       </div>
       <input
         type="file"

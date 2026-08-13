@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey } from 'lexical';
@@ -7,6 +7,7 @@ import { GalleryCardData, StudioCardNode } from '@vibress/studio-cards';
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { $getNodeByKey } from 'lexical';
 import { CardPlaceholder } from '../ui/CardPlaceholder';
+import { useStudioUpload } from '../../upload-context';
 
 interface Props {
   nodeKey: NodeKey;
@@ -16,26 +17,34 @@ interface Props {
 export function GalleryCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const { uploadMedia } = useStudioUpload();
+  const [uploading, setUploading] = useState(false);
 
   const isPopulated = cardData.images && cardData.images.length > 0;
 
   const onFileSelect = (files: File[]) => {
-    if (files.length > 0) {
-      const newImages = files.map(file => ({
-        src: URL.createObjectURL(file),
-        alt: file.name
-      }));
-
-      editor.update(() => {
-        const node = $getNodeByKey(nodeKey);
-        if (node instanceof StudioCardNode) {
-          node.setCardData({
-            ...cardData,
-            images: [...(cardData.images || []), ...newImages]
-          });
-        }
-      });
-    }
+    if (files.length === 0 || !uploadMedia) return;
+    // Upload every file through the durable media adapter.
+    setUploading(true);
+    Promise.all(
+      files.map((file) => uploadMedia(file, 'gallery').catch(() => null))
+    )
+      .then((payloads) => {
+        const newImages = payloads
+          .filter((p): p is Record<string, unknown> => !!p && typeof p.src === 'string')
+          .map((p) => ({ src: p.src as string, alt: (p.alt as string) || '', assetId: p.assetId as string | undefined }));
+        if (newImages.length === 0) return;
+        editor.update(() => {
+          const node = $getNodeByKey(nodeKey);
+          if (node instanceof StudioCardNode) {
+            node.setCardData({
+              ...cardData,
+              images: [...(cardData.images || []), ...newImages],
+            });
+          }
+        });
+      })
+      .finally(() => setUploading(false));
   };
 
   const onCaptionChange = useCallback(
@@ -64,6 +73,7 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
         description="Click to select images, or drag and drop"
         onFileSelect={onFileSelect}
         multiple={true}
+        uploading={uploading}
         isSelected={isSelected}
         onClick={() => {
           clearSelection();

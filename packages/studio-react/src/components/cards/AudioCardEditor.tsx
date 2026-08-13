@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
@@ -6,6 +6,7 @@ import { AudioCardData, StudioCardNode } from '@vibress/studio-cards';
 
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { CardPlaceholder } from '../ui/CardPlaceholder';
+import { useStudioUpload } from '../../upload-context';
 
 interface Props {
   nodeKey: NodeKey;
@@ -15,24 +16,26 @@ interface Props {
 export function AudioCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const { uploadMedia } = useStudioUpload();
+  const [uploading, setUploading] = useState(false);
 
   const isPopulated = !!cardData.src;
 
   const onFileSelect = (files: File[]) => {
     const file = files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file); // Temporary URL until API is integrated
-
-      editor.update(() => {
-        const node = $getNodeByKey(nodeKey);
-        if (node instanceof StudioCardNode) {
-          node.setCardData({
-            ...cardData,
-            src: url,
-            title: file.name
-          });
-        }
-      });
+    if (!file || !uploadMedia) return;
+    setUploading(true);
+    uploadMedia(file, 'audio')
+      .then((payload) => {
+        if (!payload) return;
+        editor.update(() => {
+          const node = $getNodeByKey(nodeKey);
+          if (node instanceof StudioCardNode) {
+            node.setCardData({ ...cardData, ...payload, title: file.name });
+          }
+        });
+      })
+      .finally(() => setUploading(false));
   };
 
   const onCaptionChange = useCallback(
@@ -58,6 +61,7 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
         title="Audio"
         description="Click to select an audio file, or drag and drop"
         onFileSelect={onFileSelect}
+        uploading={uploading}
         isSelected={isSelected}
         onClick={() => {
           clearSelection();

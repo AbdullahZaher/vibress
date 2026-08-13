@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { NodeKey, $getNodeByKey } from 'lexical';
@@ -6,6 +6,7 @@ import { FileCardData, StudioCardNode } from '@vibress/studio-cards';
 
 import { NestedCaptionEditor } from './NestedCaptionEditor';
 import { CardPlaceholder } from '../ui/CardPlaceholder';
+import { useStudioUpload } from '../../upload-context';
 import { File as FileIcon, Download } from 'lucide-react';
 
 interface Props {
@@ -16,26 +17,26 @@ interface Props {
 export function FileCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const { uploadMedia } = useStudioUpload();
+  const [uploading, setUploading] = useState(false);
 
   const isPopulated = !!cardData.src;
 
   const onFileSelect = (files: File[]) => {
     const file = files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file); // Temporary URL until API is integrated
-    const fileSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-
-      editor.update(() => {
-        const node = $getNodeByKey(nodeKey);
-        if (node instanceof StudioCardNode) {
-          node.setCardData({
-            ...cardData,
-            src: url,
-            fileName: file.name,
-            fileSize
-          });
-        }
-      });
+    if (!file || !uploadMedia) return;
+    setUploading(true);
+    uploadMedia(file, 'file')
+      .then((payload) => {
+        if (!payload) return;
+        editor.update(() => {
+          const node = $getNodeByKey(nodeKey);
+          if (node instanceof StudioCardNode) {
+            node.setCardData({ ...cardData, ...payload });
+          }
+        });
+      })
+      .finally(() => setUploading(false));
   };
 
   const onCaptionChange = useCallback(
@@ -61,6 +62,7 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
         title="File"
         description="Click to select a file, or drag and drop"
         onFileSelect={onFileSelect}
+        uploading={uploading}
         isSelected={isSelected}
         onClick={() => {
           clearSelection();

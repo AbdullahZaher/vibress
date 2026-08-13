@@ -17,6 +17,7 @@ import { StudioCardNode } from '@vibress/studio-cards';
 import { ReactStudioCardNode } from './nodes/ReactStudioCardNode';
 import { StudioDocument, migrateDocument } from '@vibress/studio-core';
 import { serializeStudioDocument } from '@vibress/studio-serializer';
+import { StudioUploadContext, StudioUploadApi } from './upload-context';
 
 export interface VibressStudioProps {
   value?: unknown;
@@ -25,6 +26,9 @@ export interface VibressStudioProps {
   placeholder?: string;
   onError?: (error: Error) => void;
   requestMedia?: (req: { cardType: string }) => Promise<Record<string, unknown> | null>;
+  /** Durable upload adapter: local file → assetId/src payload. Card editors
+   *  must use this instead of transient blob: URLs. */
+  uploadMedia?: StudioUploadApi['uploadMedia'];
   className?: string;
 }
 
@@ -96,6 +100,7 @@ export function VibressStudio({
   placeholder = 'Write content with Vibress Studio...',
   onError,
   requestMedia,
+  uploadMedia,
   className = '',
 }: VibressStudioProps) {
   const parsedDoc = useMemo(() => migrateDocument(value), [value]);
@@ -138,6 +143,7 @@ export function VibressStudio({
 
   return (
     <StudioErrorBoundary onError={onError}>
+      <StudioUploadContext.Provider value={{ uploadMedia }}>
       <div className={`vibress-studio-editor ${className}`}>
         <LexicalComposer initialConfig={initialConfig}>
           <div style={{ position: 'relative', minHeight: '20vh' }}>
@@ -160,6 +166,9 @@ export function VibressStudio({
             {onChange && (
               <OnChangePlugin
                 onChange={(editorState) => {
+                  // Canonicalization boundary: the editor serializes its
+                  // internal react-studio-card nodes; serializeStudioDocument
+                  // normalizes them to canonical studio-card for persistence.
                   const rootNode = editorState.toJSON().root;
                   const studioDoc = serializeStudioDocument(rootNode);
                   onChange(studioDoc);
@@ -169,6 +178,7 @@ export function VibressStudio({
           </div>
         </LexicalComposer>
       </div>
+      </StudioUploadContext.Provider>
     </StudioErrorBoundary>
   );
 }
