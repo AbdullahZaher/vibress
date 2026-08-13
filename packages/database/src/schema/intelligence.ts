@@ -11,6 +11,11 @@ export const analyticsEvents = pgTable('analytics_events', {
   actorId: text('actor_id'),
   entityType: text('entity_type'),
   entityId: text('entity_id'),
+  // Public web traffic dimensions (privacy-safe). Only traffic events set these.
+  path: text('path'),
+  visitorHash: text('visitor_hash'),
+  referrerDomain: text('referrer_domain'),
+  isBot: boolean('is_bot').notNull().default(false),
   context: jsonb('context'),
   properties: jsonb('properties'),
   schemaVersion: integer('schema_version').notNull().default(1),
@@ -20,6 +25,11 @@ export const analyticsEvents = pgTable('analytics_events', {
     eventNameIdx: index('analytics_events_name_idx').on(table.eventName),
     occurredAtIdx: index('analytics_events_occurred_at_idx').on(table.occurredAt),
     entityIdx: index('analytics_events_entity_idx').on(table.entityType, table.entityId),
+    // Traffic queries: distinct visitors, top content, referrers, retention.
+    visitorOccurredIdx: index('analytics_events_visitor_occurred_idx').on(table.visitorHash, table.occurredAt),
+    pathOccurredIdx: index('analytics_events_path_occurred_idx').on(table.path, table.occurredAt),
+    referrerOccurredIdx: index('analytics_events_referrer_occurred_idx').on(table.referrerDomain, table.occurredAt),
+    nameOccurredIdx: index('analytics_events_name_occurred_idx').on(table.eventName, table.occurredAt),
   };
 });
 

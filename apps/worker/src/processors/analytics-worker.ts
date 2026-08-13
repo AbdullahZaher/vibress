@@ -1,5 +1,6 @@
 import { Worker, Job, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
 import { tracedProcessor } from './trace-helper';
+import { metrics } from '@vibress/observability';
 import { AnalyticsService, DrizzleAnalyticsRepository, IngestEventData, validateAnalyticsEvent } from '@vibress/analytics';
 
 export interface AnalyticsJob {
@@ -33,7 +34,9 @@ export class AnalyticsWorker {
     try {
       validateAnalyticsEvent(job.data.event);
       await this.analyticsService.ingest(job.data.event);
+      metrics.counter('analytics.worker.processed', 1, { event: job.data.event.eventName });
     } catch (err) {
+      metrics.counter('analytics.worker.failed', 1);
       console.error(`[AnalyticsWorker] Dropped invalid event ${job.data.event?.eventName}:`, err instanceof Error ? err.message : err);
       // Never retry invalid events; core correctness unaffected
     }

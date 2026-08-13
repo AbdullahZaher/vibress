@@ -5,6 +5,7 @@ import { ContentSchedulerWorker } from './scheduler';
 import { EmailDeliveryWorker } from './processors/email-delivery-worker';
 import { WebhookDeliveryWorker } from './processors/webhook-delivery-worker';
 import { AnalyticsWorker } from './processors/analytics-worker';
+import { AnalyticsRetentionSweeper } from './processors/analytics-retention';
 import { SearchIndexerWorker } from './processors/search-indexer-worker';
 import { AutomationRunnerWorker } from './processors/automation-runner-worker';
 import { AutomationActionExecutor } from './processors/automation-action-executor';
@@ -53,6 +54,11 @@ const analyticsWorker = new AnalyticsWorker();
 analyticsWorker.start().catch((err) => {
   appLogger.error('[AnalyticsWorker] Failed to start', {}, err as Error);
 });
+
+// Raw public-traffic retention (traffic events only; daily aggregates and
+// business analytics events are never deleted).
+const analyticsRetention = new AnalyticsRetentionSweeper(90);
+analyticsRetention.start(24 * 60 * 60 * 1000); // daily sweep
 
 const searchIndexerWorker = new SearchIndexerWorker(new WorkerSearchContentSource());
 searchIndexerWorker.start().catch((err) => {

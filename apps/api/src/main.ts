@@ -35,6 +35,8 @@ import { adminIntegrationRoutes, machineApiRoutes } from './routes/platform';
 import { publicSearchRoutes, adminAnalyticsRoutes, adminSearchRoutes, adminAutomationRoutes } from './routes/intelligence';
 import { healthRoutes } from './routes/health';
 import { setupRoutes, ensureSetupTokenConfigured } from './routes/setup';
+import { analyticsRoutes } from './routes/analytics';
+import { analyticsCollectorRoutes } from './routes/analytics-public';
 import { setupService } from './services';
 import { mediaStreamRoutes } from './routes/media-stream';
 import { adminOperationsRoutes } from './routes/operations';
@@ -133,6 +135,8 @@ export const buildApp = () => {
 
   fastify.register(healthRoutes);
   fastify.register(setupRoutes, { prefix: '/api/setup/v1' });
+  fastify.register(analyticsRoutes, { prefix: '/api/admin/v1' });
+  fastify.register(analyticsCollectorRoutes, { prefix: '/api/public/v1/analytics' });
   registerTraceHooks(fastify);
   registerMetricsRoutes(fastify);
 
