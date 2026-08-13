@@ -3,6 +3,7 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { ListNode, ListItemNode } from '@lexical/list';
 import { LinkNode, AutoLinkNode } from '@lexical/link';
 import { CodeNode, CodeHighlightNode } from '@lexical/code';
+import { TableNode, TableCellNode, TableRowNode } from '@lexical/table';
 import { Klass, LexicalNode } from 'lexical';
 
 export {
@@ -16,6 +17,9 @@ export {
   AutoLinkNode,
   CodeNode,
   CodeHighlightNode,
+  TableNode,
+  TableCellNode,
+  TableRowNode,
 };
 
 export const STUDIO_CORE_NODES: Array<Klass<LexicalNode>> = [
@@ -29,4 +33,8 @@ export const STUDIO_CORE_NODES: Array<Klass<LexicalNode>> = [
   AutoLinkNode,
   CodeNode,
   CodeHighlightNode,
+  TableNode,
+  TableCellNode,
+  TableRowNode,
 ];
+

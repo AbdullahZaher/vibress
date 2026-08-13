@@ -246,6 +246,54 @@ describe('unknown/corrupt cards — graceful failure', () => {
     expect(text).not.toContain('blob:');
   });
 
+  it('renders interactive tables with proper containers and headers', () => {
+    const tableDoc = doc([
+      {
+        type: 'table',
+        children: [
+          {
+            type: 'tablerow',
+            children: [
+              { type: 'tablecell', headerState: 1, children: [{ type: 'text', text: 'Column 1', format: 1 }] },
+              { type: 'tablecell', headerState: 1, children: [{ type: 'text', text: 'Column 2', format: 1 }] },
+            ],
+          },
+          {
+            type: 'tablerow',
+            children: [
+              { type: 'tablecell', children: [{ type: 'text', text: 'Data 1', format: 0 }] },
+              { type: 'tablecell', children: [{ type: 'text', text: 'Data 2', format: 0 }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const html = renderStudioDocumentToHtml(tableDoc);
+    expect(html).toContain('studio-table-container');
+    expect(html).toContain('<table class="studio-table">');
+    expect(html).toContain('<th><strong>Column 1</strong></th>');
+    expect(html).toContain('<td>Data 1</td>');
+  });
+
+  it('renders checklists with disabled checkboxes and state classes', () => {
+    const checklistDoc = doc([
+      {
+        type: 'list',
+        listType: 'check',
+        children: [
+          { type: 'listitem', checked: true, children: [{ type: 'text', text: 'Done task', format: 0 }] },
+          { type: 'listitem', checked: false, children: [{ type: 'text', text: 'Pending task', format: 0 }] },
+        ],
+      },
+    ]);
+    const html = renderStudioDocumentToHtml(checklistDoc);
+    expect(html).toContain('studio-checklist');
+    expect(html).toContain('studio-checklist-item is-checked');
+    expect(html).toContain('checked="checked"');
+    expect(html).toContain('Done task');
+    expect(html).toContain('Pending task');
+  });
+
   it('renders nothing for empty documents', () => {
     expect(renderStudioDocumentToHtml({ root: { type: 'root', children: [] } })).toBe('');
   });

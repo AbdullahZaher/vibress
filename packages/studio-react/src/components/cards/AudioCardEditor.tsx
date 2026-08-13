@@ -73,13 +73,13 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
 
   return (
     <figure
-      className={`vb-audio-card relative flex flex-col gap-2 p-4 border rounded-md`}
+      className={`vb-audio-card relative flex flex-col gap-2 p-4 my-3.5 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md shadow-sm`}
       onClick={() => {
         clearSelection();
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
         transition: 'outline 0.1s ease',
       }}
     >

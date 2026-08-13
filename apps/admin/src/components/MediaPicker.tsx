@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listMediaApi, uploadMediaApi, ApiMediaAsset } from '../lib/api';
+import { X, Search, UploadCloud, CheckCircle2, Film, Music, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 export interface MediaPickerProps {
   onSelectAsset?: (asset: ApiMediaAsset) => void;
@@ -87,33 +88,51 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
   };
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
-        <div style={headerStyle}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Select Media Asset</h3>
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
+      <div className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-border/60 dark:border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <ImageIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Select Media Asset</h3>
+              <p className="text-xs text-muted-foreground">Choose existing media or upload new files</p>
+            </div>
+          </div>
           {onClose && (
-            <button type="button" onClick={onClose} style={closeButtonStyle} aria-label="Close">
-              ✕
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-white/10 transition"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        <div style={toolbarStyle}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              placeholder="Search filename..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={inputStyle}
-              aria-label="Search media"
-            />
+        {/* Toolbar */}
+        <div className="flex justify-between items-center px-6 py-3 bg-muted/40 dark:bg-white/[0.02] border-b border-border/60 dark:border-white/10 gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search filename..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                aria-label="Search media"
+              />
+            </div>
 
             {!allowedTypes && (
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
-                style={selectStyle}
+                className="px-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
                 aria-label="Filter by media type"
               >
                 <option value="all">All Types</option>
@@ -125,78 +144,109 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
             )}
           </div>
 
-          <label style={uploadButtonStyle}>
-            {uploadMutation.isPending ? 'Uploading...' : '+ Upload File'}
+          <label className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground font-medium rounded-lg text-xs hover:opacity-90 transition cursor-pointer shadow-sm">
+            {uploadMutation.isPending ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Uploading...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload File</span>
+              </>
+            )}
             <input
               type="file"
               onChange={handleFileChange}
-              style={{ display: 'none' }}
+              className="hidden"
               disabled={uploadMutation.isPending}
             />
           </label>
         </div>
 
-        {uploadError && <div style={errorBannerStyle}>{uploadError}</div>}
+        {uploadError && (
+          <div className="px-6 py-2 bg-destructive/10 text-destructive text-xs border-b border-destructive/20 flex items-center justify-between">
+            <span>{uploadError}</span>
+            <button onClick={() => setUploadError(null)} className="text-xs underline font-medium">Dismiss</button>
+          </div>
+        )}
 
-        <div style={contentStyle}>
-          {isLoading && <div style={{ padding: '24px', textAlign: 'center' }}>Loading media items...</div>}
+        {/* Content grid */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {isLoading && (
+            <div className="py-16 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-sm">Loading media assets...</span>
+            </div>
+          )}
+
           {isError && (
-            <div style={{ padding: '24px', color: '#dc2626', textAlign: 'center' }}>
+            <div className="py-12 text-center text-destructive text-sm">
               Failed to load media: {(error as Error).message}
             </div>
           )}
 
-          {data && data.items.length === 0 && (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#6b7280' }}>
-              No media assets found. Upload one to get started!
+          {data && data.items.length === 0 && !isLoading && (
+            <div className="py-16 flex flex-col items-center justify-center text-center gap-3 text-muted-foreground">
+              <div className="w-12 h-12 rounded-2xl bg-muted/60 dark:bg-white/[0.04] flex items-center justify-center">
+                <UploadCloud className="w-6 h-6 opacity-60" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">No media assets found</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Upload images, videos or documents to use them here</p>
+              </div>
             </div>
           )}
 
           {data && data.items.length > 0 && (
-            <div style={gridStyle}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {data.items.map((asset) => {
                 const isSelected = selectedAssetIds.has(asset.id);
                 return (
                   <div
                     key={asset.id}
                     onClick={() => toggleSelect(asset)}
-                    style={{
-                      ...cardStyle,
-                      border: isSelected ? '2px solid #2563eb' : '1px solid #e5e7eb',
-                    }}
+                    className={`group relative rounded-xl overflow-hidden cursor-pointer border transition-all duration-200 ${
+                      isSelected
+                        ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
+                        : 'border-border/80 dark:border-white/10 bg-card dark:bg-white/[0.04] hover:border-primary/50 hover:shadow-md'
+                    }`}
                   >
-                    <div style={previewBoxStyle}>
+                    <div className="h-28 bg-muted/50 dark:bg-white/[0.03] flex items-center justify-center overflow-hidden relative">
                       {asset.assetType === 'image' ? (
                         <img
                           src={asset.url}
                           alt={asset.displayName}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <div style={iconPlaceholderStyle}>
-                          {asset.assetType === 'video' && '🎥'}
-                          {asset.assetType === 'audio' && '🎵'}
-                          {asset.assetType === 'file' && '📄'}
+                        <div className="text-muted-foreground flex items-center justify-center">
+                          {asset.assetType === 'video' && <Film className="w-8 h-8 text-rose-500/80" />}
+                          {asset.assetType === 'audio' && <Music className="w-8 h-8 text-amber-500/80" />}
+                          {asset.assetType === 'file' && <FileText className="w-8 h-8 text-blue-500/80" />}
+                        </div>
+                      )}
+
+                      {isSelected && (
+                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-0.5 shadow">
+                          <CheckCircle2 className="w-4 h-4" />
                         </div>
                       )}
                     </div>
 
-                    <div style={{ padding: '8px' }}>
+                    <div className="p-2.5">
                       <div
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: '#111827',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
+                        className="text-xs font-semibold text-foreground truncate"
                         title={asset.displayName}
                       >
                         {asset.displayName}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                        {formatSize(asset.sizeBytes)} • {asset.extension.toUpperCase()}
+                      <div className="text-[11px] text-muted-foreground mt-0.5 flex justify-between items-center">
+                        <span>{formatSize(asset.sizeBytes)}</span>
+                        <span className="uppercase text-[10px] font-medium tracking-wider px-1.5 py-0.5 rounded bg-muted/70 dark:bg-white/[0.06]">
+                          {asset.extension}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -206,153 +256,23 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
           )}
         </div>
 
-        <div style={footerStyle}>
-          {multiple ? (
+        {/* Footer */}
+        <div className="px-6 py-3.5 border-t border-border/60 dark:border-white/10 flex justify-between items-center bg-muted/30 dark:bg-white/[0.02]">
+          <span className="text-xs text-muted-foreground">
+            {multiple ? `${selectedAssetIds.size} item(s) selected` : 'Click an asset to insert it directly'}
+          </span>
+
+          {multiple && (
             <button
               onClick={handleConfirmMultiple}
               disabled={selectedAssetIds.size === 0}
-              style={confirmButtonStyle}
+              className="px-4 py-1.5 bg-primary text-primary-foreground font-medium rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition"
             >
               Select {selectedAssetIds.size} Asset(s)
             </button>
-          ) : (
-            <div style={{ fontSize: '12px', color: '#6b7280' }}>Click an asset to select it</div>
           )}
         </div>
       </div>
     </div>
   );
-};
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 1000,
-};
-
-const modalStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  borderRadius: '12px',
-  width: '760px',
-  maxWidth: '90vw',
-  maxHeight: '85vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-  overflow: 'hidden',
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '16px 24px',
-  borderBottom: '1px solid #e5e7eb',
-};
-
-const closeButtonStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  fontSize: '18px',
-  cursor: 'pointer',
-  color: '#6b7280',
-};
-
-const toolbarStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '12px 24px',
-  backgroundColor: '#f9fafb',
-  borderBottom: '1px solid #e5e7eb',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '6px',
-  border: '1px solid #d1d5db',
-  fontSize: '13px',
-};
-
-const selectStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: '6px',
-  border: '1px solid #d1d5db',
-  fontSize: '13px',
-};
-
-const uploadButtonStyle: React.CSSProperties = {
-  padding: '6px 14px',
-  backgroundColor: '#2563eb',
-  color: '#ffffff',
-  borderRadius: '6px',
-  fontSize: '13px',
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const errorBannerStyle: React.CSSProperties = {
-  padding: '8px 24px',
-  backgroundColor: '#fef2f2',
-  color: '#dc2626',
-  fontSize: '12px',
-  borderBottom: '1px solid #fecaca',
-};
-
-const contentStyle: React.CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-  padding: '24px',
-};
-
-const gridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-  gap: '16px',
-};
-
-const cardStyle: React.CSSProperties = {
-  borderRadius: '8px',
-  overflow: 'hidden',
-  cursor: 'pointer',
-  backgroundColor: '#ffffff',
-  transition: 'all 0.15s ease',
-};
-
-const previewBoxStyle: React.CSSProperties = {
-  height: '100px',
-  backgroundColor: '#f3f4f6',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-};
-
-const iconPlaceholderStyle: React.CSSProperties = {
-  fontSize: '32px',
-};
-
-const footerStyle: React.CSSProperties = {
-  padding: '16px 24px',
-  borderTop: '1px solid #e5e7eb',
-  display: 'flex',
-  justifyContent: 'flex-end',
-  backgroundColor: '#f9fafb',
-};
-
-const confirmButtonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  backgroundColor: '#2563eb',
-  color: '#ffffff',
-  border: 'none',
-  borderRadius: '6px',
-  fontSize: '13px',
-  fontWeight: 500,
-  cursor: 'pointer',
 };

@@ -125,3 +125,310 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 120, 120, 0.6);
 }
+
+/* ==========================================================================
+   Vibress Studio - Notion-grade Block & Component Styles
+   ========================================================================== */
+
+.vibress-studio-editor {
+  position: relative;
+  font-family: inherit;
+}
+
+.studio-paragraph {
+  margin-bottom: 0.65rem;
+  line-height: 1.75;
+}
+
+.studio-h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+}
+
+.studio-h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.studio-h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.4rem;
+  color: var(--foreground);
+}
+
+.studio-quote {
+  border-left: 3px solid #6366f1;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+  color: var(--muted-foreground);
+}
+
+.studio-ul, .studio-ol {
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.studio-ul { list-style-type: disc; }
+.studio-ol { list-style-type: decimal; }
+
+.studio-listitem {
+  margin-bottom: 0.25rem;
+}
+
+/* Checklists */
+.studio-checklist {
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin: 0.5rem 0;
+}
+
+.studio-checklist-item, .studio-checklist-checked, .studio-checklist-unchecked {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.studio-checklist-checked span, .is-checked span {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.studio-checklist-item input[type="checkbox"] {
+  margin-top: 0.3rem;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+/* Tables */
+.studio-table-container {
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.studio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.studio-table th, .studio-table td, .studio-table-cell, .studio-table-cell-header {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.studio-table th, .studio-table-cell-header {
+  background-color: var(--secondary);
+  font-weight: 600;
+}
+
+/* Code Blocks */
+.studio-code-block {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.studio-code {
+  background-color: var(--secondary);
+  color: #6366f1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 0.875em;
+  font-family: monospace;
+}
+
+/* ==========================================================================
+   Vibress Studio - Premium Glassmorphic Popups & Menus
+   ========================================================================== */
+
+.studio-glassy-menu,
+.notion-slash-menu,
+.notion-block-menu,
+.notion-ai-popup {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(226, 232, 240, 0.85) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.7) inset !important;
+  color: #0f172a;
+}
+
+.dark .studio-glassy-menu,
+.dark .notion-slash-menu,
+.dark .notion-block-menu,
+.dark .notion-ai-popup {
+  background: rgba(21, 23, 26, 0.75) !important;
+  backdrop-filter: blur(24px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
+  color: #f8fafc;
+}
+
+/* Slash Menu Elements */
+.studio-slash-header {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.dark .studio-slash-header {
+  color: #64748b;
+}
+
+.studio-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.studio-slash-item:hover,
+.studio-slash-item.is-selected {
+  background: rgba(15, 23, 42, 0.06);
+  transform: translateX(2px);
+}
+
+.dark .studio-slash-item:hover,
+.dark .studio-slash-item.is-selected {
+  background: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.studio-slash-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s;
+}
+
+.dark .studio-slash-icon {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  color: #f8fafc;
+}
+
+.studio-slash-item:hover .studio-slash-icon,
+.studio-slash-item.is-selected .studio-slash-icon {
+  transform: scale(1.06);
+}
+
+.studio-slash-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.studio-slash-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.dark .studio-slash-title {
+  color: #f8fafc;
+}
+
+.studio-slash-desc {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark .studio-slash-desc {
+  color: #94a3b8;
+}
+
+/* Notion Block Context Menu */
+.notion-block-menu button {
+  color: #334155;
+}
+
+.dark .notion-block-menu button {
+  color: #cbd5e1;
+}
+
+.notion-block-menu button:hover {
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+.dark .notion-block-menu button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* AI Popup in Dark Mode */
+.dark .notion-ai-popup input {
+  color: #f8fafc !important;
+  background: transparent !important;
+}
+
+.dark .notion-ai-popup input::placeholder {
+  color: #64748b !important;
+}
+
+.dark .notion-ai-popup button {
+  color: #e2e8f0;
+}
+
+/* Glassy Modals (Media Picker & Dialogs) */
+.studio-glassy-modal {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.4) inset !important;
+}
+
+.dark .studio-glassy-modal {
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
+}
+
+/* Studio Interactive Cards */
+[data-studio-card] {
+  margin-top: 1rem !important;
+  margin-bottom: 1rem !important;
+  display: block;
+}
+
+.dark [data-studio-card] {
+  color-scheme: dark;
+}
+
+
+

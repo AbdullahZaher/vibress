@@ -145,7 +145,7 @@ jobs:
           set -e
 
           # --- Dev infrastructure + migrations ---
-          docker compose -f compose.dev.yml -f compose.dev.ci.yml up -d --wait
+          docker compose -f compose.dev.yml up -d --wait
           pnpm --filter @vibress/database run db:migrate
 
           # --- Production-mode web build (fast SSR, no dev cold-compile) ---

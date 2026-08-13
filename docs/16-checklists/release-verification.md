@@ -65,8 +65,11 @@ automation, email) all drained to 0 after load.
    (`apps/worker/tests/search-content-source.test.ts`). After fix, index rebuild
    reaches full dataset (1,403 documents; post 1268 / page 125 / tag 10).
 2. **Gateway connection stalls (infra, fixed)** — `host.docker.internal`
-   resolved to an unreachable IPv6 address on Docker Desktop; pinned
-   `192.168.65.254` in compose.dev.yml + nginx keepalive upstream.
+   resolved to an unreachable IPv6 address on some Docker Desktop versions.
+   Switched compose.dev.yml to the portable `extra_hosts: host-gateway`
+   mapping and kept the nginx API upstream hostname-based
+   (`host.docker.internal:7780`), so the dev gateway works on both Docker
+   Desktop and Linux Docker Engine (CI).
 3. **MinIO image mismatch (infra, fixed)** — pinned `RELEASE.2025-09-07T16-13-09Z`
    (mc-capable, meta-v3 compatible); container now healthy.
 4. **E2E environment contract (config, documented)** — webhook suites require

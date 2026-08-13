@@ -12,6 +12,8 @@ coverage/
 .env.production.local
 content/*
 !content/.gitkeep
+apps/api/content/*
+!apps/api/content/.gitkeep
 tmp/
 
 # Local third-party source references

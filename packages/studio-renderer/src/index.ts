@@ -63,7 +63,8 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
           ((child as { type?: string }).type === 'studio-card')
       );
       if (hasBlockCard) return content;
-      return content ? `<p>${content}</p>` : '<p></p>';
+      const styleAttr = n.style ? ` style="${escapeHtml(String(n.style))}"` : '';
+      return content ? `<p${styleAttr}>${content}</p>` : '<p></p>';
     }
 
     case 'heading': {
@@ -71,19 +72,45 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
       const level = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag.toLowerCase())
         ? tag.toLowerCase()
         : 'h2';
-      return `<${level}>${renderChildren()}</${level}>`;
+      const styleAttr = n.style ? ` style="${escapeHtml(String(n.style))}"` : '';
+      return `<${level}${styleAttr}>${renderChildren()}</${level}>`;
     }
 
     case 'quote':
       return `<blockquote>${renderChildren()}</blockquote>`;
 
     case 'list': {
+      if (n.listType === 'check') {
+        return `<ul class="studio-checklist">${renderChildren()}</ul>`;
+      }
       const listType = n.listType === 'number' ? 'ol' : 'ul';
       return `<${listType}>${renderChildren()}</${listType}>`;
     }
 
-    case 'listitem':
+    case 'listitem': {
+      if (typeof n.checked === 'boolean') {
+        const isChecked = n.checked;
+        const checkedAttr = isChecked ? ' checked="checked"' : '';
+        const checkedClass = isChecked ? ' is-checked' : '';
+        return `<li class="studio-checklist-item${checkedClass}"><input type="checkbox"${checkedAttr} disabled /><span>${renderChildren()}</span></li>`;
+      }
       return `<li>${renderChildren()}</li>`;
+    }
+
+    case 'table':
+      return `<div class="studio-table-container"><table class="studio-table"><tbody>${renderChildren()}</tbody></table></div>`;
+
+    case 'tablerow':
+      return `<tr>${renderChildren()}</tr>`;
+
+    case 'tablecell': {
+      const isHeader = n.headerState && n.headerState !== 0;
+      const tag = isHeader ? 'th' : 'td';
+      const colSpan = n.colSpan && Number(n.colSpan) > 1 ? ` colspan="${n.colSpan}"` : '';
+      const rowSpan = n.rowSpan && Number(n.rowSpan) > 1 ? ` rowspan="${n.rowSpan}"` : '';
+      const bg = n.backgroundColor ? ` style="background-color: ${escapeHtml(String(n.backgroundColor))}"` : '';
+      return `<${tag}${colSpan}${rowSpan}${bg}>${renderChildren()}</${tag}>`;
+    }
 
     case 'link': {
       const url = sanitizeUrl(n.url || '#');

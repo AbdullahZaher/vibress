@@ -40,7 +40,7 @@ export function MarkdownCardEditor({ nodeKey, cardData }: Props) {
 
   return (
     <div
-      className={`vb-markdown-card relative w-full mb-4 border rounded-md bg-gray-50 overflow-hidden shadow-sm`}
+      className={`vb-markdown-card relative w-full mb-4 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md text-foreground shadow-sm overflow-hidden`}
       onClick={(e) => {
         clearSelection();
         setSelected(true);
@@ -50,12 +50,12 @@ export function MarkdownCardEditor({ nodeKey, cardData }: Props) {
         }
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
         transition: 'outline 0.1s ease',
       }}
     >
-      <div className="bg-gray-100 border-b px-3 py-1 flex items-center justify-between select-none">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Markdown</span>
+      <div className="bg-muted/60 dark:bg-white/[0.04] border-b border-border/60 dark:border-white/10 px-3 py-1.5 flex items-center justify-between select-none">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Markdown</span>
       </div>
       <div className="p-3">
         {isSelected ? (

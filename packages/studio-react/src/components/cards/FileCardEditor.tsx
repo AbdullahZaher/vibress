@@ -74,24 +74,26 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
 
   return (
     <figure
-      className={`vb-file-card relative`}
+      className={`vb-file-card relative my-3`}
       onClick={() => {
         clearSelection();
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
         transition: 'outline 0.1s ease',
       }}
     >
-      <div className="flex items-center gap-4 p-4 border rounded-md bg-gray-50 mb-2">
-        <FileIcon className="text-gray-500 flex-shrink-0" size={32} />
-        <div className="flex-1 overflow-hidden">
-          <div className="font-semibold truncate">{cardData.fileName}</div>
-          <div className="text-sm text-gray-500">{cardData.fileSize}</div>
+      <div className="flex items-center gap-3.5 py-2.5 px-3.5 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md text-foreground shadow-sm">
+        <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0">
+          <FileIcon size={20} />
         </div>
-        <div className="p-2 bg-white border rounded shadow-sm flex-shrink-0">
-          <Download size={20} className="text-gray-700" />
+        <div className="flex-1 overflow-hidden">
+          <div className="font-semibold text-sm truncate text-foreground">{cardData.fileName}</div>
+          <div className="text-xs text-muted-foreground">{cardData.fileSize}</div>
+        </div>
+        <div className="p-2 bg-muted/60 dark:bg-white/[0.08] border border-border/60 dark:border-white/10 rounded-lg shadow-sm flex-shrink-0 text-muted-foreground">
+          <Download size={16} />
         </div>
       </div>
       <NestedCaptionEditor

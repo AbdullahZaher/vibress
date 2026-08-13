@@ -49,6 +49,10 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   } | null>(null);
 
   const handleRequestMedia = useCallback((req: { cardType: string }) => {
+    const mediaTypes = ['image', 'gallery', 'video', 'audio', 'file'];
+    if (!mediaTypes.includes(req.cardType)) {
+      return Promise.resolve(null);
+    }
     return new Promise<Record<string, unknown> | null>((resolve) => {
       setPickerConfig({ cardType: req.cardType, resolve });
       setShowPicker(true);

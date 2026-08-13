@@ -24,9 +24,10 @@ export const STUDIO_ALLOWED_TAGS = new Set([
   'div', 'span', 'hr',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
   'iframe',
+  'input',
 ]);
 
-const GLOBAL_ATTRS = new Set(['class', 'id', 'dir', 'lang', 'title']);
+const GLOBAL_ATTRS = new Set(['class', 'id', 'dir', 'lang', 'title', 'style', 'data-checked']);
 
 /** Tag → allowed attributes (beyond GLOBAL_ATTRS). */
 const TAG_ATTRS: Record<string, Set<string>> = {
@@ -39,6 +40,7 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   td: new Set(['colspan', 'rowspan']),
   th: new Set(['colspan', 'rowspan', 'scope']),
   ol: new Set(['start', 'type']),
+  input: new Set(['type', 'checked', 'disabled']),
 };
 
 const URL_ATTRS = new Set(['href', 'src', 'poster']);
@@ -216,6 +218,13 @@ function sanitizeNode(node: P5Node): P5Node[] {
     const target = attrs.find((a) => a.name.toLowerCase() === 'target');
     if (target && target.value === '_blank' && !attrs.some((a) => a.name.toLowerCase() === 'rel')) {
       attrs.push({ name: 'rel', value: 'noopener noreferrer' });
+    }
+  }
+
+  if (tag === 'input') {
+    const typeAttr = attrs.find((a) => a.name.toLowerCase() === 'type');
+    if (!typeAttr || typeAttr.value.toLowerCase() !== 'checkbox') {
+      return [];
     }
   }
 

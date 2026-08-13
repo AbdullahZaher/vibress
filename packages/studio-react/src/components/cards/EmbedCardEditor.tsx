@@ -76,11 +76,11 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
         transition: 'outline 0.1s ease',
       }}
     >
-      <div className="relative w-full overflow-hidden bg-gray-100 rounded-md" style={{ paddingTop: '56.25%' /* 16:9 Aspect Ratio */ }}>
+      <div className="relative w-full overflow-hidden bg-muted/60 dark:bg-white/[0.04] rounded-xl border border-border/80 dark:border-white/10 shadow-sm" style={{ paddingTop: '56.25%' /* 16:9 Aspect Ratio */ }}>
         {cardData.html ? (
            <div className="absolute top-0 left-0 w-full h-full" dangerouslySetInnerHTML={{ __html: cardData.html }} />
         ) : (

@@ -77,18 +77,18 @@ export function ImageCardEditor({ nodeKey, cardData }: Props) {
 
   return (
     <figure
-      className={`vb-image-card${widthClass} relative`}
+      className={`vb-image-card${widthClass} relative my-3.5`}
       onClick={() => {
         clearSelection();
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
-        borderRadius: '4px',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
+        borderRadius: '12px',
         transition: 'outline 0.1s ease',
       }}
     >
-      <img src={cardData.src} alt={cardData.alt || ''} className="w-full" />
+      <img src={cardData.src} alt={cardData.alt || ''} className="w-full rounded-xl overflow-hidden shadow-sm" />
       <NestedCaptionEditor
         initialCaptionJSON={typeof cardData.caption === 'object' ? cardData.caption : undefined}
         onChange={onCaptionChange}

@@ -101,8 +101,10 @@ export function StudioCardComponent({
 
   const isInteractiveTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false;
-    // Native interactive controls inside the card keep their behavior.
-    if (target.closest('input, textarea, button, select, a')) return true;
+    // Inside popovers, toolbars, or nested form inputs: keep native interactive behavior
+    if (target.closest('.studio-glassy-menu, .floating-card-action-popup, form, input, textarea, select')) {
+      return true;
+    }
     // Nested Lexical editors (e.g. caption editors) are also interactive.
     const editable = target.closest('[contenteditable="true"]');
     if (editable && editable !== editor.getRootElement()) return true;
@@ -171,11 +173,11 @@ export function StudioCardComponent({
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
         position: 'relative',
         cursor: 'pointer',
         padding: '2px',
-        borderRadius: '4px',
+        borderRadius: '8px',
         transition: 'outline 0.1s ease',
       }}
       dangerouslySetInnerHTML={{ __html: html }}

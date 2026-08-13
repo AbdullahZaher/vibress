@@ -13,8 +13,13 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # host-gateway is the portable mapping for reaching host services from
+    # containers: works on Docker Desktop (macOS/Windows) and Docker Engine
+    # on Linux (GitHub Actions runners) alike. Do not pin a platform-specific
+    # IP here (e.g. Docker Desktop's 192.168.65.254) — it silently breaks the
+    # gateway round-trip on Linux CI.
     extra_hosts:
-      - "host.docker.internal:192.168.65.254"
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7777/nginx-health"]
       interval: 30s

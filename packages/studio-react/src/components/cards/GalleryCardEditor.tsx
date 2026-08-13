@@ -85,20 +85,20 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
 
   return (
     <figure
-      className={`vb-gallery-card${widthClass} relative`}
+      className={`vb-gallery-card${widthClass} relative my-3.5`}
       onClick={() => {
         clearSelection();
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
-        borderRadius: '4px',
+        outline: isSelected ? '2px solid #6366f1' : 'none',
+        borderRadius: '12px',
         transition: 'outline 0.1s ease',
       }}
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2.5">
         {cardData.images.map((img, i) => (
-          <img key={i} src={img.src} alt={img.alt || ''} className="flex-1 object-cover min-w-[200px]" style={{ maxHeight: '300px' }} />
+          <img key={i} src={img.src} alt={img.alt || ''} className="flex-1 object-cover min-w-[200px] rounded-xl shadow-sm" style={{ maxHeight: '300px' }} />
         ))}
       </div>
       <NestedCaptionEditor
