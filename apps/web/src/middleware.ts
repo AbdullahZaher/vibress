@@ -27,6 +27,9 @@ function buildCsp(nonce: string): string {
     "media-src 'self' blob: https:",
     "font-src 'self' data:",
     "connect-src 'self'",
+    // Approved Studio embed providers only — never frame-src *.
+    // Matches packages/studio-utils getEmbedProvider() allowlist.
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com",
     `script-src 'self' 'nonce-${nonce}'`,
     `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
   ].join('; ');

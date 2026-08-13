@@ -611,3 +611,134 @@ a {
     height: 220px;
   }
 }
+
+/* ==========================================================================
+   Vibress Studio rich-content card styles (kg-* classes emitted by the
+   shared public renderer). Appended verbatim to every bundled theme so all
+   themes render Studio cards consistently. Scoped to .studio-html-content
+   (the wrapper used by Post/Page components).
+   ========================================================================== */
+.studio-html-content .kg-card {
+  margin: 2.4rem auto;
+}
+.studio-html-content .kg-card:first-child {
+  margin-top: 0;
+}
+.studio-html-content figure {
+  margin: 0;
+}
+.studio-html-content img {
+  max-width: 100%;
+  height: auto;
+}
+.studio-html-content figcaption {
+  margin-top: 0.8rem;
+  font-size: 0.9em;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-secondary, #6b7280);
+}
+.studio-html-content .kg-image-card img,
+.studio-html-content .kg-gallery-card img {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+}
+.studio-html-content .kg-image-card.kg-width-wide,
+.studio-html-content .kg-image-card.kg-width-full {
+  width: 100%;
+}
+.studio-html-content .kg-gallery-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem;
+  width: 100%;
+}
+.studio-html-content .kg-video-card video {
+  display: block;
+  width: 100%;
+  background-color: #000;
+  border-radius: 6px;
+}
+.studio-html-content .kg-audio-card audio {
+  display: block;
+  width: 100%;
+}
+.studio-html-content .kg-audio-card .title {
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+.studio-html-content .kg-embed-card iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 6px;
+}
+.studio-html-content .kg-embed-card > a {
+  word-break: break-word;
+}
+.studio-html-content .kg-button-card {
+  text-align: center;
+}
+.studio-html-content .kg-button-card .btn {
+  display: inline-block;
+  padding: 0.9rem 2.2rem;
+  border-radius: 999px;
+  color: #fff;
+  background-color: var(--accent-color, #1f2937);
+  text-decoration: none;
+  font-weight: 600;
+}
+.studio-html-content .kg-callout-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1.6rem 2rem;
+  border-radius: 8px;
+  background-color: var(--light-gray, #f3f4f6);
+}
+.studio-html-content .kg-callout-card .emoji {
+  flex-shrink: 0;
+  font-size: 1.6rem;
+  line-height: 1.4;
+}
+.studio-html-content .kg-toggle-card summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.studio-html-content .kg-toggle-card[open] summary {
+  margin-bottom: 0.8rem;
+}
+.studio-html-content .kg-file-card a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.6rem;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  text-decoration: none;
+}
+.studio-html-content .kg-file-card .size {
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+.studio-html-content .kg-bookmark-card a {
+  display: block;
+  padding: 1.6rem;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  text-decoration: none;
+}
+.studio-html-content .kg-bookmark-card .title {
+  font-weight: 700;
+}
+.studio-html-content .kg-bookmark-card .desc {
+  margin-top: 0.4rem;
+  font-size: 0.9em;
+  color: var(--text-secondary, #6b7280);
+}
+@media (max-width: 768px) {
+  .studio-html-content .kg-gallery-card {
+    grid-template-columns: 1fr;
+  }
+}
