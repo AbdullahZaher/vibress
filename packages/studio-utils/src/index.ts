@@ -47,19 +47,15 @@ export function sanitizeUrl(url: string, fallback = '#'): string {
   return url.trim();
 }
 
+/**
+ * Sanitize arbitrary HTML against the Studio allowlist.
+ *
+ * Implemented with a real HTML parser (parse5) — NOT a regex filter.
+ * Safe semantic markup survives; script/event-handler/unsafe-URL vectors are
+ * removed. See sanitize.ts for the full allowlist and URL rules.
+ */
 export function sanitizeHtml(html: string): string {
-  if (!html) return '';
-
-  // Remove script tags and their contents
-  let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-
-  // Remove inline event handlers like onclick, onerror
-  clean = clean.replace(/\s*on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-
-  // Neutralize javascript: URLs in href/src
-  clean = clean.replace(/(href|src)\s*=\s*["']?\s*javascript:[^"'>\s]*/gi, '$1="#"');
-
-  return clean;
+  return sanitizeStudioHtml(html);
 }
 
 export function slugify(text: string): string {
@@ -74,4 +70,7 @@ export function slugify(text: string): string {
     .replace(/-+$/, '');
 }
 
+import { sanitizeStudioHtml } from './sanitize';
+
 export * from './markdown';
+export * from './sanitize';

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "markdown-it": "^14.1.0",
+    "parse5": "^7.3.0",
     "semver": "^7.6.3"
   },
   "devDependencies": {

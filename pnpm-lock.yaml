@@ -286,6 +286,9 @@ importers:
       '@vibress/storage-s3':
         specifier: workspace:*
         version: link:../../packages/storage-s3
+      '@vibress/studio-core':
+        specifier: workspace:*
+        version: link:../../packages/studio-core
       '@vibress/studio-renderer':
         specifier: workspace:*
         version: link:../../packages/studio-renderer
@@ -1762,6 +1765,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.31)
+      '@vibress/studio-testing':
+        specifier: workspace:*
+        version: link:../studio-testing
 
   packages/studio-serializer:
     dependencies:
@@ -1840,6 +1846,9 @@ importers:
       markdown-it:
         specifier: ^14.1.0
         version: 14.3.0
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
       semver:
         specifier: ^7.6.3
         version: 7.8.5

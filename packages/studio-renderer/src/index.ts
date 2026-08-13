@@ -1,18 +1,25 @@
 import { StudioDocument, validateStudioDocument, migrateDocument } from '@vibress/studio-core';
 import { STUDIO_CARD_DEFINITIONS } from '@vibress/studio-cards';
-import { escapeHtml, sanitizeUrl } from '@vibress/studio-utils';
+import { escapeHtml, sanitizeUrl, sanitizeStudioHtml } from '@vibress/studio-utils';
 
 export interface RenderOptions {
   target?: 'web' | 'email';
 }
 
 export function renderStudioDocumentToHtml(docInput: unknown, options: RenderOptions = {}): string {
+  // migrateDocument applies the canonical normalization layer
+  // (react-studio-card → studio-card) plus legacy migration.
   const doc = migrateDocument(docInput);
   if (!doc.root || !Array.isArray(doc.root.children)) {
     return '';
   }
 
-  return doc.root.children.map((node) => renderNodeToHtml(node, options)).join('');
+  const raw = doc.root.children.map((node) => renderNodeToHtml(node, options)).join('');
+
+  // FINAL security boundary: every Studio card's rendered markup passes
+  // through the shared allowlist sanitizer before leaving the server.
+  // CSP remains a second, independent defense layer.
+  return sanitizeStudioHtml(raw);
 }
 
 function renderNodeToHtml(node: unknown, options: RenderOptions): string {
@@ -48,6 +55,14 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
   switch (type) {
     case 'paragraph': {
       const content = renderChildren();
+      // Block-level cards must never be wrapped in <p> (invalid HTML that
+      // the final sanitizer would split, leaving stray empty <p> nodes).
+      const hasBlockCard = Array.isArray(n.children) && n.children.some(
+        (child: unknown) =>
+          child && typeof child === 'object' &&
+          ((child as { type?: string }).type === 'studio-card')
+      );
+      if (hasBlockCard) return content;
       return content ? `<p>${content}</p>` : '<p></p>';
     }
 
@@ -80,10 +95,15 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
     case 'code':
       return `<pre><code>${renderChildren()}</code></pre>`;
 
-    // Handle Studio Card Nodes
+    // Handle Studio Card Nodes (canonical type after normalization)
     case 'studio-card': {
       const cardType = n.cardType;
       const cardData = n.cardData || {};
+      // A blob: URL only exists for the current browser session and can never
+      // be published; skip the card rather than emit a broken/leaky reference.
+      if (hasTransientMedia(cardData)) {
+        return `<!-- Card skipped: ${escapeHtml(cardType || 'card')} (transient media) -->`;
+      }
       const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
       if (def) {
         try {
@@ -112,6 +132,18 @@ export function renderStudioDocumentToPlainText(docInput: unknown): string {
     .map((node) => renderNodeToPlainText(node))
     .filter(Boolean)
     .join('\n\n');
+}
+
+function hasTransientMedia(cardData: Record<string, unknown>): boolean {
+  const candidates: Array<unknown> = [cardData.src, cardData.poster, cardData.thumbnail];
+  if (Array.isArray(cardData.images)) {
+    for (const img of cardData.images) {
+      if (img && typeof img === 'object') {
+        candidates.push((img as Record<string, unknown>).src);
+      }
+    }
+  }
+  return candidates.some((v) => typeof v === 'string' && (v as string).toLowerCase().startsWith('blob:'));
 }
 
 function renderNodeToPlainText(node: unknown): string {
