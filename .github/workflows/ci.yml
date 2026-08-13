@@ -135,16 +135,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Start development infrastructure
-        run: docker compose -f compose.dev.yml -f compose.dev.ci.yml up -d --wait
-
-      - name: Run database migrations
-        run: pnpm --filter @vibress/database run db:migrate
-
-      - name: Start development applications
+      - name: Run E2E suite (dev stack + fresh-install wizard)
+        # Everything runs in ONE step so the background app processes stay
+        # alive for the whole test run (GitHub Actions kills background
+        # processes when a step ends), and the web runs in production mode
+        # (`next start`) so cold-compile timeouts cannot occur on a fresh
+        # runner.
         run: |
-          pnpm dev > /tmp/vibress-dev.log 2>&1 &
-          for i in $(seq 1 90); do
+          set -e
+
+          # --- Dev infrastructure + migrations ---
+          docker compose -f compose.dev.yml -f compose.dev.ci.yml up -d --wait
+          pnpm --filter @vibress/database run db:migrate
+
+          # --- Production-mode web build (fast SSR, no dev cold-compile) ---
+          pnpm --filter @vibress/web build
+
+          # --- Start dev-stack apps (API/worker from source, web prod, SPAs dev) ---
+          npx tsx apps/api/src/main.ts > /tmp/api.log 2>&1 &
+          npx tsx apps/worker/src/main.ts > /tmp/worker.log 2>&1 &
+          (cd apps/web && npx next start -p 7778 > /tmp/web.log 2>&1) &
+          pnpm --filter @vibress/admin dev > /tmp/admin.log 2>&1 &
+          pnpm --filter @vibress/portal dev > /tmp/portal.log 2>&1 &
+
+          # --- Wait for dev-stack health (host ports + gateway round-trip) ---
+          for i in $(seq 1 60); do
             ok=1
             for u in http://127.0.0.1:7780/health/ready http://127.0.0.1:7778 http://127.0.0.1:7779 http://127.0.0.1:7781; do
               curl -sf -o /dev/null "$u" || ok=0
@@ -152,13 +167,11 @@ jobs:
             [ "$ok" = "1" ] && break
             sleep 5
           done
-          curl -sf -o /dev/null http://127.0.0.1:7780/health/ready || { echo 'dev apps failed to start'; tail -80 /tmp/vibress-dev.log; exit 1; }
+          curl -sf http://127.0.0.1:7777/ >/dev/null || { echo 'gateway -> web round-trip failed'; tail -40 /tmp/web.log; tail -40 /tmp/api.log; exit 1; }
 
-      - name: Start fresh-install stack (setup wizard E2E)
-        # Note: no `--wait` — the one-shot `migrate` service exits (0) and
-        # `up --wait` treats any exited container as a failure. Poll health
-        # explicitly instead.
-        run: |
+          # --- Fresh-install stack (setup wizard E2E, :8899) ---
+          # No `--wait`: the one-shot migrate service exits (0) and
+          # `up --wait` treats any exited container as a failure.
           docker compose -f compose.setup-e2e.yml up -d --build
           for i in $(seq 1 60); do
             if curl -sf -o /dev/null http://127.0.0.1:8899/nginx-health; then
@@ -166,10 +179,8 @@ jobs:
             fi
             sleep 5
           done
-          curl -sf http://127.0.0.1:8899/api/setup/v1/status || { echo 'setup-e2e stack failed to become ready'; exit 1; }
+          curl -sf http://127.0.0.1:8899/api/setup/v1/status || { echo 'setup-e2e stack failed to become ready'; docker compose -f compose.setup-e2e.yml logs --tail=40; exit 1; }
 
-      - name: Install Playwright browser
-        run: npx playwright install chromium --with-deps
-
-      - name: Run E2E suite
-        run: npx playwright test
+          # --- Browser + tests ---
+          npx playwright install chromium --with-deps
+          npx playwright test
