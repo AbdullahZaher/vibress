@@ -6,16 +6,12 @@ import { PagesList } from './PagesList';
 import { PageEditor } from './PageEditor';
 import { TagsManager } from './TagsManager';
 import { MediaLibrary } from './MediaLibrary';
-import { StorageSettings } from './StorageSettings';
-import { ThemesSettings } from './ThemesSettings';
 import { MembersList } from './MembersList';
-import { BillingSettings } from './BillingSettings';
-import { SubscriptionsList } from './SubscriptionsList';
-import { NewslettersSettings } from './NewslettersSettings';
-import { CommunitySettings } from './CommunitySettings';
-import { PlatformSettings } from './PlatformSettings';
-import { IntelligenceSettings } from './IntelligenceSettings';
-import { OperationsSettings } from './OperationsSettings';
+import { GeneralSettings } from './GeneralSettings';
+import { SiteSettings } from './SiteSettings';
+import { MembershipSettings } from './MembershipSettings';
+import { GrowthSettings } from './GrowthSettings';
+import { AdvancedSettings } from './AdvancedSettings';
 
 import { AppSidebar } from './layout/sidebar/AppSidebar';
 import { AnalyticsDashboard } from './layout/AnalyticsDashboard';
@@ -66,6 +62,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
 
   // Route Views Renderer
   const renderContent = () => {
+    // 1. Posts & Editor Routes
     if (currentPath === '/admin/posts' || currentPath === '/admin/posts/') {
       return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} />;
     }
@@ -86,6 +83,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       return <PostEditor postId={postId} currentUserId={user.id} canPublish={canPublishPosts} onNavigate={onNavigate} />;
     }
 
+    // 2. Pages Routes
     if (currentPath === '/admin/pages' || currentPath === '/admin/pages/') {
       return <PagesList onNavigate={onNavigate} canPublish={canPublishPages} />;
     }
@@ -97,55 +95,75 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       return <PageEditor pageId={pageId} currentUserId={user.id} canPublish={canPublishPages} onNavigate={onNavigate} />;
     }
 
+    // 3. Taxonomy & Content Assets
     if (currentPath === '/admin/tags' || currentPath === '/admin/tags/') {
       return <TagsManager />;
     }
-
     if (currentPath === '/admin/media' || currentPath === '/admin/media/' || currentPath.startsWith('/admin/media/')) {
       return <MediaLibrary />;
     }
-
-    if (currentPath === '/admin/settings/storage' || currentPath === '/admin/settings/storage/' || currentPath.startsWith('/admin/settings/storage')) {
-      return <StorageSettings />;
-    }
-
-    if (currentPath === '/admin/settings/themes' || currentPath === '/admin/settings/themes/' || currentPath.startsWith('/admin/settings/themes')) {
-      return <ThemesSettings />;
-    }
-
     if (currentPath === '/admin/members' || currentPath === '/admin/members/' || currentPath.startsWith('/admin/members')) {
       return <MembersList />;
     }
 
-    if (currentPath === '/admin/settings/billing' || currentPath === '/admin/settings/billing/' || currentPath.startsWith('/admin/settings/billing')) {
-      return <BillingSettings />;
+    // 4. Five Core Settings Pillars:
+    // Pillar 1: General settings
+    if (
+      currentPath === '/admin/settings' ||
+      currentPath === '/admin/settings/' ||
+      currentPath.startsWith('/admin/settings/general')
+    ) {
+      return <GeneralSettings />;
     }
 
-    if (currentPath === '/admin/subscriptions' || currentPath === '/admin/subscriptions/' || currentPath.startsWith('/admin/subscriptions')) {
-      return <SubscriptionsList />;
+    // Pillar 2: Site Settings (Themes & Design, Storage)
+    if (currentPath.startsWith('/admin/settings/site')) {
+      return <SiteSettings />;
+    }
+    if (currentPath.startsWith('/admin/settings/themes')) {
+      return <SiteSettings initialTab="themes" />;
+    }
+    if (currentPath.startsWith('/admin/settings/storage')) {
+      return <SiteSettings initialTab="storage" />;
     }
 
-    if (currentPath === '/admin/newsletters' || currentPath === '/admin/newsletters/' || currentPath.startsWith('/admin/newsletters')) {
-      return <NewslettersSettings />;
+    // Pillar 3: Membership Settings (Billing, Access, Subscriptions)
+    if (currentPath.startsWith('/admin/settings/membership')) {
+      return <MembershipSettings />;
+    }
+    if (currentPath.startsWith('/admin/settings/billing')) {
+      return <MembershipSettings initialTab="billing" />;
+    }
+    if (currentPath.startsWith('/admin/subscriptions')) {
+      return <MembershipSettings initialTab="subscriptions" />;
     }
 
-    if (currentPath === '/admin/community' || currentPath === '/admin/community/' || currentPath.startsWith('/admin/community')) {
-      return <CommunitySettings />;
+    // Pillar 4: Growth Settings (Newsletters, Intelligence, Community)
+    if (currentPath.startsWith('/admin/settings/growth')) {
+      return <GrowthSettings />;
+    }
+    if (currentPath.startsWith('/admin/newsletters')) {
+      return <GrowthSettings initialTab="newsletters" />;
+    }
+    if (currentPath.startsWith('/admin/analytics')) {
+      return <GrowthSettings initialTab="intelligence" />;
+    }
+    if (currentPath.startsWith('/admin/community')) {
+      return <GrowthSettings initialTab="community" />;
     }
 
-    if (currentPath === '/admin/settings/platform' || currentPath === '/admin/settings/platform/' || currentPath.startsWith('/admin/settings/platform')) {
-      return <PlatformSettings />;
+    // Pillar 5: Advanced Settings (Platform & APIs, System Operations)
+    if (currentPath.startsWith('/admin/settings/advanced')) {
+      return <AdvancedSettings />;
+    }
+    if (currentPath.startsWith('/admin/settings/platform')) {
+      return <AdvancedSettings initialTab="platform" />;
+    }
+    if (currentPath.startsWith('/admin/settings/operations')) {
+      return <AdvancedSettings initialTab="operations" />;
     }
 
-    if (currentPath === '/admin/analytics' || currentPath === '/admin/analytics/' || currentPath.startsWith('/admin/analytics')) {
-      return <IntelligenceSettings />;
-    }
-
-    if (currentPath === '/admin/settings/operations' || currentPath === '/admin/settings/operations/' || currentPath.startsWith('/admin/settings/operations')) {
-      return <OperationsSettings />;
-    }
-
-    // Default View: Analytics Dashboard
+    // Default Fallback View: Analytics Dashboard
     return <AnalyticsDashboard user={user} />;
   };
 

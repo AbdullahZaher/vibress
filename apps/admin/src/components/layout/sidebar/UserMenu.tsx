@@ -102,13 +102,13 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
-                    onNavigate('/admin/settings/platform');
+                    onNavigate('/admin/settings/general');
                   }}
                   className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <Shield className="h-3.5 w-3.5" />
-                    <span>Security & Platform</span>
+                    <Settings className="h-3.5 w-3.5" />
+                    <span>General Settings</span>
                   </div>
                 </button>
 
@@ -116,13 +116,13 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
-                    onNavigate('/admin/settings/themes');
+                    onNavigate('/admin/settings/advanced');
                   }}
                   className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <Settings className="h-3.5 w-3.5" />
-                    <span>Theme Settings</span>
+                    <Shield className="h-3.5 w-3.5" />
+                    <span>Advanced & Platform</span>
                   </div>
                 </button>
               </>

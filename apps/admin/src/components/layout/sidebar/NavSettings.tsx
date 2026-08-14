@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ChevronDown, HelpCircle, Palette, CreditCard, Mail, HardDrive, Sliders, Activity } from 'lucide-react';
+import { Settings, ChevronDown, HelpCircle, Sliders, Layout, CreditCard, Sparkles, Cpu } from 'lucide-react';
 
 interface NavSettingsProps {
   currentPath: string;
@@ -21,40 +21,48 @@ export const NavSettings: React.FC<NavSettingsProps> = ({ currentPath, onNavigat
 
   const settingsItems = [
     {
-      label: 'Themes',
-      path: '/admin/settings/themes',
-      icon: <Palette className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/settings/themes'),
-    },
-    {
-      label: 'Billing',
-      path: '/admin/settings/billing',
-      icon: <CreditCard className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/settings/billing'),
-    },
-    {
-      label: 'Newsletters',
-      path: '/admin/newsletters',
-      icon: <Mail className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/newsletters'),
-    },
-    {
-      label: 'Storage',
-      path: '/admin/settings/storage',
-      icon: <HardDrive className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/settings/storage'),
-    },
-    {
-      label: 'Platform',
-      path: '/admin/settings/platform',
+      label: 'General settings',
+      path: '/admin/settings/general',
       icon: <Sliders className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/settings/platform'),
+      active:
+        currentPath === '/admin/settings' ||
+        currentPath === '/admin/settings/' ||
+        currentPath.startsWith('/admin/settings/general'),
     },
     {
-      label: 'Operations',
-      path: '/admin/settings/operations',
-      icon: <Activity className="h-3.5 w-3.5 shrink-0" />,
-      active: currentPath.startsWith('/admin/settings/operations'),
+      label: 'Site',
+      path: '/admin/settings/site',
+      icon: <Layout className="h-3.5 w-3.5 shrink-0" />,
+      active:
+        currentPath.startsWith('/admin/settings/site') ||
+        currentPath.startsWith('/admin/settings/themes') ||
+        currentPath.startsWith('/admin/settings/storage'),
+    },
+    {
+      label: 'Membership',
+      path: '/admin/settings/membership',
+      icon: <CreditCard className="h-3.5 w-3.5 shrink-0" />,
+      active:
+        currentPath.startsWith('/admin/settings/membership') ||
+        currentPath.startsWith('/admin/settings/billing') ||
+        currentPath.startsWith('/admin/subscriptions'),
+    },
+    {
+      label: 'Growth',
+      path: '/admin/settings/growth',
+      icon: <Sparkles className="h-3.5 w-3.5 shrink-0" />,
+      active:
+        currentPath.startsWith('/admin/settings/growth') ||
+        currentPath.startsWith('/admin/newsletters'),
+    },
+    {
+      label: 'Advanced',
+      path: '/admin/settings/advanced',
+      icon: <Cpu className="h-3.5 w-3.5 shrink-0" />,
+      active:
+        currentPath.startsWith('/admin/settings/advanced') ||
+        currentPath.startsWith('/admin/settings/platform') ||
+        currentPath.startsWith('/admin/settings/operations'),
     },
   ];
 
@@ -83,15 +91,15 @@ export const NavSettings: React.FC<NavSettingsProps> = ({ currentPath, onNavigat
 
       {/* Expanded Settings Menu */}
       {settingsOpen && (
-        <div className="relative ml-4 pl-3.5 border-l border-sidebar-border/70 space-y-0 text-[12px] my-0.5">
+        <div className="relative ml-4 pl-3.5 border-l border-sidebar-border/70 space-y-0.5 text-[12px] my-1">
           {settingsItems.map((item) => (
             <button
               key={item.path}
               type="button"
               onClick={() => onNavigate(item.path)}
-              className={`w-full flex items-center gap-2 text-left py-1 px-2 rounded-md transition-colors cursor-pointer font-medium ${
+              className={`w-full flex items-center gap-2.5 text-left py-1.5 px-2 rounded-md transition-colors cursor-pointer font-medium ${
                 item.active
-                  ? 'text-foreground font-semibold bg-sidebar-accent/70'
+                  ? 'text-foreground font-semibold bg-sidebar-accent/80 shadow-2xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40'
               }`}
             >
