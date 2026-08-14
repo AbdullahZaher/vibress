@@ -49,7 +49,7 @@ async function fetchContentApi<T>(
     });
   } catch (error) {
     console.error(`[ContentApiClient Error] Network failure fetching ${path}:`, error);
-    throw new Error(`Content API unreachable at ${baseUrl}`, { cause: error });
+    return null;
   }
 
   if (res.status === 404) {
@@ -58,10 +58,14 @@ async function fetchContentApi<T>(
 
   if (!res.ok) {
     console.error(`[ContentApiClient Error] ${res.status} from ${path}`);
-    throw new Error(`Content API returned ${res.status}`);
+    return null;
   }
 
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 export interface PaginatedPostsResult {

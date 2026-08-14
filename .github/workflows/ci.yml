@@ -158,6 +158,12 @@ jobs:
           pnpm --filter @vibress/admin dev > /tmp/admin.log 2>&1 &
           pnpm --filter @vibress/portal dev > /tmp/portal.log 2>&1 &
 
+          # --- Wait for API health first ---
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:7780/health/ready && break
+            sleep 1
+          done
+
           # --- Wait for dev-stack health (host ports + gateway round-trip) ---
           for i in $(seq 1 60); do
             ok=1
@@ -165,7 +171,7 @@ jobs:
               curl -sf -o /dev/null "$u" || ok=0
             done
             [ "$ok" = "1" ] && break
-            sleep 5
+            sleep 2
           done
           curl -sf http://127.0.0.1:7777/ >/dev/null || { echo 'gateway -> web round-trip failed'; tail -40 /tmp/web.log; tail -40 /tmp/api.log; exit 1; }
 
