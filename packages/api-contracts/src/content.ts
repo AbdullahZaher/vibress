@@ -137,9 +137,18 @@ export const PublicPostSummarySchema = z.object({
 });
 export type PublicPostSummaryDto = z.infer<typeof PublicPostSummarySchema>;
 
+export const PublicTocItemSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  level: z.number(),
+});
+export type PublicTocItemDto = z.infer<typeof PublicTocItemSchema>;
+
 export const PublicPostDetailSchema = PublicPostSummarySchema.extend({
   content: z.record(z.unknown()),
   html: z.string(),
+  toc: z.array(PublicTocItemSchema).optional(),
+  readingTimeMins: z.number().optional(),
 });
 export type PublicPostDetailDto = z.infer<typeof PublicPostDetailSchema>;
 
@@ -154,6 +163,7 @@ export const PublicPageDetailSchema = z.object({
   publishedAt: z.string(),
   updatedAt: z.string(),
   seo: PublicSeoSchema,
+  toc: z.array(PublicTocItemSchema).optional(),
 });
 export type PublicPageDetailDto = z.infer<typeof PublicPageDetailSchema>;
 

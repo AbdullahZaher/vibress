@@ -1,6 +1,8 @@
 import React from 'react';
 import { ThemePageProps } from '../../types';
 import { ThemeLayout } from './Layout';
+import { CodeCopyHandler } from '../../../components/reader/CodeCopyHandler';
+import { ImageLightbox } from '../../../components/reader/ImageLightbox';
 
 export async function Page(props: ThemePageProps) {
   const pageObj = props.page;
@@ -16,6 +18,9 @@ export async function Page(props: ThemePageProps) {
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
+      <CodeCopyHandler />
+      <ImageLightbox />
+
       <main id="site-main" className="site-main outer">
         <article className="article inner">
           <script
@@ -26,11 +31,6 @@ export async function Page(props: ThemePageProps) {
           <header className="article-header">
             <h1 className="article-title">{pageObj.title}</h1>
             {pageObj.excerpt && <p className="article-excerpt">{pageObj.excerpt}</p>}
-            {pageObj.featureImage && (
-              <figure className="article-image">
-                <img src={pageObj.featureImage.url} alt={pageObj.featureImage.alt || pageObj.title} />
-              </figure>
-            )}
           </header>
 
           <section className="vb-content studio-html-content">

@@ -19,6 +19,8 @@ import { OperationsSettings } from './OperationsSettings';
 
 import { AppSidebar } from './layout/sidebar/AppSidebar';
 import { AnalyticsDashboard } from './layout/AnalyticsDashboard';
+import { MobileHeader } from './layout/MobileHeader';
+import { CommandPalette } from './layout/CommandPalette';
 
 interface AdminShellProps {
   user: ApiUser;
@@ -36,6 +38,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   can,
 }) => {
   const [darkMode, setDarkMode] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -44,6 +48,18 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // Global ⌘K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const canPublishPosts = can('posts.publish');
   const canPublishPages = can('pages.publish');
@@ -134,8 +150,19 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   };
 
   return (
-    <div className="h-screen max-h-screen w-screen bg-background text-foreground flex overflow-hidden font-sans">
-      {/* Vibress Modular Sidebar Assembly */}
+    <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
+      {/* Mobile Top Header (only visible on mobile/tablet screens < md) */}
+      <MobileHeader
+        currentPath={currentPath}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onNavigate={onNavigate}
+        canPublishPosts={canPublishPosts}
+      />
+
+      {/* Vibress Modular Sidebar (Desktop Static + Mobile Off-Canvas Drawer) */}
       <AppSidebar
         user={user}
         currentPath={currentPath}
@@ -144,10 +171,26 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onNavigate={onNavigate}
         onLogout={onLogout}
         canPublishPosts={canPublishPosts}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1 h-full max-h-screen overflow-y-auto p-6 md:p-8">{renderContent()}</main>
+      {/* Main Content Area */}
+      <main className="flex-1 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto p-4 sm:p-6 md:p-8">
+        {renderContent()}
+      </main>
+
+      {/* Global Interactive Command Palette (⌘K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigate={onNavigate}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        darkMode={darkMode}
+        onLogout={onLogout}
+        canPublishPosts={canPublishPosts}
+      />
     </div>
   );
 };

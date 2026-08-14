@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderStudioDocumentToHtml, renderStudioDocumentToPlainText } from '../index';
+import { renderStudioDocumentToHtml, renderStudioDocumentToPlainText, extractTableOfContentsFromDocument } from '../index';
 import { XSS_TEST_PAYLOADS } from '@vibress/studio-testing';
 
 function doc(children: unknown[]): unknown {
@@ -20,7 +20,8 @@ describe('renderStudioDocumentToHtml — all Studio cards', () => {
     ]));
     expect(html).toContain('<strong>Hello </strong>');
     expect(html).toContain('world');
-    expect(html).toContain('<h2>Sub</h2>');
+    expect(html).toContain('<h2 id="sub">Sub');
+    expect(html).toContain('class="heading-anchor"');
     expect(html).toContain('<li>item</li>');
     expect(html).toContain('<a href="https://example.com">link</a>');
   });
@@ -327,5 +328,19 @@ describe('renderStudioDocumentToPlainText', () => {
     expect(text).toContain('---');
     expect(text).not.toContain('<strong>');
     expect(text).not.toContain('<p>');
+  });
+
+  it('extracts table of contents hierarchy correctly', () => {
+    const toc = extractTableOfContentsFromDocument(doc([
+      { type: 'heading', tag: 'h2', children: [{ type: 'text', text: 'First Section' }] },
+      { type: 'paragraph', children: [{ type: 'text', text: 'Paragraph' }] },
+      { type: 'heading', tag: 'h3', children: [{ type: 'text', text: 'Sub section' }] },
+      { type: 'heading', tag: 'h2', children: [{ type: 'text', text: 'First Section' }] }, // duplicate title
+    ]));
+
+    expect(toc).toHaveLength(3);
+    expect(toc[0]).toEqual({ id: 'first-section', text: 'First Section', level: 2 });
+    expect(toc[1]).toEqual({ id: 'sub-section', text: 'Sub section', level: 3 });
+    expect(toc[2]).toEqual({ id: 'first-section-1', text: 'First Section', level: 2 });
   });
 });

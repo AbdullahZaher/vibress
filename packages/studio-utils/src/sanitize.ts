@@ -25,9 +25,13 @@ export const STUDIO_ALLOWED_TAGS = new Set([
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
   'iframe',
   'input',
+  'button',
 ]);
 
-const GLOBAL_ATTRS = new Set(['class', 'id', 'dir', 'lang', 'title', 'style', 'data-checked']);
+const GLOBAL_ATTRS = new Set([
+  'class', 'id', 'dir', 'lang', 'title', 'style',
+  'data-checked', 'data-language', 'aria-label', 'aria-hidden', 'aria-expanded'
+]);
 
 /** Tag → allowed attributes (beyond GLOBAL_ATTRS). */
 const TAG_ATTRS: Record<string, Set<string>> = {
@@ -41,6 +45,7 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   th: new Set(['colspan', 'rowspan', 'scope']),
   ol: new Set(['start', 'type']),
   input: new Set(['type', 'checked', 'disabled']),
+  button: new Set(['type', 'disabled', 'aria-label', 'aria-expanded']),
 };
 
 const URL_ATTRS = new Set(['href', 'src', 'poster']);

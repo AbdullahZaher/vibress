@@ -6,6 +6,7 @@ import { Author } from '@vibress/authors';
 import {
   renderStudioDocumentToHtml,
   renderStudioDocumentToPlainText,
+  extractTableOfContentsFromDocument,
 } from '@vibress/studio-renderer';
 import { normalizeStudioDocument } from '@vibress/studio-core';
 import { slugify } from '@vibress/utils';
@@ -236,6 +237,16 @@ export async function buildPublicPostSummaryDto(
   };
 }
 
+export function calculateReadingTime(docInput: unknown): number {
+  try {
+    const text = renderStudioDocumentToPlainText(docInput);
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    return Math.max(1, Math.ceil(words / 200));
+  } catch {
+    return 1;
+  }
+}
+
 export async function buildPublicPostDetailDto(
   post: Post,
   authors: Author[],
@@ -252,10 +263,15 @@ export async function buildPublicPostDetailDto(
     html = '<p>Content rendering unavailable.</p>';
   }
 
+  const toc = extractTableOfContentsFromDocument(resolvedDoc);
+  const readingTimeMins = calculateReadingTime(resolvedDoc);
+
   return {
     ...summary,
     content: resolvedDoc,
     html,
+    toc,
+    readingTimeMins,
   };
 }
 
@@ -279,6 +295,8 @@ export async function buildPublicPageDetailDto(
     html = '<p>Content rendering unavailable.</p>';
   }
 
+  const toc = extractTableOfContentsFromDocument(resolvedDoc);
+
   return {
     id: page.id,
     title: page.title,
@@ -296,5 +314,6 @@ export async function buildPublicPageDetailDto(
       ogImage: featureImage?.url || undefined,
       ogType: 'website',
     },
+    toc,
   };
 }

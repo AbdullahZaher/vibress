@@ -51,7 +51,7 @@ export const ImageCardDefinition: StudioCardDefinition<ImageCardData> = {
   },
   renderPlainText: (data) => {
     const capStr = data.captionHtml || (typeof data.caption === 'string' ? data.caption : '');
-    return data.alt || capStr || data.src || '';
+    return capStr ? stripHtml(capStr) : '';
   },
 };
 
@@ -77,7 +77,10 @@ export const GalleryCardDefinition: StudioCardDefinition<GalleryCardData> = {
     const layoutClass = data.width && data.width !== 'regular' ? ` kg-width-${data.width}` : '';
     return `<figure class="kg-card kg-gallery-card${layoutClass}">${imgs}${caption}</figure>`;
   },
-  renderPlainText: (data) => data.images.map((i) => i.alt).filter(Boolean).join(', '),
+  renderPlainText: (data) => {
+    const capStr = data.captionHtml || (typeof data.caption === 'string' ? data.caption : '');
+    return capStr ? stripHtml(capStr) : '';
+  },
 };
 
 // 3. Video Card
@@ -107,7 +110,7 @@ export const VideoCardDefinition: StudioCardDefinition<VideoCardData> = {
   },
   renderPlainText: (data) => {
     const capStr = data.captionHtml || (typeof data.caption === 'string' ? data.caption : '');
-    return capStr || data.src || '';
+    return capStr ? stripHtml(capStr) : '';
   },
 };
 
@@ -131,7 +134,7 @@ export const AudioCardDefinition: StudioCardDefinition<AudioCardData> = {
   },
   renderPlainText: (data) => {
     const capStr = typeof data.caption === 'string' ? data.caption : '';
-    return data.title || capStr || data.src || '';
+    return capStr || '';
   },
 };
 
@@ -157,7 +160,7 @@ export const FileCardDefinition: StudioCardDefinition<FileCardData> = {
   },
   renderPlainText: (data) => {
     const capStr = typeof data.caption === 'string' ? data.caption : '';
-    return data.fileName || capStr || data.src || '';
+    return capStr || '';
   },
 };
 
@@ -183,7 +186,7 @@ export const BookmarkCardDefinition: StudioCardDefinition<BookmarkCardData> = {
     const desc = escapeHtml(data.description || '');
     return `<figure class="kg-card kg-bookmark-card"><a href="${url}"><div class="title">${title}</div><div class="desc">${desc}</div></a></figure>`;
   },
-  renderPlainText: (data) => data.title || data.url || '',
+  renderPlainText: (data) => data.title || data.description || '',
 };
 
 // 7. Embed Card
@@ -213,7 +216,7 @@ export const EmbedCardDefinition: StudioCardDefinition<EmbedCardData> = {
   },
   renderPlainText: (data) => {
     const capStr = typeof data.caption === 'string' ? data.caption : '';
-    return data.url || capStr || '';
+    return capStr || '';
   },
 };
 

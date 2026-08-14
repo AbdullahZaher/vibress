@@ -1,6 +1,10 @@
 import React from 'react';
 import { ThemePostProps, themeSetting } from '../../types';
 import { ThemeLayout } from './Layout';
+import { ReadingProgressBar } from '../../../components/reader/ReadingProgressBar';
+import { TableOfContents } from '../../../components/reader/TableOfContents';
+import { CodeCopyHandler } from '../../../components/reader/CodeCopyHandler';
+import { ImageLightbox } from '../../../components/reader/ImageLightbox';
 import { t } from '../../../lib/i18n';
 
 export async function Post(props: ThemePostProps) {
@@ -27,11 +31,16 @@ export async function Post(props: ThemePostProps) {
     ...(post.featureImage?.url ? { image: [post.featureImage.url] } : {}),
   };
 
-  const text = (post.html || post.excerpt || '').replace(/<[^>]*>?/gm, '');
-  const readTimeMins = Math.ceil(text.trim().split(/\s+/).filter(Boolean).length / 200) || 1;
+  const readTimeMins = post.readingTimeMins || (
+    Math.ceil((post.html || post.excerpt || '').replace(/<[^>]*>?/gm, '').trim().split(/\s+/).filter(Boolean).length / 200) || 1
+  );
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
+      <ReadingProgressBar />
+      <CodeCopyHandler />
+      <ImageLightbox />
+
       <main id="site-main" className="site-main outer">
         <article className="article inner">
           <script
@@ -79,13 +88,11 @@ export async function Post(props: ThemePostProps) {
                 </div>
               </section>
             </div>
-
-            {post.featureImage && (
-              <figure className="article-image">
-                <img src={post.featureImage.url} alt={post.featureImage.alt || post.title} />
-              </figure>
-            )}
           </header>
+
+          {post.toc && post.toc.length > 1 && (
+            <TableOfContents items={post.toc} />
+          )}
 
           <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: post.html || '' }} />

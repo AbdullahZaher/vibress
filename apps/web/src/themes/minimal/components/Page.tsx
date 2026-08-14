@@ -12,11 +12,6 @@ export async function Page(props: ThemePageProps) {
           <header className="vb-article-header">
             <h1 className="vb-article-title">{pageObj.title}</h1>
             {pageObj.excerpt && <p className="vb-article-excerpt">{pageObj.excerpt}</p>}
-            {pageObj.featureImage && (
-              <figure className="vb-article-image">
-                <img src={pageObj.featureImage.url} alt={pageObj.featureImage.alt || pageObj.title} />
-              </figure>
-            )}
           </header>
 
           <section className="vb-content studio-html-content">

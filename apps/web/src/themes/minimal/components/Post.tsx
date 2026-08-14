@@ -33,12 +33,6 @@ export async function Post(props: ThemePostProps) {
                 </time>
               )}
             </div>
-
-            {post.featureImage && (
-              <figure className="vb-article-image">
-                <img src={post.featureImage.url} alt={post.featureImage.alt || post.title} />
-              </figure>
-            )}
           </header>
 
           <section className="vb-content studio-html-content">

@@ -21,6 +21,9 @@ WORKDIR /app
 COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /repo/apps/web/.next/static ./.next/static
 COPY --from=builder --chown=node:node /repo/apps/web/public ./public
+COPY --from=builder --chown=node:node /repo/apps/web/public ./apps/web/public
+COPY --from=builder --chown=node:node /repo/apps/web/src/themes ./src/themes
+COPY --from=builder --chown=node:node /repo/apps/web/src/themes ./apps/web/src/themes
 USER node
 EXPOSE 7778
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

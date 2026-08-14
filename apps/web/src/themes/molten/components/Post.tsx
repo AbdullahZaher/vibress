@@ -38,15 +38,6 @@ export async function Post(props: ThemePostProps) {
             {post.excerpt && (
               <p className="vb-article-excerpt">{post.excerpt}</p>
             )}
-
-            {post.featureImage && (
-              <figure className="vb-article-image vb-width-wide">
-                <img
-                  src={post.featureImage.url}
-                  alt={post.title}
-                />
-              </figure>
-            )}
           </header>
 
           <div className="vb-content vb-canvas studio-html-content" dangerouslySetInnerHTML={{ __html: post.html || '' }} />

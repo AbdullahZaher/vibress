@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { SubscribeModal } from './SubscribeModal';
+import { ThemeToggle } from '../../../components/reader/ThemeToggle';
 import { t } from '../../../lib/i18n';
 
 interface HeaderNavProps {
@@ -33,6 +34,8 @@ export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
           </div>
 
           <div className="vb-head-actions">
+            <ThemeToggle />
+
             <button type="button" className="vb-search-btn" aria-label={t('search.label')} title={t('search.label')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>

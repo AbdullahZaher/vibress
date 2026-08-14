@@ -73,7 +73,14 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
         ? tag.toLowerCase()
         : 'h2';
       const styleAttr = n.style ? ` style="${escapeHtml(String(n.style))}"` : '';
-      return `<${level}${styleAttr}>${renderChildren()}</${level}>`;
+      const childrenHtml = renderChildren();
+      const rawText = extractNodeText(n);
+      const slug = slugifyHeading(rawText);
+      const idAttr = slug ? ` id="${escapeHtml(slug)}"` : '';
+      const anchor = slug
+        ? `<a href="#${escapeHtml(slug)}" class="heading-anchor" aria-label="Link to section" aria-hidden="true">#</a>`
+        : '';
+      return `<${level}${idAttr}${styleAttr}>${childrenHtml}${anchor}</${level}>`;
     }
 
     case 'quote':
@@ -119,8 +126,12 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
       return `<a href="${url}"${relAttr}${targetAttr}>${renderChildren()}</a>`;
     }
 
-    case 'code':
-      return `<pre><code>${renderChildren()}</code></pre>`;
+    case 'code': {
+      const lang = typeof n.language === 'string' && n.language ? escapeHtml(n.language) : '';
+      const langAttr = lang ? ` data-language="${lang}"` : '';
+      const codeHtml = renderChildren();
+      return `<div class="studio-code-block"${langAttr}><div class="studio-code-header"><span class="studio-code-lang">${lang || 'code'}</span><button type="button" class="studio-code-copy-btn" aria-label="Copy code">Copy</button></div><pre><code>${codeHtml}</code></pre></div>`;
+    }
 
     // Handle Studio Card Nodes (canonical type after normalization)
     case 'studio-card': {
@@ -205,4 +216,64 @@ function renderNodeToPlainText(node: unknown): string {
   }
 
   return '';
+}
+
+export function extractNodeText(node: unknown): string {
+  if (!node || typeof node !== 'object') return '';
+  const n = node as { type?: string; text?: string; children?: unknown[] };
+  if (n.type === 'text') return n.text || '';
+  if (Array.isArray(n.children)) {
+    return n.children.map(extractNodeText).join('');
+  }
+  return '';
+}
+
+export function slugifyHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/<[^>]*>?/gm, '')
+    .replace(/[^\w\s\u0600-\u06FF-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+export interface TableOfContentsItem {
+  id: string;
+  text: string;
+  level: number;
+}
+
+export function extractTableOfContentsFromDocument(docInput: unknown): TableOfContentsItem[] {
+  const doc = migrateDocument(docInput);
+  if (!doc.root || !Array.isArray(doc.root.children)) {
+    return [];
+  }
+
+  const items: TableOfContentsItem[] = [];
+  const seenSlugs = new Map<string, number>();
+
+  for (const node of doc.root.children) {
+    if (!node || typeof node !== 'object') continue;
+    const n = node as { type?: string; tag?: string; children?: unknown[] };
+    if (n.type === 'heading') {
+      const tag = (n.tag || 'h2').toLowerCase();
+      if (['h2', 'h3'].includes(tag)) {
+        const text = extractNodeText(n).trim();
+        if (text) {
+          let baseSlug = slugifyHeading(text);
+          if (!baseSlug) baseSlug = 'heading';
+          const count = seenSlugs.get(baseSlug) || 0;
+          seenSlugs.set(baseSlug, count + 1);
+          const slug = count > 0 ? `${baseSlug}-${count}` : baseSlug;
+          items.push({
+            id: slug,
+            text,
+            level: tag === 'h2' ? 2 : 3,
+          });
+        }
+      }
+    }
+  }
+
+  return items;
 }

@@ -16,15 +16,6 @@ export async function Page(props: ThemePageProps) {
             {page.excerpt && (
               <p className="vb-article-excerpt">{page.excerpt}</p>
             )}
-
-            {page.featureImage && (
-              <figure className="vb-article-image vb-width-wide">
-                <img
-                  src={page.featureImage.url}
-                  alt={page.title}
-                />
-              </figure>
-            )}
           </header>
 
           <div className="vb-content vb-canvas studio-html-content" dangerouslySetInnerHTML={{ __html: page.html || '' }} />
