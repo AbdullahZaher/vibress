@@ -1,46 +1,55 @@
-import React, { useEffect } from 'react';
-import { useSettingsHub } from './hooks/useSettingsHub';
-import { useSettingsSearch } from './hooks/useSettingsSearch';
-import { useScrollSpy } from './hooks/useScrollSpy';
-import { SETTINGS_REGISTRY } from './settings.registry';
-import { SettingsSection } from './SettingsSection';
-import { SettingsSaveBar } from './SettingsSaveBar';
-import { SettingsPermissionGate } from './SettingsPermissionGate';
-import { Input } from '../ui/input';
+import React, { useEffect } from "react";
+import { useSettingsHub } from "./hooks/useSettingsHub";
+import { useSettingsSearch } from "./hooks/useSettingsSearch";
+import { useScrollSpy } from "./hooks/useScrollSpy";
+import { SETTINGS_REGISTRY } from "./settings.registry";
+import { SettingsSection } from "./SettingsSection";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import { SettingsPermissionGate } from "./SettingsPermissionGate";
+import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
-import { PublicationInfoCard } from './general/PublicationInfoCard';
-import { LocalizationCard } from './general/LocalizationCard';
-import { MetadataSocialCard } from './general/MetadataSocialCard';
-import { SitePrivacyCard } from './general/SitePrivacyCard';
-import { StaffOverviewCard } from './general/StaffOverviewCard';
+import { PublicationInfoCard } from "./general/PublicationInfoCard";
+import { LocalizationCard } from "./general/LocalizationCard";
+import { MetadataSocialCard } from "./general/MetadataSocialCard";
+import { SitePrivacyCard } from "./general/SitePrivacyCard";
+import { StaffOverviewCard } from "./general/StaffOverviewCard";
 
 // Site Pillar Compact Cards
-import { DesignBrandingCard } from './site/DesignBrandingCard';
-import { NavigationManagerCard } from './site/NavigationManagerCard';
-import { ThemesManagerCard } from './site/ThemesManagerCard';
-import { AnnouncementBarCard } from './site/AnnouncementBarCard';
+import { DesignBrandingCard } from "./site/DesignBrandingCard";
+import { NavigationManagerCard } from "./site/NavigationManagerCard";
+import { ThemesManagerCard } from "./site/ThemesManagerCard";
+import { AnnouncementBarCard } from "./site/AnnouncementBarCard";
 
 // Membership Pillar Compact Cards
-import { PortalAccessCard } from './membership/PortalAccessCard';
-import { SubscriptionTiersCard } from './membership/SubscriptionTiersCard';
-import { OffersPromotionsCard } from './membership/OffersPromotionsCard';
+import { PortalAccessCard } from "./membership/PortalAccessCard";
+import { SubscriptionTiersCard } from "./membership/SubscriptionTiersCard";
+import { OffersPromotionsCard } from "./membership/OffersPromotionsCard";
 
 // Growth Pillar Compact Cards
-import { NewslettersConfigCard } from './growth/NewslettersConfigCard';
-import { AnalyticsTrackingCard } from './growth/AnalyticsTrackingCard';
-import { CommunityDiscussionsCard } from './growth/CommunityDiscussionsCard';
-import { RecommendationsCard } from './growth/RecommendationsCard';
+import { NewslettersConfigCard } from "./growth/NewslettersConfigCard";
+import { AnalyticsTrackingCard } from "./growth/AnalyticsTrackingCard";
+import { CommunityDiscussionsCard } from "./growth/CommunityDiscussionsCard";
+import { RecommendationsCard } from "./growth/RecommendationsCard";
 
 // Advanced Pillar Compact Cards
-import { CodeInjectionCard } from './advanced/CodeInjectionCard';
-import { IntegrationsPlatformCard } from './advanced/IntegrationsPlatformCard';
-import { SystemDiagnosticsCard } from './advanced/SystemDiagnosticsCard';
-import { ImportExportCard } from './advanced/ImportExportCard';
-import { AuditLogsCard } from './advanced/AuditLogsCard';
-import { DangerZoneCard } from './advanced/DangerZoneCard';
+import { CodeInjectionCard } from "./advanced/CodeInjectionCard";
+import { IntegrationsPlatformCard } from "./advanced/IntegrationsPlatformCard";
+import { SystemDiagnosticsCard } from "./advanced/SystemDiagnosticsCard";
+import { ImportExportCard } from "./advanced/ImportExportCard";
+import { AuditLogsCard } from "./advanced/AuditLogsCard";
+import { DangerZoneCard } from "./advanced/DangerZoneCard";
 
-import { Sliders, Layout, CreditCard, Sparkles, Cpu, RefreshCw, Search, X } from 'lucide-react';
+import {
+  Sliders,
+  Layout,
+  CreditCard,
+  Sparkles,
+  Cpu,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 
 interface SettingsHubProps {
   initialSection?: string | undefined;
@@ -51,22 +60,25 @@ const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
 
 const getPillarIcon = (iconName: string) => {
   switch (iconName) {
-    case 'Sliders':
+    case "Sliders":
       return <Sliders className="h-4 w-4" />;
-    case 'Layout':
+    case "Layout":
       return <Layout className="h-4 w-4" />;
-    case 'CreditCard':
+    case "CreditCard":
       return <CreditCard className="h-4 w-4" />;
-    case 'Sparkles':
+    case "Sparkles":
       return <Sparkles className="h-4 w-4" />;
-    case 'Cpu':
+    case "Cpu":
       return <Cpu className="h-4 w-4" />;
     default:
       return <Sliders className="h-4 w-4" />;
   }
 };
 
-export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can }) => {
+export const SettingsHub: React.FC<SettingsHubProps> = ({
+  initialSection,
+  can,
+}) => {
   const {
     general,
     site,
@@ -83,12 +95,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
     discardAllDirty,
   } = useSettingsHub();
 
-  const {
-    query,
-    setQuery,
-    filteredPillars,
-    highlightedCardId,
-  } = useSettingsSearch();
+  const { query, setQuery, filteredPillars, highlightedCardId } =
+    useSettingsSearch();
 
   const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 120);
 
@@ -133,8 +141,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
                 onClick={() => scrollToSection(pillar.id, true)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 {getPillarIcon(pillar.iconName)}
@@ -157,7 +165,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
           {query && (
             <button
               type="button"
-              onClick={() => setQuery('')}
+              onClick={() => setQuery("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
@@ -169,60 +177,62 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
       {/* ========================================================================= */}
       {/* 1. GENERAL SETTINGS PILLAR                                                */}
       {/* ========================================================================= */}
-      {isPillarVisible('general') && (
+      {isPillarVisible("general") && (
         <SettingsSection
           id="general"
           title="General settings"
           description="Publication identity, localization, social metadata, and team permissions."
-          icon={getPillarIcon('Sliders')}
+          icon={getPillarIcon("Sliders")}
         >
-          {isCardVisible('publication-info') && (
+          {isCardVisible("publication-info") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <PublicationInfoCard
                 title={general.settings.title}
                 tagline={general.settings.tagline}
                 description={general.settings.description}
                 onChange={(key, val) => general.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'publication-info'}
+                isHighlighted={highlightedCardId === "publication-info"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('localization') && (
+          {isCardVisible("localization") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <LocalizationCard
                 locale={general.settings.locale}
                 timezone={general.settings.timezone}
                 onChange={(key, val) => general.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'localization'}
+                isHighlighted={highlightedCardId === "localization"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('metadata-social') && (
+          {isCardVisible("metadata-social") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <MetadataSocialCard
                 title={general.settings.title}
                 description={general.settings.description}
-                isHighlighted={highlightedCardId === 'metadata-social'}
+                isHighlighted={highlightedCardId === "metadata-social"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('site-privacy') && (
+          {isCardVisible("site-privacy") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <SitePrivacyCard
                 isPrivate={general.settings.isPrivate}
                 password={general.settings.password}
                 onChange={(key, val) => general.updateField(key, val as any)}
-                isHighlighted={highlightedCardId === 'site-privacy'}
+                isHighlighted={highlightedCardId === "site-privacy"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('staff-overview') && (
+          {isCardVisible("staff-overview") && (
             <SettingsPermissionGate permission="users.read" can={can}>
-              <StaffOverviewCard isHighlighted={highlightedCardId === 'staff-overview'} />
+              <StaffOverviewCard
+                isHighlighted={highlightedCardId === "staff-overview"}
+              />
             </SettingsPermissionGate>
           )}
         </SettingsSection>
@@ -231,14 +241,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
       {/* ========================================================================= */}
       {/* 2. SITE PILLAR                                                            */}
       {/* ========================================================================= */}
-      {isPillarVisible('site') && (
+      {isPillarVisible("site") && (
         <SettingsSection
           id="site"
           title="Site"
           description="Visual presentation, theme selection, navigation menus, and public announcement banners."
-          icon={getPillarIcon('Layout')}
+          icon={getPillarIcon("Layout")}
         >
-          {isCardVisible('design-branding') && (
+          {isCardVisible("design-branding") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <DesignBrandingCard
                 accentColor={site.settings.accentColor}
@@ -246,37 +256,43 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
                 logoUrl={site.settings.logoUrl}
                 coverUrl={site.settings.coverUrl}
                 onChange={(key, val) => site.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'design-branding'}
+                isHighlighted={highlightedCardId === "design-branding"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('navigation-manager') && (
+          {isCardVisible("navigation-manager") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <NavigationManagerCard
                 primaryNav={site.settings.primaryNav}
                 secondaryNav={site.settings.secondaryNav}
-                onChangePrimary={(items) => site.updateField('primaryNav', items)}
-                onChangeSecondary={(items) => site.updateField('secondaryNav', items)}
-                isHighlighted={highlightedCardId === 'navigation-manager'}
+                onChangePrimary={(items) =>
+                  site.updateField("primaryNav", items)
+                }
+                onChangeSecondary={(items) =>
+                  site.updateField("secondaryNav", items)
+                }
+                isHighlighted={highlightedCardId === "navigation-manager"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('themes-manager') && (
+          {isCardVisible("themes-manager") && (
             <SettingsPermissionGate permission="themes.manage" can={can}>
-              <ThemesManagerCard isHighlighted={highlightedCardId === 'themes-manager'} />
+              <ThemesManagerCard
+                isHighlighted={highlightedCardId === "themes-manager"}
+              />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('announcement-bar') && (
+          {isCardVisible("announcement-bar") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <AnnouncementBarCard
                 enabled={site.settings.announcementEnabled}
                 text={site.settings.announcementText}
                 url={site.settings.announcementUrl}
                 onChange={(key, val) => site.updateField(key, val as any)}
-                isHighlighted={highlightedCardId === 'announcement-bar'}
+                isHighlighted={highlightedCardId === "announcement-bar"}
               />
             </SettingsPermissionGate>
           )}
@@ -286,37 +302,43 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
       {/* ========================================================================= */}
       {/* 3. MEMBERSHIP PILLAR                                                      */}
       {/* ========================================================================= */}
-      {isPillarVisible('membership') && (
+      {isPillarVisible("membership") && (
         <SettingsSection
           id="membership"
           title="Membership"
           description="Reader subscriptions, member access levels, Stripe Connect payments, and promotional offers."
-          icon={getPillarIcon('CreditCard')}
+          icon={getPillarIcon("CreditCard")}
         >
-          {isCardVisible('portal-access') && (
+          {isCardVisible("portal-access") && (
             <SettingsPermissionGate permission="members.manage" can={can}>
               <PortalAccessCard
                 signupEnabled={membership.settings.signupEnabled}
-                defaultNewsletterOptIn={membership.settings.defaultNewsletterOptIn}
-                memberSessionTtlHours={membership.settings.memberSessionTtlHours}
+                defaultNewsletterOptIn={
+                  membership.settings.defaultNewsletterOptIn
+                }
+                memberSessionTtlHours={
+                  membership.settings.memberSessionTtlHours
+                }
                 onChange={(key, val) => membership.updateField(key, val as any)}
-                isHighlighted={highlightedCardId === 'portal-access'}
+                isHighlighted={highlightedCardId === "portal-access"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('subscription-tiers') && (
+          {isCardVisible("subscription-tiers") && (
             <SettingsPermissionGate permission="billing.manage" can={can}>
               <SubscriptionTiersCard
                 currency={membership.settings.currency}
-                isHighlighted={highlightedCardId === 'subscription-tiers'}
+                isHighlighted={highlightedCardId === "subscription-tiers"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('offers-promotions') && (
+          {isCardVisible("offers-promotions") && (
             <SettingsPermissionGate permission="offers.manage" can={can}>
-              <OffersPromotionsCard isHighlighted={highlightedCardId === 'offers-promotions'} />
+              <OffersPromotionsCard
+                isHighlighted={highlightedCardId === "offers-promotions"}
+              />
             </SettingsPermissionGate>
           )}
         </SettingsSection>
@@ -325,51 +347,56 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
       {/* ========================================================================= */}
       {/* 4. GROWTH PILLAR                                                          */}
       {/* ========================================================================= */}
-      {isPillarVisible('growth') && (
+      {isPillarVisible("growth") && (
         <SettingsSection
           id="growth"
           title="Growth"
           description="Audience acquisition, email newsletter delivery, privacy-first analytics, and member discussions."
-          icon={getPillarIcon('Sparkles')}
+          icon={getPillarIcon("Sparkles")}
         >
-          {isCardVisible('newsletters-config') && (
+          {isCardVisible("newsletters-config") && (
             <SettingsPermissionGate permission="email.manage" can={can}>
               <NewslettersConfigCard
                 fromName={growth.settings.fromName}
                 fromEmail={growth.settings.fromEmail}
                 smtpHost={growth.settings.smtpHost}
                 onChange={(key, val) => growth.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'newsletters-config'}
+                isHighlighted={highlightedCardId === "newsletters-config"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('analytics-tracking') && (
+          {isCardVisible("analytics-tracking") && (
             <SettingsPermissionGate permission="analytics.read" can={can}>
               <AnalyticsTrackingCard
                 gaId={growth.settings.gaId}
                 plausibleDomain={growth.settings.plausibleDomain}
                 posthogKey={growth.settings.posthogKey}
                 onChange={(key, val) => growth.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'analytics-tracking'}
+                isHighlighted={highlightedCardId === "analytics-tracking"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('community-discussions') && (
+          {isCardVisible("community-discussions") && (
             <SettingsPermissionGate permission="comments.manage" can={can}>
               <CommunityDiscussionsCard
                 commentAccess={growth.settings.commentAccess}
                 preModeration={growth.settings.preModeration}
                 onChange={(key, val) => growth.updateField(key, val as any)}
-                isHighlighted={highlightedCardId === 'community-discussions'}
+                isHighlighted={highlightedCardId === "community-discussions"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('recommendations-card') && (
-            <SettingsPermissionGate permission="recommendations.manage" can={can}>
-              <RecommendationsCard isHighlighted={highlightedCardId === 'recommendations-card'} />
+          {isCardVisible("recommendations-card") && (
+            <SettingsPermissionGate
+              permission="recommendations.manage"
+              can={can}
+            >
+              <RecommendationsCard
+                isHighlighted={highlightedCardId === "recommendations-card"}
+              />
             </SettingsPermissionGate>
           )}
         </SettingsSection>
@@ -378,51 +405,61 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({ initialSection, can })
       {/* ========================================================================= */}
       {/* 5. ADVANCED PILLAR                                                        */}
       {/* ========================================================================= */}
-      {isPillarVisible('advanced') && (
+      {isPillarVisible("advanced") && (
         <SettingsSection
           id="advanced"
           title="Advanced"
           description="Code injection, developer APIs & webhooks, system maintenance, data import/export, and audit logs."
-          icon={getPillarIcon('Cpu')}
+          icon={getPillarIcon("Cpu")}
         >
-          {isCardVisible('code-injection') && (
+          {isCardVisible("code-injection") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <CodeInjectionCard
                 headerCode={advanced.settings.headerCode}
                 footerCode={advanced.settings.footerCode}
                 onChange={(key, val) => advanced.updateField(key, val)}
-                isHighlighted={highlightedCardId === 'code-injection'}
+                isHighlighted={highlightedCardId === "code-injection"}
               />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('integrations-platform') && (
+          {isCardVisible("integrations-platform") && (
             <SettingsPermissionGate permission="integrations.manage" can={can}>
-              <IntegrationsPlatformCard isHighlighted={highlightedCardId === 'integrations-platform'} />
+              <IntegrationsPlatformCard
+                isHighlighted={highlightedCardId === "integrations-platform"}
+              />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('system-diagnostics') && (
+          {isCardVisible("system-diagnostics") && (
             <SettingsPermissionGate permission="system.read" can={can}>
-              <SystemDiagnosticsCard isHighlighted={highlightedCardId === 'system-diagnostics'} />
+              <SystemDiagnosticsCard
+                isHighlighted={highlightedCardId === "system-diagnostics"}
+              />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('import-export') && (
+          {isCardVisible("import-export") && (
             <SettingsPermissionGate permission="imports.manage" can={can}>
-              <ImportExportCard isHighlighted={highlightedCardId === 'import-export'} />
+              <ImportExportCard
+                isHighlighted={highlightedCardId === "import-export"}
+              />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('audit-logs') && (
+          {isCardVisible("audit-logs") && (
             <SettingsPermissionGate permission="audit.read" can={can}>
-              <AuditLogsCard isHighlighted={highlightedCardId === 'audit-logs'} />
+              <AuditLogsCard
+                isHighlighted={highlightedCardId === "audit-logs"}
+              />
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible('danger-zone') && (
+          {isCardVisible("danger-zone") && (
             <SettingsPermissionGate permission="system.manage" can={can}>
-              <DangerZoneCard isHighlighted={highlightedCardId === 'danger-zone'} />
+              <DangerZoneCard
+                isHighlighted={highlightedCardId === "danger-zone"}
+              />
             </SettingsPermissionGate>
           )}
         </SettingsSection>

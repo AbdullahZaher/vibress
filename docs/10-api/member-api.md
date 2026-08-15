@@ -11,6 +11,7 @@ All member endpoints are unauthenticated where noted, or require the `vibress_me
 Unified signup/login. Body: `{ "email": string }`.
 
 Response (always, enumeration-safe):
+
 ```json
 { "message": "If this email can receive a sign-in link, we have sent one." }
 ```
@@ -22,13 +23,21 @@ Rate-limited by IP. Never reveals whether the email exists.
 Body: `{ "token": string }`. Verifies the magic link, creates a member session, sets the `vibress_member_session` cookie.
 
 Response 200:
+
 ```json
 {
-  "member": { "id": "...", "email": "...", "name": null, "emailVerified": true, "createdAt": "..." }
+  "member": {
+    "id": "...",
+    "email": "...",
+    "name": null,
+    "emailVerified": true,
+    "createdAt": "..."
+  }
 }
 ```
 
 Errors:
+
 - 400 `AUTH_TOKEN_INVALID` — invalid/unknown token
 - 400 `AUTH_TOKEN_EXPIRED` — token past expiry
 - 400 `AUTH_TOKEN_USED` — token already consumed
@@ -47,8 +56,17 @@ Revokes the current member session and clears the cookie. Idempotent. Returns `{
 ### `GET /me`
 
 Requires member session. Returns `MemberSelfDTO`:
+
 ```json
-{ "member": { "id": "...", "email": "...", "name": null, "emailVerified": true, "createdAt": "..." } }
+{
+  "member": {
+    "id": "...",
+    "email": "...",
+    "name": null,
+    "emailVerified": true,
+    "createdAt": "..."
+  }
+}
 ```
 
 401 `MEMBER_AUTH_REQUIRED` when unauthenticated (including with only a Staff cookie).

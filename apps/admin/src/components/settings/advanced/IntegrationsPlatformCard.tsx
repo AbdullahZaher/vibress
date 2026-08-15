@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
-import { SettingsCard } from '../SettingsCard';
-import { SettingsCardRow } from '../SettingsCardRow';
-import { SettingsModalPortal } from '../SettingsModalPortal';
-import { Button } from '../../ui/button';
-import { Badge } from '../../ui/badge';
-import { Input } from '../../ui/input';
-import { Cpu, Key, Webhook, RefreshCw, X, Plus, Sparkles, Image, Zap, Trash2, Copy, Check } from 'lucide-react';
+import React, { useState } from "react";
+import { SettingsCard } from "../SettingsCard";
+import { SettingsCardRow } from "../SettingsCardRow";
+import { SettingsModalPortal } from "../SettingsModalPortal";
+import { Button } from "../../ui/button";
+import { Badge } from "../../ui/badge";
+import { Input } from "../../ui/input";
+import {
+  Cpu,
+  Key,
+  Webhook,
+  RefreshCw,
+  X,
+  Plus,
+  Sparkles,
+  Image,
+  Zap,
+  Trash2,
+  Copy,
+  Check,
+} from "lucide-react";
 import {
   listApiKeysApi,
   createApiKeyApi,
@@ -16,13 +29,15 @@ import {
   listPluginsApi,
   AdminApiKey,
   AdminWebhookEndpoint,
-} from '../../../lib/api';
+} from "../../../lib/api";
 
 interface IntegrationsPlatformCardProps {
   isHighlighted?: boolean | undefined;
 }
 
-export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> = ({ isHighlighted }) => {
+export const IntegrationsPlatformCard: React.FC<
+  IntegrationsPlatformCardProps
+> = ({ isHighlighted }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [keys, setKeys] = useState<AdminApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<AdminWebhookEndpoint[]>([]);
@@ -30,15 +45,15 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
 
   // New API Key Modal state
   const [isCreatingKey, setIsCreatingKey] = useState(false);
-  const [keyName, setKeyName] = useState('');
+  const [keyName, setKeyName] = useState("");
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [keySaving, setKeySaving] = useState(false);
 
   // New Webhook Modal state
   const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
-  const [webhookName, setWebhookName] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookName, setWebhookName] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookSaving, setWebhookSaving] = useState(false);
 
   const loadData = () => {
@@ -67,10 +82,10 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
     try {
       const res = await createApiKeyApi({
         name: keyName.trim(),
-        scopes: ['*'],
+        scopes: ["*"],
       });
       setCreatedSecret(res.key.secret);
-      setKeyName('');
+      setKeyName("");
       loadData();
     } catch {
       // Keep state
@@ -96,11 +111,11 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
       await createWebhookEndpointApi({
         name: webhookName.trim(),
         url: webhookUrl.trim(),
-        eventTypes: ['post.published', 'member.created'],
+        eventTypes: ["post.published", "member.created"],
       });
       setIsCreatingWebhook(false);
-      setWebhookName('');
-      setWebhookUrl('');
+      setWebhookName("");
+      setWebhookUrl("");
       loadData();
     } catch {
       // Keep state
@@ -135,9 +150,19 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
           description="Manage built-in services (Unsplash, Zapier), custom API keys, and real-time webhook endpoints."
           currentValue={
             <div className="flex items-center gap-1 font-mono text-xs">
-              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{activeKeysCount} Keys</Badge>
+              <Badge
+                variant="secondary"
+                className="bg-primary/10 text-primary border-primary/20"
+              >
+                {activeKeysCount} Keys
+              </Badge>
               <span className="text-muted-foreground">•</span>
-              <Badge variant="secondary" className="bg-muted text-muted-foreground">{webhooks.length} Webhooks</Badge>
+              <Badge
+                variant="secondary"
+                className="bg-muted text-muted-foreground"
+              >
+                {webhooks.length} Webhooks
+              </Badge>
             </div>
           }
           actionLabel="Manage integrations"
@@ -146,14 +171,19 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
       </SettingsCard>
 
       {/* Integrations Slide-over Drawer */}
-      <SettingsModalPortal isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)}>
+      <SettingsModalPortal
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+      >
         <div className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
               <div className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">Integrations & Developer Platform</h3>
+                <h3 className="text-sm font-bold text-foreground">
+                  Integrations & Developer Platform
+                </h3>
               </div>
               <button
                 type="button"
@@ -169,7 +199,8 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
               {/* Built-in Services Grid */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Built-in Integrations
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Built-in
+                  Integrations
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="p-3.5 rounded-xl border border-border/60 bg-muted/10 flex items-center justify-between">
@@ -178,11 +209,20 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                         <Image className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-foreground">Unsplash</p>
-                        <p className="text-[11px] text-muted-foreground">Free high-res photos</p>
+                        <p className="text-xs font-bold text-foreground">
+                          Unsplash
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Free high-res photos
+                        </p>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="text-[10px] text-emerald-500 bg-emerald-500/10">Active</Badge>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] text-emerald-500 bg-emerald-500/10"
+                    >
+                      Active
+                    </Badge>
                   </div>
 
                   <div className="p-3.5 rounded-xl border border-border/60 bg-muted/10 flex items-center justify-between">
@@ -191,18 +231,25 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                         <Zap className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-foreground">Zapier</p>
-                        <p className="text-[11px] text-muted-foreground">Automations & sync</p>
+                        <p className="text-xs font-bold text-foreground">
+                          Zapier
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Automations & sync
+                        </p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-mono">Available</Badge>
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      Available
+                    </Badge>
                   </div>
                 </div>
               </div>
 
               {loading ? (
                 <div className="flex items-center justify-center py-16 text-muted-foreground text-xs">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading platform records...
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading
+                  platform records...
                 </div>
               ) : (
                 <>
@@ -210,9 +257,15 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                   <div className="space-y-3 pt-2 border-t border-border/50">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Key className="h-3.5 w-3.5 text-primary" /> Custom API Keys
+                        <Key className="h-3.5 w-3.5 text-primary" /> Custom API
+                        Keys
                       </h4>
-                      <Button size="sm" variant="outline" onClick={() => setIsCreatingKey(true)} className="h-7 text-xs gap-1 cursor-pointer bg-card">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsCreatingKey(true)}
+                        className="h-7 text-xs gap-1 cursor-pointer bg-card"
+                      >
                         <Plus className="h-3 w-3" /> New Key
                       </Button>
                     </div>
@@ -220,18 +273,38 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                     {/* Created Secret Display Alert */}
                     {createdSecret && (
                       <div className="p-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 space-y-2 animate-in fade-in">
-                        <p className="text-xs font-bold text-emerald-500">API Key Created Successfully!</p>
+                        <p className="text-xs font-bold text-emerald-500">
+                          API Key Created Successfully!
+                        </p>
                         <p className="text-[11px] text-muted-foreground">
-                          Please copy your API key secret now. You will not be able to see it again!
+                          Please copy your API key secret now. You will not be
+                          able to see it again!
                         </p>
                         <div className="flex items-center gap-2">
-                          <Input value={createdSecret} readOnly className="font-mono text-xs h-8 bg-card" />
-                          <Button size="sm" onClick={() => copyToClipboard(createdSecret)} className="h-8 text-xs shrink-0 cursor-pointer">
-                            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copied ? 'Copied' : 'Copy'}
+                          <Input
+                            value={createdSecret}
+                            readOnly
+                            className="font-mono text-xs h-8 bg-card"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => copyToClipboard(createdSecret)}
+                            className="h-8 text-xs shrink-0 cursor-pointer"
+                          >
+                            {copied ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                            {copied ? "Copied" : "Copy"}
                           </Button>
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => setCreatedSecret(null)} className="text-[10px] h-6 cursor-pointer">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setCreatedSecret(null)}
+                          className="text-[10px] h-6 cursor-pointer"
+                        >
                           I have saved my key
                         </Button>
                       </div>
@@ -239,8 +312,13 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
 
                     {/* New Key Form */}
                     {isCreatingKey && !createdSecret && (
-                      <form onSubmit={handleCreateKey} className="p-3.5 rounded-xl border border-primary/40 bg-primary/5 space-y-2.5">
-                        <h5 className="text-xs font-bold text-foreground">Generate New API Key</h5>
+                      <form
+                        onSubmit={handleCreateKey}
+                        className="p-3.5 rounded-xl border border-primary/40 bg-primary/5 space-y-2.5"
+                      >
+                        <h5 className="text-xs font-bold text-foreground">
+                          Generate New API Key
+                        </h5>
                         <Input
                           placeholder="Key Name (e.g. Mobile App Backend)"
                           value={keyName}
@@ -249,11 +327,22 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                           required
                         />
                         <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setIsCreatingKey(false)} className="text-xs h-7 cursor-pointer">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsCreatingKey(false)}
+                            className="text-xs h-7 cursor-pointer"
+                          >
                             Cancel
                           </Button>
-                          <Button type="submit" size="sm" disabled={keySaving} className="text-xs h-7 cursor-pointer">
-                            {keySaving ? 'Generating...' : 'Generate Key'}
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={keySaving}
+                            className="text-xs h-7 cursor-pointer"
+                          >
+                            {keySaving ? "Generating..." : "Generate Key"}
                           </Button>
                         </div>
                       </form>
@@ -261,17 +350,29 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
 
                     <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card overflow-hidden">
                       {keys.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-muted-foreground">No API keys created yet.</div>
+                        <div className="p-4 text-center text-xs text-muted-foreground">
+                          No API keys created yet.
+                        </div>
                       ) : (
                         keys.map((k) => (
-                          <div key={k.id} className="p-3.5 flex items-center justify-between text-xs">
+                          <div
+                            key={k.id}
+                            className="p-3.5 flex items-center justify-between text-xs"
+                          >
                             <div>
-                              <p className="font-semibold text-foreground">{k.name}</p>
-                              <p className="text-[11px] text-muted-foreground font-mono">{k.prefix}••••••••</p>
+                              <p className="font-semibold text-foreground">
+                                {k.name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground font-mono">
+                                {k.prefix}••••••••
+                              </p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant={k.revokedAt ? 'outline' : 'secondary'} className="text-[10px] font-mono">
-                                {k.revokedAt ? 'Revoked' : 'Active'}
+                              <Badge
+                                variant={k.revokedAt ? "outline" : "secondary"}
+                                className="text-[10px] font-mono"
+                              >
+                                {k.revokedAt ? "Revoked" : "Active"}
                               </Badge>
                               {!k.revokedAt && (
                                 <button
@@ -294,17 +395,28 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                   <div className="space-y-3 pt-2 border-t border-border/50">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Webhook className="h-3.5 w-3.5 text-primary" /> Outgoing Webhooks
+                        <Webhook className="h-3.5 w-3.5 text-primary" />{" "}
+                        Outgoing Webhooks
                       </h4>
-                      <Button size="sm" variant="outline" onClick={() => setIsCreatingWebhook(true)} className="h-7 text-xs gap-1 cursor-pointer bg-card">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsCreatingWebhook(true)}
+                        className="h-7 text-xs gap-1 cursor-pointer bg-card"
+                      >
                         <Plus className="h-3 w-3" /> Add Webhook
                       </Button>
                     </div>
 
                     {/* New Webhook Form */}
                     {isCreatingWebhook && (
-                      <form onSubmit={handleCreateWebhook} className="p-3.5 rounded-xl border border-primary/40 bg-primary/5 space-y-2.5">
-                        <h5 className="text-xs font-bold text-foreground">Register Webhook Endpoint</h5>
+                      <form
+                        onSubmit={handleCreateWebhook}
+                        className="p-3.5 rounded-xl border border-primary/40 bg-primary/5 space-y-2.5"
+                      >
+                        <h5 className="text-xs font-bold text-foreground">
+                          Register Webhook Endpoint
+                        </h5>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Input
                             placeholder="Webhook Name"
@@ -323,11 +435,22 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
                           />
                         </div>
                         <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setIsCreatingWebhook(false)} className="text-xs h-7 cursor-pointer">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsCreatingWebhook(false)}
+                            className="text-xs h-7 cursor-pointer"
+                          >
                             Cancel
                           </Button>
-                          <Button type="submit" size="sm" disabled={webhookSaving} className="text-xs h-7 cursor-pointer">
-                            {webhookSaving ? 'Saving...' : 'Add Endpoint'}
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={webhookSaving}
+                            className="text-xs h-7 cursor-pointer"
+                          >
+                            {webhookSaving ? "Saving..." : "Add Endpoint"}
                           </Button>
                         </div>
                       </form>
@@ -335,17 +458,29 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
 
                     <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card overflow-hidden">
                       {webhooks.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-muted-foreground">No webhook endpoints registered.</div>
+                        <div className="p-4 text-center text-xs text-muted-foreground">
+                          No webhook endpoints registered.
+                        </div>
                       ) : (
                         webhooks.map((w) => (
-                          <div key={w.id} className="p-3.5 flex items-center justify-between text-xs">
+                          <div
+                            key={w.id}
+                            className="p-3.5 flex items-center justify-between text-xs"
+                          >
                             <div>
-                              <p className="font-semibold text-foreground">{w.name}</p>
-                              <p className="text-[11px] text-muted-foreground font-mono truncate max-w-xs">{w.url}</p>
+                              <p className="font-semibold text-foreground">
+                                {w.name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground font-mono truncate max-w-xs">
+                                {w.url}
+                              </p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-[10px]">
-                                {w.enabled ? 'Active' : 'Disabled'}
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px]"
+                              >
+                                {w.enabled ? "Active" : "Disabled"}
                               </Badge>
                               <button
                                 type="button"
@@ -367,7 +502,11 @@ export const IntegrationsPlatformCard: React.FC<IntegrationsPlatformCardProps> =
 
             {/* Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
-              <Button size="sm" onClick={() => setIsDrawerOpen(false)} className="text-xs cursor-pointer">
+              <Button
+                size="sm"
+                onClick={() => setIsDrawerOpen(false)}
+                className="text-xs cursor-pointer"
+              >
                 Done
               </Button>
             </div>

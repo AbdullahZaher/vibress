@@ -13,14 +13,14 @@ Member      → members table → member sessions → Portal
 
 ## Member vs Staff
 
-| | Staff | Member |
-|---|---|---|
-| Table | `users` | `members` |
-| Sessions | `sessions` | `member_sessions` |
-| Auth tokens | staff password/session | passwordless magic links |
-| Cookie | `vibress_session` | `vibress_member_session` |
-| Middleware | `requireStaffSession` | `requireMemberSession` |
-| Permissions | Staff RBAC | none (member identity only) |
+|             | Staff                  | Member                      |
+| ----------- | ---------------------- | --------------------------- |
+| Table       | `users`                | `members`                   |
+| Sessions    | `sessions`             | `member_sessions`           |
+| Auth tokens | staff password/session | passwordless magic links    |
+| Cookie      | `vibress_session`      | `vibress_member_session`    |
+| Middleware  | `requireStaffSession`  | `requireMemberSession`      |
+| Permissions | Staff RBAC             | none (member identity only) |
 
 No `member` role was added to Staff RBAC. `members.read` / `members.manage` are Staff permissions that protect Admin member-management routes.
 
@@ -28,29 +28,29 @@ No `member` role was added to Staff RBAC. `members.read` / `members.manage` are 
 
 ### `members`
 
-| Column | Purpose |
-|--------|---------|
-| `id` | opaque UUID (stable, future FK target for subscriptions) |
-| `email` | display email |
-| `email_normalized` | unique canonical email (trim + lowercase) |
-| `name` | optional profile name |
-| `status` | `active` \| `disabled` |
-| `email_verified_at` | set on first successful magic-link verification |
-| `last_seen_at` | optional |
-| `disabled_at` | set when disabled |
-| `created_at` / `updated_at` | UTC timestamps |
+| Column                      | Purpose                                                  |
+| --------------------------- | -------------------------------------------------------- |
+| `id`                        | opaque UUID (stable, future FK target for subscriptions) |
+| `email`                     | display email                                            |
+| `email_normalized`          | unique canonical email (trim + lowercase)                |
+| `name`                      | optional profile name                                    |
+| `status`                    | `active` \| `disabled`                                   |
+| `email_verified_at`         | set on first successful magic-link verification          |
+| `last_seen_at`              | optional                                                 |
+| `disabled_at`               | set when disabled                                        |
+| `created_at` / `updated_at` | UTC timestamps                                           |
 
 ### `member_auth_tokens`
 
 Passwordless magic-link challenges. Stores **SHA-256 hash only** — never the raw token.
 
-| Column | Purpose |
-|--------|---------|
-| `member_id` | owning member |
-| `token_hash` | SHA-256(token) |
-| `purpose` | `authenticate` |
-| `expires_at` | 15 minutes |
-| `used_at` | single-use marker (atomic compare-and-set) |
+| Column       | Purpose                                    |
+| ------------ | ------------------------------------------ |
+| `member_id`  | owning member                              |
+| `token_hash` | SHA-256(token)                             |
+| `purpose`    | `authenticate`                             |
+| `expires_at` | 15 minutes                                 |
+| `used_at`    | single-use marker (atomic compare-and-set) |
 
 ### `member_sessions`
 

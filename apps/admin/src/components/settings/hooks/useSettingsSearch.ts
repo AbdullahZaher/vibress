@@ -1,9 +1,11 @@
-import { useState, useMemo, useCallback } from 'react';
-import { SETTINGS_REGISTRY, SettingPillarMeta } from '../settings.registry';
+import { useState, useMemo, useCallback } from "react";
+import { SETTINGS_REGISTRY, SettingPillarMeta } from "../settings.registry";
 
 export function useSettingsSearch() {
-  const [query, setQuery] = useState('');
-  const [highlightedCardId, setHighlightedCardId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [highlightedCardId, setHighlightedCardId] = useState<string | null>(
+    null,
+  );
 
   const totalCardsCount = useMemo(() => {
     return SETTINGS_REGISTRY.reduce((acc, p) => acc + p.cards.length, 0);
@@ -26,7 +28,8 @@ export function useSettingsSearch() {
         if (pillarMatches) return true;
         if (card.title.toLowerCase().includes(q)) return true;
         if (card.description.toLowerCase().includes(q)) return true;
-        if (card.keywords.some((kw) => kw.toLowerCase().includes(q))) return true;
+        if (card.keywords.some((kw) => kw.toLowerCase().includes(q)))
+          return true;
         return false;
       });
 

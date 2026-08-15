@@ -1,4 +1,4 @@
-export type NewsletterStatus = 'active' | 'archived';
+export type NewsletterStatus = "active" | "archived";
 
 export interface Newsletter {
   id: string;
@@ -45,7 +45,14 @@ export interface NewsletterPreference {
 }
 
 export interface NewsletterPreferenceRepository {
-  setSubscription(memberId: string, newsletterId: string, subscribed: boolean): Promise<NewsletterPreference>;
-  get(memberId: string, newsletterId: string): Promise<NewsletterPreference | null>;
+  setSubscription(
+    memberId: string,
+    newsletterId: string,
+    subscribed: boolean,
+  ): Promise<NewsletterPreference>;
+  get(
+    memberId: string,
+    newsletterId: string,
+  ): Promise<NewsletterPreference | null>;
   listForMember(memberId: string): Promise<NewsletterPreference[]>;
 }

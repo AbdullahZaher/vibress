@@ -1,10 +1,5 @@
 export type EmailEventType =
-  | 'delivered'
-  | 'bounced'
-  | 'complained'
-  | 'failed'
-  | 'opened'
-  | 'clicked';
+  "delivered" | "bounced" | "complained" | "failed" | "opened" | "clicked";
 
 export interface EmailMessage {
   to: string;
@@ -37,7 +32,10 @@ export interface EmailProvider {
   readonly name: string;
   send(message: EmailMessage): Promise<EmailSendResult>;
   sendBatch(messages: EmailMessage[]): Promise<EmailSendResult[]>;
-  verifyWebhookSignature(payload: string | Buffer, signatureHeader: string | null | undefined): Promise<boolean>;
+  verifyWebhookSignature(
+    payload: string | Buffer,
+    signatureHeader: string | null | undefined,
+  ): Promise<boolean>;
   parseWebhookEvent(payload: string | Buffer): Promise<NormalizedEmailEvent>;
 }
 

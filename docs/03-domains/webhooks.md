@@ -4,23 +4,23 @@
 
 `webhook_endpoints` — durable delivery endpoints.
 
-| Field | Notes |
-|---|---|
-| `url` | http/https only, SSRF-validated |
-| `secret_encrypted` | Per-endpoint signing secret, encrypted at rest |
-| `enabled` | Delivery switch |
-| `event_types` | Subscribed domain events (e.g. `comment.created`, `post.published`) |
+| Field              | Notes                                                               |
+| ------------------ | ------------------------------------------------------------------- |
+| `url`              | http/https only, SSRF-validated                                     |
+| `secret_encrypted` | Per-endpoint signing secret, encrypted at rest                      |
+| `enabled`          | Delivery switch                                                     |
+| `event_types`      | Subscribed domain events (e.g. `comment.created`, `post.published`) |
 
 `webhook_deliveries` — durable per-event delivery state.
 
-| Field | Notes |
-|---|---|
-| `endpoint_id` FK | |
-| `event_id` | Stable event identity (same across retries) |
-| `payload_hash` | Event payload fingerprint |
-| `status` | `pending` / `delivered` / `failed` / `dead_letter` |
-| `attempt_count` / `last_error` / `response_status` | Delivery visibility |
-| `UNIQUE(endpoint_id, event_id)` | Dedup — replays cannot duplicate |
+| Field                                              | Notes                                              |
+| -------------------------------------------------- | -------------------------------------------------- |
+| `endpoint_id` FK                                   |                                                    |
+| `event_id`                                         | Stable event identity (same across retries)        |
+| `payload_hash`                                     | Event payload fingerprint                          |
+| `status`                                           | `pending` / `delivered` / `failed` / `dead_letter` |
+| `attempt_count` / `last_error` / `response_status` | Delivery visibility                                |
+| `UNIQUE(endpoint_id, event_id)`                    | Dedup — replays cannot duplicate                   |
 
 ## Signing
 

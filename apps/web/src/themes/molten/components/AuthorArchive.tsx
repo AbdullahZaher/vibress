@@ -1,7 +1,7 @@
-import React from 'react';
-import { ThemeAuthorArchiveProps } from '../../types';
-import { ThemeLayout } from './Layout';
-import { PostCard } from './PostCard';
+import React from "react";
+import { ThemeAuthorArchiveProps } from "../../types";
+import { ThemeLayout } from "./Layout";
+import { PostCard } from "./PostCard";
 
 export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
   const { author, posts, settings, site, pagination } = props;
@@ -12,13 +12,18 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
         <header className="vb-page-head">
           <div className="vb-page-head-inner vb-inner">
             {(author as { profileImage?: string }).profileImage && (
-              <img className="vb-page-head-image" src={(author as { profileImage?: string }).profileImage} alt={author.name} />
+              <img
+                className="vb-page-head-image"
+                src={(author as { profileImage?: string }).profileImage}
+                alt={author.name}
+              />
             )}
             <h1 className="vb-page-head-title">{author.name}</h1>
             <p className="vb-page-head-description">
               {author.bio || (
                 <>
-                  A collection of {pagination.total} {pagination.total === 1 ? 'post' : 'posts'}
+                  A collection of {pagination.total}{" "}
+                  {pagination.total === 1 ? "post" : "posts"}
                 </>
               )}
             </p>
@@ -33,9 +38,20 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
           </div>
 
           {pagination.pages > 1 && (
-            <nav className="pagination" style={{ marginTop: '3.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <nav
+              className="pagination"
+              style={{
+                marginTop: "3.5rem",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               {pagination.page > 1 ? (
-                <a href={`/author/${author.slug}?page=${pagination.page - 1}`} className="newer-posts">
+                <a
+                  href={`/author/${author.slug}?page=${pagination.page - 1}`}
+                  className="newer-posts"
+                >
                   &larr; Newer Posts
                 </a>
               ) : (
@@ -45,7 +61,10 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                 Page {pagination.page} of {pagination.pages}
               </span>
               {pagination.page < pagination.pages ? (
-                <a href={`/author/${author.slug}?page=${pagination.page + 1}`} className="older-posts">
+                <a
+                  href={`/author/${author.slug}?page=${pagination.page + 1}`}
+                  className="older-posts"
+                >
                   Older Posts &rarr;
                 </a>
               ) : (

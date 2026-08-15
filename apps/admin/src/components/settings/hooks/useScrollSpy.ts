@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 
 export function useScrollSpy(sectionIds: string[], offset = 100) {
-  const [activeSection, setActiveSection] = useState<string>(sectionIds[0] || '');
+  const [activeSection, setActiveSection] = useState<string>(
+    sectionIds[0] || "",
+  );
 
   // Scroll to section smoothly and update URL path cleanly without hash redundancy
   const scrollToSection = useCallback((id: string, updateUrl = true) => {
     const section = document.getElementById(id);
     if (section) {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
       if (updateUrl) {
-        window.history.replaceState(null, '', `/admin/settings/${id}`);
+        window.history.replaceState(null, "", `/admin/settings/${id}`);
       }
       setActiveSection(id);
     }
@@ -29,8 +31,8 @@ export function useScrollSpy(sectionIds: string[], offset = 100) {
             if (entry.isIntersecting) {
               setActiveSection(id);
               // Update URL path to reflect visible section without triggering page reload
-              if (window.location.pathname.startsWith('/admin/settings')) {
-                window.history.replaceState(null, '', `/admin/settings/${id}`);
+              if (window.location.pathname.startsWith("/admin/settings")) {
+                window.history.replaceState(null, "", `/admin/settings/${id}`);
               }
             }
           });
@@ -39,7 +41,7 @@ export function useScrollSpy(sectionIds: string[], offset = 100) {
           root: null, // viewport or scroll container
           rootMargin: `-${offset}px 0px -60% 0px`,
           threshold: 0,
-        }
+        },
       );
 
       observer.observe(el);

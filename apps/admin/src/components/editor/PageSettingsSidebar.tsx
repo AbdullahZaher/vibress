@@ -1,7 +1,7 @@
-import React from 'react';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { X, Sparkles } from 'lucide-react';
+import React from "react";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import { X, Sparkles } from "lucide-react";
 
 interface PageSettingsSidebarProps {
   isOpen: boolean;
@@ -36,11 +36,19 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40 transition-opacity" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40 transition-opacity"
+        onClick={onClose}
+      />
       <div className="fixed inset-y-0 right-0 w-80 bg-background border-l shadow-2xl z-50 flex flex-col overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background/95 backdrop-blur z-10">
           <h2 className="font-semibold text-sm">Page Settings</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -49,7 +57,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
           {/* Basic Meta */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">URL Slug</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                URL Slug
+              </label>
               <Input
                 type="text"
                 value={slug}
@@ -59,7 +69,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Excerpt</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Excerpt
+              </label>
               <textarea
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
@@ -75,7 +87,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
               <Sparkles className="h-4 w-4 text-primary" /> Meta Data
             </h3>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Meta Title</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Meta Title
+              </label>
               <Input
                 type="text"
                 value={metaTitle}
@@ -85,7 +99,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Meta Description</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Meta Description
+              </label>
               <textarea
                 value={metaDescription}
                 onChange={(e) => setMetaDescription(e.target.value)}
@@ -94,7 +110,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Canonical URL</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Canonical URL
+              </label>
               <Input
                 type="text"
                 value={canonicalUrl}

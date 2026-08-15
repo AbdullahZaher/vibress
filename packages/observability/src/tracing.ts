@@ -1,11 +1,14 @@
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace';
-import { resourceFromAttributes } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { trace, context, SpanStatusCode, TraceFlags } from '@opentelemetry/api';
-import type { Span, Attributes, SpanContext } from '@opentelemetry/api';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
+import { trace, context, SpanStatusCode, TraceFlags } from "@opentelemetry/api";
+import type { Span, Attributes, SpanContext } from "@opentelemetry/api";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 
 export interface TracingOptions {
   enabled: boolean;
@@ -26,7 +29,7 @@ export function initTracing(options: TracingOptions): TracingStopHandle {
     return { stop: async () => undefined };
   }
 
-  const endpoint = options.otlpEndpoint.replace(/\/+$/, '');
+  const endpoint = options.otlpEndpoint.replace(/\/+$/, "");
   const exporter = new OTLPTraceExporter({
     url: `${endpoint}/v1/traces`,
     timeoutMillis: 2000,
@@ -35,7 +38,7 @@ export function initTracing(options: TracingOptions): TracingStopHandle {
 
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: options.serviceName,
-    [ATTR_SERVICE_VERSION]: options.serviceVersion || '0.0.0',
+    [ATTR_SERVICE_VERSION]: options.serviceVersion || "0.0.0",
     ...options.resourceAttributes,
   });
 
@@ -58,7 +61,10 @@ export function initTracing(options: TracingOptions): TracingStopHandle {
   try {
     sdk.start();
   } catch (error) {
-    console.error('[tracing] failed to start OpenTelemetry SDK, continuing without tracing:', error);
+    console.error(
+      "[tracing] failed to start OpenTelemetry SDK, continuing without tracing:",
+      error,
+    );
   }
 
   return {
@@ -66,22 +72,24 @@ export function initTracing(options: TracingOptions): TracingStopHandle {
       try {
         await sdk.shutdown();
       } catch (error) {
-        console.error('[tracing] error during OpenTelemetry shutdown:', error);
+        console.error("[tracing] error during OpenTelemetry shutdown:", error);
       }
     },
   };
 }
 
-export function getTracer(name = 'vibress'): ReturnType<typeof trace.getTracer> {
+export function getTracer(
+  name = "vibress",
+): ReturnType<typeof trace.getTracer> {
   return trace.getTracer(name);
 }
 
 export async function withSpan<T>(
   spanName: string,
   fn: (span: Span) => Promise<T>,
-  attributes?: Attributes
+  attributes?: Attributes,
 ): Promise<T> {
-  const tracer = getTracer('vibress');
+  const tracer = getTracer("vibress");
   return tracer.startActiveSpan(spanName, async (span) => {
     if (attributes) {
       span.setAttributes(attributes);
@@ -107,7 +115,8 @@ export async function withSpan<T>(
  * is enabled and a span is active, or undefined. Used to propagate trace
  * context across process boundaries (outbox envelope, queue job metadata).
  */
-export function getActiveTraceContext(): { traceId: string; spanId: string } | undefined {
+export function getActiveTraceContext():
+  { traceId: string; spanId: string } | undefined {
   const span = trace.getSpan(context.active());
   if (!span) return undefined;
   const spanContext = span.spanContext();
@@ -122,7 +131,7 @@ export function getActiveTraceContext(): { traceId: string; spanId: string } | u
  */
 export function withRemoteTraceContext<T>(
   traceCtx: { traceId: string; spanId: string } | undefined,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   if (!traceCtx) return fn();
   const spanContext: SpanContext = {

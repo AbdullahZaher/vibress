@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const LoginRequestSchema = z.object({
   email: z.string().trim().email().max(255),

@@ -4,14 +4,14 @@
 
 `integrations` represents durable external-service connections.
 
-| Field | Notes |
-|---|---|
-| `key` | Stable identifier, unique, lowercase alphanumeric + hyphens |
-| `type` | Integration type (e.g. `email-marketing`, `external`) |
-| `name` | Display name |
-| `status` | `active` / `disabled` |
-| `config` | Public, non-secret configuration (JSON) |
-| `encrypted_secrets` | Secret values, AES-256-GCM encrypted at rest |
+| Field               | Notes                                                       |
+| ------------------- | ----------------------------------------------------------- |
+| `key`               | Stable identifier, unique, lowercase alphanumeric + hyphens |
+| `type`              | Integration type (e.g. `email-marketing`, `external`)       |
+| `name`              | Display name                                                |
+| `status`            | `active` / `disabled`                                       |
+| `config`            | Public, non-secret configuration (JSON)                     |
+| `encrypted_secrets` | Secret values, AES-256-GCM encrypted at rest                |
 
 ## Secret Handling
 
@@ -39,14 +39,14 @@ integrations referenced by API keys.
 
 Machine credentials, fully separate from Staff/Member sessions.
 
-| Field | Notes |
-|---|---|
-| `prefix` | Visible identifier (`vk_<8 hex>`), never a secret |
-| `key_hash` | SHA-256 of the full raw secret — **raw secret never stored** |
-| `scopes` | Explicit permission list (e.g. `content.read`, `webhooks.register`) |
-| `expires_at` | Optional expiry |
-| `revoked_at` | Set on revocation |
-| `last_used_at` | Updated on successful authentication |
+| Field          | Notes                                                               |
+| -------------- | ------------------------------------------------------------------- |
+| `prefix`       | Visible identifier (`vk_<8 hex>`), never a secret                   |
+| `key_hash`     | SHA-256 of the full raw secret — **raw secret never stored**        |
+| `scopes`       | Explicit permission list (e.g. `content.read`, `webhooks.register`) |
+| `expires_at`   | Optional expiry                                                     |
+| `revoked_at`   | Set on revocation                                                   |
+| `last_used_at` | Updated on successful authentication                                |
 
 - The raw secret (`vk_<prefix-part>_<secret-part>`) is returned **exactly
   once** at creation.

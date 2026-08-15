@@ -1,16 +1,38 @@
-import { ImportProcessor, ExportCollector } from '@vibress/import-export';
+import { ImportProcessor, ExportCollector } from "@vibress/import-export";
 
 interface SettingsServiceLike {
-  updateSetting(namespace: string, key: string, value: unknown, actorId: string | null): Promise<unknown>;
-  getStaffSettings(): Promise<Array<{ namespace: string; settings: Array<{ key: string; value: unknown; classification: string }> }>>;
+  updateSetting(
+    namespace: string,
+    key: string,
+    value: unknown,
+    actorId: string | null,
+  ): Promise<unknown>;
+  getStaffSettings(): Promise<
+    Array<{
+      namespace: string;
+      settings: Array<{ key: string; value: unknown; classification: string }>;
+    }>
+  >;
 }
 
 interface RedirectsServiceLike {
   createRedirect(
-    data: { source: string; destination: string; statusCode?: number; enabled?: boolean },
-    actorId: string | null
+    data: {
+      source: string;
+      destination: string;
+      statusCode?: number;
+      enabled?: boolean;
+    },
+    actorId: string | null,
   ): Promise<unknown>;
-  listRedirects(): Promise<Array<{ source: string; destination: string; statusCode: number; enabled: boolean }>>;
+  listRedirects(): Promise<
+    Array<{
+      source: string;
+      destination: string;
+      statusCode: number;
+      enabled: boolean;
+    }>
+  >;
 }
 
 export interface ProcessorsDeps {
@@ -34,7 +56,14 @@ export class NativeImportProcessor implements ImportProcessor {
     this.settingsService = deps.settingsService;
   }
 
-  async process(data: Record<string, unknown>): Promise<{ posts: number; pages: number; tags: number; redirects: number }> {
+  async process(
+    data: Record<string, unknown>,
+  ): Promise<{
+    posts: number;
+    pages: number;
+    tags: number;
+    redirects: number;
+  }> {
     let redirectCount = 0;
     const posts = 0;
     const pages = 0;
@@ -44,13 +73,17 @@ export class NativeImportProcessor implements ImportProcessor {
     if (Array.isArray(data.redirects)) {
       for (const item of data.redirects) {
         const r = item as Record<string, unknown>;
-        if (typeof r.source !== 'string' || typeof r.destination !== 'string') continue;
+        if (typeof r.source !== "string" || typeof r.destination !== "string")
+          continue;
         try {
-          await this.redirectsService.createRedirect({
-            source: r.source,
-            destination: r.destination,
-            statusCode: Number(r.statusCode) || 301,
-          }, null);
+          await this.redirectsService.createRedirect(
+            {
+              source: r.source,
+              destination: r.destination,
+              statusCode: Number(r.statusCode) || 301,
+            },
+            null,
+          );
           redirectCount++;
         } catch {
           // Skip invalid redirects; report via summary
@@ -59,11 +92,18 @@ export class NativeImportProcessor implements ImportProcessor {
     }
 
     // Settings: only non-secret, known settings pass through settings domain
-    if (data.settings && typeof data.settings === 'object') {
-      for (const [namespace, values] of Object.entries(data.settings as Record<string, Record<string, unknown>>)) {
+    if (data.settings && typeof data.settings === "object") {
+      for (const [namespace, values] of Object.entries(
+        data.settings as Record<string, Record<string, unknown>>,
+      )) {
         for (const [key, value] of Object.entries(values || {})) {
           try {
-            await this.settingsService.updateSetting(namespace, key, value, null);
+            await this.settingsService.updateSetting(
+              namespace,
+              key,
+              value,
+              null,
+            );
           } catch {
             // Unknown namespace/setting or secret — skip silently
           }
@@ -96,7 +136,8 @@ export class NativeExportCollector implements ExportCollector {
     for (const ns of settings) {
       const safe: Record<string, unknown> = {};
       for (const s of ns.settings) {
-        if (s.classification === 'secret' || s.classification === 'internal') continue;
+        if (s.classification === "secret" || s.classification === "internal")
+          continue;
         safe[s.key] = s.value;
       }
       safeSettings[ns.namespace] = safe;

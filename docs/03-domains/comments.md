@@ -4,16 +4,16 @@
 
 `comments` belongs to `member.id` — never staff identity.
 
-| Field | Notes |
-|---|---|
-| `post_id` FK | The content the comment belongs to |
-| `member_id` FK | The comment author (member identity) |
-| `parent_id` FK null | Threading parent |
-| `body` | Plain text, sanitized, max 5000 chars |
-| `status` | `published` / `pending_review` / `hidden` / `deleted` |
-| `depth` | Thread depth, max 5 (`MAX_COMMENT_DEPTH`) |
-| `like_count` / `reply_count` | Denormalized counters |
-| `deleted_at` | Tombstone timestamp |
+| Field                        | Notes                                                 |
+| ---------------------------- | ----------------------------------------------------- |
+| `post_id` FK                 | The content the comment belongs to                    |
+| `member_id` FK               | The comment author (member identity)                  |
+| `parent_id` FK null          | Threading parent                                      |
+| `body`                       | Plain text, sanitized, max 5000 chars                 |
+| `status`                     | `published` / `pending_review` / `hidden` / `deleted` |
+| `depth`                      | Thread depth, max 5 (`MAX_COMMENT_DEPTH`)             |
+| `like_count` / `reply_count` | Denormalized counters                                 |
+| `deleted_at`                 | Tombstone timestamp                                   |
 
 ## Content Safety
 

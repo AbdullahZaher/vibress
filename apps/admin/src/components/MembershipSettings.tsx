@@ -1,15 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { CreditCard, ShieldCheck, Users, RefreshCw, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
-import { BillingSettings } from './BillingSettings';
-import { SubscriptionsList } from './SubscriptionsList';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { getStaffSettingsApi, updateSettingApi } from '../lib/api/operations';
+import React, { useState, useEffect } from "react";
+import {
+  CreditCard,
+  ShieldCheck,
+  Users,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
+import { BillingSettings } from "./BillingSettings";
+import { SubscriptionsList } from "./SubscriptionsList";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { getStaffSettingsApi, updateSettingApi } from "../lib/api/operations";
 
 interface MembershipSettingsProps {
-  initialTab?: 'billing' | 'access' | 'subscriptions';
+  initialTab?: "billing" | "access" | "subscriptions";
 }
 
 const MemberAccessPanel: React.FC = () => {
@@ -26,21 +40,27 @@ const MemberAccessPanel: React.FC = () => {
     getStaffSettingsApi()
       .then((res) => {
         for (const ns of res.namespaces) {
-          if (ns.namespace === 'members') {
+          if (ns.namespace === "members") {
             for (const s of ns.settings) {
-              if (s.key === 'signupEnabled') setSignupEnabled(Boolean(s.value));
-              if (s.key === 'defaultNewsletterOptIn') setDefaultNewsletterOptIn(Boolean(s.value));
+              if (s.key === "signupEnabled") setSignupEnabled(Boolean(s.value));
+              if (s.key === "defaultNewsletterOptIn")
+                setDefaultNewsletterOptIn(Boolean(s.value));
             }
           }
-          if (ns.namespace === 'security') {
+          if (ns.namespace === "security") {
             for (const s of ns.settings) {
-              if (s.key === 'memberSessionTtlHours') setMemberSessionTtlHours(Number(s.value ?? 720));
+              if (s.key === "memberSessionTtlHours")
+                setMemberSessionTtlHours(Number(s.value ?? 720));
             }
           }
         }
       })
       .catch((err: unknown) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to load membership settings');
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Failed to load membership settings",
+        );
       })
       .finally(() => setLoading(false));
   }, []);
@@ -52,14 +72,24 @@ const MemberAccessPanel: React.FC = () => {
     setErrorMsg(null);
     try {
       await Promise.all([
-        updateSettingApi('members', 'signupEnabled', signupEnabled),
-        updateSettingApi('members', 'defaultNewsletterOptIn', defaultNewsletterOptIn),
-        updateSettingApi('security', 'memberSessionTtlHours', Number(memberSessionTtlHours)),
+        updateSettingApi("members", "signupEnabled", signupEnabled),
+        updateSettingApi(
+          "members",
+          "defaultNewsletterOptIn",
+          defaultNewsletterOptIn,
+        ),
+        updateSettingApi(
+          "security",
+          "memberSessionTtlHours",
+          Number(memberSessionTtlHours),
+        ),
       ]);
-      setSuccessMsg('Membership access settings saved.');
+      setSuccessMsg("Membership access settings saved.");
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to save settings');
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to save settings",
+      );
     } finally {
       setSaving(false);
     }
@@ -96,15 +126,19 @@ const MemberAccessPanel: React.FC = () => {
             Registration & Portal Access
           </CardTitle>
           <CardDescription>
-            Control how members join your publication and configure authentication session lifetimes.
+            Control how members join your publication and configure
+            authentication session lifetimes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-background/50">
             <div>
-              <p className="text-sm font-semibold text-foreground">Allow Member Signups</p>
+              <p className="text-sm font-semibold text-foreground">
+                Allow Member Signups
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                When enabled, visitors can subscribe and register accounts through the public portal.
+                When enabled, visitors can subscribe and register accounts
+                through the public portal.
               </p>
             </div>
             <input
@@ -117,9 +151,12 @@ const MemberAccessPanel: React.FC = () => {
 
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-background/50">
             <div>
-              <p className="text-sm font-semibold text-foreground">Default Newsletter Opt-in</p>
+              <p className="text-sm font-semibold text-foreground">
+                Default Newsletter Opt-in
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Automatically subscribe newly registered members to default email newsletters.
+                Automatically subscribe newly registered members to default
+                email newsletters.
               </p>
             </div>
             <input
@@ -131,7 +168,10 @@ const MemberAccessPanel: React.FC = () => {
           </div>
 
           <div className="space-y-1.5 pt-2">
-            <label htmlFor="session-ttl" className="text-xs font-semibold text-foreground">
+            <label
+              htmlFor="session-ttl"
+              className="text-xs font-semibold text-foreground"
+            >
               Member Session Lifetime (Hours)
             </label>
             <Input
@@ -140,26 +180,41 @@ const MemberAccessPanel: React.FC = () => {
               min={1}
               max={8760}
               value={memberSessionTtlHours}
-              onChange={(e) => setMemberSessionTtlHours(parseInt(e.target.value, 10) || 720)}
+              onChange={(e) =>
+                setMemberSessionTtlHours(parseInt(e.target.value, 10) || 720)
+              }
               className="max-w-xs"
               required
             />
-            <p className="text-[11px] text-muted-foreground">Default is 720 hours (30 days) before re-authentication is required.</p>
+            <p className="text-[11px] text-muted-foreground">
+              Default is 720 hours (30 days) before re-authentication is
+              required.
+            </p>
           </div>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving} className="gap-2 cursor-pointer">
-          {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {saving ? 'Saving...' : 'Save Access Settings'}
+        <Button
+          type="submit"
+          disabled={saving}
+          className="gap-2 cursor-pointer"
+        >
+          {saving ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {saving ? "Saving..." : "Save Access Settings"}
         </Button>
       </div>
     </form>
   );
 };
 
-export const MembershipSettings: React.FC<MembershipSettingsProps> = ({ initialTab = 'billing' }) => {
+export const MembershipSettings: React.FC<MembershipSettingsProps> = ({
+  initialTab = "billing",
+}) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   return (
@@ -172,7 +227,8 @@ export const MembershipSettings: React.FC<MembershipSettingsProps> = ({ initialT
             Membership & Monetization
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure member registration, subscription tiers, Stripe payment gateways, and member access.
+            Configure member registration, subscription tiers, Stripe payment
+            gateways, and member access.
           </p>
         </div>
 

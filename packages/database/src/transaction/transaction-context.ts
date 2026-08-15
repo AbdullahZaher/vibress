@@ -1,6 +1,6 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type * as schema from '../schema';
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type * as schema from "../schema";
 
 export type TransactionDb = NodePgDatabase<typeof schema>;
 
@@ -15,6 +15,9 @@ export function getTransactionDb(): TransactionDb | null {
   return tx === undefined ? null : tx;
 }
 
-export function runWithTransaction<T>(tx: TransactionDb, work: () => Promise<T>): Promise<T> {
+export function runWithTransaction<T>(
+  tx: TransactionDb,
+  work: () => Promise<T>,
+): Promise<T> {
   return transactionStorage.run(tx, work);
 }

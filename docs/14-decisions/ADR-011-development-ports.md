@@ -17,21 +17,21 @@ The development gateway/reverse proxy routes requests internally to the appropri
 
 ## Port allocation
 
-| Service | Port |
-|---|---:|
-| Vibress Gateway / Main URL | **7777** |
-| Public Web | 7778 |
-| Admin | 7779 |
-| API | 7780 |
-| Portal | 7781 |
-| Worker health/metrics, if enabled | 7782 |
+| Service                           |     Port |
+| --------------------------------- | -------: |
+| Vibress Gateway / Main URL        | **7777** |
+| Public Web                        |     7778 |
+| Admin                             |     7779 |
+| API                               |     7780 |
+| Portal                            |     7781 |
+| Worker health/metrics, if enabled |     7782 |
 
 Infrastructure services keep their standard internal ports unless a local conflict requires remapping:
 
-| Service | Default internal port |
-|---|---:|
-| PostgreSQL | 5432 |
-| Redis | 6379 |
+| Service    | Default internal port |
+| ---------- | --------------------: |
+| PostgreSQL |                  5432 |
+| Redis      |                  6379 |
 
 ## Routing convention
 

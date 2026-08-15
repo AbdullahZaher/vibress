@@ -12,8 +12,8 @@ export class Translator {
   private dictionary: TranslationDictionary;
 
   constructor(options: TranslatorOptions = {}) {
-    this.locale = options.locale || options.fallbackLocale || 'en';
-    this.fallbackLocale = options.fallbackLocale || 'en';
+    this.locale = options.locale || options.fallbackLocale || "en";
+    this.fallbackLocale = options.fallbackLocale || "en";
     this.dictionary = options.dictionary || {};
   }
 
@@ -32,24 +32,29 @@ export class Translator {
   translate(
     key: string,
     params?: Record<string, string | number>,
-    locale: string = this.locale
+    locale: string = this.locale,
   ): string {
-    const localeDict = this.dictionary[locale] || this.dictionary[this.fallbackLocale] || {};
+    const localeDict =
+      this.dictionary[locale] || this.dictionary[this.fallbackLocale] || {};
     let template = localeDict[key] || key;
 
     if (params) {
       for (const [pKey, pVal] of Object.entries(params)) {
         const strVal = String(pVal);
         template = template
-          .replace(new RegExp(`\\{\\{\\s*${pKey}\\s*\\}\\}`, 'g'), strVal)
-          .replace(new RegExp(`\\{${pKey}\\}`, 'g'), strVal);
+          .replace(new RegExp(`\\{\\{\\s*${pKey}\\s*\\}\\}`, "g"), strVal)
+          .replace(new RegExp(`\\{${pKey}\\}`, "g"), strVal);
       }
     }
 
     return template;
   }
 
-  t(key: string, params?: Record<string, string | number>, locale?: string): string {
+  t(
+    key: string,
+    params?: Record<string, string | number>,
+    locale?: string,
+  ): string {
     return this.translate(key, params, locale);
   }
 }

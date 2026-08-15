@@ -57,33 +57,43 @@ Recommended base: Lexical.
 ## Package responsibilities
 
 ### `studio-core`
+
 Editor state, commands, history, selection, shared extension contracts.
 
 ### `studio-react`
+
 React components and bindings.
 
 ### `studio-nodes`
+
 Paragraph, heading, quote, list, text, and custom node definitions.
 
 ### `studio-cards`
+
 Reusable rich content blocks.
 
 ### `studio-serializer`
+
 Canonical Studio document serialization.
 
 ### `studio-renderer`
+
 Renderer orchestration.
 
 ### `studio-html`
+
 Web HTML output.
 
 ### `studio-markdown`
+
 Markdown conversion.
 
 ### `studio-email`
+
 Email-safe HTML output.
 
 ### `studio-plugin-sdk`
+
 Public contracts for third-party editor extensions.
 
 ## Independence rule

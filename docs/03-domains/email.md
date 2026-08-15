@@ -26,16 +26,16 @@ native signature scheme.
 
 `email_recipients` is the per-send snapshot:
 
-| Field | Notes |
-|---|---|
-| `send_id` FK | Belongs to the send |
-| `member_id` FK null | Identity link (set null on member delete) |
-| `email` / `name` | Delivery address |
-| `status` | `pending` → `queued` → `sent` → `delivered` / `bounced` / `complained` / `failed` / `unsubscribed` / `suppressed` |
-| `provider_message_id` | Stable provider message identity for webhook matching |
-| `unsubscribe_token` | Per-recipient signed token |
-| `attempt_count` / `last_error` | Retry visibility |
-| `UNIQUE(member_id, send_id)` | No duplicate recipients per send |
+| Field                          | Notes                                                                                                             |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `send_id` FK                   | Belongs to the send                                                                                               |
+| `member_id` FK null            | Identity link (set null on member delete)                                                                         |
+| `email` / `name`               | Delivery address                                                                                                  |
+| `status`                       | `pending` → `queued` → `sent` → `delivered` / `bounced` / `complained` / `failed` / `unsubscribed` / `suppressed` |
+| `provider_message_id`          | Stable provider message identity for webhook matching                                                             |
+| `unsubscribe_token`            | Per-recipient signed token                                                                                        |
+| `attempt_count` / `last_error` | Retry visibility                                                                                                  |
+| `UNIQUE(member_id, send_id)`   | No duplicate recipients per send                                                                                  |
 
 ## Suppression Policy (Email domain owns it)
 

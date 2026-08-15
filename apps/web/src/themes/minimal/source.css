@@ -3,7 +3,7 @@
    Stark Architectural & Typography-First Design System
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap");
 
 :root {
   --vb-accent-color: #09090b;
@@ -12,45 +12,51 @@
   --bg-base: #fafafa;
   --bg-surface: #ffffff;
   --bg-surface-hover: #f4f4f5;
-  
+
   --text-primary: #09090b;
   --text-secondary: #52525b;
   --text-muted: #a1a1aa;
-  
+
   --border-hairline: rgba(9, 9, 11, 0.08);
   --border-strong: #09090b;
-  
+
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 14px;
-  
-  --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
-  
+
+  --font-sans: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+
   --title-font: var(--font-sans);
   --body-font: var(--font-sans);
-  
+
   --transition-fast: all 0.2s ease;
 }
 
-.has-serif-body { --body-font: var(--font-serif); }
-.has-serif-title { --title-font: var(--font-serif); }
+.has-serif-body {
+  --body-font: var(--font-serif);
+}
+.has-serif-title {
+  --title-font: var(--font-serif);
+}
 
 .dark-mode,
 [data-theme="dark"] {
   --bg-base: #09090b;
   --bg-surface: #121215;
   --bg-surface-hover: #18181b;
-  
+
   --text-primary: #f4f4f5;
   --text-secondary: #a1a1aa;
   --text-muted: #71717a;
-  
+
   --border-hairline: rgba(255, 255, 255, 0.1);
   --border-strong: #f4f4f5;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -151,7 +157,7 @@ a {
 }
 
 .vb-container-title::after {
-  content: '';
+  content: "";
   flex-grow: 1;
   height: 1px;
   background-color: var(--border-hairline);

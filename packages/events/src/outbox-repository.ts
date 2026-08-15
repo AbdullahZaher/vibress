@@ -1,6 +1,10 @@
-import { sql, inArray } from 'drizzle-orm';
-import { getDb } from '@vibress/database';
-import { outboxEvents, OutboxEventRow, NewOutboxEventRow } from '@vibress/database';
+import { sql, inArray } from "drizzle-orm";
+import { getDb } from "@vibress/database";
+import {
+  outboxEvents,
+  OutboxEventRow,
+  NewOutboxEventRow,
+} from "@vibress/database";
 
 export type { OutboxEventRow, NewOutboxEventRow };
 
@@ -20,9 +24,16 @@ export interface OutboxRepository {
    * attempts exceed maxAttempts the row transitions to 'failed', otherwise it
    * returns to 'pending' with a backoff window via availableAfter.
    */
-  markFailed(id: string, error: string, opts: { maxAttempts: number }): Promise<void>;
+  markFailed(
+    id: string,
+    error: string,
+    opts: { maxAttempts: number },
+  ): Promise<void>;
   /** Reclaims claims that have been 'delivering' past the stale threshold. */
-  reclaimStaleClaims(opts: { staleAfterMs: number; now?: Date }): Promise<number>;
+  reclaimStaleClaims(opts: {
+    staleAfterMs: number;
+    now?: Date;
+  }): Promise<number>;
   /** Deletes rows whose fate was decided long ago (retention). */
   purge(opts: { publishedBefore: Date; failedBefore: Date }): Promise<void>;
 }
@@ -33,7 +44,9 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     await db.insert(outboxEvents).values(row);
   }
 
-  async claimReady(opts: { limit?: number; now?: Date } = {}): Promise<OutboxEventRow[]> {
+  async claimReady(
+    opts: { limit?: number; now?: Date } = {},
+  ): Promise<OutboxEventRow[]> {
     const db = getDb();
     const limit = opts.limit ?? OUTBOX_CLAIM_BATCH_SIZE;
     const now = opts.now ?? new Date();
@@ -60,7 +73,15 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     rows.sort((a, b) => {
       const ta = String(a.createdAt);
       const tb = String(b.createdAt);
-      return ta < tb ? -1 : ta > tb ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      return ta < tb
+        ? -1
+        : ta > tb
+          ? 1
+          : a.id < b.id
+            ? -1
+            : a.id > b.id
+              ? 1
+              : 0;
     });
     return rows;
   }
@@ -70,11 +91,19 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     const db = getDb();
     await db
       .update(outboxEvents)
-      .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: "published",
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(inArray(outboxEvents.id, ids));
   }
 
-  async markFailed(id: string, error: string, opts: { maxAttempts: number }): Promise<void> {
+  async markFailed(
+    id: string,
+    error: string,
+    opts: { maxAttempts: number },
+  ): Promise<void> {
     const db = getDb();
     const maxAttempts = opts.maxAttempts;
     await db.execute(sql`
@@ -89,7 +118,9 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     `);
   }
 
-  async reclaimStaleClaims(opts: { staleAfterMs: number; now?: Date } = { staleAfterMs: 60_000 }): Promise<number> {
+  async reclaimStaleClaims(
+    opts: { staleAfterMs: number; now?: Date } = { staleAfterMs: 60_000 },
+  ): Promise<number> {
     const db = getDb();
     const now = opts.now ?? new Date();
     const result = await db.execute(sql`
@@ -102,25 +133,34 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     return (result.rows ?? []).length;
   }
 
-  async purge(opts: { publishedBefore: Date; failedBefore: Date }): Promise<void> {
+  async purge(opts: {
+    publishedBefore: Date;
+    failedBefore: Date;
+  }): Promise<void> {
     const db = getDb();
     await db
       .delete(outboxEvents)
-      .where(sql`${outboxEvents.status} = 'published' AND ${outboxEvents.publishedAt} < ${opts.publishedBefore}`);
+      .where(
+        sql`${outboxEvents.status} = 'published' AND ${outboxEvents.publishedAt} < ${opts.publishedBefore}`,
+      );
     await db
       .delete(outboxEvents)
-      .where(sql`${outboxEvents.status} = 'failed' AND ${outboxEvents.updatedAt} < ${opts.failedBefore}`);
+      .where(
+        sql`${outboxEvents.status} = 'failed' AND ${outboxEvents.updatedAt} < ${opts.failedBefore}`,
+      );
   }
 }
 
 /** Maps raw pg rows (snake_case columns) to typed outbox rows. */
 function mapRows(rows: unknown): OutboxEventRow[] {
-  const raw = (Array.isArray(rows) ? rows : []) as Array<Record<string, unknown>>;
+  const raw = (Array.isArray(rows) ? rows : []) as Array<
+    Record<string, unknown>
+  >;
   return raw.map((r) => ({
     id: r.id as string,
     eventType: r.event_type as string,
     payload: r.payload as Record<string, unknown>,
-    status: r.status as OutboxEventRow['status'],
+    status: r.status as OutboxEventRow["status"],
     attempts: r.attempts as number,
     lastError: (r.last_error as string | null) ?? null,
     availableAfter: (r.available_after as Date | null) ?? null,
@@ -130,4 +170,5 @@ function mapRows(rows: unknown): OutboxEventRow[] {
   }));
 }
 
-export const defaultOutboxRepository: OutboxRepository = new DrizzleOutboxRepository();
+export const defaultOutboxRepository: OutboxRepository =
+  new DrizzleOutboxRepository();

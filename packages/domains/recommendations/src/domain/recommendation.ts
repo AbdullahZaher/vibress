@@ -1,4 +1,4 @@
-export type RecommendationStatus = 'active' | 'archived';
+export type RecommendationStatus = "active" | "archived";
 
 export interface Recommendation {
   id: string;

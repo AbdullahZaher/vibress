@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useGeneralSettings } from './useGeneralSettings';
-import { useSiteSettings } from './useSiteSettings';
-import { useMembershipSettings } from './useMembershipSettings';
-import { useGrowthSettings } from './useGrowthSettings';
-import { useAdvancedSettings } from './useAdvancedSettings';
+import { useState, useCallback, useMemo } from "react";
+import { useGeneralSettings } from "./useGeneralSettings";
+import { useSiteSettings } from "./useSiteSettings";
+import { useMembershipSettings } from "./useMembershipSettings";
+import { useGrowthSettings } from "./useGrowthSettings";
+import { useAdvancedSettings } from "./useAdvancedSettings";
 
 export function useSettingsHub() {
   const general = useGeneralSettings();
@@ -23,7 +23,13 @@ export function useSettingsHub() {
       growth.isDirty ||
       advanced.isDirty
     );
-  }, [general.isDirty, site.isDirty, membership.isDirty, growth.isDirty, advanced.isDirty]);
+  }, [
+    general.isDirty,
+    site.isDirty,
+    membership.isDirty,
+    growth.isDirty,
+    advanced.isDirty,
+  ]);
 
   const dirtyCount = useMemo(() => {
     return (
@@ -49,7 +55,13 @@ export function useSettingsHub() {
       growth.saving ||
       advanced.saving
     );
-  }, [general.saving, site.saving, membership.saving, growth.saving, advanced.saving]);
+  }, [
+    general.saving,
+    site.saving,
+    membership.saving,
+    growth.saving,
+    advanced.saving,
+  ]);
 
   const loading = useMemo(() => {
     return general.loading || membership.loading || growth.loading;
@@ -70,11 +82,13 @@ export function useSettingsHub() {
     const allPassed = results.every(Boolean);
 
     if (allPassed) {
-      setGlobalSuccess('Settings saved successfully.');
+      setGlobalSuccess("Settings saved successfully.");
       setTimeout(() => setGlobalSuccess(null), 4000);
       return true;
     } else {
-      setGlobalError('Some settings could not be saved. Please check the affected cards.');
+      setGlobalError(
+        "Some settings could not be saved. Please check the affected cards.",
+      );
       return false;
     }
   }, [general, site, membership, growth, advanced]);

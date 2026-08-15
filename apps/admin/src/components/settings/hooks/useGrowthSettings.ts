@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getStaffSettingsApi, updateSettingApi } from '../../../lib/api/operations';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getStaffSettingsApi,
+  updateSettingApi,
+} from "../../../lib/api/operations";
 
 export interface GrowthSettingsState {
   fromName: string;
@@ -8,18 +11,18 @@ export interface GrowthSettingsState {
   gaId: string;
   plausibleDomain: string;
   posthogKey: string;
-  commentAccess: 'all' | 'paid' | 'disabled';
+  commentAccess: "all" | "paid" | "disabled";
   preModeration: boolean;
 }
 
 const DEFAULT_STATE: GrowthSettingsState = {
-  fromName: 'Vibress Newsletter',
-  fromEmail: '',
-  smtpHost: '',
-  gaId: '',
-  plausibleDomain: '',
-  posthogKey: '',
-  commentAccess: 'all',
+  fromName: "Vibress Newsletter",
+  fromEmail: "",
+  smtpHost: "",
+  gaId: "",
+  plausibleDomain: "",
+  posthogKey: "",
+  commentAccess: "all",
   preModeration: false,
 };
 
@@ -35,39 +38,47 @@ export function useGrowthSettings() {
     setError(null);
     try {
       const res = await getStaffSettingsApi();
-      const emailNs = res.namespaces.find((n) => n.namespace === 'email');
-      const analyticsNs = res.namespaces.find((n) => n.namespace === 'analytics');
-      const commentsNs = res.namespaces.find((n) => n.namespace === 'comments');
+      const emailNs = res.namespaces.find((n) => n.namespace === "email");
+      const analyticsNs = res.namespaces.find(
+        (n) => n.namespace === "analytics",
+      );
+      const commentsNs = res.namespaces.find((n) => n.namespace === "comments");
 
       const loaded: GrowthSettingsState = { ...DEFAULT_STATE };
 
       if (emailNs) {
         for (const s of emailNs.settings) {
-          if (s.key === 'fromName') loaded.fromName = String(s.value || '');
-          if (s.key === 'fromEmail') loaded.fromEmail = String(s.value || '');
-          if (s.key === 'smtpHost') loaded.smtpHost = String(s.value || '');
+          if (s.key === "fromName") loaded.fromName = String(s.value || "");
+          if (s.key === "fromEmail") loaded.fromEmail = String(s.value || "");
+          if (s.key === "smtpHost") loaded.smtpHost = String(s.value || "");
         }
       }
 
       if (analyticsNs) {
         for (const s of analyticsNs.settings) {
-          if (s.key === 'gaId') loaded.gaId = String(s.value || '');
-          if (s.key === 'plausibleDomain') loaded.plausibleDomain = String(s.value || '');
-          if (s.key === 'posthogKey') loaded.posthogKey = String(s.value || '');
+          if (s.key === "gaId") loaded.gaId = String(s.value || "");
+          if (s.key === "plausibleDomain")
+            loaded.plausibleDomain = String(s.value || "");
+          if (s.key === "posthogKey") loaded.posthogKey = String(s.value || "");
         }
       }
 
       if (commentsNs) {
         for (const s of commentsNs.settings) {
-          if (s.key === 'commentAccess') loaded.commentAccess = (s.value as GrowthSettingsState['commentAccess']) || 'all';
-          if (s.key === 'preModeration') loaded.preModeration = Boolean(s.value);
+          if (s.key === "commentAccess")
+            loaded.commentAccess =
+              (s.value as GrowthSettingsState["commentAccess"]) || "all";
+          if (s.key === "preModeration")
+            loaded.preModeration = Boolean(s.value);
         }
       }
 
       setInitial(loaded);
       setDraft(loaded);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load growth settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to load growth settings",
+      );
     } finally {
       setLoading(false);
     }
@@ -77,9 +88,15 @@ export function useGrowthSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const updateField = useCallback(<K extends keyof GrowthSettingsState>(key: K, value: GrowthSettingsState[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const updateField = useCallback(
+    <K extends keyof GrowthSettingsState>(
+      key: K,
+      value: GrowthSettingsState[K],
+    ) => {
+      setDraft((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
 
   const dirtyKeys = useMemo(() => {
     const keys: (keyof GrowthSettingsState)[] = [];
@@ -100,19 +117,21 @@ export function useGrowthSettings() {
     try {
       const promises: Promise<unknown>[] = [];
       for (const k of dirtyKeys) {
-        if (['fromName', 'fromEmail', 'smtpHost'].includes(k)) {
-          promises.push(updateSettingApi('email', k, draft[k]));
-        } else if (['gaId', 'plausibleDomain', 'posthogKey'].includes(k)) {
-          promises.push(updateSettingApi('analytics', k, draft[k]));
-        } else if (['commentAccess', 'preModeration'].includes(k)) {
-          promises.push(updateSettingApi('comments', k, draft[k]));
+        if (["fromName", "fromEmail", "smtpHost"].includes(k)) {
+          promises.push(updateSettingApi("email", k, draft[k]));
+        } else if (["gaId", "plausibleDomain", "posthogKey"].includes(k)) {
+          promises.push(updateSettingApi("analytics", k, draft[k]));
+        } else if (["commentAccess", "preModeration"].includes(k)) {
+          promises.push(updateSettingApi("comments", k, draft[k]));
         }
       }
       await Promise.all(promises);
       setInitial({ ...draft });
       return true;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save growth settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to save growth settings",
+      );
       return false;
     } finally {
       setSaving(false);

@@ -1,4 +1,4 @@
-export type IntegrationStatus = 'active' | 'disabled';
+export type IntegrationStatus = "active" | "disabled";
 
 export interface Integration {
   id: string;

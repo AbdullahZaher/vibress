@@ -1,7 +1,14 @@
-import { ThemeConfiguration, ThemeConfigurationRepository } from '../domain/theme-configuration';
-import { getDb, themeConfigurations, ThemeConfigurationRow } from '@vibress/database';
-import { eq } from 'drizzle-orm';
-import crypto from 'node:crypto';
+import {
+  ThemeConfiguration,
+  ThemeConfigurationRepository,
+} from "../domain/theme-configuration";
+import {
+  getDb,
+  themeConfigurations,
+  ThemeConfigurationRow,
+} from "@vibress/database";
+import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
 
 export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRepository {
   private mapToDomain(row: ThemeConfigurationRow): ThemeConfiguration {
@@ -42,7 +49,7 @@ export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRe
         })
         .where(eq(themeConfigurations.id, existing[0].id))
         .returning();
-      if (!row) throw new Error('Failed to update active theme configuration');
+      if (!row) throw new Error("Failed to update active theme configuration");
       return this.mapToDomain(row);
     }
 
@@ -59,7 +66,7 @@ export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRe
         updatedAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert active theme configuration');
+    if (!row) throw new Error("Failed to insert active theme configuration");
     return this.mapToDomain(row);
   }
 }

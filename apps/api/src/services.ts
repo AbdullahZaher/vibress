@@ -1,49 +1,55 @@
-import { DrizzleUserRepository, UsersService } from '@vibress/users';
-import { DrizzleRoleRepository, RolesService } from '@vibress/roles';
-import { DrizzlePermissionRepository, PermissionsService } from '@vibress/permissions';
-import { DrizzleAuditRepository, AuditService } from '@vibress/audit';
-import { DrizzleSessionRepository, AuthService } from '@vibress/auth';
-import { DrizzleTagRepository, TagsService } from '@vibress/tags';
-import { DrizzleAuthorRepository, AuthorsService } from '@vibress/authors';
-import { DrizzleRevisionRepository, RevisionsService } from '@vibress/revisions';
-import { DrizzlePostRepository, PostsService } from '@vibress/posts';
-import { DrizzlePageRepository, PagesService } from '@vibress/pages';
-import { LocalStorageProvider, defaultStorageRegistry } from '@vibress/storage-core';
-import { DrizzleMediaRepository, MediaService } from '@vibress/media';
-import { getConfig } from '@vibress/config';
-import { SetupService, DrizzleInstallationRepository } from '@vibress/setup';
+import { DrizzleUserRepository, UsersService } from "@vibress/users";
+import { DrizzleRoleRepository, RolesService } from "@vibress/roles";
+import {
+  DrizzlePermissionRepository,
+  PermissionsService,
+} from "@vibress/permissions";
+import { DrizzleAuditRepository, AuditService } from "@vibress/audit";
+import { DrizzleSessionRepository, AuthService } from "@vibress/auth";
+import { DrizzleTagRepository, TagsService } from "@vibress/tags";
+import { DrizzleAuthorRepository, AuthorsService } from "@vibress/authors";
+import {
+  DrizzleRevisionRepository,
+  RevisionsService,
+} from "@vibress/revisions";
+import { DrizzlePostRepository, PostsService } from "@vibress/posts";
+import { DrizzlePageRepository, PagesService } from "@vibress/pages";
+import {
+  LocalStorageProvider,
+  defaultStorageRegistry,
+} from "@vibress/storage-core";
+import { DrizzleMediaRepository, MediaService } from "@vibress/media";
+import { getConfig } from "@vibress/config";
+import { SetupService, DrizzleInstallationRepository } from "@vibress/setup";
 
-import { DrizzleStorageRepository, StorageService } from '@vibress/storage-domain';
+import {
+  DrizzleStorageRepository,
+  StorageService,
+} from "@vibress/storage-domain";
 import {
   DrizzleThemeConfigurationRepository,
   ThemeService,
-} from '@vibress/themes';
-import { listThemeMetadata } from '@vibress/themes-registry';
-import { validateThemeManifest, validateThemeCompatibility, validateThemeSettings, mergeThemeSettings } from '@vibress/theme-core';
+} from "@vibress/themes";
+import { listThemeMetadata } from "@vibress/themes-registry";
+import {
+  validateThemeManifest,
+  validateThemeCompatibility,
+} from "@vibress/theme-core";
 import {
   DrizzleMemberRepository,
   DrizzleMemberAuthTokenRepository,
   DrizzleMemberSessionRepository,
   MembersService,
   MemberAuthService,
-} from '@vibress/members';
-import { SmtpMemberAuthMailer } from './mailer/member-auth-mailer';
-import {
-  DrizzleProductRepository,
-  ProductsService,
-} from '@vibress/products';
-import {
-  DrizzlePlanRepository,
-  PlansService,
-} from '@vibress/plans';
-import {
-  DrizzleOfferRepository,
-  OffersService,
-} from '@vibress/offers';
+} from "@vibress/members";
+import { SmtpMemberAuthMailer } from "./mailer/member-auth-mailer";
+import { DrizzleProductRepository, ProductsService } from "@vibress/products";
+import { DrizzlePlanRepository, PlansService } from "@vibress/plans";
+import { DrizzleOfferRepository, OffersService } from "@vibress/offers";
 import {
   DrizzleSubscriptionRepository,
   SubscriptionsService,
-} from '@vibress/subscriptions';
+} from "@vibress/subscriptions";
 import {
   DrizzleBillingCustomerRepository,
   DrizzleBillingPlanMappingRepository,
@@ -51,14 +57,14 @@ import {
   DrizzleBillingEventRepository,
   BillingService,
   StripeBillingProvider,
-} from '@vibress/billing';
+} from "@vibress/billing";
 import {
   DrizzleNewsletterRepository,
   DrizzleNewsletterPreferenceRepository,
   DrizzleSendRepository,
   NewslettersService,
   BillingAwareMemberAudienceRepository,
-} from '@vibress/newsletters';
+} from "@vibress/newsletters";
 import {
   DrizzleEmailRecipientRepository,
   DrizzleEmailEventRepository,
@@ -66,67 +72,61 @@ import {
   DrizzleProviderEventRepository,
   EmailService,
   SmtpEmailProvider,
-} from '@vibress/email';
+} from "@vibress/email";
 
-import { NewsletterSendEnqueuer } from './newsletter-send-enqueuer';
+import { NewsletterSendEnqueuer } from "./newsletter-send-enqueuer";
 
 import {
   DrizzleCommentRepository,
   DrizzleCommentLikeRepository,
   DrizzleCommentReportRepository,
   CommentsService,
-} from '@vibress/comments';
+} from "@vibress/comments";
 import {
   DrizzleNotificationRepository,
   NotificationsService,
-} from '@vibress/notifications';
+} from "@vibress/notifications";
 import {
   DrizzleRecommendationRepository,
   DrizzleRecommendationEventRepository,
   RecommendationsService,
-} from '@vibress/recommendations';
+} from "@vibress/recommendations";
 import {
   DrizzleIntegrationRepository,
   DrizzleApiKeyRepository,
   IntegrationsService,
-} from '@vibress/integrations';
-import {
-  DrizzleWebhookRepository,
-  WebhooksService,
-} from '@vibress/webhooks';
+} from "@vibress/integrations";
+import { DrizzleWebhookRepository, WebhooksService } from "@vibress/webhooks";
 import {
   DrizzlePluginRepository,
   DrizzlePluginSettingRepository,
   PluginsService,
-} from '@vibress/plugins';
-import { BundledPluginHost } from './plugins/plugin-host';
-import { NativeImportProcessor, NativeExportCollector } from './import-export-processors';
+} from "@vibress/plugins";
+import { BundledPluginHost } from "./plugins/plugin-host";
+import {
+  NativeImportProcessor,
+  NativeExportCollector,
+} from "./import-export-processors";
 import {
   DrizzleAnalyticsRepository,
   AnalyticsService,
-} from '@vibress/analytics';
-import { AnalyticsOverviewService } from '@vibress/analytics';
-import {
-  DrizzleSearchRepository,
-  SearchService,
-} from '@vibress/search';
+} from "@vibress/analytics";
+import { AnalyticsOverviewService } from "@vibress/analytics";
+import { DrizzleSearchRepository, SearchService } from "@vibress/search";
 import {
   DrizzleAutomationRepository,
   AutomationsService,
   AutomationAction,
-} from '@vibress/automations';
-import {
-  DrizzleSettingRepository,
-  SettingsService,
-} from '@vibress/settings';
+} from "@vibress/automations";
+import { DrizzleSettingRepository, SettingsService } from "@vibress/settings";
 import {
   DrizzleRedirectRepository,
   RedirectsService,
-} from '@vibress/redirects';
+} from "@vibress/redirects";
 import {
   DrizzleImportExportJobRepository,
   ImportExportService,
-} from '@vibress/import-export';
+} from "@vibress/import-export";
 
 const config = getConfig();
 
@@ -134,11 +134,18 @@ const themeDefinitionRegistry = {
   has: (id: string) => listThemeMetadata().some((t) => t.manifest.id === id),
   get: (id: string) => {
     const found = listThemeMetadata().find((t) => t.manifest.id === id);
-    return found ? { manifest: found.manifest, settingsSchema: found.settingsSchema } : null;
+    return found
+      ? { manifest: found.manifest, settingsSchema: found.settingsSchema }
+      : null;
   },
-  list: () => listThemeMetadata().map((t) => ({ manifest: t.manifest, settingsSchema: t.settingsSchema })),
+  list: () =>
+    listThemeMetadata().map((t) => ({
+      manifest: t.manifest,
+      settingsSchema: t.settingsSchema,
+    })),
   validate: (manifest: unknown) => validateThemeManifest(manifest),
-  checkCompatibility: (manifest: ReturnType<typeof validateThemeManifest>) => validateThemeCompatibility(manifest),
+  checkCompatibility: (manifest: ReturnType<typeof validateThemeManifest>) =>
+    validateThemeCompatibility(manifest),
 };
 
 const userRepo = new DrizzleUserRepository();
@@ -155,7 +162,7 @@ const storageRepo = new DrizzleStorageRepository();
 
 const localStorageProvider = new LocalStorageProvider();
 defaultStorageRegistry.register(localStorageProvider);
-defaultStorageRegistry.setActiveProvider('local');
+defaultStorageRegistry.setActiveProvider("local");
 
 const mediaRepo = new DrizzleMediaRepository();
 const themeConfigRepo = new DrizzleThemeConfigurationRepository();
@@ -171,22 +178,28 @@ const billingPlanMappingRepo = new DrizzleBillingPlanMappingRepository();
 const billingWebhookEventRepo = new DrizzleBillingWebhookEventRepository();
 export const billingEventRepo = new DrizzleBillingEventRepository();
 
-export const themeService = new ThemeService(themeConfigRepo, themeDefinitionRegistry);
+export const themeService = new ThemeService(
+  themeConfigRepo,
+  themeDefinitionRegistry,
+);
 export const membersService = new MembersService(memberRepo, memberSessionRepo);
 export const memberAuthService = new MemberAuthService(
   memberRepo,
   memberAuthTokenRepo,
   memberSessionRepo,
   new SmtpMemberAuthMailer(),
-  () => getConfig().members.signupEnabled
+  () => getConfig().members.signupEnabled,
 );
 
 export const productsService = new ProductsService(productRepo);
-export const plansService = new PlansService(planRepo, async (id) => !!(await productRepo.findById(id)));
+export const plansService = new PlansService(
+  planRepo,
+  async (id) => !!(await productRepo.findById(id)),
+);
 export const offersService = new OffersService(
   offerRepo,
   async (id) => !!(await productRepo.findById(id)),
-  async (id) => !!(await planRepo.findById(id))
+  async (id) => !!(await planRepo.findById(id)),
 );
 export const subscriptionsService = new SubscriptionsService(subscriptionRepo);
 
@@ -229,13 +242,18 @@ export const newslettersService = new NewslettersService({
   newsletterRepo,
   preferenceRepo: newsletterPrefRepo,
   sendRepo: newsletterSendRepo,
-  audienceRepo: new BillingAwareMemberAudienceRepository(memberRepo, subscriptionRepo),
+  audienceRepo: new BillingAwareMemberAudienceRepository(
+    memberRepo,
+    subscriptionRepo,
+  ),
   isMemberSuppressed: (email) => emailSuppressionRepo.isSuppressed(email),
-  unsubscribeSecret: config.newsletters.unsubscribeSecret || 'dev-unsub-secret',
+  unsubscribeSecret: config.newsletters.unsubscribeSecret || "dev-unsub-secret",
   portalUrl: config.site.portalUrl,
 });
 
-export const newsletterSendEnqueuer = new NewsletterSendEnqueuer(newslettersService);
+export const newsletterSendEnqueuer = new NewsletterSendEnqueuer(
+  newslettersService,
+);
 
 // ---------------- Community: Comments, Notifications, Recommendations ----------------
 const notificationRepo = new DrizzleNotificationRepository();
@@ -248,79 +266,120 @@ export const commentsService = new CommentsService({
 });
 export const recommendationsService = new RecommendationsService(
   new DrizzleRecommendationRepository(),
-  new DrizzleRecommendationEventRepository()
+  new DrizzleRecommendationEventRepository(),
 );
 
 // ---------------- Platform: Integrations, API Keys, Webhooks, Plugins ----------------
 export const integrationsService = new IntegrationsService(
   new DrizzleIntegrationRepository(),
-  new DrizzleApiKeyRepository()
+  new DrizzleApiKeyRepository(),
 );
 
 // Webhook dispatcher: enqueues into the shared BullMQ queue via a lightweight
 // API-side queue handle. The worker owns actual delivery.
-import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
+import {
+  Queue,
+  QUEUE_NAMES,
+  enqueueTraced,
+  getBullMqRedisConnection,
+} from "@vibress/queue";
 const webhookQueueName = QUEUE_NAMES.WEBHOOK_DELIVERY;
 const webhookQueue = new Queue(webhookQueueName, {
   connection: getBullMqRedisConnection(),
   defaultJobOptions: { attempts: 1, removeOnComplete: 500, removeOnFail: 1000 },
 });
-export const webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
-  enqueue: async (deliveryId: string, endpointId: string) => {
-    await enqueueTraced(webhookQueue, 'deliver', { deliveryId, endpointId }, {
-      jobId: `delivery-${deliveryId}`,
-      removeOnComplete: true,
-      removeOnFail: 1000,
-    });
+export const webhooksService = new WebhooksService(
+  new DrizzleWebhookRepository(),
+  {
+    enqueue: async (deliveryId: string, endpointId: string) => {
+      await enqueueTraced(
+        webhookQueue,
+        "deliver",
+        { deliveryId, endpointId },
+        {
+          jobId: `delivery-${deliveryId}`,
+          removeOnComplete: true,
+          removeOnFail: 1000,
+        },
+      );
+    },
   },
-});
+);
 
 export const pluginsService = new PluginsService(
   new DrizzlePluginRepository(),
   new DrizzlePluginSettingRepository(),
-  new BundledPluginHost()
+  new BundledPluginHost(),
 );
 
 // ---------------- Intelligence: Analytics, Search, Automations ----------------
-export const analyticsService = new AnalyticsService(new DrizzleAnalyticsRepository());
-export const analyticsOverviewService = new AnalyticsOverviewService(new DrizzleAnalyticsRepository());
+export const analyticsService = new AnalyticsService(
+  new DrizzleAnalyticsRepository(),
+);
+export const analyticsOverviewService = new AnalyticsOverviewService(
+  new DrizzleAnalyticsRepository(),
+);
 export const searchService = new SearchService(new DrizzleSearchRepository());
 
 const automationRunQueueName = QUEUE_NAMES.AUTOMATIONS_RUN;
 const automationRunQueue = new Queue(automationRunQueueName, {
   connection: getBullMqRedisConnection(),
-  defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 5000 },
+    removeOnComplete: 1000,
+    removeOnFail: 2000,
+  },
 });
 const automationDelayedQueueName = QUEUE_NAMES.AUTOMATIONS_DELAYED;
 const automationDelayedQueue = new Queue(automationDelayedQueueName, {
   connection: getBullMqRedisConnection(),
-  defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: 2000 },
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: "exponential", delay: 5000 },
+    removeOnComplete: 1000,
+    removeOnFail: 2000,
+  },
 });
 
 export const automationsService = new AutomationsService(
   new DrizzleAutomationRepository(),
   {
     enqueueRun: async (runId: string) => {
-      await enqueueTraced(automationRunQueue, 'run', { runId }, { jobId: `run-${runId}` });
+      await enqueueTraced(
+        automationRunQueue,
+        "run",
+        { runId },
+        { jobId: `run-${runId}` },
+      );
     },
-    enqueueDelayedStep: async (runId: string, stepIndex: number, delayMs: number) => {
-      await enqueueTraced(automationDelayedQueue, 'resume', { runId, stepIndex, resumeAt: Date.now() + delayMs }, {
-        delay: delayMs,
-        jobId: `resume-${runId}-${stepIndex}`,
-      });
+    enqueueDelayedStep: async (
+      runId: string,
+      stepIndex: number,
+      delayMs: number,
+    ) => {
+      await enqueueTraced(
+        automationDelayedQueue,
+        "resume",
+        { runId, stepIndex, resumeAt: Date.now() + delayMs },
+        {
+          delay: delayMs,
+          jobId: `resume-${runId}-${stepIndex}`,
+        },
+      );
     },
   },
   {
-    execute: async (action: AutomationAction) => {
+    execute: async (_action: AutomationAction) => {
       // Default no-op executor for API-side validation; the worker runs real actions.
       return { result: { dryRun: true } };
     },
-  }
+  },
 );
 
 export const billingProvider = new StripeBillingProvider({
-  secretKey: config.billing.stripeSecretKey || 'sk_test_missing',
-  webhookSecret: config.billing.stripeWebhookSecret || '',
+  secretKey: config.billing.stripeSecretKey || "sk_test_missing",
+  webhookSecret: config.billing.stripeWebhookSecret || "",
 });
 
 export let billingService = new BillingService({
@@ -336,8 +395,8 @@ export let billingService = new BillingService({
   memberRepository: memberRepo,
   memberEmailProvider: (member) => member.email,
   portalUrl: config.billing.portalUrl,
-  successPath: '/account',
-  cancelPath: '/plans',
+  successPath: "/account",
+  cancelPath: "/plans",
 });
 
 /**
@@ -349,25 +408,58 @@ export function setBillingServiceForTests(service: BillingService): void {
   billingService = service;
 }
 
-export const storageService = new StorageService(storageRepo, auditRepo, defaultStorageRegistry);
+export const storageService = new StorageService(
+  storageRepo,
+  auditRepo,
+  defaultStorageRegistry,
+);
 export const usersService = new UsersService(userRepo);
 export const rolesService = new RolesService(roleRepo);
 export const permissionsService = new PermissionsService(permRepo);
 export const auditService = new AuditService(auditRepo);
-export const authService = new AuthService(sessionRepo, userRepo, roleRepo, permRepo, auditRepo);
+export const authService = new AuthService(
+  sessionRepo,
+  userRepo,
+  roleRepo,
+  permRepo,
+  auditRepo,
+);
 export const tagsService = new TagsService(tagRepo);
 export const authorsService = new AuthorsService(authorRepo);
 export const revisionsService = new RevisionsService(revisionRepo);
-export const mediaService = new MediaService(mediaRepo, defaultStorageRegistry, auditRepo);
-export const postsService = new PostsService(postRepo, revisionsService, authorRepo, auditRepo, mediaService);
-export const pagesService = new PagesService(pageRepo, revisionsService, authorRepo, auditRepo, mediaService);
+export const mediaService = new MediaService(
+  mediaRepo,
+  defaultStorageRegistry,
+  auditRepo,
+);
+export const postsService = new PostsService(
+  postRepo,
+  revisionsService,
+  authorRepo,
+  auditRepo,
+  mediaService,
+);
+export const pagesService = new PagesService(
+  pageRepo,
+  revisionsService,
+  authorRepo,
+  auditRepo,
+  mediaService,
+);
 
 // ---------------- Operations: Settings, Redirects, Import/Export ----------------
-export const settingsService = new SettingsService(new DrizzleSettingRepository(), auditService);
-export const setupService = new SetupService(new DrizzleInstallationRepository());
-export const redirectsService = new RedirectsService(new DrizzleRedirectRepository());
+export const settingsService = new SettingsService(
+  new DrizzleSettingRepository(),
+  auditService,
+);
+export const setupService = new SetupService(
+  new DrizzleInstallationRepository(),
+);
+export const redirectsService = new RedirectsService(
+  new DrizzleRedirectRepository(),
+);
 export const importExportService = new ImportExportService(
   new DrizzleImportExportJobRepository(),
   new NativeImportProcessor({ settingsService, redirectsService }),
-  new NativeExportCollector({ settingsService, redirectsService })
+  new NativeExportCollector({ settingsService, redirectsService }),
 );

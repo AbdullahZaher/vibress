@@ -1,4 +1,4 @@
-export type AssetType = 'image' | 'video' | 'audio' | 'file';
+export type AssetType = "image" | "video" | "audio" | "file";
 
 export interface MediaAsset {
   id: string;
@@ -24,7 +24,7 @@ export interface MediaAsset {
 export interface MediaReference {
   id: string;
   mediaId: string;
-  resourceType: 'post' | 'page' | string;
+  resourceType: "post" | "page" | string;
   resourceId: string;
   fieldPath: string;
   createdAt: Date;
@@ -53,7 +53,7 @@ export interface MediaLimitsConfig {
   maxImageSize: number; // default 20MB
   maxAudioSize: number; // default 100MB
   maxVideoSize: number; // default 500MB
-  maxFileSize: number;  // default 100MB
+  maxFileSize: number; // default 100MB
 }
 
 export const DEFAULT_MEDIA_LIMITS: MediaLimitsConfig = {

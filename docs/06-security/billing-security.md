@@ -36,11 +36,11 @@ Requests without a valid `Origin`/`Referer` are rejected with 403.
 
 ## Rate Limits
 
-| Endpoint | Limit |
-|---|---|
-| checkout / portal / cancel / resume | 10/min (100/min in test) |
-| webhook endpoint | 600/min (1000/min in test) |
-| auth verify | 20/min (200/min in test) |
+| Endpoint                            | Limit                      |
+| ----------------------------------- | -------------------------- |
+| checkout / portal / cancel / resume | 10/min (100/min in test)   |
+| webhook endpoint                    | 600/min (1000/min in test) |
+| auth verify                         | 20/min (200/min in test)   |
 
 ## Open Redirects
 
@@ -53,7 +53,11 @@ Origin, Referer, and user-provided URLs are never used in redirects.
 Client-visible billing errors use the stable envelope:
 
 ```json
-{ "errors": [{ "code": "SUBSCRIPTION_NOT_FOUND", "message": "...", "requestId": "..." }] }
+{
+  "errors": [
+    { "code": "SUBSCRIPTION_NOT_FOUND", "message": "...", "requestId": "..." }
+  ]
+}
 ```
 
 Provider errors are mapped inside the adapter to `BILLING_PROVIDER_UNAVAILABLE`

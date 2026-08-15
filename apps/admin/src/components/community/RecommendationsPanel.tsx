@@ -1,10 +1,27 @@
-import React, { useState } from 'react';
-import { AdminRecommendation, createRecommendationApi, archiveRecommendationApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Sparkles } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  AdminRecommendation,
+  createRecommendationApi,
+  archiveRecommendationApi,
+} from "../../lib/api";
+import { Button } from "../ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Sparkles } from "lucide-react";
 
 interface RecommendationsPanelProps {
   recommendations: AdminRecommendation[];
@@ -12,22 +29,32 @@ interface RecommendationsPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function RecommendationsPanel({ recommendations, onError, onChanged }: RecommendationsPanelProps) {
-  const [recUrl, setRecUrl] = useState('');
-  const [recTitle, setRecTitle] = useState('');
-  const [recDesc, setRecDesc] = useState('');
+export function RecommendationsPanel({
+  recommendations,
+  onError,
+  onChanged,
+}: RecommendationsPanelProps) {
+  const [recUrl, setRecUrl] = useState("");
+  const [recTitle, setRecTitle] = useState("");
+  const [recDesc, setRecDesc] = useState("");
 
   const handleCreateRec = async (e: React.FormEvent) => {
     e.preventDefault();
-    onError('');
+    onError("");
     try {
-      await createRecommendationApi({ url: recUrl, title: recTitle, description: recDesc || null });
-      setRecUrl('');
-      setRecTitle('');
-      setRecDesc('');
+      await createRecommendationApi({
+        url: recUrl,
+        title: recTitle,
+        description: recDesc || null,
+      });
+      setRecUrl("");
+      setRecTitle("");
+      setRecDesc("");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed to create recommendation');
+      onError(
+        err instanceof Error ? err.message : "Failed to create recommendation",
+      );
     }
   };
 
@@ -36,7 +63,7 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
       await archiveRecommendationApi(id);
       await onChanged();
     } catch (e: unknown) {
-      onError(e instanceof Error ? e.message : 'Failed');
+      onError(e instanceof Error ? e.message : "Failed");
     }
   };
 
@@ -55,7 +82,9 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
         <CardContent>
           <form onSubmit={handleCreateRec} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Publication URL</label>
+              <label className="text-xs font-medium text-foreground">
+                Publication URL
+              </label>
               <Input
                 required
                 type="url"
@@ -66,7 +95,9 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Title</label>
+              <label className="text-xs font-medium text-foreground">
+                Title
+              </label>
               <Input
                 required
                 value={recTitle}
@@ -76,7 +107,9 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Description (Optional)</label>
+              <label className="text-xs font-medium text-foreground">
+                Description (Optional)
+              </label>
               <Input
                 value={recDesc}
                 onChange={(e) => setRecDesc(e.target.value)}
@@ -84,7 +117,11 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
                 className="h-8 text-xs bg-card border-border"
               />
             </div>
-            <Button type="submit" size="sm" className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2">
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+            >
               Create Recommendation
             </Button>
           </form>
@@ -103,15 +140,25 @@ export function RecommendationsPanel({ recommendations, onError, onChanged }: Re
           <TableBody>
             {recommendations.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={3}
+                  className="h-32 text-center text-xs text-muted-foreground"
+                >
                   No recommendations added yet.
                 </TableCell>
               </TableRow>
             ) : (
               recommendations.map((rec) => (
-                <TableRow key={rec.id} className="hover:bg-muted/40 border-border">
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">{rec.title}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-xs">{rec.url}</TableCell>
+                <TableRow
+                  key={rec.id}
+                  className="hover:bg-muted/40 border-border"
+                >
+                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                    {rec.title}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-xs">
+                    {rec.url}
+                  </TableCell>
                   <TableCell className="text-right pr-6">
                     <Button
                       variant="ghost"

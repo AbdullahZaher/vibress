@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { ApiUser } from '../lib/api';
-import { PostsList } from './PostsList';
-import { PostEditor } from './PostEditor';
-import { PagesList } from './PagesList';
-import { PageEditor } from './PageEditor';
-import { TagsManager } from './TagsManager';
-import { MediaLibrary } from './MediaLibrary';
-import { MembersList } from './MembersList';
-import { SettingsHub } from './settings/SettingsHub';
+import React, { useState, useEffect } from "react";
+import { ApiUser } from "../lib/api";
+import { PostsList } from "./PostsList";
+import { PostEditor } from "./PostEditor";
+import { PagesList } from "./PagesList";
+import { PageEditor } from "./PageEditor";
+import { TagsManager } from "./TagsManager";
+import { MediaLibrary } from "./MediaLibrary";
+import { MembersList } from "./MembersList";
+import { SettingsHub } from "./settings/SettingsHub";
 
-import { AppSidebar } from './layout/sidebar/AppSidebar';
-import { AnalyticsDashboard } from './layout/AnalyticsDashboard';
-import { MobileHeader } from './layout/MobileHeader';
-import { CommandPalette } from './layout/CommandPalette';
+import { AppSidebar } from "./layout/sidebar/AppSidebar";
+import { AnalyticsDashboard } from "./layout/AnalyticsDashboard";
+import { MobileHeader } from "./layout/MobileHeader";
+import { CommandPalette } from "./layout/CommandPalette";
 
 interface AdminShellProps {
   user: ApiUser;
@@ -35,111 +35,163 @@ export const AdminShell: React.FC<AdminShellProps> = ({
 
   useEffect(() => {
     if (darkMode) {
-      document.documentElement.classList.add('dark');
+      document.documentElement.classList.add("dark");
     } else {
-      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const canPublishPosts = can('posts.publish');
-  const canPublishPages = can('pages.publish');
+  const canPublishPosts = can("posts.publish");
+  const canPublishPages = can("pages.publish");
 
   // Route Views Renderer
   const renderContent = () => {
     // 1. Posts & Editor Routes
-    if (currentPath === '/admin/posts' || currentPath === '/admin/posts/') {
+    if (currentPath === "/admin/posts" || currentPath === "/admin/posts/") {
       return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} />;
     }
-    if (currentPath === '/admin/posts/drafts') {
-      return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} filterStatus="draft" />;
+    if (currentPath === "/admin/posts/drafts") {
+      return (
+        <PostsList
+          onNavigate={onNavigate}
+          canPublish={canPublishPosts}
+          filterStatus="draft"
+        />
+      );
     }
-    if (currentPath === '/admin/posts/scheduled') {
-      return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} filterStatus="scheduled" />;
+    if (currentPath === "/admin/posts/scheduled") {
+      return (
+        <PostsList
+          onNavigate={onNavigate}
+          canPublish={canPublishPosts}
+          filterStatus="scheduled"
+        />
+      );
     }
-    if (currentPath === '/admin/posts/published') {
-      return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} filterStatus="published" />;
+    if (currentPath === "/admin/posts/published") {
+      return (
+        <PostsList
+          onNavigate={onNavigate}
+          canPublish={canPublishPosts}
+          filterStatus="published"
+        />
+      );
     }
-    if (currentPath === '/admin/posts/new') {
-      return <PostEditor currentUserId={user.id} canPublish={canPublishPosts} onNavigate={onNavigate} />;
+    if (currentPath === "/admin/posts/new") {
+      return (
+        <PostEditor
+          currentUserId={user.id}
+          canPublish={canPublishPosts}
+          onNavigate={onNavigate}
+        />
+      );
     }
-    if (currentPath.startsWith('/admin/posts/')) {
-      const postId = currentPath.split('/admin/posts/')[1];
-      return <PostEditor postId={postId} currentUserId={user.id} canPublish={canPublishPosts} onNavigate={onNavigate} />;
+    if (currentPath.startsWith("/admin/posts/")) {
+      const postId = currentPath.split("/admin/posts/")[1];
+      return (
+        <PostEditor
+          postId={postId}
+          currentUserId={user.id}
+          canPublish={canPublishPosts}
+          onNavigate={onNavigate}
+        />
+      );
     }
 
     // 2. Pages Routes
-    if (currentPath === '/admin/pages' || currentPath === '/admin/pages/') {
+    if (currentPath === "/admin/pages" || currentPath === "/admin/pages/") {
       return <PagesList onNavigate={onNavigate} canPublish={canPublishPages} />;
     }
-    if (currentPath === '/admin/pages/new') {
-      return <PageEditor currentUserId={user.id} canPublish={canPublishPages} onNavigate={onNavigate} />;
+    if (currentPath === "/admin/pages/new") {
+      return (
+        <PageEditor
+          currentUserId={user.id}
+          canPublish={canPublishPages}
+          onNavigate={onNavigate}
+        />
+      );
     }
-    if (currentPath.startsWith('/admin/pages/')) {
-      const pageId = currentPath.split('/admin/pages/')[1];
-      return <PageEditor pageId={pageId} currentUserId={user.id} canPublish={canPublishPages} onNavigate={onNavigate} />;
+    if (currentPath.startsWith("/admin/pages/")) {
+      const pageId = currentPath.split("/admin/pages/")[1];
+      return (
+        <PageEditor
+          pageId={pageId}
+          currentUserId={user.id}
+          canPublish={canPublishPages}
+          onNavigate={onNavigate}
+        />
+      );
     }
 
     // 3. Taxonomy & Content Assets
-    if (currentPath === '/admin/tags' || currentPath === '/admin/tags/') {
+    if (currentPath === "/admin/tags" || currentPath === "/admin/tags/") {
       return <TagsManager />;
     }
-    if (currentPath === '/admin/media' || currentPath === '/admin/media/' || currentPath.startsWith('/admin/media/')) {
+    if (
+      currentPath === "/admin/media" ||
+      currentPath === "/admin/media/" ||
+      currentPath.startsWith("/admin/media/")
+    ) {
       return <MediaLibrary />;
     }
-    if (currentPath === '/admin/members' || currentPath === '/admin/members/' || currentPath.startsWith('/admin/members')) {
+    if (
+      currentPath === "/admin/members" ||
+      currentPath === "/admin/members/" ||
+      currentPath.startsWith("/admin/members")
+    ) {
       return <MembersList />;
     }
 
     // 4. Unified Settings Hub Routes (All 5 Pillars + Legacy Route Aliases)
     if (
-      currentPath === '/admin/settings' ||
-      currentPath === '/admin/settings/' ||
-      currentPath.startsWith('/admin/settings/general')
+      currentPath === "/admin/settings" ||
+      currentPath === "/admin/settings/" ||
+      currentPath.startsWith("/admin/settings/general")
     ) {
       return <SettingsHub initialSection="general" can={can} />;
     }
 
     if (
-      currentPath.startsWith('/admin/settings/site') ||
-      currentPath.startsWith('/admin/settings/themes') ||
-      currentPath.startsWith('/admin/settings/storage')
+      currentPath.startsWith("/admin/settings/site") ||
+      currentPath.startsWith("/admin/settings/themes") ||
+      currentPath.startsWith("/admin/settings/storage")
     ) {
       return <SettingsHub initialSection="site" can={can} />;
     }
 
     if (
-      currentPath.startsWith('/admin/settings/membership') ||
-      currentPath.startsWith('/admin/settings/billing') ||
-      currentPath.startsWith('/admin/subscriptions')
+      currentPath.startsWith("/admin/settings/membership") ||
+      currentPath.startsWith("/admin/settings/billing") ||
+      currentPath.startsWith("/admin/subscriptions")
     ) {
       return <SettingsHub initialSection="membership" can={can} />;
     }
 
     if (
-      currentPath.startsWith('/admin/settings/growth') ||
-      currentPath.startsWith('/admin/newsletters') ||
-      currentPath.startsWith('/admin/analytics') ||
-      currentPath.startsWith('/admin/community')
+      currentPath.startsWith("/admin/settings/growth") ||
+      currentPath.startsWith("/admin/newsletters") ||
+      currentPath.startsWith("/admin/analytics") ||
+      currentPath.startsWith("/admin/community")
     ) {
       return <SettingsHub initialSection="growth" can={can} />;
     }
 
     if (
-      currentPath.startsWith('/admin/settings/advanced') ||
-      currentPath.startsWith('/admin/settings/platform') ||
-      currentPath.startsWith('/admin/settings/operations')
+      currentPath.startsWith("/admin/settings/advanced") ||
+      currentPath.startsWith("/admin/settings/platform") ||
+      currentPath.startsWith("/admin/settings/operations")
     ) {
       return <SettingsHub initialSection="advanced" can={can} />;
     }

@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { Palette, HardDrive, Layout } from 'lucide-react';
-import { ThemesSettings } from './ThemesSettings';
-import { StorageSettings } from './StorageSettings';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import React, { useState } from "react";
+import { Palette, HardDrive, Layout } from "lucide-react";
+import { ThemesSettings } from "./ThemesSettings";
+import { StorageSettings } from "./StorageSettings";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
 interface SiteSettingsProps {
-  initialTab?: 'themes' | 'storage';
+  initialTab?: "themes" | "storage";
 }
 
-export const SiteSettings: React.FC<SiteSettingsProps> = ({ initialTab = 'themes' }) => {
+export const SiteSettings: React.FC<SiteSettingsProps> = ({
+  initialTab = "themes",
+}) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   return (
@@ -21,7 +23,8 @@ export const SiteSettings: React.FC<SiteSettingsProps> = ({ initialTab = 'themes
             Site Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your site's visual presentation, themes, branding, and asset storage providers.
+            Manage your site's visual presentation, themes, branding, and asset
+            storage providers.
           </p>
         </div>
 

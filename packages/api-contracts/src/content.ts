@@ -1,12 +1,12 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreatePostInputSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required').max(255),
+  title: z.string().trim().min(1, "Title is required").max(255),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
-  visibility: z.enum(['public', 'members', 'paid']).optional(),
-  primaryAuthorId: z.string().min(1, 'Primary author ID is required'),
+  visibility: z.enum(["public", "members", "paid"]).optional(),
+  primaryAuthorId: z.string().min(1, "Primary author ID is required"),
   authorIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
@@ -21,7 +21,7 @@ export const UpdatePostInputSchema = z.object({
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
-  visibility: z.enum(['public', 'members', 'paid']).optional(),
+  visibility: z.enum(["public", "members", "paid"]).optional(),
   primaryAuthorId: z.string().optional(),
   authorIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
@@ -38,12 +38,12 @@ export const SchedulePostInputSchema = z.object({
 export type SchedulePostInput = z.infer<typeof SchedulePostInputSchema>;
 
 export const CreatePageInputSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required').max(255),
+  title: z.string().trim().min(1, "Title is required").max(255),
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
-  visibility: z.enum(['public', 'members', 'paid']).optional(),
-  primaryAuthorId: z.string().min(1, 'Primary author ID is required'),
+  visibility: z.enum(["public", "members", "paid"]).optional(),
+  primaryAuthorId: z.string().min(1, "Primary author ID is required"),
   authorIds: z.array(z.string()).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
   metaTitle: z.string().max(255).nullable().optional(),
@@ -57,7 +57,7 @@ export const UpdatePageInputSchema = z.object({
   slug: z.string().trim().max(255).optional(),
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
-  visibility: z.enum(['public', 'members', 'paid']).optional(),
+  visibility: z.enum(["public", "members", "paid"]).optional(),
   primaryAuthorId: z.string().optional(),
   authorIds: z.array(z.string()).optional(),
   expectedVersion: z.number().int().positive().optional(),
@@ -73,7 +73,7 @@ export const SchedulePageInputSchema = z.object({
 export type SchedulePageInput = z.infer<typeof SchedulePageInputSchema>;
 
 export const CreateTagInputSchema = z.object({
-  name: z.string().trim().min(1, 'Tag name is required').max(100),
+  name: z.string().trim().min(1, "Tag name is required").max(100),
   slug: z.string().trim().max(100).optional(),
   description: z.string().max(500).nullable().optional(),
 });

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const MediaAssetSchema = z.object({
   id: z.string(),
@@ -10,7 +10,7 @@ export const MediaAssetSchema = z.object({
   extension: z.string(),
   sizeBytes: z.number(),
   checksum: z.string(),
-  assetType: z.enum(['image', 'video', 'audio', 'file']),
+  assetType: z.enum(["image", "video", "audio", "file"]),
   width: z.number().nullable().optional(),
   height: z.number().nullable().optional(),
   durationMs: z.number().nullable().optional(),
@@ -23,7 +23,12 @@ export const MediaAssetSchema = z.object({
 export type MediaAssetDto = z.infer<typeof MediaAssetSchema>;
 
 export const UpdateMediaInputSchema = z.object({
-  displayName: z.string().trim().min(1, 'Display name is required').max(255).optional(),
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Display name is required")
+    .max(255)
+    .optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 export type UpdateMediaInputDto = z.infer<typeof UpdateMediaInputSchema>;
@@ -31,12 +36,14 @@ export type UpdateMediaInputDto = z.infer<typeof UpdateMediaInputSchema>;
 export const ListMediaFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),
-  assetType: z.enum(['image', 'video', 'audio', 'file']).optional(),
+  assetType: z.enum(["image", "video", "audio", "file"]).optional(),
   mimeType: z.string().optional(),
   uploadedBy: z.string().optional(),
   search: z.string().optional(),
-  sortBy: z.enum(['createdAt', 'updatedAt', 'displayName', 'sizeBytes']).optional(),
-  sortOrder: z.enum(['asc', 'desc']).optional(),
+  sortBy: z
+    .enum(["createdAt", "updatedAt", "displayName", "sizeBytes"])
+    .optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
 });
 export type ListMediaFilterDto = z.infer<typeof ListMediaFilterSchema>;
 
@@ -48,7 +55,9 @@ export const MediaReferenceSummarySchema = z.object({
       resourceType: z.string(),
       resourceId: z.string(),
       fieldPath: z.string(),
-    })
+    }),
   ),
 });
-export type MediaReferenceSummaryDto = z.infer<typeof MediaReferenceSummarySchema>;
+export type MediaReferenceSummaryDto = z.infer<
+  typeof MediaReferenceSummarySchema
+>;

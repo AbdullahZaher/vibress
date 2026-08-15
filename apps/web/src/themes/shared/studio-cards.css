@@ -24,10 +24,22 @@
   scroll-margin-top: 5rem;
 }
 
-.studio-html-content h1 { font-size: 2.25rem; margin: 2.5rem 0 1rem; }
-.studio-html-content h2 { font-size: 1.75rem; margin: 2.25rem 0 0.875rem; }
-.studio-html-content h3 { font-size: 1.375rem; margin: 1.75rem 0 0.75rem; }
-.studio-html-content h4 { font-size: 1.125rem; margin: 1.5rem 0 0.5rem; }
+.studio-html-content h1 {
+  font-size: 2.25rem;
+  margin: 2.5rem 0 1rem;
+}
+.studio-html-content h2 {
+  font-size: 1.75rem;
+  margin: 2.25rem 0 0.875rem;
+}
+.studio-html-content h3 {
+  font-size: 1.375rem;
+  margin: 1.75rem 0 0.75rem;
+}
+.studio-html-content h4 {
+  font-size: 1.125rem;
+  margin: 1.5rem 0 0.5rem;
+}
 
 .studio-html-content .heading-anchor {
   display: inline-block;
@@ -36,7 +48,9 @@
   color: var(--vb-accent-color, #3b82f6);
   text-decoration: none;
   font-weight: 400;
-  transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+  transition:
+    opacity 0.15s ease-in-out,
+    transform 0.15s ease-in-out;
   user-select: none;
 }
 
@@ -157,7 +171,9 @@
   font-weight: 500;
   color: #e2e8f0;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .studio-html-content .studio-code-copy-btn:hover {
@@ -351,9 +367,15 @@
   margin: 2.5rem 0;
 }
 
-.studio-html-content .kg-button-card.align-left { text-align: left; }
-.studio-html-content .kg-button-card.align-center { text-align: center; }
-.studio-html-content .kg-button-card.align-right { text-align: right; }
+.studio-html-content .kg-button-card.align-left {
+  text-align: left;
+}
+.studio-html-content .kg-button-card.align-center {
+  text-align: center;
+}
+.studio-html-content .kg-button-card.align-right {
+  text-align: right;
+}
 
 .studio-html-content .kg-button-card .btn {
   display: inline-flex;
@@ -367,7 +389,10 @@
   font-weight: 600;
   font-size: 1rem;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .studio-html-content .kg-button-card .btn:hover {
@@ -391,10 +416,22 @@
   margin: 2rem 0;
 }
 
-.studio-html-content .kg-callout-card.bg-blue { background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.25); }
-.studio-html-content .kg-callout-card.bg-green { background-color: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); }
-.studio-html-content .kg-callout-card.bg-yellow { background-color: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.25); }
-.studio-html-content .kg-callout-card.bg-red { background-color: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.25); }
+.studio-html-content .kg-callout-card.bg-blue {
+  background-color: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+.studio-html-content .kg-callout-card.bg-green {
+  background-color: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.studio-html-content .kg-callout-card.bg-yellow {
+  background-color: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.studio-html-content .kg-callout-card.bg-red {
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+}
 
 .studio-html-content .kg-callout-card .emoji {
   flex-shrink: 0;
@@ -444,7 +481,10 @@
   border-radius: 10px;
   background: var(--card-bg, #f8fafc);
   text-decoration: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .studio-html-content .kg-bookmark-card a:hover {
@@ -478,7 +518,9 @@
   text-decoration: none;
   font-weight: 600;
   color: var(--heading-color, #0f172a);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .studio-html-content .kg-file-card a:hover {
@@ -524,4 +566,3 @@
     grid-template-columns: 1fr;
   }
 }
-

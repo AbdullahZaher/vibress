@@ -7,7 +7,7 @@ Durable definitions + immutable versions + run history:
 - `automations` — key, name, trigger_event, conditions, actions, status,
   version.
 - `automation_versions` — immutable snapshots (`UNIQUE(automation_id,
-  version)`); runs reference a specific version so active definitions never
+version)`); runs reference a specific version so active definitions never
   mutate under existing runs.
 - `automation_runs` — run state with `UNIQUE(automation_id, run_key)`
   (idempotency) and `depth` (loop prevention).

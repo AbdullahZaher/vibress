@@ -1,4 +1,4 @@
-import { AuditEvent, CreateAuditEventData } from './audit-event';
+import { AuditEvent, CreateAuditEventData } from "./audit-event";
 
 export interface AuditListFilter {
   actorUserId?: string | undefined;
@@ -15,5 +15,7 @@ export interface AuditListFilter {
 export interface AuditRepository {
   record(data: CreateAuditEventData): Promise<AuditEvent>;
   listAll(limit?: number): Promise<AuditEvent[]>;
-  list(filter?: AuditListFilter): Promise<{ events: AuditEvent[]; total: number }>;
+  list(
+    filter?: AuditListFilter,
+  ): Promise<{ events: AuditEvent[]; total: number }>;
 }

@@ -3,12 +3,12 @@ export class UserDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'UserDomainError';
+    this.name = "UserDomainError";
     this.code = code;
   }
 }
 
-export type UserStatus = 'active' | 'disabled';
+export type UserStatus = "active" | "disabled";
 
 export interface User {
   id: string;
@@ -35,6 +35,6 @@ export interface CreateUserData {
 }
 
 export function normalizeEmail(email: string): string {
-  if (typeof email !== 'string') return '';
+  if (typeof email !== "string") return "";
   return email.trim().toLowerCase();
 }

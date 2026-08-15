@@ -8,18 +8,19 @@
 
 ## Per-Type File Size Limits
 
-| Type | Default Limit |
-|---|---|
-| Image | 20 MB |
-| Audio | 100 MB |
-| Video | 500 MB |
-| File | 100 MB |
+| Type  | Default Limit |
+| ----- | ------------- |
+| Image | 20 MB         |
+| Audio | 100 MB        |
+| Video | 500 MB        |
+| File  | 100 MB        |
 
 Configurable via `MediaLimitsConfig`.
 
 ## MIME Detection
 
 Magic-byte detection is used to determine the actual file type:
+
 - PNG: 89 50 4E 47
 - JPEG: FF D8 FF
 - GIF: 47 49 46 38
@@ -55,6 +56,7 @@ Responses from the media serving route include `X-Content-Type-Options: nosniff`
 ## Path Traversal Protection
 
 Storage keys are validated:
+
 - No `..` or `.` path segments
 - No absolute paths
 - No null bytes
@@ -63,6 +65,7 @@ Storage keys are validated:
 ## Filename Sanitization
 
 Original filenames are sanitized:
+
 - Control characters removed (`\x00-\x1F\x7F`)
 - Path separators stripped
 - Used only as display metadata, never as storage paths

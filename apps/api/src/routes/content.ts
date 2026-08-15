@@ -1,7 +1,5 @@
-import { FastifyInstance } from 'fastify';
-import {
-  PublicListFilterSchema,
-} from '@vibress/api-contracts';
+import { FastifyInstance } from "fastify";
+import { PublicListFilterSchema } from "@vibress/api-contracts";
 import {
   postsService,
   pagesService,
@@ -10,17 +8,21 @@ import {
   mediaService,
   themeService,
   settingsService,
-} from '../services';
+} from "../services";
 import {
   buildPublicPostSummaryDto,
   buildPublicPostDetailDto,
   buildPublicPageDetailDto,
   formatPublicTag,
   formatPublicAuthor,
-} from '../helpers/public-content-helpers';
-import type { Author } from '@vibress/authors';
-import { getConfig } from '@vibress/config';
-import { verifyPassword, signSiteAuthToken, SITE_AUTH_COOKIE_NAME } from '@vibress/security';
+} from "../helpers/public-content-helpers";
+import type { Author } from "@vibress/authors";
+import { getConfig } from "@vibress/config";
+import {
+  verifyPassword,
+  signSiteAuthToken,
+  SITE_AUTH_COOKIE_NAME,
+} from "@vibress/security";
 
 /**
  * Wizard-managed site identity, precedence: DB setting → environment →
@@ -54,24 +56,24 @@ async function buildPublicSiteIdentity(): Promise<{
   const site = (stored.site ?? {}) as Record<string, unknown>;
 
   const str = (v: unknown, fallback: string): string =>
-    typeof v === 'string' && v.trim() !== '' ? v : fallback;
+    typeof v === "string" && v.trim() !== "" ? v : fallback;
 
   return {
     title: str(site.title, config.site.name),
     description: str(site.description, config.site.description),
-    tagline: str(site.tagline, ''),
+    tagline: str(site.tagline, ""),
     url: config.site.url,
     locale: str(site.locale, config.site.locale),
-    timezone: str(site.timezone, 'UTC'),
-    accentColor: str(site.accentColor, '#6366f1'),
-    iconUrl: str(site.iconUrl, ''),
-    logoUrl: str(site.logoUrl, ''),
-    coverUrl: str(site.coverUrl, ''),
+    timezone: str(site.timezone, "UTC"),
+    accentColor: str(site.accentColor, "#6366f1"),
+    iconUrl: str(site.iconUrl, ""),
+    logoUrl: str(site.logoUrl, ""),
+    coverUrl: str(site.coverUrl, ""),
     primaryNav: Array.isArray(site.primaryNav) ? site.primaryNav : [],
     secondaryNav: Array.isArray(site.secondaryNav) ? site.secondaryNav : [],
     announcementEnabled: Boolean(site.announcementEnabled),
-    announcementText: str(site.announcementText, ''),
-    announcementUrl: str(site.announcementUrl, ''),
+    announcementText: str(site.announcementText, ""),
+    announcementUrl: str(site.announcementUrl, ""),
     security: {
       isPrivate: Boolean(stored.security?.isPrivate),
     },
@@ -82,7 +84,7 @@ async function buildPublicSiteIdentity(): Promise<{
 }
 export async function publicContentRoutes(fastify: FastifyInstance) {
   // Public Site Metadata + Active Theme
-  fastify.get('/site', {
+  fastify.get("/site", {
     handler: async (req, reply) => {
       const site = await buildPublicSiteIdentity();
       const active = await themeService.getActiveTheme();
@@ -110,7 +112,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         code: site.code,
         comments: site.comments,
         theme: {
-          themeId: active?.manifest.id || 'vibress-default',
+          themeId: active?.manifest.id || "vibress-default",
           settings: active?.settings || {},
         },
       });
@@ -118,43 +120,66 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Verify Site Password
-  fastify.post('/verify-site-password', {
+  fastify.post("/verify-site-password", {
     handler: async (req, reply) => {
       const body = req.body as { password?: string } | undefined;
-      if (!body || typeof body.password !== 'string') {
-        return reply.status(400).send({ errors: [{ code: 'VALIDATION_ERROR', message: 'Password is required', requestId: req.id }] });
+      if (!body || typeof body.password !== "string") {
+        return reply
+          .status(400)
+          .send({
+            errors: [
+              {
+                code: "VALIDATION_ERROR",
+                message: "Password is required",
+                requestId: req.id,
+              },
+            ],
+          });
       }
       const publicSettings = await settingsService.getPublicSettings();
       const isPrivate = Boolean(publicSettings.security?.isPrivate);
       if (!isPrivate) {
         return reply.status(200).send({ valid: true, private: false });
       }
-      const stored = await (settingsService as unknown as { repo: { get: (ns: string, k: string) => Promise<{ value: unknown } | null> } }).repo.get('security', 'passwordHash');
+      const stored = await (
+        settingsService as unknown as {
+          repo: {
+            get: (ns: string, k: string) => Promise<{ value: unknown } | null>;
+          };
+        }
+      ).repo.get("security", "passwordHash");
       if (!stored || !stored.value) {
         return reply.status(200).send({ valid: true, private: false });
       }
       const valid = await verifyPassword(String(stored.value), body.password);
       if (valid) {
-        const secret = getConfig().secrets.encryptionKey || process.env.VIBRESS_ENCRYPTION_KEY || 'vibress-site-privacy-secret';
+        const secret =
+          getConfig().secrets.encryptionKey ||
+          process.env.VIBRESS_ENCRYPTION_KEY ||
+          "vibress-site-privacy-secret";
         const token = signSiteAuthToken(secret);
         reply.setCookie(SITE_AUTH_COOKIE_NAME, token, {
-          path: '/',
+          path: "/",
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
           maxAge: 30 * 24 * 60 * 60,
         });
         return reply.status(200).send({ valid: true, private: true });
       }
-      return reply.status(401).send({ valid: false, private: true, message: 'Invalid password' });
+      return reply
+        .status(401)
+        .send({ valid: false, private: true, message: "Invalid password" });
     },
   });
 
   // Public Posts List
-  fastify.get('/posts', {
+  fastify.get("/posts", {
     handler: async (req, reply) => {
       const parseResult = PublicListFilterSchema.safeParse(req.query);
-      const filter = parseResult.success ? parseResult.data : { page: 1, limit: 20 };
+      const filter = parseResult.success
+        ? parseResult.data
+        : { page: 1, limit: 20 };
 
       const limit = filter.limit;
       const page = filter.page;
@@ -162,13 +187,13 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
-        visibility: 'public',
+        visibility: "public",
         tagSlug: filter.tag,
         authorSlug: filter.author,
         limit,
         offset,
-        sortBy: 'publishedAt',
-        sortOrder: 'desc',
+        sortBy: "publishedAt",
+        sortOrder: "desc",
       });
 
       const summaries = await Promise.all(
@@ -179,10 +204,17 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
             authorsService.getPostAuthors(post.id),
             Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
           ]);
-          const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
+          const validTags = tagsList.filter(
+            (t): t is NonNullable<typeof t> => !!t,
+          );
 
-          return buildPublicPostSummaryDto(post, authors, validTags, mediaService);
-        })
+          return buildPublicPostSummaryDto(
+            post,
+            authors,
+            validTags,
+            mediaService,
+          );
+        }),
       );
 
       const totalPages = Math.ceil(total / limit) || 1;
@@ -200,7 +232,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Single Post by Slug
-  fastify.get('/posts/:slug', {
+  fastify.get("/posts/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const post = await postsService.findPublishedBySlug(slug);
@@ -209,8 +241,8 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'CONTENT_NOT_FOUND',
-              message: 'Post not found',
+              code: "CONTENT_NOT_FOUND",
+              message: "Post not found",
               requestId: req.id,
             },
           ],
@@ -224,16 +256,23 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       ]);
       const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
 
-      const postDetail = await buildPublicPostDetailDto(post, authors, validTags, mediaService);
+      const postDetail = await buildPublicPostDetailDto(
+        post,
+        authors,
+        validTags,
+        mediaService,
+      );
       return reply.status(200).send({ post: postDetail });
     },
   });
 
   // Public Pages List
-  fastify.get('/pages', {
+  fastify.get("/pages", {
     handler: async (req, reply) => {
       const parseResult = PublicListFilterSchema.safeParse(req.query);
-      const filter = parseResult.success ? parseResult.data : { page: 1, limit: 20 };
+      const filter = parseResult.success
+        ? parseResult.data
+        : { page: 1, limit: 20 };
 
       const limit = filter.limit;
       const page = filter.page;
@@ -241,7 +280,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { pages, total } = await pagesService.listPages({
         publishedOnly: true,
-        visibility: 'public',
+        visibility: "public",
         limit,
         offset,
       });
@@ -249,7 +288,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       const details = await Promise.all(
         pages.map(async (pageObj) => {
           return buildPublicPageDetailDto(pageObj, mediaService);
-        })
+        }),
       );
 
       const totalPages = Math.ceil(total / limit) || 1;
@@ -267,7 +306,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Single Page by Slug
-  fastify.get('/pages/:slug', {
+  fastify.get("/pages/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const pageObj = await pagesService.findPublishedBySlug(slug);
@@ -276,8 +315,8 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'CONTENT_NOT_FOUND',
-              message: 'Page not found',
+              code: "CONTENT_NOT_FOUND",
+              message: "Page not found",
               requestId: req.id,
             },
           ],
@@ -290,7 +329,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Tags List
-  fastify.get('/tags', {
+  fastify.get("/tags", {
     handler: async (req, reply) => {
       const tagsList = await tagsService.listAll();
       const formatted = tagsList.map(formatPublicTag);
@@ -299,7 +338,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Tag Detail
-  fastify.get('/tags/:slug', {
+  fastify.get("/tags/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const tag = await tagsService.findBySlug(slug);
@@ -308,8 +347,8 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'TAG_NOT_FOUND',
-              message: 'Tag not found',
+              code: "TAG_NOT_FOUND",
+              message: "Tag not found",
               requestId: req.id,
             },
           ],
@@ -321,7 +360,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Tag Posts Archive
-  fastify.get('/tags/:slug/posts', {
+  fastify.get("/tags/:slug/posts", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const tag = await tagsService.findBySlug(slug);
@@ -330,8 +369,8 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'TAG_NOT_FOUND',
-              message: 'Tag not found',
+              code: "TAG_NOT_FOUND",
+              message: "Tag not found",
               requestId: req.id,
             },
           ],
@@ -339,7 +378,9 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       }
 
       const parseResult = PublicListFilterSchema.safeParse(req.query);
-      const filter = parseResult.success ? parseResult.data : { page: 1, limit: 20 };
+      const filter = parseResult.success
+        ? parseResult.data
+        : { page: 1, limit: 20 };
 
       const limit = filter.limit;
       const page = filter.page;
@@ -347,12 +388,12 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
-        visibility: 'public',
+        visibility: "public",
         tagSlug: slug,
         limit,
         offset,
-        sortBy: 'publishedAt',
-        sortOrder: 'desc',
+        sortBy: "publishedAt",
+        sortOrder: "desc",
       });
 
       const summaries = await Promise.all(
@@ -362,10 +403,17 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
             authorsService.getPostAuthors(post.id),
             Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
           ]);
-          const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
+          const validTags = tagsList.filter(
+            (t): t is NonNullable<typeof t> => !!t,
+          );
 
-          return buildPublicPostSummaryDto(post, authors, validTags, mediaService);
-        })
+          return buildPublicPostSummaryDto(
+            post,
+            authors,
+            validTags,
+            mediaService,
+          );
+        }),
       );
 
       const totalPages = Math.ceil(total / limit) || 1;
@@ -384,9 +432,30 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Authors List
-  fastify.get('/authors', {
+  fastify.get("/authors", {
     handler: async (_req, reply) => {
-      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
+      const authorRepo = (
+        authorsService as unknown as {
+          authorRepo: {
+            listAuthors: () => Promise<
+              Array<{
+                id: string;
+                name: string;
+                slug: string;
+                bio: string | null;
+              }>
+            >;
+            findAuthorBySlug: (
+              slug: string,
+            ) => Promise<{
+              id: string;
+              name: string;
+              slug: string;
+              bio: string | null;
+            } | null>;
+          };
+        }
+      ).authorRepo;
       const authorList = await authorRepo.listAuthors();
       const formatted = authorList.map((a) => formatPublicAuthor(a as Author));
       return reply.status(200).send({ authors: formatted });
@@ -394,41 +463,85 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   });
 
   // Public Author Detail
-  fastify.get('/authors/:slug', {
+  fastify.get("/authors/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
+      const authorRepo = (
+        authorsService as unknown as {
+          authorRepo: {
+            listAuthors: () => Promise<
+              Array<{
+                id: string;
+                name: string;
+                slug: string;
+                bio: string | null;
+              }>
+            >;
+            findAuthorBySlug: (
+              slug: string,
+            ) => Promise<{
+              id: string;
+              name: string;
+              slug: string;
+              bio: string | null;
+            } | null>;
+          };
+        }
+      ).authorRepo;
       const author = await authorRepo.findAuthorBySlug(slug);
 
       if (!author) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'AUTHOR_NOT_FOUND',
-              message: 'Author not found',
+              code: "AUTHOR_NOT_FOUND",
+              message: "Author not found",
               requestId: req.id,
             },
           ],
         });
       }
 
-      return reply.status(200).send({ author: formatPublicAuthor(author as Author) });
+      return reply
+        .status(200)
+        .send({ author: formatPublicAuthor(author as Author) });
     },
   });
 
   // Public Author Posts Archive
-  fastify.get('/authors/:slug/posts', {
+  fastify.get("/authors/:slug/posts", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (authorsService as unknown as { authorRepo: { listAuthors: () => Promise<Array<{ id: string; name: string; slug: string; bio: string | null }>>; findAuthorBySlug: (slug: string) => Promise<{ id: string; name: string; slug: string; bio: string | null } | null> } }).authorRepo;
+      const authorRepo = (
+        authorsService as unknown as {
+          authorRepo: {
+            listAuthors: () => Promise<
+              Array<{
+                id: string;
+                name: string;
+                slug: string;
+                bio: string | null;
+              }>
+            >;
+            findAuthorBySlug: (
+              slug: string,
+            ) => Promise<{
+              id: string;
+              name: string;
+              slug: string;
+              bio: string | null;
+            } | null>;
+          };
+        }
+      ).authorRepo;
       const author = await authorRepo.findAuthorBySlug(slug);
 
       if (!author) {
         return reply.status(404).send({
           errors: [
             {
-              code: 'AUTHOR_NOT_FOUND',
-              message: 'Author not found',
+              code: "AUTHOR_NOT_FOUND",
+              message: "Author not found",
               requestId: req.id,
             },
           ],
@@ -436,7 +549,9 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       }
 
       const parseResult = PublicListFilterSchema.safeParse(req.query);
-      const filter = parseResult.success ? parseResult.data : { page: 1, limit: 20 };
+      const filter = parseResult.success
+        ? parseResult.data
+        : { page: 1, limit: 20 };
 
       const limit = filter.limit;
       const page = filter.page;
@@ -444,12 +559,12 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
-        visibility: 'public',
+        visibility: "public",
         authorSlug: slug,
         limit,
         offset,
-        sortBy: 'publishedAt',
-        sortOrder: 'desc',
+        sortBy: "publishedAt",
+        sortOrder: "desc",
       });
 
       const summaries = await Promise.all(
@@ -459,10 +574,17 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
             authorsService.getPostAuthors(post.id),
             Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
           ]);
-          const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
+          const validTags = tagsList.filter(
+            (t): t is NonNullable<typeof t> => !!t,
+          );
 
-          return buildPublicPostSummaryDto(post, authors, validTags, mediaService);
-        })
+          return buildPublicPostSummaryDto(
+            post,
+            authors,
+            validTags,
+            mediaService,
+          );
+        }),
       );
 
       const totalPages = Math.ceil(total / limit) || 1;

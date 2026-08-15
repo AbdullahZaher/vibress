@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
-import { AdminApiKey, createApiKeyApi, revokeApiKeyApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Key } from 'lucide-react';
+import React, { useState } from "react";
+import { AdminApiKey, createApiKeyApi, revokeApiKeyApi } from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Key } from "lucide-react";
 
 interface ApiKeysPanelProps {
   apiKeys: AdminApiKey[];
@@ -14,29 +21,35 @@ interface ApiKeysPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function ApiKeysPanel({ apiKeys, onError, onMessage, onNewSecret, onChanged }: ApiKeysPanelProps) {
-  const [keyName, setKeyName] = useState('');
+export function ApiKeysPanel({
+  apiKeys,
+  onError,
+  onMessage,
+  onNewSecret,
+  onChanged,
+}: ApiKeysPanelProps) {
+  const [keyName, setKeyName] = useState("");
 
   const handleCreateApiKey = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await createApiKeyApi({ name: keyName, scopes: ['*'] });
-      setKeyName('');
+      const res = await createApiKeyApi({ name: keyName, scopes: ["*"] });
+      setKeyName("");
       onNewSecret(res.key.secret || null);
-      onMessage('API Key generated successfully. Copy the secret now!');
+      onMessage("API Key generated successfully. Copy the secret now!");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleRevokeApiKey = async (id: string) => {
     try {
       await revokeApiKeyApi(id);
-      onMessage('API key revoked');
+      onMessage("API key revoked");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -51,10 +64,22 @@ export function ApiKeysPanel({ apiKeys, onError, onMessage, onNewSecret, onChang
         <CardContent>
           <form onSubmit={handleCreateApiKey} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Key Name / Description</label>
-              <Input required value={keyName} onChange={(e) => setKeyName(e.target.value)} placeholder="GitHub Actions Deployment Key" className="h-8 text-xs bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Key Name / Description
+              </label>
+              <Input
+                required
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="GitHub Actions Deployment Key"
+                className="h-8 text-xs bg-card border-border"
+              />
             </div>
-            <Button type="submit" size="sm" className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2">
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+            >
               Generate Key
             </Button>
           </form>
@@ -73,15 +98,25 @@ export function ApiKeysPanel({ apiKeys, onError, onMessage, onNewSecret, onChang
           <TableBody>
             {apiKeys.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={3}
+                  className="h-32 text-center text-xs text-muted-foreground"
+                >
                   No API keys generated.
                 </TableCell>
               </TableRow>
             ) : (
               apiKeys.map((k) => (
-                <TableRow key={k.id} className="hover:bg-muted/40 border-border">
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">{k.name}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{k.prefix}</TableCell>
+                <TableRow
+                  key={k.id}
+                  className="hover:bg-muted/40 border-border"
+                >
+                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                    {k.name}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">
+                    {k.prefix}
+                  </TableCell>
                   <TableCell className="text-right pr-6">
                     <Button
                       variant="ghost"

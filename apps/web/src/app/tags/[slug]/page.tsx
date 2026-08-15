@@ -1,12 +1,12 @@
-import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
-import { ContentApiClient } from '../../../lib/content-api-client';
-import { buildPageMetadata } from '../../../lib/seo-helpers';
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
+import { ContentApiClient } from "../../../lib/content-api-client";
+import { buildPageMetadata } from "../../../lib/seo-helpers";
 import {
   resolveThemeHostState,
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
-} from '../../../lib/theme-host';
+} from "../../../lib/theme-host";
 
 export const revalidate = 0;
 
@@ -19,7 +19,7 @@ export async function generateMetadata({
   const tag = await ContentApiClient.getTagBySlug(slug);
   if (!tag) {
     return {
-      title: 'Tag Not Found',
+      title: "Tag Not Found",
     };
   }
 
@@ -52,7 +52,10 @@ export default async function TagArchivePage({
   }
 
   const previewThemeId = await getPreviewThemeIdFromHeaders();
-  const hostState = await resolveThemeHostState(!!previewThemeId, previewThemeId);
+  const hostState = await resolveThemeHostState(
+    !!previewThemeId,
+    previewThemeId,
+  );
   const site = await getThemeSiteSettings();
 
   return hostState.theme.components.TagArchive({

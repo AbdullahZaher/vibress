@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getStaffSettingsApi, updateSettingApi } from '../../../lib/api/operations';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getStaffSettingsApi,
+  updateSettingApi,
+} from "../../../lib/api/operations";
 
 export interface AdvancedSettingsState {
   headerCode: string;
@@ -7,8 +10,8 @@ export interface AdvancedSettingsState {
 }
 
 const DEFAULT_STATE: AdvancedSettingsState = {
-  headerCode: '',
-  footerCode: '',
+  headerCode: "",
+  footerCode: "",
 };
 
 export function useAdvancedSettings() {
@@ -23,20 +26,22 @@ export function useAdvancedSettings() {
     setError(null);
     try {
       const res = await getStaffSettingsApi();
-      const codeNs = res.namespaces.find((n) => n.namespace === 'code');
+      const codeNs = res.namespaces.find((n) => n.namespace === "code");
       const loaded: AdvancedSettingsState = { ...DEFAULT_STATE };
 
       if (codeNs) {
         for (const s of codeNs.settings) {
-          if (s.key === 'headerCode') loaded.headerCode = String(s.value || '');
-          if (s.key === 'footerCode') loaded.footerCode = String(s.value || '');
+          if (s.key === "headerCode") loaded.headerCode = String(s.value || "");
+          if (s.key === "footerCode") loaded.footerCode = String(s.value || "");
         }
       }
 
       setInitial(loaded);
       setDraft(loaded);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load advanced settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to load advanced settings",
+      );
     } finally {
       setLoading(false);
     }
@@ -46,12 +51,21 @@ export function useAdvancedSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const updateField = useCallback(<K extends keyof AdvancedSettingsState>(key: K, value: AdvancedSettingsState[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const updateField = useCallback(
+    <K extends keyof AdvancedSettingsState>(
+      key: K,
+      value: AdvancedSettingsState[K],
+    ) => {
+      setDraft((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
 
   const isDirty = useMemo(() => {
-    return initial.headerCode !== draft.headerCode || initial.footerCode !== draft.footerCode;
+    return (
+      initial.headerCode !== draft.headerCode ||
+      initial.footerCode !== draft.footerCode
+    );
   }, [initial, draft]);
 
   const dirtyCount = useMemo(() => {
@@ -67,14 +81,18 @@ export function useAdvancedSettings() {
     setError(null);
     try {
       const promises: Promise<unknown>[] = [];
-      if (initial.headerCode !== draft.headerCode) promises.push(updateSettingApi('code', 'headerCode', draft.headerCode));
-      if (initial.footerCode !== draft.footerCode) promises.push(updateSettingApi('code', 'footerCode', draft.footerCode));
+      if (initial.headerCode !== draft.headerCode)
+        promises.push(updateSettingApi("code", "headerCode", draft.headerCode));
+      if (initial.footerCode !== draft.footerCode)
+        promises.push(updateSettingApi("code", "footerCode", draft.footerCode));
 
       await Promise.all(promises);
       setInitial({ ...draft });
       return true;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save advanced settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to save advanced settings",
+      );
       return false;
     } finally {
       setSaving(false);

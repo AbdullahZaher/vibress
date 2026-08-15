@@ -20,16 +20,21 @@ export interface PublicProduct {
 }
 
 export async function fetchProducts(): Promise<PublicProduct[]> {
-  const res = await fetch('/api/content/v1/products');
-  if (!res.ok) throw new Error('Failed to load plans');
+  const res = await fetch("/api/content/v1/products");
+  if (!res.ok) throw new Error("Failed to load plans");
   const data = await res.json();
   return data.products as PublicProduct[];
 }
 
 export function formatPrice(plan: PublicPlan): string {
-  if (plan.billingType === 'free') return 'Free';
+  if (plan.billingType === "free") return "Free";
   const amount = plan.amountMinor / 100;
-  const symbol = plan.currency === 'USD' ? '$' : plan.currency === 'SAR' ? 'SAR ' : `${plan.currency} `;
-  const interval = plan.billingInterval === 'year' ? '/year' : '/month';
+  const symbol =
+    plan.currency === "USD"
+      ? "$"
+      : plan.currency === "SAR"
+        ? "SAR "
+        : `${plan.currency} `;
+  const interval = plan.billingInterval === "year" ? "/year" : "/month";
   return `${symbol}${amount.toFixed(2)}${interval}`;
 }

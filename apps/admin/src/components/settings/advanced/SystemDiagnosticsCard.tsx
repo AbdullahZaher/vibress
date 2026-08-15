@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
-import { SettingsCard } from '../SettingsCard';
-import { SettingsCardRow } from '../SettingsCardRow';
-import { Button } from '../../ui/button';
-import { Activity, RefreshCw, CheckCircle2, Database, Zap } from 'lucide-react';
-import { Badge } from '../../ui/badge';
-import { runMaintenanceApi } from '../../../lib/api/operations';
+import React, { useState } from "react";
+import { SettingsCard } from "../SettingsCard";
+import { SettingsCardRow } from "../SettingsCardRow";
+import { Button } from "../../ui/button";
+import { Activity, RefreshCw, CheckCircle2, Database, Zap } from "lucide-react";
+import { Badge } from "../../ui/badge";
+import { runMaintenanceApi } from "../../../lib/api/operations";
 
 interface SystemDiagnosticsCardProps {
   isHighlighted?: boolean | undefined;
 }
 
-export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ isHighlighted }) => {
+export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({
+  isHighlighted,
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [purging, setPurging] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -19,11 +21,11 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ is
     setPurging(true);
     setMsg(null);
     try {
-      await runMaintenanceApi('cache-purge');
-      setMsg('Redis & Next.js cache purged successfully.');
+      await runMaintenanceApi("cache-purge");
+      setMsg("Redis & Next.js cache purged successfully.");
       setTimeout(() => setMsg(null), 3500);
     } catch {
-      setMsg('Cache purge triggered.');
+      setMsg("Cache purge triggered.");
       setTimeout(() => setMsg(null), 3500);
     } finally {
       setPurging(false);
@@ -38,12 +40,15 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ is
         description="Monitor database and Redis health, and perform global cache invalidations."
         currentValue={
           <div className="flex items-center gap-1 font-mono text-xs">
-            <Badge variant="secondary" className="gap-1 text-emerald-600 dark:text-emerald-400">
+            <Badge
+              variant="secondary"
+              className="gap-1 text-emerald-600 dark:text-emerald-400"
+            >
               <CheckCircle2 className="h-3 w-3" /> All Systems Operational
             </Badge>
           </div>
         }
-        actionLabel={isExpanded ? 'Close' : 'Maintain'}
+        actionLabel={isExpanded ? "Close" : "Maintain"}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
@@ -62,8 +67,12 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ is
               <div className="flex items-center gap-2.5">
                 <Database className="h-4 w-4 text-emerald-500" />
                 <div>
-                  <p className="text-xs font-semibold text-foreground">PostgreSQL Database</p>
-                  <p className="text-[10px] text-muted-foreground">Connected & Healthy</p>
+                  <p className="text-xs font-semibold text-foreground">
+                    PostgreSQL Database
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Connected & Healthy
+                  </p>
                 </div>
               </div>
               <span className="size-2 rounded-full bg-emerald-500" />
@@ -73,8 +82,12 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ is
               <div className="flex items-center gap-2.5">
                 <Zap className="h-4 w-4 text-emerald-500" />
                 <div>
-                  <p className="text-xs font-semibold text-foreground">Redis Memory Cache</p>
-                  <p className="text-[10px] text-muted-foreground">Connected & Healthy</p>
+                  <p className="text-xs font-semibold text-foreground">
+                    Redis Memory Cache
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Connected & Healthy
+                  </p>
                 </div>
               </div>
               <span className="size-2 rounded-full bg-emerald-500" />
@@ -89,8 +102,12 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({ is
               disabled={purging}
               className="gap-1.5 text-xs cursor-pointer"
             >
-              {purging ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
-              {purging ? 'Purging...' : 'Purge All Cache'}
+              {purging ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+              )}
+              {purging ? "Purging..." : "Purge All Cache"}
             </Button>
           </div>
         </div>

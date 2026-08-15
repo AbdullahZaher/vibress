@@ -33,7 +33,7 @@
   timeouts, size bounds). localhost/private/link-local/169.254 addresses are
   blocked. Verified by integration + E2E tests.
 - **Signing**: every delivery carries `X-Vibress-Signature:
-  sha256=<HMAC-SHA256(secret, payload)>` plus stable event ID/timestamp.
+sha256=<HMAC-SHA256(secret, payload)>` plus stable event ID/timestamp.
 - **Replay/dedup**: `UNIQUE(endpoint_id, event_id)` — a repeated event cannot
   create a duplicate delivery.
 - **Retry idempotency**: retries reuse the same event identity.

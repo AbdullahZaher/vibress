@@ -4,13 +4,13 @@
 
 `recommendations` are managed external-site/content recommendations.
 
-| Field | Notes |
-|---|---|
-| `url` | http/https only (SSRF-validated) |
-| `title` / `description` | Display metadata |
-| `image_url` / `favicon_url` | Optional |
-| `status` | `active` / `archived` |
-| `sort_order` | Display ordering |
+| Field                       | Notes                            |
+| --------------------------- | -------------------------------- |
+| `url`                       | http/https only (SSRF-validated) |
+| `title` / `description`     | Display metadata                 |
+| `image_url` / `favicon_url` | Optional                         |
+| `status`                    | `active` / `archived`            |
+| `sort_order`                | Display ordering                 |
 
 ## SSRF Protection
 
@@ -24,6 +24,7 @@
 ## Attribution
 
 Lightweight `recommendation_events` records:
+
 - `view` (session-scoped, no PII)
 - `click` (optionally member-linked)
 - per-recommendation counts visible to staff (`recommendations.read`)

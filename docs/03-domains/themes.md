@@ -4,7 +4,7 @@
 
 The Vibress Theme Engine allows switching the public presentation of a Vibress site at runtime without rebuilding, redeploying, or modifying content.
 
-**Architecture invariant**: A theme controls *presentation only*. It never owns content, publishing, routing security, storage, or database access.
+**Architecture invariant**: A theme controls _presentation only_. It never owns content, publishing, routing security, storage, or database access.
 
 ```
 Content Core
@@ -36,10 +36,10 @@ Active Theme
 
 ## Registered Themes
 
-| ID | Name | Notes |
-|----|------|-------|
+| ID                | Name            | Notes                                                  |
+| ----------------- | --------------- | ------------------------------------------------------ |
 | `vibress-default` | Vibress Default | Clean reading layout (refactored Batch 6 presentation) |
-| `vibress-minimal` | Vibress Minimal | Stark typography-first layout |
+| `vibress-minimal` | Vibress Minimal | Stark typography-first layout                          |
 
 Both provide: Layout, Home, Post, Page, TagArchive, AuthorArchive. Studio card CSS is namespaced under `.studio-html-content` and `kg-*` compatibility classes.
 

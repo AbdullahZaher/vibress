@@ -1,6 +1,6 @@
-import { NotificationRepository } from '../domain/repository';
-import { Notification, CreateNotificationData, ListNotificationsFilter } from '../domain/notification';
-import { domainEvents } from '@vibress/events';
+import { NotificationRepository } from "../domain/repository";
+import { Notification, ListNotificationsFilter } from "../domain/notification";
+import { domainEvents } from "@vibress/events";
 
 export class NotificationsService {
   constructor(private repo: NotificationRepository) {}
@@ -24,10 +24,15 @@ export class NotificationsService {
       entityId: data.entityId,
       data: data.data,
     });
-    domainEvents.emit('notification.created', { notificationId: notification.id, recipientId: data.recipientId });
+    domainEvents.emit("notification.created", {
+      notificationId: notification.id,
+      recipientId: data.recipientId,
+    });
   }
 
-  async listNotifications(filter: ListNotificationsFilter): Promise<{ notifications: Notification[]; total: number }> {
+  async listNotifications(
+    filter: ListNotificationsFilter,
+  ): Promise<{ notifications: Notification[]; total: number }> {
     return this.repo.list(filter);
   }
 

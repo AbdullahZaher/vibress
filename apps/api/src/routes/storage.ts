@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance } from "fastify";
 import {
   CreateStorageConfigurationInputSchema,
   UpdateStorageConfigurationInputSchema,
@@ -7,18 +7,24 @@ import {
   InitiateMultipartUploadInputSchema,
   SignMultipartPartInputSchema,
   CompleteMultipartUploadInputSchema,
-} from '@vibress/api-contracts';
-import { storageService, mediaService } from '../services';
-import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { validateAndDetectFile } from '@vibress/media';
-import { defaultStorageRegistry, StorageError } from '@vibress/storage-core';
-import crypto from 'node:crypto';
+} from "@vibress/api-contracts";
+import { storageService, mediaService } from "../services";
+import {
+  requireStaffSession,
+  requirePermission,
+  validateOrigin,
+} from "../middleware/auth";
+import { validateAndDetectFile } from "@vibress/media";
+import { defaultStorageRegistry } from "@vibress/storage-core";
+import crypto from "node:crypto";
 
 type CodedError = Error & { code?: string };
 
 function asCodedError(err: unknown): CodedError {
   if (err instanceof Error) return err as CodedError;
-  return new Error(typeof err === 'string' ? err : 'Unknown error') as CodedError;
+  return new Error(
+    typeof err === "string" ? err : "Unknown error",
+  ) as CodedError;
 }
 
 type StorageConnectionTestBody = {
@@ -36,16 +42,24 @@ type StorageConnectionTestBody = {
 
 // Access the storage service's internal repository (used for upload session lifecycle)
 function storageRepoOf(svc: typeof storageService) {
-  return (svc as unknown as { storageRepo: import('@vibress/storage-domain').DrizzleStorageRepository }).storageRepo;
+  return (
+    svc as unknown as {
+      storageRepo: import("@vibress/storage-domain").DrizzleStorageRepository;
+    }
+  ).storageRepo;
 }
 function mediaRepoOf(svc: typeof mediaService) {
-  return (svc as unknown as { mediaRepo: import('@vibress/media').DrizzleMediaRepository }).mediaRepo;
+  return (
+    svc as unknown as {
+      mediaRepo: import("@vibress/media").DrizzleMediaRepository;
+    }
+  ).mediaRepo;
 }
 
 export async function storageRoutes(fastify: FastifyInstance) {
   // List storage configurations
-  fastify.get('/storage/configurations', {
-    preHandler: [requireStaffSession, requirePermission('storage.read')],
+  fastify.get("/storage/configurations", {
+    preHandler: [requireStaffSession, requirePermission("storage.read")],
     handler: async (req, reply) => {
       const configs = await storageService.listConfigurations();
       const sanitized = configs.map((c) => ({
@@ -68,16 +82,22 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Create storage configuration
-  fastify.post('/storage/configurations', {
-    preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
+  fastify.post("/storage/configurations", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("storage.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
-      const parseResult = CreateStorageConfigurationInputSchema.safeParse(req.body);
+      const parseResult = CreateStorageConfigurationInputSchema.safeParse(
+        req.body,
+      );
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -90,7 +110,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           ...rest,
           credentials: { accessKeyId, secretAccessKey },
         },
-        req.user!.id
+        req.user!.id,
       );
 
       return reply.status(201).send({
@@ -113,17 +133,23 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Update storage configuration
-  fastify.patch('/storage/configurations/:id', {
-    preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
+  fastify.patch("/storage/configurations/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("storage.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const parseResult = UpdateStorageConfigurationInputSchema.safeParse(req.body);
+      const parseResult = UpdateStorageConfigurationInputSchema.safeParse(
+        req.body,
+      );
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -140,9 +166,10 @@ export async function storageRoutes(fastify: FastifyInstance) {
           id,
           {
             ...rest,
-            credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
+            credentials:
+              Object.keys(credentials).length > 0 ? credentials : undefined,
           },
-          req.user!.id
+          req.user!.id,
         );
 
         return reply.status(200).send({
@@ -163,9 +190,15 @@ export async function storageRoutes(fastify: FastifyInstance) {
         });
       } catch (err) {
         const e = asCodedError(err);
-        if (e.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
+        if (e.code === "STORAGE_CONFIGURATION_NOT_FOUND") {
           return reply.status(404).send({
-            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: e.message, requestId: req.id }],
+            errors: [
+              {
+                code: "STORAGE_CONFIGURATION_NOT_FOUND",
+                message: e.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -174,20 +207,27 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Test connection
-  fastify.post('/storage/test', {
-    preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
+  fastify.post("/storage/test", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("storage.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const body = (req.body ?? {}) as StorageConnectionTestBody;
       try {
-        const input: Parameters<typeof storageService.testConnection>[0] = 'id' in body && body.id
-          ? { id: body.id }
-          : {
-              ...body,
-              credentials: {
-                accessKeyId: body.accessKeyId || body.credentials?.accessKeyId,
-                secretAccessKey: body.secretAccessKey || body.credentials?.secretAccessKey,
-              },
-            } as Parameters<typeof storageService.testConnection>[0];
+        const input: Parameters<typeof storageService.testConnection>[0] =
+          "id" in body && body.id
+            ? { id: body.id }
+            : ({
+                ...body,
+                credentials: {
+                  accessKeyId:
+                    body.accessKeyId || body.credentials?.accessKeyId,
+                  secretAccessKey:
+                    body.secretAccessKey || body.credentials?.secretAccessKey,
+                },
+              } as Parameters<typeof storageService.testConnection>[0]);
         const result = await storageService.testConnection(input, req.user!.id);
         return reply.status(200).send({ result });
       } catch (err) {
@@ -195,8 +235,8 @@ export async function storageRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: e.code || 'STORAGE_CONNECTION_FAILED',
-              message: e.message || 'Connection test failed',
+              code: e.code || "STORAGE_CONNECTION_FAILED",
+              message: e.message || "Connection test failed",
               requestId: req.id,
             },
           ],
@@ -206,12 +246,19 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Activate storage configuration
-  fastify.post('/storage/configurations/:id/activate', {
-    preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
+  fastify.post("/storage/configurations/:id/activate", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("storage.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const activated = await storageService.activateConfiguration(id, req.user!.id);
+        const activated = await storageService.activateConfiguration(
+          id,
+          req.user!.id,
+        );
         return reply.status(200).send({
           activeConfiguration: {
             id: activated.id,
@@ -226,8 +273,8 @@ export async function storageRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: e.code || 'STORAGE_CONFIGURATION_INVALID',
-              message: e.message || 'Activation failed',
+              code: e.code || "STORAGE_CONFIGURATION_INVALID",
+              message: e.message || "Activation failed",
               requestId: req.id,
             },
           ],
@@ -237,8 +284,12 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Delete configuration
-  fastify.delete('/storage/configurations/:id', {
-    preHandler: [requireStaffSession, requirePermission('storage.manage'), validateOrigin],
+  fastify.delete("/storage/configurations/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("storage.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -246,14 +297,26 @@ export async function storageRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true });
       } catch (err) {
         const e = asCodedError(err);
-        if (e.code === 'STORAGE_PROVIDER_IN_USE') {
+        if (e.code === "STORAGE_PROVIDER_IN_USE") {
           return reply.status(409).send({
-            errors: [{ code: 'STORAGE_PROVIDER_IN_USE', message: e.message, requestId: req.id }],
+            errors: [
+              {
+                code: "STORAGE_PROVIDER_IN_USE",
+                message: e.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
-        if (e.code === 'STORAGE_CONFIGURATION_NOT_FOUND') {
+        if (e.code === "STORAGE_CONFIGURATION_NOT_FOUND") {
           return reply.status(404).send({
-            errors: [{ code: 'STORAGE_CONFIGURATION_NOT_FOUND', message: e.message, requestId: req.id }],
+            errors: [
+              {
+                code: "STORAGE_CONFIGURATION_NOT_FOUND",
+                message: e.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -262,16 +325,20 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Direct Upload: Initiate
-  fastify.post('/media/uploads/direct/initiate', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/direct/initiate", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const parseResult = InitiateDirectUploadInputSchema.safeParse(req.body);
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -281,11 +348,14 @@ export async function storageRoutes(fastify: FastifyInstance) {
       const activeProvider = defaultStorageRegistry.getActiveProvider();
       const caps = activeProvider.getCapabilities();
 
-      if (!caps.directUpload || typeof activeProvider.createSignedUploadUrl !== 'function') {
+      if (
+        !caps.directUpload ||
+        typeof activeProvider.createSignedUploadUrl !== "function"
+      ) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'STORAGE_CAPABILITY_NOT_SUPPORTED',
+              code: "STORAGE_CAPABILITY_NOT_SUPPORTED",
               message: `Active storage provider '${activeProvider.name}' does not support direct signed uploads. Use standard API upload.`,
               requestId: req.id,
             },
@@ -307,7 +377,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: ve.code || 'MEDIA_INVALID_FILE',
+              code: ve.code || "MEDIA_INVALID_FILE",
               message: ve.message,
               requestId: req.id,
             },
@@ -316,7 +386,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
       }
 
       const assetId = crypto.randomUUID();
-      const storageKey = `media/${assetId}/${inputData.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const storageKey = `media/${assetId}/${inputData.originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
       const signedResult = await activeProvider.createSignedUploadUrl({
         key: storageKey,
@@ -345,16 +415,20 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Direct Upload: Complete / Finalize
-  fastify.post('/media/uploads/direct/complete', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/direct/complete", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const parseResult = CompleteDirectUploadInputSchema.safeParse(req.body);
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -367,23 +441,47 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       if (!session) {
         return reply.status(404).send({
-          errors: [{ code: 'STORAGE_UPLOAD_INVALID', message: 'Upload session not found', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_INVALID",
+              message: "Upload session not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
       if (session.actorId !== req.user!.id) {
         return reply.status(403).send({
-          errors: [{ code: 'FORBIDDEN', message: 'Upload session belongs to another user', requestId: req.id }],
+          errors: [
+            {
+              code: "FORBIDDEN",
+              message: "Upload session belongs to another user",
+              requestId: req.id,
+            },
+          ],
         });
       }
-      if (session.state !== 'pending') {
+      if (session.state !== "pending") {
         return reply.status(400).send({
-          errors: [{ code: 'STORAGE_UPLOAD_INVALID', message: `Session state is '${session.state}', expected 'pending'`, requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_INVALID",
+              message: `Session state is '${session.state}', expected 'pending'`,
+              requestId: req.id,
+            },
+          ],
         });
       }
       if (session.expiresAt.getTime() < Date.now()) {
-        await repo.updateUploadSessionState(uploadSessionId, 'failed');
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
         return reply.status(400).send({
-          errors: [{ code: 'STORAGE_UPLOAD_EXPIRED', message: 'Upload session has expired', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_EXPIRED",
+              message: "Upload session has expired",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -393,26 +491,43 @@ export async function storageRoutes(fastify: FastifyInstance) {
         : null;
 
       if (!head) {
-        await repo.updateUploadSessionState(uploadSessionId, 'failed');
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
         return reply.status(400).send({
-          errors: [{ code: 'STORAGE_UPLOAD_INVALID', message: 'Direct upload object missing in storage', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_INVALID",
+              message: "Direct upload object missing in storage",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
       // Check size matches expected bounds
       if (head.size <= 0) {
-        await repo.updateUploadSessionState(uploadSessionId, 'failed');
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
         await activeProvider.delete(session.storageKey).catch(() => {});
         return reply.status(400).send({
-          errors: [{ code: 'MEDIA_INVALID_FILE', message: 'Direct uploaded file is zero bytes', requestId: req.id }],
+          errors: [
+            {
+              code: "MEDIA_INVALID_FILE",
+              message: "Direct uploaded file is zero bytes",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
       // Perform signature verification on initial byte range if getSignedUrl is supported
       if (activeProvider.getSignedUrl) {
         try {
-          const downloadUrl = await activeProvider.getSignedUrl(session.storageKey, { operation: 'get', expiresInSeconds: 60 });
-          const rangeRes = await fetch(downloadUrl, { headers: { Range: 'bytes=0-512' } });
+          const downloadUrl = await activeProvider.getSignedUrl(
+            session.storageKey,
+            { operation: "get", expiresInSeconds: 60 },
+          );
+          const rangeRes = await fetch(downloadUrl, {
+            headers: { Range: "bytes=0-512" },
+          });
           if (rangeRes.ok) {
             const arrBuf = await rangeRes.arrayBuffer();
             const headBuf = Buffer.from(arrBuf);
@@ -424,12 +539,12 @@ export async function storageRoutes(fastify: FastifyInstance) {
           }
         } catch (valErr) {
           const ve = asCodedError(valErr);
-          await repo.updateUploadSessionState(uploadSessionId, 'failed');
+          await repo.updateUploadSessionState(uploadSessionId, "failed");
           await activeProvider.delete(session.storageKey).catch(() => {});
           return reply.status(400).send({
             errors: [
               {
-                code: ve.code || 'MEDIA_MIME_MISMATCH',
+                code: ve.code || "MEDIA_MIME_MISMATCH",
                 message: `Direct upload signature verification failed: ${ve.message}`,
                 requestId: req.id,
               },
@@ -439,8 +554,8 @@ export async function storageRoutes(fastify: FastifyInstance) {
       }
 
       // Create MediaAsset record
-      const assetId = session.storageKey.split('/')[1] || crypto.randomUUID();
-      const ext = session.originalFilename.split('.').pop() || '';
+      const assetId = session.storageKey.split("/")[1] || crypto.randomUUID();
+      const ext = session.originalFilename.split(".").pop() || "";
 
       const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
@@ -460,23 +575,29 @@ export async function storageRoutes(fastify: FastifyInstance) {
         uploadedBy: req.user!.id,
       });
 
-      await repo.updateUploadSessionState(uploadSessionId, 'verified');
+      await repo.updateUploadSessionState(uploadSessionId, "verified");
 
       return reply.status(201).send({ media: mediaAsset });
     },
   });
 
   // Multipart Upload: Initiate
-  fastify.post('/media/uploads/multipart/initiate', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/multipart/initiate", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
-      const parseResult = InitiateMultipartUploadInputSchema.safeParse(req.body);
+      const parseResult = InitiateMultipartUploadInputSchema.safeParse(
+        req.body,
+      );
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -486,11 +607,14 @@ export async function storageRoutes(fastify: FastifyInstance) {
       const activeProvider = defaultStorageRegistry.getActiveProvider();
       const caps = activeProvider.getCapabilities();
 
-      if (!caps.multipartUpload || typeof activeProvider.createMultipartUpload !== 'function') {
+      if (
+        !caps.multipartUpload ||
+        typeof activeProvider.createMultipartUpload !== "function"
+      ) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'STORAGE_CAPABILITY_NOT_SUPPORTED',
+              code: "STORAGE_CAPABILITY_NOT_SUPPORTED",
               message: `Active storage provider '${activeProvider.name}' does not support multipart upload.`,
               requestId: req.id,
             },
@@ -500,7 +624,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       const inputData = parseResult.data;
       const assetId = crypto.randomUUID();
-      const storageKey = `media/${assetId}/${inputData.originalFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const storageKey = `media/${assetId}/${inputData.originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
       const multipartRes = await activeProvider.createMultipartUpload({
         key: storageKey,
@@ -527,13 +651,23 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Multipart Upload: Sign Part URL
-  fastify.post('/media/uploads/multipart/part-url', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/multipart/part-url", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const parseResult = SignMultipartPartInputSchema.safeParse(req.body);
       if (!parseResult.success) {
         return reply.status(400).send({
-          errors: [{ code: 'VALIDATION_ERROR', message: parseResult.error.errors[0]?.message || 'Invalid input', requestId: req.id }],
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -543,19 +677,37 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       if (!session || !session.multipartUploadId) {
         return reply.status(404).send({
-          errors: [{ code: 'STORAGE_MULTIPART_INVALID', message: 'Multipart upload session not found', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_MULTIPART_INVALID",
+              message: "Multipart upload session not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
       if (session.actorId !== req.user!.id) {
         return reply.status(403).send({
-          errors: [{ code: 'FORBIDDEN', message: 'Session belongs to another user', requestId: req.id }],
+          errors: [
+            {
+              code: "FORBIDDEN",
+              message: "Session belongs to another user",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
       const activeProvider = defaultStorageRegistry.getActiveProvider();
-      if (typeof activeProvider.getSignedPartUrl !== 'function') {
+      if (typeof activeProvider.getSignedPartUrl !== "function") {
         return reply.status(400).send({
-          errors: [{ code: 'STORAGE_CAPABILITY_NOT_SUPPORTED', message: 'Provider missing getSignedPartUrl', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_CAPABILITY_NOT_SUPPORTED",
+              message: "Provider missing getSignedPartUrl",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -571,13 +723,25 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Multipart Upload: Complete
-  fastify.post('/media/uploads/multipart/complete', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/multipart/complete", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
-      const parseResult = CompleteMultipartUploadInputSchema.safeParse(req.body);
+      const parseResult = CompleteMultipartUploadInputSchema.safeParse(
+        req.body,
+      );
       if (!parseResult.success) {
         return reply.status(400).send({
-          errors: [{ code: 'VALIDATION_ERROR', message: parseResult.error.errors[0]?.message || 'Invalid input', requestId: req.id }],
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -587,14 +751,26 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       if (!session || !session.multipartUploadId) {
         return reply.status(404).send({
-          errors: [{ code: 'STORAGE_MULTIPART_INVALID', message: 'Multipart upload session not found', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_MULTIPART_INVALID",
+              message: "Multipart upload session not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
       const activeProvider = defaultStorageRegistry.getActiveProvider();
-      if (typeof activeProvider.completeMultipartUpload !== 'function') {
+      if (typeof activeProvider.completeMultipartUpload !== "function") {
         return reply.status(400).send({
-          errors: [{ code: 'STORAGE_CAPABILITY_NOT_SUPPORTED', message: 'Provider missing completeMultipartUpload', requestId: req.id }],
+          errors: [
+            {
+              code: "STORAGE_CAPABILITY_NOT_SUPPORTED",
+              message: "Provider missing completeMultipartUpload",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -604,8 +780,8 @@ export async function storageRoutes(fastify: FastifyInstance) {
         parts,
       });
 
-      const assetId = session.storageKey.split('/')[1] || crypto.randomUUID();
-      const ext = session.originalFilename.split('.').pop() || '';
+      const assetId = session.storageKey.split("/")[1] || crypto.randomUUID();
+      const ext = session.originalFilename.split(".").pop() || "";
 
       const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
@@ -625,15 +801,19 @@ export async function storageRoutes(fastify: FastifyInstance) {
         uploadedBy: req.user!.id,
       });
 
-      await repo.updateUploadSessionState(uploadSessionId, 'verified');
+      await repo.updateUploadSessionState(uploadSessionId, "verified");
 
       return reply.status(201).send({ media: mediaAsset });
     },
   });
 
   // Multipart Upload: Abort
-  fastify.post('/media/uploads/multipart/abort', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media/uploads/multipart/abort", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { uploadSessionId } = req.body as { uploadSessionId: string };
       const repo = storageRepoOf(storageService);
@@ -641,13 +821,15 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       if (session && session.multipartUploadId) {
         const activeProvider = defaultStorageRegistry.getActiveProvider();
-        if (typeof activeProvider.abortMultipartUpload === 'function') {
-          await activeProvider.abortMultipartUpload({
-            key: session.storageKey,
-            uploadId: session.multipartUploadId,
-          }).catch(() => {});
+        if (typeof activeProvider.abortMultipartUpload === "function") {
+          await activeProvider
+            .abortMultipartUpload({
+              key: session.storageKey,
+              uploadId: session.multipartUploadId,
+            })
+            .catch(() => {});
         }
-        await repo.updateUploadSessionState(uploadSessionId, 'failed');
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
       }
 
       return reply.status(200).send({ success: true });

@@ -1,34 +1,51 @@
-import React from 'react';
-import { ThemePostProps, themeSetting } from '../../types';
-import { ThemeLayout } from './Layout';
+import React from "react";
+import { ThemePostProps, themeSetting } from "../../types";
+import { ThemeLayout } from "./Layout";
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
-  const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
-  const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
-  const dateLocale = props.site.locale || 'en';
+  const showPublicationDate = themeSetting(
+    props.settings,
+    "showPublicationDate",
+    true,
+  ) as boolean;
+  const showAuthor = themeSetting(
+    props.settings,
+    "showAuthor",
+    true,
+  ) as boolean;
+  const dateLocale = props.site.locale || "en";
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
       <main className="vb-main vb-outer">
         <article className="vb-article vb-inner">
           <header className="vb-article-header">
-            {post.tags?.[0] && <span className="vb-article-tag">{post.tags[0].name}</span>}
-            
+            {post.tags?.[0] && (
+              <span className="vb-article-tag">{post.tags[0].name}</span>
+            )}
+
             <h1 className="vb-article-title gh-article-title">{post.title}</h1>
-            
-            {post.excerpt && <p className="vb-article-excerpt">{post.excerpt}</p>}
+
+            {post.excerpt && (
+              <p className="vb-article-excerpt">{post.excerpt}</p>
+            )}
 
             <div className="vb-meta-share">
               {showAuthor && post.primaryAuthor && (
-                <div className="vb-article-author-name">{post.primaryAuthor.name}</div>
+                <div className="vb-article-author-name">
+                  {post.primaryAuthor.name}
+                </div>
               )}
               {showPublicationDate && (
-                <time className="vb-article-meta-date" dateTime={post.publishedAt}>
+                <time
+                  className="vb-article-meta-date"
+                  dateTime={post.publishedAt}
+                >
                   {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
                   })}
                 </time>
               )}
@@ -36,7 +53,7 @@ export async function Post(props: ThemePostProps) {
           </header>
 
           <section className="vb-content studio-html-content">
-            <div dangerouslySetInnerHTML={{ __html: post.html || '' }} />
+            <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
           </section>
         </article>
       </main>

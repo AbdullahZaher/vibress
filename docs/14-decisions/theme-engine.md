@@ -10,7 +10,7 @@ Batch 6 shipped a single built-in presentation directly in `apps/web`. To suppor
 
 ### 1. Themes are trusted build-time registered code
 
-Theme modules live in the repository and are registered explicitly. The database stores only the *identity* of the active theme plus validated settings — never theme source, assets, or executable values. Dynamic third-party installation (marketplace, ZIP upload, runtime npm install, arbitrary JS execution) is explicitly out of scope.
+Theme modules live in the repository and are registered explicitly. The database stores only the _identity_ of the active theme plus validated settings — never theme source, assets, or executable values. Dynamic third-party installation (marketplace, ZIP upload, runtime npm install, arbitrary JS execution) is explicitly out of scope.
 
 ### 2. Themes consume public contracts only
 

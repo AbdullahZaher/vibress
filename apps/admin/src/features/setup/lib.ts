@@ -4,7 +4,7 @@
  * X-Vibress-Setup-Token header — never in a JSON body.
  */
 
-export const SETUP_TOKEN_HEADER = 'X-Vibress-Setup-Token';
+export const SETUP_TOKEN_HEADER = "X-Vibress-Setup-Token";
 
 export interface SetupStatus {
   installed: boolean;
@@ -34,12 +34,16 @@ export interface SetupCompleteResult {
   } | null;
 }
 
-async function setupRequest<T>(path: string, token: string | undefined, init: RequestInit = {}): Promise<T> {
+async function setupRequest<T>(
+  path: string,
+  token: string | undefined,
+  init: RequestInit = {},
+): Promise<T> {
   const response = await fetch(`/api/setup/v1${path}`, {
     ...init,
-    credentials: 'include',
+    credentials: "include",
     headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { [SETUP_TOKEN_HEADER]: token } : {}),
       ...init.headers,
     },
@@ -48,9 +52,14 @@ async function setupRequest<T>(path: string, token: string | undefined, init: Re
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const errorDetail = (data as { errors?: Array<{ code?: string; message?: string }> }).errors?.[0] || {};
-    const err = new Error(errorDetail.message || 'An unexpected error occurred');
-    (err as Error & { code?: string; statusCode?: number }).code = errorDetail.code || 'UNKNOWN_ERROR';
+    const errorDetail =
+      (data as { errors?: Array<{ code?: string; message?: string }> })
+        .errors?.[0] || {};
+    const err = new Error(
+      errorDetail.message || "An unexpected error occurred",
+    );
+    (err as Error & { code?: string; statusCode?: number }).code =
+      errorDetail.code || "UNKNOWN_ERROR";
     (err as Error & { statusCode?: number }).statusCode = response.status;
     throw err;
   }
@@ -58,16 +67,21 @@ async function setupRequest<T>(path: string, token: string | undefined, init: Re
 }
 
 export async function fetchSetupStatus(): Promise<SetupStatus> {
-  return setupRequest<SetupStatus>('/status', undefined);
+  return setupRequest<SetupStatus>("/status", undefined);
 }
 
-export async function fetchSetupPreflight(token: string): Promise<SetupPreflight> {
-  return setupRequest<SetupPreflight>('/preflight', token);
+export async function fetchSetupPreflight(
+  token: string,
+): Promise<SetupPreflight> {
+  return setupRequest<SetupPreflight>("/preflight", token);
 }
 
-export async function completeSetup(token: string, payload: SetupCompletePayload): Promise<SetupCompleteResult> {
-  return setupRequest<SetupCompleteResult>('/complete', token, {
-    method: 'POST',
+export async function completeSetup(
+  token: string,
+  payload: SetupCompletePayload,
+): Promise<SetupCompleteResult> {
+  return setupRequest<SetupCompleteResult>("/complete", token, {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }

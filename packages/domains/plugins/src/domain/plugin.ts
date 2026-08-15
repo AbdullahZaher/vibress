@@ -1,4 +1,4 @@
-export type PluginStatus = 'registered' | 'active' | 'inactive' | 'error';
+export type PluginStatus = "registered" | "active" | "inactive" | "error";
 
 export interface Plugin {
   id: string;
@@ -44,14 +44,27 @@ export interface PluginRepository {
   create(data: RegisterPluginData): Promise<Plugin>;
   findById(id: string): Promise<Plugin | null>;
   findByManifestId(manifestId: string): Promise<Plugin | null>;
-  updateStatus(id: string, status: PluginStatus, error?: string): Promise<Plugin>;
-  updateMetadata(id: string, data: Partial<RegisterPluginData>): Promise<Plugin>;
+  updateStatus(
+    id: string,
+    status: PluginStatus,
+    error?: string,
+  ): Promise<Plugin>;
+  updateMetadata(
+    id: string,
+    data: Partial<RegisterPluginData>,
+  ): Promise<Plugin>;
   list(): Promise<Plugin[]>;
   delete(id: string): Promise<void>;
 }
 
 export interface PluginSettingRepository {
-  set(pluginId: string, key: string, value: string | null, encryptedValue: string | null, isSecret: boolean): Promise<void>;
+  set(
+    pluginId: string,
+    key: string,
+    value: string | null,
+    encryptedValue: string | null,
+    isSecret: boolean,
+  ): Promise<void>;
   listForPlugin(pluginId: string): Promise<PluginSetting[]>;
   getSecret(pluginId: string, key: string): Promise<string | null>;
 }

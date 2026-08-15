@@ -1,8 +1,15 @@
-import React from 'react';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { X, Calendar, Tag as TagIcon, Sparkles, History, RotateCcw } from 'lucide-react';
+import React from "react";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import {
+  X,
+  Calendar,
+  Tag as TagIcon,
+  Sparkles,
+  History,
+  RotateCcw,
+} from "lucide-react";
 
 interface Tag {
   id: string;
@@ -69,11 +76,19 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40 transition-opacity" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40 transition-opacity"
+        onClick={onClose}
+      />
       <div className="fixed inset-y-0 right-0 w-80 bg-background border-l shadow-2xl z-50 flex flex-col overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background/95 backdrop-blur z-10">
           <h2 className="font-semibold text-sm">Post Settings</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -82,7 +97,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
           {/* Basic Meta */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">URL Slug</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                URL Slug
+              </label>
               <Input
                 type="text"
                 value={slug}
@@ -92,7 +109,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Excerpt</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Excerpt
+              </label>
               <textarea
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
@@ -113,10 +132,12 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                 return (
                   <Badge
                     key={tag.id}
-                    variant={isSelected ? 'default' : 'outline'}
+                    variant={isSelected ? "default" : "outline"}
                     onClick={() => {
                       if (isSelected) {
-                        setSelectedTagIds(selectedTagIds.filter((id) => id !== tag.id));
+                        setSelectedTagIds(
+                          selectedTagIds.filter((id) => id !== tag.id),
+                        );
                       } else {
                         setSelectedTagIds([...selectedTagIds, tag.id]);
                       }
@@ -136,7 +157,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
               <Sparkles className="h-4 w-4 text-primary" /> Meta Data
             </h3>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Meta Title</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Meta Title
+              </label>
               <Input
                 type="text"
                 value={metaTitle}
@@ -146,7 +169,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Meta Description</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Meta Description
+              </label>
               <textarea
                 value={metaDescription}
                 onChange={(e) => setMetaDescription(e.target.value)}
@@ -155,7 +180,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Canonical URL</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Canonical URL
+              </label>
               <Input
                 type="text"
                 value={canonicalUrl}
@@ -179,7 +206,12 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                   onChange={(e) => setScheduledAtStr(e.target.value)}
                   className="text-sm h-9"
                 />
-                <Button variant="outline" size="sm" onClick={handleSchedule} className="text-sm w-full">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSchedule}
+                  className="text-sm w-full"
+                >
                   Schedule
                 </Button>
               </div>
@@ -199,7 +231,9 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                     className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/20 text-xs"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold">Version #{rev.revisionNumber}</span>
+                      <span className="font-semibold">
+                        Version #{rev.revisionNumber}
+                      </span>
                       <span className="text-muted-foreground">
                         {new Date(rev.createdAt).toLocaleString()}
                       </span>

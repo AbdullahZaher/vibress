@@ -5,12 +5,12 @@
 `newsletters` holds durable newsletter definitions with stable keys and
 archival semantics (never hard-deleted — historical sends reference them).
 
-| Field | Notes |
-|---|---|
-| `key` | Stable identifier, unique, lowercase alphanumeric + hyphens |
-| `name` / `description` | Display metadata |
-| `sender_name` / `sender_email` / `reply_to` | Used on every send |
-| `status` | `active` / `archived` |
+| Field                                       | Notes                                                       |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| `key`                                       | Stable identifier, unique, lowercase alphanumeric + hyphens |
+| `name` / `description`                      | Display metadata                                            |
+| `sender_name` / `sender_email` / `reply_to` | Used on every send                                          |
+| `status`                                    | `active` / `archived`                                       |
 
 Validation: key syntax, name length, sender email format, and **control
 characters are rejected** in name/sender fields (header-injection guard at the
@@ -30,14 +30,14 @@ domain boundary; the SMTP adapter additionally strips CR/LF at send time).
 
 `newsletter_sends` snapshots everything needed for delivery:
 
-| Field | Notes |
-|---|---|
-| `subject`, `content`, `content_version` | Studio document snapshot (canonical JSON) |
-| `sender_name` / `sender_email` / `reply_to` | Snapshot from the newsletter |
-| `audience` | Snapshot of the audience definition (`all` / `paid` / `free`, product filter) |
-| `scheduled_at` | Durable schedule (DB, restart-safe) |
-| `status` | `draft` / `scheduled` / `sending` / `sent` / `failed` / `cancelled` |
-| counters | `total_recipients`, `sent_recipients`, `failed_recipients` |
+| Field                                       | Notes                                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `subject`, `content`, `content_version`     | Studio document snapshot (canonical JSON)                                     |
+| `sender_name` / `sender_email` / `reply_to` | Snapshot from the newsletter                                                  |
+| `audience`                                  | Snapshot of the audience definition (`all` / `paid` / `free`, product filter) |
+| `scheduled_at`                              | Durable schedule (DB, restart-safe)                                           |
+| `status`                                    | `draft` / `scheduled` / `sending` / `sent` / `failed` / `cancelled`           |
+| counters                                    | `total_recipients`, `sent_recipients`, `failed_recipients`                    |
 
 Delivery never depends on mutable source content — recipients and content are
 snapshotted when the send starts.
@@ -88,6 +88,7 @@ token = base64url(memberId:sendId) + "." + HMAC-SHA256(secret, "unsub:" + payloa
 
 Authorized staff (`newsletters.send`) can send test emails to explicit
 recipients. Test sends:
+
 - never mark a real send complete,
 - never mutate audience membership or recipient state,
 - are rate limited (10/min, 100/min in test),

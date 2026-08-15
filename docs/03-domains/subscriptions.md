@@ -10,23 +10,23 @@ Subscriptions are the canonical Vibress-owned membership state.
 
 ## Model
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | text | UUID |
-| `member_id` | text FK | |
-| `product_id` / `plan_id` | text FK | |
-| `provider` | text null | Null for free plans |
-| `provider_subscription_id` | text null | |
-| `provider_customer_id` | text null | |
-| `status` | see below | Canonical Vibress status |
-| `currency` / `amount_minor` | | Snapshot from the plan at creation |
-| `billing_interval` / `interval_count` | | Snapshot from the plan at creation |
-| `current_period_start` / `current_period_end` | timestamptz | |
-| `trial_start` / `trial_end` | timestamptz | |
-| `cancel_at_period_end` | boolean | |
-| `cancelled_at` / `ended_at` | timestamptz | |
-| `offer_id` | FK null | |
-| `provider_event_timestamp` | timestamptz | Out-of-order guard |
+| Field                                         | Type        | Notes                              |
+| --------------------------------------------- | ----------- | ---------------------------------- |
+| `id`                                          | text        | UUID                               |
+| `member_id`                                   | text FK     |                                    |
+| `product_id` / `plan_id`                      | text FK     |                                    |
+| `provider`                                    | text null   | Null for free plans                |
+| `provider_subscription_id`                    | text null   |                                    |
+| `provider_customer_id`                        | text null   |                                    |
+| `status`                                      | see below   | Canonical Vibress status           |
+| `currency` / `amount_minor`                   |             | Snapshot from the plan at creation |
+| `billing_interval` / `interval_count`         |             | Snapshot from the plan at creation |
+| `current_period_start` / `current_period_end` | timestamptz |                                    |
+| `trial_start` / `trial_end`                   | timestamptz |                                    |
+| `cancel_at_period_end`                        | boolean     |                                    |
+| `cancelled_at` / `ended_at`                   | timestamptz |                                    |
+| `offer_id`                                    | FK null     |                                    |
+| `provider_event_timestamp`                    | timestamptz | Out-of-order guard                 |
 
 ## Status Lifecycle
 

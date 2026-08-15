@@ -1,64 +1,76 @@
-import './tracing-init';
-import Fastify from 'fastify';
-import helmet from '@fastify/helmet';
-import cors from '@fastify/cors';
-import cookie from '@fastify/cookie';
-import rateLimit from '@fastify/rate-limit';
-import crypto from 'node:crypto';
-import multipart from '@fastify/multipart';
-import { getDbPool, closeDbPool, seedDatabase } from '@vibress/database';
-import { getRedisClient, closeRedisClient } from '@vibress/cache';
-import { authRoutes } from './routes/auth';
-import { adminRoutes } from './routes/admin';
-import { postRoutes } from './routes/posts';
-import { pageRoutes } from './routes/pages';
-import { tagRoutes } from './routes/tags';
-import { mediaRoutes } from './routes/media';
-import { storageRoutes } from './routes/storage';
-import { themeRoutes } from './routes/themes';
-import { memberRoutes } from './routes/members';
-import { adminMemberRoutes } from './routes/admin-members';
-import { publicContentRoutes } from './routes/content';
-import { memberBillingRoutes } from './routes/member-billing';
-import { adminBillingRoutes } from './routes/admin-billing';
-import { publicCatalogRoutes } from './routes/catalog';
-import { billingWebhookRoutes } from './routes/billing-webhooks';
-import { adminNewsletterRoutes } from './routes/admin-newsletters';
-import { memberNewsletterRoutes, publicUnsubscribeRoutes } from './routes/member-newsletters';
-import { emailWebhookRoutes } from './routes/email-webhooks';
-import { startWebhookEventBridge } from './webhook-event-bridge';
-import { startAsyncBridge } from './async-bridge';
-import { publicCommentRoutes, memberCommentRoutes } from './routes/comments';
-import { memberNotificationRoutes } from './routes/notifications';
-import { publicRecommendationRoutes, adminRecommendationRoutes, adminCommentModerationRoutes } from './routes/recommendations';
-import { adminIntegrationRoutes, machineApiRoutes } from './routes/platform';
-import { publicSearchRoutes, adminAnalyticsRoutes, adminSearchRoutes, adminAutomationRoutes } from './routes/intelligence';
-import { healthRoutes } from './routes/health';
-import { setupRoutes, ensureSetupTokenConfigured } from './routes/setup';
-import { analyticsRoutes } from './routes/analytics';
-import { analyticsCollectorRoutes } from './routes/analytics-public';
-import { setupService } from './services';
-import { mediaStreamRoutes } from './routes/media-stream';
-import { adminOperationsRoutes } from './routes/operations';
-import { storageService, themeService } from './services';
-import { getConfig } from '@vibress/config';
+import "./tracing-init";
+import Fastify from "fastify";
+import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
+import rateLimit from "@fastify/rate-limit";
+import crypto from "node:crypto";
+import multipart from "@fastify/multipart";
+import { getDbPool, closeDbPool, seedDatabase } from "@vibress/database";
+import { getRedisClient, closeRedisClient } from "@vibress/cache";
+import { authRoutes } from "./routes/auth";
+import { adminRoutes } from "./routes/admin";
+import { postRoutes } from "./routes/posts";
+import { pageRoutes } from "./routes/pages";
+import { tagRoutes } from "./routes/tags";
+import { mediaRoutes } from "./routes/media";
+import { storageRoutes } from "./routes/storage";
+import { themeRoutes } from "./routes/themes";
+import { memberRoutes } from "./routes/members";
+import { adminMemberRoutes } from "./routes/admin-members";
+import { publicContentRoutes } from "./routes/content";
+import { memberBillingRoutes } from "./routes/member-billing";
+import { adminBillingRoutes } from "./routes/admin-billing";
+import { publicCatalogRoutes } from "./routes/catalog";
+import { billingWebhookRoutes } from "./routes/billing-webhooks";
+import { adminNewsletterRoutes } from "./routes/admin-newsletters";
+import {
+  memberNewsletterRoutes,
+  publicUnsubscribeRoutes,
+} from "./routes/member-newsletters";
+import { emailWebhookRoutes } from "./routes/email-webhooks";
+import { startWebhookEventBridge } from "./webhook-event-bridge";
+import { startAsyncBridge } from "./async-bridge";
+import { publicCommentRoutes, memberCommentRoutes } from "./routes/comments";
+import { memberNotificationRoutes } from "./routes/notifications";
+import {
+  publicRecommendationRoutes,
+  adminRecommendationRoutes,
+  adminCommentModerationRoutes,
+} from "./routes/recommendations";
+import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
+import {
+  publicSearchRoutes,
+  adminAnalyticsRoutes,
+  adminSearchRoutes,
+  adminAutomationRoutes,
+} from "./routes/intelligence";
+import { healthRoutes } from "./routes/health";
+import { setupRoutes, ensureSetupTokenConfigured } from "./routes/setup";
+import { analyticsRoutes } from "./routes/analytics";
+import { analyticsCollectorRoutes } from "./routes/analytics-public";
+import { setupService } from "./services";
+import { mediaStreamRoutes } from "./routes/media-stream";
+import { adminOperationsRoutes } from "./routes/operations";
+import { storageService, themeService } from "./services";
+import { getConfig } from "@vibress/config";
 import {
   appLogger,
   recordHttpError,
   registerMetricsRoutes,
   registerTraceHooks,
   startObservabilityMonitors,
-} from './observability';
+} from "./observability";
 
 export const buildApp = () => {
   const config = getConfig();
   const fastify = Fastify({
     logger: false,
     bodyLimit: 524288000, // 500MB body limit to match max media upload capabilities
-    requestIdHeader: 'x-request-id',
+    requestIdHeader: "x-request-id",
     trustProxy: true,
     genReqId: function (req) {
-      return (req.headers['x-request-id'] as string) || crypto.randomUUID();
+      return (req.headers["x-request-id"] as string) || crypto.randomUUID();
     },
   });
 
@@ -77,9 +89,11 @@ export const buildApp = () => {
   fastify.register(rateLimit, {
     global: false, // Apply per route as configured
     errorResponseBuilder: (req, context) => {
-      const err = new Error(`Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`);
+      const err = new Error(
+        `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+      );
       (err as Error & { statusCode: number }).statusCode = 429;
-      (err as Error & { code: string }).code = 'TOO_MANY_REQUESTS';
+      (err as Error & { code: string }).code = "TOO_MANY_REQUESTS";
       (err as Error & { requestId: string }).requestId = req.id;
       return err;
     },
@@ -112,15 +126,21 @@ export const buildApp = () => {
   // Central error handler
   fastify.setErrorHandler(function (error, request, reply) {
     const errObj = error instanceof Error ? error : undefined;
-    appLogger.error('request failed', { requestId: request.id, method: request.method, path: request.url }, errObj);
+    appLogger.error(
+      "request failed",
+      { requestId: request.id, method: request.method, path: request.url },
+      errObj,
+    );
     const e = error as Error & { statusCode?: number; code?: string };
     const statusCode = e.statusCode || 500;
-    const errorCode = e.code || 'INTERNAL_ERROR';
+    const errorCode = e.code || "INTERNAL_ERROR";
     const isServerError = statusCode >= 500;
-    const responseCode = config.isProduction && isServerError ? 'INTERNAL_ERROR' : errorCode;
-    const message = config.isProduction && isServerError
-      ? 'Internal Server Error'
-      : e.message || 'Internal Server Error';
+    const responseCode =
+      config.isProduction && isServerError ? "INTERNAL_ERROR" : errorCode;
+    const message =
+      config.isProduction && isServerError
+        ? "Internal Server Error"
+        : e.message || "Internal Server Error";
     recordHttpError(statusCode, errorCode);
     reply.status(statusCode).send({
       errors: [
@@ -134,53 +154,55 @@ export const buildApp = () => {
   });
 
   fastify.register(healthRoutes);
-  fastify.register(setupRoutes, { prefix: '/api/setup/v1' });
-  fastify.register(analyticsRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(analyticsCollectorRoutes, { prefix: '/api/public/v1/analytics' });
+  fastify.register(setupRoutes, { prefix: "/api/setup/v1" });
+  fastify.register(analyticsRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(analyticsCollectorRoutes, {
+    prefix: "/api/public/v1/analytics",
+  });
   registerTraceHooks(fastify);
   registerMetricsRoutes(fastify);
 
   // Register Admin & Auth Routes
-  fastify.register(authRoutes, { prefix: '/api/admin/v1/auth' });
-  fastify.register(adminRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(postRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(pageRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(tagRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(mediaRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(storageRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(themeRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminMemberRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminBillingRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminNewsletterRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminRecommendationRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminCommentModerationRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminIntegrationRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminAnalyticsRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminSearchRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminAutomationRoutes, { prefix: '/api/admin/v1' });
-  fastify.register(adminOperationsRoutes, { prefix: '/api/admin/v1' });
+  fastify.register(authRoutes, { prefix: "/api/admin/v1/auth" });
+  fastify.register(adminRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(postRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(pageRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(tagRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(mediaRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(storageRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(themeRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminMemberRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminBillingRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminNewsletterRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminRecommendationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminAnalyticsRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminSearchRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminAutomationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminOperationsRoutes, { prefix: "/api/admin/v1" });
 
   // Register Member Routes
-  fastify.register(memberRoutes, { prefix: '/api/members/v1' });
-  fastify.register(memberBillingRoutes, { prefix: '/api/members/v1' });
-  fastify.register(memberNewsletterRoutes, { prefix: '/api/members/v1' });
-  fastify.register(memberCommentRoutes, { prefix: '/api/members/v1' });
-  fastify.register(memberNotificationRoutes, { prefix: '/api/members/v1' });
+  fastify.register(memberRoutes, { prefix: "/api/members/v1" });
+  fastify.register(memberBillingRoutes, { prefix: "/api/members/v1" });
+  fastify.register(memberNewsletterRoutes, { prefix: "/api/members/v1" });
+  fastify.register(memberCommentRoutes, { prefix: "/api/members/v1" });
+  fastify.register(memberNotificationRoutes, { prefix: "/api/members/v1" });
 
   // Register Public Content Routes
-  fastify.register(publicContentRoutes, { prefix: '/api/content/v1' });
-  fastify.register(publicCatalogRoutes, { prefix: '/api/content/v1' });
-  fastify.register(publicCommentRoutes, { prefix: '/api/content/v1' });
-  fastify.register(publicRecommendationRoutes, { prefix: '/api/content/v1' });
-  fastify.register(publicSearchRoutes, { prefix: '/api/content/v1' });
-  fastify.register(publicUnsubscribeRoutes, { prefix: '/api/public/v1' });
+  fastify.register(publicContentRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicCatalogRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicCommentRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicRecommendationRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicSearchRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicUnsubscribeRoutes, { prefix: "/api/public/v1" });
 
   // Machine API key surface (separate from staff/member sessions)
-  fastify.register(machineApiRoutes, { prefix: '/api/machine/v1' });
+  fastify.register(machineApiRoutes, { prefix: "/api/machine/v1" });
 
   // Register Billing Webhooks (signature-authenticated, NOT cookie auth)
-  fastify.register(billingWebhookRoutes, { prefix: '/api/webhooks/v1' });
-  fastify.register(emailWebhookRoutes, { prefix: '/api/webhooks/v1/email' });
+  fastify.register(billingWebhookRoutes, { prefix: "/api/webhooks/v1" });
+  fastify.register(emailWebhookRoutes, { prefix: "/api/webhooks/v1/email" });
 
   return fastify;
 };
@@ -206,9 +228,9 @@ const start = async () => {
     // seeded (dev users are automatically skipped in production)
     try {
       await seedDatabase();
-      appLogger.info('Seeded database roles, permissions, and staff users');
+      appLogger.info("Seeded database roles, permissions, and staff users");
     } catch (err) {
-      appLogger.error('Failed to seed database users', {}, err as Error);
+      appLogger.error("Failed to seed database users", {}, err as Error);
     }
 
     // Classify legacy databases as installed BEFORE accepting setup traffic:
@@ -216,7 +238,11 @@ const start = async () => {
     try {
       await setupService.classifyLegacyInstallation();
     } catch (err) {
-      appLogger.error('Failed to classify legacy installation state', {}, err as Error);
+      appLogger.error(
+        "Failed to classify legacy installation state",
+        {},
+        err as Error,
+      );
     }
 
     // Dev-only: print an ephemeral setup token when one is not configured.
@@ -226,14 +252,14 @@ const start = async () => {
     try {
       const active = await themeService.getActiveThemeConfiguration();
       if (!active) {
-        await themeService.activateTheme('vibress-default', null);
-        appLogger.info('Seeded default active theme (vibress-default)');
+        await themeService.activateTheme("vibress-default", null);
+        appLogger.info("Seeded default active theme (vibress-default)");
       }
     } catch (err) {
-      appLogger.error('Failed to seed active theme', {}, err as Error);
+      appLogger.error("Failed to seed active theme", {}, err as Error);
     }
 
-    await app.listen({ port, host: '0.0.0.0' });
+    await app.listen({ port, host: "0.0.0.0" });
     appLogger.info(`API listening on port ${port}`);
 
     // Graceful shutdown
@@ -244,18 +270,18 @@ const start = async () => {
         await app.close();
         await closeDbPool();
         await closeRedisClient();
-        const { tracingHandle } = await import('./tracing-init');
+        const { tracingHandle } = await import("./tracing-init");
         await tracingHandle.stop();
-        appLogger.info('Closed out remaining connections.');
+        appLogger.info("Closed out remaining connections.");
         process.exit(0);
       } catch (err) {
-        appLogger.error('Error during shutdown', {}, err as Error);
+        appLogger.error("Error during shutdown", {}, err as Error);
         process.exit(1);
       }
     };
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
   } catch (err) {
     console.error(err);
     process.exit(1);

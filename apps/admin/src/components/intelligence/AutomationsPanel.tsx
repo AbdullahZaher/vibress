@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
-import { AdminAutomation, createAutomationApi, activateAutomationApi, deactivateAutomationApi, runAutomationApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Cpu, Play } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  AdminAutomation,
+  createAutomationApi,
+  activateAutomationApi,
+  deactivateAutomationApi,
+  runAutomationApi,
+} from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Cpu, Play } from "lucide-react";
 
 interface AutomationsPanelProps {
   automations: AdminAutomation[];
@@ -14,12 +27,17 @@ interface AutomationsPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function AutomationsPanel({ automations, onError, onMessage, onChanged }: AutomationsPanelProps) {
-  const [autoKey, setAutoKey] = useState('');
-  const [autoName, setAutoName] = useState('');
-  const [autoTrigger] = useState('comment.created');
-  const [autoActionType] = useState('webhook');
-  const [autoActionUrl, setAutoActionUrl] = useState('');
+export function AutomationsPanel({
+  automations,
+  onError,
+  onMessage,
+  onChanged,
+}: AutomationsPanelProps) {
+  const [autoKey, setAutoKey] = useState("");
+  const [autoName, setAutoName] = useState("");
+  const [autoTrigger] = useState("comment.created");
+  const [autoActionType] = useState("webhook");
+  const [autoActionUrl, setAutoActionUrl] = useState("");
 
   const handleCreateAutomation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,35 +48,35 @@ export function AutomationsPanel({ automations, onError, onMessage, onChanged }:
         triggerEvent: autoTrigger,
         actions: [{ type: autoActionType, config: { url: autoActionUrl } }],
       });
-      setAutoKey('');
-      setAutoName('');
-      setAutoActionUrl('');
-      onMessage('Automation created');
+      setAutoKey("");
+      setAutoName("");
+      setAutoActionUrl("");
+      onMessage("Automation created");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleToggleAutomation = async (a: AdminAutomation) => {
     try {
-      if (a.status === 'active') {
+      if (a.status === "active") {
         await deactivateAutomationApi(a.id);
       } else {
         await activateAutomationApi(a.id);
       }
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleRunAutomationNow = async (id: string) => {
     try {
       await runAutomationApi(id);
-      onMessage('Automation test execution triggered');
+      onMessage("Automation test execution triggered");
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -73,18 +91,47 @@ export function AutomationsPanel({ automations, onError, onMessage, onChanged }:
         <CardContent>
           <form onSubmit={handleCreateAutomation} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Workflow Key</label>
-              <Input required value={autoKey} onChange={(e) => setAutoKey(e.target.value)} placeholder="auto-slack-notify" className="h-8 text-xs font-mono bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Workflow Key
+              </label>
+              <Input
+                required
+                value={autoKey}
+                onChange={(e) => setAutoKey(e.target.value)}
+                placeholder="auto-slack-notify"
+                className="h-8 text-xs font-mono bg-card border-border"
+              />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Workflow Name</label>
-              <Input required value={autoName} onChange={(e) => setAutoName(e.target.value)} placeholder="Slack Notification on Comment" className="h-8 text-xs bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Workflow Name
+              </label>
+              <Input
+                required
+                value={autoName}
+                onChange={(e) => setAutoName(e.target.value)}
+                placeholder="Slack Notification on Comment"
+                className="h-8 text-xs bg-card border-border"
+              />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Target Webhook URL</label>
-              <Input required type="url" value={autoActionUrl} onChange={(e) => setAutoActionUrl(e.target.value)} placeholder="https://hooks.slack.com/services/..." className="h-8 text-xs font-mono bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Target Webhook URL
+              </label>
+              <Input
+                required
+                type="url"
+                value={autoActionUrl}
+                onChange={(e) => setAutoActionUrl(e.target.value)}
+                placeholder="https://hooks.slack.com/services/..."
+                className="h-8 text-xs font-mono bg-card border-border"
+              />
             </div>
-            <Button type="submit" size="sm" className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2">
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+            >
               Create Automation
             </Button>
           </form>
@@ -104,22 +151,38 @@ export function AutomationsPanel({ automations, onError, onMessage, onChanged }:
           <TableBody>
             {automations.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="h-32 text-center text-xs text-muted-foreground"
+                >
                   No automated workflows created.
                 </TableCell>
               </TableRow>
             ) : (
               automations.map((a) => (
-                <TableRow key={a.id} className="hover:bg-muted/40 border-border">
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">{a.name}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{a.triggerEvent}</TableCell>
+                <TableRow
+                  key={a.id}
+                  className="hover:bg-muted/40 border-border"
+                >
+                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                    {a.name}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">
+                    {a.triggerEvent}
+                  </TableCell>
                   <TableCell>
-                    {a.status === 'active' ? (
-                      <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                    {a.status === "active" ? (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      >
                         Active
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border"
+                      >
                         Disabled
                       </Badge>
                     )}
@@ -132,7 +195,7 @@ export function AutomationsPanel({ automations, onError, onMessage, onChanged }:
                         onClick={() => handleToggleAutomation(a)}
                         className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
                       >
-                        {a.status === 'active' ? 'Deactivate' : 'Activate'}
+                        {a.status === "active" ? "Deactivate" : "Activate"}
                       </Button>
                       <Button
                         variant="ghost"

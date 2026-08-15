@@ -1,6 +1,16 @@
-import { getDb, emailRecipients, EmailRecipientRow, emailEvents, emailSuppressions, EmailEventRow, EmailSuppressionRow, providerEvents, ProviderEventRow } from '@vibress/database';
-import { eq, and, count, desc, sql } from 'drizzle-orm';
-import crypto from 'node:crypto';
+import {
+  getDb,
+  emailRecipients,
+  EmailRecipientRow,
+  emailEvents,
+  emailSuppressions,
+  EmailEventRow,
+  EmailSuppressionRow,
+  providerEvents,
+  ProviderEventRow,
+} from "@vibress/database";
+import { eq, and, count, desc, sql } from "drizzle-orm";
+import crypto from "node:crypto";
 import {
   EmailRecipientRepository,
   EmailEventRepository,
@@ -10,9 +20,12 @@ import {
   EmailEvent,
   SuppressionReason,
   EmailSuppression,
-} from '../domain/recipient';
-import { RecipientStatus } from '../domain/recipient-status';
-import { ProviderEventRecord, ProviderEventRepository } from '../application/email-service';
+} from "../domain/recipient";
+import { RecipientStatus } from "../domain/recipient-status";
+import {
+  ProviderEventRecord,
+  ProviderEventRepository,
+} from "../application/email-service";
 
 export class DrizzleEmailRecipientRepository implements EmailRecipientRepository {
   async createMany(rows: CreateRecipientData[]): Promise<number> {
@@ -25,12 +38,15 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
       memberId: r.memberId,
       email: r.email,
       name: r.name || null,
-      status: 'pending' as const,
+      status: "pending" as const,
       unsubscribeToken: r.unsubscribeToken,
       createdAt: now,
       updatedAt: now,
     }));
-    const result = await db.insert(emailRecipients).values(values).returning({ id: emailRecipients.id });
+    const result = await db
+      .insert(emailRecipients)
+      .values(values)
+      .returning({ id: emailRecipients.id });
     return result.length;
   }
 
@@ -39,14 +55,23 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
     const rows = await db
       .select()
       .from(emailRecipients)
-      .where(and(eq(emailRecipients.sendId, sendId), eq(emailRecipients.status, 'pending')))
+      .where(
+        and(
+          eq(emailRecipients.sendId, sendId),
+          eq(emailRecipients.status, "pending"),
+        ),
+      )
       .limit(limit);
     return rows.map((r) => this.mapToDomain(r));
   }
 
   async findById(id: string): Promise<EmailRecipient | null> {
     const db = getDb();
-    const rows = await db.select().from(emailRecipients).where(eq(emailRecipients.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(emailRecipients)
+      .where(eq(emailRecipients.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -54,12 +79,12 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
 
   async findByMessageId(messageId: string): Promise<EmailRecipient | null> {
     const db = getDb();
-    const normalized = messageId.trim().replace(/^<|>$/g, '');
+    const normalized = messageId.trim().replace(/^<|>$/g, "");
     const rows = await db
       .select()
       .from(emailRecipients)
       .where(
-        sql`${emailRecipients.providerMessageId} IS NOT NULL AND (${emailRecipients.providerMessageId} = ${messageId} OR ${emailRecipients.providerMessageId} = ${`<${normalized}>`})`
+        sql`${emailRecipients.providerMessageId} IS NOT NULL AND (${emailRecipients.providerMessageId} = ${messageId} OR ${emailRecipients.providerMessageId} = ${`<${normalized}>`})`,
       )
       .limit(1);
     const row = rows[0];
@@ -67,34 +92,60 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
     return this.mapToDomain(row);
   }
 
-  async findByEmailAndSend(email: string, sendId: string): Promise<EmailRecipient | null> {
+  async findByEmailAndSend(
+    email: string,
+    sendId: string,
+  ): Promise<EmailRecipient | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(emailRecipients)
-      .where(and(eq(emailRecipients.email, email), eq(emailRecipients.sendId, sendId)))
+      .where(
+        and(
+          eq(emailRecipients.email, email),
+          eq(emailRecipients.sendId, sendId),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async markSent(id: string, messageId: string, at: Date): Promise<EmailRecipient> {
+  async markSent(
+    id: string,
+    messageId: string,
+    at: Date,
+  ): Promise<EmailRecipient> {
     const db = getDb();
     const [row] = await db
       .update(emailRecipients)
-      .set({ status: 'sent', providerMessageId: messageId, sentAt: at, updatedAt: new Date() })
+      .set({
+        status: "sent",
+        providerMessageId: messageId,
+        sentAt: at,
+        updatedAt: new Date(),
+      })
       .where(eq(emailRecipients.id, id))
       .returning();
     if (!row) throw new Error(`Recipient not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async markFailed(id: string, error: string, attemptCount: number): Promise<EmailRecipient> {
+  async markFailed(
+    id: string,
+    error: string,
+    attemptCount: number,
+  ): Promise<EmailRecipient> {
     const db = getDb();
     const [row] = await db
       .update(emailRecipients)
-      .set({ status: 'failed', lastError: error.slice(0, 500), attemptCount, updatedAt: new Date() })
+      .set({
+        status: "failed",
+        lastError: error.slice(0, 500),
+        attemptCount,
+        updatedAt: new Date(),
+      })
       .where(eq(emailRecipients.id, id))
       .returning();
     if (!row) throw new Error(`Recipient not found: ${id}`);
@@ -105,7 +156,7 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
     const db = getDb();
     const [row] = await db
       .update(emailRecipients)
-      .set({ status: 'delivered', deliveredAt: at, updatedAt: new Date() })
+      .set({ status: "delivered", deliveredAt: at, updatedAt: new Date() })
       .where(eq(emailRecipients.id, id))
       .returning();
     if (!row) throw new Error(`Recipient not found: ${id}`);
@@ -194,7 +245,7 @@ export class DrizzleEmailEventRepository implements EmailEventRepository {
         createdAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to record email event');
+    if (!row) throw new Error("Failed to record email event");
     return this.mapToDomain(row);
   }
 
@@ -214,7 +265,13 @@ export class DrizzleEmailEventRepository implements EmailEventRepository {
 }
 
 export class DrizzleProviderEventRepository implements ProviderEventRepository {
-  async create(data: { id?: string | undefined; provider: string; providerEventId: string; eventType: string; payloadHash: string }): Promise<ProviderEventRecord> {
+  async create(data: {
+    id?: string | undefined;
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    payloadHash: string;
+  }): Promise<ProviderEventRecord> {
     const db = getDb();
     const [row] = await db
       .insert(providerEvents)
@@ -224,21 +281,29 @@ export class DrizzleProviderEventRepository implements ProviderEventRepository {
         providerEventId: data.providerEventId,
         eventType: data.eventType,
         payloadHash: data.payloadHash,
-        status: 'received',
+        status: "received",
         attemptCount: 0,
         receivedAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert provider event');
+    if (!row) throw new Error("Failed to insert provider event");
     return this.mapToDomain(row);
   }
 
-  async findByProviderEventId(provider: string, providerEventId: string): Promise<ProviderEventRecord | null> {
+  async findByProviderEventId(
+    provider: string,
+    providerEventId: string,
+  ): Promise<ProviderEventRecord | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(providerEvents)
-      .where(and(eq(providerEvents.provider, provider), eq(providerEvents.providerEventId, providerEventId)))
+      .where(
+        and(
+          eq(providerEvents.provider, provider),
+          eq(providerEvents.providerEventId, providerEventId),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -247,14 +312,21 @@ export class DrizzleProviderEventRepository implements ProviderEventRepository {
 
   async markProcessed(id: string, processedAt = new Date()): Promise<void> {
     const db = getDb();
-    await db.update(providerEvents).set({ status: 'processed', processedAt }).where(eq(providerEvents.id, id));
+    await db
+      .update(providerEvents)
+      .set({ status: "processed", processedAt })
+      .where(eq(providerEvents.id, id));
   }
 
-  async markFailed(id: string, error: string, attemptCount: number): Promise<void> {
+  async markFailed(
+    id: string,
+    error: string,
+    attemptCount: number,
+  ): Promise<void> {
     const db = getDb();
     await db
       .update(providerEvents)
-      .set({ status: 'failed', lastError: error.slice(0, 500), attemptCount })
+      .set({ status: "failed", lastError: error.slice(0, 500), attemptCount })
       .where(eq(providerEvents.id, id));
   }
 
@@ -300,21 +372,34 @@ export class DrizzleEmailSuppressionRepository implements EmailSuppressionReposi
 
   async isSuppressed(email: string): Promise<boolean> {
     const db = getDb();
-    const rows = await db.select({ id: emailSuppressions.id }).from(emailSuppressions).where(eq(emailSuppressions.email, email.trim().toLowerCase())).limit(1);
+    const rows = await db
+      .select({ id: emailSuppressions.id })
+      .from(emailSuppressions)
+      .where(eq(emailSuppressions.email, email.trim().toLowerCase()))
+      .limit(1);
     return rows.length > 0;
   }
 
   async findByEmail(email: string): Promise<EmailSuppression | null> {
     const db = getDb();
-    const rows = await db.select().from(emailSuppressions).where(eq(emailSuppressions.email, email.trim().toLowerCase())).limit(1);
+    const rows = await db
+      .select()
+      .from(emailSuppressions)
+      .where(eq(emailSuppressions.email, email.trim().toLowerCase()))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async list(limit = 50, offset = 0): Promise<{ suppressions: EmailSuppression[]; total: number }> {
+  async list(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ suppressions: EmailSuppression[]; total: number }> {
     const db = getDb();
-    const countRes = await db.select({ total: count() }).from(emailSuppressions);
+    const countRes = await db
+      .select({ total: count() })
+      .from(emailSuppressions);
     const rows = await db
       .select()
       .from(emailSuppressions)
@@ -331,7 +416,12 @@ export class DrizzleEmailSuppressionRepository implements EmailSuppressionReposi
     const db = getDb();
     await db
       .delete(emailSuppressions)
-      .where(and(eq(emailSuppressions.email, email.trim().toLowerCase()), eq(emailSuppressions.reason, reason)));
+      .where(
+        and(
+          eq(emailSuppressions.email, email.trim().toLowerCase()),
+          eq(emailSuppressions.reason, reason),
+        ),
+      );
   }
 
   private mapToDomain(row: EmailSuppressionRow): EmailSuppression {

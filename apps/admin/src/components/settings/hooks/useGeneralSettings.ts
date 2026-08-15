@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getStaffSettingsApi, updateSettingApi } from '../../../lib/api/operations';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getStaffSettingsApi,
+  updateSettingApi,
+} from "../../../lib/api/operations";
 
 export interface GeneralSettingsState {
   title: string;
@@ -12,13 +15,13 @@ export interface GeneralSettingsState {
 }
 
 const DEFAULT_STATE: GeneralSettingsState = {
-  title: 'Vibress',
-  tagline: '',
-  description: '',
-  locale: 'en',
-  timezone: 'UTC',
+  title: "Vibress",
+  tagline: "",
+  description: "",
+  locale: "en",
+  timezone: "UTC",
   isPrivate: false,
-  password: '',
+  password: "",
 };
 
 export function useGeneralSettings() {
@@ -33,30 +36,33 @@ export function useGeneralSettings() {
     setError(null);
     try {
       const res = await getStaffSettingsApi();
-      const siteNs = res.namespaces.find((n) => n.namespace === 'site');
-      const securityNs = res.namespaces.find((n) => n.namespace === 'security');
+      const siteNs = res.namespaces.find((n) => n.namespace === "site");
+      const securityNs = res.namespaces.find((n) => n.namespace === "security");
       const loaded: GeneralSettingsState = { ...DEFAULT_STATE };
 
       if (siteNs) {
         for (const s of siteNs.settings) {
-          if (s.key === 'title') loaded.title = String(s.value || '');
-          if (s.key === 'tagline') loaded.tagline = String(s.value || '');
-          if (s.key === 'description') loaded.description = String(s.value || '');
-          if (s.key === 'locale') loaded.locale = String(s.value || 'en');
-          if (s.key === 'timezone') loaded.timezone = String(s.value || 'UTC');
+          if (s.key === "title") loaded.title = String(s.value || "");
+          if (s.key === "tagline") loaded.tagline = String(s.value || "");
+          if (s.key === "description")
+            loaded.description = String(s.value || "");
+          if (s.key === "locale") loaded.locale = String(s.value || "en");
+          if (s.key === "timezone") loaded.timezone = String(s.value || "UTC");
         }
       }
 
       if (securityNs) {
         for (const s of securityNs.settings) {
-          if (s.key === 'isPrivate') loaded.isPrivate = Boolean(s.value);
+          if (s.key === "isPrivate") loaded.isPrivate = Boolean(s.value);
         }
       }
 
       setInitial(loaded);
       setDraft(loaded);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load general settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to load general settings",
+      );
     } finally {
       setLoading(false);
     }
@@ -66,9 +72,15 @@ export function useGeneralSettings() {
     fetchGeneralSettings();
   }, [fetchGeneralSettings]);
 
-  const updateField = useCallback(<K extends keyof GeneralSettingsState>(key: K, value: GeneralSettingsState[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const updateField = useCallback(
+    <K extends keyof GeneralSettingsState>(
+      key: K,
+      value: GeneralSettingsState[K],
+    ) => {
+      setDraft((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
 
   const dirtyKeys = useMemo(() => {
     const keys: (keyof GeneralSettingsState)[] = [];
@@ -89,21 +101,29 @@ export function useGeneralSettings() {
     try {
       const promises: Promise<unknown>[] = [];
       for (const k of dirtyKeys) {
-        if (['title', 'tagline', 'description', 'locale', 'timezone'].includes(k)) {
-          promises.push(updateSettingApi('site', k, draft[k]));
-        } else if (k === 'isPrivate') {
-          promises.push(updateSettingApi('security', 'isPrivate', draft.isPrivate));
-        } else if (k === 'password' && draft.password) {
-          promises.push(updateSettingApi('security', 'password', draft.password));
+        if (
+          ["title", "tagline", "description", "locale", "timezone"].includes(k)
+        ) {
+          promises.push(updateSettingApi("site", k, draft[k]));
+        } else if (k === "isPrivate") {
+          promises.push(
+            updateSettingApi("security", "isPrivate", draft.isPrivate),
+          );
+        } else if (k === "password" && draft.password) {
+          promises.push(
+            updateSettingApi("security", "password", draft.password),
+          );
         }
       }
       await Promise.all(promises);
-      const nextInitial = { ...draft, password: '' };
+      const nextInitial = { ...draft, password: "" };
       setInitial(nextInitial);
       setDraft(nextInitial);
       return true;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save general settings');
+      setError(
+        err instanceof Error ? err.message : "Failed to save general settings",
+      );
       return false;
     } finally {
       setSaving(false);

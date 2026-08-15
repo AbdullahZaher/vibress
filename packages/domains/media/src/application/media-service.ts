@@ -1,31 +1,34 @@
-import crypto from 'node:crypto';
-import { StorageRegistry } from '@vibress/storage-core';
-import { AuditRepository } from '@vibress/audit';
-import { MediaRepository, ListMediaFilter } from '../domain/repository';
+import crypto from "node:crypto";
+import { StorageRegistry } from "@vibress/storage-core";
+import { AuditRepository } from "@vibress/audit";
+import { MediaRepository, ListMediaFilter } from "../domain/repository";
 import {
   MediaAsset,
   MediaLimitsConfig,
   MediaReferenceSummary,
   UploadMediaInput,
-} from '../domain/asset';
-import { validateAndDetectFile } from '../domain/file-validator';
+} from "../domain/asset";
+import { validateAndDetectFile } from "../domain/file-validator";
 import {
   MediaInUseError,
   MediaNotFoundError,
   MediaStorageError,
   MediaUploadFailedError,
-} from '../domain/errors';
+} from "../domain/errors";
 
 export class MediaService {
   constructor(
     private mediaRepo: MediaRepository,
     private storageRegistry: StorageRegistry,
     private auditRepo?: AuditRepository,
-    private limitsConfig?: MediaLimitsConfig
+    private limitsConfig?: MediaLimitsConfig,
   ) {}
 
   resolveProviderForAsset(storageProviderName?: string | null) {
-    if (storageProviderName && this.storageRegistry.hasProvider(storageProviderName)) {
+    if (
+      storageProviderName &&
+      this.storageRegistry.hasProvider(storageProviderName)
+    ) {
       return this.storageRegistry.getProvider(storageProviderName);
     }
     return this.storageRegistry.getActiveProvider();
@@ -36,7 +39,10 @@ export class MediaService {
     return provider.getUrl(asset.storageKey);
   }
 
-  async uploadMedia(input: UploadMediaInput, actorId?: string): Promise<MediaAsset> {
+  async uploadMedia(
+    input: UploadMediaInput,
+    actorId?: string,
+  ): Promise<MediaAsset> {
     const validated = validateAndDetectFile(input, this.limitsConfig);
 
     const assetId = crypto.randomUUID();
@@ -87,8 +93,8 @@ export class MediaService {
       const uploader = actorId || input.uploadedBy || undefined;
       await this.auditRepo.record({
         actorUserId: uploader,
-        action: 'media.uploaded',
-        targetType: 'media',
+        action: "media.uploaded",
+        targetType: "media",
         targetId: asset.id,
         metadata: {
           mimeType: asset.mimeType,
@@ -110,19 +116,28 @@ export class MediaService {
     return asset;
   }
 
-  async listMedia(filter?: ListMediaFilter): Promise<{ items: MediaAsset[]; total: number }> {
+  async listMedia(
+    filter?: ListMediaFilter,
+  ): Promise<{ items: MediaAsset[]; total: number }> {
     return this.mediaRepo.list(filter);
   }
 
   async updateMediaMetadata(
     id: string,
-    updates: { displayName?: string | undefined; metadata?: Record<string, unknown> | undefined },
-    actorId?: string
+    updates: {
+      displayName?: string | undefined;
+      metadata?: Record<string, unknown> | undefined;
+    },
+    actorId?: string,
   ): Promise<MediaAsset> {
     await this.getMediaById(id);
 
-    const repoUpdate: { displayName?: string; metadata?: Record<string, unknown> } = {};
-    if (updates.displayName !== undefined) repoUpdate.displayName = updates.displayName;
+    const repoUpdate: {
+      displayName?: string;
+      metadata?: Record<string, unknown>;
+    } = {};
+    if (updates.displayName !== undefined)
+      repoUpdate.displayName = updates.displayName;
     if (updates.metadata !== undefined) repoUpdate.metadata = updates.metadata;
 
     const updated = await this.mediaRepo.update(id, repoUpdate);
@@ -130,8 +145,8 @@ export class MediaService {
     if (this.auditRepo && actorId) {
       await this.auditRepo.record({
         actorUserId: actorId,
-        action: 'media.updated',
-        targetType: 'media',
+        action: "media.updated",
+        targetType: "media",
         targetId: id,
         metadata: {
           displayName: updated.displayName,
@@ -158,8 +173,8 @@ export class MediaService {
     if (this.auditRepo && actorId) {
       await this.auditRepo.record({
         actorUserId: actorId,
-        action: 'media.deleted',
-        targetType: 'media',
+        action: "media.deleted",
+        targetType: "media",
         targetId: id,
         metadata: {
           displayName: asset.displayName,
@@ -178,8 +193,12 @@ export class MediaService {
   async updateResourceMediaReferences(
     resourceType: string,
     resourceId: string,
-    mediaIdsWithPaths: Array<{ mediaId: string; fieldPath?: string }>
+    mediaIdsWithPaths: Array<{ mediaId: string; fieldPath?: string }>,
   ): Promise<void> {
-    await this.mediaRepo.replaceResourceReferences(resourceType, resourceId, mediaIdsWithPaths);
+    await this.mediaRepo.replaceResourceReferences(
+      resourceType,
+      resourceId,
+      mediaIdsWithPaths,
+    );
   }
 }

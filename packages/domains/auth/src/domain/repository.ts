@@ -1,4 +1,4 @@
-import { Session, CreateSessionData } from './session';
+import { Session, CreateSessionData } from "./session";
 
 export interface SessionRepository {
   createSession(data: CreateSessionData): Promise<Session>;

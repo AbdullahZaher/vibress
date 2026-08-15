@@ -1,8 +1,13 @@
-import { getDb, plans, PlanRow } from '@vibress/database';
-import { eq, and, isNull } from 'drizzle-orm';
-import { PlanRepository } from '../domain/repository';
-import { Plan, CreatePlanData, UpdatePlanData, PlanStatus } from '../domain/plan';
-import crypto from 'node:crypto';
+import { getDb, plans, PlanRow } from "@vibress/database";
+import { eq, and, isNull } from "drizzle-orm";
+import { PlanRepository } from "../domain/repository";
+import {
+  Plan,
+  CreatePlanData,
+  UpdatePlanData,
+  PlanStatus,
+} from "../domain/plan";
+import crypto from "node:crypto";
 
 export class DrizzlePlanRepository implements PlanRepository {
   async create(data: CreatePlanData): Promise<Plan> {
@@ -17,19 +22,19 @@ export class DrizzlePlanRepository implements PlanRepository {
         key: data.key,
         name: data.name,
         description: data.description || null,
-        billingType: data.billingType || 'recurring',
+        billingType: data.billingType || "recurring",
         billingInterval: data.billingInterval || null,
         intervalCount: data.intervalCount || 1,
-        currency: data.currency || 'USD',
+        currency: data.currency || "USD",
         amountMinor: data.amountMinor || 0,
         trialDays: data.trialDays || 0,
-        status: data.status || 'active',
-        visibility: data.visibility || 'public',
+        status: data.status || "active",
+        visibility: data.visibility || "public",
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert plan');
+    if (!row) throw new Error("Failed to insert plan");
     return this.mapToDomain(row);
   }
 
@@ -43,7 +48,11 @@ export class DrizzlePlanRepository implements PlanRepository {
 
   async findByKey(productId: string, key: string): Promise<Plan | null> {
     const db = getDb();
-    const rows = await db.select().from(plans).where(and(eq(plans.productId, productId), eq(plans.key, key))).limit(1);
+    const rows = await db
+      .select()
+      .from(plans)
+      .where(and(eq(plans.productId, productId), eq(plans.key, key)))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -53,10 +62,16 @@ export class DrizzlePlanRepository implements PlanRepository {
     const db = getDb();
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) updatePayload.name = data.name;
-    if (data.description !== undefined) updatePayload.description = data.description;
-    if (data.visibility !== undefined) updatePayload.visibility = data.visibility;
+    if (data.description !== undefined)
+      updatePayload.description = data.description;
+    if (data.visibility !== undefined)
+      updatePayload.visibility = data.visibility;
 
-    const [row] = await db.update(plans).set(updatePayload).where(eq(plans.id, id)).returning();
+    const [row] = await db
+      .update(plans)
+      .set(updatePayload)
+      .where(eq(plans.id, id))
+      .returning();
     if (!row) throw new Error(`Plan not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -65,14 +80,21 @@ export class DrizzlePlanRepository implements PlanRepository {
     const db = getDb();
     const [row] = await db
       .update(plans)
-      .set({ status: 'archived', archivedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: "archived",
+        archivedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(plans.id, id))
       .returning();
     if (!row) throw new Error(`Plan not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async listByProduct(productId: string, filter?: { status?: PlanStatus; includeArchived?: boolean }): Promise<Plan[]> {
+  async listByProduct(
+    productId: string,
+    filter?: { status?: PlanStatus; includeArchived?: boolean },
+  ): Promise<Plan[]> {
     const db = getDb();
     const conditions = [eq(plans.productId, productId)];
     if (!filter?.includeArchived && filter?.status) {
@@ -80,7 +102,11 @@ export class DrizzlePlanRepository implements PlanRepository {
     } else if (!filter?.includeArchived && !filter?.status) {
       conditions.push(isNull(plans.archivedAt));
     }
-    const rows = await db.select().from(plans).where(and(...conditions)).orderBy(plans.createdAt);
+    const rows = await db
+      .select()
+      .from(plans)
+      .where(and(...conditions))
+      .orderBy(plans.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
 
@@ -89,7 +115,13 @@ export class DrizzlePlanRepository implements PlanRepository {
     const rows = await db
       .select()
       .from(plans)
-      .where(and(eq(plans.status, 'active'), eq(plans.visibility, 'public'), isNull(plans.archivedAt)))
+      .where(
+        and(
+          eq(plans.status, "active"),
+          eq(plans.visibility, "public"),
+          isNull(plans.archivedAt),
+        ),
+      )
       .orderBy(plans.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -101,14 +133,14 @@ export class DrizzlePlanRepository implements PlanRepository {
       key: row.key,
       name: row.name,
       description: row.description || null,
-      billingType: row.billingType as Plan['billingType'],
+      billingType: row.billingType as Plan["billingType"],
       billingInterval: row.billingInterval,
       intervalCount: row.intervalCount,
       currency: row.currency,
       amountMinor: row.amountMinor,
       trialDays: row.trialDays,
       status: row.status as PlanStatus,
-      visibility: row.visibility as Plan['visibility'],
+      visibility: row.visibility as Plan["visibility"],
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       archivedAt: row.archivedAt,

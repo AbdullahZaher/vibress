@@ -1,8 +1,19 @@
-import { getDb, mediaAssets, mediaReferences, MediaAssetRow, runInTransaction } from '@vibress/database';
-import { eq, and, isNull, ilike, count, desc, asc } from 'drizzle-orm';
-import { MediaRepository, ListMediaFilter } from '../domain/repository';
-import { AssetType, MediaAsset, MediaReference, MediaReferenceSummary } from '../domain/asset';
-import crypto from 'node:crypto';
+import {
+  getDb,
+  mediaAssets,
+  mediaReferences,
+  MediaAssetRow,
+  runInTransaction,
+} from "@vibress/database";
+import { eq, and, isNull, ilike, count, desc, asc } from "drizzle-orm";
+import { MediaRepository, ListMediaFilter } from "../domain/repository";
+import {
+  AssetType,
+  MediaAsset,
+  MediaReference,
+  MediaReferenceSummary,
+} from "../domain/asset";
+import crypto from "node:crypto";
 
 export class DrizzleMediaRepository implements MediaRepository {
   async findById(id: string): Promise<MediaAsset | null> {
@@ -23,7 +34,12 @@ export class DrizzleMediaRepository implements MediaRepository {
     const rows = await db
       .select()
       .from(mediaAssets)
-      .where(and(eq(mediaAssets.storageKey, storageKey), isNull(mediaAssets.deletedAt)))
+      .where(
+        and(
+          eq(mediaAssets.storageKey, storageKey),
+          isNull(mediaAssets.deletedAt),
+        ),
+      )
       .limit(1);
 
     const row = rows[0];
@@ -31,14 +47,16 @@ export class DrizzleMediaRepository implements MediaRepository {
     return this.mapToDomain(row);
   }
 
-  async create(data: Omit<MediaAsset, 'createdAt' | 'updatedAt'>): Promise<MediaAsset> {
+  async create(
+    data: Omit<MediaAsset, "createdAt" | "updatedAt">,
+  ): Promise<MediaAsset> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
 
     const insertPayload = {
       id,
-      storageProvider: data.storageProvider || 'local',
+      storageProvider: data.storageProvider || "local",
       storageKey: data.storageKey,
       originalFilename: data.originalFilename,
       displayName: data.displayName,
@@ -59,11 +77,18 @@ export class DrizzleMediaRepository implements MediaRepository {
 
     const rows = await db.insert(mediaAssets).values(insertPayload).returning();
     const row = rows[0];
-    if (!row) throw new Error('Failed to insert media asset record');
+    if (!row) throw new Error("Failed to insert media asset record");
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: { displayName?: string; metadata?: Record<string, unknown>; deletedAt?: Date | null }): Promise<MediaAsset> {
+  async update(
+    id: string,
+    data: {
+      displayName?: string;
+      metadata?: Record<string, unknown>;
+      deletedAt?: Date | null;
+    },
+  ): Promise<MediaAsset> {
     const db = getDb();
     const now = new Date();
 
@@ -71,7 +96,8 @@ export class DrizzleMediaRepository implements MediaRepository {
       updatedAt: now,
     };
 
-    if (data.displayName !== undefined) updatePayload.displayName = data.displayName;
+    if (data.displayName !== undefined)
+      updatePayload.displayName = data.displayName;
     if (data.metadata !== undefined) updatePayload.metadata = data.metadata;
     if (data.deletedAt !== undefined) updatePayload.deletedAt = data.deletedAt;
 
@@ -88,10 +114,15 @@ export class DrizzleMediaRepository implements MediaRepository {
 
   async delete(id: string): Promise<void> {
     const db = getDb();
-    await db.update(mediaAssets).set({ deletedAt: new Date() }).where(eq(mediaAssets.id, id));
+    await db
+      .update(mediaAssets)
+      .set({ deletedAt: new Date() })
+      .where(eq(mediaAssets.id, id));
   }
 
-  async list(filter: ListMediaFilter = {}): Promise<{ items: MediaAsset[]; total: number }> {
+  async list(
+    filter: ListMediaFilter = {},
+  ): Promise<{ items: MediaAsset[]; total: number }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
@@ -121,14 +152,26 @@ export class DrizzleMediaRepository implements MediaRepository {
 
     const totalCount = Number(countRes[0]?.totalCount || 0);
 
-    let orderDirection = filter.sortOrder === 'asc' ? asc(mediaAssets.createdAt) : desc(mediaAssets.createdAt);
+    let orderDirection =
+      filter.sortOrder === "asc"
+        ? asc(mediaAssets.createdAt)
+        : desc(mediaAssets.createdAt);
 
-    if (filter.sortBy === 'updatedAt') {
-      orderDirection = filter.sortOrder === 'asc' ? asc(mediaAssets.updatedAt) : desc(mediaAssets.updatedAt);
-    } else if (filter.sortBy === 'displayName') {
-      orderDirection = filter.sortOrder === 'asc' ? asc(mediaAssets.displayName) : desc(mediaAssets.displayName);
-    } else if (filter.sortBy === 'sizeBytes') {
-      orderDirection = filter.sortOrder === 'asc' ? asc(mediaAssets.sizeBytes) : desc(mediaAssets.sizeBytes);
+    if (filter.sortBy === "updatedAt") {
+      orderDirection =
+        filter.sortOrder === "asc"
+          ? asc(mediaAssets.updatedAt)
+          : desc(mediaAssets.updatedAt);
+    } else if (filter.sortBy === "displayName") {
+      orderDirection =
+        filter.sortOrder === "asc"
+          ? asc(mediaAssets.displayName)
+          : desc(mediaAssets.displayName);
+    } else if (filter.sortBy === "sizeBytes") {
+      orderDirection =
+        filter.sortOrder === "asc"
+          ? asc(mediaAssets.sizeBytes)
+          : desc(mediaAssets.sizeBytes);
     }
 
     const rows = await db
@@ -173,7 +216,9 @@ export class DrizzleMediaRepository implements MediaRepository {
     };
   }
 
-  async addReference(data: Omit<MediaReference, 'id' | 'createdAt'>): Promise<MediaReference> {
+  async addReference(
+    data: Omit<MediaReference, "id" | "createdAt">,
+  ): Promise<MediaReference> {
     const db = getDb();
     const id = crypto.randomUUID();
     const now = new Date();
@@ -183,7 +228,7 @@ export class DrizzleMediaRepository implements MediaRepository {
       mediaId: data.mediaId,
       resourceType: data.resourceType,
       resourceId: data.resourceId,
-      fieldPath: data.fieldPath || '',
+      fieldPath: data.fieldPath || "",
       createdAt: now,
     };
 
@@ -204,7 +249,11 @@ export class DrizzleMediaRepository implements MediaRepository {
     };
   }
 
-  async removeReferences(mediaId: string, resourceType: string, resourceId: string): Promise<void> {
+  async removeReferences(
+    mediaId: string,
+    resourceType: string,
+    resourceId: string,
+  ): Promise<void> {
     const db = getDb();
     await db
       .delete(mediaReferences)
@@ -212,15 +261,15 @@ export class DrizzleMediaRepository implements MediaRepository {
         and(
           eq(mediaReferences.mediaId, mediaId),
           eq(mediaReferences.resourceType, resourceType),
-          eq(mediaReferences.resourceId, resourceId)
-        )
+          eq(mediaReferences.resourceId, resourceId),
+        ),
       );
   }
 
   async replaceResourceReferences(
     resourceType: string,
     resourceId: string,
-    mediaIdsWithPaths: Array<{ mediaId: string; fieldPath?: string }>
+    mediaIdsWithPaths: Array<{ mediaId: string; fieldPath?: string }>,
   ): Promise<void> {
     await runInTransaction(async () => {
       const db = getDb();
@@ -229,8 +278,8 @@ export class DrizzleMediaRepository implements MediaRepository {
         .where(
           and(
             eq(mediaReferences.resourceType, resourceType),
-            eq(mediaReferences.resourceId, resourceId)
-          )
+            eq(mediaReferences.resourceId, resourceId),
+          ),
         );
 
       if (mediaIdsWithPaths.length > 0) {
@@ -240,11 +289,14 @@ export class DrizzleMediaRepository implements MediaRepository {
           mediaId: item.mediaId,
           resourceType,
           resourceId,
-          fieldPath: item.fieldPath || '',
+          fieldPath: item.fieldPath || "",
           createdAt: now,
         }));
 
-        await db.insert(mediaReferences).values(insertValues).onConflictDoNothing();
+        await db
+          .insert(mediaReferences)
+          .values(insertValues)
+          .onConflictDoNothing();
       }
     });
   }

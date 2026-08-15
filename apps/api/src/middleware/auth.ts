@@ -1,7 +1,7 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { authService } from '../services';
-import { hasPermission } from '@vibress/security';
-import { getConfig } from '@vibress/config';
+import { FastifyRequest, FastifyReply } from "fastify";
+import { authService } from "../services";
+import { hasPermission } from "@vibress/security";
+import { getConfig } from "@vibress/config";
 
 export const COOKIE_NAME = getConfig().cookies.staffSessionName;
 
@@ -10,20 +10,23 @@ export function extractSessionToken(req: FastifyRequest): string | null {
     return req.cookies[COOKIE_NAME] as string;
   }
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
     return authHeader.substring(7).trim();
   }
   return null;
 }
 
-export async function requireStaffSession(req: FastifyRequest, reply: FastifyReply) {
+export async function requireStaffSession(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
   const token = extractSessionToken(req);
   if (!token) {
     return reply.status(401).send({
       errors: [
         {
-          code: 'AUTHENTICATION_REQUIRED',
-          message: 'Authentication required',
+          code: "AUTHENTICATION_REQUIRED",
+          message: "Authentication required",
           requestId: req.id,
         },
       ],
@@ -35,8 +38,8 @@ export async function requireStaffSession(req: FastifyRequest, reply: FastifyRep
     return reply.status(401).send({
       errors: [
         {
-          code: 'AUTHENTICATION_REQUIRED',
-          message: 'Session is invalid or expired',
+          code: "AUTHENTICATION_REQUIRED",
+          message: "Session is invalid or expired",
           requestId: req.id,
         },
       ],
@@ -55,8 +58,8 @@ export function requirePermission(permissionKey: string) {
       return reply.status(401).send({
         errors: [
           {
-            code: 'AUTHENTICATION_REQUIRED',
-            message: 'Authentication required',
+            code: "AUTHENTICATION_REQUIRED",
+            message: "Authentication required",
             requestId: req.id,
           },
         ],
@@ -68,7 +71,7 @@ export function requirePermission(permissionKey: string) {
       return reply.status(403).send({
         errors: [
           {
-            code: 'PERMISSION_DENIED',
+            code: "PERMISSION_DENIED",
             message: `Permission denied: ${permissionKey} required`,
             requestId: req.id,
           },
@@ -80,7 +83,7 @@ export function requirePermission(permissionKey: string) {
 
 export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
   // Only check state-changing HTTP methods
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return;
   }
 
@@ -91,15 +94,17 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
     return;
   }
 
-  const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+  const origin =
+    req.headers.origin ||
+    (req.headers.referer ? new URL(req.headers.referer).origin : null);
   const allowedOrigins = getConfig().cors.staffAllowedOrigins;
 
   if (!origin || !allowedOrigins.includes(origin)) {
     return reply.status(403).send({
       errors: [
         {
-          code: 'INVALID_ORIGIN',
-          message: 'Invalid request origin',
+          code: "INVALID_ORIGIN",
+          message: "Invalid request origin",
           requestId: req.id,
         },
       ],

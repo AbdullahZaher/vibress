@@ -1,21 +1,25 @@
-import crypto from 'node:crypto';
-import { runInTransaction, getDb } from '@vibress/database';
-import { sql } from 'drizzle-orm';
-import { UsersService, DrizzleUserRepository, User } from '@vibress/users';
-import { RolesService, DrizzleRoleRepository } from '@vibress/roles';
-import { AuditService, DrizzleAuditRepository } from '@vibress/audit';
+import crypto from "node:crypto";
+import { runInTransaction, getDb } from "@vibress/database";
+import { sql } from "drizzle-orm";
+import { UsersService, DrizzleUserRepository, User } from "@vibress/users";
+import { RolesService, DrizzleRoleRepository } from "@vibress/roles";
+import { AuditService, DrizzleAuditRepository } from "@vibress/audit";
 import {
   DrizzleSettingRepository,
   SettingRepository,
   SETTING_NAMESPACES,
   SettingValueType,
   SettingClassification,
-} from '@vibress/settings';
-import { hashPassword, validatePasswordPolicy, hashToken } from '@vibress/security';
+} from "@vibress/settings";
+import {
+  hashPassword,
+  validatePasswordPolicy,
+  hashToken,
+} from "@vibress/security";
 import {
   InstallationRepository,
   SetupDomainError,
-} from '../domain/installation';
+} from "../domain/installation";
 
 export interface SetupSiteInput {
   name: string;
@@ -58,12 +62,19 @@ export function validateSetupLocale(locale: string): boolean {
   return LOCALE_RE.test(locale.trim());
 }
 
-export function isSetupTokenInsecure(token: string | null | undefined): boolean {
-  if (!token || typeof token !== 'string') return true;
+export function isSetupTokenInsecure(
+  token: string | null | undefined,
+): boolean {
+  if (!token || typeof token !== "string") return true;
   const trimmed = token.trim();
   if (trimmed.length < 16) return true;
   const lower = trimmed.toLowerCase();
-  return lower.includes('change-me') || lower.includes('changeme') || lower === 'dev' || lower === 'development';
+  return (
+    lower.includes("change-me") ||
+    lower.includes("changeme") ||
+    lower === "dev" ||
+    lower === "development"
+  );
 }
 
 /**
@@ -71,14 +82,17 @@ export function isSetupTokenInsecure(token: string | null | undefined): boolean 
  * secret. Both sides are SHA-256-hashed to equal length before comparison,
  * reusing the platform token primitives.
  */
-export function setupTokenMatches(presented: string, configured: string): boolean {
-  if (typeof presented !== 'string' || typeof configured !== 'string') return false;
-  const a = Buffer.from(hashToken(presented), 'hex');
-  const b = Buffer.from(hashToken(configured), 'hex');
+export function setupTokenMatches(
+  presented: string,
+  configured: string,
+): boolean {
+  if (typeof presented !== "string" || typeof configured !== "string")
+    return false;
+  const a = Buffer.from(hashToken(presented), "hex");
+  const b = Buffer.from(hashToken(configured), "hex");
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
-
 
 export class SetupService {
   private userRepo = new DrizzleUserRepository();
@@ -92,12 +106,14 @@ export class SetupService {
     settingsRepo?: SettingRepository,
     usersService?: UsersService,
     rolesService?: RolesService,
-    auditService?: AuditService
+    auditService?: AuditService,
   ) {
     this.settingsRepo = settingsRepo ?? new DrizzleSettingRepository();
     this.usersService = usersService ?? new UsersService(this.userRepo);
-    this.rolesService = rolesService ?? new RolesService(new DrizzleRoleRepository());
-    this.auditService = auditService ?? new AuditService(new DrizzleAuditRepository());
+    this.rolesService =
+      rolesService ?? new RolesService(new DrizzleRoleRepository());
+    this.auditService =
+      auditService ?? new AuditService(new DrizzleAuditRepository());
   }
 
   /** Minimal, non-locking read for the public status endpoint. */
@@ -115,7 +131,11 @@ export class SetupService {
    * Server-side readiness used by the setup preflight. Returns booleans only
    * — never connection details, credentials, or stack traces.
    */
-  async getReadiness(): Promise<{ database: boolean; redis: boolean; configuration: boolean }> {
+  async getReadiness(): Promise<{
+    database: boolean;
+    redis: boolean;
+    configuration: boolean;
+  }> {
     const database = await this.checkDatabase();
     const redis = await this.checkRedis();
     const configuration = true; // config was already parsed at boot (fail-closed in production)
@@ -133,9 +153,9 @@ export class SetupService {
 
   private async checkRedis(): Promise<boolean> {
     try {
-      const { getRedisClient } = await import('@vibress/cache');
+      const { getRedisClient } = await import("@vibress/cache");
       const pong = await getRedisClient().ping();
-      return pong === 'PONG';
+      return pong === "PONG";
     } catch {
       return false;
     }
@@ -153,17 +173,24 @@ export class SetupService {
       if (!record || record.installed) return;
 
       const signals = await this.installationRepo.countLegacySignals();
-      const hasSignal = signals.activeOwners > 0 || signals.siteSettings > 0 || signals.posts > 0 || signals.pages > 0;
+      const hasSignal =
+        signals.activeOwners > 0 ||
+        signals.siteSettings > 0 ||
+        signals.posts > 0 ||
+        signals.pages > 0;
       if (!hasSignal) return;
 
-      await this.installationRepo.markInstalled({ version: null, source: 'legacy_backfill' });
+      await this.installationRepo.markInstalled({
+        version: null,
+        source: "legacy_backfill",
+      });
       await this.auditService.record({
         actorUserId: null,
-        action: 'setup.backfilled',
-        targetType: 'installation',
-        targetId: 'singleton',
+        action: "setup.backfilled",
+        targetType: "installation",
+        targetId: "singleton",
         metadata: {
-          installationSource: 'legacy_backfill',
+          installationSource: "legacy_backfill",
           signals: {
             activeOwners: signals.activeOwners,
             siteSettings: signals.siteSettings,
@@ -183,28 +210,43 @@ export class SetupService {
    * back everything — never "owner created but not installed", never
    * "installed but no owner".
    */
-  async completeSetup(input: SetupCompleteInput, context: SetupContext): Promise<SetupCompleteResult> {
+  async completeSetup(
+    input: SetupCompleteInput,
+    context: SetupContext,
+  ): Promise<SetupCompleteResult> {
     return runInTransaction(async () => {
       const record = await this.installationRepo.getSingletonForUpdate();
       if (!record) {
-        throw new SetupDomainError('INSTALLATION_NOT_FOUND', 'Installation state is missing; run database migrations first');
+        throw new SetupDomainError(
+          "INSTALLATION_NOT_FOUND",
+          "Installation state is missing; run database migrations first",
+        );
       }
       if (record.installed) {
-        throw new SetupDomainError('SETUP_ALREADY_COMPLETED', 'Setup has already been completed');
+        throw new SetupDomainError(
+          "SETUP_ALREADY_COMPLETED",
+          "Setup has already been completed",
+        );
       }
 
       const email = input.owner.email.trim().toLowerCase();
       const siteName = input.site.name.trim();
       if (!siteName) {
-        throw new SetupDomainError('INVALID_SITE_SETTINGS', 'Site name is required');
+        throw new SetupDomainError(
+          "INVALID_SITE_SETTINGS",
+          "Site name is required",
+        );
       }
       if (!validateSetupLocale(input.site.locale)) {
-        throw new SetupDomainError('INVALID_SITE_SETTINGS', 'Invalid locale');
+        throw new SetupDomainError("INVALID_SITE_SETTINGS", "Invalid locale");
       }
 
       const passValidation = validatePasswordPolicy(input.owner.password);
       if (!passValidation.valid) {
-        throw new SetupDomainError('INVALID_PASSWORD', passValidation.reason || 'Invalid password');
+        throw new SetupDomainError(
+          "INVALID_PASSWORD",
+          passValidation.reason || "Invalid password",
+        );
       }
 
       const passwordHash = await hashPassword(input.owner.password);
@@ -213,12 +255,15 @@ export class SetupService {
         email,
         name: input.owner.name.trim(),
         passwordHash,
-        status: 'active',
+        status: "active",
       });
 
-      const ownerRole = await this.rolesService.findByKey('owner');
+      const ownerRole = await this.rolesService.findByKey("owner");
       if (!ownerRole) {
-        throw new SetupDomainError('OWNER_ROLE_MISSING', 'Owner role not found in system roles');
+        throw new SetupDomainError(
+          "OWNER_ROLE_MISSING",
+          "Owner role not found in system roles",
+        );
       }
       await this.rolesService.assignRoleToUser(user.id, ownerRole.id);
 
@@ -226,14 +271,14 @@ export class SetupService {
 
       await this.auditService.record({
         actorUserId: user.id,
-        action: 'setup.completed',
-        targetType: 'installation',
-        targetId: 'singleton',
+        action: "setup.completed",
+        targetType: "installation",
+        targetId: "singleton",
         ipAddress: context.ipAddress ?? undefined,
         userAgent: context.userAgent ?? undefined,
         requestId: context.requestId,
         metadata: {
-          installationSource: 'fresh',
+          installationSource: "fresh",
           applicationVersion: context.applicationVersion,
           ownerUserId: user.id,
         },
@@ -241,27 +286,61 @@ export class SetupService {
 
       await this.installationRepo.markInstalled({
         version: context.applicationVersion || null,
-        source: 'fresh',
+        source: "fresh",
       });
 
-      return { user, roles: ['owner'] };
+      return { user, roles: ["owner"] };
     });
   }
 
-  private async writeSiteSettings(actorId: string, site: SetupSiteInput): Promise<void> {
-    const siteNamespace = SETTING_NAMESPACES.find((ns) => ns.namespace === 'site');
+  private async writeSiteSettings(
+    actorId: string,
+    site: SetupSiteInput,
+  ): Promise<void> {
+    const siteNamespace = SETTING_NAMESPACES.find(
+      (ns) => ns.namespace === "site",
+    );
     if (!siteNamespace) {
-      throw new SetupDomainError('INVALID_SITE_SETTINGS', 'Site settings namespace is not defined');
+      throw new SetupDomainError(
+        "INVALID_SITE_SETTINGS",
+        "Site settings namespace is not defined",
+      );
     }
-    const defOf = (key: string) => siteNamespace.settings.find((s) => s.key === key);
+    const defOf = (key: string) =>
+      siteNamespace.settings.find((s) => s.key === key);
 
-    const entries: Array<{ key: string; value: unknown; valueType: SettingValueType; classification: SettingClassification }> = [
-      { key: 'title', value: site.name, valueType: 'string', classification: 'public' },
-      { key: 'description', value: site.description ?? '', valueType: 'string', classification: 'public' },
-      { key: 'locale', value: site.locale || 'en', valueType: 'string', classification: 'public' },
+    const entries: Array<{
+      key: string;
+      value: unknown;
+      valueType: SettingValueType;
+      classification: SettingClassification;
+    }> = [
+      {
+        key: "title",
+        value: site.name,
+        valueType: "string",
+        classification: "public",
+      },
+      {
+        key: "description",
+        value: site.description ?? "",
+        valueType: "string",
+        classification: "public",
+      },
+      {
+        key: "locale",
+        value: site.locale || "en",
+        valueType: "string",
+        classification: "public",
+      },
     ];
     if (site.tagline) {
-      entries.push({ key: 'tagline', value: site.tagline, valueType: 'string', classification: 'public' });
+      entries.push({
+        key: "tagline",
+        value: site.tagline,
+        valueType: "string",
+        classification: "public",
+      });
     }
 
     for (const entry of entries) {
@@ -269,10 +348,14 @@ export class SetupService {
       if (!def) continue; // unknown key — namespace doesn't define it; skip
       if (def.validate) {
         const error = def.validate(entry.value);
-        if (error) throw new SetupDomainError('INVALID_SITE_SETTINGS', `${entry.key}: ${error}`);
+        if (error)
+          throw new SetupDomainError(
+            "INVALID_SITE_SETTINGS",
+            `${entry.key}: ${error}`,
+          );
       }
       await this.settingsRepo.set({
-        namespace: 'site',
+        namespace: "site",
         key: entry.key,
         value: entry.value,
         valueType: entry.valueType,

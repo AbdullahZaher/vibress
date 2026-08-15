@@ -1,10 +1,27 @@
-import { getDb, billingWebhookEvents, billingEvents, BillingWebhookEventRow, BillingEventRow } from '@vibress/database';
-import { eq, and, desc } from 'drizzle-orm';
-import { BillingWebhookEventRepository, BillingEventRepository, BillingWebhookEvent, BillingEvent } from '../domain/webhook-events';
-import crypto from 'node:crypto';
+import {
+  getDb,
+  billingWebhookEvents,
+  billingEvents,
+  BillingWebhookEventRow,
+  BillingEventRow,
+} from "@vibress/database";
+import { eq, and, desc } from "drizzle-orm";
+import {
+  BillingWebhookEventRepository,
+  BillingEventRepository,
+  BillingWebhookEvent,
+  BillingEvent,
+} from "../domain/webhook-events";
+import crypto from "node:crypto";
 
 export class DrizzleBillingWebhookEventRepository implements BillingWebhookEventRepository {
-  async create(data: { id?: string | undefined; provider: string; providerEventId: string; eventType: string; payloadHash: string }): Promise<BillingWebhookEvent> {
+  async create(data: {
+    id?: string | undefined;
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    payloadHash: string;
+  }): Promise<BillingWebhookEvent> {
     const db = getDb();
     const [row] = await db
       .insert(billingWebhookEvents)
@@ -14,21 +31,29 @@ export class DrizzleBillingWebhookEventRepository implements BillingWebhookEvent
         providerEventId: data.providerEventId,
         eventType: data.eventType,
         payloadHash: data.payloadHash,
-        status: 'received',
+        status: "received",
         attemptCount: 0,
         receivedAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert webhook event');
+    if (!row) throw new Error("Failed to insert webhook event");
     return this.mapToDomain(row);
   }
 
-  async findByProviderEventId(provider: string, providerEventId: string): Promise<BillingWebhookEvent | null> {
+  async findByProviderEventId(
+    provider: string,
+    providerEventId: string,
+  ): Promise<BillingWebhookEvent | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(billingWebhookEvents)
-      .where(and(eq(billingWebhookEvents.provider, provider), eq(billingWebhookEvents.providerEventId, providerEventId)))
+      .where(
+        and(
+          eq(billingWebhookEvents.provider, provider),
+          eq(billingWebhookEvents.providerEventId, providerEventId),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -37,14 +62,27 @@ export class DrizzleBillingWebhookEventRepository implements BillingWebhookEvent
 
   async markProcessed(id: string, processedAt = new Date()): Promise<void> {
     const db = getDb();
-    await db.update(billingWebhookEvents).set({ status: 'processed', processedAt }).where(eq(billingWebhookEvents.id, id));
+    await db
+      .update(billingWebhookEvents)
+      .set({ status: "processed", processedAt })
+      .where(eq(billingWebhookEvents.id, id));
   }
 
-  async markFailed(id: string, error: string, attemptCount?: number): Promise<void> {
+  async markFailed(
+    id: string,
+    error: string,
+    attemptCount?: number,
+  ): Promise<void> {
     const db = getDb();
-    const updatePayload: Record<string, unknown> = { status: 'failed', lastError: error.slice(0, 500) };
+    const updatePayload: Record<string, unknown> = {
+      status: "failed",
+      lastError: error.slice(0, 500),
+    };
     if (attemptCount !== undefined) updatePayload.attemptCount = attemptCount;
-    await db.update(billingWebhookEvents).set(updatePayload).where(eq(billingWebhookEvents.id, id));
+    await db
+      .update(billingWebhookEvents)
+      .set(updatePayload)
+      .where(eq(billingWebhookEvents.id, id));
   }
 
   async listPending(limit = 50): Promise<BillingWebhookEvent[]> {
@@ -52,7 +90,7 @@ export class DrizzleBillingWebhookEventRepository implements BillingWebhookEvent
     const rows = await db
       .select()
       .from(billingWebhookEvents)
-      .where(eq(billingWebhookEvents.status, 'received'))
+      .where(eq(billingWebhookEvents.status, "received"))
       .orderBy(billingWebhookEvents.receivedAt)
       .limit(limit);
     return rows.map((r) => this.mapToDomain(r));
@@ -98,11 +136,14 @@ export class DrizzleBillingEventRepository implements BillingEventRepository {
         createdAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to record billing event');
+    if (!row) throw new Error("Failed to record billing event");
     return this.mapToDomain(row);
   }
 
-  async listForSubscription(subscriptionId: string, limit = 50): Promise<BillingEvent[]> {
+  async listForSubscription(
+    subscriptionId: string,
+    limit = 50,
+  ): Promise<BillingEvent[]> {
     const db = getDb();
     const rows = await db
       .select()

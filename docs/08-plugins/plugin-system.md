@@ -16,15 +16,15 @@ A future marketplace/sandbox is explicitly out of scope.
 
 Versioned manifest validated before any state is written:
 
-| Field | Notes |
-|---|---|
-| `id` | Stable identifier, lowercase alphanumeric + hyphens |
-| `name` / `version` | Display + semver |
+| Field               | Notes                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `id`                | Stable identifier, lowercase alphanumeric + hyphens                                        |
+| `name` / `version`  | Display + semver                                                                           |
 | `vibressApiVersion` | Must equal the SDK version (`@vibress/plugin-sdk`); incompatible versions are **rejected** |
-| `entrypoint` | Module entry within the plugin package |
-| `capabilities` | Explicit capability list — unknown capabilities are **rejected** |
-| `settingsSchema` | Declarative settings (incl. `secret: true` flags) |
-| `hooks` | Approved hook names |
+| `entrypoint`        | Module entry within the plugin package                                                     |
+| `capabilities`      | Explicit capability list — unknown capabilities are **rejected**                           |
+| `settingsSchema`    | Declarative settings (incl. `secret: true` flags)                                          |
+| `hooks`             | Approved hook names                                                                        |
 
 Supported capabilities (v1): `events.subscribe`, `webhooks.register`,
 `storage.provider`, `content.read`, `admin.navigation`,

@@ -4,7 +4,7 @@ import {
   QUEUE_DEFAULTS,
   EmailDeliveryJob,
   getBullMqRedisConnection,
-} from '@vibress/queue';
+} from "@vibress/queue";
 
 export const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
 export type { EmailDeliveryJob };

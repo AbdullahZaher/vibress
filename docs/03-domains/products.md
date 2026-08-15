@@ -5,16 +5,16 @@ or more plans and optionally references offers.
 
 ## Model
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | text | UUID |
-| `key` | text | Stable identifier, e.g. `premium`, `supporter`, `business` |
-| `name` | text | Display name (not an identifier) |
-| `description` | text null | |
-| `status` | `active` / `archived` | |
-| `visibility` | `public` / `private` | |
-| `created_at` / `updated_at` | timestamptz | |
-| `archived_at` | timestamptz null | |
+| Field                       | Type                  | Notes                                                      |
+| --------------------------- | --------------------- | ---------------------------------------------------------- |
+| `id`                        | text                  | UUID                                                       |
+| `key`                       | text                  | Stable identifier, e.g. `premium`, `supporter`, `business` |
+| `name`                      | text                  | Display name (not an identifier)                           |
+| `description`               | text null             |                                                            |
+| `status`                    | `active` / `archived` |                                                            |
+| `visibility`                | `public` / `private`  |                                                            |
+| `created_at` / `updated_at` | timestamptz           |                                                            |
+| `archived_at`               | timestamptz null      |                                                            |
 
 ## Rules
 

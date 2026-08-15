@@ -1,7 +1,8 @@
-export type SendStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'cancelled';
+export type SendStatus =
+  "draft" | "scheduled" | "sending" | "sent" | "failed" | "cancelled";
 
 export interface AudienceDefinition {
-  filter: 'all' | 'paid' | 'free';
+  filter: "all" | "paid" | "free";
   productId: string | null;
   planId: string | null;
 }
@@ -47,7 +48,16 @@ export interface CreateSendData {
 export interface SendRepository {
   create(data: CreateSendData): Promise<NewsletterSend>;
   findById(id: string): Promise<NewsletterSend | null>;
-  updateStatus(id: string, status: SendStatus, patch?: Partial<NewsletterSend>): Promise<NewsletterSend>;
-  list(filter?: { status?: SendStatus; newsletterId?: string; limit?: number; offset?: number }): Promise<{ sends: NewsletterSend[]; total: number }>;
+  updateStatus(
+    id: string,
+    status: SendStatus,
+    patch?: Partial<NewsletterSend>,
+  ): Promise<NewsletterSend>;
+  list(filter?: {
+    status?: SendStatus;
+    newsletterId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ sends: NewsletterSend[]; total: number }>;
   findDueScheduled(now: Date, limit: number): Promise<NewsletterSend[]>;
 }

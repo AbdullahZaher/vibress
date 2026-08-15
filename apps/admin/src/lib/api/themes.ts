@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest } from "./client";
 
 export interface ApiThemeManifest {
   id: string;
@@ -18,7 +18,7 @@ export interface ApiThemeSummary {
 }
 
 export interface ApiThemeSettingDefinition {
-  type: 'string' | 'boolean' | 'number' | 'color' | 'select';
+  type: "string" | "boolean" | "number" | "color" | "select";
   default?: unknown;
   min?: number;
   max?: number;
@@ -34,24 +34,36 @@ export interface ApiActiveTheme {
 }
 
 export async function listThemesApi(): Promise<{ themes: ApiThemeSummary[] }> {
-  return apiRequest('/themes');
+  return apiRequest("/themes");
 }
 
-export async function getActiveThemeApi(): Promise<{ themeId: string; themeVersion: string; settings: Record<string, unknown>; settingsSchemaVersion: number }> {
-  return apiRequest('/themes/active');
+export async function getActiveThemeApi(): Promise<{
+  themeId: string;
+  themeVersion: string;
+  settings: Record<string, unknown>;
+  settingsSchemaVersion: number;
+}> {
+  return apiRequest("/themes/active");
 }
 
-export async function activateThemeApi(id: string): Promise<{ theme: ApiActiveTheme }> {
-  return apiRequest(`/themes/${id}/activate`, { method: 'POST' });
+export async function activateThemeApi(
+  id: string,
+): Promise<{ theme: ApiActiveTheme }> {
+  return apiRequest(`/themes/${id}/activate`, { method: "POST" });
 }
 
-export async function updateThemeSettingsApi(id: string, settings: Record<string, unknown>): Promise<{ theme: ApiActiveTheme }> {
+export async function updateThemeSettingsApi(
+  id: string,
+  settings: Record<string, unknown>,
+): Promise<{ theme: ApiActiveTheme }> {
   return apiRequest(`/themes/${id}/settings`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(settings),
   });
 }
 
-export async function createThemePreviewApi(id: string): Promise<{ previewToken: string; expiresAt: string; themeId: string }> {
-  return apiRequest(`/themes/${id}/preview`, { method: 'POST' });
+export async function createThemePreviewApi(
+  id: string,
+): Promise<{ previewToken: string; expiresAt: string; themeId: string }> {
+  return apiRequest(`/themes/${id}/preview`, { method: "POST" });
 }

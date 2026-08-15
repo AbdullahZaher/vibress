@@ -1,6 +1,6 @@
-import React from 'react';
-import { Button } from '../ui/button';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React from "react";
+import { Button } from "../ui/button";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export interface SettingsCardRowProps {
   icon?: React.ReactNode | undefined;
@@ -8,7 +8,8 @@ export interface SettingsCardRowProps {
   description?: string | undefined;
   currentValue?: React.ReactNode | undefined;
   actionLabel?: string | undefined;
-  actionVariant?: ('default' | 'outline' | 'ghost' | 'secondary' | 'destructive') | undefined;
+  actionVariant?:
+    ("default" | "outline" | "ghost" | "secondary" | "destructive") | undefined;
   isExpanded?: boolean | undefined;
   onAction?: (() => void) | undefined;
   disabled?: boolean | undefined;
@@ -19,8 +20,8 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
   title,
   description,
   currentValue,
-  actionLabel = 'Edit',
-  actionVariant = 'outline',
+  actionLabel = "Edit",
+  actionVariant = "outline",
   isExpanded,
   onAction,
   disabled = false,
@@ -34,9 +35,13 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
           </div>
         )}
         <div className="space-y-0.5">
-          <h4 className="text-sm font-semibold text-foreground tracking-tight">{title}</h4>
+          <h4 className="text-sm font-semibold text-foreground tracking-tight">
+            {title}
+          </h4>
           {description && (
-            <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {description}
+            </p>
           )}
         </div>
       </div>
@@ -58,9 +63,12 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
             className="h-8 text-xs font-semibold px-3 cursor-pointer shrink-0 gap-1.5 transition-all bg-card/80 hover:bg-muted/80 border-border/80 text-foreground"
           >
             <span>{actionLabel}</span>
-            {isExpanded !== undefined && (
-              isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-            )}
+            {isExpanded !== undefined &&
+              (isExpanded ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              ))}
           </Button>
         )}
       </div>

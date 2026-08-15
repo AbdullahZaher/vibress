@@ -1,6 +1,7 @@
-export type SettingClassification = 'public' | 'staff-visible' | 'secret' | 'internal';
+export type SettingClassification =
+  "public" | "staff-visible" | "secret" | "internal";
 
-export type SettingValueType = 'string' | 'number' | 'boolean' | 'json';
+export type SettingValueType = "string" | "number" | "boolean" | "json";
 
 export interface SettingDefinition {
   key: string;
@@ -31,10 +32,23 @@ export interface SettingRecord {
 export interface SettingRepository {
   get(namespace: string, key: string): Promise<SettingRecord | null>;
   getMany(namespace: string): Promise<SettingRecord[]>;
-  set(record: { namespace: string; key: string; value: unknown; valueType: SettingValueType; classification: SettingClassification; updatedBy: string | null }): Promise<SettingRecord>;
+  set(record: {
+    namespace: string;
+    key: string;
+    value: unknown;
+    valueType: SettingValueType;
+    classification: SettingClassification;
+    updatedBy: string | null;
+  }): Promise<SettingRecord>;
   delete(namespace: string, key: string): Promise<void>;
 }
 
 export interface AuditRecorder {
-  record(data: { actorUserId?: string | null; action: string; targetType?: string | null; targetId?: string | null; metadata?: Record<string, unknown> }): Promise<unknown>;
+  record(data: {
+    actorUserId?: string | null;
+    action: string;
+    targetType?: string | null;
+    targetId?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<unknown>;
 }

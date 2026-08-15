@@ -16,7 +16,7 @@ export interface StoredObject {
 
 export interface SignedUrlOptions {
   expiresInSeconds?: number;
-  operation?: 'get' | 'put';
+  operation?: "get" | "put";
 }
 
 export interface StorageCapabilities {
@@ -92,10 +92,15 @@ export interface StorageProvider {
   getUrl(key: string): Promise<string>;
   getSignedUrl?(key: string, options?: SignedUrlOptions): Promise<string>;
   headObject?(key: string): Promise<ObjectHeadResult | null>;
-  createSignedUploadUrl?(input: CreateSignedUploadInput): Promise<SignedUploadUrlResult>;
-  createMultipartUpload?(input: CreateMultipartInput): Promise<MultipartSessionResult>;
+  createSignedUploadUrl?(
+    input: CreateSignedUploadInput,
+  ): Promise<SignedUploadUrlResult>;
+  createMultipartUpload?(
+    input: CreateMultipartInput,
+  ): Promise<MultipartSessionResult>;
   getSignedPartUrl?(input: SignPartInput): Promise<SignedPartUrlResult>;
-  completeMultipartUpload?(input: CompleteMultipartInput): Promise<StoredObject>;
+  completeMultipartUpload?(
+    input: CompleteMultipartInput,
+  ): Promise<StoredObject>;
   abortMultipartUpload?(input: AbortMultipartInput): Promise<void>;
 }
-

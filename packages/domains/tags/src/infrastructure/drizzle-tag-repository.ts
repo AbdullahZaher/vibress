@@ -1,8 +1,8 @@
-import { getDb, tags } from '@vibress/database';
-import { eq, ilike } from 'drizzle-orm';
-import { TagRepository } from '../domain/repository';
-import { Tag, CreateTagData, UpdateTagData } from '../domain/tag';
-import crypto from 'node:crypto';
+import { getDb, tags } from "@vibress/database";
+import { eq, ilike } from "drizzle-orm";
+import { TagRepository } from "../domain/repository";
+import { Tag, CreateTagData, UpdateTagData } from "../domain/tag";
+import crypto from "node:crypto";
 
 export class DrizzleTagRepository implements TagRepository {
   async findById(id: string): Promise<Tag | null> {
@@ -15,7 +15,11 @@ export class DrizzleTagRepository implements TagRepository {
 
   async findBySlug(slug: string): Promise<Tag | null> {
     const db = getDb();
-    const rows = await db.select().from(tags).where(eq(tags.slug, slug)).limit(1);
+    const rows = await db
+      .select()
+      .from(tags)
+      .where(eq(tags.slug, slug))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -26,16 +30,19 @@ export class DrizzleTagRepository implements TagRepository {
     const id = data.id || crypto.randomUUID();
     const now = new Date();
 
-    const [row] = await db.insert(tags).values({
-      id,
-      name: data.name,
-      slug: data.slug!,
-      description: data.description || null,
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const [row] = await db
+      .insert(tags)
+      .values({
+        id,
+        name: data.name,
+        slug: data.slug!,
+        description: data.description || null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
-    if (!row) throw new Error('Failed to create tag');
+    if (!row) throw new Error("Failed to create tag");
     return this.mapToDomain(row);
   }
 
@@ -46,7 +53,11 @@ export class DrizzleTagRepository implements TagRepository {
     if (data.slug !== undefined) payload.slug = data.slug;
     if (data.description !== undefined) payload.description = data.description;
 
-    const [row] = await db.update(tags).set(payload).where(eq(tags.id, id)).returning();
+    const [row] = await db
+      .update(tags)
+      .set(payload)
+      .where(eq(tags.id, id))
+      .returning();
     if (!row) throw new Error(`Tag not found for update: ${id}`);
     return this.mapToDomain(row);
   }
@@ -59,10 +70,11 @@ export class DrizzleTagRepository implements TagRepository {
   async listAll(search?: string): Promise<Tag[]> {
     const db = getDb();
     const base = db.select().from(tags);
-    const rows = search && search.trim()
-      ? await base.where(ilike(tags.name, `%${search.trim()}%`))
-      : await base;
-    return rows.map(r => this.mapToDomain(r));
+    const rows =
+      search && search.trim()
+        ? await base.where(ilike(tags.name, `%${search.trim()}%`))
+        : await base;
+    return rows.map((r) => this.mapToDomain(r));
   }
 
   private mapToDomain(row: typeof tags.$inferSelect): Tag {

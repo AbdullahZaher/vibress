@@ -4,12 +4,12 @@ import type {
   PublicPostDetailDto,
   PublicPostSummaryDto,
   PublicTagDto,
-} from '@vibress/api-contracts';
+} from "@vibress/api-contracts";
 import type {
   ThemeManifest,
   ThemeSettingsSchema,
   ThemeSiteSettings,
-} from '@vibress/theme-core';
+} from "@vibress/theme-core";
 
 export interface ThemePagination {
   page: number;
@@ -58,11 +58,21 @@ export interface VibressThemeDefinition {
   manifest: ThemeManifest;
   settingsSchema: ThemeSettingsSchema;
   components: {
-    Home: (props: ThemeHomeProps) => Promise<React.ReactElement> | React.ReactElement;
-    Post: (props: ThemePostProps) => Promise<React.ReactElement> | React.ReactElement;
-    Page: (props: ThemePageProps) => Promise<React.ReactElement> | React.ReactElement;
-    TagArchive: (props: ThemeTagArchiveProps) => Promise<React.ReactElement> | React.ReactElement;
-    AuthorArchive: (props: ThemeAuthorArchiveProps) => Promise<React.ReactElement> | React.ReactElement;
+    Home: (
+      props: ThemeHomeProps,
+    ) => Promise<React.ReactElement> | React.ReactElement;
+    Post: (
+      props: ThemePostProps,
+    ) => Promise<React.ReactElement> | React.ReactElement;
+    Page: (
+      props: ThemePageProps,
+    ) => Promise<React.ReactElement> | React.ReactElement;
+    TagArchive: (
+      props: ThemeTagArchiveProps,
+    ) => Promise<React.ReactElement> | React.ReactElement;
+    AuthorArchive: (
+      props: ThemeAuthorArchiveProps,
+    ) => Promise<React.ReactElement> | React.ReactElement;
   };
   cssPath?: string;
 }
@@ -70,7 +80,7 @@ export interface VibressThemeDefinition {
 export function themeSetting(
   settings: Record<string, unknown>,
   key: string,
-  fallback: unknown
+  fallback: unknown,
 ): unknown {
   const value = settings[key];
   return value === undefined ? fallback : value;

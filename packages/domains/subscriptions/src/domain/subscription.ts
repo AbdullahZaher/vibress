@@ -1,13 +1,16 @@
 export type SubscriptionStatus =
-  | 'trialing'
-  | 'active'
-  | 'past_due'
-  | 'unpaid'
-  | 'cancelled'
-  | 'expired'
-  | 'incomplete';
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "unpaid"
+  | "cancelled"
+  | "expired"
+  | "incomplete";
 
-export const ACCESS_GRANTING_STATUSES: SubscriptionStatus[] = ['trialing', 'active'];
+export const ACCESS_GRANTING_STATUSES: SubscriptionStatus[] = [
+  "trialing",
+  "active",
+];
 
 export interface Subscription {
   id: string;

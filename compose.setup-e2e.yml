@@ -57,7 +57,8 @@ services:
       SMTP_PORT: "1025"
       SMTP_FROM: Vibress <no-reply@vibress.local>
       VIBRESS_SETUP_TOKEN: setup-e2e-token-0123456789abcdef0123456789abcdef
-    command: ["sh", "-c", "cd /repo && pnpm --filter @vibress/database run db:migrate"]
+    command:
+      ["sh", "-c", "cd /repo && pnpm --filter @vibress/database run db:migrate"]
     depends_on:
       postgres:
         condition: service_healthy

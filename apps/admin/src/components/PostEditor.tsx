@@ -1,21 +1,30 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { apiRequest, ApiMediaAsset, ApiError, uploadMediaApi } from '../lib/api';
-import { VibressStudio } from '@vibress/studio-react';
-import { StudioDocument, migrateDocument, createEmptyStudioDocument } from '@vibress/studio-core';
-import { MediaPicker } from './MediaPicker';
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import {
+  apiRequest,
+  ApiMediaAsset,
+  ApiError,
+  uploadMediaApi,
+} from "../lib/api";
+import { VibressStudio } from "@vibress/studio-react";
+import {
+  StudioDocument,
+  migrateDocument,
+  createEmptyStudioDocument,
+} from "@vibress/studio-core";
+import { MediaPicker } from "./MediaPicker";
 
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Dialog } from './ui/dialog';
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { Dialog } from "./ui/dialog";
 import {
   ArrowLeft,
   Save,
   CheckCircle2,
   AlertCircle,
   Clock,
-  Settings
-} from 'lucide-react';
-import { PostSettingsSidebar } from './editor/PostSettingsSidebar';
+  Settings,
+} from "lucide-react";
+import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 
 interface AdminPostDetail {
   id: string;
@@ -52,7 +61,7 @@ interface Revision {
   createdAt: string;
 }
 
-type AutosaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'conflict';
+type AutosaveState = "idle" | "saving" | "saved" | "failed" | "conflict";
 
 export const PostEditor: React.FC<PostEditorProps> = ({
   postId,
@@ -60,24 +69,26 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const [title, setTitle] = useState('');
-  const [slug, setSlug] = useState('');
-  const [excerpt, setExcerpt] = useState('');
-  const [metaTitle, setMetaTitle] = useState('');
-  const [metaDescription, setMetaDescription] = useState('');
-  const [canonicalUrl, setCanonicalUrl] = useState('');
-  const [studioDoc, setStudioDoc] = useState<StudioDocument>(createEmptyStudioDocument());
-  const [status, setStatus] = useState('draft');
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [excerpt, setExcerpt] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [canonicalUrl, setCanonicalUrl] = useState("");
+  const [studioDoc, setStudioDoc] = useState<StudioDocument>(
+    createEmptyStudioDocument(),
+  );
+  const [status, setStatus] = useState("draft");
   const [version, setVersion] = useState(1);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [revisions, setRevisions] = useState<Revision[]>([]);
-  const [scheduledAtStr, setScheduledAtStr] = useState('');
+  const [scheduledAtStr, setScheduledAtStr] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [autosaveState, setAutosaveState] = useState<AutosaveState>('idle');
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,7 +101,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   } | null>(null);
 
   const handleRequestMedia = useCallback((req: { cardType: string }) => {
-    const mediaTypes = ['image', 'gallery', 'video', 'audio', 'file'];
+    const mediaTypes = ["image", "gallery", "video", "audio", "file"];
     if (!mediaTypes.includes(req.cardType)) {
       return Promise.resolve(null);
     }
@@ -102,41 +113,78 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   // Durable upload adapter for Studio card editors (drag/drop/file select).
   // Uses the same media upload API as the picker — never persists blob: URLs.
-  const handleUploadMedia = useCallback(async (file: File, cardType: string) => {
-    try {
-      const { media } = await uploadMediaApi(file);
-      if (cardType === 'image') {
-        return { assetId: media.id, src: media.url, alt: media.displayName, width: media.width || undefined, height: media.height || undefined };
+  const handleUploadMedia = useCallback(
+    async (file: File, cardType: string) => {
+      try {
+        const { media } = await uploadMediaApi(file);
+        if (cardType === "image") {
+          return {
+            assetId: media.id,
+            src: media.url,
+            alt: media.displayName,
+            width: media.width || undefined,
+            height: media.height || undefined,
+          };
+        }
+        if (cardType === "gallery") {
+          return { assetId: media.id, src: media.url, alt: media.displayName };
+        }
+        if (cardType === "video") {
+          return {
+            assetId: media.id,
+            src: media.url,
+            caption: media.displayName,
+          };
+        }
+        if (cardType === "audio") {
+          return {
+            assetId: media.id,
+            src: media.url,
+            title: media.displayName,
+          };
+        }
+        if (cardType === "file") {
+          return {
+            assetId: media.id,
+            src: media.url,
+            fileName: media.originalFilename,
+            fileSize: `${(media.sizeBytes / (1024 * 1024)).toFixed(2)} MB`,
+          };
+        }
+        return { assetId: media.id, src: media.url };
+      } catch {
+        return null;
       }
-      if (cardType === 'gallery') {
-        return { assetId: media.id, src: media.url, alt: media.displayName };
-      }
-      if (cardType === 'video') {
-        return { assetId: media.id, src: media.url, caption: media.displayName };
-      }
-      if (cardType === 'audio') {
-        return { assetId: media.id, src: media.url, title: media.displayName };
-      }
-      if (cardType === 'file') {
-        return { assetId: media.id, src: media.url, fileName: media.originalFilename, fileSize: `${(media.sizeBytes / (1024 * 1024)).toFixed(2)} MB` };
-      }
-      return { assetId: media.id, src: media.url };
-    } catch {
-      return null;
-    }
-  }, []);
+    },
+    [],
+  );
 
   const handlePickerSelectAsset = (asset: ApiMediaAsset) => {
     if (!pickerConfig) return;
     let payload: Record<string, unknown> = {};
-    if (pickerConfig.cardType === 'image') {
-      payload = { assetId: asset.id, src: asset.url, alt: asset.displayName, width: asset.width || undefined, height: asset.height || undefined };
-    } else if (pickerConfig.cardType === 'video') {
-      payload = { assetId: asset.id, src: asset.url, caption: asset.displayName };
-    } else if (pickerConfig.cardType === 'audio') {
+    if (pickerConfig.cardType === "image") {
+      payload = {
+        assetId: asset.id,
+        src: asset.url,
+        alt: asset.displayName,
+        width: asset.width || undefined,
+        height: asset.height || undefined,
+      };
+    } else if (pickerConfig.cardType === "video") {
+      payload = {
+        assetId: asset.id,
+        src: asset.url,
+        caption: asset.displayName,
+      };
+    } else if (pickerConfig.cardType === "audio") {
       payload = { assetId: asset.id, src: asset.url, title: asset.displayName };
-    } else if (pickerConfig.cardType === 'file') {
-      payload = { assetId: asset.id, src: asset.url, fileName: asset.originalFilename, fileSize: `${asset.sizeBytes}` };
+    } else if (pickerConfig.cardType === "file") {
+      payload = {
+        assetId: asset.id,
+        src: asset.url,
+        fileName: asset.originalFilename,
+        fileSize: `${asset.sizeBytes}`,
+      };
     }
     pickerConfig.resolve(payload);
     setShowPicker(false);
@@ -146,7 +194,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePickerSelectAssets = (assets: ApiMediaAsset[]) => {
     if (!pickerConfig) return;
     const payload = {
-      images: assets.map((a) => ({ assetId: a.id, src: a.url, alt: a.displayName })),
+      images: assets.map((a) => ({
+        assetId: a.id,
+        src: a.url,
+        alt: a.displayName,
+      })),
     };
     pickerConfig.resolve(payload);
     setShowPicker(false);
@@ -164,10 +216,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => {
     const fetchAllTags = async () => {
       try {
-        const res = await apiRequest<{ tags: Tag[] }>('/tags');
+        const res = await apiRequest<{ tags: Tag[] }>("/tags");
         setAllTags(res.tags || []);
       } catch (err) {
-        console.error('Failed to load tags', err);
+        console.error("Failed to load tags", err);
       }
     };
     fetchAllTags();
@@ -178,15 +230,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     const fetchPost = async () => {
       setLoading(true);
       try {
-        const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`);
+        const res = await apiRequest<{ post: AdminPostDetail }>(
+          `/posts/${postId}`,
+        );
         const p = res.post;
-        setTitle(p.title || '');
-        setSlug(p.slug || '');
-        setExcerpt(p.excerpt || '');
-        setMetaTitle(p.metaTitle || '');
-        setMetaDescription(p.metaDescription || '');
-        setCanonicalUrl(p.canonicalUrl || '');
-        setStatus(p.status || 'draft');
+        setTitle(p.title || "");
+        setSlug(p.slug || "");
+        setExcerpt(p.excerpt || "");
+        setMetaTitle(p.metaTitle || "");
+        setMetaDescription(p.metaDescription || "");
+        setCanonicalUrl(p.canonicalUrl || "");
+        setStatus(p.status || "draft");
         setVersion(p.version || 1);
         if (p.scheduledAt) {
           const d = new Date(p.scheduledAt);
@@ -201,10 +255,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           setStudioDoc(migrateDocument(p.content || p.contentJson));
         }
       } catch (err) {
-        if (err instanceof ApiError && err.path && Array.isArray(err.path) && err.path.length > 0) {
-          setErrorMsg(`${err.path.join('.')}: ${err.message}`);
+        if (
+          err instanceof ApiError &&
+          err.path &&
+          Array.isArray(err.path) &&
+          err.path.length > 0
+        ) {
+          setErrorMsg(`${err.path.join(".")}: ${err.message}`);
         } else {
-          setErrorMsg(err instanceof Error ? err.message : 'Failed to load post');
+          setErrorMsg(
+            err instanceof Error ? err.message : "Failed to load post",
+          );
         }
       } finally {
         setLoading(false);
@@ -213,10 +274,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
     const fetchRevisions = async () => {
       try {
-        const res = await apiRequest<{ revisions: Revision[] }>(`/posts/${postId}/revisions`);
+        const res = await apiRequest<{ revisions: Revision[] }>(
+          `/posts/${postId}/revisions`,
+        );
         setRevisions(res.revisions || []);
       } catch (err) {
-        console.error('Failed to load revisions', err);
+        console.error("Failed to load revisions", err);
       }
     };
 
@@ -227,7 +290,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const performAutosave = useCallback(async () => {
     if (!postId || !hasUnsavedChangesRef.current) return;
 
-    setAutosaveState('saving');
+    setAutosaveState("saving");
     try {
       const payload = {
         title,
@@ -241,23 +304,42 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         expectedVersion: version,
       };
 
-      const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
+      const res = await apiRequest<{ post: AdminPostDetail }>(
+        `/posts/${postId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      );
 
       setVersion(res.post.version);
-      setAutosaveState('saved');
+      setAutosaveState("saved");
       hasUnsavedChangesRef.current = false;
     } catch (err) {
-      if (err instanceof ApiError && (err.statusCode === 409 || err.message.includes('Version conflict'))) {
-        setAutosaveState('conflict');
-        setErrorMsg('Autosave conflict: Post was modified elsewhere. Please refresh.');
+      if (
+        err instanceof ApiError &&
+        (err.statusCode === 409 || err.message.includes("Version conflict"))
+      ) {
+        setAutosaveState("conflict");
+        setErrorMsg(
+          "Autosave conflict: Post was modified elsewhere. Please refresh.",
+        );
       } else {
-        setAutosaveState('failed');
+        setAutosaveState("failed");
       }
     }
-  }, [postId, title, slug, excerpt, metaTitle, metaDescription, canonicalUrl, studioDoc, selectedTagIds, version]);
+  }, [
+    postId,
+    title,
+    slug,
+    excerpt,
+    metaTitle,
+    metaDescription,
+    canonicalUrl,
+    studioDoc,
+    selectedTagIds,
+    version,
+  ]);
 
   const triggerAutosaveDebounced = useCallback(() => {
     hasUnsavedChangesRef.current = true;
@@ -272,9 +354,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const generateSlug = (text: string) => {
     return text
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/[^a-z0-9\s-]/g, "")
       .trim()
-      .replace(/\s+/g, '-');
+      .replace(/\s+/g, "-");
   };
 
   const handleTitleChange = (val: string) => {
@@ -283,10 +365,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     // Auto-generate slug if it's currently empty or matches the old title's slug
     if (!slug || slug === generateSlug(title)) {
       setSlug(generatedSlug);
-      
+
       // Auto-generate canonicalUrl if it's currently empty
       if (!canonicalUrl) {
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://vibress.com';
+        const origin =
+          typeof window !== "undefined"
+            ? window.location.origin
+            : "https://vibress.com";
         setCanonicalUrl(`${origin}/${generatedSlug}`);
       }
     }
@@ -317,25 +402,37 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       };
 
       if (postId) {
-        const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        const res = await apiRequest<{ post: AdminPostDetail }>(
+          `/posts/${postId}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          },
+        );
         setVersion(res.post.version);
-        setAutosaveState('saved');
+        setAutosaveState("saved");
         hasUnsavedChangesRef.current = false;
       } else {
-        const res = await apiRequest<{ post: AdminPostDetail }>('/posts', {
-          method: 'POST',
-          body: JSON.stringify({ ...payload, primaryAuthorId: currentUserId, authorIds: [currentUserId] }),
+        const res = await apiRequest<{ post: AdminPostDetail }>("/posts", {
+          method: "POST",
+          body: JSON.stringify({
+            ...payload,
+            primaryAuthorId: currentUserId,
+            authorIds: [currentUserId],
+          }),
         });
         onNavigate(`/admin/posts/${res.post.id}`);
       }
     } catch (err) {
-      if (err instanceof ApiError && err.path && Array.isArray(err.path) && err.path.length > 0) {
-        setErrorMsg(`${err.path.join('.')}: ${err.message}`);
+      if (
+        err instanceof ApiError &&
+        err.path &&
+        Array.isArray(err.path) &&
+        err.path.length > 0
+      ) {
+        setErrorMsg(`${err.path.join(".")}: ${err.message}`);
       } else {
-        setErrorMsg(err instanceof Error ? err.message : 'Save failed');
+        setErrorMsg(err instanceof Error ? err.message : "Save failed");
       }
     } finally {
       setSaving(false);
@@ -345,20 +442,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePublish = async () => {
     if (!postId || !canPublish) return;
     try {
-      await apiRequest(`/posts/${postId}/publish`, { method: 'POST' });
-      setStatus('published');
+      await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
+      setStatus("published");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Publish failed');
+      setErrorMsg(err instanceof Error ? err.message : "Publish failed");
     }
   };
 
   const handleUnpublish = async () => {
     if (!postId || !canPublish) return;
     try {
-      await apiRequest(`/posts/${postId}/unpublish`, { method: 'POST' });
-      setStatus('draft');
+      await apiRequest(`/posts/${postId}/unpublish`, { method: "POST" });
+      setStatus("draft");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Unpublish failed');
+      setErrorMsg(err instanceof Error ? err.message : "Unpublish failed");
     }
   };
 
@@ -367,54 +464,60 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     try {
       const scheduledAt = new Date(scheduledAtStr).toISOString();
       await apiRequest(`/posts/${postId}/schedule`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({ scheduledAt }),
       });
-      setStatus('scheduled');
+      setStatus("scheduled");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Schedule failed');
+      setErrorMsg(err instanceof Error ? err.message : "Schedule failed");
     }
   };
 
   const handleRestoreRevision = async (revisionId: string) => {
     if (!postId) return;
-    if (!confirm('Restore this revision? Unsaved changes will be overwritten.')) return;
+    if (!confirm("Restore this revision? Unsaved changes will be overwritten."))
+      return;
     try {
-      const res = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}/revisions/${revisionId}/restore`, {
-        method: 'POST',
-      });
+      const res = await apiRequest<{ post: AdminPostDetail }>(
+        `/posts/${postId}/revisions/${revisionId}/restore`,
+        {
+          method: "POST",
+        },
+      );
       const p = res.post;
-      setTitle(p.title || '');
+      setTitle(p.title || "");
       setStudioDoc(migrateDocument(p.content || p.contentJson));
       setVersion(p.version);
-      alert('Revision restored successfully');
+      alert("Revision restored successfully");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Restore revision failed');
+      setErrorMsg(
+        err instanceof Error ? err.message : "Restore revision failed",
+      );
     }
   };
 
   const renderAutosaveStatus = () => {
     if (!postId) return null;
     switch (autosaveState) {
-      case 'saving':
+      case "saving":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3 animate-spin" /> Saving...
           </span>
         );
-      case 'saved':
+      case "saved":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-foreground font-mono font-medium">
             <CheckCircle2 className="h-3 w-3" /> Saved to cloud
           </span>
         );
-      case 'failed':
+      case "failed":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-foreground font-mono font-medium">
             <AlertCircle className="h-3 w-3" /> Save failed
           </span>
         );
-      case 'conflict':
+      case "conflict":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
             <AlertCircle className="h-3 w-3" /> Version conflict
@@ -442,14 +545,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onNavigate('/admin/posts')}
+            onClick={() => onNavigate("/admin/posts")}
             className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Back to Posts
           </Button>
           <div className="h-4 w-[1px] bg-border" />
           <Badge
-            variant={status === 'published' ? 'success' : status === 'scheduled' ? 'warning' : 'secondary'}
+            variant={
+              status === "published"
+                ? "success"
+                : status === "scheduled"
+                  ? "warning"
+                  : "secondary"
+            }
           >
             {status.toUpperCase()}
           </Badge>
@@ -459,8 +568,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         <div className="flex items-center gap-2">
           {postId && canPublish && (
             <>
-              {status === 'published' ? (
-                <Button variant="outline" size="sm" onClick={handleUnpublish} className="text-xs">
+              {status === "published" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUnpublish}
+                  className="text-xs"
+                >
                   Unpublish
                 </Button>
               ) : (
@@ -478,17 +592,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
           <Button
             onClick={handleSave}
-            disabled={saving || autosaveState === 'conflict'}
+            disabled={saving || autosaveState === "conflict"}
             className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-1.5 shadow-sm"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'Saving...' : postId ? 'Update' : 'Save Draft'}
+            {saving ? "Saving..." : postId ? "Update" : "Save Draft"}
           </Button>
-          
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setShowSettings(true)} 
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowSettings(true)}
             className="ml-2 text-muted-foreground hover:text-foreground"
           >
             <Settings className="h-5 w-5" />
@@ -513,7 +627,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             className="w-full text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0"
             rows={1}
             onInput={(e) => {
-              e.currentTarget.style.height = 'auto';
+              e.currentTarget.style.height = "auto";
               e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
             }}
           />
@@ -527,29 +641,44 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         </div>
       </main>
 
-      <PostSettingsSidebar 
+      <PostSettingsSidebar
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-        slug={slug} setSlug={setSlug}
-        excerpt={excerpt} setExcerpt={setExcerpt}
-        metaTitle={metaTitle} setMetaTitle={setMetaTitle}
-        metaDescription={metaDescription} setMetaDescription={setMetaDescription}
-        canonicalUrl={canonicalUrl} setCanonicalUrl={setCanonicalUrl}
+        slug={slug}
+        setSlug={setSlug}
+        excerpt={excerpt}
+        setExcerpt={setExcerpt}
+        metaTitle={metaTitle}
+        setMetaTitle={setMetaTitle}
+        metaDescription={metaDescription}
+        setMetaDescription={setMetaDescription}
+        canonicalUrl={canonicalUrl}
+        setCanonicalUrl={setCanonicalUrl}
         allTags={allTags}
-        selectedTagIds={selectedTagIds} setSelectedTagIds={setSelectedTagIds}
-        scheduledAtStr={scheduledAtStr} setScheduledAtStr={setScheduledAtStr}
+        selectedTagIds={selectedTagIds}
+        setSelectedTagIds={setSelectedTagIds}
+        scheduledAtStr={scheduledAtStr}
+        setScheduledAtStr={setScheduledAtStr}
         handleSchedule={handleSchedule}
         canPublish={canPublish}
-        postId={postId || ''}
+        postId={postId || ""}
         revisions={revisions}
         handleRestoreRevision={handleRestoreRevision}
       />
 
       {/* Media Picker Modal Host */}
-      <Dialog isOpen={showPicker} onClose={handlePickerClose} title="Select Media Asset">
+      <Dialog
+        isOpen={showPicker}
+        onClose={handlePickerClose}
+        title="Select Media Asset"
+      >
         <MediaPicker
-          allowedTypes={pickerConfig?.cardType === 'gallery' ? ['image'] : [pickerConfig?.cardType as 'image' | 'video' | 'audio' | 'file']}
-          multiple={pickerConfig?.cardType === 'gallery'}
+          allowedTypes={
+            pickerConfig?.cardType === "gallery"
+              ? ["image"]
+              : [pickerConfig?.cardType as "image" | "video" | "audio" | "file"]
+          }
+          multiple={pickerConfig?.cardType === "gallery"}
           onSelectAsset={handlePickerSelectAsset}
           onSelectAssets={handlePickerSelectAssets}
           onClose={handlePickerClose}

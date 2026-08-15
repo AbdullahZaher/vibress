@@ -182,6 +182,7 @@ Status: complete
 - [x] files domain removed/merged
 
 Design: all 1-line placeholder platform packages have been replaced with typed implementations:
+
 - `@vibress/config`: Zod env validation & production guards (H3)
 - `@vibress/queue`: BullMQ constants (`QUEUE_NAMES`), payload interfaces, and typed `createTypedQueue` / `createTypedWorker` helpers
 - `@vibress/observability`: AsyncLocalStorage request tracing (`setRequestTraceContext`), structured JSON `Logger` with redaction, and `metrics` registry
@@ -419,6 +420,7 @@ route table). No ISR revalidation path is needed and none is used. The earlier
 cache.
 
 Verified (dev + production compose):
+
 - draft → web 404; publish → web 200 with SSR content
 - title/content update → reflected immediately
 - slug change → old 404, new 200
@@ -509,11 +511,11 @@ checks pass at all three layers.
 Benchmarked `GET /api/members/v1/me` with a REAL member session obtained via
 the full magic-link flow (Mailpit token extraction → verify → session cookie):
 
-| Concurrency | Duration | r/s | p50 | p90 | p97.5 | p99 | max | errors |
-|---|---|---|---|---|---|---|---|---|
-| 10 | 30 s | 2,867 | 16 ms | 29 | 33 | 34 | 60 | 0 |
-| 50 | 60 s | 3,058 | 35 ms | 65 | 70 | 74 | 98 | 0 |
-| 100 | 60 s | 3,008 | 37 ms | 68 | 72 | 77 | 298 | 0 |
+| Concurrency | Duration | r/s   | p50   | p90 | p97.5 | p99 | max | errors |
+| ----------- | -------- | ----- | ----- | --- | ----- | --- | --- | ------ |
+| 10          | 30 s     | 2,867 | 16 ms | 29  | 33    | 34  | 60  | 0      |
+| 50          | 60 s     | 3,058 | 35 ms | 65  | 70    | 74  | 98  | 0      |
+| 100         | 60 s     | 3,008 | 37 ms | 68  | 72    | 77  | 298 | 0      |
 
 (autocannon JSON exposes p90/p97.5/p99, not p95.)
 
@@ -538,10 +540,10 @@ c100 (single-core bound), RSS stable ~758 MB.
      after pnpm bootstrap (`api`/`worker`/`web` Dockerfiles).
   3. OS-level CVEs in the nginx alpine bases (openssl, zlib, musl, …) →
      `apk upgrade --no-cache` added to `gateway`/`spa` Dockerfiles.
-  Verified locally: all 6 images scan 0 HIGH/CRITICAL; workspace lockfile
-  overrides (sharp ^0.35.0, brace-expansion ^5.0.9, uuid ^11.1.1) make
-  `pnpm audit` fully clean; hardened stack boots, migrates a fresh DB, serves
-  published posts, and passes all health checks.
+     Verified locally: all 6 images scan 0 HIGH/CRITICAL; workspace lockfile
+     overrides (sharp ^0.35.0, brace-expansion ^5.0.9, uuid ^11.1.1) make
+     `pnpm audit` fully clean; hardened stack boots, migrates a fresh DB, serves
+     published posts, and passes all health checks.
 
 ### Gates summary (this batch)
 

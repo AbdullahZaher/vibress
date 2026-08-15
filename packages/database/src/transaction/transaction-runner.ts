@@ -1,6 +1,10 @@
-import { getDb } from '../connection';
-import { isInsideTransaction, runWithTransaction, type TransactionDb } from './transaction-context';
-import { withSpan } from '@vibress/observability';
+import { getDb } from "../connection";
+import {
+  isInsideTransaction,
+  runWithTransaction,
+  type TransactionDb,
+} from "./transaction-context";
+import { withSpan } from "@vibress/observability";
 
 export interface TransactionRunner {
   run<T>(work: () => Promise<T>): Promise<T>;
@@ -22,8 +26,8 @@ export async function runInTransaction<T>(work: () => Promise<T>): Promise<T> {
     return work();
   }
   const db = getDb();
-  return withSpan('db.transaction', () =>
-    db.transaction((tx) => runWithTransaction(tx as TransactionDb, work))
+  return withSpan("db.transaction", () =>
+    db.transaction((tx) => runWithTransaction(tx as TransactionDb, work)),
   );
 }
 
@@ -33,4 +37,5 @@ export class DrizzleTransactionRunner implements TransactionRunner {
   }
 }
 
-export const defaultTransactionRunner: TransactionRunner = new DrizzleTransactionRunner();
+export const defaultTransactionRunner: TransactionRunner =
+  new DrizzleTransactionRunner();

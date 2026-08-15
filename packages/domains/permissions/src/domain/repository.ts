@@ -1,4 +1,4 @@
-import { Permission, CreatePermissionData } from './permission';
+import { Permission, CreatePermissionData } from "./permission";
 
 export interface PermissionRepository {
   findById(id: string): Promise<Permission | null>;

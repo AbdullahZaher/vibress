@@ -21,19 +21,21 @@ export interface PostDeletedEventPayload {
 }
 
 export interface OutboxEventPayloadMap {
-  'post.published': PostPublishedEventPayload;
-  'post.unpublished': PostUnpublishedEventPayload;
-  'post.deleted': PostDeletedEventPayload;
+  "post.published": PostPublishedEventPayload;
+  "post.unpublished": PostUnpublishedEventPayload;
+  "post.deleted": PostDeletedEventPayload;
 }
 
 export type OutboxEventName = keyof OutboxEventPayloadMap;
 
-export function isKnownOutboxEventName(value: string): value is OutboxEventName {
+export function isKnownOutboxEventName(
+  value: string,
+): value is OutboxEventName {
   return value in EVENT_NAMES;
 }
 
 const EVENT_NAMES: Record<OutboxEventName, true> = {
-  'post.published': true,
-  'post.unpublished': true,
-  'post.deleted': true,
+  "post.published": true,
+  "post.unpublished": true,
+  "post.deleted": true,
 };

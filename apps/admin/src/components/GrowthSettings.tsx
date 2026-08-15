@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
-import { Mail, TrendingUp, MessageSquare, Sparkles } from 'lucide-react';
-import { NewslettersSettings } from './NewslettersSettings';
-import { IntelligenceSettings } from './IntelligenceSettings';
-import { CommunitySettings } from './CommunitySettings';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import React, { useState } from "react";
+import { Mail, TrendingUp, MessageSquare, Sparkles } from "lucide-react";
+import { NewslettersSettings } from "./NewslettersSettings";
+import { IntelligenceSettings } from "./IntelligenceSettings";
+import { CommunitySettings } from "./CommunitySettings";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
 interface GrowthSettingsProps {
-  initialTab?: 'newsletters' | 'intelligence' | 'community';
+  initialTab?: "newsletters" | "intelligence" | "community";
 }
 
-export const GrowthSettings: React.FC<GrowthSettingsProps> = ({ initialTab = 'newsletters' }) => {
+export const GrowthSettings: React.FC<GrowthSettingsProps> = ({
+  initialTab = "newsletters",
+}) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   return (
@@ -22,7 +24,8 @@ export const GrowthSettings: React.FC<GrowthSettingsProps> = ({ initialTab = 'ne
             Growth & Audience
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Grow your audience with email newsletters, predictive intelligence, and member community engagement.
+            Grow your audience with email newsletters, predictive intelligence,
+            and member community engagement.
           </p>
         </div>
 

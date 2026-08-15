@@ -1,6 +1,6 @@
-import { generateRssFeed } from '../../lib/rss';
+import { generateRssFeed } from "../../lib/rss";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 export async function GET() {

@@ -1,16 +1,23 @@
-import { FastifyInstance } from 'fastify';
-import { notificationsService } from '../services';
-import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
+import { FastifyInstance } from "fastify";
+import { notificationsService } from "../services";
+import {
+  requireMemberSession,
+  validateMemberOrigin,
+} from "../middleware/member-auth";
 
 export async function memberNotificationRoutes(fastify: FastifyInstance) {
   // List own notifications
-  fastify.get('/notifications', {
+  fastify.get("/notifications", {
     preHandler: [requireMemberSession],
     handler: async (req, reply) => {
-      const query = (req.query ?? {}) as { unread?: string; limit?: string; offset?: string };
+      const query = (req.query ?? {}) as {
+        unread?: string;
+        limit?: string;
+        offset?: string;
+      };
       const result = await notificationsService.listNotifications({
         recipientId: req.member!.id,
-        unreadOnly: query.unread === 'true',
+        unreadOnly: query.unread === "true",
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
       });
@@ -31,7 +38,7 @@ export async function memberNotificationRoutes(fastify: FastifyInstance) {
   });
 
   // Unread count
-  fastify.get('/notifications/unread-count', {
+  fastify.get("/notifications/unread-count", {
     preHandler: [requireMemberSession],
     handler: async (req, reply) => {
       const count = await notificationsService.countUnread(req.member!.id);
@@ -40,7 +47,7 @@ export async function memberNotificationRoutes(fastify: FastifyInstance) {
   });
 
   // Mark one notification read
-  fastify.post('/notifications/:id/read', {
+  fastify.post("/notifications/:id/read", {
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
@@ -51,7 +58,7 @@ export async function memberNotificationRoutes(fastify: FastifyInstance) {
   });
 
   // Mark all notifications read
-  fastify.post('/notifications/read-all', {
+  fastify.post("/notifications/read-all", {
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
       await notificationsService.markAllRead(req.member!.id);

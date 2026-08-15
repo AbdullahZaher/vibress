@@ -3,21 +3,27 @@
 ## Test layers
 
 ### Unit tests
+
 Pure domain rules and utilities.
 
 ### Integration tests
+
 Real PostgreSQL/Redis where behavior depends on persistence or transactions.
 
 ### Contract tests
+
 API schemas, plugin contracts, storage provider behavior.
 
 ### E2E tests
+
 Full flows using Playwright.
 
 ### Security tests
+
 Authentication, authorization, CSRF, SSRF, uploads, rate limits, webhook signatures.
 
 ### Performance tests
+
 High-risk paths such as content listing, newsletter fan-out, uploads, and analytics aggregation.
 
 ## Repository layout

@@ -1,9 +1,9 @@
-import { ContentApiClient } from '../lib/content-api-client';
+import { ContentApiClient } from "../lib/content-api-client";
 import {
   resolveThemeHostState,
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
-} from '../lib/theme-host';
+} from "../lib/theme-host";
 
 export const revalidate = 0;
 
@@ -17,7 +17,10 @@ export default async function HomePage({
   const validPage = isNaN(pageNum) || pageNum < 1 ? 1 : pageNum;
 
   const previewThemeId = await getPreviewThemeIdFromHeaders();
-  const hostState = await resolveThemeHostState(!!previewThemeId, previewThemeId);
+  const hostState = await resolveThemeHostState(
+    !!previewThemeId,
+    previewThemeId,
+  );
 
   const [postsData, tags] = await Promise.all([
     ContentApiClient.getPosts({ page: validPage, limit: 10 }),
@@ -25,7 +28,12 @@ export default async function HomePage({
   ]);
 
   const posts = postsData?.posts || [];
-  const pagination = postsData?.pagination || { page: 1, limit: 10, total: 0, pages: 1 };
+  const pagination = postsData?.pagination || {
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 1,
+  };
 
   const site = await getThemeSiteSettings();
 

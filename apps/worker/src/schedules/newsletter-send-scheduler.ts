@@ -3,19 +3,15 @@ import {
   NewslettersService,
   DrizzleNewsletterPreferenceRepository,
   BillingAwareMemberAudienceRepository,
-} from '@vibress/newsletters';
-import {
-  DrizzleMemberRepository,
-} from '@vibress/members';
-import {
-  DrizzleSubscriptionRepository,
-} from '@vibress/subscriptions';
+} from "@vibress/newsletters";
+import { DrizzleMemberRepository } from "@vibress/members";
+import { DrizzleSubscriptionRepository } from "@vibress/subscriptions";
 import {
   DrizzleEmailRecipientRepository,
   DrizzleEmailSuppressionRepository,
-} from '@vibress/email';
-import { getEmailQueue } from '../queues/email-queue';
-import { getConfig } from '@vibress/config';
+} from "@vibress/email";
+import { getEmailQueue } from "../queues/email-queue";
+import { getConfig } from "@vibress/config";
 
 const BATCH_SIZE = 25;
 const appConfig = getConfig();
@@ -33,25 +29,39 @@ export class NewsletterSendSchedulerWorker {
     newsletterRepo: undefined as never,
     preferenceRepo: new DrizzleNewsletterPreferenceRepository(),
     sendRepo: this.sendRepo,
-    audienceRepo: new BillingAwareMemberAudienceRepository(new DrizzleMemberRepository(), new DrizzleSubscriptionRepository()),
+    audienceRepo: new BillingAwareMemberAudienceRepository(
+      new DrizzleMemberRepository(),
+      new DrizzleSubscriptionRepository(),
+    ),
     isMemberSuppressed: (email) => this.suppressionRepo.isSuppressed(email),
-    unsubscribeSecret: appConfig.newsletters.unsubscribeSecret || 'dev-unsub-secret',
+    unsubscribeSecret:
+      appConfig.newsletters.unsubscribeSecret || "dev-unsub-secret",
     portalUrl: appConfig.site.portalUrl,
   });
   private intervalTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
 
-  async startSendAndEnqueue(sendId: string): Promise<{ recipientCount: number; batchCount: number }> {
-    const { send, recipientCount } = await this.newslettersService.startSend(sendId, async (rows) => {
-      return this.recipientRepo.createMany(rows.map((r) => ({ ...r, sendId })));
-    });
+  async startSendAndEnqueue(
+    sendId: string,
+  ): Promise<{ recipientCount: number; batchCount: number }> {
+    const { recipientCount } = await this.newslettersService.startSend(
+      sendId,
+      async (rows) => {
+        return this.recipientRepo.createMany(
+          rows.map((r) => ({ ...r, sendId })),
+        );
+      },
+    );
     if (recipientCount === 0) {
       await this.newslettersService.completeSend(sendId);
       return { recipientCount: 0, batchCount: 0 };
     }
 
     const queue = getEmailQueue();
-    const pending = await this.recipientRepo.findPending(sendId, recipientCount);
+    const pending = await this.recipientRepo.findPending(
+      sendId,
+      recipientCount,
+    );
     const batches: string[][] = [];
     for (let i = 0; i < pending.length; i += BATCH_SIZE) {
       batches.push(pending.slice(i, i + BATCH_SIZE).map((r) => r.id));
@@ -60,9 +70,13 @@ export class NewsletterSendSchedulerWorker {
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]!;
       await queue.add(
-        'deliver',
+        "deliver",
         { sendId, recipientIds: batch },
-        { jobId: `send-${sendId}-batch-${i}`, removeOnComplete: true, removeOnFail: 1000 }
+        {
+          jobId: `send-${sendId}-batch-${i}`,
+          removeOnComplete: true,
+          removeOnFail: 1000,
+        },
       );
     }
     return { recipientCount, batchCount: batches.length };
@@ -76,13 +90,19 @@ export class NewsletterSendSchedulerWorker {
       try {
         // Guard against races: only start sends still in 'scheduled' state.
         const current = await this.sendRepo.findById(send.id);
-        if (!current || current.status !== 'scheduled') continue;
+        if (!current || current.status !== "scheduled") continue;
         await this.startSendAndEnqueue(send.id);
         started++;
-        console.log(`[SendScheduler] Started scheduled send ${send.id} ("${send.subject}")`);
+        console.log(
+          `[SendScheduler] Started scheduled send ${send.id} ("${send.subject}")`,
+        );
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'scheduler failure';
-        console.error(`[SendScheduler] Failed to start send ${send.id}:`, message);
+        const message =
+          err instanceof Error ? err.message : "scheduler failure";
+        console.error(
+          `[SendScheduler] Failed to start send ${send.id}:`,
+          message,
+        );
         await this.newslettersService.failSend(send.id, message);
       }
     }
@@ -92,9 +112,13 @@ export class NewsletterSendSchedulerWorker {
   start(intervalMs = 5000): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.runReconciliationSweep().catch((err) => console.error('[SendScheduler] Initial sweep failed:', err));
+    this.runReconciliationSweep().catch((err) =>
+      console.error("[SendScheduler] Initial sweep failed:", err),
+    );
     this.intervalTimer = setInterval(() => {
-      this.runReconciliationSweep().catch((err) => console.error('[SendScheduler] Sweep error:', err));
+      this.runReconciliationSweep().catch((err) =>
+        console.error("[SendScheduler] Sweep error:", err),
+      );
     }, intervalMs);
   }
 

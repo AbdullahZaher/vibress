@@ -1,4 +1,5 @@
-export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead_letter';
+export type WebhookDeliveryStatus =
+  "pending" | "delivered" | "failed" | "dead_letter";
 
 export interface WebhookEndpoint {
   id: string;
@@ -45,14 +46,27 @@ export interface WebhookRepository {
   createEndpoint(data: CreateWebhookEndpointData): Promise<WebhookEndpoint>;
   findEndpointById(id: string): Promise<WebhookEndpoint | null>;
   listEndpoints(): Promise<WebhookEndpoint[]>;
-  updateEndpoint(id: string, data: Partial<CreateWebhookEndpointData>): Promise<WebhookEndpoint>;
+  updateEndpoint(
+    id: string,
+    data: Partial<CreateWebhookEndpointData>,
+  ): Promise<WebhookEndpoint>;
   deleteEndpoint(id: string): Promise<void>;
   findActiveEndpointsForEvent(eventType: string): Promise<WebhookEndpoint[]>;
 
-  createDelivery(data: { endpointId: string; eventId: string; eventType: string; payloadHash: string }): Promise<WebhookDelivery>;
-  findDelivery(endpointId: string, eventId: string): Promise<WebhookDelivery | null>;
+  createDelivery(data: {
+    endpointId: string;
+    eventId: string;
+    eventType: string;
+    payloadHash: string;
+  }): Promise<WebhookDelivery>;
+  findDelivery(
+    endpointId: string,
+    eventId: string,
+  ): Promise<WebhookDelivery | null>;
   findDeliveryById(id: string): Promise<WebhookDelivery | null>;
-  listDeliveries(filter?: ListDeliveriesFilter): Promise<{ deliveries: WebhookDelivery[]; total: number }>;
+  listDeliveries(
+    filter?: ListDeliveriesFilter,
+  ): Promise<{ deliveries: WebhookDelivery[]; total: number }>;
   markDelivered(id: string, responseStatus: number): Promise<void>;
   markFailed(id: string, error: string, attemptCount: number): Promise<void>;
   markDeadLetter(id: string, error: string): Promise<void>;

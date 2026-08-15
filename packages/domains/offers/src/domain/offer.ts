@@ -1,6 +1,6 @@
-export type OfferDiscountType = 'percentage' | 'fixed_amount';
-export type OfferDurationType = 'once' | 'repeating' | 'forever';
-export type OfferStatus = 'active' | 'disabled';
+export type OfferDiscountType = "percentage" | "fixed_amount";
+export type OfferDurationType = "once" | "repeating" | "forever";
+export type OfferStatus = "active" | "disabled";
 
 export interface Offer {
   id: string;

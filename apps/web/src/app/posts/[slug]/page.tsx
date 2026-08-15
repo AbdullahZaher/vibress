@@ -1,16 +1,12 @@
-import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
-import { ContentApiClient } from '../../../lib/content-api-client';
-import {
-  buildPageMetadata,
-  buildPostJsonLd,
-  safeJsonLdScript,
-} from '../../../lib/seo-helpers';
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
+import { ContentApiClient } from "../../../lib/content-api-client";
+import { buildPageMetadata } from "../../../lib/seo-helpers";
 import {
   resolveThemeHostState,
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
-} from '../../../lib/theme-host';
+} from "../../../lib/theme-host";
 
 export const revalidate = 0;
 
@@ -23,17 +19,17 @@ export async function generateMetadata({
   const post = await ContentApiClient.getPostBySlug(slug);
   if (!post) {
     return {
-      title: 'Post Not Found',
+      title: "Post Not Found",
     };
   }
 
   return buildPageMetadata({
     title: post.seo?.title || post.title,
-    description: post.seo?.description || post.excerpt || '',
+    description: post.seo?.description || post.excerpt || "",
     canonicalPath: `/posts/${post.slug}`,
     canonicalOverride: post.seo?.canonicalUrl || null,
     ogImage: post.featureImage?.url || post.seo?.ogImage || null,
-    ogType: 'article',
+    ogType: "article",
   });
 }
 
@@ -49,7 +45,10 @@ export default async function PostPage({
   }
 
   const previewThemeId = await getPreviewThemeIdFromHeaders();
-  const hostState = await resolveThemeHostState(!!previewThemeId, previewThemeId);
+  const hostState = await resolveThemeHostState(
+    !!previewThemeId,
+    previewThemeId,
+  );
   const site = await getThemeSiteSettings();
 
   return hostState.theme.components.Post({

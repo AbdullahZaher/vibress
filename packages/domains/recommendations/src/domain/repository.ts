@@ -1,4 +1,8 @@
-import { Recommendation, CreateRecommendationData, UpdateRecommendationData, RecommendationStatus } from './recommendation';
+import {
+  Recommendation,
+  CreateRecommendationData,
+  UpdateRecommendationData,
+} from "./recommendation";
 
 export interface RecommendationRepository {
   create(data: CreateRecommendationData): Promise<Recommendation>;
@@ -10,6 +14,11 @@ export interface RecommendationRepository {
 }
 
 export interface RecommendationEventRepository {
-  record(data: { recommendationId: string; memberId?: string | null; type: string; sessionId?: string | null }): Promise<void>;
+  record(data: {
+    recommendationId: string;
+    memberId?: string | null;
+    type: string;
+    sessionId?: string | null;
+  }): Promise<void>;
   countByType(recommendationId: string): Promise<Record<string, number>>;
 }

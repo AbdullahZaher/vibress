@@ -1,18 +1,19 @@
-import './globals.css';
-import { Metadata } from 'next';
-import { getPublicSiteUrl } from '../lib/seo-helpers';
-import { resolveThemeHostState, getThemeSiteSettings, getPreviewThemeIdFromHeaders } from '../lib/theme-host';
-import { AnalyticsTracker } from '../components/analytics-tracker';
-import { HeadCodeInjection } from '../components/HeadCodeInjection';
-
-const siteName = process.env.SITE_NAME || 'Vibress';
-const siteDescription = process.env.SITE_DESCRIPTION || 'Publishing Platform';
-const siteUrl = getPublicSiteUrl();
+import "./globals.css";
+import { Metadata } from "next";
+import { getPublicSiteUrl } from "../lib/seo-helpers";
+import {
+  resolveThemeHostState,
+  getThemeSiteSettings,
+  getPreviewThemeIdFromHeaders,
+} from "../lib/theme-host";
+import { AnalyticsTracker } from "../components/analytics-tracker";
+import { HeadCodeInjection } from "../components/HeadCodeInjection";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getThemeSiteSettings();
-  const title = site.title || process.env.SITE_NAME || 'Vibress';
-  const description = site.description || process.env.SITE_DESCRIPTION || 'Publishing Platform';
+  const title = site.title || process.env.SITE_NAME || "Vibress";
+  const description =
+    site.description || process.env.SITE_DESCRIPTION || "Publishing Platform";
   const siteUrl = site.url || getPublicSiteUrl();
 
   return {
@@ -31,11 +32,11 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       url: siteUrl,
       siteName: title,
-      type: 'website',
+      type: "website",
       images: site.coverUrl ? [{ url: site.coverUrl }] : undefined,
     },
     twitter: {
-      card: 'summary_large_image',
+      card: "summary_large_image",
       title,
       description,
       images: site.coverUrl ? [site.coverUrl] : undefined,
@@ -59,7 +60,9 @@ export default async function RootLayout({
   }
 
   const site = await getThemeSiteSettings();
-  const themeCss = hostState?.theme.cssPath || '/theme-assets/vibress-default/1.0.0/default.css';
+  const themeCss =
+    hostState?.theme.cssPath ||
+    "/theme-assets/vibress-default/1.0.0/default.css";
 
   return (
     <html lang={site.locale} suppressHydrationWarning>
@@ -74,20 +77,20 @@ export default async function RootLayout({
           <div
             id="vb-announcement-bar"
             style={{
-              backgroundColor: site.accentColor || '#6366f1',
-              color: '#ffffff',
-              textAlign: 'center',
-              padding: '10px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
+              backgroundColor: site.accentColor || "#6366f1",
+              color: "#ffffff",
+              textAlign: "center",
+              padding: "10px 16px",
+              fontSize: "14px",
+              fontWeight: "500",
               zIndex: 9999,
-              position: 'relative',
+              position: "relative",
             }}
           >
             {site.announcementUrl ? (
               <a
                 href={site.announcementUrl}
-                style={{ color: '#ffffff', textDecoration: 'underline' }}
+                style={{ color: "#ffffff", textDecoration: "underline" }}
               >
                 {site.announcementText}
               </a>
@@ -105,4 +108,3 @@ export default async function RootLayout({
     </html>
   );
 }
-

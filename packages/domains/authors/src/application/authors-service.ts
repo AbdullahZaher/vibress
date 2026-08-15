@@ -1,5 +1,5 @@
-import { AuthorRepository } from '../domain/repository';
-import { Author } from '../domain/author';
+import { AuthorRepository } from "../domain/repository";
+import { Author } from "../domain/author";
 
 export class AuthorsService {
   constructor(private authorRepo: AuthorRepository) {}
@@ -8,7 +8,11 @@ export class AuthorsService {
     return this.authorRepo.getPostAuthors(postId);
   }
 
-  async setPostAuthors(postId: string, authorIds: string[], primaryAuthorId: string): Promise<void> {
+  async setPostAuthors(
+    postId: string,
+    authorIds: string[],
+    primaryAuthorId: string,
+  ): Promise<void> {
     await this.authorRepo.setPostAuthors(postId, authorIds, primaryAuthorId);
   }
 
@@ -16,7 +20,11 @@ export class AuthorsService {
     return this.authorRepo.getPageAuthors(pageId);
   }
 
-  async setPageAuthors(pageId: string, authorIds: string[], primaryAuthorId: string): Promise<void> {
+  async setPageAuthors(
+    pageId: string,
+    authorIds: string[],
+    primaryAuthorId: string,
+  ): Promise<void> {
     await this.authorRepo.setPageAuthors(pageId, authorIds, primaryAuthorId);
   }
 }

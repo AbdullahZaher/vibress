@@ -4,14 +4,14 @@
 
 `notifications` is durable, independent of email transport.
 
-| Field | Notes |
-|---|---|
-| `recipient_type` / `recipient_id` | v1 is `member` only |
-| `type` | e.g. `comment.reply`, `comment.hidden` |
-| `actor_member_id` FK null | Who triggered it (null = system) |
-| `entity_type` / `entity_id` | What it refers to |
-| `data` | Safe JSON payload (no PII beyond entity refs) |
-| `read_at` | Null until read |
+| Field                             | Notes                                         |
+| --------------------------------- | --------------------------------------------- |
+| `recipient_type` / `recipient_id` | v1 is `member` only                           |
+| `type`                            | e.g. `comment.reply`, `comment.hidden`        |
+| `actor_member_id` FK null         | Who triggered it (null = system)              |
+| `entity_type` / `entity_id`       | What it refers to                             |
+| `data`                            | Safe JSON payload (no PII beyond entity refs) |
+| `read_at`                         | Null until read                               |
 
 ## Rules
 

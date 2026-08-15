@@ -1,11 +1,11 @@
-import { useCallback } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
-import { NodeKey, $getNodeByKey } from 'lexical';
-import { EmbedCardData, StudioCardNode } from '@vibress/studio-cards';
+import { useCallback } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
+import { NodeKey, $getNodeByKey } from "lexical";
+import { EmbedCardData, StudioCardNode } from "@vibress/studio-cards";
 
-import { NestedCaptionEditor } from './NestedCaptionEditor';
-import { UrlPlaceholder } from '../ui/UrlPlaceholder';
+import { NestedCaptionEditor } from "./NestedCaptionEditor";
+import { UrlPlaceholder } from "../ui/UrlPlaceholder";
 
 interface Props {
   nodeKey: NodeKey;
@@ -14,7 +14,8 @@ interface Props {
 
 export function EmbedCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
-  const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const [isSelected, setSelected, clearSelection] =
+    useLexicalNodeSelection(nodeKey);
 
   const isPopulated = !!cardData.url;
 
@@ -43,7 +44,7 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         }
       });
     },
-    [editor, nodeKey, cardData]
+    [editor, nodeKey, cardData],
   );
 
   if (!isPopulated) {
@@ -64,8 +65,8 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
 
   // Very basic iframe rendering. In a real app you would process the URL to get proper embed codes (like turning youtube watch URLs into embed URLs)
   let src = cardData.url;
-  if (src.includes('youtube.com/watch?v=')) {
-    src = src.replace('youtube.com/watch?v=', 'youtube.com/embed/');
+  if (src.includes("youtube.com/watch?v=")) {
+    src = src.replace("youtube.com/watch?v=", "youtube.com/embed/");
   }
 
   return (
@@ -76,13 +77,19 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #6366f1' : 'none',
-        transition: 'outline 0.1s ease',
+        outline: isSelected ? "2px solid #6366f1" : "none",
+        transition: "outline 0.1s ease",
       }}
     >
-      <div className="relative w-full overflow-hidden bg-muted/60 dark:bg-white/[0.04] rounded-xl border border-border/80 dark:border-white/10 shadow-sm" style={{ paddingTop: '56.25%' /* 16:9 Aspect Ratio */ }}>
+      <div
+        className="relative w-full overflow-hidden bg-muted/60 dark:bg-white/[0.04] rounded-xl border border-border/80 dark:border-white/10 shadow-sm"
+        style={{ paddingTop: "56.25%" /* 16:9 Aspect Ratio */ }}
+      >
         {cardData.html ? (
-           <div className="absolute top-0 left-0 w-full h-full" dangerouslySetInnerHTML={{ __html: cardData.html }} />
+          <div
+            className="absolute top-0 left-0 w-full h-full"
+            dangerouslySetInnerHTML={{ __html: cardData.html }}
+          />
         ) : (
           <iframe
             className="absolute top-0 left-0 w-full h-full"
@@ -95,7 +102,9 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         )}
       </div>
       <NestedCaptionEditor
-        initialCaptionJSON={typeof cardData.caption === 'object' ? cardData.caption : undefined}
+        initialCaptionJSON={
+          typeof cardData.caption === "object" ? cardData.caption : undefined
+        }
         onChange={onCaptionChange}
         placeholder="Type caption for embed (optional)"
       />

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ThemeManifestDtoSchema = z.object({
   id: z.string(),
@@ -30,12 +30,16 @@ export const ActiveThemeDtoSchema = z.object({
 export type ActiveThemeDto = z.infer<typeof ActiveThemeDtoSchema>;
 
 export const ThemeSettingsUpdateSchema = z.record(z.unknown());
-export type ThemeSettingsUpdateInput = z.infer<typeof ThemeSettingsUpdateSchema>;
+export type ThemeSettingsUpdateInput = z.infer<
+  typeof ThemeSettingsUpdateSchema
+>;
 
 export const ThemeActivationResponseSchema = z.object({
   theme: ActiveThemeDtoSchema,
 });
-export type ThemeActivationResponse = z.infer<typeof ThemeActivationResponseSchema>;
+export type ThemeActivationResponse = z.infer<
+  typeof ThemeActivationResponseSchema
+>;
 
 export const ThemePreviewResponseSchema = z.object({
   previewToken: z.string(),

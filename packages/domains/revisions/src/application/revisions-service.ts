@@ -1,5 +1,9 @@
-import { RevisionRepository } from '../domain/repository';
-import { Revision, CreateRevisionData, RevisionResourceType } from '../domain/revision';
+import { RevisionRepository } from "../domain/repository";
+import {
+  Revision,
+  CreateRevisionData,
+  RevisionResourceType,
+} from "../domain/revision";
 
 export class RevisionsService {
   constructor(private revisionRepo: RevisionRepository) {}
@@ -8,7 +12,10 @@ export class RevisionsService {
     return this.revisionRepo.createRevision(data);
   }
 
-  async getRevisions(resourceType: RevisionResourceType, resourceId: string): Promise<Revision[]> {
+  async getRevisions(
+    resourceType: RevisionResourceType,
+    resourceId: string,
+  ): Promise<Revision[]> {
     return this.revisionRepo.getRevisions(resourceType, resourceId);
   }
 

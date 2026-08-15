@@ -1,7 +1,20 @@
-import { IntegrationRepository, ApiKeyRepository, ApiKeyRecord } from '../domain/repository';
-import { Integration, CreateIntegrationData, UpdateIntegrationData } from '../domain/integration';
-import { encryptSecret, decryptSecret, generateOpaqueToken, hashToken } from '@vibress/security';
-import { domainEvents } from '@vibress/events';
+import {
+  IntegrationRepository,
+  ApiKeyRepository,
+  ApiKeyRecord,
+} from "../domain/repository";
+import {
+  Integration,
+  CreateIntegrationData,
+  UpdateIntegrationData,
+} from "../domain/integration";
+import {
+  encryptSecret,
+  decryptSecret,
+  generateOpaqueToken,
+  hashToken,
+} from "@vibress/security";
+import { domainEvents } from "@vibress/events";
 
 export class IntegrationDomainError extends Error {
   code: string;
@@ -31,19 +44,30 @@ export interface ApiKeySession {
 export class IntegrationsService {
   constructor(
     private integrationRepo: IntegrationRepository,
-    private apiKeyRepo: ApiKeyRepository
+    private apiKeyRepo: ApiKeyRepository,
   ) {}
 
   // ---------------- Integrations ----------------
 
-  async createIntegration(data: CreateIntegrationData, actorId: string | null): Promise<Integration> {
+  async createIntegration(
+    data: CreateIntegrationData,
+    actorId: string | null,
+  ): Promise<Integration> {
     const key = data.key.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]*$/.test(key)) {
-      throw new IntegrationDomainError('VALIDATION_ERROR', 'Integration key must be lowercase alphanumeric with hyphens');
+      throw new IntegrationDomainError(
+        "VALIDATION_ERROR",
+        "Integration key must be lowercase alphanumeric with hyphens",
+      );
     }
-    if (!data.name.trim()) throw new IntegrationDomainError('VALIDATION_ERROR', 'Name is required');
+    if (!data.name.trim())
+      throw new IntegrationDomainError("VALIDATION_ERROR", "Name is required");
     const existing = await this.integrationRepo.findByKey(key);
-    if (existing) throw new IntegrationDomainError('VALIDATION_ERROR', 'Integration key already exists');
+    if (existing)
+      throw new IntegrationDomainError(
+        "VALIDATION_ERROR",
+        "Integration key already exists",
+      );
 
     const encryptedSecrets = this.encryptSecrets(data.secrets || {});
     const integration = await this.integrationRepo.create({
@@ -51,13 +75,24 @@ export class IntegrationsService {
       key,
       secrets: encryptedSecrets,
     });
-    domainEvents.emit('integration.created', { integrationId: integration.id, actorId });
+    domainEvents.emit("integration.created", {
+      integrationId: integration.id,
+      actorId,
+    });
     return integration;
   }
 
-  async updateIntegration(id: string, data: UpdateIntegrationData, actorId: string | null): Promise<Integration> {
+  async updateIntegration(
+    id: string,
+    data: UpdateIntegrationData,
+    actorId: string | null,
+  ): Promise<Integration> {
     const existing = await this.integrationRepo.findById(id);
-    if (!existing) throw new IntegrationDomainError('INTEGRATION_NOT_FOUND', 'Integration not found');
+    if (!existing)
+      throw new IntegrationDomainError(
+        "INTEGRATION_NOT_FOUND",
+        "Integration not found",
+      );
 
     const updateData: UpdateIntegrationData = { ...data };
     if (data.secrets) {
@@ -68,7 +103,7 @@ export class IntegrationsService {
       };
     }
     const updated = await this.integrationRepo.update(id, updateData);
-    domainEvents.emit('integration.updated', { integrationId: id, actorId });
+    domainEvents.emit("integration.updated", { integrationId: id, actorId });
     return updated;
   }
 
@@ -87,7 +122,7 @@ export class IntegrationsService {
     const maskedSecrets: Record<string, string> = {};
     if (integration.encryptedSecrets) {
       for (const key of Object.keys(integration.encryptedSecrets)) {
-        maskedSecrets[key] = '••••••••';
+        maskedSecrets[key] = "••••••••";
       }
     }
     return {
@@ -103,8 +138,15 @@ export class IntegrationsService {
     };
   }
 
-  async decryptIntegrationSecret(integration: Integration, secretKey: string): Promise<string | null> {
-    if (!integration.encryptedSecrets || !integration.encryptedSecrets[secretKey]) return null;
+  async decryptIntegrationSecret(
+    integration: Integration,
+    secretKey: string,
+  ): Promise<string | null> {
+    if (
+      !integration.encryptedSecrets ||
+      !integration.encryptedSecrets[secretKey]
+    )
+      return null;
     try {
       return decryptSecret(integration.encryptedSecrets[secretKey]);
     } catch {
@@ -112,7 +154,9 @@ export class IntegrationsService {
     }
   }
 
-  private encryptSecrets(secrets: Record<string, string>): Record<string, string> {
+  private encryptSecrets(
+    secrets: Record<string, string>,
+  ): Record<string, string> {
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(secrets)) {
       out[key] = encryptSecret(value);
@@ -125,10 +169,22 @@ export class IntegrationsService {
   /**
    * Creates an API key. The raw secret is returned exactly once.
    */
-  async createApiKey(data: { name: string; scopes: string[]; integrationId?: string | null; expiresAt?: Date | null }, actorId: string | null): Promise<ApiKeyCreated> {
-    if (!data.name.trim()) throw new IntegrationDomainError('VALIDATION_ERROR', 'Name is required');
+  async createApiKey(
+    data: {
+      name: string;
+      scopes: string[];
+      integrationId?: string | null;
+      expiresAt?: Date | null;
+    },
+    actorId: string | null,
+  ): Promise<ApiKeyCreated> {
+    if (!data.name.trim())
+      throw new IntegrationDomainError("VALIDATION_ERROR", "Name is required");
     if (!Array.isArray(data.scopes) || data.scopes.length === 0) {
-      throw new IntegrationDomainError('VALIDATION_ERROR', 'At least one scope is required');
+      throw new IntegrationDomainError(
+        "VALIDATION_ERROR",
+        "At least one scope is required",
+      );
     }
 
     const raw = generateOpaqueToken();
@@ -144,7 +200,7 @@ export class IntegrationsService {
       integrationId: data.integrationId || null,
       expiresAt: data.expiresAt || null,
     });
-    domainEvents.emit('api_key.created', { apiKeyId: record.id, actorId });
+    domainEvents.emit("api_key.created", { apiKeyId: record.id, actorId });
 
     return {
       id: record.id,
@@ -162,7 +218,7 @@ export class IntegrationsService {
 
   async revokeApiKey(id: string, actorId: string | null): Promise<void> {
     await this.apiKeyRepo.revoke(id);
-    domainEvents.emit('api_key.revoked', { apiKeyId: id, actorId });
+    domainEvents.emit("api_key.revoked", { apiKeyId: id, actorId });
   }
 
   /**
@@ -171,12 +227,18 @@ export class IntegrationsService {
    * between unknown/expired/revoked keys.
    */
   async authenticateApiKey(rawSecret: string): Promise<ApiKeySession | null> {
-    if (!rawSecret || typeof rawSecret !== 'string' || !rawSecret.startsWith('vk_')) return null;
+    if (
+      !rawSecret ||
+      typeof rawSecret !== "string" ||
+      !rawSecret.startsWith("vk_")
+    )
+      return null;
     const keyHash = hashToken(rawSecret);
     const record = await this.apiKeyRepo.findByKeyHash(keyHash);
     if (!record) return null;
     if (record.revokedAt) return null;
-    if (record.expiresAt && record.expiresAt.getTime() < Date.now()) return null;
+    if (record.expiresAt && record.expiresAt.getTime() < Date.now())
+      return null;
 
     await this.apiKeyRepo.touchLastUsed(record.id);
     return {

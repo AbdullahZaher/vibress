@@ -4,13 +4,13 @@
 
 ```ts
 interface StorageProvider {
-    readonly name: string;
-    getCapabilities(): StorageCapabilities;
-    put(input: PutObjectInput): Promise<StoredObject>;
-    delete(key: string): Promise<void>;
-    exists(key: string): Promise<boolean>;
-    getUrl(key: string): Promise<string>;
-    getSignedUrl?(key: string, options?: SignedUrlOptions): Promise<string>;
+  readonly name: string;
+  getCapabilities(): StorageCapabilities;
+  put(input: PutObjectInput): Promise<StoredObject>;
+  delete(key: string): Promise<void>;
+  exists(key: string): Promise<boolean>;
+  getUrl(key: string): Promise<string>;
+  getSignedUrl?(key: string, options?: SignedUrlOptions): Promise<string>;
 }
 ```
 
@@ -18,11 +18,11 @@ interface StorageProvider {
 
 ```ts
 interface StorageCapabilities {
-    signedUrls: boolean;
-    directUpload: boolean;
-    multipartUpload: boolean;
-    privateObjects: boolean;
-    publicObjects: boolean;
+  signedUrls: boolean;
+  directUpload: boolean;
+  multipartUpload: boolean;
+  privateObjects: boolean;
+  publicObjects: boolean;
 }
 ```
 
@@ -32,10 +32,10 @@ Central provider registration and resolution:
 
 ```ts
 class StorageRegistry {
-    register(provider: StorageProvider): void;
-    setActiveProvider(name: string): void;
-    getActiveProvider(): StorageProvider;
-    getProvider(name: string): StorageProvider;
+  register(provider: StorageProvider): void;
+  setActiveProvider(name: string): void;
+  getActiveProvider(): StorageProvider;
+  getProvider(name: string): StorageProvider;
 }
 ```
 
@@ -44,11 +44,13 @@ class StorageRegistry {
 Implements `StorageProvider` for local filesystem storage.
 
 ### Configuration
+
 - Root directory: `content/media/` (configurable via `storageRoot`)
 - Temp directory: `content/temp/` (atomic writes)
 - Base URL: `/content/media` (configurable)
 
 ### Capabilities
+
 ```text
 signedUrls: false
 directUpload: false
@@ -58,7 +60,9 @@ publicObjects: true
 ```
 
 ### Path Safety
+
 Storage keys are validated for:
+
 - Non-empty strings
 - No null bytes
 - No path traversal (`..`, `.`)
@@ -66,9 +70,11 @@ Storage keys are validated for:
 - Resolved path must be within `storageRoot`
 
 ### Atomic Writes
+
 Files are written to a temp file first, then atomically renamed to the target path. On failure, temp files are cleaned up.
 
 ### Public URL
+
 Public URL is resolved from baseUrl + key. Never expose filesystem paths.
 
 ## Active Provider Configuration

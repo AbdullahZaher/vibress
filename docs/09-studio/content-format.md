@@ -68,10 +68,10 @@ Each card should define:
 
 ```tsx
 <VibressStudio
-    document={post.content}
-    onChange={updateContent}
-    upload={mediaUploader}
-    plugins={studioPlugins}
+  document={post.content}
+  onChange={updateContent}
+  upload={mediaUploader}
+  plugins={studioPlugins}
 />
 ```
 

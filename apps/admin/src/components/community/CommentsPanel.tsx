@@ -1,8 +1,20 @@
-import { AdminComment, hideCommentApi, restoreCommentApi, adminDeleteCommentApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import {
+  AdminComment,
+  hideCommentApi,
+  restoreCommentApi,
+  adminDeleteCommentApi,
+} from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
 
 interface CommentsPanelProps {
   comments: AdminComment[];
@@ -10,13 +22,17 @@ interface CommentsPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelProps) {
+export function CommentsPanel({
+  comments,
+  onError,
+  onChanged,
+}: CommentsPanelProps) {
   const handleHide = async (id: string) => {
     try {
       await hideCommentApi(id);
       await onChanged();
     } catch (e: unknown) {
-      onError(e instanceof Error ? e.message : 'Failed');
+      onError(e instanceof Error ? e.message : "Failed");
     }
   };
 
@@ -25,7 +41,7 @@ export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelPro
       await restoreCommentApi(id);
       await onChanged();
     } catch (e: unknown) {
-      onError(e instanceof Error ? e.message : 'Failed');
+      onError(e instanceof Error ? e.message : "Failed");
     }
   };
 
@@ -34,7 +50,7 @@ export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelPro
       await adminDeleteCommentApi(id);
       await onChanged();
     } catch (e: unknown) {
-      onError(e instanceof Error ? e.message : 'Failed');
+      onError(e instanceof Error ? e.message : "Failed");
     }
   };
 
@@ -52,7 +68,10 @@ export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelPro
         <TableBody>
           {comments.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-xs text-muted-foreground">
+              <TableCell
+                colSpan={4}
+                className="h-32 text-center text-xs text-muted-foreground"
+              >
                 No comments found.
               </TableCell>
             </TableRow>
@@ -73,12 +92,18 @@ export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelPro
                 </TableCell>
 
                 <TableCell>
-                  {c.status === 'hidden' ? (
-                    <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">
+                  {c.status === "hidden" ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-mono px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                    >
                       Hidden
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                    >
                       Visible
                     </Badge>
                   )}
@@ -86,7 +111,7 @@ export function CommentsPanel({ comments, onError, onChanged }: CommentsPanelPro
 
                 <TableCell className="text-right pr-6">
                   <div className="flex items-center justify-end gap-1.5">
-                    {c.status === 'hidden' ? (
+                    {c.status === "hidden" ? (
                       <Button
                         variant="outline"
                         size="sm"

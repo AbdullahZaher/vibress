@@ -1,17 +1,24 @@
-import { FastifyInstance } from 'fastify';
-import { membersService } from '../services';
-import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { MemberNotFoundError, MemberStateError } from '@vibress/members';
+import { FastifyInstance } from "fastify";
+import { membersService } from "../services";
+import {
+  requireStaffSession,
+  requirePermission,
+  validateOrigin,
+} from "../middleware/auth";
+import { MemberNotFoundError, MemberStateError } from "@vibress/members";
 
 export async function adminMemberRoutes(fastify: FastifyInstance) {
   // List members (staff only)
-  fastify.get('/members', {
-    preHandler: [requireStaffSession, requirePermission('members.read')],
+  fastify.get("/members", {
+    preHandler: [requireStaffSession, requirePermission("members.read")],
     handler: async (req, reply) => {
-      const { search, status, limit, offset } = req.query as Record<string, string | undefined>;
+      const { search, status, limit, offset } = req.query as Record<
+        string,
+        string | undefined
+      >;
       const result = await membersService.listMembers({
         search,
-        status: status as 'active' | 'disabled' | undefined,
+        status: status as "active" | "disabled" | undefined,
         limit: limit ? parseInt(limit, 10) : 20,
         offset: offset ? parseInt(offset, 10) : 0,
       });
@@ -29,21 +36,27 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({
         members,
         total: result.total,
-        limit: parseInt(limit || '20', 10),
-        offset: parseInt(offset || '0', 10),
+        limit: parseInt(limit || "20", 10),
+        offset: parseInt(offset || "0", 10),
       });
     },
   });
 
   // Member detail (staff only)
-  fastify.get('/members/:id', {
-    preHandler: [requireStaffSession, requirePermission('members.read')],
+  fastify.get("/members/:id", {
+    preHandler: [requireStaffSession, requirePermission("members.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const member = await membersService.findById(id);
       if (!member) {
         return reply.status(404).send({
-          errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
+          errors: [
+            {
+              code: "MEMBER_NOT_FOUND",
+              message: "Member not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -58,8 +71,12 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
           status: member.status,
           emailVerified: !!member.emailVerifiedAt,
           createdAt: member.createdAt.toISOString(),
-          lastSeenAt: member.lastSeenAt ? member.lastSeenAt.toISOString() : null,
-          disabledAt: member.disabledAt ? member.disabledAt.toISOString() : null,
+          lastSeenAt: member.lastSeenAt
+            ? member.lastSeenAt.toISOString()
+            : null,
+          disabledAt: member.disabledAt
+            ? member.disabledAt.toISOString()
+            : null,
           updatedAt: member.updatedAt.toISOString(),
           activeSessionCount,
         },
@@ -68,8 +85,12 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
   });
 
   // Disable member (staff only) — revokes sessions atomically
-  fastify.post('/members/:id/disable', {
-    preHandler: [requireStaffSession, requirePermission('members.manage'), validateOrigin],
+  fastify.post("/members/:id/disable", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("members.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -78,18 +99,35 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
           member: {
             id: updated.id,
             status: updated.status,
-            disabledAt: updated.disabledAt ? updated.disabledAt.toISOString() : null,
+            disabledAt: updated.disabledAt
+              ? updated.disabledAt.toISOString()
+              : null,
           },
         });
       } catch (err: unknown) {
         if (err instanceof MemberNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
+            errors: [
+              {
+                code: "MEMBER_NOT_FOUND",
+                message: "Member not found",
+                requestId: req.id,
+              },
+            ],
           });
         }
-        if (err instanceof MemberStateError && err.code === 'MEMBER_ALREADY_DISABLED') {
+        if (
+          err instanceof MemberStateError &&
+          err.code === "MEMBER_ALREADY_DISABLED"
+        ) {
           return reply.status(409).send({
-            errors: [{ code: 'MEMBER_ALREADY_DISABLED', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEMBER_ALREADY_DISABLED",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -98,8 +136,12 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
   });
 
   // Enable member (staff only)
-  fastify.post('/members/:id/enable', {
-    preHandler: [requireStaffSession, requirePermission('members.manage'), validateOrigin],
+  fastify.post("/members/:id/enable", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("members.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -114,12 +156,27 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
       } catch (err: unknown) {
         if (err instanceof MemberNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
+            errors: [
+              {
+                code: "MEMBER_NOT_FOUND",
+                message: "Member not found",
+                requestId: req.id,
+              },
+            ],
           });
         }
-        if (err instanceof MemberStateError && err.code === 'MEMBER_ALREADY_ACTIVE') {
+        if (
+          err instanceof MemberStateError &&
+          err.code === "MEMBER_ALREADY_ACTIVE"
+        ) {
           return reply.status(409).send({
-            errors: [{ code: 'MEMBER_ALREADY_ACTIVE', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEMBER_ALREADY_ACTIVE",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -128,14 +185,24 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
   });
 
   // Revoke all member sessions (staff only)
-  fastify.post('/members/:id/revoke-sessions', {
-    preHandler: [requireStaffSession, requirePermission('members.manage'), validateOrigin],
+  fastify.post("/members/:id/revoke-sessions", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("members.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const member = await membersService.findById(id);
       if (!member) {
         return reply.status(404).send({
-          errors: [{ code: 'MEMBER_NOT_FOUND', message: 'Member not found', requestId: req.id }],
+          errors: [
+            {
+              code: "MEMBER_NOT_FOUND",
+              message: "Member not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
 

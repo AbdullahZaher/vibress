@@ -1,12 +1,12 @@
-import { EmailProvider, NormalizedEmailEvent, EmailMessage } from '../domain/provider';
+import { EmailProvider, NormalizedEmailEvent } from "../domain/provider";
 import {
   EmailRecipientRepository,
   EmailEventRepository,
   EmailSuppressionRepository,
-} from '../domain/recipient';
-import { SuppressionReason } from '../domain/recipient';
-import { domainEvents } from '@vibress/events';
-import crypto from 'node:crypto';
+} from "../domain/recipient";
+import { SuppressionReason } from "../domain/recipient";
+import { domainEvents } from "@vibress/events";
+import crypto from "node:crypto";
 
 export class EmailDomainError extends Error {
   code: string;
@@ -38,7 +38,10 @@ export interface ProviderEventRepository {
     eventType: string;
     payloadHash: string;
   }): Promise<ProviderEventRecord>;
-  findByProviderEventId(provider: string, providerEventId: string): Promise<ProviderEventRecord | null>;
+  findByProviderEventId(
+    provider: string,
+    providerEventId: string,
+  ): Promise<ProviderEventRecord | null>;
   markProcessed(id: string, processedAt?: Date): Promise<void>;
   markFailed(id: string, error: string, attemptCount: number): Promise<void>;
 }
@@ -51,10 +54,12 @@ export interface EmailServiceDeps {
   providerEventRepo: ProviderEventRepository;
 }
 
-const SUPPRESSION_BY_EVENT: Partial<Record<NormalizedEmailEvent['type'], SuppressionReason>> = {
-  bounced: 'hard_bounce',
-  complained: 'spam_complaint',
-  failed: 'hard_bounce',
+const SUPPRESSION_BY_EVENT: Partial<
+  Record<NormalizedEmailEvent["type"], SuppressionReason>
+> = {
+  bounced: "hard_bounce",
+  complained: "spam_complaint",
+  failed: "hard_bounce",
 };
 
 export class EmailService {
@@ -94,11 +99,26 @@ export class EmailService {
     return this.deps.suppressionRepo.isSuppressed(email);
   }
 
-  async suppress(email: string, reason: SuppressionReason, source: string, detail?: string | null, memberId?: string | null): Promise<void> {
-    await this.deps.suppressionRepo.add({ email, reason, source, detail, memberId });
+  async suppress(
+    email: string,
+    reason: SuppressionReason,
+    source: string,
+    detail?: string | null,
+    memberId?: string | null,
+  ): Promise<void> {
+    await this.deps.suppressionRepo.add({
+      email,
+      reason,
+      source,
+      detail,
+      memberId,
+    });
   }
 
-  async listSuppressions(limit = 50, offset = 0): Promise<{ suppressions: unknown[]; total: number }> {
+  async listSuppressions(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ suppressions: unknown[]; total: number }> {
     return this.deps.suppressionRepo.list(limit, offset);
   }
 
@@ -111,7 +131,10 @@ export class EmailService {
     return 0;
   }
 
-  async removeSuppression(email: string, reason: SuppressionReason): Promise<void> {
+  async removeSuppression(
+    email: string,
+    reason: SuppressionReason,
+  ): Promise<void> {
     await this.deps.suppressionRepo.remove(email, reason);
   }
 
@@ -122,23 +145,32 @@ export class EmailService {
   async handleWebhook(
     providerName: string,
     rawPayload: string | Buffer,
-    signatureHeader: string | null | undefined
+    signatureHeader: string | null | undefined,
   ): Promise<{ processed: boolean; status: number }> {
     if (this.deps.provider.name !== providerName) {
       return { processed: false, status: 404 };
     }
 
-    const verified = await this.deps.provider.verifyWebhookSignature(rawPayload, signatureHeader);
+    const verified = await this.deps.provider.verifyWebhookSignature(
+      rawPayload,
+      signatureHeader,
+    );
     if (!verified) {
       return { processed: false, status: 400 };
     }
 
     const event = await this.deps.provider.parseWebhookEvent(rawPayload);
-    const payloadHash = crypto.createHash('sha256').update(rawPayload.toString()).digest('hex');
+    const payloadHash = crypto
+      .createHash("sha256")
+      .update(rawPayload.toString())
+      .digest("hex");
 
-    const existing = await this.deps.providerEventRepo.findByProviderEventId(providerName, event.providerEventId);
+    const existing = await this.deps.providerEventRepo.findByProviderEventId(
+      providerName,
+      event.providerEventId,
+    );
     if (existing) {
-      if (existing.status !== 'processed') {
+      if (existing.status !== "processed") {
         await this.processEvent(existing.id, event);
         await this.deps.providerEventRepo.markProcessed(existing.id);
       }
@@ -156,7 +188,11 @@ export class EmailService {
       await this.processEvent(record.id, event);
       await this.deps.providerEventRepo.markProcessed(record.id);
     } catch (err: unknown) {
-      await this.deps.providerEventRepo.markFailed(record.id, err instanceof Error ? err.message : 'processing failed', 1);
+      await this.deps.providerEventRepo.markFailed(
+        record.id,
+        err instanceof Error ? err.message : "processing failed",
+        1,
+      );
       throw err;
     }
 
@@ -166,11 +202,16 @@ export class EmailService {
   /**
    * Applies a normalized provider event to recipient/suppression state.
    */
-  private async processEvent(eventRecordId: string, event: NormalizedEmailEvent): Promise<void> {
+  private async processEvent(
+    eventRecordId: string,
+    event: NormalizedEmailEvent,
+  ): Promise<void> {
     let recipient = null;
 
     if (event.messageId) {
-      recipient = await this.deps.recipientRepo.findByMessageId(event.messageId);
+      recipient = await this.deps.recipientRepo.findByMessageId(
+        event.messageId,
+      );
     }
     if (!recipient && event.recipientEmail) {
       // Resolve by email within any active send is ambiguous; rely on messageId.
@@ -187,40 +228,60 @@ export class EmailService {
     const domainType = event.type;
 
     switch (domainType) {
-      case 'delivered':
+      case "delivered":
         await this.deps.recipientRepo.markDelivered(recipient.id, at);
-        domainEvents.emit('email.delivered', { recipientId: recipient.id, memberId: recipient.memberId, sendId: recipient.sendId });
+        domainEvents.emit("email.delivered", {
+          recipientId: recipient.id,
+          memberId: recipient.memberId,
+          sendId: recipient.sendId,
+        });
         break;
-      case 'opened':
+      case "opened":
         await this.deps.recipientRepo.markOpened(recipient.id, at);
         break;
-      case 'clicked':
+      case "clicked":
         await this.deps.recipientRepo.markClicked(recipient.id, at);
         break;
-      case 'bounced':
-      case 'failed': {
+      case "bounced":
+      case "failed": {
         const reason = SUPPRESSION_BY_EVENT[domainType]!;
-        await this.deps.recipientRepo.markFailed(recipient.id, event.detail || domainType, recipient.attemptCount + 1);
+        await this.deps.recipientRepo.markFailed(
+          recipient.id,
+          event.detail || domainType,
+          recipient.attemptCount + 1,
+        );
         await this.deps.suppressionRepo.add({
           email: recipient.email,
           memberId: recipient.memberId,
           reason,
-          source: 'provider_webhook',
+          source: "provider_webhook",
           detail: event.detail,
         });
-        domainEvents.emit('email.bounced', { recipientId: recipient.id, memberId: recipient.memberId, sendId: recipient.sendId });
+        domainEvents.emit("email.bounced", {
+          recipientId: recipient.id,
+          memberId: recipient.memberId,
+          sendId: recipient.sendId,
+        });
         break;
       }
-      case 'complained':
-        await this.deps.recipientRepo.markFailed(recipient.id, 'spam complaint', recipient.attemptCount + 1);
+      case "complained":
+        await this.deps.recipientRepo.markFailed(
+          recipient.id,
+          "spam complaint",
+          recipient.attemptCount + 1,
+        );
         await this.deps.suppressionRepo.add({
           email: recipient.email,
           memberId: recipient.memberId,
-          reason: 'spam_complaint',
-          source: 'provider_webhook',
+          reason: "spam_complaint",
+          source: "provider_webhook",
           detail: event.detail,
         });
-        domainEvents.emit('email.complained', { recipientId: recipient.id, memberId: recipient.memberId, sendId: recipient.sendId });
+        domainEvents.emit("email.complained", {
+          recipientId: recipient.id,
+          memberId: recipient.memberId,
+          sendId: recipient.sendId,
+        });
         break;
     }
 

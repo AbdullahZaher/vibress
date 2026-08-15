@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { Cpu, Server, Activity } from 'lucide-react';
-import { PlatformSettings } from './PlatformSettings';
-import { OperationsSettings } from './OperationsSettings';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import React, { useState } from "react";
+import { Cpu, Server, Activity } from "lucide-react";
+import { PlatformSettings } from "./PlatformSettings";
+import { OperationsSettings } from "./OperationsSettings";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
 interface AdvancedSettingsProps {
-  initialTab?: 'platform' | 'operations';
+  initialTab?: "platform" | "operations";
 }
 
-export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({ initialTab = 'platform' }) => {
+export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
+  initialTab = "platform",
+}) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   return (
@@ -21,7 +23,8 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({ initialTab =
             Advanced Platform & Operations
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage developer APIs, webhooks, extensible plugins, system diagnostics, maintenance, and audit trails.
+            Manage developer APIs, webhooks, extensible plugins, system
+            diagnostics, maintenance, and audit trails.
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const PublicProductDtoSchema = z.object({
   id: z.string(),
@@ -14,7 +14,7 @@ export const PublicPlanDtoSchema = z.object({
   key: z.string(),
   name: z.string(),
   description: z.string().nullable(),
-  billingType: z.enum(['free', 'recurring']),
+  billingType: z.enum(["free", "recurring"]),
   billingInterval: z.string().nullable(),
   intervalCount: z.number(),
   currency: z.string(),
@@ -27,17 +27,23 @@ export const MemberCheckoutRequestSchema = z.object({
   planId: z.string().min(1),
   offerKey: z.string().optional(),
 });
-export type MemberCheckoutRequestInput = z.infer<typeof MemberCheckoutRequestSchema>;
+export type MemberCheckoutRequestInput = z.infer<
+  typeof MemberCheckoutRequestSchema
+>;
 
 export const MemberCheckoutResponseSchema = z.object({
   checkoutUrl: z.string(),
 });
-export type MemberCheckoutResponse = z.infer<typeof MemberCheckoutResponseSchema>;
+export type MemberCheckoutResponse = z.infer<
+  typeof MemberCheckoutResponseSchema
+>;
 
 export const MemberBillingPortalResponseSchema = z.object({
   url: z.string(),
 });
-export type MemberBillingPortalResponse = z.infer<typeof MemberBillingPortalResponseSchema>;
+export type MemberBillingPortalResponse = z.infer<
+  typeof MemberBillingPortalResponseSchema
+>;
 
 export const MemberSubscriptionDtoSchema = z.object({
   id: z.string(),
@@ -60,7 +66,7 @@ export const AdminProductInputSchema = z.object({
   key: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
   description: z.string().max(500).nullable().optional(),
-  visibility: z.enum(['public', 'private']).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
 });
 export type AdminProductInput = z.infer<typeof AdminProductInputSchema>;
 
@@ -69,13 +75,13 @@ export const AdminPlanInputSchema = z.object({
   key: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
   description: z.string().max(500).nullable().optional(),
-  billingType: z.enum(['free', 'recurring']).optional(),
-  billingInterval: z.enum(['month', 'year']).nullable().optional(),
+  billingType: z.enum(["free", "recurring"]).optional(),
+  billingInterval: z.enum(["month", "year"]).nullable().optional(),
   intervalCount: z.number().int().min(1).max(12).optional(),
   currency: z.string().min(3).max(3).optional(),
   amountMinor: z.number().int().min(0).optional(),
   trialDays: z.number().int().min(0).max(365).optional(),
-  visibility: z.enum(['public', 'private']).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
 });
 export type AdminPlanInput = z.infer<typeof AdminPlanInputSchema>;
 
@@ -85,9 +91,9 @@ export const AdminOfferInputSchema = z.object({
   key: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
   description: z.string().max(500).nullable().optional(),
-  discountType: z.enum(['percentage', 'fixed_amount']),
+  discountType: z.enum(["percentage", "fixed_amount"]),
   discountValue: z.number().int().min(0),
-  durationType: z.enum(['once', 'repeating', 'forever']).optional(),
+  durationType: z.enum(["once", "repeating", "forever"]).optional(),
   durationCycles: z.number().int().min(1).nullable().optional(),
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
@@ -103,4 +109,6 @@ export const AdminSubscriptionFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
-export type AdminSubscriptionFilter = z.infer<typeof AdminSubscriptionFilterSchema>;
+export type AdminSubscriptionFilter = z.infer<
+  typeof AdminSubscriptionFilterSchema
+>;

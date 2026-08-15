@@ -1,8 +1,8 @@
-import { Pool } from 'pg';
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from './schema';
-import { getTransactionDb } from './transaction/transaction-context';
-import { getConfig } from '@vibress/config';
+import { Pool } from "pg";
+import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
+import * as schema from "./schema";
+import { getTransactionDb } from "./transaction/transaction-context";
+import { getConfig } from "@vibress/config";
 
 let pool: Pool | null = null;
 let dbInstance: NodePgDatabase<typeof schema> | null = null;
@@ -16,9 +16,9 @@ export const getDbPool = (): Pool => {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
     });
-    
-    pool.on('error', (err) => {
-      console.error('Unexpected error on idle DB client', err);
+
+    pool.on("error", (err) => {
+      console.error("Unexpected error on idle DB client", err);
     });
   }
   return pool;

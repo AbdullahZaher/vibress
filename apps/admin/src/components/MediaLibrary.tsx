@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listMediaApi,
   uploadMediaApi,
@@ -8,49 +8,65 @@ import {
   getMediaReferencesApi,
   ApiMediaAsset,
   ApiMediaReferenceSummary,
-} from '../lib/api';
+} from "../lib/api";
 
-import { Button } from './ui/button';
-import { Card } from './ui/card';
-import { Input } from './ui/input';
-import { Dialog } from './ui/dialog';
-import { Video, Music, FileText, Upload, Trash2, CheckCircle2, Copy, Search } from 'lucide-react';
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Input } from "./ui/input";
+import { Dialog } from "./ui/dialog";
+import {
+  Video,
+  Music,
+  FileText,
+  Upload,
+  Trash2,
+  CheckCircle2,
+  Copy,
+  Search,
+} from "lucide-react";
 
 export const MediaLibrary: React.FC = () => {
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [search, setSearch] = useState("");
+  const [selectedType, setSelectedType] = useState<string>("all");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Detail Modal
-  const [selectedAsset, setSelectedAsset] = useState<ApiMediaAsset | null>(null);
-  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [selectedAsset, setSelectedAsset] = useState<ApiMediaAsset | null>(
+    null,
+  );
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // References Query
-  const { data: refSummaryData, isLoading: isLoadingRefs } = useQuery<{ summary: ApiMediaReferenceSummary }>({
-    queryKey: ['media-references', selectedAsset?.id],
+  const { data: refSummaryData, isLoading: isLoadingRefs } = useQuery<{
+    summary: ApiMediaReferenceSummary;
+  }>({
+    queryKey: ["media-references", selectedAsset?.id],
     queryFn: () => getMediaReferencesApi(selectedAsset!.id),
     enabled: !!selectedAsset,
   });
 
-  const filterType = selectedType === 'all' ? undefined : (selectedType as 'image' | 'video' | 'audio' | 'file');
+  const filterType =
+    selectedType === "all"
+      ? undefined
+      : (selectedType as "image" | "video" | "audio" | "file");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['media', { search, assetType: filterType }],
+    queryKey: ["media", { search, assetType: filterType }],
     queryFn: () => listMediaApi({ search, assetType: filterType, limit: 100 }),
   });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadMediaApi(file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ["media"] });
       setUploadError(null);
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
-      setUploadError(e.message || 'Upload failed');
+      setUploadError(e.message || "Upload failed");
     },
   });
 
@@ -58,7 +74,7 @@ export const MediaLibrary: React.FC = () => {
     mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
       updateMediaApi(id, { displayName }),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ["media"] });
       setSelectedAsset(res.media);
     },
   });
@@ -66,13 +82,13 @@ export const MediaLibrary: React.FC = () => {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteMediaApi(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ["media"] });
       setSelectedAsset(null);
       setDeleteError(null);
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
-      setDeleteError(e.message || 'Delete failed');
+      setDeleteError(e.message || "Delete failed");
     },
   });
 
@@ -98,7 +114,10 @@ export const MediaLibrary: React.FC = () => {
   const handleSaveDisplayName = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAsset) return;
-    updateMutation.mutate({ id: selectedAsset.id, displayName: displayNameDraft });
+    updateMutation.mutate({
+      id: selectedAsset.id,
+      displayName: displayNameDraft,
+    });
   };
 
   const assets = data?.items || [];
@@ -107,11 +126,18 @@ export const MediaLibrary: React.FC = () => {
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">Media Asset Library</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          Media Asset Library
+        </h1>
 
         <label className="inline-flex items-center justify-center rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 cursor-pointer gap-2 shadow-2xs shrink-0">
           <Upload className="h-4 w-4" /> Upload Files
-          <input type="file" multiple onChange={handleFileUpload} className="hidden" />
+          <input
+            type="file"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+          />
         </label>
       </div>
 
@@ -130,17 +156,17 @@ export const MediaLibrary: React.FC = () => {
       {/* Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-1.5">
-          {['all', 'image', 'video', 'audio', 'file'].map((type) => (
+          {["all", "image", "video", "audio", "file"].map((type) => (
             <button
               key={type}
               onClick={() => setSelectedType(type)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
                 selectedType === type
-                  ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {type === 'all' ? 'All Media' : `${type}s`}
+              {type === "all" ? "All Media" : `${type}s`}
             </button>
           ))}
         </div>
@@ -169,8 +195,12 @@ export const MediaLibrary: React.FC = () => {
         </div>
       ) : assets.length === 0 ? (
         <Card className="p-12 text-center text-muted-foreground space-y-2 bg-transparent border-border shadow-2xs">
-          <p className="text-xs font-medium text-foreground">No media assets found</p>
-          <p className="text-xs text-muted-foreground">Upload images, audio, or video files to populate library.</p>
+          <p className="text-xs font-medium text-foreground">
+            No media assets found
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Upload images, audio, or video files to populate library.
+          </p>
         </Card>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -181,18 +211,24 @@ export const MediaLibrary: React.FC = () => {
               className="group relative rounded-xl border border-border bg-card overflow-hidden cursor-pointer hover:border-sidebar-border shadow-2xs transition-all flex flex-col"
             >
               <div className="aspect-square bg-muted/40 flex items-center justify-center relative overflow-hidden">
-                {asset.assetType === 'image' ? (
-                  <img src={asset.url} alt={asset.displayName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                ) : asset.assetType === 'video' ? (
+                {asset.assetType === "image" ? (
+                  <img
+                    src={asset.url}
+                    alt={asset.displayName}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : asset.assetType === "video" ? (
                   <Video className="h-8 w-8 text-muted-foreground" />
-                ) : asset.assetType === 'audio' ? (
+                ) : asset.assetType === "audio" ? (
                   <Music className="h-8 w-8 text-muted-foreground" />
                 ) : (
                   <FileText className="h-8 w-8 text-muted-foreground" />
                 )}
               </div>
               <div className="p-2 space-y-0.5 border-t border-border">
-                <p className="text-xs font-semibold text-foreground truncate">{asset.displayName}</p>
+                <p className="text-xs font-semibold text-foreground truncate">
+                  {asset.displayName}
+                </p>
                 <p className="text-[10px] text-muted-foreground font-mono">
                   {(asset.sizeBytes / 1024).toFixed(0)} KB
                 </p>
@@ -203,27 +239,47 @@ export const MediaLibrary: React.FC = () => {
       )}
 
       {/* Asset Detail Modal */}
-      <Dialog isOpen={!!selectedAsset} onClose={() => setSelectedAsset(null)} title="Asset Preview & Details">
+      <Dialog
+        isOpen={!!selectedAsset}
+        onClose={() => setSelectedAsset(null)}
+        title="Asset Preview & Details"
+      >
         {selectedAsset && (
           <div className="space-y-4 pt-2">
             <div className="aspect-video rounded-lg bg-neutral-950 border border-border overflow-hidden flex items-center justify-center">
-              {selectedAsset.assetType === 'image' ? (
-                <img src={selectedAsset.url} alt={selectedAsset.displayName} className="max-h-full object-contain" />
-              ) : selectedAsset.assetType === 'video' ? (
-                <video src={selectedAsset.url} controls className="max-h-full" />
-              ) : selectedAsset.assetType === 'audio' ? (
-                <audio src={selectedAsset.url} controls className="w-full px-4" />
+              {selectedAsset.assetType === "image" ? (
+                <img
+                  src={selectedAsset.url}
+                  alt={selectedAsset.displayName}
+                  className="max-h-full object-contain"
+                />
+              ) : selectedAsset.assetType === "video" ? (
+                <video
+                  src={selectedAsset.url}
+                  controls
+                  className="max-h-full"
+                />
+              ) : selectedAsset.assetType === "audio" ? (
+                <audio
+                  src={selectedAsset.url}
+                  controls
+                  className="w-full px-4"
+                />
               ) : (
                 <div className="text-center space-y-2">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
-                  <p className="text-xs font-mono text-muted-foreground">{selectedAsset.originalFilename}</p>
+                  <p className="text-xs font-mono text-muted-foreground">
+                    {selectedAsset.originalFilename}
+                  </p>
                 </div>
               )}
             </div>
 
             <form onSubmit={handleSaveDisplayName} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Display Name</label>
+                <label className="text-xs font-semibold text-foreground">
+                  Display Name
+                </label>
                 <Input
                   type="text"
                   value={displayNameDraft}
@@ -233,32 +289,50 @@ export const MediaLibrary: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Direct URL</label>
+                <label className="text-xs font-semibold text-foreground">
+                  Direct URL
+                </label>
                 <div className="flex items-center gap-2">
-                  <Input readOnly value={selectedAsset.url} className="h-8 text-xs font-mono bg-muted/40 border-border" />
+                  <Input
+                    readOnly
+                    value={selectedAsset.url}
+                    className="h-8 text-xs font-mono bg-muted/40 border-border"
+                  />
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCopyUrl(selectedAsset.url, selectedAsset.id)}
+                    onClick={() =>
+                      handleCopyUrl(selectedAsset.url, selectedAsset.id)
+                    }
                     className="h-8 text-xs shrink-0 border-border bg-card hover:bg-accent"
                   >
-                    {copiedId === selectedAsset.id ? <CheckCircle2 className="h-4 w-4 text-foreground" /> : <Copy className="h-4 w-4" />}
+                    {copiedId === selectedAsset.id ? (
+                      <CheckCircle2 className="h-4 w-4 text-foreground" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               </div>
 
               {/* Usage References */}
               <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1 text-xs">
-                <p className="font-semibold text-foreground">Usage References:</p>
+                <p className="font-semibold text-foreground">
+                  Usage References:
+                </p>
                 {isLoadingRefs ? (
-                  <p className="text-muted-foreground">Checking references...</p>
+                  <p className="text-muted-foreground">
+                    Checking references...
+                  </p>
                 ) : refSummaryData?.summary ? (
                   <p className="text-muted-foreground font-mono">
                     Used in {refSummaryData.summary.totalReferences} location(s)
                   </p>
                 ) : (
-                  <p className="text-muted-foreground font-mono">No usage recorded</p>
+                  <p className="text-muted-foreground font-mono">
+                    No usage recorded
+                  </p>
                 )}
               </div>
 
@@ -273,7 +347,11 @@ export const MediaLibrary: React.FC = () => {
                   <Trash2 className="h-4 w-4" /> Delete Asset
                 </Button>
 
-                <Button type="submit" size="sm" className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
                   Save Changes
                 </Button>
               </div>

@@ -1,13 +1,22 @@
-import { getDb, memberAuthTokens, memberSessions, MemberAuthTokenRow, MemberSessionRow } from '@vibress/database';
-import { eq, and, isNull, lt } from 'drizzle-orm';
-import { MemberAuthTokenRepository, MemberSessionRepository } from '../domain/repository';
+import {
+  getDb,
+  memberAuthTokens,
+  memberSessions,
+  MemberAuthTokenRow,
+  MemberSessionRow,
+} from "@vibress/database";
+import { eq, and, isNull, lt } from "drizzle-orm";
+import {
+  MemberAuthTokenRepository,
+  MemberSessionRepository,
+} from "../domain/repository";
 import {
   MemberAuthToken,
   CreateMemberAuthTokenData,
   MemberSession,
   CreateMemberSessionData,
-} from '../domain/auth';
-import crypto from 'node:crypto';
+} from "../domain/auth";
+import crypto from "node:crypto";
 
 export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenRepository {
   async create(data: CreateMemberAuthTokenData): Promise<MemberAuthToken> {
@@ -19,19 +28,23 @@ export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenReposito
         id,
         memberId: data.memberId,
         tokenHash: data.tokenHash,
-        purpose: data.purpose || 'authenticate',
+        purpose: data.purpose || "authenticate",
         expiresAt: data.expiresAt,
         userAgent: data.userAgent || null,
         ipAddress: data.ipAddress || null,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert member auth token');
+    if (!row) throw new Error("Failed to insert member auth token");
     return this.mapToDomain(row);
   }
 
   async findByTokenHash(tokenHash: string): Promise<MemberAuthToken | null> {
     const db = getDb();
-    const rows = await db.select().from(memberAuthTokens).where(eq(memberAuthTokens.tokenHash, tokenHash)).limit(1);
+    const rows = await db
+      .select()
+      .from(memberAuthTokens)
+      .where(eq(memberAuthTokens.tokenHash, tokenHash))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -42,7 +55,13 @@ export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenReposito
     await db
       .update(memberAuthTokens)
       .set({ usedAt: new Date() })
-      .where(and(eq(memberAuthTokens.memberId, memberId), eq(memberAuthTokens.purpose, purpose), isNull(memberAuthTokens.usedAt)));
+      .where(
+        and(
+          eq(memberAuthTokens.memberId, memberId),
+          eq(memberAuthTokens.purpose, purpose),
+          isNull(memberAuthTokens.usedAt),
+        ),
+      );
   }
 
   async markUsed(tokenId: string, usedAt: Date): Promise<boolean> {
@@ -50,14 +69,18 @@ export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenReposito
     const [row] = await db
       .update(memberAuthTokens)
       .set({ usedAt })
-      .where(and(eq(memberAuthTokens.id, tokenId), isNull(memberAuthTokens.usedAt)))
+      .where(
+        and(eq(memberAuthTokens.id, tokenId), isNull(memberAuthTokens.usedAt)),
+      )
       .returning({ id: memberAuthTokens.id });
     return !!row;
   }
 
   async deleteExpired(now = new Date()): Promise<number> {
     const db = getDb();
-    const res = await db.delete(memberAuthTokens).where(lt(memberAuthTokens.expiresAt, now));
+    const res = await db
+      .delete(memberAuthTokens)
+      .where(lt(memberAuthTokens.expiresAt, now));
     return Number(res.rowCount || 0);
   }
 
@@ -91,13 +114,17 @@ export class DrizzleMemberSessionRepository implements MemberSessionRepository {
         ipAddress: data.ipAddress || null,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert member session');
+    if (!row) throw new Error("Failed to insert member session");
     return this.mapToDomain(row);
   }
 
   async findByTokenHash(tokenHash: string): Promise<MemberSession | null> {
     const db = getDb();
-    const rows = await db.select().from(memberSessions).where(eq(memberSessions.tokenHash, tokenHash)).limit(1);
+    const rows = await db
+      .select()
+      .from(memberSessions)
+      .where(eq(memberSessions.tokenHash, tokenHash))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -105,7 +132,10 @@ export class DrizzleMemberSessionRepository implements MemberSessionRepository {
 
   async revoke(sessionId: string): Promise<void> {
     const db = getDb();
-    await db.update(memberSessions).set({ revokedAt: new Date() }).where(eq(memberSessions.id, sessionId));
+    await db
+      .update(memberSessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(memberSessions.id, sessionId));
   }
 
   async revokeAllForMember(memberId: string): Promise<number> {
@@ -113,13 +143,20 @@ export class DrizzleMemberSessionRepository implements MemberSessionRepository {
     const res = await db
       .update(memberSessions)
       .set({ revokedAt: new Date() })
-      .where(and(eq(memberSessions.memberId, memberId), isNull(memberSessions.revokedAt)));
+      .where(
+        and(
+          eq(memberSessions.memberId, memberId),
+          isNull(memberSessions.revokedAt),
+        ),
+      );
     return Number(res.rowCount || 0);
   }
 
   async deleteExpired(now = new Date()): Promise<number> {
     const db = getDb();
-    const res = await db.delete(memberSessions).where(lt(memberSessions.expiresAt, now));
+    const res = await db
+      .delete(memberSessions)
+      .where(lt(memberSessions.expiresAt, now));
     return Number(res.rowCount || 0);
   }
 

@@ -1,5 +1,5 @@
-import Redis, { type RedisOptions } from 'ioredis';
-import { getConfig } from '@vibress/config';
+import Redis, { type RedisOptions } from "ioredis";
+import { getConfig } from "@vibress/config";
 
 let redisClient: Redis | null = null;
 let bullMqClient: Redis | null = null;
@@ -7,7 +7,7 @@ let bullMqClient: Redis | null = null;
 export const getRedisClient = (): Redis => {
   if (!redisClient) {
     const redisUrl = getConfig().redis.url;
-    
+
     const options: RedisOptions = {
       retryStrategy(times) {
         // Linear backoff maxing at 2s
@@ -17,11 +17,11 @@ export const getRedisClient = (): Redis => {
       connectTimeout: 5000,
       lazyConnect: false,
     };
-    
+
     redisClient = new Redis(redisUrl, options);
-    
-    redisClient.on('error', (err) => {
-      console.error('Redis Client Error:', err.message);
+
+    redisClient.on("error", (err) => {
+      console.error("Redis Client Error:", err.message);
     });
   }
   return redisClient;
@@ -46,8 +46,8 @@ export const getBullMqRedisConnection = (): Redis => {
 
     bullMqClient = new Redis(redisUrl, options);
 
-    bullMqClient.on('error', (err) => {
-      console.error('BullMQ Redis Client Error:', err.message);
+    bullMqClient.on("error", (err) => {
+      console.error("BullMQ Redis Client Error:", err.message);
     });
   }
   return bullMqClient;

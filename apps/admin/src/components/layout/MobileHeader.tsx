@@ -1,6 +1,6 @@
-import React from 'react';
-import { Menu, Sun, Moon, Search, Plus } from 'lucide-react';
-import vibressLogo from '../../assets/images/vibress-logo.png';
+import React from "react";
+import { Menu, Sun, Moon, Search, Plus } from "lucide-react";
+import vibressLogo from "../../assets/images/vibress-logo.png";
 
 interface MobileHeaderProps {
   currentPath: string;
@@ -23,29 +23,31 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 }) => {
   // Derive a human-friendly title for the top header based on the current path
   const getPageTitle = () => {
-    if (currentPath === '/admin' || currentPath === '/admin/') return 'Analytics';
-    if (currentPath.startsWith('/admin/posts/new')) return 'New Post';
-    if (currentPath.startsWith('/admin/posts/drafts')) return 'Drafts';
-    if (currentPath.startsWith('/admin/posts/scheduled')) return 'Scheduled';
-    if (currentPath.startsWith('/admin/posts/published')) return 'Published';
-    if (currentPath.startsWith('/admin/posts/')) return 'Edit Post';
-    if (currentPath.startsWith('/admin/posts')) return 'Posts';
-    if (currentPath.startsWith('/admin/pages/new')) return 'New Page';
-    if (currentPath.startsWith('/admin/pages/')) return 'Edit Page';
-    if (currentPath.startsWith('/admin/pages')) return 'Pages';
-    if (currentPath.startsWith('/admin/tags')) return 'Tags';
-    if (currentPath.startsWith('/admin/media')) return 'Media Library';
-    if (currentPath.startsWith('/admin/members')) return 'Members';
-    if (currentPath.startsWith('/admin/community')) return 'Comments';
-    if (currentPath.startsWith('/admin/subscriptions')) return 'Subscriptions';
-    if (currentPath.startsWith('/admin/newsletters')) return 'Newsletters';
-    if (currentPath.startsWith('/admin/settings/themes')) return 'Themes';
-    if (currentPath.startsWith('/admin/settings/billing')) return 'Billing';
-    if (currentPath.startsWith('/admin/settings/storage')) return 'Storage';
-    if (currentPath.startsWith('/admin/settings/platform')) return 'Platform';
-    if (currentPath.startsWith('/admin/settings/operations')) return 'Operations';
-    if (currentPath.startsWith('/admin/analytics')) return 'Intelligence';
-    return 'Vibress Admin';
+    if (currentPath === "/admin" || currentPath === "/admin/")
+      return "Analytics";
+    if (currentPath.startsWith("/admin/posts/new")) return "New Post";
+    if (currentPath.startsWith("/admin/posts/drafts")) return "Drafts";
+    if (currentPath.startsWith("/admin/posts/scheduled")) return "Scheduled";
+    if (currentPath.startsWith("/admin/posts/published")) return "Published";
+    if (currentPath.startsWith("/admin/posts/")) return "Edit Post";
+    if (currentPath.startsWith("/admin/posts")) return "Posts";
+    if (currentPath.startsWith("/admin/pages/new")) return "New Page";
+    if (currentPath.startsWith("/admin/pages/")) return "Edit Page";
+    if (currentPath.startsWith("/admin/pages")) return "Pages";
+    if (currentPath.startsWith("/admin/tags")) return "Tags";
+    if (currentPath.startsWith("/admin/media")) return "Media Library";
+    if (currentPath.startsWith("/admin/members")) return "Members";
+    if (currentPath.startsWith("/admin/community")) return "Comments";
+    if (currentPath.startsWith("/admin/subscriptions")) return "Subscriptions";
+    if (currentPath.startsWith("/admin/newsletters")) return "Newsletters";
+    if (currentPath.startsWith("/admin/settings/themes")) return "Themes";
+    if (currentPath.startsWith("/admin/settings/billing")) return "Billing";
+    if (currentPath.startsWith("/admin/settings/storage")) return "Storage";
+    if (currentPath.startsWith("/admin/settings/platform")) return "Platform";
+    if (currentPath.startsWith("/admin/settings/operations"))
+      return "Operations";
+    if (currentPath.startsWith("/admin/analytics")) return "Intelligence";
+    return "Vibress Admin";
   };
 
   return (
@@ -64,9 +66,13 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
         <div
           className="flex items-center gap-2 cursor-pointer"
-          onClick={() => onNavigate('/admin')}
+          onClick={() => onNavigate("/admin")}
         >
-          <img src={vibressLogo} alt="Vibress" className="h-5 w-auto object-contain" />
+          <img
+            src={vibressLogo}
+            alt="Vibress"
+            className="h-5 w-auto object-contain"
+          />
           <span className="font-semibold text-sm tracking-tight text-foreground truncate max-w-[120px]">
             {getPageTitle()}
           </span>
@@ -78,7 +84,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         {canPublishPosts && (
           <button
             type="button"
-            onClick={() => onNavigate('/admin/posts/new')}
+            onClick={() => onNavigate("/admin/posts/new")}
             className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
             title="Create new post"
             aria-label="Create new post"
@@ -104,7 +110,11 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           title="Toggle theme"
           aria-label="Toggle theme"
         >
-          {darkMode ? <Sun className="h-3.5 w-3.5 text-amber-400" /> : <Moon className="h-3.5 w-3.5 text-slate-700" />}
+          {darkMode ? (
+            <Sun className="h-3.5 w-3.5 text-amber-400" />
+          ) : (
+            <Moon className="h-3.5 w-3.5 text-slate-700" />
+          )}
         </button>
       </div>
     </header>

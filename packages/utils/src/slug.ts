@@ -1,35 +1,35 @@
 export const RESERVED_SLUGS = new Set([
-  'admin',
-  'api',
-  'portal',
-  'health',
-  'login',
-  'logout',
-  'auth',
-  'settings',
-  'rss',
-  'feed',
-  'sitemap',
-  'sitemap.xml',
-  'robots.txt',
-  'favicon.ico',
-  'tags',
-  'authors',
-  'posts',
-  'pages',
+  "admin",
+  "api",
+  "portal",
+  "health",
+  "login",
+  "logout",
+  "auth",
+  "settings",
+  "rss",
+  "feed",
+  "sitemap",
+  "sitemap.xml",
+  "robots.txt",
+  "favicon.ico",
+  "tags",
+  "authors",
+  "posts",
+  "pages",
 ]);
 
 export function slugify(input: string): string {
-  if (typeof input !== 'string') return '';
+  if (typeof input !== "string") return "";
   return input
     .toLowerCase()
     .trim()
-    .normalize('NFD') // Separate accented characters
-    .replace(/[\u0300-\u036f]/g, '') // Remove accents
-    .replace(/[^a-z0-9\s-]/g, '') // Remove non-alphanumeric except spaces and hyphens
-    .replace(/[\s_]+/g, '-') // Replace spaces and underscores with single hyphen
-    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-    .replace(/^-+|-+$/g, ''); // Trim leading and trailing hyphens
+    .normalize("NFD") // Separate accented characters
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[^a-z0-9\s-]/g, "") // Remove non-alphanumeric except spaces and hyphens
+    .replace(/[\s_]+/g, "-") // Replace spaces and underscores with single hyphen
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ""); // Trim leading and trailing hyphens
 }
 
 export function isReservedSlug(slug: string): boolean {
@@ -39,9 +39,9 @@ export function isReservedSlug(slug: string): boolean {
 export async function generateUniqueSlug(
   baseText: string,
   checkExists: (candidate: string) => Promise<boolean>,
-  currentId?: string
+  _currentId?: string,
 ): Promise<string> {
-  const baseSlug = slugify(baseText) || 'untitled';
+  const baseSlug = slugify(baseText) || "untitled";
   if (isReservedSlug(baseSlug)) {
     // If base slug is reserved, append '-1'
     let suffix = 1;

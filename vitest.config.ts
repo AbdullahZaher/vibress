@@ -1,63 +1,202 @@
-import { defineConfig } from 'vitest/config';
-import path from 'path';
+import { defineConfig } from "vitest/config";
+import path from "path";
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
+    environment: "jsdom",
     globals: true,
-    globalSetup: path.resolve(__dirname, './tests/global-setup.ts'),
+    globalSetup: path.resolve(__dirname, "./tests/global-setup.ts"),
     fileParallelism: false,
     passWithNoTests: true,
-    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', 'references/**', '**/references/**', 'tests/e2e/**'],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "references/**",
+      "**/references/**",
+      "tests/e2e/**",
+    ],
   },
   resolve: {
     alias: {
-      '@vibress/database': path.resolve(__dirname, './packages/database/src/index.ts'),
-      '@vibress/config': path.resolve(__dirname, './packages/config/src/index.ts'),
-      '@vibress/security': path.resolve(__dirname, './packages/security/src/index.ts'),
-      '@vibress/utils': path.resolve(__dirname, './packages/utils/src/index.ts'),
-      '@vibress/users': path.resolve(__dirname, './packages/domains/users/src/index.ts'),
-      '@vibress/roles': path.resolve(__dirname, './packages/domains/roles/src/index.ts'),
-      '@vibress/permissions': path.resolve(__dirname, './packages/domains/permissions/src/index.ts'),
-      '@vibress/audit': path.resolve(__dirname, './packages/domains/audit/src/index.ts'),
-      '@vibress/auth': path.resolve(__dirname, './packages/domains/auth/src/index.ts'),
-      '@vibress/tags': path.resolve(__dirname, './packages/domains/tags/src/index.ts'),
-      '@vibress/authors': path.resolve(__dirname, './packages/domains/authors/src/index.ts'),
-      '@vibress/revisions': path.resolve(__dirname, './packages/domains/revisions/src/index.ts'),
-      '@vibress/posts': path.resolve(__dirname, './packages/domains/posts/src/index.ts'),
-      '@vibress/pages': path.resolve(__dirname, './packages/domains/pages/src/index.ts'),
-      '@vibress/api-contracts': path.resolve(__dirname, './packages/api-contracts/src/index.ts'),
-      '@vibress/events': path.resolve(__dirname, './packages/events/src/index.ts'),
-      '@vibress/storage-core': path.resolve(__dirname, './packages/storage-core/src/index.ts'),
-      '@vibress/storage-domain': path.resolve(__dirname, './packages/domains/storage/src/index.ts'),
-      '@vibress/storage-s3': path.resolve(__dirname, './packages/storage-s3/src/index.ts'),
-      '@vibress/media': path.resolve(__dirname, './packages/domains/media/src/index.ts'),
-      '@vibress/studio-core': path.resolve(__dirname, './packages/studio-core/src/index.ts'),
-      '@vibress/studio-utils': path.resolve(__dirname, './packages/studio-utils/src/index.ts'),
-      '@vibress/studio-nodes': path.resolve(__dirname, './packages/studio-nodes/src/index.ts'),
-      '@vibress/studio-transforms': path.resolve(__dirname, './packages/studio-transforms/src/index.ts'),
-      '@vibress/studio-cards': path.resolve(__dirname, './packages/studio-cards/src/index.ts'),
-      '@vibress/studio-serializer': path.resolve(__dirname, './packages/studio-serializer/src/index.ts'),
-      '@vibress/studio-renderer': path.resolve(__dirname, './packages/studio-renderer/src/index.ts'),
-      '@vibress/studio-html': path.resolve(__dirname, './packages/studio-html/src/index.ts'),
-      '@vibress/studio-markdown': path.resolve(__dirname, './packages/studio-markdown/src/index.ts'),
-      '@vibress/studio-plugin-sdk': path.resolve(__dirname, './packages/studio-plugin-sdk/src/index.ts'),
-      '@vibress/studio-react': path.resolve(__dirname, './packages/studio-react/src/index.ts'),
-      '@vibress/studio-testing': path.resolve(__dirname, './packages/studio-testing/src/index.ts'),
-      '@vibress/theme-core': path.resolve(__dirname, './packages/theme-core/src/index.ts'),
-      '@vibress/themes-registry': path.resolve(__dirname, './packages/themes-registry/src/index.ts'),
-      '@vibress/themes': path.resolve(__dirname, './packages/domains/themes/src/index.ts'),
-      '@vibress/queue': path.resolve(__dirname, './packages/queue/src/index.ts'),
-      '@vibress/cache': path.resolve(__dirname, './packages/cache/src/index.ts'),
-      '@vibress/settings': path.resolve(__dirname, './packages/domains/settings/src/index.ts'),
-      '@vibress/setup': path.resolve(__dirname, './packages/domains/setup/src/index.ts'),
-      '@vibress/analytics': path.resolve(__dirname, './packages/domains/analytics/src/index.ts'),
-      '@vibress/observability': path.resolve(__dirname, './packages/observability/src/index.ts'),
-      '@vibress/testing': path.resolve(__dirname, './packages/testing/src/index.ts'),
-      '@vibress/plugin-core': path.resolve(__dirname, './packages/plugin-core/src/index.ts'),
-      '@vibress/ui': path.resolve(__dirname, './packages/ui/src/index.ts'),
-      '@vibress/i18n': path.resolve(__dirname, './packages/i18n/src/index.ts'),
-      '@vibress/files': path.resolve(__dirname, './packages/domains/files/src/index.ts'),
+      "@vibress/database": path.resolve(
+        __dirname,
+        "./packages/database/src/index.ts",
+      ),
+      "@vibress/config": path.resolve(
+        __dirname,
+        "./packages/config/src/index.ts",
+      ),
+      "@vibress/security": path.resolve(
+        __dirname,
+        "./packages/security/src/index.ts",
+      ),
+      "@vibress/utils": path.resolve(
+        __dirname,
+        "./packages/utils/src/index.ts",
+      ),
+      "@vibress/users": path.resolve(
+        __dirname,
+        "./packages/domains/users/src/index.ts",
+      ),
+      "@vibress/roles": path.resolve(
+        __dirname,
+        "./packages/domains/roles/src/index.ts",
+      ),
+      "@vibress/permissions": path.resolve(
+        __dirname,
+        "./packages/domains/permissions/src/index.ts",
+      ),
+      "@vibress/audit": path.resolve(
+        __dirname,
+        "./packages/domains/audit/src/index.ts",
+      ),
+      "@vibress/auth": path.resolve(
+        __dirname,
+        "./packages/domains/auth/src/index.ts",
+      ),
+      "@vibress/tags": path.resolve(
+        __dirname,
+        "./packages/domains/tags/src/index.ts",
+      ),
+      "@vibress/authors": path.resolve(
+        __dirname,
+        "./packages/domains/authors/src/index.ts",
+      ),
+      "@vibress/revisions": path.resolve(
+        __dirname,
+        "./packages/domains/revisions/src/index.ts",
+      ),
+      "@vibress/posts": path.resolve(
+        __dirname,
+        "./packages/domains/posts/src/index.ts",
+      ),
+      "@vibress/pages": path.resolve(
+        __dirname,
+        "./packages/domains/pages/src/index.ts",
+      ),
+      "@vibress/api-contracts": path.resolve(
+        __dirname,
+        "./packages/api-contracts/src/index.ts",
+      ),
+      "@vibress/events": path.resolve(
+        __dirname,
+        "./packages/events/src/index.ts",
+      ),
+      "@vibress/storage-core": path.resolve(
+        __dirname,
+        "./packages/storage-core/src/index.ts",
+      ),
+      "@vibress/storage-domain": path.resolve(
+        __dirname,
+        "./packages/domains/storage/src/index.ts",
+      ),
+      "@vibress/storage-s3": path.resolve(
+        __dirname,
+        "./packages/storage-s3/src/index.ts",
+      ),
+      "@vibress/media": path.resolve(
+        __dirname,
+        "./packages/domains/media/src/index.ts",
+      ),
+      "@vibress/studio-core": path.resolve(
+        __dirname,
+        "./packages/studio-core/src/index.ts",
+      ),
+      "@vibress/studio-utils": path.resolve(
+        __dirname,
+        "./packages/studio-utils/src/index.ts",
+      ),
+      "@vibress/studio-nodes": path.resolve(
+        __dirname,
+        "./packages/studio-nodes/src/index.ts",
+      ),
+      "@vibress/studio-transforms": path.resolve(
+        __dirname,
+        "./packages/studio-transforms/src/index.ts",
+      ),
+      "@vibress/studio-cards": path.resolve(
+        __dirname,
+        "./packages/studio-cards/src/index.ts",
+      ),
+      "@vibress/studio-serializer": path.resolve(
+        __dirname,
+        "./packages/studio-serializer/src/index.ts",
+      ),
+      "@vibress/studio-renderer": path.resolve(
+        __dirname,
+        "./packages/studio-renderer/src/index.ts",
+      ),
+      "@vibress/studio-html": path.resolve(
+        __dirname,
+        "./packages/studio-html/src/index.ts",
+      ),
+      "@vibress/studio-markdown": path.resolve(
+        __dirname,
+        "./packages/studio-markdown/src/index.ts",
+      ),
+      "@vibress/studio-plugin-sdk": path.resolve(
+        __dirname,
+        "./packages/studio-plugin-sdk/src/index.ts",
+      ),
+      "@vibress/studio-react": path.resolve(
+        __dirname,
+        "./packages/studio-react/src/index.ts",
+      ),
+      "@vibress/studio-testing": path.resolve(
+        __dirname,
+        "./packages/studio-testing/src/index.ts",
+      ),
+      "@vibress/theme-core": path.resolve(
+        __dirname,
+        "./packages/theme-core/src/index.ts",
+      ),
+      "@vibress/themes-registry": path.resolve(
+        __dirname,
+        "./packages/themes-registry/src/index.ts",
+      ),
+      "@vibress/themes": path.resolve(
+        __dirname,
+        "./packages/domains/themes/src/index.ts",
+      ),
+      "@vibress/queue": path.resolve(
+        __dirname,
+        "./packages/queue/src/index.ts",
+      ),
+      "@vibress/cache": path.resolve(
+        __dirname,
+        "./packages/cache/src/index.ts",
+      ),
+      "@vibress/settings": path.resolve(
+        __dirname,
+        "./packages/domains/settings/src/index.ts",
+      ),
+      "@vibress/setup": path.resolve(
+        __dirname,
+        "./packages/domains/setup/src/index.ts",
+      ),
+      "@vibress/analytics": path.resolve(
+        __dirname,
+        "./packages/domains/analytics/src/index.ts",
+      ),
+      "@vibress/observability": path.resolve(
+        __dirname,
+        "./packages/observability/src/index.ts",
+      ),
+      "@vibress/testing": path.resolve(
+        __dirname,
+        "./packages/testing/src/index.ts",
+      ),
+      "@vibress/plugin-core": path.resolve(
+        __dirname,
+        "./packages/plugin-core/src/index.ts",
+      ),
+      "@vibress/ui": path.resolve(__dirname, "./packages/ui/src/index.ts"),
+      "@vibress/i18n": path.resolve(__dirname, "./packages/i18n/src/index.ts"),
+      "@vibress/files": path.resolve(
+        __dirname,
+        "./packages/domains/files/src/index.ts",
+      ),
     },
   },
 });

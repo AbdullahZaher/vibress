@@ -1,20 +1,33 @@
-import { StudioDocument, validateStudioDocument, migrateDocument } from '@vibress/studio-core';
-import { STUDIO_CARD_DEFINITIONS } from '@vibress/studio-cards';
-import { escapeHtml, sanitizeUrl, sanitizeStudioHtml } from '@vibress/studio-utils';
+import {
+  StudioDocument,
+  validateStudioDocument,
+  migrateDocument,
+} from "@vibress/studio-core";
+import { STUDIO_CARD_DEFINITIONS } from "@vibress/studio-cards";
+import {
+  escapeHtml,
+  sanitizeUrl,
+  sanitizeStudioHtml,
+} from "@vibress/studio-utils";
 
 export interface RenderOptions {
-  target?: 'web' | 'email';
+  target?: "web" | "email";
 }
 
-export function renderStudioDocumentToHtml(docInput: unknown, options: RenderOptions = {}): string {
+export function renderStudioDocumentToHtml(
+  docInput: unknown,
+  options: RenderOptions = {},
+): string {
   // migrateDocument applies the canonical normalization layer
   // (react-studio-card → studio-card) plus legacy migration.
   const doc = migrateDocument(docInput);
   if (!doc.root || !Array.isArray(doc.root.children)) {
-    return '';
+    return "";
   }
 
-  const raw = doc.root.children.map((node) => renderNodeToHtml(node, options)).join('');
+  const raw = doc.root.children
+    .map((node) => renderNodeToHtml(node, options))
+    .join("");
 
   // FINAL security boundary: every Studio card's rendered markup passes
   // through the shared allowlist sanitizer before leaving the server.
@@ -23,15 +36,30 @@ export function renderStudioDocumentToHtml(docInput: unknown, options: RenderOpt
 }
 
 function renderNodeToHtml(node: unknown, options: RenderOptions): string {
-  if (!node || typeof node !== 'object') return '';
-  const n = node as { type?: string; text?: string; format?: number; children?: unknown[]; tag?: string; listType?: string; url?: string; src?: string; alt?: string; cardType?: string; caption?: string; rel?: string; target?: string; cardData?: Record<string, unknown>; } & Record<string, unknown>;
+  if (!node || typeof node !== "object") return "";
+  const n = node as {
+    type?: string;
+    text?: string;
+    format?: number;
+    children?: unknown[];
+    tag?: string;
+    listType?: string;
+    url?: string;
+    src?: string;
+    alt?: string;
+    cardType?: string;
+    caption?: string;
+    rel?: string;
+    target?: string;
+    cardData?: Record<string, unknown>;
+  } & Record<string, unknown>;
 
   const type = n.type;
 
   // Handle TextNode
-  if (type === 'text') {
-    let text = escapeHtml(n.text || '');
-    const format = typeof n.format === 'number' ? n.format : 0;
+  if (type === "text") {
+    let text = escapeHtml(n.text || "");
+    const format = typeof n.format === "number" ? n.format : 0;
 
     // Lexical format bitmask: 1=Bold, 2=Italic, 4=Strikethrough, 8=Underline, 16=Code, 32=Subscript, 64=Superscript
     if (format & 16) text = `<code>${text}</code>`;
@@ -46,101 +74,119 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
   // Render children helper
   const renderChildren = () => {
     if (Array.isArray(n.children)) {
-      return n.children.map((child: unknown) => renderNodeToHtml(child, options)).join('');
+      return n.children
+        .map((child: unknown) => renderNodeToHtml(child, options))
+        .join("");
     }
-    return '';
+    return "";
   };
 
   // Handle Element Nodes
   switch (type) {
-    case 'paragraph': {
+    case "paragraph": {
       const content = renderChildren();
       // Block-level cards must never be wrapped in <p> (invalid HTML that
       // the final sanitizer would split, leaving stray empty <p> nodes).
-      const hasBlockCard = Array.isArray(n.children) && n.children.some(
-        (child: unknown) =>
-          child && typeof child === 'object' &&
-          ((child as { type?: string }).type === 'studio-card')
-      );
+      const hasBlockCard =
+        Array.isArray(n.children) &&
+        n.children.some(
+          (child: unknown) =>
+            child &&
+            typeof child === "object" &&
+            (child as { type?: string }).type === "studio-card",
+        );
       if (hasBlockCard) return content;
-      const styleAttr = n.style ? ` style="${escapeHtml(String(n.style))}"` : '';
-      return content ? `<p${styleAttr}>${content}</p>` : '<p></p>';
+      const styleAttr = n.style
+        ? ` style="${escapeHtml(String(n.style))}"`
+        : "";
+      return content ? `<p${styleAttr}>${content}</p>` : "<p></p>";
     }
 
-    case 'heading': {
-      const tag = n.tag || 'h2';
-      const level = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag.toLowerCase())
+    case "heading": {
+      const tag = n.tag || "h2";
+      const level = ["h1", "h2", "h3", "h4", "h5", "h6"].includes(
+        tag.toLowerCase(),
+      )
         ? tag.toLowerCase()
-        : 'h2';
-      const styleAttr = n.style ? ` style="${escapeHtml(String(n.style))}"` : '';
+        : "h2";
+      const styleAttr = n.style
+        ? ` style="${escapeHtml(String(n.style))}"`
+        : "";
       const childrenHtml = renderChildren();
       const rawText = extractNodeText(n);
       const slug = slugifyHeading(rawText);
-      const idAttr = slug ? ` id="${escapeHtml(slug)}"` : '';
+      const idAttr = slug ? ` id="${escapeHtml(slug)}"` : "";
       const anchor = slug
         ? `<a href="#${escapeHtml(slug)}" class="heading-anchor" aria-label="Link to section" aria-hidden="true">#</a>`
-        : '';
+        : "";
       return `<${level}${idAttr}${styleAttr}>${childrenHtml}${anchor}</${level}>`;
     }
 
-    case 'quote':
+    case "quote":
       return `<blockquote>${renderChildren()}</blockquote>`;
 
-    case 'list': {
-      if (n.listType === 'check') {
+    case "list": {
+      if (n.listType === "check") {
         return `<ul class="studio-checklist">${renderChildren()}</ul>`;
       }
-      const listType = n.listType === 'number' ? 'ol' : 'ul';
+      const listType = n.listType === "number" ? "ol" : "ul";
       return `<${listType}>${renderChildren()}</${listType}>`;
     }
 
-    case 'listitem': {
-      if (typeof n.checked === 'boolean') {
+    case "listitem": {
+      if (typeof n.checked === "boolean") {
         const isChecked = n.checked;
-        const checkedAttr = isChecked ? ' checked="checked"' : '';
-        const checkedClass = isChecked ? ' is-checked' : '';
+        const checkedAttr = isChecked ? ' checked="checked"' : "";
+        const checkedClass = isChecked ? " is-checked" : "";
         return `<li class="studio-checklist-item${checkedClass}"><input type="checkbox"${checkedAttr} disabled /><span>${renderChildren()}</span></li>`;
       }
       return `<li>${renderChildren()}</li>`;
     }
 
-    case 'table':
+    case "table":
       return `<div class="studio-table-container"><table class="studio-table"><tbody>${renderChildren()}</tbody></table></div>`;
 
-    case 'tablerow':
+    case "tablerow":
       return `<tr>${renderChildren()}</tr>`;
 
-    case 'tablecell': {
+    case "tablecell": {
       const isHeader = n.headerState && n.headerState !== 0;
-      const tag = isHeader ? 'th' : 'td';
-      const colSpan = n.colSpan && Number(n.colSpan) > 1 ? ` colspan="${n.colSpan}"` : '';
-      const rowSpan = n.rowSpan && Number(n.rowSpan) > 1 ? ` rowspan="${n.rowSpan}"` : '';
-      const bg = n.backgroundColor ? ` style="background-color: ${escapeHtml(String(n.backgroundColor))}"` : '';
+      const tag = isHeader ? "th" : "td";
+      const colSpan =
+        n.colSpan && Number(n.colSpan) > 1 ? ` colspan="${n.colSpan}"` : "";
+      const rowSpan =
+        n.rowSpan && Number(n.rowSpan) > 1 ? ` rowspan="${n.rowSpan}"` : "";
+      const bg = n.backgroundColor
+        ? ` style="background-color: ${escapeHtml(String(n.backgroundColor))}"`
+        : "";
       return `<${tag}${colSpan}${rowSpan}${bg}>${renderChildren()}</${tag}>`;
     }
 
-    case 'link': {
-      const url = sanitizeUrl(n.url || '#');
-      const relAttr = n.rel ? ` rel="${escapeHtml(n.rel)}"` : '';
-      const targetAttr = n.target ? ` target="${escapeHtml(n.target)}"` : '';
+    case "link": {
+      const url = sanitizeUrl(n.url || "#");
+      const relAttr = n.rel ? ` rel="${escapeHtml(n.rel)}"` : "";
+      const targetAttr = n.target ? ` target="${escapeHtml(n.target)}"` : "";
       return `<a href="${url}"${relAttr}${targetAttr}>${renderChildren()}</a>`;
     }
 
-    case 'code': {
-      const lang = typeof n.language === 'string' && n.language ? escapeHtml(n.language) : '';
-      const langAttr = lang ? ` data-language="${lang}"` : '';
+    case "code": {
+      const lang =
+        typeof n.language === "string" && n.language
+          ? escapeHtml(n.language)
+          : "";
+      const langAttr = lang ? ` data-language="${lang}"` : "";
       const codeHtml = renderChildren();
-      return `<div class="studio-code-block"${langAttr}><div class="studio-code-header"><span class="studio-code-lang">${lang || 'code'}</span><button type="button" class="studio-code-copy-btn" aria-label="Copy code">Copy</button></div><pre><code>${codeHtml}</code></pre></div>`;
+      return `<div class="studio-code-block"${langAttr}><div class="studio-code-header"><span class="studio-code-lang">${lang || "code"}</span><button type="button" class="studio-code-copy-btn" aria-label="Copy code">Copy</button></div><pre><code>${codeHtml}</code></pre></div>`;
     }
 
     // Handle Studio Card Nodes (canonical type after normalization)
-    case 'studio-card': {
+    case "studio-card": {
       const cardType = n.cardType;
       const cardData = n.cardData || {};
       // A blob: URL only exists for the current browser session and can never
       // be published; skip the card rather than emit a broken/leaky reference.
       if (hasTransientMedia(cardData)) {
-        return `<!-- Card skipped: ${escapeHtml(cardType || 'card')} (transient media) -->`;
+        return `<!-- Card skipped: ${escapeHtml(cardType || "card")} (transient media) -->`;
       }
       const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
       if (def) {
@@ -148,10 +194,10 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
           const validated = def.validate(cardData);
           return def.renderHtml(validated);
         } catch {
-          return `<!-- Error rendering card: ${escapeHtml(cardType || '')} -->`;
+          return `<!-- Error rendering card: ${escapeHtml(cardType || "")} -->`;
         }
       }
-      return `<!-- Unknown card: ${escapeHtml(cardType || '')} -->`;
+      return `<!-- Unknown card: ${escapeHtml(cardType || "")} -->`;
     }
 
     default:
@@ -163,41 +209,63 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
 export function renderStudioDocumentToPlainText(docInput: unknown): string {
   const doc = migrateDocument(docInput);
   if (!doc.root || !Array.isArray(doc.root.children)) {
-    return '';
+    return "";
   }
 
   return doc.root.children
     .map((node) => renderNodeToPlainText(node))
     .filter(Boolean)
-    .join('\n\n');
+    .join("\n\n");
 }
 
 function hasTransientMedia(cardData: Record<string, unknown>): boolean {
-  const candidates: Array<unknown> = [cardData.src, cardData.poster, cardData.thumbnail];
+  const candidates: Array<unknown> = [
+    cardData.src,
+    cardData.poster,
+    cardData.thumbnail,
+  ];
   if (Array.isArray(cardData.images)) {
     for (const img of cardData.images) {
-      if (img && typeof img === 'object') {
+      if (img && typeof img === "object") {
         candidates.push((img as Record<string, unknown>).src);
       }
     }
   }
-  return candidates.some((v) => typeof v === 'string' && (v as string).toLowerCase().startsWith('blob:'));
+  return candidates.some(
+    (v) =>
+      typeof v === "string" && (v as string).toLowerCase().startsWith("blob:"),
+  );
 }
 
 function renderNodeToPlainText(node: unknown): string {
-  if (!node || typeof node !== 'object') return '';
-  const n = node as { type?: string; text?: string; format?: number; children?: unknown[]; tag?: string; listType?: string; url?: string; src?: string; alt?: string; cardType?: string; caption?: string; rel?: string; target?: string; cardData?: Record<string, unknown>; } & Record<string, unknown>;
+  if (!node || typeof node !== "object") return "";
+  const n = node as {
+    type?: string;
+    text?: string;
+    format?: number;
+    children?: unknown[];
+    tag?: string;
+    listType?: string;
+    url?: string;
+    src?: string;
+    alt?: string;
+    cardType?: string;
+    caption?: string;
+    rel?: string;
+    target?: string;
+    cardData?: Record<string, unknown>;
+  } & Record<string, unknown>;
 
-  if (n.type === 'text') {
-    return n.text || '';
+  if (n.type === "text") {
+    return n.text || "";
   }
 
-  if (n.type === 'studio-card') {
+  if (n.type === "studio-card") {
     const cardType = n.cardType;
     const cardData = n.cardData || {};
     // Transient blob: media must never surface in excerpts/search text.
     if (hasTransientMedia(cardData)) {
-      return '';
+      return "";
     }
     const def = cardType ? STUDIO_CARD_DEFINITIONS[cardType] : undefined;
     if (def) {
@@ -205,36 +273,38 @@ function renderNodeToPlainText(node: unknown): string {
         const validated = def.validate(cardData);
         return def.renderPlainText(validated);
       } catch {
-        return '';
+        return "";
       }
     }
-    return '';
+    return "";
   }
 
   if (Array.isArray(n.children)) {
-    return n.children.map((child: unknown) => renderNodeToPlainText(child)).join('');
+    return n.children
+      .map((child: unknown) => renderNodeToPlainText(child))
+      .join("");
   }
 
-  return '';
+  return "";
 }
 
 export function extractNodeText(node: unknown): string {
-  if (!node || typeof node !== 'object') return '';
+  if (!node || typeof node !== "object") return "";
   const n = node as { type?: string; text?: string; children?: unknown[] };
-  if (n.type === 'text') return n.text || '';
+  if (n.type === "text") return n.text || "";
   if (Array.isArray(n.children)) {
-    return n.children.map(extractNodeText).join('');
+    return n.children.map(extractNodeText).join("");
   }
-  return '';
+  return "";
 }
 
 export function slugifyHeading(text: string): string {
   return text
     .toLowerCase()
-    .replace(/<[^>]*>?/gm, '')
-    .replace(/[^\w\s\u0600-\u06FF-]/g, '')
+    .replace(/<[^>]*>?/gm, "")
+    .replace(/[^\w\s\u0600-\u06FF-]/g, "")
     .trim()
-    .replace(/\s+/g, '-');
+    .replace(/\s+/g, "-");
 }
 
 export interface TableOfContentsItem {
@@ -243,7 +313,9 @@ export interface TableOfContentsItem {
   level: number;
 }
 
-export function extractTableOfContentsFromDocument(docInput: unknown): TableOfContentsItem[] {
+export function extractTableOfContentsFromDocument(
+  docInput: unknown,
+): TableOfContentsItem[] {
   const doc = migrateDocument(docInput);
   if (!doc.root || !Array.isArray(doc.root.children)) {
     return [];
@@ -253,22 +325,22 @@ export function extractTableOfContentsFromDocument(docInput: unknown): TableOfCo
   const seenSlugs = new Map<string, number>();
 
   for (const node of doc.root.children) {
-    if (!node || typeof node !== 'object') continue;
+    if (!node || typeof node !== "object") continue;
     const n = node as { type?: string; tag?: string; children?: unknown[] };
-    if (n.type === 'heading') {
-      const tag = (n.tag || 'h2').toLowerCase();
-      if (['h2', 'h3'].includes(tag)) {
+    if (n.type === "heading") {
+      const tag = (n.tag || "h2").toLowerCase();
+      if (["h2", "h3"].includes(tag)) {
         const text = extractNodeText(n).trim();
         if (text) {
           let baseSlug = slugifyHeading(text);
-          if (!baseSlug) baseSlug = 'heading';
+          if (!baseSlug) baseSlug = "heading";
           const count = seenSlugs.get(baseSlug) || 0;
           seenSlugs.set(baseSlug, count + 1);
           const slug = count > 0 ? `${baseSlug}-${count}` : baseSlug;
           items.push({
             id: slug,
             text,
-            level: tag === 'h2' ? 2 : 3,
+            level: tag === "h2" ? 2 : 3,
           });
         }
       }

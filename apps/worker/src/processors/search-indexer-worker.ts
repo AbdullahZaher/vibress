@@ -1,12 +1,21 @@
-import { Worker, Job, QUEUE_NAMES, getBullMqRedisConnection } from '@vibress/queue';
-import { SearchService, DrizzleSearchRepository, SearchDocumentInput } from '@vibress/search';
-import { DrizzlePostRepository } from '@vibress/posts';
-import { DrizzlePageRepository } from '@vibress/pages';
-import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
-import { tracedProcessor } from './trace-helper';
+import {
+  Worker,
+  Job,
+  QUEUE_NAMES,
+  getBullMqRedisConnection,
+} from "@vibress/queue";
+import {
+  SearchService,
+  DrizzleSearchRepository,
+  SearchDocumentInput,
+} from "@vibress/search";
+import { DrizzlePostRepository } from "@vibress/posts";
+import { DrizzlePageRepository } from "@vibress/pages";
+import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
+import { tracedProcessor } from "./trace-helper";
 
 export interface SearchIndexJob {
-  op: 'upsert' | 'remove';
+  op: "upsert" | "remove";
   doc?: SearchDocumentInput;
   entityType?: string;
   entityId?: string;
@@ -14,7 +23,7 @@ export interface SearchIndexJob {
 }
 
 export interface SearchRebuildJob {
-  op: 'rebuild';
+  op: "rebuild";
   traceparent?: string;
 }
 
@@ -44,42 +53,55 @@ export class SearchIndexerWorker {
   async start(): Promise<void> {
     this.worker = new Worker<SearchIndexJob | SearchRebuildJob>(
       SEARCH_QUEUE_NAME,
-      tracedProcessor('worker.job.search', (job) => this.process(job)),
-      { connection: getBullMqRedisConnection(), concurrency: 1 }
+      tracedProcessor("worker.job.search", (job) => this.process(job)),
+      { connection: getBullMqRedisConnection(), concurrency: 1 },
     );
-    this.worker.on('failed', (job, err) => {
+    this.worker.on("failed", (job, err) => {
       console.error(`[SearchIndexer] Job ${job?.id} failed:`, err.message);
     });
   }
 
-  private async process(job: Job<SearchIndexJob | SearchRebuildJob>): Promise<void> {
-    if (job.data.op === 'rebuild') {
+  private async process(
+    job: Job<SearchIndexJob | SearchRebuildJob>,
+  ): Promise<void> {
+    if (job.data.op === "rebuild") {
       const count = await this.searchService.rebuild(this.contentProvider);
-      console.log(`[SearchIndexer] Rebuild complete: ${count} documents indexed`);
+      console.log(
+        `[SearchIndexer] Rebuild complete: ${count} documents indexed`,
+      );
       return;
     }
-    if (job.data.op === 'upsert' && job.data.doc) {
+    if (job.data.op === "upsert" && job.data.doc) {
       // Verify the entity is published + public before indexing
       const verified = await this.resolveVerifiedDoc(job.data.doc);
       if (verified) {
         await this.searchService.indexDocument(verified);
       } else {
         // Not indexable — ensure any stale entry is removed
-        await this.searchService.removeDocument(job.data.doc.entityType, job.data.doc.entityId);
+        await this.searchService.removeDocument(
+          job.data.doc.entityType,
+          job.data.doc.entityId,
+        );
       }
       return;
     }
-    if (job.data.op === 'remove' && job.data.entityType && job.data.entityId) {
-      await this.searchService.removeDocument(job.data.entityType, job.data.entityId);
+    if (job.data.op === "remove" && job.data.entityType && job.data.entityId) {
+      await this.searchService.removeDocument(
+        job.data.entityType,
+        job.data.entityId,
+      );
     }
   }
 
-  private async resolveVerifiedDoc(doc: SearchDocumentInput): Promise<SearchDocumentInput | null> {
-    if (doc.entityType === 'post') {
+  private async resolveVerifiedDoc(
+    doc: SearchDocumentInput,
+  ): Promise<SearchDocumentInput | null> {
+    if (doc.entityType === "post") {
       const post = await this.postRepo.findById(doc.entityId);
-      if (!post || post.status !== 'published' || post.visibility !== 'public') return null;
+      if (!post || post.status !== "published" || post.visibility !== "public")
+        return null;
       return {
-        entityType: 'post',
+        entityType: "post",
         entityId: post.id,
         title: post.title,
         bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
@@ -87,11 +109,12 @@ export class SearchIndexerWorker {
         url: doc.url || `/posts/${post.slug}`,
       };
     }
-    if (doc.entityType === 'page') {
+    if (doc.entityType === "page") {
       const page = await this.pageRepo.findById(doc.entityId);
-      if (!page || page.status !== 'published' || page.visibility !== 'public') return null;
+      if (!page || page.status !== "published" || page.visibility !== "public")
+        return null;
       return {
-        entityType: 'page',
+        entityType: "page",
         entityId: page.id,
         title: page.title,
         bodyText: renderStudioDocumentToPlainText(page.content).slice(0, 2000),

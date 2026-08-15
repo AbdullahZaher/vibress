@@ -77,14 +77,14 @@ Main development URL:
 http://localhost:7777
 ```
 
-| Service | Port |
-|---|---:|
-| Gateway | **7777** |
-| Web | 7778 |
-| Admin | 7779 |
-| API | 7780 |
-| Portal | 7781 |
-| Worker health/metrics | 7782 |
+| Service               |     Port |
+| --------------------- | -------: |
+| Gateway               | **7777** |
+| Web                   |     7778 |
+| Admin                 |     7779 |
+| API                   |     7780 |
+| Portal                |     7781 |
+| Worker health/metrics |     7782 |
 
 Routing:
 

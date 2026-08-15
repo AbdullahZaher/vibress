@@ -5,21 +5,21 @@ at checkout.
 
 ## Model
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | text | UUID |
-| `product_id` | text FK | |
-| `plan_id` | text FK null | Null = applies to all plans in the product |
-| `key` | text | Unique; used as the redeem code |
-| `name` / `description` | text | |
-| `discount_type` | `percentage` / `fixed_amount` | |
-| `discount_value` | int | Percentage `1..100`; fixed in minor units |
-| `duration_type` | `once` / `repeating` / `forever` | |
-| `duration_cycles` | int null | Required for `repeating` |
-| `starts_at` / `ends_at` | timestamptz null | Validity window |
-| `max_redemptions` | int null | Null = unlimited |
-| `redemption_count` | int | |
-| `status` | `active` / `disabled` | |
+| Field                   | Type                             | Notes                                      |
+| ----------------------- | -------------------------------- | ------------------------------------------ |
+| `id`                    | text                             | UUID                                       |
+| `product_id`            | text FK                          |                                            |
+| `plan_id`               | text FK null                     | Null = applies to all plans in the product |
+| `key`                   | text                             | Unique; used as the redeem code            |
+| `name` / `description`  | text                             |                                            |
+| `discount_type`         | `percentage` / `fixed_amount`    |                                            |
+| `discount_value`        | int                              | Percentage `1..100`; fixed in minor units  |
+| `duration_type`         | `once` / `repeating` / `forever` |                                            |
+| `duration_cycles`       | int null                         | Required for `repeating`                   |
+| `starts_at` / `ends_at` | timestamptz null                 | Validity window                            |
+| `max_redemptions`       | int null                         | Null = unlimited                           |
+| `redemption_count`      | int                              |                                            |
+| `status`                | `active` / `disabled`            |                                            |
 
 ## Validation (at checkout)
 

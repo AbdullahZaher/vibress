@@ -1,12 +1,12 @@
 export type S3ProviderType =
-  | 'aws-s3'
-  | 'cloudflare-r2'
-  | 'digitalocean-spaces'
-  | 'wasabi'
-  | 'backblaze-b2'
-  | 'hetzner'
-  | 'minio'
-  | 'custom';
+  | "aws-s3"
+  | "cloudflare-r2"
+  | "digitalocean-spaces"
+  | "wasabi"
+  | "backblaze-b2"
+  | "hetzner"
+  | "minio"
+  | "custom";
 
 export interface S3StorageConfig {
   id?: string | undefined;

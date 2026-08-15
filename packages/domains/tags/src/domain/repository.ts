@@ -1,4 +1,4 @@
-import { Tag, CreateTagData, UpdateTagData } from './tag';
+import { Tag, CreateTagData, UpdateTagData } from "./tag";
 
 export interface TagRepository {
   findById(id: string): Promise<Tag | null>;

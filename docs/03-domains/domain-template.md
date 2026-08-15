@@ -39,15 +39,19 @@ posts/
 ## Layer definitions
 
 ### `domain/`
+
 Pure business rules, entities, value objects, errors, domain events, and repository interfaces.
 
 ### `application/`
+
 Use cases and orchestration of domain behavior.
 
 ### `queries/`
+
 Read-oriented operations. These may use optimized read models when necessary.
 
 ### `infrastructure/`
+
 Concrete adapters for persistence or external services.
 
 ## Command flow

@@ -1,5 +1,5 @@
-import { PermissionRepository } from '../domain/repository';
-import { Permission, CreatePermissionData } from '../domain/permission';
+import { PermissionRepository } from "../domain/repository";
+import { Permission, CreatePermissionData } from "../domain/permission";
 
 export class PermissionsService {
   constructor(private permRepo: PermissionRepository) {}
@@ -20,11 +20,17 @@ export class PermissionsService {
     return this.permRepo.listAll();
   }
 
-  async assignPermissionToRole(roleId: string, permissionId: string): Promise<void> {
+  async assignPermissionToRole(
+    roleId: string,
+    permissionId: string,
+  ): Promise<void> {
     await this.permRepo.assignPermissionToRole(roleId, permissionId);
   }
 
-  async removePermissionFromRole(roleId: string, permissionId: string): Promise<void> {
+  async removePermissionFromRole(
+    roleId: string,
+    permissionId: string,
+  ): Promise<void> {
     await this.permRepo.removePermissionFromRole(roleId, permissionId);
   }
 

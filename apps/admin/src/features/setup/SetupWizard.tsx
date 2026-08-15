@@ -1,25 +1,40 @@
-import React, { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { KeyRound, UserRound, Loader2, CheckCircle2, ArrowRight, ArrowLeft, Rocket } from 'lucide-react';
-import { fetchSetupPreflight, completeSetup, SetupPreflight } from './lib';
+import React, { useState } from "react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import {
+  KeyRound,
+  UserRound,
+  Loader2,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Rocket,
+} from "lucide-react";
+import { fetchSetupPreflight, completeSetup, SetupPreflight } from "./lib";
 
-type Step = 'welcome' | 'site' | 'owner' | 'ready';
+type Step = "welcome" | "site" | "owner" | "ready";
 
 interface WizardProps {
   onComplete: () => void;
 }
 
 const LOCALES = [
-  { value: 'en', label: 'English' },
-  { value: 'ar', label: 'العربية (Arabic)' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'es', label: 'Español' },
-  { value: 'fr', label: 'Français' },
-  { value: 'ja', label: '日本語' },
-  { value: 'pt', label: 'Português' },
-  { value: 'zh', label: '中文' },
+  { value: "en", label: "English" },
+  { value: "ar", label: "العربية (Arabic)" },
+  { value: "de", label: "Deutsch" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "ja", label: "日本語" },
+  { value: "pt", label: "Português" },
+  { value: "zh", label: "中文" },
 ];
 
 function ErrorBanner({ message }: { message: string }) {
@@ -36,39 +51,41 @@ function ErrorBanner({ message }: { message: string }) {
 
 function StepHeader({ step }: { step: Step }) {
   const labels: Record<Step, string> = {
-    welcome: 'Welcome',
-    site: 'Your site',
-    owner: 'Your account',
-    ready: 'Ready',
+    welcome: "Welcome",
+    site: "Your site",
+    owner: "Your account",
+    ready: "Ready",
   };
   return (
     <div className="text-center space-y-2 mb-6">
       <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl border border-border bg-card text-foreground shadow-xs mb-2">
         <Rocket className="h-5 w-5" />
       </div>
-      <h1 className="text-2xl font-black tracking-tight text-foreground">{labels[step]}</h1>
+      <h1 className="text-2xl font-black tracking-tight text-foreground">
+        {labels[step]}
+      </h1>
     </div>
   );
 }
 
 export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
-  const [step, setStep] = useState<Step>('welcome');
-  const [setupKey, setSetupKey] = useState('');
+  const [step, setStep] = useState<Step>("welcome");
+  const [setupKey, setSetupKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<SetupPreflight | null>(null);
 
   // Site step
-  const [siteName, setSiteName] = useState('');
-  const [siteDescription, setSiteDescription] = useState('');
-  const [siteTagline, setSiteTagline] = useState('');
-  const [siteLocale, setSiteLocale] = useState('en');
+  const [siteName, setSiteName] = useState("");
+  const [siteDescription, setSiteDescription] = useState("");
+  const [siteTagline, setSiteTagline] = useState("");
+  const [siteLocale, setSiteLocale] = useState("en");
 
   // Owner step
-  const [ownerName, setOwnerName] = useState('');
-  const [ownerEmail, setOwnerEmail] = useState('');
-  const [ownerPassword, setOwnerPassword] = useState('');
-  const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState('');
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState("");
 
   const go = (next: Step) => {
     setError(null);
@@ -78,7 +95,9 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   // Welcome: verify the setup key and run readiness checks.
   const handleVerifyKey = async () => {
     if (!setupKey.trim()) {
-      setError('Enter the setup key provided in your environment configuration.');
+      setError(
+        "Enter the setup key provided in your environment configuration.",
+      );
       return;
     }
     setIsLoading(true);
@@ -87,17 +106,27 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
       const preflight = await fetchSetupPreflight(setupKey.trim());
       setReadiness(preflight);
       if (!preflight.ready) {
-        const failed = ['database', 'redis', 'configuration'].filter((k) => preflight[k as keyof SetupPreflight] === false);
-        setError(`Some checks failed: ${failed.join(', ')}. Fix them and try again.`);
+        const failed = ["database", "redis", "configuration"].filter(
+          (k) => preflight[k as keyof SetupPreflight] === false,
+        );
+        setError(
+          `Some checks failed: ${failed.join(", ")}. Fix them and try again.`,
+        );
         return;
       }
-      go('site');
+      go("site");
     } catch (err) {
       const code = (err as Error & { code?: string }).code;
-      if (code === 'INVALID_SETUP_TOKEN') {
-        setError('Invalid setup key. Check VIBRESS_SETUP_TOKEN in your environment.');
+      if (code === "INVALID_SETUP_TOKEN") {
+        setError(
+          "Invalid setup key. Check VIBRESS_SETUP_TOKEN in your environment.",
+        );
       } else {
-        setError(err instanceof Error ? err.message : 'Could not reach the server. Is the API running?');
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not reach the server. Is the API running?",
+        );
       }
     } finally {
       setIsLoading(false);
@@ -105,20 +134,26 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   };
 
   const validateSite = (): string | null => {
-    if (!siteName.trim()) return 'Site name is required.';
-    if (siteName.trim().length > 120) return 'Site name must be 120 characters or fewer.';
-    if (siteDescription.trim().length > 500) return 'Site description must be 500 characters or fewer.';
-    if (siteTagline.trim().length > 200) return 'Tagline must be 200 characters or fewer.';
+    if (!siteName.trim()) return "Site name is required.";
+    if (siteName.trim().length > 120)
+      return "Site name must be 120 characters or fewer.";
+    if (siteDescription.trim().length > 500)
+      return "Site description must be 500 characters or fewer.";
+    if (siteTagline.trim().length > 200)
+      return "Tagline must be 200 characters or fewer.";
     return null;
   };
 
   const validateOwner = (): string | null => {
-    if (!ownerName.trim()) return 'Full name is required.';
+    if (!ownerName.trim()) return "Full name is required.";
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail.trim());
-    if (!emailOk) return 'Enter a valid email address.';
-    if (ownerPassword.length < 12) return 'Password must be at least 12 characters.';
-    if (ownerPassword.length > 128) return 'Password must be 128 characters or fewer.';
-    if (ownerPassword !== ownerPasswordConfirm) return 'Passwords do not match.';
+    if (!emailOk) return "Enter a valid email address.";
+    if (ownerPassword.length < 12)
+      return "Password must be at least 12 characters.";
+    if (ownerPassword.length > 128)
+      return "Password must be 128 characters or fewer.";
+    if (ownerPassword !== ownerPasswordConfirm)
+      return "Passwords do not match.";
     return null;
   };
 
@@ -126,17 +161,17 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   const handleInstall = async () => {
     const siteError = validateSite();
     if (siteError) {
-      go('site');
+      go("site");
       setError(siteError);
       return;
     }
     const ownerError = validateOwner();
     if (ownerError) {
-      go('owner');
+      go("owner");
       setError(ownerError);
       return;
     }
-    setStep('ready');
+    setStep("ready");
     setIsLoading(true);
     setError(null);
     try {
@@ -159,13 +194,17 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
       onComplete();
     } catch (err) {
       const code = (err as Error & { code?: string }).code;
-      if (code === 'SETUP_ALREADY_COMPLETED') {
+      if (code === "SETUP_ALREADY_COMPLETED") {
         // Another process completed installation — treat as success.
         onComplete();
         return;
       }
-      setError(err instanceof Error ? err.message : 'Installation failed. Please try again.');
-      setStep('owner');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Installation failed. Please try again.",
+      );
+      setStep("owner");
     } finally {
       setIsLoading(false);
     }
@@ -176,19 +215,25 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
       <div className="w-full max-w-md space-y-6">
         <StepHeader step={step} />
 
-        {step === 'welcome' && (
+        {step === "welcome" && (
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-base font-bold">First-run setup</CardTitle>
+              <CardTitle className="text-base font-bold">
+                First-run setup
+              </CardTitle>
               <CardDescription className="text-xs">
-                Welcome to Vibress. This instance has not been installed yet. Enter your setup key to begin, and we'll
-                check that everything is ready.
+                Welcome to Vibress. This instance has not been installed yet.
+                Enter your setup key to begin, and we'll check that everything
+                is ready.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {error && <ErrorBanner message={error} />}
               <div className="space-y-1">
-                <label htmlFor="setup-key" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="setup-key"
+                  className="text-xs font-medium text-foreground"
+                >
                   Setup key
                 </label>
                 <div className="relative">
@@ -207,51 +252,98 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
               </div>
 
               {readiness && (
-                <div className="rounded-lg border border-border p-3 space-y-1.5 text-xs" aria-label="System readiness">
-                  {(['database', 'redis', 'configuration'] as const).map((key) => (
-                    <div key={key} className="flex items-center justify-between">
-                      <span className="text-muted-foreground capitalize">{key}</span>
-                      <span className={readiness[key] ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                        {readiness[key] ? '✓' : '✗'}
-                      </span>
-                    </div>
-                  ))}
+                <div
+                  className="rounded-lg border border-border p-3 space-y-1.5 text-xs"
+                  aria-label="System readiness"
+                >
+                  {(["database", "redis", "configuration"] as const).map(
+                    (key) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between"
+                      >
+                        <span className="text-muted-foreground capitalize">
+                          {key}
+                        </span>
+                        <span
+                          className={
+                            readiness[key]
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
+                          }
+                        >
+                          {readiness[key] ? "✓" : "✗"}
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </div>
               )}
             </CardContent>
             <CardFooter className="pt-2">
-              <Button className="w-full" onClick={handleVerifyKey} disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {isLoading ? 'Checking…' : 'Continue'}
+              <Button
+                className="w-full"
+                onClick={handleVerifyKey}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                {isLoading ? "Checking…" : "Continue"}
               </Button>
             </CardFooter>
           </Card>
         )}
 
-        {step === 'site' && (
+        {step === "site" && (
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-base font-bold">About your site</CardTitle>
+              <CardTitle className="text-base font-bold">
+                About your site
+              </CardTitle>
               <CardDescription className="text-xs">
-                Give your site a name and description. You can change these later from Settings.
+                Give your site a name and description. You can change these
+                later from Settings.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {error && <ErrorBanner message={error} />}
               <div className="space-y-1">
-                <label htmlFor="site-name" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="site-name"
+                  className="text-xs font-medium text-foreground"
+                >
                   Site name
                 </label>
-                <Input id="site-name" value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="My Vibress site" />
+                <Input
+                  id="site-name"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                  placeholder="My Vibress site"
+                />
               </div>
               <div className="space-y-1">
-                <label htmlFor="site-tagline" className="text-xs font-medium text-foreground">
-                  Tagline <span className="text-muted-foreground">(optional)</span>
+                <label
+                  htmlFor="site-tagline"
+                  className="text-xs font-medium text-foreground"
+                >
+                  Tagline{" "}
+                  <span className="text-muted-foreground">(optional)</span>
                 </label>
-                <Input id="site-tagline" value={siteTagline} onChange={(e) => setSiteTagline(e.target.value)} placeholder="Short tagline" />
+                <Input
+                  id="site-tagline"
+                  value={siteTagline}
+                  onChange={(e) => setSiteTagline(e.target.value)}
+                  placeholder="Short tagline"
+                />
               </div>
               <div className="space-y-1">
-                <label htmlFor="site-description" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="site-description"
+                  className="text-xs font-medium text-foreground"
+                >
                   Description
                 </label>
                 <textarea
@@ -264,7 +356,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                 />
               </div>
               <div className="space-y-1">
-                <label htmlFor="site-locale" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="site-locale"
+                  className="text-xs font-medium text-foreground"
+                >
                   Default language
                 </label>
                 <select
@@ -279,11 +374,13 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-muted-foreground">Languages without a full dictionary fall back to English.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Languages without a full dictionary fall back to English.
+                </p>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between pt-2">
-              <Button variant="ghost" onClick={() => go('welcome')}>
+              <Button variant="ghost" onClick={() => go("welcome")}>
                 <ArrowLeft className="h-4 w-4" /> Back
               </Button>
               <Button
@@ -293,7 +390,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                     setError(err);
                     return;
                   }
-                  go('owner');
+                  go("owner");
                 }}
               >
                 Continue <ArrowRight className="h-4 w-4" />
@@ -302,24 +399,38 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           </Card>
         )}
 
-        {step === 'owner' && (
+        {step === "owner" && (
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-base font-bold">Create the owner account</CardTitle>
+              <CardTitle className="text-base font-bold">
+                Create the owner account
+              </CardTitle>
               <CardDescription className="text-xs">
-                This will be the site owner with full administrative access. You'll sign in with these credentials.
+                This will be the site owner with full administrative access.
+                You'll sign in with these credentials.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {error && <ErrorBanner message={error} />}
               <div className="space-y-1">
-                <label htmlFor="owner-name" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="owner-name"
+                  className="text-xs font-medium text-foreground"
+                >
                   Full name
                 </label>
-                <Input id="owner-name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} autoComplete="name" />
+                <Input
+                  id="owner-name"
+                  value={ownerName}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  autoComplete="name"
+                />
               </div>
               <div className="space-y-1">
-                <label htmlFor="owner-email" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="owner-email"
+                  className="text-xs font-medium text-foreground"
+                >
                   Email
                 </label>
                 <div className="relative">
@@ -335,7 +446,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                 </div>
               </div>
               <div className="space-y-1">
-                <label htmlFor="owner-password" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="owner-password"
+                  className="text-xs font-medium text-foreground"
+                >
                   Password
                 </label>
                 <Input
@@ -345,10 +459,15 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   onChange={(e) => setOwnerPassword(e.target.value)}
                   autoComplete="new-password"
                 />
-                <p className="text-[11px] text-muted-foreground">At least 12 characters.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  At least 12 characters.
+                </p>
               </div>
               <div className="space-y-1">
-                <label htmlFor="owner-password-confirm" className="text-xs font-medium text-foreground">
+                <label
+                  htmlFor="owner-password-confirm"
+                  className="text-xs font-medium text-foreground"
+                >
                   Confirm password
                 </label>
                 <Input
@@ -361,7 +480,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
               </div>
             </CardContent>
             <CardFooter className="flex justify-between pt-2">
-              <Button variant="ghost" onClick={() => go('site')}>
+              <Button variant="ghost" onClick={() => go("site")}>
                 <ArrowLeft className="h-4 w-4" /> Back
               </Button>
               <Button
@@ -371,7 +490,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                     setError(err);
                     return;
                   }
-                  go('ready');
+                  go("ready");
                   handleInstall();
                 }}
               >
@@ -381,13 +500,16 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           </Card>
         )}
 
-        {step === 'ready' && (
+        {step === "ready" && (
           <Card className="border border-border shadow-sm">
             <CardContent className="py-10 text-center space-y-4">
               {isLoading ? (
                 <>
                   <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground" aria-live="polite">
+                  <p
+                    className="text-sm text-muted-foreground"
+                    aria-live="polite"
+                  >
                     Setting up Vibress…
                   </p>
                 </>

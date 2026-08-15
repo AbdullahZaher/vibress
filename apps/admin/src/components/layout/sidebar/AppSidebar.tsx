@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
-import { ApiUser } from '../../../lib/api';
-import { AppSidebarHeader } from './AppSidebarHeader';
-import { NavMain } from './NavMain';
-import { NavContent } from './NavContent';
-import { NavSettings } from './NavSettings';
-import { AppSidebarBanner } from './AppSidebarBanner';
-import { UserMenu } from './UserMenu';
+import React, { useEffect } from "react";
+import { ApiUser } from "../../../lib/api";
+import { AppSidebarHeader } from "./AppSidebarHeader";
+import { NavMain } from "./NavMain";
+import { NavContent } from "./NavContent";
+import { NavSettings } from "./NavSettings";
+import { AppSidebarBanner } from "./AppSidebarBanner";
+import { UserMenu } from "./UserMenu";
 
 interface AppSidebarProps {
   user: ApiUser;
@@ -41,23 +41,23 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   // Close mobile sidebar on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === "Escape" && isOpen) {
         onClose?.();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
   // Lock background body scroll on mobile when open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
     }
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
     };
   }, [isOpen]);
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
 /**
  * Analytics v1 E2E — public web traffic reaches the Admin dashboard.
@@ -11,58 +11,71 @@ import { test, expect } from '@playwright/test';
 
 // Overridable so the suite can target the real gateway (e.g. a LAN
 // address) when a local app occupies localhost:7777.
-const BASE = process.env.VIBRESS_E2E_BASE || 'http://localhost:7777';
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
 
 // The analytics pipeline correctly treats automation UAs (e.g.
 // "HeadlessChrome") as bots. Use a realistic browser UA for the traffic
 // tests so page views count as real visitors.
 test.use({
   userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
 });
 // Origin header allowed by the dev API's CORS/staff-origin allow-list.
-const ORIGIN = 'http://localhost:7777';
+const ORIGIN = "http://localhost:7777";
 
-test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
-  let postSlug = '';
-  let ownerCookie = '';
+test.describe.serial("Analytics v1 — public traffic to dashboard", () => {
+  let postSlug = "";
+  let ownerCookie = "";
 
   test.beforeAll(async ({ request }) => {
     // Clean slate for traffic events (only this suite writes analytics_events).
     await request.post(`${BASE}/api/admin/v1/auth/login`, {
-      headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
-      data: { email: 'owner@example.com', password: 'OwnerPass123!' },
+      headers: { "Content-Type": "application/json", Origin: ORIGIN },
+      data: { email: "owner@example.com", password: "OwnerPass123!" },
     });
     // Use the API directly to clear traffic events deterministically.
     const admin = await request.post(`${BASE}/api/admin/v1/auth/login`, {
-      headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
-      data: { email: 'owner@example.com', password: 'OwnerPass123!' },
+      headers: { "Content-Type": "application/json", Origin: ORIGIN },
+      data: { email: "owner@example.com", password: "OwnerPass123!" },
     });
-    const adminCookie = ((admin.headers()['set-cookie'] as unknown as string) || '').split(';')[0] ?? '';
+    const adminCookie =
+      ((admin.headers()["set-cookie"] as unknown as string) || "").split(
+        ";",
+      )[0] ?? "";
 
     // Login as the seeded owner
     const loginRes = await request.post(`${BASE}/api/admin/v1/auth/login`, {
-      headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
-      data: { email: 'owner@example.com', password: 'OwnerPass123!' },
+      headers: { "Content-Type": "application/json", Origin: ORIGIN },
+      data: { email: "owner@example.com", password: "OwnerPass123!" },
     });
     expect(loginRes.status()).toBe(200);
-    const setCookie = (loginRes.headers()['set-cookie'] as unknown as string) || '';
-    ownerCookie = setCookie.split(';')[0] ?? '';
+    const setCookie =
+      (loginRes.headers()["set-cookie"] as unknown as string) || "";
+    ownerCookie = setCookie.split(";")[0] ?? "";
     const loginData = await loginRes.json();
 
     // Create + publish a post
     postSlug = `analytics-e2e-${Date.now()}`;
     const postRes = await request.post(`${BASE}/api/admin/v1/posts`, {
-      headers: { 'Content-Type': 'application/json', Origin: ORIGIN, cookie: ownerCookie },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: ORIGIN,
+        cookie: ownerCookie,
+      },
       data: {
-        title: 'Analytics E2E Post',
+        title: "Analytics E2E Post",
         slug: postSlug,
         content: {
-          schema: 'vibress-studio',
+          schema: "vibress-studio",
           version: 1,
           root: {
-            type: 'root',
-            children: [{ type: 'paragraph', children: [{ type: 'text', text: 'Analytics E2E body.' }] }],
+            type: "root",
+            children: [
+              {
+                type: "paragraph",
+                children: [{ type: "text", text: "Analytics E2E body." }],
+              },
+            ],
           },
         },
         primaryAuthorId: loginData.user.id,
@@ -75,7 +88,10 @@ test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
     });
   });
 
-  test('visiting a public post records a view visible in Admin Analytics', async ({ page, request }) => {
+  test("visiting a public post records a view visible in Admin Analytics", async ({
+    page,
+    request,
+  }) => {
     // 1. Visit the published public post (tracker beacon fires)
     const res = await page.goto(`${BASE}/posts/${postSlug}`);
     expect(res?.status()).toBe(200);
@@ -84,9 +100,12 @@ test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
     let overview: any = null;
     for (let i = 0; i < 40; i++) {
       await page.waitForTimeout(500);
-      const overviewRes = await request.get(`${BASE}/api/admin/v1/analytics/overview?range=7d`, {
-        headers: { cookie: ownerCookie },
-      });
+      const overviewRes = await request.get(
+        `${BASE}/api/admin/v1/analytics/overview?range=7d`,
+        {
+          headers: { cookie: ownerCookie },
+        },
+      );
       if (overviewRes.status() !== 200) continue;
       overview = await overviewRes.json();
       if ((overview.summary?.views ?? 0) >= 1) break;
@@ -94,18 +113,28 @@ test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
     expect(overview?.summary?.views ?? 0).toBeGreaterThanOrEqual(1);
 
     // 3. Top content includes the post path
-    const paths = (overview.topContent ?? []).map((c: { path: string }) => c.path);
+    const paths = (overview.topContent ?? []).map(
+      (c: { path: string }) => c.path,
+    );
     expect(paths).toContain(`/posts/${postSlug}`);
   });
 
   async function overview(request: any): Promise<any> {
-    const res = await request.get(`${BASE}/api/admin/v1/analytics/overview?range=7d`, {
-      headers: { cookie: ownerCookie },
-    });
-    return res.status() === 200 ? res.json() : { summary: { views: 0, visitors: 0 }, topContent: [] };
+    const res = await request.get(
+      `${BASE}/api/admin/v1/analytics/overview?range=7d`,
+      {
+        headers: { cookie: ownerCookie },
+      },
+    );
+    return res.status() === 200
+      ? res.json()
+      : { summary: { views: 0, visitors: 0 }, topContent: [] };
   }
 
-  test('multiple views by the same visitor count as one visitor', async ({ page, request }) => {
+  test("multiple views by the same visitor count as one visitor", async ({
+    page,
+    request,
+  }) => {
     // Capture the visitor baseline, then refresh the post twice in the SAME
     // browser context (same anonymous visitor).
     const before = await overview(request);
@@ -116,18 +145,26 @@ test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
     for (let i = 0; i < 40; i++) {
       await page.waitForTimeout(500);
       after = await overview(request);
-      if ((after.summary?.views ?? 0) >= (before.summary?.views ?? 0) + 2) break;
+      if ((after.summary?.views ?? 0) >= (before.summary?.views ?? 0) + 2)
+        break;
     }
-    expect((after.summary?.views ?? 0)).toBeGreaterThanOrEqual((before.summary?.views ?? 0) + 2);
+    expect(after.summary?.views ?? 0).toBeGreaterThanOrEqual(
+      (before.summary?.views ?? 0) + 2,
+    );
     // Two extra views from the SAME context → only ONE new visitor.
-    expect(after.summary?.visitors ?? 0).toBe((before.summary?.visitors ?? 0) + 1);
+    expect(after.summary?.visitors ?? 0).toBe(
+      (before.summary?.visitors ?? 0) + 1,
+    );
   });
 
-  test('a second browser context counts as a new visitor', async ({ browser, request }) => {
+  test("a second browser context counts as a new visitor", async ({
+    browser,
+    request,
+  }) => {
     const before = await overview(request);
     const context = await browser.newContext({
       userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     });
     const page = await context.newPage();
     await page.goto(`${BASE}/posts/${postSlug}`);
@@ -139,9 +176,12 @@ test.describe.serial('Analytics v1 — public traffic to dashboard', () => {
     let after = before;
     for (let i = 0; i < 40; i++) {
       after = await overview(request);
-      if ((after.summary?.visitors ?? 0) >= (before.summary?.visitors ?? 0) + 1) break;
+      if ((after.summary?.visitors ?? 0) >= (before.summary?.visitors ?? 0) + 1)
+        break;
       await new Promise((r) => setTimeout(r, 500));
     }
-    expect(after.summary?.visitors ?? 0).toBe((before.summary?.visitors ?? 0) + 1);
+    expect(after.summary?.visitors ?? 0).toBe(
+      (before.summary?.visitors ?? 0) + 1,
+    );
   });
 });

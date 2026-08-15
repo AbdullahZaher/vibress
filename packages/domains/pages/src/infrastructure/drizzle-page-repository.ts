@@ -1,13 +1,24 @@
-import { getDb, pages } from '@vibress/database';
-import { eq, and, isNull, ilike, count, lte, desc } from 'drizzle-orm';
-import { PageRepository } from '../domain/repository';
-import { Page, CreatePageData, ListPagesFilter, PageStatus, PageVisibility, PageDomainError } from '../domain/page';
-import crypto from 'node:crypto';
+import { getDb, pages } from "@vibress/database";
+import { eq, and, isNull, ilike, count, lte, desc } from "drizzle-orm";
+import { PageRepository } from "../domain/repository";
+import {
+  Page,
+  CreatePageData,
+  ListPagesFilter,
+  PageStatus,
+  PageVisibility,
+  PageDomainError,
+} from "../domain/page";
+import crypto from "node:crypto";
 
 export class DrizzlePageRepository implements PageRepository {
   async findById(id: string): Promise<Page | null> {
     const db = getDb();
-    const rows = await db.select().from(pages).where(and(eq(pages.id, id), isNull(pages.deletedAt))).limit(1);
+    const rows = await db
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, id), isNull(pages.deletedAt)))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -15,7 +26,11 @@ export class DrizzlePageRepository implements PageRepository {
 
   async findBySlug(slug: string): Promise<Page | null> {
     const db = getDb();
-    const rows = await db.select().from(pages).where(and(eq(pages.slug, slug), isNull(pages.deletedAt))).limit(1);
+    const rows = await db
+      .select()
+      .from(pages)
+      .where(and(eq(pages.slug, slug), isNull(pages.deletedAt)))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -30,11 +45,11 @@ export class DrizzlePageRepository implements PageRepository {
       .where(
         and(
           eq(pages.slug, slug),
-          eq(pages.status, 'published'),
-          eq(pages.visibility, 'public'),
+          eq(pages.status, "published"),
+          eq(pages.visibility, "public"),
           lte(pages.publishedAt, now),
-          isNull(pages.deletedAt)
-        )
+          isNull(pages.deletedAt),
+        ),
       )
       .limit(1);
     const row = rows[0];
@@ -42,7 +57,9 @@ export class DrizzlePageRepository implements PageRepository {
     return this.mapToDomain(row);
   }
 
-  async create(data: CreatePageData & { slug: string; content: Record<string, unknown> }): Promise<Page> {
+  async create(
+    data: CreatePageData & { slug: string; content: Record<string, unknown> },
+  ): Promise<Page> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
@@ -54,8 +71,8 @@ export class DrizzlePageRepository implements PageRepository {
       excerpt: data.excerpt || null,
       content: data.content,
       contentVersion: data.contentVersion || 1,
-      status: data.status || 'draft',
-      visibility: data.visibility || 'public',
+      status: data.status || "draft",
+      visibility: data.visibility || "public",
       version: 1,
       primaryAuthorId: data.primaryAuthorId,
       createdBy: data.createdBy || data.primaryAuthorId,
@@ -73,17 +90,23 @@ export class DrizzlePageRepository implements PageRepository {
 
     const rows = await db.insert(pages).values(insertPayload).returning();
     const row = rows[0];
-    if (!row) throw new Error('Failed to insert page');
+    if (!row) throw new Error("Failed to insert page");
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: Partial<Page> & { version: number }): Promise<Page> {
+  async update(
+    id: string,
+    data: Partial<Page> & { version: number },
+  ): Promise<Page> {
     const db = getDb();
     const current = await this.findById(id);
     if (!current) throw new Error(`Page not found: ${id}`);
 
     if (current.version !== data.version) {
-      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
+      throw new PageDomainError(
+        "CONTENT_CONFLICT",
+        "Content has been modified by another request",
+      );
     }
 
     const nextVersion = current.version + 1;
@@ -98,39 +121,59 @@ export class DrizzlePageRepository implements PageRepository {
     if (data.slug !== undefined) updatePayload.slug = data.slug;
     if (data.excerpt !== undefined) updatePayload.excerpt = data.excerpt;
     if (data.content !== undefined) updatePayload.content = data.content;
-    if (data.contentVersion !== undefined) updatePayload.contentVersion = data.contentVersion;
+    if (data.contentVersion !== undefined)
+      updatePayload.contentVersion = data.contentVersion;
     if (data.status !== undefined) updatePayload.status = data.status;
-    if (data.visibility !== undefined) updatePayload.visibility = data.visibility;
-    if (data.primaryAuthorId !== undefined) updatePayload.primaryAuthorId = data.primaryAuthorId;
+    if (data.visibility !== undefined)
+      updatePayload.visibility = data.visibility;
+    if (data.primaryAuthorId !== undefined)
+      updatePayload.primaryAuthorId = data.primaryAuthorId;
     if (data.updatedBy !== undefined) updatePayload.updatedBy = data.updatedBy;
-    if (data.publishedBy !== undefined) updatePayload.publishedBy = data.publishedBy;
-    if (data.publishedAt !== undefined) updatePayload.publishedAt = data.publishedAt;
-    if (data.scheduledAt !== undefined) updatePayload.scheduledAt = data.scheduledAt;
+    if (data.publishedBy !== undefined)
+      updatePayload.publishedBy = data.publishedBy;
+    if (data.publishedAt !== undefined)
+      updatePayload.publishedAt = data.publishedAt;
+    if (data.scheduledAt !== undefined)
+      updatePayload.scheduledAt = data.scheduledAt;
     if (data.metaTitle !== undefined) updatePayload.metaTitle = data.metaTitle;
-    if (data.metaDescription !== undefined) updatePayload.metaDescription = data.metaDescription;
-    if (data.canonicalUrl !== undefined) updatePayload.canonicalUrl = data.canonicalUrl;
+    if (data.metaDescription !== undefined)
+      updatePayload.metaDescription = data.metaDescription;
+    if (data.canonicalUrl !== undefined)
+      updatePayload.canonicalUrl = data.canonicalUrl;
     if (data.deletedAt !== undefined) updatePayload.deletedAt = data.deletedAt;
 
-    const [row] = await db.update(pages).set(updatePayload).where(and(eq(pages.id, id), eq(pages.version, current.version))).returning();
+    const [row] = await db
+      .update(pages)
+      .set(updatePayload)
+      .where(and(eq(pages.id, id), eq(pages.version, current.version)))
+      .returning();
     if (!row) {
-      throw new PageDomainError('CONTENT_CONFLICT', 'Content has been modified by another request');
+      throw new PageDomainError(
+        "CONTENT_CONFLICT",
+        "Content has been modified by another request",
+      );
     }
     return this.mapToDomain(row);
   }
 
   async delete(id: string): Promise<void> {
     const db = getDb();
-    await db.update(pages).set({ deletedAt: new Date() }).where(eq(pages.id, id));
+    await db
+      .update(pages)
+      .set({ deletedAt: new Date() })
+      .where(eq(pages.id, id));
   }
 
-  async list(filter: ListPagesFilter = {}): Promise<{ pages: Page[]; total: number }> {
+  async list(
+    filter: ListPagesFilter = {},
+  ): Promise<{ pages: Page[]; total: number }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
 
     const conditions = [isNull(pages.deletedAt)];
     if (filter.publishedOnly) {
-      conditions.push(eq(pages.status, 'published'));
+      conditions.push(eq(pages.status, "published"));
       conditions.push(lte(pages.publishedAt, new Date()));
     } else if (filter.status) {
       conditions.push(eq(pages.status, filter.status));
@@ -160,7 +203,7 @@ export class DrizzlePageRepository implements PageRepository {
       .offset(offset);
 
     return {
-      pages: rows.map(r => this.mapToDomain(r)),
+      pages: rows.map((r) => this.mapToDomain(r)),
       total: Number(totalCount),
     };
   }
@@ -172,13 +215,13 @@ export class DrizzlePageRepository implements PageRepository {
       .from(pages)
       .where(
         and(
-          eq(pages.status, 'scheduled'),
+          eq(pages.status, "scheduled"),
           lte(pages.scheduledAt, now),
-          isNull(pages.deletedAt)
-        )
+          isNull(pages.deletedAt),
+        ),
       );
 
-    return rows.map(r => this.mapToDomain(r));
+    return rows.map((r) => this.mapToDomain(r));
   }
 
   private mapToDomain(row: typeof pages.$inferSelect): Page {

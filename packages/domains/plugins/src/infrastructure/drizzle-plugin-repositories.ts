@@ -1,7 +1,20 @@
-import { getDb, plugins, PluginRow, pluginSettings, PluginSettingRow } from '@vibress/database';
-import { eq, and } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { PluginRepository, PluginSettingRepository, Plugin, PluginSetting, RegisterPluginData, PluginStatus } from '../domain/plugin';
+import {
+  getDb,
+  plugins,
+  PluginRow,
+  pluginSettings,
+  PluginSettingRow,
+} from "@vibress/database";
+import { eq, and } from "drizzle-orm";
+import crypto from "node:crypto";
+import {
+  PluginRepository,
+  PluginSettingRepository,
+  Plugin,
+  PluginSetting,
+  RegisterPluginData,
+  PluginStatus,
+} from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
   async create(data: RegisterPluginData): Promise<Plugin> {
@@ -20,18 +33,22 @@ export class DrizzlePluginRepository implements PluginRepository {
         capabilities: data.capabilities,
         hooks: data.hooks || [],
         settingsSchema: data.settingsSchema || {},
-        status: 'registered',
+        status: "registered",
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert plugin');
+    if (!row) throw new Error("Failed to insert plugin");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Plugin | null> {
     const db = getDb();
-    const rows = await db.select().from(plugins).where(eq(plugins.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(plugins)
+      .where(eq(plugins.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -39,7 +56,11 @@ export class DrizzlePluginRepository implements PluginRepository {
 
   async findByManifestId(manifestId: string): Promise<Plugin | null> {
     const db = getDb();
-    const rows = await db.select().from(plugins).where(eq(plugins.manifestId, manifestId)).limit(1);
+    const rows = await db
+      .select()
+      .from(plugins)
+      .where(eq(plugins.manifestId, manifestId))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -47,22 +68,35 @@ export class DrizzlePluginRepository implements PluginRepository {
 
   async updateStatus(id: string, status: PluginStatus): Promise<Plugin> {
     const db = getDb();
-    const [row] = await db.update(plugins).set({ status, updatedAt: new Date() }).where(eq(plugins.id, id)).returning();
+    const [row] = await db
+      .update(plugins)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(plugins.id, id))
+      .returning();
     if (!row) throw new Error(`Plugin not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async updateMetadata(id: string, data: Partial<RegisterPluginData>): Promise<Plugin> {
+  async updateMetadata(
+    id: string,
+    data: Partial<RegisterPluginData>,
+  ): Promise<Plugin> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
     if (data.description !== undefined) payload.description = data.description;
     if (data.entrypoint !== undefined) payload.entrypoint = data.entrypoint;
-    if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
+    if (data.capabilities !== undefined)
+      payload.capabilities = data.capabilities;
     if (data.hooks !== undefined) payload.hooks = data.hooks;
-    if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
-    const [row] = await db.update(plugins).set(payload).where(eq(plugins.id, id)).returning();
+    if (data.settingsSchema !== undefined)
+      payload.settingsSchema = data.settingsSchema;
+    const [row] = await db
+      .update(plugins)
+      .set(payload)
+      .where(eq(plugins.id, id))
+      .returning();
     if (!row) throw new Error(`Plugin not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -98,12 +132,20 @@ export class DrizzlePluginRepository implements PluginRepository {
 }
 
 export class DrizzlePluginSettingRepository implements PluginSettingRepository {
-  async set(pluginId: string, key: string, value: string | null, encryptedValue: string | null, isSecret: boolean): Promise<void> {
+  async set(
+    pluginId: string,
+    key: string,
+    value: string | null,
+    encryptedValue: string | null,
+    isSecret: boolean,
+  ): Promise<void> {
     const db = getDb();
     const existing = await db
       .select()
       .from(pluginSettings)
-      .where(and(eq(pluginSettings.pluginId, pluginId), eq(pluginSettings.key, key)))
+      .where(
+        and(eq(pluginSettings.pluginId, pluginId), eq(pluginSettings.key, key)),
+      )
       .limit(1);
 
     if (existing[0]) {
@@ -127,7 +169,10 @@ export class DrizzlePluginSettingRepository implements PluginSettingRepository {
 
   async listForPlugin(pluginId: string): Promise<PluginSetting[]> {
     const db = getDb();
-    const rows = await db.select().from(pluginSettings).where(eq(pluginSettings.pluginId, pluginId));
+    const rows = await db
+      .select()
+      .from(pluginSettings)
+      .where(eq(pluginSettings.pluginId, pluginId));
     return rows.map((r) => this.mapToDomain(r));
   }
 
@@ -136,7 +181,9 @@ export class DrizzlePluginSettingRepository implements PluginSettingRepository {
     const rows = await db
       .select()
       .from(pluginSettings)
-      .where(and(eq(pluginSettings.pluginId, pluginId), eq(pluginSettings.key, key)))
+      .where(
+        and(eq(pluginSettings.pluginId, pluginId), eq(pluginSettings.key, key)),
+      )
       .limit(1);
     const row = rows[0];
     if (!row || !row.encryptedValue) return null;

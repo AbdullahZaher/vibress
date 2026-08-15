@@ -1,7 +1,11 @@
-import { headers } from 'next/headers';
-import { getTheme, getFallbackTheme, DEFAULT_THEME_ID } from '../themes/registry';
-import type { VibressThemeDefinition } from '../themes/types';
-import { getPublicSiteUrl } from './seo-helpers';
+import { headers } from "next/headers";
+import {
+  getTheme,
+  getFallbackTheme,
+  DEFAULT_THEME_ID,
+} from "../themes/registry";
+import type { VibressThemeDefinition } from "../themes/types";
+import { getPublicSiteUrl } from "./seo-helpers";
 
 export interface ThemeHostState {
   theme: VibressThemeDefinition;
@@ -15,11 +19,11 @@ export interface ActiveThemeInfo {
 }
 
 export async function fetchActiveThemeInfo(): Promise<ActiveThemeInfo | null> {
-  const baseUrl = process.env.API_URL || 'http://127.0.0.1:7780';
+  const baseUrl = process.env.API_URL || "http://127.0.0.1:7780";
   try {
     const res = await fetch(`${baseUrl}/api/content/v1/site`, {
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
+      cache: "no-store",
+      headers: { Accept: "application/json" },
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -31,13 +35,13 @@ export async function fetchActiveThemeInfo(): Promise<ActiveThemeInfo | null> {
 
 export async function resolveThemeHostState(
   isPreview = false,
-  previewThemeId?: string | null
+  previewThemeId?: string | null,
 ): Promise<ThemeHostState> {
   let activeThemeId: string | null = null;
   let settings: Record<string, unknown> = {};
 
   const info = await fetchActiveThemeInfo();
-  if (info && typeof info.themeId === 'string') {
+  if (info && typeof info.themeId === "string") {
     activeThemeId = info.themeId;
     settings = info.settings || {};
   }
@@ -46,7 +50,10 @@ export async function resolveThemeHostState(
     activeThemeId = previewThemeId;
   }
 
-  const theme = activeThemeId && getTheme(activeThemeId) ? getTheme(activeThemeId)! : getFallbackTheme();
+  const theme =
+    activeThemeId && getTheme(activeThemeId)
+      ? getTheme(activeThemeId)!
+      : getFallbackTheme();
 
   // Merge theme defaults over persisted settings (persisted values win)
   const merged: Record<string, unknown> = {};
@@ -83,9 +90,23 @@ export interface ThemeSiteSettings {
   announcementText?: string | undefined;
   announcementUrl?: string | undefined;
   security?: { isPrivate: boolean } | undefined;
-  analytics?: { gaId?: string | undefined; plausibleDomain?: string | undefined; posthogKey?: string | undefined; posthogHost?: string | undefined } | undefined;
-  code?: { headerCode?: string | undefined; footerCode?: string | undefined } | undefined;
-  comments?: { commentAccess?: string | undefined; preModeration?: boolean | undefined } | undefined;
+  analytics?:
+    | {
+        gaId?: string | undefined;
+        plausibleDomain?: string | undefined;
+        posthogKey?: string | undefined;
+        posthogHost?: string | undefined;
+      }
+    | undefined;
+  code?:
+    | { headerCode?: string | undefined; footerCode?: string | undefined }
+    | undefined;
+  comments?:
+    | {
+        commentAccess?: string | undefined;
+        preModeration?: boolean | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -95,26 +116,26 @@ export interface ThemeSiteSettings {
  */
 export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
   const fallback: ThemeSiteSettings = {
-    title: process.env.SITE_NAME || 'Vibress',
-    description: process.env.SITE_DESCRIPTION || 'Publishing Platform',
+    title: process.env.SITE_NAME || "Vibress",
+    description: process.env.SITE_DESCRIPTION || "Publishing Platform",
     url: getPublicSiteUrl(),
-    locale: process.env.SITE_LOCALE || 'en',
-    accentColor: '#6366f1',
+    locale: process.env.SITE_LOCALE || "en",
+    accentColor: "#6366f1",
     primaryNav: [],
     secondaryNav: [],
     announcementEnabled: false,
-    announcementText: '',
-    announcementUrl: '',
+    announcementText: "",
+    announcementUrl: "",
     security: { isPrivate: false },
     analytics: {},
     code: {},
-    comments: { commentAccess: 'all', preModeration: false },
+    comments: { commentAccess: "all", preModeration: false },
   };
   try {
-    const baseUrl = process.env.API_URL || 'http://127.0.0.1:7780';
+    const baseUrl = process.env.API_URL || "http://127.0.0.1:7780";
     const res = await fetch(`${baseUrl}/api/content/v1/site`, {
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
+      cache: "no-store",
+      headers: { Accept: "application/json" },
     });
     if (!res.ok) return fallback;
     const data = (await res.json()) as {
@@ -125,27 +146,34 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       comments?: Record<string, unknown>;
     };
     const site = data?.site;
-    if (!site || typeof site.title !== 'string') return fallback;
+    if (!site || typeof site.title !== "string") return fallback;
     return {
       title: site.title as string,
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,
       locale: (site.locale as string) || fallback.locale,
-      timezone: (site.timezone as string) || 'UTC',
+      timezone: (site.timezone as string) || "UTC",
       accentColor: (site.accentColor as string) || fallback.accentColor,
       iconUrl: (site.iconUrl as string) || undefined,
       logoUrl: (site.logoUrl as string) || undefined,
       coverUrl: (site.coverUrl as string) || undefined,
-      primaryNav: Array.isArray(site.primaryNav) ? (site.primaryNav as Array<{ label: string; url: string }>) : [],
-      secondaryNav: Array.isArray(site.secondaryNav) ? (site.secondaryNav as Array<{ label: string; url: string }>) : [],
+      primaryNav: Array.isArray(site.primaryNav)
+        ? (site.primaryNav as Array<{ label: string; url: string }>)
+        : [],
+      secondaryNav: Array.isArray(site.secondaryNav)
+        ? (site.secondaryNav as Array<{ label: string; url: string }>)
+        : [],
       announcementEnabled: Boolean(site.announcementEnabled),
-      announcementText: (site.announcementText as string) || '',
-      announcementUrl: (site.announcementUrl as string) || '',
-      tagline: typeof site.tagline === 'string' && site.tagline ? site.tagline : undefined,
+      announcementText: (site.announcementText as string) || "",
+      announcementUrl: (site.announcementUrl as string) || "",
+      tagline:
+        typeof site.tagline === "string" && site.tagline
+          ? site.tagline
+          : undefined,
       security: data.security || { isPrivate: false },
-      analytics: (data.analytics as ThemeSiteSettings['analytics']) || {},
-      code: (data.code as ThemeSiteSettings['code']) || {},
-      comments: (data.comments as ThemeSiteSettings['comments']) || {},
+      analytics: (data.analytics as ThemeSiteSettings["analytics"]) || {},
+      code: (data.code as ThemeSiteSettings["code"]) || {},
+      comments: (data.comments as ThemeSiteSettings["comments"]) || {},
     };
   } catch {
     return fallback;
@@ -155,7 +183,7 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
 export async function getPreviewThemeIdFromHeaders(): Promise<string | null> {
   try {
     const hs = await headers();
-    return hs.get('x-vibress-theme') || null;
+    return hs.get("x-vibress-theme") || null;
   } catch {
     return null;
   }

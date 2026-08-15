@@ -1,16 +1,16 @@
-import { ContentApiClient } from '../../lib/content-api-client';
-import { getPublicSiteUrl } from '../../lib/seo-helpers';
+import { ContentApiClient } from "../../lib/content-api-client";
+import { getPublicSiteUrl } from "../../lib/seo-helpers";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 300; // 5-minute cache for sitemap
 
 function escapeXml(unsafe: string): string {
   return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 export async function GET() {
@@ -62,17 +62,19 @@ ${urls
   .map(
     (item) => `  <url>
     <loc>${escapeXml(item.loc)}</loc>${
-      item.lastmod ? `\n    <lastmod>${escapeXml(new Date(item.lastmod).toISOString())}</lastmod>` : ''
+      item.lastmod
+        ? `\n    <lastmod>${escapeXml(new Date(item.lastmod).toISOString())}</lastmod>`
+        : ""
     }
-  </url>`
+  </url>`,
   )
-  .join('\n')}
+  .join("\n")}
 </urlset>`;
 
   return new Response(xml, {
     headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=300, s-maxage=300',
+      "Content-Type": "application/xml; charset=utf-8",
+      "Cache-Control": "public, max-age=300, s-maxage=300",
     },
   });
 }

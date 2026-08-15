@@ -11,15 +11,15 @@ unaffected.
 
 Versioned, bounded model (`analytics_events`):
 
-| Field | Notes |
-|---|---|
-| `event_id` | Unique (dedup on ingestion) |
-| `event_name` | **Allowlisted** — unknown names rejected |
-| `occurred_at` | UTC |
-| `actor_type` / `actor_id` | Opaque references, never emails/names |
-| `entity_type` / `entity_id` | Opaque references |
-| `context` / `properties` | Key/length-bounded JSON |
-| `schema_version` | 1 |
+| Field                       | Notes                                    |
+| --------------------------- | ---------------------------------------- |
+| `event_id`                  | Unique (dedup on ingestion)              |
+| `event_name`                | **Allowlisted** — unknown names rejected |
+| `occurred_at`               | UTC                                      |
+| `actor_type` / `actor_id`   | Opaque references, never emails/names    |
+| `entity_type` / `entity_id` | Opaque references                        |
+| `context` / `properties`    | Key/length-bounded JSON                  |
+| `schema_version`            | 1                                        |
 
 `validateAnalyticsEvent` rejects arbitrary unbounded JSON, unknown event
 names, oversized values, and oversize arrays.
@@ -36,7 +36,7 @@ billing domain events only.
 ## Aggregation
 
 - `analytics_daily_metrics` with `UNIQUE(metric_date, metric_name,
-  dimension_key, dimension_value)`.
+dimension_key, dimension_value)`.
 - Idempotent upserts: duplicate event IDs are ignored, counts are atomic
   increments.
 - Date buckets are **UTC days** (documented semantics).

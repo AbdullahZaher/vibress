@@ -1,11 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../lib/api';
-import { Button } from './ui/button';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
-import { Input } from './ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
-import { Plus, Search, FileCode, Edit, Trash2, Globe, EyeOff } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { apiRequest } from "../lib/api";
+import { Button } from "./ui/button";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "./ui/table";
+import {
+  Plus,
+  Search,
+  FileCode,
+  Edit,
+  Trash2,
+  Globe,
+  EyeOff,
+} from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -20,22 +35,27 @@ interface PagesListProps {
   canPublish: boolean;
 }
 
-export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) => {
+export const PagesList: React.FC<PagesListProps> = ({
+  onNavigate,
+  canPublish,
+}) => {
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "published" | "draft"
+  >("all");
 
   const fetchPages = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiRequest<{ pages: PageSummary[] }>('/pages');
+      const data = await apiRequest<{ pages: PageSummary[] }>("/pages");
       setPages(data.pages || []);
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
-      setError(errorObj.message || 'Failed to fetch pages');
+      setError(errorObj.message || "Failed to fetch pages");
     } finally {
       setLoading(false);
     }
@@ -48,23 +68,26 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
   const handlePublishToggle = async (page: PageSummary) => {
     if (!canPublish) return;
     try {
-      const endpoint = page.status === 'published' ? `/pages/${page.id}/unpublish` : `/pages/${page.id}/publish`;
-      await apiRequest(endpoint, { method: 'POST' });
+      const endpoint =
+        page.status === "published"
+          ? `/pages/${page.id}/unpublish`
+          : `/pages/${page.id}/publish`;
+      await apiRequest(endpoint, { method: "POST" });
       fetchPages();
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
-      alert(errorObj.message || 'Action failed');
+      alert(errorObj.message || "Action failed");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete page?')) return;
+    if (!confirm("Delete page?")) return;
     try {
-      await apiRequest(`/pages/${id}`, { method: 'DELETE' });
+      await apiRequest(`/pages/${id}`, { method: "DELETE" });
       fetchPages();
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
-      alert(errorObj.message || 'Delete failed');
+      alert(errorObj.message || "Delete failed");
     }
   };
 
@@ -72,7 +95,7 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
     const matchesSearch =
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.slug.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -97,9 +120,11 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">Static Pages</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          Static Pages
+        </h1>
         <Button
-          onClick={() => onNavigate('/admin/pages/new')}
+          onClick={() => onNavigate("/admin/pages/new")}
           className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer"
         >
           <Plus className="h-4 w-4" /> Create Page
@@ -110,34 +135,34 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => setStatusFilter('all')}
+            onClick={() => setStatusFilter("all")}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              statusFilter === 'all'
-                ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-                : 'text-muted-foreground hover:text-foreground'
+              statusFilter === "all"
+                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             All ({pages.length})
           </button>
           <button
-            onClick={() => setStatusFilter('published')}
+            onClick={() => setStatusFilter("published")}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              statusFilter === 'published'
-                ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-                : 'text-muted-foreground hover:text-foreground'
+              statusFilter === "published"
+                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Published ({pages.filter((p) => p.status === 'published').length})
+            Published ({pages.filter((p) => p.status === "published").length})
           </button>
           <button
-            onClick={() => setStatusFilter('draft')}
+            onClick={() => setStatusFilter("draft")}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              statusFilter === 'draft'
-                ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-                : 'text-muted-foreground hover:text-foreground'
+              statusFilter === "draft"
+                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Drafts ({pages.filter((p) => p.status === 'draft').length})
+            Drafts ({pages.filter((p) => p.status === "draft").length})
           </button>
         </div>
 
@@ -167,30 +192,48 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
           <TableBody>
             {filteredPages.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-36 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="h-36 text-center text-muted-foreground"
+                >
                   <div className="flex flex-col items-center justify-center space-y-1">
                     <FileCode className="h-8 w-8 text-muted-foreground/40" />
-                    <p className="text-xs font-medium">No pages found matching filter.</p>
+                    <p className="text-xs font-medium">
+                      No pages found matching filter.
+                    </p>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
               filteredPages.map((page) => (
-                <TableRow key={page.id} className="hover:bg-muted/40 border-border">
+                <TableRow
+                  key={page.id}
+                  className="hover:bg-muted/40 border-border"
+                >
                   <TableCell className="pl-6 font-medium">
                     <div className="flex flex-col">
-                      <span className="font-semibold text-xs text-foreground">{page.title}</span>
-                      <span className="text-[11px] text-muted-foreground font-mono">/{page.slug}</span>
+                      <span className="font-semibold text-xs text-foreground">
+                        {page.title}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        /{page.slug}
+                      </span>
                     </div>
                   </TableCell>
 
                   <TableCell>
-                    {page.status === 'published' ? (
-                      <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                    {page.status === "published" ? (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      >
                         Published
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      >
                         Draft
                       </Badge>
                     )}
@@ -198,9 +241,9 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
 
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {new Date(page.updatedAt).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
                     })}
                   </TableCell>
 
@@ -212,9 +255,17 @@ export const PagesList: React.FC<PagesListProps> = ({ onNavigate, canPublish }) 
                           size="sm"
                           onClick={() => handlePublishToggle(page)}
                           className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                          title={page.status === 'published' ? 'Unpublish' : 'Publish'}
+                          title={
+                            page.status === "published"
+                              ? "Unpublish"
+                              : "Publish"
+                          }
                         >
-                          {page.status === 'published' ? <EyeOff className="h-3.5 w-3.5" /> : <Globe className="h-3.5 w-3.5" />}
+                          {page.status === "published" ? (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          ) : (
+                            <Globe className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                       )}
 

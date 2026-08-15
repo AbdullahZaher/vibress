@@ -1,13 +1,17 @@
-import { getDb, storageConfigurations, uploadSessions, mediaAssets } from '@vibress/database';
-import { eq, and, desc, count, isNull } from 'drizzle-orm';
-import { StorageError } from '@vibress/storage-core';
+import {
+  getDb,
+  storageConfigurations,
+  uploadSessions,
+} from "@vibress/database";
+import { eq, desc, count } from "drizzle-orm";
+import { StorageError } from "@vibress/storage-core";
 import {
   StorageConfiguration,
   CreateStorageConfigurationData,
   UpdateStorageConfigurationData,
   UploadSession,
-} from '../domain/storage-config';
-import crypto from 'node:crypto';
+} from "../domain/storage-config";
+import crypto from "node:crypto";
 
 export class DrizzleStorageRepository {
   async listConfigurations(): Promise<StorageConfiguration[]> {
@@ -20,7 +24,9 @@ export class DrizzleStorageRepository {
     return rows.map((r) => this.mapConfigToDomain(r));
   }
 
-  async findConfigurationById(id: string): Promise<StorageConfiguration | null> {
+  async findConfigurationById(
+    id: string,
+  ): Promise<StorageConfiguration | null> {
     const db = getDb();
     const rows = await db
       .select()
@@ -47,7 +53,9 @@ export class DrizzleStorageRepository {
   }
 
   async createConfiguration(
-    data: CreateStorageConfigurationData & { encryptedCredentials?: string | null }
+    data: CreateStorageConfigurationData & {
+      encryptedCredentials?: string | null;
+    },
   ): Promise<StorageConfiguration> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
@@ -70,15 +78,20 @@ export class DrizzleStorageRepository {
       updatedAt: now,
     };
 
-    const rows = await db.insert(storageConfigurations).values(insertPayload).returning();
+    const rows = await db
+      .insert(storageConfigurations)
+      .values(insertPayload)
+      .returning();
     const row = rows[0];
-    if (!row) throw new Error('Failed to insert storage configuration');
+    if (!row) throw new Error("Failed to insert storage configuration");
     return this.mapConfigToDomain(row);
   }
 
   async updateConfiguration(
     id: string,
-    data: UpdateStorageConfigurationData & { encryptedCredentials?: string | null }
+    data: UpdateStorageConfigurationData & {
+      encryptedCredentials?: string | null;
+    },
   ): Promise<StorageConfiguration> {
     const db = getDb();
     const now = new Date();
@@ -88,13 +101,17 @@ export class DrizzleStorageRepository {
     };
 
     if (data.name !== undefined) updatePayload.name = data.name;
-    if (data.providerType !== undefined) updatePayload.providerType = data.providerType;
+    if (data.providerType !== undefined)
+      updatePayload.providerType = data.providerType;
     if (data.endpoint !== undefined) updatePayload.endpoint = data.endpoint;
     if (data.region !== undefined) updatePayload.region = data.region;
     if (data.bucket !== undefined) updatePayload.bucket = data.bucket;
-    if (data.publicBaseUrl !== undefined) updatePayload.publicBaseUrl = data.publicBaseUrl;
-    if (data.forcePathStyle !== undefined) updatePayload.forcePathStyle = data.forcePathStyle;
-    if (data.encryptedCredentials !== undefined) updatePayload.encryptedCredentials = data.encryptedCredentials;
+    if (data.publicBaseUrl !== undefined)
+      updatePayload.publicBaseUrl = data.publicBaseUrl;
+    if (data.forcePathStyle !== undefined)
+      updatePayload.forcePathStyle = data.forcePathStyle;
+    if (data.encryptedCredentials !== undefined)
+      updatePayload.encryptedCredentials = data.encryptedCredentials;
 
     const [row] = await db
       .update(storageConfigurations)
@@ -111,7 +128,9 @@ export class DrizzleStorageRepository {
     const now = new Date();
 
     // Deactivate all first
-    await db.update(storageConfigurations).set({ isActive: false, updatedAt: now });
+    await db
+      .update(storageConfigurations)
+      .set({ isActive: false, updatedAt: now });
 
     // Activate target
     const [row] = await db
@@ -120,7 +139,8 @@ export class DrizzleStorageRepository {
       .where(eq(storageConfigurations.id, id))
       .returning();
 
-    if (!row) throw new Error(`Storage configuration not found to activate: ${id}`);
+    if (!row)
+      throw new Error(`Storage configuration not found to activate: ${id}`);
     return this.mapConfigToDomain(row);
   }
 
@@ -136,11 +156,13 @@ export class DrizzleStorageRepository {
     if ((sessionCount[0]?.totalCount || 0) > 0) {
       throw new StorageError(
         `Storage configuration '${id}' is in use by active upload sessions`,
-        'STORAGE_PROVIDER_IN_USE'
+        "STORAGE_PROVIDER_IN_USE",
       );
     }
 
-    await db.delete(storageConfigurations).where(eq(storageConfigurations.id, id));
+    await db
+      .delete(storageConfigurations)
+      .where(eq(storageConfigurations.id, id));
   }
 
   // Upload Session methods
@@ -152,7 +174,7 @@ export class DrizzleStorageRepository {
     originalFilename: string;
     declaredMime: string;
     expectedSize: number;
-    assetType: 'image' | 'video' | 'audio' | 'file';
+    assetType: "image" | "video" | "audio" | "file";
     expiresAt: Date;
     multipartUploadId?: string | null;
   }): Promise<UploadSession> {
@@ -169,22 +191,29 @@ export class DrizzleStorageRepository {
       declaredMime: data.declaredMime,
       expectedSize: data.expectedSize,
       assetType: data.assetType,
-      state: 'pending',
+      state: "pending",
       expiresAt: data.expiresAt,
       multipartUploadId: data.multipartUploadId || null,
       createdAt: now,
       updatedAt: now,
     };
 
-    const rows = await db.insert(uploadSessions).values(insertPayload).returning();
+    const rows = await db
+      .insert(uploadSessions)
+      .values(insertPayload)
+      .returning();
     const row = rows[0];
-    if (!row) throw new Error('Failed to insert upload session');
+    if (!row) throw new Error("Failed to insert upload session");
     return this.mapSessionToDomain(row);
   }
 
   async findUploadSessionById(id: string): Promise<UploadSession | null> {
     const db = getDb();
-    const rows = await db.select().from(uploadSessions).where(eq(uploadSessions.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(uploadSessions)
+      .where(eq(uploadSessions.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapSessionToDomain(row);
@@ -192,7 +221,7 @@ export class DrizzleStorageRepository {
 
   async updateUploadSessionState(
     id: string,
-    state: 'pending' | 'uploaded' | 'verified' | 'failed'
+    state: "pending" | "uploaded" | "verified" | "failed",
   ): Promise<UploadSession> {
     const db = getDb();
     const now = new Date();
@@ -207,7 +236,9 @@ export class DrizzleStorageRepository {
     return this.mapSessionToDomain(row);
   }
 
-  private mapConfigToDomain(row: typeof storageConfigurations.$inferSelect): StorageConfiguration {
+  private mapConfigToDomain(
+    row: typeof storageConfigurations.$inferSelect,
+  ): StorageConfiguration {
     return {
       id: row.id,
       name: row.name,
@@ -226,7 +257,9 @@ export class DrizzleStorageRepository {
     };
   }
 
-  private mapSessionToDomain(row: typeof uploadSessions.$inferSelect): UploadSession {
+  private mapSessionToDomain(
+    row: typeof uploadSessions.$inferSelect,
+  ): UploadSession {
     return {
       id: row.id,
       actorId: row.actorId,
@@ -235,8 +268,8 @@ export class DrizzleStorageRepository {
       originalFilename: row.originalFilename,
       declaredMime: row.declaredMime,
       expectedSize: row.expectedSize,
-      assetType: row.assetType as UploadSession['assetType'],
-      state: row.state as UploadSession['state'],
+      assetType: row.assetType as UploadSession["assetType"],
+      state: row.state as UploadSession["state"],
       expiresAt: row.expiresAt,
       multipartUploadId: row.multipartUploadId,
       createdAt: row.createdAt,

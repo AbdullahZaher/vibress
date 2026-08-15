@@ -1,39 +1,54 @@
-import React from 'react';
-import { ThemePostProps, themeSetting } from '../../types';
-import { ThemeLayout } from './Layout';
-import { ReadingProgressBar } from '../../../components/reader/ReadingProgressBar';
-import { TableOfContents } from '../../../components/reader/TableOfContents';
-import { CodeCopyHandler } from '../../../components/reader/CodeCopyHandler';
-import { ImageLightbox } from '../../../components/reader/ImageLightbox';
-import { t } from '../../../lib/i18n';
+import React from "react";
+import { ThemePostProps, themeSetting } from "../../types";
+import { ThemeLayout } from "./Layout";
+import { ReadingProgressBar } from "../../../components/reader/ReadingProgressBar";
+import { TableOfContents } from "../../../components/reader/TableOfContents";
+import { CodeCopyHandler } from "../../../components/reader/CodeCopyHandler";
+import { ImageLightbox } from "../../../components/reader/ImageLightbox";
+import { t } from "../../../lib/i18n";
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
-  const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
-  const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
-  const showTags = themeSetting(props.settings, 'showTags', true) as boolean;
+  const showAuthor = themeSetting(
+    props.settings,
+    "showAuthor",
+    true,
+  ) as boolean;
+  const showPublicationDate = themeSetting(
+    props.settings,
+    "showPublicationDate",
+    true,
+  ) as boolean;
+  const showTags = themeSetting(props.settings, "showTags", true) as boolean;
 
   const primaryTag = post.tags?.[0];
-  const dateLocale = props.site.locale || 'en';
+  const dateLocale = props.site.locale || "en";
 
   const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
     headline: post.title,
     description: post.excerpt || post.seo?.description,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt,
     mainEntityOfPage: {
-      '@type': 'WebPage',
-      '@id': post.seo?.canonicalUrl,
+      "@type": "WebPage",
+      "@id": post.seo?.canonicalUrl,
     },
-    author: post.authors?.map((a) => ({ '@type': 'Person', name: a.name })),
+    author: post.authors?.map((a) => ({ "@type": "Person", name: a.name })),
     ...(post.featureImage?.url ? { image: [post.featureImage.url] } : {}),
   };
 
-  const readTimeMins = post.readingTimeMins || (
-    Math.ceil((post.html || post.excerpt || '').replace(/<[^>]*>?/gm, '').trim().split(/\s+/).filter(Boolean).length / 200) || 1
-  );
+  const readTimeMins =
+    post.readingTimeMins ||
+    Math.ceil(
+      (post.html || post.excerpt || "")
+        .replace(/<[^>]*>?/gm, "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length / 200,
+    ) ||
+    1;
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -45,7 +60,9 @@ export async function Post(props: ThemePostProps) {
         <article className="article inner">
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+            }}
           />
 
           <header className="article-header">
@@ -64,27 +81,53 @@ export async function Post(props: ThemePostProps) {
             <div className="article-byline">
               <section className="article-byline-content">
                 {showAuthor && post.primaryAuthor && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span className="author-avatar" style={{ width: 36, height: 36, fontSize: '0.9rem' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.6rem",
+                    }}
+                  >
+                    <span
+                      className="author-avatar"
+                      style={{ width: 36, height: 36, fontSize: "0.9rem" }}
+                    >
                       {post.primaryAuthor.name.charAt(0).toUpperCase()}
                     </span>
                     <h4 className="author-name">
-                      <a href={`/authors/${post.primaryAuthor.slug}`}>{post.primaryAuthor.name}</a>
+                      <a href={`/authors/${post.primaryAuthor.slug}`}>
+                        {post.primaryAuthor.name}
+                      </a>
                     </h4>
                   </div>
                 )}
-                <div className="byline-meta-content" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <div
+                  className="byline-meta-content"
+                  style={{
+                    display: "flex",
+                    gap: "0.75rem",
+                    alignItems: "center",
+                  }}
+                >
                   {showPublicationDate && (
-                    <time className="byline-meta-date" dateTime={post.publishedAt}>
-                      {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+                    <time
+                      className="byline-meta-date"
+                      dateTime={post.publishedAt}
+                    >
+                      {new Date(post.publishedAt).toLocaleDateString(
+                        dateLocale,
+                        {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        },
+                      )}
                     </time>
                   )}
                   <span style={{ opacity: 0.4 }}>&bull;</span>
-                  <span className="byline-meta-date">{t('post.readTime', { minutes: readTimeMins })}</span>
+                  <span className="byline-meta-date">
+                    {t("post.readTime", { minutes: readTimeMins })}
+                  </span>
                 </div>
               </section>
             </div>
@@ -95,7 +138,7 @@ export async function Post(props: ThemePostProps) {
           )}
 
           <section className="vb-content studio-html-content">
-            <div dangerouslySetInnerHTML={{ __html: post.html || '' }} />
+            <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
           </section>
         </article>
       </main>

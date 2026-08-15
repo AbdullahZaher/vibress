@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreateCommentSchema = z.object({
   postId: z.string().min(1),
@@ -25,12 +25,19 @@ export const CreateRecommendationSchema = z.object({
   faviconUrl: z.string().url().nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
-export type CreateRecommendationInput = z.infer<typeof CreateRecommendationSchema>;
+export type CreateRecommendationInput = z.infer<
+  typeof CreateRecommendationSchema
+>;
 
-export const UpdateRecommendationSchema = CreateRecommendationSchema.partial().omit({ url: true });
-export type UpdateRecommendationInput = z.infer<typeof UpdateRecommendationSchema>;
+export const UpdateRecommendationSchema =
+  CreateRecommendationSchema.partial().omit({ url: true });
+export type UpdateRecommendationInput = z.infer<
+  typeof UpdateRecommendationSchema
+>;
 
 export const RecommendationClickSchema = z.object({
   sessionId: z.string().nullable().optional(),
 });
-export type RecommendationClickInput = z.infer<typeof RecommendationClickSchema>;
+export type RecommendationClickInput = z.infer<
+  typeof RecommendationClickSchema
+>;

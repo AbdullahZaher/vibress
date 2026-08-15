@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
 
 interface LoginPageProps {
   loginFn: (email: string, password?: string) => Promise<void>;
   onLoginSuccess: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export const LoginPage: React.FC<LoginPageProps> = ({
+  loginFn,
+  onLoginSuccess,
+}) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +33,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
       await loginFn(email, password);
       onLoginSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to login. Check credentials.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to login. Check credentials.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -37,8 +51,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl border border-border bg-card text-foreground shadow-xs mb-2">
             <Lock className="h-5 w-5" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-foreground">Vibress Admin</h1>
-          <p className="text-xs text-muted-foreground">Publication Management Console</p>
+          <h1 className="text-2xl font-black tracking-tight text-foreground">
+            Vibress Admin
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Publication Management Console
+          </p>
         </div>
 
         {/* Minimal Login Card */}
@@ -58,7 +76,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1">
-                <label htmlFor="email" className="text-xs font-medium text-foreground">Email Address</label>
+                <label
+                  htmlFor="email"
+                  className="text-xs font-medium text-foreground"
+                >
+                  Email Address
+                </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -74,7 +97,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="password" className="text-xs font-medium text-foreground">Password</label>
+                <label
+                  htmlFor="password"
+                  className="text-xs font-medium text-foreground"
+                >
+                  Password
+                </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -108,7 +136,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
           </CardContent>
           <CardFooter className="border-t border-border pt-4 text-center justify-center">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session Secured
+              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session
+              Secured
             </p>
           </CardFooter>
         </Card>

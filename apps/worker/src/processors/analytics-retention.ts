@@ -1,5 +1,8 @@
-import { DrizzleAnalyticsRepository, TRAFFIC_EVENT_NAMES } from '@vibress/analytics';
-import { metrics } from '@vibress/observability';
+import {
+  DrizzleAnalyticsRepository,
+  TRAFFIC_EVENT_NAMES,
+} from "@vibress/analytics";
+import { metrics } from "@vibress/observability";
 
 /**
  * Raw public-traffic retention sweep. Deletes only traffic raw events
@@ -34,7 +37,9 @@ export class AnalyticsRetentionSweeper {
     const before = new Date(Date.now() - this.retentionDays * 24 * 3600 * 1000);
     const deleted = await this.repository.deleteTrafficEventsBefore(before);
     if (deleted > 0) {
-      metrics.counter('analytics.retention.deleted', deleted, { eventNames: TRAFFIC_EVENT_NAMES.join(',') });
+      metrics.counter("analytics.retention.deleted", deleted, {
+        eventNames: TRAFFIC_EVENT_NAMES.join(","),
+      });
     }
   }
 }

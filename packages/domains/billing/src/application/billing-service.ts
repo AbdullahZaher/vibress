@@ -1,14 +1,20 @@
-import { BillingProvider } from '../domain/provider';
-import { BillingCustomerRepository, BillingPlanMappingRepository } from '../domain/mappings';
-import { BillingWebhookEventRepository, BillingEventRepository } from '../domain/webhook-events';
-import { SubscriptionsService, Subscription } from '@vibress/subscriptions';
-import { Plan } from '@vibress/plans';
-import { Product } from '@vibress/products';
-import { Member } from '@vibress/members';
-import { Offer, OffersService } from '@vibress/offers';
-import { domainEvents } from '@vibress/events';
-import { runInTransaction } from '@vibress/database';
-import crypto from 'node:crypto';
+import { BillingProvider } from "../domain/provider";
+import {
+  BillingCustomerRepository,
+  BillingPlanMappingRepository,
+} from "../domain/mappings";
+import {
+  BillingWebhookEventRepository,
+  BillingEventRepository,
+} from "../domain/webhook-events";
+import { SubscriptionsService, Subscription } from "@vibress/subscriptions";
+import { Plan } from "@vibress/plans";
+import { Product } from "@vibress/products";
+import { Member } from "@vibress/members";
+import { Offer, OffersService } from "@vibress/offers";
+import { domainEvents } from "@vibress/events";
+import { runInTransaction } from "@vibress/database";
+import crypto from "node:crypto";
 
 export class BillingDomainError extends Error {
   code: string;
@@ -47,25 +53,29 @@ export interface BillingServiceDeps {
 
 function safeReturnPath(path: string): string {
   // Only allow internal relative paths; reject open redirects
-  if (!path.startsWith('/') || path.startsWith('//')) {
-    return '/account';
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    return "/account";
   }
-  if (path.startsWith('http:') || path.startsWith('https:') || path.startsWith('javascript:')) {
-    return '/account';
+  if (
+    path.startsWith("http:") ||
+    path.startsWith("https:") ||
+    path.startsWith("javascript:")
+  ) {
+    return "/account";
   }
   return path;
 }
 
-const MAP_STATUS: Record<string, Subscription['status']> = {
-  trialing: 'trialing',
-  active: 'active',
-  past_due: 'past_due',
-  unpaid: 'unpaid',
-  canceled: 'cancelled',
-  cancelled: 'cancelled',
-  incomplete: 'incomplete',
-  incomplete_expired: 'expired',
-  expired: 'expired',
+const MAP_STATUS: Record<string, Subscription["status"]> = {
+  trialing: "trialing",
+  active: "active",
+  past_due: "past_due",
+  unpaid: "unpaid",
+  canceled: "cancelled",
+  cancelled: "cancelled",
+  incomplete: "incomplete",
+  incomplete_expired: "expired",
+  expired: "expired",
 };
 
 export class BillingService {
@@ -78,39 +88,72 @@ export class BillingService {
   async createCheckoutSession(
     memberId: string,
     planId: string,
-    offerKey: string | null | undefined
+    offerKey: string | null | undefined,
   ): Promise<{ checkoutUrl: string; checkoutSessionId: string }> {
     const member = await this.deps.memberRepository.findById(memberId);
-    if (!member) throw new BillingDomainError('BILLING_AUTH_REQUIRED', 'Member not found');
-    if (member.status === 'disabled') throw new BillingDomainError('BILLING_AUTH_REQUIRED', 'Member is disabled');
+    if (!member)
+      throw new BillingDomainError("BILLING_AUTH_REQUIRED", "Member not found");
+    if (member.status === "disabled")
+      throw new BillingDomainError(
+        "BILLING_AUTH_REQUIRED",
+        "Member is disabled",
+      );
 
     const plan = await this.deps.planRepository.findById(planId);
-    if (!plan) throw new BillingDomainError('PLAN_NOT_FOUND', 'Plan not found');
-    if (plan.status !== 'active') throw new BillingDomainError('PLAN_NOT_AVAILABLE', 'Plan is not available');
+    if (!plan) throw new BillingDomainError("PLAN_NOT_FOUND", "Plan not found");
+    if (plan.status !== "active")
+      throw new BillingDomainError(
+        "PLAN_NOT_AVAILABLE",
+        "Plan is not available",
+      );
     const product = await this.deps.productRepository.findById(plan.productId);
-    if (!product || product.status !== 'active') throw new BillingDomainError('PRODUCT_NOT_FOUND', 'Product not found');
+    if (!product || product.status !== "active")
+      throw new BillingDomainError("PRODUCT_NOT_FOUND", "Product not found");
 
     // Duplicate prevention: one active subscription per product per member
-    const existing = await this.deps.subscriptionsService.listSubscriptions({ memberId, productId: product.id, limit: 5 });
-    const active = existing.subscriptions.find((s) => ['trialing', 'active', 'past_due', 'unpaid'].includes(s.status));
+    const existing = await this.deps.subscriptionsService.listSubscriptions({
+      memberId,
+      productId: product.id,
+      limit: 5,
+    });
+    const active = existing.subscriptions.find((s) =>
+      ["trialing", "active", "past_due", "unpaid"].includes(s.status),
+    );
     if (active) {
-      throw new BillingDomainError('SUBSCRIPTION_ALREADY_ACTIVE', 'Member already has an active subscription for this product');
+      throw new BillingDomainError(
+        "SUBSCRIPTION_ALREADY_ACTIVE",
+        "Member already has an active subscription for this product",
+      );
     }
 
     // Resolve offer
     let offer: Offer | null = null;
     if (offerKey) {
       const found = await this.deps.offersService.getOfferByKey(offerKey);
-      if (!found) throw new BillingDomainError('OFFER_NOT_FOUND', 'Offer not found');
+      if (!found)
+        throw new BillingDomainError("OFFER_NOT_FOUND", "Offer not found");
       try {
         await this.deps.offersService.validateOffer(found, plan.id, new Date());
-        if (found.discountType === 'fixed_amount' && found.discountValue > plan.amountMinor) {
-          throw new BillingDomainError('OFFER_INVALID', 'Offer discount exceeds plan price');
+        if (
+          found.discountType === "fixed_amount" &&
+          found.discountValue > plan.amountMinor
+        ) {
+          throw new BillingDomainError(
+            "OFFER_INVALID",
+            "Offer discount exceeds plan price",
+          );
         }
       } catch (err: unknown) {
         if (err instanceof BillingDomainError) throw err;
-        if (err instanceof Error && 'code' in err && typeof (err as { code?: unknown }).code === 'string') {
-          throw new BillingDomainError((err as { code: string }).code, err.message);
+        if (
+          err instanceof Error &&
+          "code" in err &&
+          typeof (err as { code?: unknown }).code === "string"
+        ) {
+          throw new BillingDomainError(
+            (err as { code: string }).code,
+            err.message,
+          );
         }
         throw err;
       }
@@ -118,20 +161,26 @@ export class BillingService {
     }
 
     // Free plan flow: no external provider records
-    if (plan.billingType === 'free') {
+    if (plan.billingType === "free") {
       const subscription = await runInTransaction(() =>
         this.createFreeSubscriptionTx({
           memberId: member.id,
           productId: product.id,
           planId: plan.id,
           offer: offer as Offer | null,
-        })
+        }),
       );
-      return { checkoutUrl: `${this.deps.portalUrl}/account`, checkoutSessionId: `free-${subscription.id}` };
+      return {
+        checkoutUrl: `${this.deps.portalUrl}/account`,
+        checkoutSessionId: `free-${subscription.id}`,
+      };
     }
 
     // Paid flow: ensure customer mapping
-    let billingCustomer = await this.deps.customerRepo.findByMemberId(member.id, this.deps.provider.name);
+    let billingCustomer = await this.deps.customerRepo.findByMemberId(
+      member.id,
+      this.deps.provider.name,
+    );
     if (!billingCustomer) {
       const providerCustomerId = await this.deps.provider.createCustomer({
         email: this.deps.memberEmailProvider(member),
@@ -145,9 +194,15 @@ export class BillingService {
     }
 
     // Ensure plan mapping exists
-    const mapping = await this.deps.mappingRepo.findByPlanId(plan.id, this.deps.provider.name);
+    const mapping = await this.deps.mappingRepo.findByPlanId(
+      plan.id,
+      this.deps.provider.name,
+    );
     if (!mapping) {
-      throw new BillingDomainError('BILLING_CONFIGURATION_ERROR', 'Plan is not configured with a billing price');
+      throw new BillingDomainError(
+        "BILLING_CONFIGURATION_ERROR",
+        "Plan is not configured with a billing price",
+      );
     }
 
     const successUrl = `${this.deps.portalUrl}${safeReturnPath(this.deps.successPath)}`;
@@ -169,15 +224,25 @@ export class BillingService {
       },
     });
 
-    domainEvents.emit('checkout.started', { memberId: member.id, planId: plan.id });
+    domainEvents.emit("checkout.started", {
+      memberId: member.id,
+      planId: plan.id,
+    });
     await this.deps.billingEventRepo.record({
       memberId: member.id,
       provider: this.deps.provider.name,
-      type: 'checkout.started',
-      data: { planId: plan.id, productId: product.id, checkoutSessionId: result.checkoutSessionId },
+      type: "checkout.started",
+      data: {
+        planId: plan.id,
+        productId: product.id,
+        checkoutSessionId: result.checkoutSessionId,
+      },
     });
 
-    return { checkoutUrl: result.url, checkoutSessionId: result.checkoutSessionId };
+    return {
+      checkoutUrl: result.url,
+      checkoutSessionId: result.checkoutSessionId,
+    };
   }
 
   private async createFreeSubscriptionTx(params: {
@@ -186,26 +251,30 @@ export class BillingService {
     planId: string;
     offer: Offer | null;
   }): Promise<{ id: string }> {
-    const subscription = await this.deps.subscriptionsService.createSubscription({
-      memberId: params.memberId,
-      productId: params.productId,
-      planId: params.planId,
-      provider: null,
-      status: 'active',
-      currency: 'USD',
-      amountMinor: 0,
-      billingInterval: 'month',
-      intervalCount: 1,
-      offerId: params.offer ? params.offer.id : null,
-    });
+    const subscription =
+      await this.deps.subscriptionsService.createSubscription({
+        memberId: params.memberId,
+        productId: params.productId,
+        planId: params.planId,
+        provider: null,
+        status: "active",
+        currency: "USD",
+        amountMinor: 0,
+        billingInterval: "month",
+        intervalCount: 1,
+        offerId: params.offer ? params.offer.id : null,
+      });
     if (params.offer) {
       await this.deps.offersService.redeemOffer(params.offer.id, new Date());
-      domainEvents.emit('offer.redeemed', { offerId: params.offer.id, memberId: params.memberId });
+      domainEvents.emit("offer.redeemed", {
+        offerId: params.offer.id,
+        memberId: params.memberId,
+      });
     }
     await this.deps.billingEventRepo.record({
       subscriptionId: subscription.id,
       memberId: params.memberId,
-      type: 'subscription.created',
+      type: "subscription.created",
       data: { planId: params.planId, productId: params.productId, free: true },
     });
     return { id: subscription.id };
@@ -213,11 +282,18 @@ export class BillingService {
 
   async createBillingPortalSession(memberId: string): Promise<{ url: string }> {
     const member = await this.deps.memberRepository.findById(memberId);
-    if (!member) throw new BillingDomainError('BILLING_AUTH_REQUIRED', 'Member not found');
+    if (!member)
+      throw new BillingDomainError("BILLING_AUTH_REQUIRED", "Member not found");
 
-    const billingCustomer = await this.deps.customerRepo.findByMemberId(member.id, this.deps.provider.name);
+    const billingCustomer = await this.deps.customerRepo.findByMemberId(
+      member.id,
+      this.deps.provider.name,
+    );
     if (!billingCustomer) {
-      throw new BillingDomainError('BILLING_CONFIGURATION_ERROR', 'No billing customer for this member');
+      throw new BillingDomainError(
+        "BILLING_CONFIGURATION_ERROR",
+        "No billing customer for this member",
+      );
     }
 
     const result = await this.deps.provider.createBillingPortalSession({
@@ -225,7 +301,7 @@ export class BillingService {
       returnUrl: `${this.deps.portalUrl}/account`,
     });
 
-    domainEvents.emit('billing_portal.opened', { memberId: member.id });
+    domainEvents.emit("billing_portal.opened", { memberId: member.id });
     return { url: result.url };
   }
 
@@ -236,24 +312,33 @@ export class BillingService {
   async handleWebhook(
     providerName: string,
     rawPayload: string | Buffer,
-    signatureHeader: string | null | undefined
+    signatureHeader: string | null | undefined,
   ): Promise<{ processed: boolean; status: number }> {
     if (this.deps.provider.name !== providerName) {
       return { processed: false, status: 404 };
     }
 
-    const verified = await this.deps.provider.verifyWebhookSignature(rawPayload, signatureHeader);
+    const verified = await this.deps.provider.verifyWebhookSignature(
+      rawPayload,
+      signatureHeader,
+    );
     if (!verified) {
       return { processed: false, status: 400 };
     }
 
     const event = await this.deps.provider.parseWebhookEvent(rawPayload);
-    const payloadHash = crypto.createHash('sha256').update(rawPayload.toString()).digest('hex');
+    const payloadHash = crypto
+      .createHash("sha256")
+      .update(rawPayload.toString())
+      .digest("hex");
 
     // Dedup: unique(provider, provider_event_id)
-    const existing = await this.deps.webhookEventRepo.findByProviderEventId(providerName, event.id);
+    const existing = await this.deps.webhookEventRepo.findByProviderEventId(
+      providerName,
+      event.id,
+    );
     if (existing) {
-      if (existing.status !== 'processed') {
+      if (existing.status !== "processed") {
         // Retry previously failed event
         await this.processEvent(existing.id, event);
       }
@@ -271,7 +356,11 @@ export class BillingService {
       await this.processEvent(record.id, event);
       await this.deps.webhookEventRepo.markProcessed(record.id);
     } catch (err: unknown) {
-      await this.deps.webhookEventRepo.markFailed(record.id, err instanceof Error ? err.message : 'processing failed', 1);
+      await this.deps.webhookEventRepo.markFailed(
+        record.id,
+        err instanceof Error ? err.message : "processing failed",
+        1,
+      );
       throw err;
     }
 
@@ -283,22 +372,32 @@ export class BillingService {
    */
   private async processEvent(
     eventRecordId: string,
-    event: { id: string; type: string; created: number; data: Record<string, unknown> }
+    event: {
+      id: string;
+      type: string;
+      created: number;
+      data: Record<string, unknown>;
+    },
   ): Promise<void> {
     return runInTransaction(() => this.processEventTx(eventRecordId, event));
   }
 
   private async processEventTx(
     eventRecordId: string,
-    event: { id: string; type: string; created: number; data: Record<string, unknown> }
+    event: {
+      id: string;
+      type: string;
+      created: number;
+      data: Record<string, unknown>;
+    },
   ): Promise<void> {
     // Provider event objects are heterogeneous; treated as opaque records
     const object = event.data as Record<string, unknown>;
     // Invoice-type events carry the subscription id in object.subscription
     const providerSubscriptionId =
-      typeof object.subscription === 'string'
+      typeof object.subscription === "string"
         ? object.subscription
-        : typeof object.id === 'string'
+        : typeof object.id === "string"
           ? object.id
           : null;
     const eventTimestamp = new Date(event.created * 1000);
@@ -307,17 +406,18 @@ export class BillingService {
       await this.deps.billingEventRepo.record({
         provider: this.deps.provider.name,
         providerEventId: event.id,
-        type: 'webhook.ignored',
+        type: "webhook.ignored",
         data: { eventType: event.type },
       });
       return;
     }
 
     // Find or create the Vibress subscription
-    let subscription = await this.deps.subscriptionsService.getSubscriptionByProviderId(
-      this.deps.provider.name,
-      providerSubscriptionId
-    );
+    let subscription =
+      await this.deps.subscriptionsService.getSubscriptionByProviderId(
+        this.deps.provider.name,
+        providerSubscriptionId,
+      );
 
     if (!subscription) {
       // Subscription unknown: derive from provider metadata when available
@@ -328,15 +428,20 @@ export class BillingService {
         await this.deps.billingEventRepo.record({
           provider: this.deps.provider.name,
           providerEventId: event.id,
-          type: 'webhook.ignored',
-          data: { reason: 'no member/plan metadata', eventType: event.type },
+          type: "webhook.ignored",
+          data: { reason: "no member/plan metadata", eventType: event.type },
         });
         return;
       }
       const plan = await this.deps.planRepository.findById(planId);
-      if (!plan) throw new BillingDomainError('PLAN_NOT_FOUND', 'Plan not found for webhook');
+      if (!plan)
+        throw new BillingDomainError(
+          "PLAN_NOT_FOUND",
+          "Plan not found for webhook",
+        );
 
-      const providerCustomerId = typeof object.customer === 'string' ? object.customer : null;
+      const providerCustomerId =
+        typeof object.customer === "string" ? object.customer : null;
       subscription = await this.deps.subscriptionsService.createSubscription({
         memberId,
         productId: plan.productId,
@@ -344,17 +449,37 @@ export class BillingService {
         provider: this.deps.provider.name,
         providerSubscriptionId,
         providerCustomerId,
-        status: this.mapProviderStatus(event.type === 'customer.subscription.trialing' ? 'trialing' : (object.status as string) || 'active'),
-        currency: typeof object.currency === 'string' ? object.currency.toUpperCase() : plan.currency,
-        amountMinor: typeof object.amount === 'number' ? object.amount : plan.amountMinor,
-        billingInterval: plan.billingInterval || 'month',
+        status: this.mapProviderStatus(
+          event.type === "customer.subscription.trialing"
+            ? "trialing"
+            : (object.status as string) || "active",
+        ),
+        currency:
+          typeof object.currency === "string"
+            ? object.currency.toUpperCase()
+            : plan.currency,
+        amountMinor:
+          typeof object.amount === "number" ? object.amount : plan.amountMinor,
+        billingInterval: plan.billingInterval || "month",
         intervalCount: plan.intervalCount,
-        currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : null,
-        currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : null,
-        trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : null,
-        trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : null,
+        currentPeriodStart:
+          typeof object.current_period_start === "number"
+            ? new Date(object.current_period_start * 1000)
+            : null,
+        currentPeriodEnd:
+          typeof object.current_period_end === "number"
+            ? new Date(object.current_period_end * 1000)
+            : null,
+        trialStart:
+          typeof object.trial_start === "number"
+            ? new Date(object.trial_start * 1000)
+            : null,
+        trialEnd:
+          typeof object.trial_end === "number"
+            ? new Date(object.trial_end * 1000)
+            : null,
         cancelAtPeriodEnd: !!object.cancel_at_period_end,
-        offerId: typeof metadata.offerId === 'string' ? metadata.offerId : null,
+        offerId: typeof metadata.offerId === "string" ? metadata.offerId : null,
         providerEventTimestamp: eventTimestamp,
       });
     } else {
@@ -362,15 +487,32 @@ export class BillingService {
       subscription = await this.deps.subscriptionsService.applyProviderUpdate(
         subscription.id,
         {
-          status: this.mapProviderStatus((object.status as string) || subscription.status),
-          currentPeriodStart: typeof object.current_period_start === 'number' ? new Date(object.current_period_start * 1000) : undefined,
-          currentPeriodEnd: typeof object.current_period_end === 'number' ? new Date(object.current_period_end * 1000) : undefined,
-          trialStart: typeof object.trial_start === 'number' ? new Date(object.trial_start * 1000) : undefined,
-          trialEnd: typeof object.trial_end === 'number' ? new Date(object.trial_end * 1000) : undefined,
-          cancelAtPeriodEnd: typeof object.cancel_at_period_end === 'boolean' ? object.cancel_at_period_end : undefined,
+          status: this.mapProviderStatus(
+            (object.status as string) || subscription.status,
+          ),
+          currentPeriodStart:
+            typeof object.current_period_start === "number"
+              ? new Date(object.current_period_start * 1000)
+              : undefined,
+          currentPeriodEnd:
+            typeof object.current_period_end === "number"
+              ? new Date(object.current_period_end * 1000)
+              : undefined,
+          trialStart:
+            typeof object.trial_start === "number"
+              ? new Date(object.trial_start * 1000)
+              : undefined,
+          trialEnd:
+            typeof object.trial_end === "number"
+              ? new Date(object.trial_end * 1000)
+              : undefined,
+          cancelAtPeriodEnd:
+            typeof object.cancel_at_period_end === "boolean"
+              ? object.cancel_at_period_end
+              : undefined,
           providerEventTimestamp: eventTimestamp,
         },
-        eventTimestamp
+        eventTimestamp,
       );
     }
 
@@ -385,27 +527,27 @@ export class BillingService {
     });
   }
 
-  private mapProviderStatus(providerStatus: string): Subscription['status'] {
+  private mapProviderStatus(providerStatus: string): Subscription["status"] {
     const normalized = providerStatus.toLowerCase();
-    return MAP_STATUS[normalized] || 'incomplete';
+    return MAP_STATUS[normalized] || "incomplete";
   }
 
   private mapEventType(providerType: string): string {
     switch (providerType) {
-      case 'checkout.session.completed':
-        return 'checkout.completed';
-      case 'customer.subscription.created':
-        return 'subscription.created';
-      case 'customer.subscription.updated':
-        return 'subscription.updated';
-      case 'customer.subscription.deleted':
-        return 'subscription.cancelled';
-      case 'invoice.payment_succeeded':
-        return 'subscription.payment_succeeded';
-      case 'invoice.payment_failed':
-        return 'subscription.payment_failed';
+      case "checkout.session.completed":
+        return "checkout.completed";
+      case "customer.subscription.created":
+        return "subscription.created";
+      case "customer.subscription.updated":
+        return "subscription.updated";
+      case "customer.subscription.deleted":
+        return "subscription.cancelled";
+      case "invoice.payment_succeeded":
+        return "subscription.payment_succeeded";
+      case "invoice.payment_failed":
+        return "subscription.payment_failed";
       default:
-        return 'subscription.updated';
+        return "subscription.updated";
     }
   }
 }

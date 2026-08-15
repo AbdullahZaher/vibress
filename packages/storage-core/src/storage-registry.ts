@@ -1,9 +1,9 @@
-import { StorageProvider } from './storage-provider';
-import { StorageError } from './errors';
+import { StorageProvider } from "./storage-provider";
+import { StorageError } from "./errors";
 
 export class StorageRegistry {
   private providers = new Map<string, StorageProvider>();
-  private activeProviderName: string = 'local';
+  private activeProviderName: string = "local";
 
   register(provider: StorageProvider): void {
     this.providers.set(provider.name, provider);
@@ -23,7 +23,9 @@ export class StorageRegistry {
   getActiveProvider(): StorageProvider {
     const provider = this.providers.get(this.activeProviderName);
     if (!provider) {
-      throw new StorageError(`Active storage provider '${this.activeProviderName}' is not registered`);
+      throw new StorageError(
+        `Active storage provider '${this.activeProviderName}' is not registered`,
+      );
     }
     return provider;
   }

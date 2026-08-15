@@ -52,6 +52,7 @@ Active theme identity + current settings.
 Activates a registered theme atomically. Validates manifest + API compatibility + settings defaults before persisting. On failure, the previously active theme remains unchanged.
 
 Responses:
+
 - 200 `{ theme: { themeId, themeVersion, settings, settingsSchemaVersion } }`
 - 404 `THEME_NOT_FOUND` (unknown/invalid theme id)
 - 400 `THEME_INVALID`, `THEME_INCOMPATIBLE`, `THEME_SETTINGS_INVALID`, `THEME_ACTIVATION_FAILED`

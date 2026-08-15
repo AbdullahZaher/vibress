@@ -1,26 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { SettingsCard } from '../SettingsCard';
-import { SettingsCardRow } from '../SettingsCardRow';
-import { SettingsModalPortal } from '../SettingsModalPortal';
-import { Button } from '../../ui/button';
-import { Badge } from '../../ui/badge';
-import { Input } from '../../ui/input';
-import { Users, UserPlus, Shield, X, Mail, RefreshCw } from 'lucide-react';
-import { listStaffUsersApi, inviteStaffUserApi, AdminStaffUser } from '../../../lib/api/operations';
+import React, { useState, useEffect } from "react";
+import { SettingsCard } from "../SettingsCard";
+import { SettingsCardRow } from "../SettingsCardRow";
+import { SettingsModalPortal } from "../SettingsModalPortal";
+import { Button } from "../../ui/button";
+import { Badge } from "../../ui/badge";
+import { Input } from "../../ui/input";
+import { Users, UserPlus, Shield, X, Mail, RefreshCw } from "lucide-react";
+import {
+  listStaffUsersApi,
+  inviteStaffUserApi,
+  AdminStaffUser,
+} from "../../../lib/api/operations";
 
 interface StaffOverviewCardProps {
   isHighlighted?: boolean | undefined;
 }
 
-export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighlighted }) => {
+export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({
+  isHighlighted,
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [users, setUsers] = useState<AdminStaffUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState('editor');
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState("editor");
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -58,14 +67,18 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
         payload.name = inviteName.trim();
       }
       await inviteStaffUserApi(payload);
-      setFeedback({ type: 'success', message: 'Staff member added successfully!' });
-      setInviteEmail('');
-      setInviteName('');
+      setFeedback({
+        type: "success",
+        message: "Staff member added successfully!",
+      });
+      setInviteEmail("");
+      setInviteName("");
       loadUsers();
     } catch (err: unknown) {
       setFeedback({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to invite staff member',
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Failed to invite staff member",
       });
     } finally {
       setSubmitting(false);
@@ -83,7 +96,8 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
           description="Manage team members, authors, editors, and administrators with role-based access control."
           currentValue={
             <Badge variant="secondary" className="text-xs gap-1 font-mono">
-              <Shield className="h-3 w-3 text-emerald-500" /> {activeCount} Active {activeCount === 1 ? 'Member' : 'Members'}
+              <Shield className="h-3 w-3 text-emerald-500" /> {activeCount}{" "}
+              Active {activeCount === 1 ? "Member" : "Members"}
             </Badge>
           }
           actionLabel="Manage staff"
@@ -92,13 +106,18 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
       </SettingsCard>
 
       {/* Staff Management & Invite Modal */}
-      <SettingsModalPortal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+      <SettingsModalPortal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      >
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="w-full max-w-lg bg-card border border-border/80 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">Staff & Permissions</h3>
+                <h3 className="text-sm font-bold text-foreground">
+                  Staff & Permissions
+                </h3>
               </div>
               <button
                 type="button"
@@ -113,26 +132,42 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
               {/* Active Users */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold text-foreground">Active Team Members</h4>
-                  {loading && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+                  <h4 className="text-xs font-semibold text-foreground">
+                    Active Team Members
+                  </h4>
+                  {loading && (
+                    <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                  )}
                 </div>
                 <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-muted/10 overflow-hidden max-h-48 overflow-y-auto">
                   {users.length === 0 ? (
-                    <div className="p-3.5 text-center text-xs text-muted-foreground">Loading active team...</div>
+                    <div className="p-3.5 text-center text-xs text-muted-foreground">
+                      Loading active team...
+                    </div>
                   ) : (
                     users.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between p-3">
+                      <div
+                        key={u.id}
+                        className="flex items-center justify-between p-3"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                            {u.name?.charAt(0)?.toUpperCase() || 'U'}
+                            {u.name?.charAt(0)?.toUpperCase() || "U"}
                           </div>
                           <div>
-                            <p className="text-xs font-semibold text-foreground">{u.name}</p>
-                            <p className="text-[11px] text-muted-foreground font-mono">{u.email}</p>
+                            <p className="text-xs font-semibold text-foreground">
+                              {u.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground font-mono">
+                              {u.email}
+                            </p>
                           </div>
                         </div>
-                        <Badge variant="secondary" className="text-[10px] font-mono capitalize">
-                          {u.roles?.[0] || 'Member'}
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] font-mono capitalize"
+                        >
+                          {u.roles?.[0] || "Member"}
                         </Badge>
                       </div>
                     ))
@@ -141,9 +176,13 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
               </div>
 
               {/* Invite User Form */}
-              <form onSubmit={handleInvite} className="space-y-3 pt-2 border-t border-border/50">
+              <form
+                onSubmit={handleInvite}
+                className="space-y-3 pt-2 border-t border-border/50"
+              >
                 <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <UserPlus className="h-3.5 w-3.5 text-primary" /> Invite new staff member
+                  <UserPlus className="h-3.5 w-3.5 text-primary" /> Invite new
+                  staff member
                 </h4>
 
                 <div className="space-y-2">
@@ -182,13 +221,26 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({ isHighligh
 
                 <div className="flex items-center justify-between pt-1">
                   {feedback ? (
-                    <span className={`text-xs font-medium ${feedback.type === 'success' ? 'text-emerald-500' : 'text-destructive'}`}>
+                    <span
+                      className={`text-xs font-medium ${feedback.type === "success" ? "text-emerald-500" : "text-destructive"}`}
+                    >
                       {feedback.message}
                     </span>
-                  ) : <span />}
-                  <Button type="submit" size="sm" disabled={submitting} className="h-8 text-xs gap-1.5 cursor-pointer">
-                    {submitting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                    <span>{submitting ? 'Adding...' : 'Send Invitation'}</span>
+                  ) : (
+                    <span />
+                  )}
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={submitting}
+                    className="h-8 text-xs gap-1.5 cursor-pointer"
+                  >
+                    {submitting ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5" />
+                    )}
+                    <span>{submitting ? "Adding..." : "Send Invitation"}</span>
                   </Button>
                 </div>
               </form>

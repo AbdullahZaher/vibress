@@ -1,5 +1,10 @@
-import { UserRepository } from '../domain/repository';
-import { User, CreateUserData, normalizeEmail, UserDomainError } from '../domain/user';
+import { UserRepository } from "../domain/repository";
+import {
+  User,
+  CreateUserData,
+  normalizeEmail,
+  UserDomainError,
+} from "../domain/user";
 
 export class UsersService {
   constructor(private userRepo: UserRepository) {}
@@ -16,7 +21,10 @@ export class UsersService {
     const normalizedEmail = normalizeEmail(data.email);
     const existing = await this.userRepo.findByEmail(normalizedEmail);
     if (existing) {
-      throw new UserDomainError('EMAIL_ALREADY_EXISTS', 'User with this email already exists');
+      throw new UserDomainError(
+        "EMAIL_ALREADY_EXISTS",
+        "User with this email already exists",
+      );
     }
     return this.userRepo.create({
       ...data,
@@ -27,7 +35,7 @@ export class UsersService {
   async disableUser(id: string): Promise<User> {
     const user = await this.userRepo.findById(id);
     if (!user) {
-      throw new UserDomainError('USER_NOT_FOUND', 'User not found');
+      throw new UserDomainError("USER_NOT_FOUND", "User not found");
     }
 
     // Owner invariant protection
@@ -35,10 +43,13 @@ export class UsersService {
     if (activeOwnerCount <= 1) {
       // Check if this target user is an active owner
       // We check active owner count <= 1: disabling an active owner if activeOwnerCount <= 1 must fail
-      throw new UserDomainError('OWNER_REQUIRED', 'Cannot disable the last active owner');
+      throw new UserDomainError(
+        "OWNER_REQUIRED",
+        "Cannot disable the last active owner",
+      );
     }
 
-    return this.userRepo.update(id, { status: 'disabled' });
+    return this.userRepo.update(id, { status: "disabled" });
   }
 
   async updateLastLogin(id: string): Promise<User> {

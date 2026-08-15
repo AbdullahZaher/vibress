@@ -1,5 +1,5 @@
-import React from 'react';
-import { ThemeSiteSettings } from '@vibress/theme-core';
+import React from "react";
+import { ThemeSiteSettings } from "@vibress/theme-core";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -7,25 +7,43 @@ interface ThemeLayoutProps {
   settings: Record<string, unknown>;
 }
 
-export async function ThemeLayout({ children, site, settings }: ThemeLayoutProps) {
-  const accentColor = typeof settings.accentColor === 'string' ? settings.accentColor : '#09090b';
-  const typography = typeof settings.typography === 'string' ? settings.typography : 'Sans-serif';
-  const footerText = typeof settings.footerText === 'string' ? settings.footerText : 'Built with Vibress.';
+export async function ThemeLayout({
+  children,
+  site,
+  settings,
+}: ThemeLayoutProps) {
+  const accentColor =
+    typeof settings.accentColor === "string" ? settings.accentColor : "#09090b";
+  const typography =
+    typeof settings.typography === "string"
+      ? settings.typography
+      : "Sans-serif";
+  const footerText =
+    typeof settings.footerText === "string"
+      ? settings.footerText
+      : "Built with Vibress.";
 
-  const isSerif = typography === 'Serif';
+  const isSerif = typography === "Serif";
 
   return (
     <div
-      className={isSerif ? 'has-serif-body' : 'has-sans-body'}
+      className={isSerif ? "has-serif-body" : "has-sans-body"}
       data-theme="vibress-minimal"
       data-accent={accentColor}
     >
-      <link rel="stylesheet" href="/theme-assets/vibress-minimal/1.0.0/source.css" />
-      <style dangerouslySetInnerHTML={{ __html: `
+      <link
+        rel="stylesheet"
+        href="/theme-assets/vibress-minimal/1.0.0/source.css"
+      />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         :root {
           --vb-accent-color: ${accentColor};
         }
-      ` }} />
+      `,
+        }}
+      />
 
       <div className="vb-viewport">
         <header id="vb-navigation" className="vb-navigation vb-outer">
@@ -35,7 +53,9 @@ export async function ThemeLayout({ children, site, settings }: ThemeLayoutProps
             </a>
             <nav className="vb-navigation-menu">
               <ul className="nav">
-                <li className="nav-home"><a href="/">Home</a></li>
+                <li className="nav-home">
+                  <a href="/">Home</a>
+                </li>
               </ul>
             </nav>
           </div>

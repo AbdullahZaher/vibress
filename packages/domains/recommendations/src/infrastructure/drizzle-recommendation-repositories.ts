@@ -1,8 +1,21 @@
-import { getDb, recommendations, RecommendationRow, recommendationEvents } from '@vibress/database';
-import { eq, and, isNull, count, sql } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { RecommendationRepository, RecommendationEventRepository } from '../domain/repository';
-import { Recommendation, CreateRecommendationData, UpdateRecommendationData, RecommendationStatus } from '../domain/recommendation';
+import {
+  getDb,
+  recommendations,
+  RecommendationRow,
+  recommendationEvents,
+} from "@vibress/database";
+import { eq, isNull, count } from "drizzle-orm";
+import crypto from "node:crypto";
+import {
+  RecommendationRepository,
+  RecommendationEventRepository,
+} from "../domain/repository";
+import {
+  Recommendation,
+  CreateRecommendationData,
+  UpdateRecommendationData,
+  RecommendationStatus,
+} from "../domain/recommendation";
 
 export class DrizzleRecommendationRepository implements RecommendationRepository {
   async create(data: CreateRecommendationData): Promise<Recommendation> {
@@ -17,25 +30,32 @@ export class DrizzleRecommendationRepository implements RecommendationRepository
         description: data.description || null,
         imageUrl: data.imageUrl || null,
         faviconUrl: data.faviconUrl || null,
-        status: data.status || 'active',
+        status: data.status || "active",
         sortOrder: data.sortOrder || 0,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert recommendation');
+    if (!row) throw new Error("Failed to insert recommendation");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Recommendation | null> {
     const db = getDb();
-    const rows = await db.select().from(recommendations).where(eq(recommendations.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(recommendations)
+      .where(eq(recommendations.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: UpdateRecommendationData): Promise<Recommendation> {
+  async update(
+    id: string,
+    data: UpdateRecommendationData,
+  ): Promise<Recommendation> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.title !== undefined) payload.title = data.title;
@@ -44,7 +64,11 @@ export class DrizzleRecommendationRepository implements RecommendationRepository
     if (data.faviconUrl !== undefined) payload.faviconUrl = data.faviconUrl;
     if (data.status !== undefined) payload.status = data.status;
     if (data.sortOrder !== undefined) payload.sortOrder = data.sortOrder;
-    const [row] = await db.update(recommendations).set(payload).where(eq(recommendations.id, id)).returning();
+    const [row] = await db
+      .update(recommendations)
+      .set(payload)
+      .where(eq(recommendations.id, id))
+      .returning();
     if (!row) throw new Error(`Recommendation not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -53,22 +77,30 @@ export class DrizzleRecommendationRepository implements RecommendationRepository
     const db = getDb();
     const [row] = await db
       .update(recommendations)
-      .set({ status: 'archived', updatedAt: new Date() })
+      .set({ status: "archived", updatedAt: new Date() })
       .where(eq(recommendations.id, id))
       .returning();
     if (!row) throw new Error(`Recommendation not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async list(filter?: { includeArchived?: boolean }): Promise<Recommendation[]> {
+  async list(filter?: {
+    includeArchived?: boolean;
+  }): Promise<Recommendation[]> {
     const db = getDb();
     const rows = await db
       .select()
       .from(recommendations)
-      .where(filter?.includeArchived ? undefined : isNull(recommendations.sortOrder) /* placeholder */ )
+      .where(
+        filter?.includeArchived
+          ? undefined
+          : isNull(recommendations.sortOrder) /* placeholder */,
+      )
       .orderBy(recommendations.sortOrder, recommendations.createdAt);
     // Filter manually for simplicity (status check)
-    const filtered = filter?.includeArchived ? rows : rows.filter((r) => r.status === 'active');
+    const filtered = filter?.includeArchived
+      ? rows
+      : rows.filter((r) => r.status === "active");
     return filtered.map((r) => this.mapToDomain(r));
   }
 
@@ -77,7 +109,7 @@ export class DrizzleRecommendationRepository implements RecommendationRepository
     const rows = await db
       .select()
       .from(recommendations)
-      .where(eq(recommendations.status, 'active'))
+      .where(eq(recommendations.status, "active"))
       .orderBy(recommendations.sortOrder, recommendations.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -99,7 +131,12 @@ export class DrizzleRecommendationRepository implements RecommendationRepository
 }
 
 export class DrizzleRecommendationEventRepository implements RecommendationEventRepository {
-  async record(data: { recommendationId: string; memberId?: string | null; type: string; sessionId?: string | null }): Promise<void> {
+  async record(data: {
+    recommendationId: string;
+    memberId?: string | null;
+    type: string;
+    sessionId?: string | null;
+  }): Promise<void> {
     const db = getDb();
     await db.insert(recommendationEvents).values({
       id: crypto.randomUUID(),

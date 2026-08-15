@@ -9,8 +9,8 @@ import {
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   StorageProvider,
   StorageCapabilities,
@@ -27,9 +27,9 @@ import {
   AbortMultipartInput,
   ObjectHeadResult,
   StorageError,
-} from '@vibress/storage-core';
-import { S3StorageConfig } from './types';
-import { resolveS3ConfigWithPreset } from './presets';
+} from "@vibress/storage-core";
+import { S3StorageConfig } from "./types";
+import { resolveS3ConfigWithPreset } from "./presets";
 
 export class S3StorageProvider implements StorageProvider {
   public readonly name: string;
@@ -39,10 +39,16 @@ export class S3StorageProvider implements StorageProvider {
 
   constructor(config: S3StorageConfig) {
     if (!config.bucket || !config.bucket.trim()) {
-      throw new StorageError('S3 bucket name is required', 'STORAGE_CONFIGURATION_INVALID');
+      throw new StorageError(
+        "S3 bucket name is required",
+        "STORAGE_CONFIGURATION_INVALID",
+      );
     }
     if (!config.accessKeyId || !config.secretAccessKey) {
-      throw new StorageError('S3 access credentials (accessKeyId and secretAccessKey) are required', 'STORAGE_CREDENTIALS_INVALID');
+      throw new StorageError(
+        "S3 access credentials (accessKeyId and secretAccessKey) are required",
+        "STORAGE_CREDENTIALS_INVALID",
+      );
     }
 
     this.config = config;
@@ -51,8 +57,12 @@ export class S3StorageProvider implements StorageProvider {
 
     this.client = new S3Client({
       region: this.resolvedConfig.region,
-      ...(this.resolvedConfig.endpoint ? { endpoint: this.resolvedConfig.endpoint } : {}),
-      ...(this.resolvedConfig.forcePathStyle !== undefined ? { forcePathStyle: this.resolvedConfig.forcePathStyle } : {}),
+      ...(this.resolvedConfig.endpoint
+        ? { endpoint: this.resolvedConfig.endpoint }
+        : {}),
+      ...(this.resolvedConfig.forcePathStyle !== undefined
+        ? { forcePathStyle: this.resolvedConfig.forcePathStyle }
+        : {}),
       credentials: {
         accessKeyId: this.resolvedConfig.accessKeyId,
         secretAccessKey: this.resolvedConfig.secretAccessKey,
@@ -77,7 +87,7 @@ export class S3StorageProvider implements StorageProvider {
         Bucket: this.resolvedConfig.bucket,
         Key: key,
         Body: input.body,
-        ContentType: input.contentType || 'application/octet-stream',
+        ContentType: input.contentType || "application/octet-stream",
         Metadata: input.metadata,
       });
 
@@ -89,11 +99,14 @@ export class S3StorageProvider implements StorageProvider {
         url,
         size: input.contentLength || input.body.length,
         contentType: input.contentType,
-        etag: response.ETag ? response.ETag.replace(/"/g, '') : undefined,
+        etag: response.ETag ? response.ETag.replace(/"/g, "") : undefined,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`S3 PutObject failed for key '${key}': ${msg}`, 'STORAGE_UPLOAD_FAILED');
+      throw new StorageError(
+        `S3 PutObject failed for key '${key}': ${msg}`,
+        "STORAGE_UPLOAD_FAILED",
+      );
     }
   }
 
@@ -107,7 +120,10 @@ export class S3StorageProvider implements StorageProvider {
       await this.client.send(command);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`S3 DeleteObject failed for key '${normalizedKey}': ${msg}`, 'STORAGE_ERROR');
+      throw new StorageError(
+        `S3 DeleteObject failed for key '${normalizedKey}': ${msg}`,
+        "STORAGE_ERROR",
+      );
     }
   }
 
@@ -128,14 +144,14 @@ export class S3StorageProvider implements StorageProvider {
         size: Number(res.ContentLength || 0),
       };
       if (res.ContentType) result.contentType = res.ContentType;
-      if (res.ETag) result.etag = res.ETag.replace(/"/g, '');
+      if (res.ETag) result.etag = res.ETag.replace(/"/g, "");
       if (res.LastModified) result.lastModified = res.LastModified;
 
       return result;
     } catch (err) {
       if (
         err instanceof Error &&
-        (err as { name?: string }).name === 'NotFound'
+        (err as { name?: string }).name === "NotFound"
       ) {
         return null;
       }
@@ -146,13 +162,18 @@ export class S3StorageProvider implements StorageProvider {
   async getUrl(key: string): Promise<string> {
     const normalizedKey = this.normalizeKey(key);
 
-    if (this.resolvedConfig.publicBaseUrl && this.resolvedConfig.publicBaseUrl.trim()) {
-      const baseUrl = this.resolvedConfig.publicBaseUrl.trim().replace(/\/+$/, '');
+    if (
+      this.resolvedConfig.publicBaseUrl &&
+      this.resolvedConfig.publicBaseUrl.trim()
+    ) {
+      const baseUrl = this.resolvedConfig.publicBaseUrl
+        .trim()
+        .replace(/\/+$/, "");
       return `${baseUrl}/${normalizedKey}`;
     }
 
     if (this.resolvedConfig.endpoint) {
-      const endpoint = this.resolvedConfig.endpoint.trim().replace(/\/+$/, '');
+      const endpoint = this.resolvedConfig.endpoint.trim().replace(/\/+$/, "");
       if (this.resolvedConfig.forcePathStyle) {
         return `${endpoint}/${this.resolvedConfig.bucket}/${normalizedKey}`;
       } else {
@@ -165,27 +186,45 @@ export class S3StorageProvider implements StorageProvider {
     return `https://${this.resolvedConfig.bucket}.s3.${this.resolvedConfig.region}.amazonaws.com/${normalizedKey}`;
   }
 
-  async getSignedUrl(key: string, options: SignedUrlOptions = {}): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    options: SignedUrlOptions = {},
+  ): Promise<string> {
     const normalizedKey = this.normalizeKey(key);
-    const ttl = options.expiresInSeconds || this.resolvedConfig.signedUrlTtlSeconds || 900;
-    const op = options.operation || 'get';
+    const ttl =
+      options.expiresInSeconds ||
+      this.resolvedConfig.signedUrlTtlSeconds ||
+      900;
+    const op = options.operation || "get";
 
     try {
       const command =
-        op === 'put'
-          ? new PutObjectCommand({ Bucket: this.resolvedConfig.bucket, Key: normalizedKey })
-          : new GetObjectCommand({ Bucket: this.resolvedConfig.bucket, Key: normalizedKey });
+        op === "put"
+          ? new PutObjectCommand({
+              Bucket: this.resolvedConfig.bucket,
+              Key: normalizedKey,
+            })
+          : new GetObjectCommand({
+              Bucket: this.resolvedConfig.bucket,
+              Key: normalizedKey,
+            });
 
       return await getSignedUrl(this.client, command, { expiresIn: ttl });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to generate signed URL for '${normalizedKey}': ${msg}`, 'STORAGE_ERROR');
+      throw new StorageError(
+        `Failed to generate signed URL for '${normalizedKey}': ${msg}`,
+        "STORAGE_ERROR",
+      );
     }
   }
 
-  async createSignedUploadUrl(input: CreateSignedUploadInput): Promise<SignedUploadUrlResult> {
+  async createSignedUploadUrl(
+    input: CreateSignedUploadInput,
+  ): Promise<SignedUploadUrlResult> {
     const key = this.normalizeKey(input.key);
-    const ttl = input.expiresInSeconds || this.resolvedConfig.signedUrlTtlSeconds || 900;
+    const ttl =
+      input.expiresInSeconds || this.resolvedConfig.signedUrlTtlSeconds || 900;
 
     try {
       const command = new PutObjectCommand({
@@ -194,24 +233,31 @@ export class S3StorageProvider implements StorageProvider {
         ContentType: input.contentType,
       });
 
-      const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: ttl });
+      const uploadUrl = await getSignedUrl(this.client, command, {
+        expiresIn: ttl,
+      });
       const expiresAt = new Date(Date.now() + ttl * 1000);
 
       return {
         uploadUrl,
         key,
         headers: {
-          'Content-Type': input.contentType,
+          "Content-Type": input.contentType,
         },
         expiresAt,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to create signed upload URL: ${msg}`, 'STORAGE_UPLOAD_INIT_FAILED');
+      throw new StorageError(
+        `Failed to create signed upload URL: ${msg}`,
+        "STORAGE_UPLOAD_INIT_FAILED",
+      );
     }
   }
 
-  async createMultipartUpload(input: CreateMultipartInput): Promise<MultipartSessionResult> {
+  async createMultipartUpload(
+    input: CreateMultipartInput,
+  ): Promise<MultipartSessionResult> {
     const key = this.normalizeKey(input.key);
     try {
       const command = new CreateMultipartUploadCommand({
@@ -223,7 +269,10 @@ export class S3StorageProvider implements StorageProvider {
 
       const res = await this.client.send(command);
       if (!res.UploadId) {
-        throw new StorageError('S3 CreateMultipartUpload returned empty UploadId', 'STORAGE_MULTIPART_INVALID');
+        throw new StorageError(
+          "S3 CreateMultipartUpload returned empty UploadId",
+          "STORAGE_MULTIPART_INVALID",
+        );
       }
 
       return {
@@ -232,13 +281,17 @@ export class S3StorageProvider implements StorageProvider {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to initiate S3 multipart upload: ${msg}`, 'STORAGE_UPLOAD_INIT_FAILED');
+      throw new StorageError(
+        `Failed to initiate S3 multipart upload: ${msg}`,
+        "STORAGE_UPLOAD_INIT_FAILED",
+      );
     }
   }
 
   async getSignedPartUrl(input: SignPartInput): Promise<SignedPartUrlResult> {
     const key = this.normalizeKey(input.key);
-    const ttl = input.expiresInSeconds || this.resolvedConfig.signedUrlTtlSeconds || 900;
+    const ttl =
+      input.expiresInSeconds || this.resolvedConfig.signedUrlTtlSeconds || 900;
 
     try {
       const command = new UploadPartCommand({
@@ -255,11 +308,16 @@ export class S3StorageProvider implements StorageProvider {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to generate signed part URL: ${msg}`, 'STORAGE_MULTIPART_INVALID');
+      throw new StorageError(
+        `Failed to generate signed part URL: ${msg}`,
+        "STORAGE_MULTIPART_INVALID",
+      );
     }
   }
 
-  async completeMultipartUpload(input: CompleteMultipartInput): Promise<StoredObject> {
+  async completeMultipartUpload(
+    input: CompleteMultipartInput,
+  ): Promise<StoredObject> {
     const key = this.normalizeKey(input.key);
     try {
       const command = new CompleteMultipartUploadCommand({
@@ -283,11 +341,14 @@ export class S3StorageProvider implements StorageProvider {
         url,
         size: head?.size || 0,
         contentType: head?.contentType,
-        etag: res.ETag ? res.ETag.replace(/"/g, '') : undefined,
+        etag: res.ETag ? res.ETag.replace(/"/g, "") : undefined,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to complete S3 multipart upload: ${msg}`, 'STORAGE_MULTIPART_COMPLETE_FAILED');
+      throw new StorageError(
+        `Failed to complete S3 multipart upload: ${msg}`,
+        "STORAGE_MULTIPART_COMPLETE_FAILED",
+      );
     }
   }
 
@@ -302,11 +363,18 @@ export class S3StorageProvider implements StorageProvider {
       await this.client.send(command);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`Failed to abort S3 multipart upload: ${msg}`, 'STORAGE_MULTIPART_INVALID');
+      throw new StorageError(
+        `Failed to abort S3 multipart upload: ${msg}`,
+        "STORAGE_MULTIPART_INVALID",
+      );
     }
   }
 
-  async testConnection(): Promise<{ connected: boolean; bucket: string; providerType: string }> {
+  async testConnection(): Promise<{
+    connected: boolean;
+    bucket: string;
+    providerType: string;
+  }> {
     try {
       const command = new HeadBucketCommand({
         Bucket: this.resolvedConfig.bucket,
@@ -319,11 +387,14 @@ export class S3StorageProvider implements StorageProvider {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      throw new StorageError(`S3 Connection Test failed for bucket '${this.resolvedConfig.bucket}': ${msg}`, 'STORAGE_CONNECTION_FAILED');
+      throw new StorageError(
+        `S3 Connection Test failed for bucket '${this.resolvedConfig.bucket}': ${msg}`,
+        "STORAGE_CONNECTION_FAILED",
+      );
     }
   }
 
   private normalizeKey(key: string): string {
-    return key.replace(/^\/+/, '');
+    return key.replace(/^\/+/, "");
   }
 }

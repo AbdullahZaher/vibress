@@ -4,20 +4,19 @@ import {
   ThemeDefinitionRegistry,
   ThemeNotFoundError,
   ThemeSettingsInvalidError,
-} from '../domain/theme-configuration';
+} from "../domain/theme-configuration";
 import {
   validateThemeManifest,
   validateThemeCompatibility,
   validateThemeSettings,
   mergeThemeSettings,
   ThemeManifest,
-  ThemeSettingsSchema,
-} from '@vibress/theme-core';
+} from "@vibress/theme-core";
 
 export class ThemeService {
   constructor(
     private repo: ThemeConfigurationRepository,
-    private registry: ThemeDefinitionRegistry
+    private registry: ThemeDefinitionRegistry,
   ) {}
 
   async getActiveThemeConfiguration(): Promise<ThemeConfiguration | null> {
@@ -34,14 +33,20 @@ export class ThemeService {
     const definition = this.registry.get(config.themeId);
     if (!definition) return null;
 
-    const settings = mergeThemeSettings(definition.settingsSchema, config.settings);
+    const settings = mergeThemeSettings(
+      definition.settingsSchema,
+      config.settings,
+    );
     return {
       manifest: definition.manifest,
       settings,
     };
   }
 
-  async activateTheme(themeId: string, actorId: string | null): Promise<ThemeConfiguration> {
+  async activateTheme(
+    themeId: string,
+    actorId: string | null,
+  ): Promise<ThemeConfiguration> {
     const definition = this.registry.get(themeId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
@@ -58,7 +63,7 @@ export class ThemeService {
     }
 
     const config: ThemeConfiguration = {
-      id: 'active',
+      id: "active",
       themeId: manifest.id,
       themeVersion: manifest.version,
       settings,
@@ -74,7 +79,7 @@ export class ThemeService {
   async updateThemeSettings(
     themeId: string,
     input: Record<string, unknown>,
-    actorId: string | null
+    _actorId: string | null,
   ): Promise<ThemeConfiguration> {
     const config = await this.repo.getActive();
     if (!config || config.themeId !== themeId) {

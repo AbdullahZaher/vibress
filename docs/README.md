@@ -46,29 +46,29 @@ vibress-ecosystem/
 
 ## Recommended stack
 
-| Layer | Technology |
-|---|---|
-| Language | TypeScript |
-| Monorepo | pnpm + Nx |
-| Admin | React + Vite |
-| Public Web | Next.js |
-| Portal | React |
-| API | Fastify |
-| Validation | Zod |
-| Database | PostgreSQL |
-| ORM | Drizzle |
-| Cache | Redis |
-| Queue | BullMQ |
-| Editor | Lexical via Vibress Studio |
-| UI | Tailwind CSS + shadcn/ui |
+| Layer          | Technology                       |
+| -------------- | -------------------------------- |
+| Language       | TypeScript                       |
+| Monorepo       | pnpm + Nx                        |
+| Admin          | React + Vite                     |
+| Public Web     | Next.js                          |
+| Portal         | React                            |
+| API            | Fastify                          |
+| Validation     | Zod                              |
+| Database       | PostgreSQL                       |
+| ORM            | Drizzle                          |
+| Cache          | Redis                            |
+| Queue          | BullMQ                           |
+| Editor         | Lexical via Vibress Studio       |
+| UI             | Tailwind CSS + shadcn/ui         |
 | Object Storage | S3-compatible + provider plugins |
-| Tests | Vitest |
-| E2E | Playwright |
-| Logging | Pino |
-| Tracing | OpenTelemetry |
-| Errors | Sentry |
-| Containers | Docker |
-| CI/CD | GitHub Actions |
+| Tests          | Vitest                           |
+| E2E            | Playwright                       |
+| Logging        | Pino                             |
+| Tracing        | OpenTelemetry                    |
+| Errors         | Sentry                           |
+| Containers     | Docker                           |
+| CI/CD          | GitHub Actions                   |
 
 ## Documentation map
 

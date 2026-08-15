@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const MemberAuthRequestSchema = z.object({
   email: z.string().trim().min(3).max(254),
@@ -21,13 +21,15 @@ export type MemberSelfDto = z.infer<typeof MemberSelfSchema>;
 export const MemberProfileUpdateSchema = z.object({
   name: z.string().trim().max(200).nullable().optional(),
 });
-export type MemberProfileUpdateInput = z.infer<typeof MemberProfileUpdateSchema> & { name?: string | null };
+export type MemberProfileUpdateInput = z.infer<
+  typeof MemberProfileUpdateSchema
+> & { name?: string | null };
 
 export const AdminMemberSummarySchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
-  status: z.enum(['active', 'disabled']),
+  status: z.enum(["active", "disabled"]),
   emailVerified: z.boolean(),
   createdAt: z.string(),
   lastSeenAt: z.string().nullable(),

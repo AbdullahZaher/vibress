@@ -1,21 +1,31 @@
-import React, { useCallback } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
-import { mergeRegister } from '@lexical/utils';
-import { $getNodeByKey, $getSelection, $isNodeSelection, $createNodeSelection, $setSelection, COMMAND_PRIORITY_LOW, KEY_BACKSPACE_COMMAND, KEY_DELETE_COMMAND, NodeKey } from 'lexical';
-import { STUDIO_CARD_DEFINITIONS } from '@vibress/studio-cards';
-import { ImageCardEditor } from './cards/ImageCardEditor';
-import { VideoCardEditor } from './cards/VideoCardEditor';
-import { GalleryCardEditor } from './cards/GalleryCardEditor';
-import { AudioCardEditor } from './cards/AudioCardEditor';
-import { FileCardEditor } from './cards/FileCardEditor';
-import { BookmarkCardEditor } from './cards/BookmarkCardEditor';
-import { EmbedCardEditor } from './cards/EmbedCardEditor';
-import { ButtonCardEditor } from './cards/ButtonCardEditor';
-import { CalloutCardEditor } from './cards/CalloutCardEditor';
-import { ToggleCardEditor } from './cards/ToggleCardEditor';
-import { MarkdownCardEditor } from './cards/MarkdownCardEditor';
-import { HtmlCardEditor } from './cards/HtmlCardEditor';
+import React, { useCallback } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
+import { mergeRegister } from "@lexical/utils";
+import {
+  $getNodeByKey,
+  $getSelection,
+  $isNodeSelection,
+  $createNodeSelection,
+  $setSelection,
+  COMMAND_PRIORITY_LOW,
+  KEY_BACKSPACE_COMMAND,
+  KEY_DELETE_COMMAND,
+  NodeKey,
+} from "lexical";
+import { STUDIO_CARD_DEFINITIONS } from "@vibress/studio-cards";
+import { ImageCardEditor } from "./cards/ImageCardEditor";
+import { VideoCardEditor } from "./cards/VideoCardEditor";
+import { GalleryCardEditor } from "./cards/GalleryCardEditor";
+import { AudioCardEditor } from "./cards/AudioCardEditor";
+import { FileCardEditor } from "./cards/FileCardEditor";
+import { BookmarkCardEditor } from "./cards/BookmarkCardEditor";
+import { EmbedCardEditor } from "./cards/EmbedCardEditor";
+import { ButtonCardEditor } from "./cards/ButtonCardEditor";
+import { CalloutCardEditor } from "./cards/CalloutCardEditor";
+import { ToggleCardEditor } from "./cards/ToggleCardEditor";
+import { MarkdownCardEditor } from "./cards/MarkdownCardEditor";
+import { HtmlCardEditor } from "./cards/HtmlCardEditor";
 
 // Registry of cards that have rich interactive React editors
 const INTERACTIVE_CARDS = {
@@ -31,7 +41,10 @@ const INTERACTIVE_CARDS = {
   toggle: ToggleCardEditor,
   markdown: MarkdownCardEditor,
   html: HtmlCardEditor,
-} as unknown as Record<string, React.FC<{ nodeKey: NodeKey; cardData: Record<string, unknown> }>>;
+} as unknown as Record<
+  string,
+  React.FC<{ nodeKey: NodeKey; cardData: Record<string, unknown> }>
+>;
 
 export function StudioCardComponent({
   cardType,
@@ -43,7 +56,8 @@ export function StudioCardComponent({
   nodeKey: NodeKey;
 }) {
   const [editor] = useLexicalComposerContext();
-  const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const [isSelected, setSelected, clearSelection] =
+    useLexicalNodeSelection(nodeKey);
 
   const onDelete = useCallback(
     (payload: KeyboardEvent) => {
@@ -57,7 +71,7 @@ export function StudioCardComponent({
       }
       return false;
     },
-    [isSelected, nodeKey]
+    [isSelected, nodeKey],
   );
 
   /**
@@ -96,13 +110,17 @@ export function StudioCardComponent({
         $setSelection(selection);
       });
     },
-    [editor, nodeKey]
+    [editor, nodeKey],
   );
 
   const isInteractiveTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false;
     // Inside popovers, toolbars, or nested form inputs: keep native interactive behavior
-    if (target.closest('.studio-glassy-menu, .floating-card-action-popup, form, input, textarea, select')) {
+    if (
+      target.closest(
+        ".studio-glassy-menu, .floating-card-action-popup, form, input, textarea, select",
+      )
+    ) {
       return true;
     }
     // Nested Lexical editors (e.g. caption editors) are also interactive.
@@ -123,7 +141,7 @@ export function StudioCardComponent({
       event.preventDefault();
       selectCard({ focus: true });
     },
-    [selectCard, editor]
+    [selectCard, editor],
   );
 
   const handleFocusCapture = useCallback(() => {
@@ -135,8 +153,16 @@ export function StudioCardComponent({
 
   React.useEffect(() => {
     return mergeRegister(
-      editor.registerCommand(KEY_DELETE_COMMAND, onDelete, COMMAND_PRIORITY_LOW),
-      editor.registerCommand(KEY_BACKSPACE_COMMAND, onDelete, COMMAND_PRIORITY_LOW)
+      editor.registerCommand(
+        KEY_DELETE_COMMAND,
+        onDelete,
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        KEY_BACKSPACE_COMMAND,
+        onDelete,
+        COMMAND_PRIORITY_LOW,
+      ),
     );
   }, [editor, onDelete]);
 
@@ -173,12 +199,12 @@ export function StudioCardComponent({
         setSelected(true);
       }}
       style={{
-        outline: isSelected ? '2px solid #6366f1' : 'none',
-        position: 'relative',
-        cursor: 'pointer',
-        padding: '2px',
-        borderRadius: '8px',
-        transition: 'outline 0.1s ease',
+        outline: isSelected ? "2px solid #6366f1" : "none",
+        position: "relative",
+        cursor: "pointer",
+        padding: "2px",
+        borderRadius: "8px",
+        transition: "outline 0.1s ease",
       }}
       dangerouslySetInnerHTML={{ __html: html }}
     />

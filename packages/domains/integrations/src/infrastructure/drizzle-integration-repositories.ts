@@ -1,8 +1,23 @@
-import { getDb, integrations, IntegrationRow, apiKeys, ApiKeyRow } from '@vibress/database';
-import { eq, and, isNull, isNotNull } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { IntegrationRepository, ApiKeyRepository, ApiKeyRecord, CreateApiKeyData } from '../domain/repository';
-import { Integration, CreateIntegrationData, UpdateIntegrationData } from '../domain/integration';
+import {
+  getDb,
+  integrations,
+  IntegrationRow,
+  apiKeys,
+  ApiKeyRow,
+} from "@vibress/database";
+import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
+import {
+  IntegrationRepository,
+  ApiKeyRepository,
+  ApiKeyRecord,
+  CreateApiKeyData,
+} from "../domain/repository";
+import {
+  Integration,
+  CreateIntegrationData,
+  UpdateIntegrationData,
+} from "../domain/integration";
 
 export class DrizzleIntegrationRepository implements IntegrationRepository {
   async create(data: CreateIntegrationData): Promise<Integration> {
@@ -15,20 +30,26 @@ export class DrizzleIntegrationRepository implements IntegrationRepository {
         key: data.key,
         type: data.type,
         name: data.name,
-        status: 'active',
+        status: "active",
         config: data.config || {},
-        encryptedSecrets: data.secrets ? (data.secrets as unknown as Record<string, string>) : null,
+        encryptedSecrets: data.secrets
+          ? (data.secrets as unknown as Record<string, string>)
+          : null,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert integration');
+    if (!row) throw new Error("Failed to insert integration");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Integration | null> {
     const db = getDb();
-    const rows = await db.select().from(integrations).where(eq(integrations.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(integrations)
+      .where(eq(integrations.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -36,7 +57,11 @@ export class DrizzleIntegrationRepository implements IntegrationRepository {
 
   async findByKey(key: string): Promise<Integration | null> {
     const db = getDb();
-    const rows = await db.select().from(integrations).where(eq(integrations.key, key)).limit(1);
+    const rows = await db
+      .select()
+      .from(integrations)
+      .where(eq(integrations.key, key))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -49,14 +74,21 @@ export class DrizzleIntegrationRepository implements IntegrationRepository {
     if (data.status !== undefined) payload.status = data.status;
     if (data.config !== undefined) payload.config = data.config;
     if (data.secrets !== undefined) payload.encryptedSecrets = data.secrets;
-    const [row] = await db.update(integrations).set(payload).where(eq(integrations.id, id)).returning();
+    const [row] = await db
+      .update(integrations)
+      .set(payload)
+      .where(eq(integrations.id, id))
+      .returning();
     if (!row) throw new Error(`Integration not found: ${id}`);
     return this.mapToDomain(row);
   }
 
   async list(): Promise<Integration[]> {
     const db = getDb();
-    const rows = await db.select().from(integrations).orderBy(integrations.createdAt);
+    const rows = await db
+      .select()
+      .from(integrations)
+      .orderBy(integrations.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
 
@@ -66,7 +98,7 @@ export class DrizzleIntegrationRepository implements IntegrationRepository {
       key: row.key,
       type: row.type,
       name: row.name,
-      status: row.status as Integration['status'],
+      status: row.status as Integration["status"],
       config: row.config as Record<string, unknown>,
       encryptedSecrets: row.encryptedSecrets as Record<string, string> | null,
       createdAt: row.createdAt,
@@ -91,13 +123,17 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
         createdAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert API key');
+    if (!row) throw new Error("Failed to insert API key");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<ApiKeyRecord | null> {
     const db = getDb();
-    const rows = await db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -105,7 +141,11 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
 
   async findByKeyHash(keyHash: string): Promise<ApiKeyRecord | null> {
     const db = getDb();
-    const rows = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
+    const rows = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -119,12 +159,18 @@ export class DrizzleApiKeyRepository implements ApiKeyRepository {
 
   async revoke(id: string): Promise<void> {
     const db = getDb();
-    await db.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, id));
+    await db
+      .update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(eq(apiKeys.id, id));
   }
 
   async touchLastUsed(id: string): Promise<void> {
     const db = getDb();
-    await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, id));
+    await db
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, id));
   }
 
   private mapToDomain(row: ApiKeyRow): ApiKeyRecord {

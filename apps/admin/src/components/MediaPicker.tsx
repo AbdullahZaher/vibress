@@ -1,14 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listMediaApi, uploadMediaApi, ApiMediaAsset } from '../lib/api';
-import { X, Search, UploadCloud, CheckCircle2, Film, Music, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { listMediaApi, uploadMediaApi, ApiMediaAsset } from "../lib/api";
+import {
+  X,
+  Search,
+  UploadCloud,
+  CheckCircle2,
+  Film,
+  Music,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+} from "lucide-react";
 
 export interface MediaPickerProps {
   onSelectAsset?: (asset: ApiMediaAsset) => void;
   onSelectAssets?: (assets: ApiMediaAsset[]) => void;
   multiple?: boolean;
-  allowedTypes?: Array<'image' | 'video' | 'audio' | 'file'>;
+  allowedTypes?: Array<"image" | "video" | "audio" | "file">;
   onClose?: () => void;
 }
 
@@ -20,22 +30,29 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
   onClose,
 }) => {
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState<string>(allowedTypes?.[0] || 'all');
-  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [selectedType, setSelectedType] = useState<string>(
+    allowedTypes?.[0] || "all",
+  );
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const filterType = selectedType === 'all' ? undefined : (selectedType as 'image' | 'video' | 'audio' | 'file');
+  const filterType =
+    selectedType === "all"
+      ? undefined
+      : (selectedType as "image" | "video" | "audio" | "file");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['media', { search, assetType: filterType }],
+    queryKey: ["media", { search, assetType: filterType }],
     queryFn: () => listMediaApi({ search, assetType: filterType, limit: 50 }),
   });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadMediaApi(file),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ["media"] });
       setUploadError(null);
       if (!multiple && onSelectAsset) {
         onSelectAsset(res.media);
@@ -43,7 +60,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
-      setUploadError(e.message || 'Upload failed');
+      setUploadError(e.message || "Upload failed");
     },
   });
 
@@ -78,7 +95,9 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
 
   const handleConfirmMultiple = () => {
     if (!onSelectAssets || !data) return;
-    const selectedList = data.items.filter((item) => selectedAssetIds.has(item.id));
+    const selectedList = data.items.filter((item) =>
+      selectedAssetIds.has(item.id),
+    );
     onSelectAssets(selectedList);
   };
 
@@ -90,20 +109,20 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onClose) {
+      if (e.key === "Escape" && onClose) {
         onClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
   }, [onClose]);
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
@@ -115,8 +134,12 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               <ImageIcon className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-foreground">Select Media Asset</h3>
-              <p className="text-xs text-muted-foreground">Choose existing media or upload new files</p>
+              <h3 className="text-base font-semibold text-foreground">
+                Select Media Asset
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Choose existing media or upload new files
+              </p>
             </div>
           </div>
           {onClose && (
@@ -186,7 +209,12 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         {uploadError && (
           <div className="px-6 py-2 bg-destructive/10 text-destructive text-xs border-b border-destructive/20 flex items-center justify-between">
             <span>{uploadError}</span>
-            <button onClick={() => setUploadError(null)} className="text-xs underline font-medium">Dismiss</button>
+            <button
+              onClick={() => setUploadError(null)}
+              className="text-xs underline font-medium"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -211,8 +239,12 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                 <UploadCloud className="w-6 h-6 opacity-60" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">No media assets found</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Upload images, videos or documents to use them here</p>
+                <p className="text-sm font-medium text-foreground">
+                  No media assets found
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upload images, videos or documents to use them here
+                </p>
               </div>
             </div>
           )}
@@ -227,12 +259,12 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                     onClick={() => toggleSelect(asset)}
                     className={`group relative rounded-xl overflow-hidden cursor-pointer border transition-all duration-200 ${
                       isSelected
-                        ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
-                        : 'border-border/80 dark:border-white/10 bg-card dark:bg-white/[0.04] hover:border-primary/50 hover:shadow-md'
+                        ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                        : "border-border/80 dark:border-white/10 bg-card dark:bg-white/[0.04] hover:border-primary/50 hover:shadow-md"
                     }`}
                   >
                     <div className="h-28 bg-muted/50 dark:bg-white/[0.03] flex items-center justify-center overflow-hidden relative">
-                      {asset.assetType === 'image' ? (
+                      {asset.assetType === "image" ? (
                         <img
                           src={asset.url}
                           alt={asset.displayName}
@@ -240,9 +272,15 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                         />
                       ) : (
                         <div className="text-muted-foreground flex items-center justify-center">
-                          {asset.assetType === 'video' && <Film className="w-8 h-8 text-rose-500/80" />}
-                          {asset.assetType === 'audio' && <Music className="w-8 h-8 text-amber-500/80" />}
-                          {asset.assetType === 'file' && <FileText className="w-8 h-8 text-blue-500/80" />}
+                          {asset.assetType === "video" && (
+                            <Film className="w-8 h-8 text-rose-500/80" />
+                          )}
+                          {asset.assetType === "audio" && (
+                            <Music className="w-8 h-8 text-amber-500/80" />
+                          )}
+                          {asset.assetType === "file" && (
+                            <FileText className="w-8 h-8 text-blue-500/80" />
+                          )}
                         </div>
                       )}
 
@@ -277,7 +315,9 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         {/* Footer */}
         <div className="px-6 py-3.5 border-t border-border/60 dark:border-white/10 flex justify-between items-center bg-muted/30 dark:bg-white/[0.02]">
           <span className="text-xs text-muted-foreground">
-            {multiple ? `${selectedAssetIds.size} item(s) selected` : 'Click an asset to insert it directly'}
+            {multiple
+              ? `${selectedAssetIds.size} item(s) selected`
+              : "Click an asset to insert it directly"}
           </span>
 
           {multiple && (
@@ -292,6 +332,6 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

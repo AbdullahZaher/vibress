@@ -1,7 +1,14 @@
-import { AdminSuppression, removeSuppressionApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card } from '../ui/card';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import { AdminSuppression, removeSuppressionApi } from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
 
 interface SuppressionsPanelProps {
   suppressions: AdminSuppression[];
@@ -10,14 +17,19 @@ interface SuppressionsPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function SuppressionsPanel({ suppressions, onError, onMessage, onChanged }: SuppressionsPanelProps) {
+export function SuppressionsPanel({
+  suppressions,
+  onError,
+  onMessage,
+  onChanged,
+}: SuppressionsPanelProps) {
   const handleRemoveSuppression = async (email: string) => {
     try {
       await removeSuppressionApi(email);
-      onMessage('Suppression removed');
+      onMessage("Suppression removed");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -34,15 +46,25 @@ export function SuppressionsPanel({ suppressions, onError, onMessage, onChanged 
         <TableBody>
           {suppressions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-xs text-muted-foreground">
+              <TableCell
+                colSpan={3}
+                className="h-32 text-center text-xs text-muted-foreground"
+              >
                 No email suppressions recorded.
               </TableCell>
             </TableRow>
           ) : (
             suppressions.map((sup) => (
-              <TableRow key={sup.id} className="hover:bg-muted/40 border-border">
-                <TableCell className="pl-6 font-mono text-xs text-foreground">{sup.email}</TableCell>
-                <TableCell className="text-xs font-mono text-muted-foreground">{sup.reason}</TableCell>
+              <TableRow
+                key={sup.id}
+                className="hover:bg-muted/40 border-border"
+              >
+                <TableCell className="pl-6 font-mono text-xs text-foreground">
+                  {sup.email}
+                </TableCell>
+                <TableCell className="text-xs font-mono text-muted-foreground">
+                  {sup.reason}
+                </TableCell>
                 <TableCell className="text-right pr-6">
                   <Button
                     variant="ghost"

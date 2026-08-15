@@ -1,9 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { getStaffSettingsApi, updateSettingApi } from '../lib/api/operations';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Sliders, Globe, FileText, CheckCircle2, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { getStaffSettingsApi, updateSettingApi } from "../lib/api/operations";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import {
+  Sliders,
+  Globe,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  RefreshCw,
+} from "lucide-react";
 
 export const GeneralSettings: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -12,11 +26,11 @@ export const GeneralSettings: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Form State
-  const [title, setTitle] = useState('Vibress');
-  const [tagline, setTagline] = useState('');
-  const [description, setDescription] = useState('');
-  const [locale, setLocale] = useState('en');
-  const [defaultPostStatus, setDefaultPostStatus] = useState('draft');
+  const [title, setTitle] = useState("Vibress");
+  const [tagline, setTagline] = useState("");
+  const [description, setDescription] = useState("");
+  const [locale, setLocale] = useState("en");
+  const [defaultPostStatus, setDefaultPostStatus] = useState("draft");
   const [postsPerPage, setPostsPerPage] = useState(10);
 
   const loadSettings = async () => {
@@ -25,23 +39,27 @@ export const GeneralSettings: React.FC = () => {
     try {
       const res = await getStaffSettingsApi();
       for (const ns of res.namespaces) {
-        if (ns.namespace === 'site') {
+        if (ns.namespace === "site") {
           for (const s of ns.settings) {
-            if (s.key === 'title') setTitle(String(s.value ?? 'Vibress'));
-            if (s.key === 'tagline') setTagline(String(s.value ?? ''));
-            if (s.key === 'description') setDescription(String(s.value ?? ''));
-            if (s.key === 'locale') setLocale(String(s.value ?? 'en'));
+            if (s.key === "title") setTitle(String(s.value ?? "Vibress"));
+            if (s.key === "tagline") setTagline(String(s.value ?? ""));
+            if (s.key === "description") setDescription(String(s.value ?? ""));
+            if (s.key === "locale") setLocale(String(s.value ?? "en"));
           }
         }
-        if (ns.namespace === 'publishing') {
+        if (ns.namespace === "publishing") {
           for (const s of ns.settings) {
-            if (s.key === 'defaultPostStatus') setDefaultPostStatus(String(s.value ?? 'draft'));
-            if (s.key === 'postsPerPage') setPostsPerPage(Number(s.value ?? 10));
+            if (s.key === "defaultPostStatus")
+              setDefaultPostStatus(String(s.value ?? "draft"));
+            if (s.key === "postsPerPage")
+              setPostsPerPage(Number(s.value ?? 10));
           }
         }
       }
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to load general settings');
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to load general settings",
+      );
     } finally {
       setLoading(false);
     }
@@ -59,17 +77,19 @@ export const GeneralSettings: React.FC = () => {
 
     try {
       await Promise.all([
-        updateSettingApi('site', 'title', title),
-        updateSettingApi('site', 'tagline', tagline),
-        updateSettingApi('site', 'description', description),
-        updateSettingApi('site', 'locale', locale),
-        updateSettingApi('publishing', 'defaultPostStatus', defaultPostStatus),
-        updateSettingApi('publishing', 'postsPerPage', Number(postsPerPage)),
+        updateSettingApi("site", "title", title),
+        updateSettingApi("site", "tagline", tagline),
+        updateSettingApi("site", "description", description),
+        updateSettingApi("site", "locale", locale),
+        updateSettingApi("publishing", "defaultPostStatus", defaultPostStatus),
+        updateSettingApi("publishing", "postsPerPage", Number(postsPerPage)),
       ]);
-      setSuccessMsg('General settings saved successfully.');
+      setSuccessMsg("General settings saved successfully.");
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to save general settings');
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to save general settings",
+      );
     } finally {
       setSaving(false);
     }
@@ -94,7 +114,8 @@ export const GeneralSettings: React.FC = () => {
             General Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure basic publication details, language, locale, and content defaults.
+            Configure basic publication details, language, locale, and content
+            defaults.
           </p>
         </div>
         <Button
@@ -102,8 +123,12 @@ export const GeneralSettings: React.FC = () => {
           disabled={saving}
           className="gap-2 shrink-0 cursor-pointer"
         >
-          {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -130,12 +155,16 @@ export const GeneralSettings: React.FC = () => {
               Publication Info
             </CardTitle>
             <CardDescription>
-              Basic identity information displayed across your site, feeds, and search engines.
+              Basic identity information displayed across your site, feeds, and
+              search engines.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="site-title" className="text-xs font-semibold text-foreground">
+              <label
+                htmlFor="site-title"
+                className="text-xs font-semibold text-foreground"
+              >
                 Publication Title
               </label>
               <Input
@@ -145,11 +174,16 @@ export const GeneralSettings: React.FC = () => {
                 placeholder="e.g. Vibress"
                 required
               />
-              <p className="text-[11px] text-muted-foreground">The primary name of your publication or brand.</p>
+              <p className="text-[11px] text-muted-foreground">
+                The primary name of your publication or brand.
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="site-tagline" className="text-xs font-semibold text-foreground">
+              <label
+                htmlFor="site-tagline"
+                className="text-xs font-semibold text-foreground"
+              >
                 Site Tagline
               </label>
               <Input
@@ -158,11 +192,16 @@ export const GeneralSettings: React.FC = () => {
                 onChange={(e) => setTagline(e.target.value)}
                 placeholder="e.g. Thoughts, stories and ideas"
               />
-              <p className="text-[11px] text-muted-foreground">A short memorable subtitle for your publication.</p>
+              <p className="text-[11px] text-muted-foreground">
+                A short memorable subtitle for your publication.
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="site-desc" className="text-xs font-semibold text-foreground">
+              <label
+                htmlFor="site-desc"
+                className="text-xs font-semibold text-foreground"
+              >
                 Site Description
               </label>
               <textarea
@@ -173,11 +212,16 @@ export const GeneralSettings: React.FC = () => {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 placeholder="Describe your publication in a few sentences..."
               />
-              <p className="text-[11px] text-muted-foreground">Used for SEO meta descriptions and social sharing cards.</p>
+              <p className="text-[11px] text-muted-foreground">
+                Used for SEO meta descriptions and social sharing cards.
+              </p>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="site-locale" className="text-xs font-semibold text-foreground">
+              <label
+                htmlFor="site-locale"
+                className="text-xs font-semibold text-foreground"
+              >
                 Site Language / Locale
               </label>
               <Input
@@ -187,7 +231,9 @@ export const GeneralSettings: React.FC = () => {
                 placeholder="e.g. en, ar, fr, es, de"
                 required
               />
-              <p className="text-[11px] text-muted-foreground">IETF language code (e.g. `en` for English, `ar` for Arabic).</p>
+              <p className="text-[11px] text-muted-foreground">
+                IETF language code (e.g. `en` for English, `ar` for Arabic).
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -200,13 +246,17 @@ export const GeneralSettings: React.FC = () => {
               Publishing Defaults
             </CardTitle>
             <CardDescription>
-              Configure default workflows and pagination for newly created posts and pages.
+              Configure default workflows and pagination for newly created posts
+              and pages.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label htmlFor="default-status" className="text-xs font-semibold text-foreground">
+                <label
+                  htmlFor="default-status"
+                  className="text-xs font-semibold text-foreground"
+                >
                   Default Post Status
                 </label>
                 <select
@@ -218,11 +268,16 @@ export const GeneralSettings: React.FC = () => {
                   <option value="draft">Draft (Recommended)</option>
                   <option value="published">Published</option>
                 </select>
-                <p className="text-[11px] text-muted-foreground">Initial status assigned when drafting new articles.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Initial status assigned when drafting new articles.
+                </p>
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="posts-per-page" className="text-xs font-semibold text-foreground">
+                <label
+                  htmlFor="posts-per-page"
+                  className="text-xs font-semibold text-foreground"
+                >
                   Posts Per Page
                 </label>
                 <Input
@@ -231,10 +286,14 @@ export const GeneralSettings: React.FC = () => {
                   min={1}
                   max={100}
                   value={postsPerPage}
-                  onChange={(e) => setPostsPerPage(parseInt(e.target.value, 10) || 10)}
+                  onChange={(e) =>
+                    setPostsPerPage(parseInt(e.target.value, 10) || 10)
+                  }
                   required
                 />
-                <p className="text-[11px] text-muted-foreground">Number of posts displayed per pagination page on index views.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Number of posts displayed per pagination page on index views.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -247,8 +306,12 @@ export const GeneralSettings: React.FC = () => {
             disabled={saving}
             className="gap-2 cursor-pointer"
           >
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </form>

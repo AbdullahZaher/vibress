@@ -1,15 +1,19 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { S3StorageProvider } from '../s3-storage-provider';
-import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import { describe, it, expect, beforeAll } from "vitest";
+import { S3StorageProvider } from "../s3-storage-provider";
+import {
+  S3Client,
+  CreateBucketCommand,
+  HeadBucketCommand,
+} from "@aws-sdk/client-s3";
 
-describe('Real MinIO Protocol & Storage Integration', () => {
+describe("Real MinIO Protocol & Storage Integration", () => {
   const MINIO_CONFIG = {
-    providerType: 'minio' as const,
-    endpoint: 'http://127.0.0.1:9000',
-    region: 'us-east-1',
-    bucket: 'vibress-test-bucket',
-    accessKeyId: 'minioadmin',
-    secretAccessKey: 'minioadmin',
+    providerType: "minio" as const,
+    endpoint: "http://127.0.0.1:9000",
+    region: "us-east-1",
+    bucket: "vibress-test-bucket",
+    accessKeyId: "minioadmin",
+    secretAccessKey: "minioadmin",
     forcePathStyle: true,
   };
 
@@ -30,27 +34,31 @@ describe('Real MinIO Protocol & Storage Integration', () => {
     });
 
     try {
-      await rawClient.send(new HeadBucketCommand({ Bucket: MINIO_CONFIG.bucket }));
+      await rawClient.send(
+        new HeadBucketCommand({ Bucket: MINIO_CONFIG.bucket }),
+      );
     } catch {
-      await rawClient.send(new CreateBucketCommand({ Bucket: MINIO_CONFIG.bucket }));
+      await rawClient.send(
+        new CreateBucketCommand({ Bucket: MINIO_CONFIG.bucket }),
+      );
     }
   });
 
-  it('should pass connection test', async () => {
+  it("should pass connection test", async () => {
     const res = await provider.testConnection();
     expect(res.connected).toBe(true);
-    expect(res.bucket).toBe('vibress-test-bucket');
-    expect(res.providerType).toBe('minio');
+    expect(res.bucket).toBe("vibress-test-bucket");
+    expect(res.providerType).toBe("minio");
   });
 
-  it('should put, check head/exists, and delete object', async () => {
+  it("should put, check head/exists, and delete object", async () => {
     const key = `test-${Date.now()}/hello.txt`;
-    const body = Buffer.from('Hello MinIO S3 Protocol');
+    const body = Buffer.from("Hello MinIO S3 Protocol");
 
     const stored = await provider.put({
       key,
       body,
-      contentType: 'text/plain',
+      contentType: "text/plain",
     });
 
     expect(stored.key).toBe(key);
@@ -70,34 +78,40 @@ describe('Real MinIO Protocol & Storage Integration', () => {
     expect(existsAfter).toBe(false);
   });
 
-  it('should generate valid signed GET and PUT URLs', async () => {
+  it("should generate valid signed GET and PUT URLs", async () => {
     const key = `test-${Date.now()}/signed.png`;
-    const getUrl = await provider.getSignedUrl(key, { operation: 'get', expiresInSeconds: 300 });
-    expect(getUrl).toContain('http://127.0.0.1:9000/vibress-test-bucket/test-');
-    expect(getUrl).toContain('X-Amz-Signature');
+    const getUrl = await provider.getSignedUrl(key, {
+      operation: "get",
+      expiresInSeconds: 300,
+    });
+    expect(getUrl).toContain("http://127.0.0.1:9000/vibress-test-bucket/test-");
+    expect(getUrl).toContain("X-Amz-Signature");
 
-    const putUrl = await provider.getSignedUrl(key, { operation: 'put', expiresInSeconds: 300 });
-    expect(putUrl).toContain('X-Amz-Signature');
+    const putUrl = await provider.getSignedUrl(key, {
+      operation: "put",
+      expiresInSeconds: 300,
+    });
+    expect(putUrl).toContain("X-Amz-Signature");
   });
 
-  it('should support direct upload signed URLs', async () => {
+  it("should support direct upload signed URLs", async () => {
     const key = `test-${Date.now()}/direct.jpg`;
     const directResult = await provider.createSignedUploadUrl({
       key,
-      contentType: 'image/jpeg',
+      contentType: "image/jpeg",
       expiresInSeconds: 600,
     });
 
     expect(directResult.key).toBe(key);
-    expect(directResult.uploadUrl).toContain('X-Amz-Signature');
-    expect(directResult.headers).toEqual({ 'Content-Type': 'image/jpeg' });
+    expect(directResult.uploadUrl).toContain("X-Amz-Signature");
+    expect(directResult.headers).toEqual({ "Content-Type": "image/jpeg" });
   });
 
-  it('should execute multipart upload lifecycle (initiate, part-url, complete)', async () => {
+  it("should execute multipart upload lifecycle (initiate, part-url, complete)", async () => {
     const key = `test-${Date.now()}/multipart.bin`;
     const multipartSession = await provider.createMultipartUpload({
       key,
-      contentType: 'application/octet-stream',
+      contentType: "application/octet-stream",
     });
 
     expect(multipartSession.uploadId).toBeTruthy();
@@ -109,13 +123,13 @@ describe('Real MinIO Protocol & Storage Integration', () => {
       partNumber: 1,
     });
     expect(part1.partNumber).toBe(1);
-    expect(part1.url).toContain('partNumber=1');
+    expect(part1.url).toContain("partNumber=1");
 
     // Perform real HTTP put for 5MB part 1
-    const part1Buf = Buffer.alloc(5 * 1024 * 1024, 'a');
-    const res1 = await fetch(part1.url, { method: 'PUT', body: part1Buf });
+    const part1Buf = Buffer.alloc(5 * 1024 * 1024, "a");
+    const res1 = await fetch(part1.url, { method: "PUT", body: part1Buf });
     expect(res1.ok).toBe(true);
-    const etag1 = res1.headers.get('etag');
+    const etag1 = res1.headers.get("etag");
     expect(etag1).toBeTruthy();
 
     // Complete multipart
@@ -131,11 +145,11 @@ describe('Real MinIO Protocol & Storage Integration', () => {
     await provider.delete(key);
   });
 
-  it('should abort multipart upload session', async () => {
+  it("should abort multipart upload session", async () => {
     const key = `test-${Date.now()}/abort-mp.bin`;
     const session = await provider.createMultipartUpload({
       key,
-      contentType: 'application/octet-stream',
+      contentType: "application/octet-stream",
     });
 
     await provider.abortMultipartUpload({
@@ -148,8 +162,8 @@ describe('Real MinIO Protocol & Storage Integration', () => {
       provider.completeMultipartUpload({
         key,
         uploadId: session.uploadId,
-        parts: [{ partNumber: 1, etag: 'dummy' }],
-      })
+        parts: [{ partNumber: 1, etag: "dummy" }],
+      }),
     ).rejects.toThrow();
   });
 });

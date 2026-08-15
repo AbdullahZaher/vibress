@@ -1,5 +1,13 @@
-import React, { useRef } from 'react';
-import { ImageIcon, Video, Images, File as FileIcon, Headphones, Upload, LucideIcon } from 'lucide-react';
+import React, { useRef } from "react";
+import {
+  ImageIcon,
+  Video,
+  Images,
+  File as FileIcon,
+  Headphones,
+  Upload,
+  LucideIcon,
+} from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   image: ImageIcon,
@@ -10,7 +18,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 interface CardPlaceholderProps {
-  iconType: 'image' | 'gallery' | 'video' | 'audio' | 'file';
+  iconType: "image" | "gallery" | "video" | "audio" | "file";
   title: string;
   description: string;
   onFileSelect: (files: File[]) => void;
@@ -20,8 +28,15 @@ interface CardPlaceholderProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
-export function CardPlaceholder({ 
-  iconType, title, description, onFileSelect, multiple = false, isSelected = false, uploading = false, onClick
+export function CardPlaceholder({
+  iconType,
+  title,
+  description,
+  onFileSelect,
+  multiple = false,
+  isSelected = false,
+  uploading = false,
+  onClick,
 }: CardPlaceholderProps) {
   const Icon = ICONS[iconType] || ImageIcon;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,22 +55,25 @@ export function CardPlaceholder({
     fileInputRef.current?.click();
   };
 
-  const accept = 
-    iconType === 'image' || iconType === 'gallery' ? 'image/*' : 
-    iconType === 'video' ? 'video/*' : 
-    iconType === 'audio' ? 'audio/*' : 
-    '*/*';
+  const accept =
+    iconType === "image" || iconType === "gallery"
+      ? "image/*"
+      : iconType === "video"
+        ? "video/*"
+        : iconType === "audio"
+          ? "audio/*"
+          : "*/*";
 
   return (
-    <div 
+    <div
       className={`group relative my-3 rounded-xl border border-dashed transition-all duration-200 cursor-pointer select-none overflow-hidden ${
         isSelected
-          ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
-          : 'border-border/80 dark:border-white/10 hover:border-primary/60 bg-muted/30 dark:bg-white/[0.02] hover:bg-muted/60 dark:hover:bg-white/[0.04]'
+          ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+          : "border-border/80 dark:border-white/10 hover:border-primary/60 bg-muted/30 dark:bg-white/[0.02] hover:bg-muted/60 dark:hover:bg-white/[0.04]"
       }`}
       onClick={handleClick}
     >
-      <div 
+      <div
         className="flex items-center justify-between p-3.5 px-4.5 gap-4"
         onClick={handleContainerClick}
       >
@@ -65,7 +83,9 @@ export function CardPlaceholder({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground tracking-tight">{title}</span>
+              <span className="text-sm font-semibold text-foreground tracking-tight">
+                {title}
+              </span>
               {uploading && (
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium animate-pulse">
                   Uploading...
@@ -73,7 +93,7 @@ export function CardPlaceholder({
               )}
             </div>
             <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {uploading ? 'Processing file upload...' : description}
+              {uploading ? "Processing file upload..." : description}
             </p>
           </div>
         </div>

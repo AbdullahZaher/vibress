@@ -1,4 +1,4 @@
-export type RevisionResourceType = 'post' | 'page';
+export type RevisionResourceType = "post" | "page";
 
 export interface Revision {
   id: string;

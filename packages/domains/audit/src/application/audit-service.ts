@@ -1,5 +1,5 @@
-import { AuditRepository, AuditListFilter } from '../domain/repository';
-import { AuditEvent, CreateAuditEventData } from '../domain/audit-event';
+import { AuditRepository, AuditListFilter } from "../domain/repository";
+import { AuditEvent, CreateAuditEventData } from "../domain/audit-event";
 
 export class AuditService {
   constructor(private auditRepo: AuditRepository) {}
@@ -15,7 +15,9 @@ export class AuditService {
   /**
    * Append-only audit exploration with filters. There is no delete action.
    */
-  async list(filter: AuditListFilter = {}): Promise<{ events: AuditEvent[]; total: number }> {
+  async list(
+    filter: AuditListFilter = {},
+  ): Promise<{ events: AuditEvent[]; total: number }> {
     return this.auditRepo.list(filter);
   }
 }

@@ -19,7 +19,10 @@ export interface BillingWebhookEventRepository {
     eventType: string;
     payloadHash: string;
   }): Promise<BillingWebhookEvent>;
-  findByProviderEventId(provider: string, providerEventId: string): Promise<BillingWebhookEvent | null>;
+  findByProviderEventId(
+    provider: string,
+    providerEventId: string,
+  ): Promise<BillingWebhookEvent | null>;
   markProcessed(id: string, processedAt?: Date): Promise<void>;
   markFailed(id: string, error: string, attemptCount?: number): Promise<void>;
   listPending(limit?: number): Promise<BillingWebhookEvent[]>;
@@ -45,5 +48,8 @@ export interface BillingEventRepository {
     type: string;
     data?: Record<string, unknown> | null | undefined;
   }): Promise<BillingEvent>;
-  listForSubscription(subscriptionId: string, limit?: number): Promise<BillingEvent[]>;
+  listForSubscription(
+    subscriptionId: string,
+    limit?: number,
+  ): Promise<BillingEvent[]>;
 }

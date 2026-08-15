@@ -1,6 +1,13 @@
-import nodemailer, { Transporter } from 'nodemailer';
-import crypto from 'node:crypto';
-import { EmailProvider, EmailMessage, EmailSendResult, NormalizedEmailEvent, EmailProviderError, EmailEventType } from '../../domain/provider';
+import nodemailer, { Transporter } from "nodemailer";
+import crypto from "node:crypto";
+import {
+  EmailProvider,
+  EmailMessage,
+  EmailSendResult,
+  NormalizedEmailEvent,
+  EmailProviderError,
+  EmailEventType,
+} from "../../domain/provider";
 
 export interface SmtpProviderOptions {
   host: string;
@@ -19,7 +26,7 @@ export interface SmtpProviderOptions {
  * would implement with its native signature scheme.
  */
 export class SmtpEmailProvider implements EmailProvider {
-  readonly name = 'smtp';
+  readonly name = "smtp";
   private transporter: Transporter;
   private webhookSecret: string | null;
 
@@ -28,7 +35,9 @@ export class SmtpEmailProvider implements EmailProvider {
       host: options.host,
       port: options.port,
       secure: options.secure ?? false,
-      ...(options.user ? { auth: { user: options.user, pass: options.pass || '' } } : {}),
+      ...(options.user
+        ? { auth: { user: options.user, pass: options.pass || "" } }
+        : {}),
       pool: true,
       maxConnections: options.maxConnections || 5,
     });
@@ -38,8 +47,12 @@ export class SmtpEmailProvider implements EmailProvider {
   async send(message: EmailMessage): Promise<EmailSendResult> {
     try {
       const result = await this.transporter.sendMail({
-        to: message.toName ? `"${sanitizeName(message.toName)}" <${message.to}>` : message.to,
-        from: message.fromName ? `"${sanitizeName(message.fromName)}" <${message.from}>` : message.from,
+        to: message.toName
+          ? `"${sanitizeName(message.toName)}" <${message.to}>`
+          : message.to,
+        from: message.fromName
+          ? `"${sanitizeName(message.fromName)}" <${message.from}>`
+          : message.from,
         replyTo: message.replyTo || undefined,
         subject: message.subject,
         html: message.html,
@@ -48,7 +61,11 @@ export class SmtpEmailProvider implements EmailProvider {
       });
       return { messageId: result.messageId || crypto.randomUUID() };
     } catch (err: unknown) {
-      throw new EmailProviderError('SEND_FAILED', (err as Error).message || 'SMTP send failed', true);
+      throw new EmailProviderError(
+        "SEND_FAILED",
+        (err as Error).message || "SMTP send failed",
+        true,
+      );
     }
   }
 
@@ -60,16 +77,24 @@ export class SmtpEmailProvider implements EmailProvider {
     return results;
   }
 
-  async verifyWebhookSignature(payload: string | Buffer, signatureHeader: string | null | undefined): Promise<boolean> {
+  async verifyWebhookSignature(
+    payload: string | Buffer,
+    signatureHeader: string | null | undefined,
+  ): Promise<boolean> {
     if (!signatureHeader || !this.webhookSecret) return false;
-    const body = typeof payload === 'string' ? payload : payload.toString();
-    const expected = crypto.createHmac('sha256', this.webhookSecret).update(body).digest('hex');
-    const received = signatureHeader.replace(/^sha256=/, '');
+    const body = typeof payload === "string" ? payload : payload.toString();
+    const expected = crypto
+      .createHmac("sha256", this.webhookSecret)
+      .update(body)
+      .digest("hex");
+    const received = signatureHeader.replace(/^sha256=/, "");
     if (received.length !== expected.length) return false;
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
   }
 
-  async parseWebhookEvent(payload: string | Buffer): Promise<NormalizedEmailEvent> {
+  async parseWebhookEvent(
+    payload: string | Buffer,
+  ): Promise<NormalizedEmailEvent> {
     const body = JSON.parse(payload.toString()) as {
       id?: unknown;
       event?: unknown;
@@ -79,47 +104,56 @@ export class SmtpEmailProvider implements EmailProvider {
       timestamp?: unknown;
       detail?: unknown;
     };
-    if (typeof body.id !== 'string' || typeof body.type !== 'string') {
-      throw new EmailProviderError('INVALID_WEBHOOK_EVENT', 'Invalid webhook event shape');
+    if (typeof body.id !== "string" || typeof body.type !== "string") {
+      throw new EmailProviderError(
+        "INVALID_WEBHOOK_EVENT",
+        "Invalid webhook event shape",
+      );
     }
     const type = normalizeEventType(body.type);
     return {
       providerEventId: body.id,
       type,
-      recipientEmail: typeof body.email === 'string' ? body.email : null,
-      messageId: typeof body.messageId === 'string' ? body.messageId : null,
-      timestamp: typeof body.timestamp === 'number' ? body.timestamp : null,
-      detail: typeof body.detail === 'string' ? body.detail : null,
-      data: { event: body.event ?? null, ...(typeof body.detail === 'string' ? { detail: body.detail } : {}) },
+      recipientEmail: typeof body.email === "string" ? body.email : null,
+      messageId: typeof body.messageId === "string" ? body.messageId : null,
+      timestamp: typeof body.timestamp === "number" ? body.timestamp : null,
+      detail: typeof body.detail === "string" ? body.detail : null,
+      data: {
+        event: body.event ?? null,
+        ...(typeof body.detail === "string" ? { detail: body.detail } : {}),
+      },
     };
   }
 }
 
 function normalizeEventType(raw: string): EmailEventType {
   switch (raw) {
-    case 'delivered':
-    case 'delivery':
-      return 'delivered';
-    case 'bounce':
-    case 'bounced':
-      return 'bounced';
-    case 'complaint':
-    case 'complained':
-      return 'complained';
-    case 'failed':
-    case 'permanent_failure':
-      return 'failed';
-    case 'open':
-    case 'opened':
-      return 'opened';
-    case 'click':
-    case 'clicked':
-      return 'clicked';
+    case "delivered":
+    case "delivery":
+      return "delivered";
+    case "bounce":
+    case "bounced":
+      return "bounced";
+    case "complaint":
+    case "complained":
+      return "complained";
+    case "failed":
+    case "permanent_failure":
+      return "failed";
+    case "open":
+    case "opened":
+      return "opened";
+    case "click":
+    case "clicked":
+      return "clicked";
     default:
-      throw new EmailProviderError('INVALID_WEBHOOK_EVENT', `Unknown event type: ${raw}`);
+      throw new EmailProviderError(
+        "INVALID_WEBHOOK_EVENT",
+        `Unknown event type: ${raw}`,
+      );
   }
 }
 
 function sanitizeName(name: string): string {
-  return name.replace(/[\r\n"<>]/g, '').slice(0, 200);
+  return name.replace(/[\r\n"<>]/g, "").slice(0, 200);
 }

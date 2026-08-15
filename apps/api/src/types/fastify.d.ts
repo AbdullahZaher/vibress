@@ -1,6 +1,6 @@
-import 'fastify';
+import "fastify";
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyRequest {
     user?: {
       id: string;
@@ -12,7 +12,7 @@ declare module 'fastify' {
     roles?: string[];
     permissions?: string[];
     sessionToken?: string;
-    member?: import('@vibress/members').Member;
+    member?: import("@vibress/members").Member;
     memberSessionToken?: string;
     machineAuth?: {
       keyId: string;

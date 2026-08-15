@@ -1,5 +1,6 @@
-export type ImportExportJobType = 'import' | 'export';
-export type ImportExportJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type ImportExportJobType = "import" | "export";
+export type ImportExportJobStatus =
+  "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export interface ImportExportJob {
   id: string;
@@ -17,10 +18,22 @@ export interface ImportExportJob {
 }
 
 export interface JobRepository {
-  create(data: { type: ImportExportJobType; requestedBy: string | null }): Promise<ImportExportJob>;
+  create(data: {
+    type: ImportExportJobType;
+    requestedBy: string | null;
+  }): Promise<ImportExportJob>;
   findById(id: string): Promise<ImportExportJob | null>;
-  list(filter?: { type?: string; status?: string; limit?: number; offset?: number }): Promise<{ jobs: ImportExportJob[]; total: number }>;
-  updateStatus(id: string, status: ImportExportJobStatus, patch?: Partial<ImportExportJob>): Promise<void>;
+  list(filter?: {
+    type?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ jobs: ImportExportJob[]; total: number }>;
+  updateStatus(
+    id: string,
+    status: ImportExportJobStatus,
+    patch?: Partial<ImportExportJob>,
+  ): Promise<void>;
 }
 
 /**

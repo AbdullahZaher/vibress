@@ -11,10 +11,12 @@ export interface BillingCheckoutInput {
   cancelUrl: string;
   metadata?: Record<string, string> | undefined;
   allowPromotionCodes?: boolean | undefined;
-  subscriptionData?: {
-    trialDays?: number | undefined;
-    metadata?: Record<string, string> | undefined;
-  } | undefined;
+  subscriptionData?:
+    | {
+        trialDays?: number | undefined;
+        metadata?: Record<string, string> | undefined;
+      }
+    | undefined;
 }
 
 export interface BillingCheckoutResult {
@@ -47,11 +49,20 @@ export interface BillingSubscriptionInfo {
 export interface BillingProvider {
   readonly name: string;
   createCustomer(input: BillingCreateCustomerInput): Promise<string>;
-  createCheckoutSession(input: BillingCheckoutInput): Promise<BillingCheckoutResult>;
-  createBillingPortalSession(input: BillingPortalInput): Promise<BillingPortalResult>;
-  getSubscription(providerSubscriptionId: string): Promise<BillingSubscriptionInfo | null>;
+  createCheckoutSession(
+    input: BillingCheckoutInput,
+  ): Promise<BillingCheckoutResult>;
+  createBillingPortalSession(
+    input: BillingPortalInput,
+  ): Promise<BillingPortalResult>;
+  getSubscription(
+    providerSubscriptionId: string,
+  ): Promise<BillingSubscriptionInfo | null>;
   cancelSubscription(providerSubscriptionId: string): Promise<void>;
-  verifyWebhookSignature(payload: string | Buffer, signatureHeader: string | null | undefined): Promise<boolean>;
+  verifyWebhookSignature(
+    payload: string | Buffer,
+    signatureHeader: string | null | undefined,
+  ): Promise<boolean>;
   parseWebhookEvent(payload: string | Buffer): Promise<{
     id: string;
     type: string;

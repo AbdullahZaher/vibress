@@ -1,7 +1,7 @@
-import type { VibressThemeDefinition } from './types';
-import { defaultTheme } from './default/theme';
-import { minimalTheme } from './minimal/theme';
-import { moltenTheme } from './molten/theme';
+import type { VibressThemeDefinition } from "./types";
+import { defaultTheme } from "./default/theme";
+import { minimalTheme } from "./minimal/theme";
+import { moltenTheme } from "./molten/theme";
 
 const registry = new Map<string, VibressThemeDefinition>();
 
@@ -21,7 +21,7 @@ export function listThemes(): VibressThemeDefinition[] {
   return Array.from(registry.values());
 }
 
-export const DEFAULT_THEME_ID = 'vibress-default';
+export const DEFAULT_THEME_ID = "vibress-default";
 
 registerTheme(defaultTheme);
 registerTheme(minimalTheme);

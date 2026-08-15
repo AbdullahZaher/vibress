@@ -3,13 +3,13 @@ export class PostDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'PostDomainError';
+    this.name = "PostDomainError";
     this.code = code;
   }
 }
 
-export type PostStatus = 'draft' | 'scheduled' | 'published';
-export type PostVisibility = 'public' | 'members' | 'paid';
+export type PostStatus = "draft" | "scheduled" | "published";
+export type PostVisibility = "public" | "members" | "paid";
 
 export interface Post {
   id: string;
@@ -80,6 +80,6 @@ export interface ListPostsFilter {
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
-  sortBy?: ('createdAt' | 'updatedAt' | 'publishedAt' | 'title') | undefined;
-  sortOrder?: ('asc' | 'desc') | undefined;
+  sortBy?: ("createdAt" | "updatedAt" | "publishedAt" | "title") | undefined;
+  sortOrder?: ("asc" | "desc") | undefined;
 }

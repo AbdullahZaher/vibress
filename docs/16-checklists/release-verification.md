@@ -15,37 +15,37 @@ Seeded dataset: 1,312 posts (1,250 benchmark), 131 pages, 1,760 members,
 
 ## 1. Code & Test Gates
 
-| Gate | Result |
-|---|---|
-| `pnpm build` (all apps incl. 4 UI bundles) | Pass |
-| `pnpm typecheck` (55 projects) | Pass, 0 errors |
-| `pnpm lint` | Pass, 0 errors |
-| `npx vitest run` (42 files / 427 tests) | Pass |
-| `npx playwright test` (E2E, 66 specs) | Pass |
-| Dependency boundary checks | Pass |
+| Gate                                       | Result         |
+| ------------------------------------------ | -------------- |
+| `pnpm build` (all apps incl. 4 UI bundles) | Pass           |
+| `pnpm typecheck` (55 projects)             | Pass, 0 errors |
+| `pnpm lint`                                | Pass, 0 errors |
+| `npx vitest run` (42 files / 427 tests)    | Pass           |
+| `npx playwright test` (E2E, 66 specs)      | Pass           |
+| Dependency boundary checks                 | Pass           |
 
 ## 2. Load & Performance Verification (autocannon v8, production stack, seeded DB)
 
-| Endpoint (via gateway 7777) | Concurrency | Requests | Throughput | p99 | Errors / non-2xx |
-|---|---|---|---|---|---|
-| `GET /api/health/live` | 10 | 280,853 | 9,362 r/s | 35 ms | 0 / 0 |
-| `GET /api/health/live` | 50 | 577,193 | 9,620 r/s | 87 ms | 0 / 0 |
-| `GET /api/health/live` | 100 | 491,666 | 10,927 r/s | 68 ms | 0 / 0 |
-| `GET /api/health/live` (drill, 15 s) | 200 | 323,478 | **16,172 r/s** | 27 ms | 0 / 0 |
-| `GET /api/content/v1/posts?limit=10` | 10 | 41,616 | 346.7 r/s | 46 ms | 0 / 0 |
-| `GET /api/content/v1/posts?limit=10` | 50 | — | 318.1 r/s | 252 ms | 0 / 0 |
-| `GET /api/content/v1/posts?limit=10` | 100 | — | 358.8 r/s | 378 ms | 0 / 0 |
-| `GET /api/content/v1/posts/benchmark-post-42` | 10 | 43,364 | 1,445 r/s | 49 ms | 0 / 0 |
-| `GET /api/content/v1/posts/benchmark-post-42` | 50 | 114,256 | 1,904 r/s | 110 ms | 0 / 0 |
-| `GET /api/content/v1/search?q=benchmark` | 10 | 200 (then 429) | — | — | rate-limit active |
-| `GET /api/members/v1/me` (auth) | 10 | 74,784 | 2,493 r/s | 40 ms | 0 / 0 |
-| `GET /api/members/v1/me` (auth) | 50 | 210,334 | 3,506 r/s | 77 ms | 0 / 0 |
-| `GET /api/members/v1/me` (auth) | 100 | 241,213 | 4,020 r/s | 81 ms | 0 / 0 |
-| `GET /api/admin/v1/posts?limit=10` (auth) | 10 | 9,088 | 302.9 r/s | 48 ms | 0 / 0 |
-| `GET /api/admin/v1/posts?limit=10` (auth) | 50 | 21,641 | 360.7 r/s | 201 ms | 0 / 0 |
-| `GET /` (web, pure SSR, revalidate=0) | 10 | 5,861 | 195.4 r/s | 107 ms | 0 / 0 |
-| `GET /` (web, pure SSR) | 50 | 12,278 | 204.6 r/s | 407 ms | 0 / 0 |
-| `GET /` (web, pure SSR) | 100 | 10,254 | 170.9 r/s | 1,732 ms | 0 / 0 |
+| Endpoint (via gateway 7777)                   | Concurrency | Requests       | Throughput     | p99      | Errors / non-2xx  |
+| --------------------------------------------- | ----------- | -------------- | -------------- | -------- | ----------------- |
+| `GET /api/health/live`                        | 10          | 280,853        | 9,362 r/s      | 35 ms    | 0 / 0             |
+| `GET /api/health/live`                        | 50          | 577,193        | 9,620 r/s      | 87 ms    | 0 / 0             |
+| `GET /api/health/live`                        | 100         | 491,666        | 10,927 r/s     | 68 ms    | 0 / 0             |
+| `GET /api/health/live` (drill, 15 s)          | 200         | 323,478        | **16,172 r/s** | 27 ms    | 0 / 0             |
+| `GET /api/content/v1/posts?limit=10`          | 10          | 41,616         | 346.7 r/s      | 46 ms    | 0 / 0             |
+| `GET /api/content/v1/posts?limit=10`          | 50          | —              | 318.1 r/s      | 252 ms   | 0 / 0             |
+| `GET /api/content/v1/posts?limit=10`          | 100         | —              | 358.8 r/s      | 378 ms   | 0 / 0             |
+| `GET /api/content/v1/posts/benchmark-post-42` | 10          | 43,364         | 1,445 r/s      | 49 ms    | 0 / 0             |
+| `GET /api/content/v1/posts/benchmark-post-42` | 50          | 114,256        | 1,904 r/s      | 110 ms   | 0 / 0             |
+| `GET /api/content/v1/search?q=benchmark`      | 10          | 200 (then 429) | —              | —        | rate-limit active |
+| `GET /api/members/v1/me` (auth)               | 10          | 74,784         | 2,493 r/s      | 40 ms    | 0 / 0             |
+| `GET /api/members/v1/me` (auth)               | 50          | 210,334        | 3,506 r/s      | 77 ms    | 0 / 0             |
+| `GET /api/members/v1/me` (auth)               | 100         | 241,213        | 4,020 r/s      | 81 ms    | 0 / 0             |
+| `GET /api/admin/v1/posts?limit=10` (auth)     | 10          | 9,088          | 302.9 r/s      | 48 ms    | 0 / 0             |
+| `GET /api/admin/v1/posts?limit=10` (auth)     | 50          | 21,641         | 360.7 r/s      | 201 ms   | 0 / 0             |
+| `GET /` (web, pure SSR, revalidate=0)         | 10          | 5,861          | 195.4 r/s      | 107 ms   | 0 / 0             |
+| `GET /` (web, pure SSR)                       | 50          | 12,278         | 204.6 r/s      | 407 ms   | 0 / 0             |
+| `GET /` (web, pure SSR)                       | 100         | 10,254         | 170.9 r/s      | 1,732 ms | 0 / 0             |
 
 All HTTP error ratio returned 0.00% in every scenario. Search endpoint correctly
 enforces the configured per-IP rate limit (429 after quota) — intended behavior.
@@ -83,17 +83,17 @@ config manifest), encryption key held separately (never inside artifacts),
 then restored to a **fresh compose project** (`compose.restore.yml`, new
 volumes, ports 5434/6381/9010/1026-8026).
 
-| Check | Result |
-|---|---|
-| Table parity post-restore (59 tables) | identical: posts 1312, pages 131, members 1760, comments 2114, users 3 |
-| Migration journal | 15/15 identical hash entries; `runMigrations` no-op |
-| Storage | 46/46 objects restored, byte parity |
+| Check                                      | Result                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------- |
+| Table parity post-restore (59 tables)      | identical: posts 1312, pages 131, members 1760, comments 2114, users 3    |
+| Migration journal                          | 15/15 identical hash entries; `runMigrations` no-op                       |
+| Storage                                    | 46/46 objects restored, byte parity                                       |
 | Encryption key decryption on restored data | AES-GCM ciphertext at rest, plaintext absent; `decryptSecret` == original |
-| Content API on restored stack | posts list, slug fetch, search — all 200 |
-| Admin auth (owner@example.com) | login + /me OK |
-| Member magic link (restore Mailpit) | sent, verified, member /me 200 |
-| Write path | draft → publish → content API 200 → search index 1404 |
-| Worker jobs | rebuild drained queue; index complete; 0 residual |
+| Content API on restored stack              | posts list, slug fetch, search — all 200                                  |
+| Admin auth (owner@example.com)             | login + /me OK                                                            |
+| Member magic link (restore Mailpit)        | sent, verified, member /me 200                                            |
+| Write path                                 | draft → publish → content API 200 → search index 1404                     |
+| Worker jobs                                | rebuild drained queue; index complete; 0 residual                         |
 
 All subsystem checks post-restore passed.
 
@@ -115,6 +115,7 @@ media flows). Fixes landed and the suite now passes **66/66 on two consecutive
 full runs** (2026-08-11).
 
 **UI defects fixed**
+
 - Admin `LoginPage` never had `id="email"`/`id="password"` (+ `htmlFor`).
 - API login `/me` DTOs lacked `slug` (broke `/authors/:slug`, author archive).
 - Web themes lost `studio-html-content` during the H13 theme refactor
@@ -132,6 +133,7 @@ references stayed 0). Fixed by overriding `exportJSON()` in
 `packages/studio-react/src/nodes/ReactStudioCardNode.tsx`.
 
 **E2E contract updated for shipped UI**
+
 - Nav: anchors → `getByRole` buttons; dashboard h1 "Analytics"; logout
   `aria-label="Sign out"`; Tags description is an Input.
 - Studio: slash-menu UX (`' /'` trigger — Lexical typeahead requires a

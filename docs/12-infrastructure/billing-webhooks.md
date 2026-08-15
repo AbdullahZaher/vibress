@@ -18,14 +18,14 @@ POST /api/webhooks/v1/billing/:provider
 
 ## Event Handling
 
-| Provider event | Vibress mapping |
-|---|---|
-| `checkout.session.completed` | `checkout.completed` |
-| `customer.subscription.created` | `subscription.created` |
-| `customer.subscription.updated` | `subscription.updated` |
-| `customer.subscription.deleted` | `subscription.cancelled` |
-| `invoice.payment_succeeded` | `subscription.payment_succeeded` |
-| `invoice.payment_failed` | `subscription.payment_failed` |
+| Provider event                  | Vibress mapping                  |
+| ------------------------------- | -------------------------------- |
+| `checkout.session.completed`    | `checkout.completed`             |
+| `customer.subscription.created` | `subscription.created`           |
+| `customer.subscription.updated` | `subscription.updated`           |
+| `customer.subscription.deleted` | `subscription.cancelled`         |
+| `invoice.payment_succeeded`     | `subscription.payment_succeeded` |
+| `invoice.payment_failed`        | `subscription.payment_failed`    |
 
 Invoice-type events resolve the subscription from `object.subscription`;
 subscription events use `object.id`.

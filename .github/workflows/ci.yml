@@ -26,8 +26,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -96,7 +96,7 @@ jobs:
         with:
           image-ref: vibress-api:scan
           format: table
-          exit-code: '1'
+          exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
@@ -105,7 +105,7 @@ jobs:
         with:
           image-ref: vibress-worker:scan
           format: table
-          exit-code: '1'
+          exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
   # End-to-end Playwright suite (existing 66 tests + First-Run Setup Wizard).
@@ -129,8 +129,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

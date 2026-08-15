@@ -1,474 +1,614 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildApp } from '../main';
-import { FastifyInstance } from 'fastify';
-import { getDb } from '@vibress/database';
-import { eq } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { hashPassword } from '@vibress/security';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { buildApp } from "../main";
+import { FastifyInstance } from "fastify";
+import { getDb } from "@vibress/database";
+import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
+import { hashPassword } from "@vibress/security";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
-  const res = await app.inject({ method: 'POST', url: '/api/admin/v1/auth/login', payload: { email: 'owner@example.com', password: 'OwnerPass123!' } });
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/admin/v1/auth/login",
+    payload: { email: "owner@example.com", password: "OwnerPass123!" },
+  });
   expect(res.statusCode).toBe(200);
-  const setCookie = (res.headers['set-cookie'] as unknown as string) || '';
-  return setCookie.split(';')[0] ?? '';
+  const setCookie = (res.headers["set-cookie"] as unknown as string) || "";
+  return setCookie.split(";")[0] ?? "";
 }
 
 async function ensureOwner(): Promise<void> {
   const db = getDb();
-  const { users, userRoles, roles } = await import('@vibress/database');
-  const rows = await db.select().from(users).where(eq(users.email, 'owner@example.com')).limit(1);
+  const { users, userRoles, roles } = await import("@vibress/database");
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, "owner@example.com"))
+    .limit(1);
   if (rows.length > 0) return;
-  const hash = await hashPassword('OwnerPass123!');
+  const hash = await hashPassword("OwnerPass123!");
   const ownerId = crypto.randomUUID();
-  await db.insert(users).values({ id: ownerId, email: 'owner@example.com', name: 'Owner', slug: 'e2e-owner', passwordHash: hash, status: 'active' }).onConflictDoNothing();
-  const ownerRole = await db.select({ id: roles.id }).from(roles).where(eq(roles.key, 'owner')).limit(1);
-  if (ownerRole[0]) await db.insert(userRoles).values({ userId: ownerId, roleId: ownerRole[0].id });
+  await db
+    .insert(users)
+    .values({
+      id: ownerId,
+      email: "owner@example.com",
+      name: "Owner",
+      slug: "e2e-owner",
+      passwordHash: hash,
+      status: "active",
+    })
+    .onConflictDoNothing();
+  const ownerRole = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.key, "owner"))
+    .limit(1);
+  if (ownerRole[0])
+    await db
+      .insert(userRoles)
+      .values({ userId: ownerId, roleId: ownerRole[0].id });
 }
 
-describe('Batch 14 — Operations Integration & Security', () => {
+describe("Batch 14 — Operations Integration & Security", () => {
   let app: FastifyInstance;
   let staffCookie: string;
 
   beforeAll(async () => {
-    process.env.VIBRESS_ENCRYPTION_KEY = process.env.VIBRESS_ENCRYPTION_KEY || 'test-encryption-key-for-batch-14';
+    process.env.VIBRESS_ENCRYPTION_KEY =
+      process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
     app = buildApp();
     await app.ready();
     await ensureOwner();
     staffCookie = await loginStaff(app);
   });
 
-  afterAll(async () => { await app.close(); });
+  afterAll(async () => {
+    await app.close();
+  });
 
   // ---------------- Settings ----------------
-  it('settings require staff auth (401)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/settings' });
+  it("settings require staff auth (401)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/settings",
+    });
     expect(res.statusCode).toBe(401);
   });
 
-  it('staff can read settings (masked secrets)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/settings', headers: { cookie: staffCookie } });
+  it("staff can read settings (masked secrets)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/settings",
+      headers: { cookie: staffCookie },
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    const emailNs = body.namespaces.find((n: any) => n.namespace === 'email');
-    const smtp = emailNs.settings.find((s: any) => s.key === 'smtpHost');
-    expect(smtp.value).toBe('••••••••');
-    expect(JSON.stringify(body)).not.toContain('real-smtp');
+    const emailNs = body.namespaces.find((n: any) => n.namespace === "email");
+    const smtp = emailNs.settings.find((s: any) => s.key === "smtpHost");
+    expect(smtp.value).toBe("••••••••");
+    expect(JSON.stringify(body)).not.toContain("real-smtp");
   });
 
-  it('staff updates a valid setting (audit created)', async () => {
+  it("staff updates a valid setting (audit created)", async () => {
     const res = await app.inject({
-      method: 'PUT', url: '/api/admin/v1/settings/site/title',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { value: 'Batch 14 Test Title' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/site/title",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: "Batch 14 Test Title" },
     });
     expect(res.statusCode).toBe(200);
 
     // Audit entry created
-    const auditRes = await app.inject({ method: 'GET', url: '/api/admin/v1/audit?action=setting.updated', headers: { cookie: staffCookie } });
+    const auditRes = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/audit?action=setting.updated",
+      headers: { cookie: staffCookie },
+    });
     expect(auditRes.statusCode).toBe(200);
     const events = auditRes.json().events;
     expect(events.length).toBeGreaterThan(0);
-    expect(JSON.stringify(events)).not.toContain('Batch 14 Test Title');
+    expect(JSON.stringify(events)).not.toContain("Batch 14 Test Title");
   });
 
-  it('staff cannot update an unknown setting', async () => {
+  it("staff cannot update an unknown setting", async () => {
     const res = await app.inject({
-      method: 'PUT', url: '/api/admin/v1/settings/site/nope',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { value: 'x' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/site/nope",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: "x" },
     });
     expect(res.statusCode).toBe(404);
   });
 
-  it('secret settings are never leaked via the update response', async () => {
+  it("secret settings are never leaked via the update response", async () => {
     const res = await app.inject({
-      method: 'PUT', url: '/api/admin/v1/settings/email/smtpHost',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { value: 'smtp.example.com' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/email/smtpHost",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: "smtp.example.com" },
     });
     expect(res.statusCode).toBe(200);
-    expect(JSON.stringify(res.json())).not.toContain('smtp.example.com');
-    expect(res.json().setting.value).toBe('••••••••');
+    expect(JSON.stringify(res.json())).not.toContain("smtp.example.com");
+    expect(res.json().setting.value).toBe("••••••••");
   });
 
-  it('public settings endpoint only exposes public values', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/settings/public' });
+  it("public settings endpoint only exposes public values", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/settings/public",
+    });
     expect(res.statusCode).toBe(200);
     const body = JSON.stringify(res.json());
-    expect(body).toContain('site');
-    expect(body).not.toContain('smtpHost');
-    expect(body).not.toContain('authRateLimitPerMinute');
+    expect(body).toContain("site");
+    expect(body).not.toContain("smtpHost");
+    expect(body).not.toContain("authRateLimitPerMinute");
   });
 
-  it('settings change without origin is rejected (CSRF)', async () => {
+  it("settings change without origin is rejected (CSRF)", async () => {
     const res = await app.inject({
-      method: 'PUT', url: '/api/admin/v1/settings/site/title',
+      method: "PUT",
+      url: "/api/admin/v1/settings/site/title",
       headers: { cookie: staffCookie },
-      payload: { value: 'x' },
+      payload: { value: "x" },
     });
     expect(res.statusCode).toBe(403);
   });
 
   // ---------------- Audit ----------------
-  it('audit explorer requires audit.read (401 unauth)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/audit' });
+  it("audit explorer requires audit.read (401 unauth)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/admin/v1/audit" });
     expect(res.statusCode).toBe(401);
   });
 
-  it('audit supports filters and pagination', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/audit?action=setting.updated&limit=5&offset=0', headers: { cookie: staffCookie } });
+  it("audit supports filters and pagination", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/audit?action=setting.updated&limit=5&offset=0",
+      headers: { cookie: staffCookie },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json().events.length).toBeLessThanOrEqual(5);
-    expect(typeof res.json().total).toBe('number');
+    expect(typeof res.json().total).toBe("number");
   });
 
-  it('audit has no delete endpoint (append-only)', async () => {
-    const res = await app.inject({ method: 'DELETE', url: '/api/admin/v1/audit', headers: { cookie: staffCookie } });
+  it("audit has no delete endpoint (append-only)", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/admin/v1/audit",
+      headers: { cookie: staffCookie },
+    });
     expect(res.statusCode).toBe(404);
   });
 
   // ---------------- Redirects ----------------
-  it('redirects require RBAC (401 unauth)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/redirects' });
+  it("redirects require RBAC (401 unauth)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/redirects",
+    });
     expect(res.statusCode).toBe(401);
   });
 
-  it('creates a redirect and rejects protected routes', async () => {
+  it("creates a redirect and rejects protected routes", async () => {
     const ok = await app.inject({
-      method: 'POST', url: '/api/admin/v1/redirects',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { source: `/old-${Date.now()}`, destination: '/new' },
+      method: "POST",
+      url: "/api/admin/v1/redirects",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { source: `/old-${Date.now()}`, destination: "/new" },
     });
     expect(ok.statusCode).toBe(201);
 
     const bad = await app.inject({
-      method: 'POST', url: '/api/admin/v1/redirects',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { source: '/api/admin/whatever', destination: '/new' },
+      method: "POST",
+      url: "/api/admin/v1/redirects",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { source: "/api/admin/whatever", destination: "/new" },
     });
     expect(bad.statusCode).toBe(400);
-    expect(bad.json().errors[0].code).toBe('PROTECTED_ROUTE');
+    expect(bad.json().errors[0].code).toBe("PROTECTED_ROUTE");
   });
 
-  it('rejects unsafe redirect destinations (javascript/data schemes)', async () => {
+  it("rejects unsafe redirect destinations (javascript/data schemes)", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/redirects',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { source: '/x-js', destination: 'javascript:alert(1)' },
+      method: "POST",
+      url: "/api/admin/v1/redirects",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { source: "/x-js", destination: "javascript:alert(1)" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().errors[0].code).toBe('INVALID_DESTINATION');
+    expect(res.json().errors[0].code).toBe("INVALID_DESTINATION");
   });
 
-  it('rejects unsupported redirect codes', async () => {
+  it("rejects unsupported redirect codes", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/redirects',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { source: '/x-code', destination: '/new', statusCode: 200 },
+      method: "POST",
+      url: "/api/admin/v1/redirects",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { source: "/x-code", destination: "/new", statusCode: 200 },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().errors[0].code).toBe('INVALID_STATUS_CODE');
+    expect(res.json().errors[0].code).toBe("INVALID_STATUS_CODE");
   });
 
   // ---------------- Import ----------------
-  it('import validation rejects a wrong format', async () => {
+  it("import validation rejects a wrong format", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/imports/validate',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { format: 'invalid-format', version: 1, data: {} },
+      method: "POST",
+      url: "/api/admin/v1/imports/validate",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { format: "invalid-format", version: 1, data: {} },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().valid).toBe(false);
   });
 
-  it('import validation accepts a valid vibress envelope', async () => {
+  it("import validation accepts a valid vibress envelope", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/imports/validate',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { format: 'vibress', version: 1, exportedAt: new Date().toISOString(), data: { redirects: [] } },
+      method: "POST",
+      url: "/api/admin/v1/imports/validate",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        format: "vibress",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: { redirects: [] },
+      },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().valid).toBe(true);
   });
 
-  it('import requires imports.manage (401 unauth)', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/admin/v1/imports', payload: {} });
+  it("import requires imports.manage (401 unauth)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/imports",
+      payload: {},
+    });
     expect(res.statusCode).toBe(401);
   });
 
-  it('valid import creates a job and completes', async () => {
+  it("valid import creates a job and completes", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/imports',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      method: "POST",
+      url: "/api/admin/v1/imports",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
       payload: {
-        format: 'vibress', version: 1, exportedAt: new Date().toISOString(),
-        data: { redirects: [{ source: `/imported-${Date.now()}`, destination: '/imported-target' }] },
+        format: "vibress",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: {
+          redirects: [
+            {
+              source: `/imported-${Date.now()}`,
+              destination: "/imported-target",
+            },
+          ],
+        },
       },
     });
     expect(res.statusCode).toBe(202);
     const body = res.json();
-    expect(['pending', 'running', 'completed', 'failed']).toContain(body.job.status);
+    expect(["pending", "running", "completed", "failed"]).toContain(
+      body.job.status,
+    );
   });
 
-  it('invalid import fails safely', async () => {
+  it("invalid import fails safely", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/imports',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { format: 'not-vibress', version: 1, data: {} },
+      method: "POST",
+      url: "/api/admin/v1/imports",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { format: "not-vibress", version: 1, data: {} },
     });
     expect(res.statusCode).toBe(400);
   });
 
   // ---------------- Export ----------------
-  it('export completes and contains no secret material', async () => {
+  it("export completes and contains no secret material", async () => {
     const res = await app.inject({
-      method: 'POST', url: '/api/admin/v1/exports',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      method: "POST",
+      url: "/api/admin/v1/exports",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
     });
     expect(res.statusCode).toBe(202);
     const job = res.json().job;
-    expect(['completed', 'failed']).toContain(job.status);
+    expect(["completed", "failed"]).toContain(job.status);
 
-    if (job.status === 'completed') {
+    if (job.status === "completed") {
       const artifactRes = await app.inject({
-        method: 'GET', url: `/api/admin/v1/import-export-jobs/${job.id}/artifact`,
+        method: "GET",
+        url: `/api/admin/v1/import-export-jobs/${job.id}/artifact`,
         headers: { cookie: staffCookie },
       });
       expect(artifactRes.statusCode).toBe(200);
       const envelope = JSON.stringify(artifactRes.json());
-      expect(envelope).not.toContain('smtpHost');
-      expect(envelope).not.toContain('••••');
-      expect(envelope).toContain('vibress');
+      expect(envelope).not.toContain("smtpHost");
+      expect(envelope).not.toContain("••••");
+      expect(envelope).toContain("vibress");
     }
   });
 
-  it('export artifact requires exports.manage', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/import-export-jobs/none/artifact' });
+  it("export artifact requires exports.manage", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/import-export-jobs/none/artifact",
+    });
     expect(res.statusCode).toBe(401);
   });
 
   // ---------------- System tools ----------------
-  it('diagnostics require system.read (401 unauth)', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/system/diagnostics' });
+  it("diagnostics require system.read (401 unauth)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/system/diagnostics",
+    });
     expect(res.statusCode).toBe(401);
   });
 
-  it('diagnostics expose safe operational info only', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/system/diagnostics', headers: { cookie: staffCookie } });
+  it("diagnostics expose safe operational info only", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/system/diagnostics",
+      headers: { cookie: staffCookie },
+    });
     expect(res.statusCode).toBe(200);
     const body = JSON.stringify(res.json());
-    expect(body).toContain('nodeVersion');
-    expect(body).toContain('postgres');
-    expect(body).not.toContain('password');
-    expect(body).not.toContain('DATABASE_URL');
-    expect(body).not.toContain('sk_live');
-    expect(body).not.toContain('VIBRESS_ENCRYPTION_KEY');
+    expect(body).toContain("nodeVersion");
+    expect(body).toContain("postgres");
+    expect(body).not.toContain("password");
+    expect(body).not.toContain("DATABASE_URL");
+    expect(body).not.toContain("sk_live");
+    expect(body).not.toContain("VIBRESS_ENCRYPTION_KEY");
   });
 
-  it('integrity checks run non-destructively', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/v1/system/integrity', headers: { cookie: staffCookie } });
+  it("integrity checks run non-destructively", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/system/integrity",
+      headers: { cookie: staffCookie },
+    });
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.json().checks)).toBe(true);
   });
 
-  it('maintenance accepts search rebuild and rejects unknown ops', async () => {
+  it("maintenance accepts search rebuild and rejects unknown ops", async () => {
     const ok = await app.inject({
-      method: 'POST', url: '/api/admin/v1/system/maintenance',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { operation: 'search.rebuild' },
+      method: "POST",
+      url: "/api/admin/v1/system/maintenance",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { operation: "search.rebuild" },
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().accepted).toBe(true);
 
     const bad = await app.inject({
-      method: 'POST', url: '/api/admin/v1/system/maintenance',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { operation: 'drop.database' },
+      method: "POST",
+      url: "/api/admin/v1/system/maintenance",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { operation: "drop.database" },
     });
     expect(bad.statusCode).toBe(400);
   });
 
-  it('no shell/sql console endpoints exist', async () => {
-    const res1 = await app.inject({ method: 'POST', url: '/api/admin/v1/system/shell', headers: { cookie: staffCookie }, payload: { cmd: 'ls' } });
+  it("no shell/sql console endpoints exist", async () => {
+    const res1 = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/system/shell",
+      headers: { cookie: staffCookie },
+      payload: { cmd: "ls" },
+    });
     expect(res1.statusCode).toBe(404);
-    const res2 = await app.inject({ method: 'POST', url: '/api/admin/v1/system/sql', headers: { cookie: staffCookie }, payload: { q: 'SELECT 1' } });
+    const res2 = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/system/sql",
+      headers: { cookie: staffCookie },
+      payload: { q: "SELECT 1" },
+    });
     expect(res2.statusCode).toBe(404);
   });
 
   // ---------------- Site Privacy & Password Protection ----------------
-  it('hashes site password on PUT /settings/security/password and verifies via /settings/verify-site-password', async () => {
+  it("hashes site password on PUT /settings/security/password and verifies via /settings/verify-site-password", async () => {
     const putRes = await app.inject({
-      method: 'PUT',
-      url: '/api/admin/v1/settings/security/password',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { value: 'SecretSitePass123' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/security/password",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: "SecretSitePass123" },
     });
     expect(putRes.statusCode).toBe(200);
     const putBody = putRes.json();
-    expect(putBody.setting.key).toBe('password');
-    expect(putBody.setting.value).toBe('••••••••');
+    expect(putBody.setting.key).toBe("password");
+    expect(putBody.setting.value).toBe("••••••••");
 
     // Enable isPrivate
     await app.inject({
-      method: 'PUT',
-      url: '/api/admin/v1/settings/security/isPrivate',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/security/isPrivate",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
       payload: { value: true },
     });
 
     // Test correct password
     const okVerify = await app.inject({
-      method: 'POST',
-      url: '/api/admin/v1/settings/verify-site-password',
-      payload: { password: 'SecretSitePass123' },
+      method: "POST",
+      url: "/api/admin/v1/settings/verify-site-password",
+      payload: { password: "SecretSitePass123" },
     });
     expect(okVerify.statusCode).toBe(200);
     expect(okVerify.json().valid).toBe(true);
 
     // Test wrong password
     const badVerify = await app.inject({
-      method: 'POST',
-      url: '/api/admin/v1/settings/verify-site-password',
-      payload: { password: 'WrongPassword' },
+      method: "POST",
+      url: "/api/admin/v1/settings/verify-site-password",
+      payload: { password: "WrongPassword" },
     });
     expect(badVerify.statusCode).toBe(401);
     expect(badVerify.json().valid).toBe(false);
   });
 
   // ---------------- SMTP Test Delivery ----------------
-  it('POST /settings/test-smtp requires authentication and dispatches', async () => {
+  it("POST /settings/test-smtp requires authentication and dispatches", async () => {
     const unauth = await app.inject({
-      method: 'POST',
-      url: '/api/admin/v1/settings/test-smtp',
-      payload: { targetEmail: 'test@example.com' },
+      method: "POST",
+      url: "/api/admin/v1/settings/test-smtp",
+      payload: { targetEmail: "test@example.com" },
     });
     expect(unauth.statusCode).toBe(401);
 
     const auth = await app.inject({
-      method: 'POST',
-      url: '/api/admin/v1/settings/test-smtp',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { targetEmail: 'owner@example.com' },
+      method: "POST",
+      url: "/api/admin/v1/settings/test-smtp",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { targetEmail: "owner@example.com" },
     });
     expect(auth.statusCode).toBe(200);
     expect(auth.json().success).toBe(true);
   });
 
   // ---------------- Staff User Invitation ----------------
-  it('POST /users/invite creates new staff member with assigned role', async () => {
+  it("POST /users/invite creates new staff member with assigned role", async () => {
     const inviteRes = await app.inject({
-      method: 'POST',
-      url: '/api/admin/v1/users/invite',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      method: "POST",
+      url: "/api/admin/v1/users/invite",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
       payload: {
         email: `colleague-${Date.now()}@example.com`,
-        name: 'New Editor',
-        roleKey: 'editor',
+        name: "New Editor",
+        roleKey: "editor",
       },
     });
     expect(inviteRes.statusCode).toBe(201);
     const body = inviteRes.json();
     expect(body.user).toBeDefined();
-    expect(body.user.name).toBe('New Editor');
-    expect(body.user.roles).toContain('editor');
+    expect(body.user.name).toBe("New Editor");
+    expect(body.user.roles).toContain("editor");
   });
 
   // ---------------- Public Content API Site Settings & Privacy ----------------
-  it('GET /api/content/v1/site returns public settings and active theme metadata', async () => {
+  it("GET /api/content/v1/site returns public settings and active theme metadata", async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: '/api/content/v1/site',
+      method: "GET",
+      url: "/api/content/v1/site",
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.site).toBeDefined();
     expect(body.site.title).toBeDefined();
     expect(body.security).toBeDefined();
-    expect(typeof body.security.isPrivate).toBe('boolean');
+    expect(typeof body.security.isPrivate).toBe("boolean");
     expect(body.analytics).toBeDefined();
     expect(body.code).toBeDefined();
     expect(body.theme).toBeDefined();
   });
 
-  it('POST /api/content/v1/verify-site-password sets signed HMAC vb_site_auth cookie', async () => {
-    const { verifySiteAuthToken } = await import('@vibress/security');
+  it("POST /api/content/v1/verify-site-password sets signed HMAC vb_site_auth cookie", async () => {
+    const { verifySiteAuthToken } = await import("@vibress/security");
     // Correct password
     const okRes = await app.inject({
-      method: 'POST',
-      url: '/api/content/v1/verify-site-password',
-      payload: { password: 'SecretSitePass123' },
+      method: "POST",
+      url: "/api/content/v1/verify-site-password",
+      payload: { password: "SecretSitePass123" },
     });
     expect(okRes.statusCode).toBe(200);
     expect(okRes.json().valid).toBe(true);
 
-    const setCookie = okRes.headers['set-cookie'] as unknown as string;
-    expect(setCookie).toContain('vb_site_auth=v1.');
+    const setCookie = okRes.headers["set-cookie"] as unknown as string;
+    expect(setCookie).toContain("vb_site_auth=v1.");
 
     // Extract cookie value
     const match = /vb_site_auth=([^;]+)/.exec(setCookie);
     expect(match).not.toBeNull();
     const token = match![1]!;
 
-    const secret = process.env.VIBRESS_ENCRYPTION_KEY || 'test-encryption-key-for-batch-14';
+    const secret =
+      process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
     expect(verifySiteAuthToken(token, secret)).toBe(true);
 
     // Tampered cookie must fail
-    expect(verifySiteAuthToken('1', secret)).toBe(false);
-    expect(verifySiteAuthToken('vb_site_auth=1', secret)).toBe(false);
+    expect(verifySiteAuthToken("1", secret)).toBe(false);
+    expect(verifySiteAuthToken("vb_site_auth=1", secret)).toBe(false);
     expect(verifySiteAuthToken(`${token}-tampered`, secret)).toBe(false);
-    expect(verifySiteAuthToken('v1.invalid.fakehmac', secret)).toBe(false);
+    expect(verifySiteAuthToken("v1.invalid.fakehmac", secret)).toBe(false);
     expect(verifySiteAuthToken(null, secret)).toBe(false);
     expect(verifySiteAuthToken(undefined, secret)).toBe(false);
 
     // Incorrect password
     const badRes = await app.inject({
-      method: 'POST',
-      url: '/api/content/v1/verify-site-password',
-      payload: { password: 'IncorrectPassword' },
+      method: "POST",
+      url: "/api/content/v1/verify-site-password",
+      payload: { password: "IncorrectPassword" },
     });
     expect(badRes.statusCode).toBe(401);
     expect(badRes.json().valid).toBe(false);
   });
 
   // ---------------- Code Injection Security & RBAC ----------------
-  it('PUT /settings/code/headerCode allows Owner / Administrator', async () => {
+  it("PUT /settings/code/headerCode allows Owner / Administrator", async () => {
     const res = await app.inject({
-      method: 'PUT',
-      url: '/api/admin/v1/settings/code/headerCode',
-      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
-      payload: { value: '<style>:root { --custom: 1; }</style>' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/code/headerCode",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: "<style>:root { --custom: 1; }</style>" },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().setting.value).toBe('<style>:root { --custom: 1; }</style>');
+    expect(res.json().setting.value).toBe(
+      "<style>:root { --custom: 1; }</style>",
+    );
   });
 
-  it('PUT /settings/code/headerCode rejects non-admin staff (403 Forbidden)', async () => {
+  it("PUT /settings/code/headerCode rejects non-admin staff (403 Forbidden)", async () => {
     // Create an editor session
     const db = getDb();
-    const { users, userRoles, roles } = await import('@vibress/database');
-    const existing = await db.select().from(users).where(eq(users.email, 'editor-restricted@example.com')).limit(1);
-    let editorId: string;
-    if (existing.length > 0) {
-      editorId = existing[0]!.id;
-    } else {
-      editorId = crypto.randomUUID();
-      const hash = await hashPassword('EditorPass123!');
-      await db.insert(users).values({ id: editorId, email: 'editor-restricted@example.com', name: 'Restricted Editor', slug: `restricted-editor-${Date.now()}`, passwordHash: hash, status: 'active' });
-      const editorRole = await db.select({ id: roles.id }).from(roles).where(eq(roles.key, 'editor')).limit(1);
-      if (editorRole[0]) await db.insert(userRoles).values({ userId: editorId, roleId: editorRole[0].id });
+    const { users, userRoles, roles } = await import("@vibress/database");
+    const existing = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "editor-restricted@example.com"))
+      .limit(1);
+    if (existing.length === 0) {
+      const editorId = crypto.randomUUID();
+      const hash = await hashPassword("EditorPass123!");
+      await db
+        .insert(users)
+        .values({
+          id: editorId,
+          email: "editor-restricted@example.com",
+          name: "Restricted Editor",
+          slug: `restricted-editor-${Date.now()}`,
+          passwordHash: hash,
+          status: "active",
+        });
+      const editorRole = await db
+        .select({ id: roles.id })
+        .from(roles)
+        .where(eq(roles.key, "editor"))
+        .limit(1);
+      if (editorRole[0])
+        await db
+          .insert(userRoles)
+          .values({ userId: editorId, roleId: editorRole[0].id });
     }
 
-    const loginRes = await app.inject({ method: 'POST', url: '/api/admin/v1/auth/login', payload: { email: 'editor-restricted@example.com', password: 'EditorPass123!' } });
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      payload: {
+        email: "editor-restricted@example.com",
+        password: "EditorPass123!",
+      },
+    });
     expect(loginRes.statusCode).toBe(200);
-    const editorCookie = (loginRes.headers['set-cookie'] as unknown as string).split(';')[0] ?? '';
+    const editorCookie =
+      (loginRes.headers["set-cookie"] as unknown as string).split(";")[0] ?? "";
 
     const putRes = await app.inject({
-      method: 'PUT',
-      url: '/api/admin/v1/settings/code/headerCode',
-      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+      method: "PUT",
+      url: "/api/admin/v1/settings/code/headerCode",
+      headers: { cookie: editorCookie, origin: "http://localhost:7777" },
       payload: { value: '<script>alert("xss")</script>' },
     });
     expect(putRes.statusCode).toBe(403);
   });
 });
-

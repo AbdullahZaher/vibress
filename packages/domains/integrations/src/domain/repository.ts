@@ -1,4 +1,8 @@
-import { Integration, CreateIntegrationData, UpdateIntegrationData } from './integration';
+import {
+  Integration,
+  CreateIntegrationData,
+  UpdateIntegrationData,
+} from "./integration";
 
 export interface IntegrationRepository {
   create(data: CreateIntegrationData): Promise<Integration>;

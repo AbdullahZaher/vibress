@@ -1,9 +1,9 @@
-import { SearchDocumentInput } from '@vibress/search';
-import { DrizzlePostRepository } from '@vibress/posts';
-import { DrizzlePageRepository } from '@vibress/pages';
-import { DrizzleTagRepository } from '@vibress/tags';
-import { renderStudioDocumentToPlainText } from '@vibress/studio-renderer';
-import { getConfig } from '@vibress/config';
+import { SearchDocumentInput } from "@vibress/search";
+import { DrizzlePostRepository } from "@vibress/posts";
+import { DrizzlePageRepository } from "@vibress/pages";
+import { DrizzleTagRepository } from "@vibress/tags";
+import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
+import { getConfig } from "@vibress/config";
 
 /**
  * Worker-side content source for full index rebuilds.
@@ -22,14 +22,21 @@ export class WorkerSearchContentSource {
     const PAGE_SIZE = 100;
     let offset = 0;
     for (;;) {
-      const { posts: postRows } = await this.postRepo.list({ publishedOnly: true, limit: PAGE_SIZE, offset });
+      const { posts: postRows } = await this.postRepo.list({
+        publishedOnly: true,
+        limit: PAGE_SIZE,
+        offset,
+      });
       for (const post of postRows) {
-        if (post.visibility !== 'public') continue;
+        if (post.visibility !== "public") continue;
         docs.push({
-          entityType: 'post',
+          entityType: "post",
           entityId: post.id,
           title: post.title,
-          bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
+          bodyText: renderStudioDocumentToPlainText(post.content).slice(
+            0,
+            2000,
+          ),
           slug: post.slug,
           url: `${siteUrl}/posts/${post.slug}`,
         });
@@ -40,11 +47,15 @@ export class WorkerSearchContentSource {
 
     offset = 0;
     for (;;) {
-      const { pages: pageRows } = await this.pageRepo.list({ publishedOnly: true, limit: PAGE_SIZE, offset });
+      const { pages: pageRows } = await this.pageRepo.list({
+        publishedOnly: true,
+        limit: PAGE_SIZE,
+        offset,
+      });
       for (const pg of pageRows) {
-        if (pg.visibility !== 'public') continue;
+        if (pg.visibility !== "public") continue;
         docs.push({
-          entityType: 'page',
+          entityType: "page",
           entityId: pg.id,
           title: pg.title,
           bodyText: renderStudioDocumentToPlainText(pg.content).slice(0, 2000),
@@ -59,7 +70,7 @@ export class WorkerSearchContentSource {
     const tags = await this.tagRepo.listAll();
     for (const tag of tags) {
       docs.push({
-        entityType: 'tag',
+        entityType: "tag",
         entityId: tag.id,
         title: tag.name,
         slug: tag.slug,

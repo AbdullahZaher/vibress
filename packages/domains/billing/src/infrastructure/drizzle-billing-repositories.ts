@@ -1,15 +1,34 @@
-import { getDb, billingCustomers, BillingCustomerRow, billingPlanMappings, BillingPlanMappingRow } from '@vibress/database';
-import { eq, and } from 'drizzle-orm';
-import { BillingCustomerRepository, BillingPlanMappingRepository, BillingCustomer, CreateBillingCustomerData, BillingPlanMapping } from '../domain/mappings';
-import crypto from 'node:crypto';
+import {
+  getDb,
+  billingCustomers,
+  BillingCustomerRow,
+  billingPlanMappings,
+  BillingPlanMappingRow,
+} from "@vibress/database";
+import { eq, and } from "drizzle-orm";
+import {
+  BillingCustomerRepository,
+  BillingPlanMappingRepository,
+  BillingCustomer,
+  CreateBillingCustomerData,
+  BillingPlanMapping,
+} from "../domain/mappings";
+import crypto from "node:crypto";
 
 export class DrizzleBillingCustomerRepository implements BillingCustomerRepository {
-  async findOrCreate(data: CreateBillingCustomerData): Promise<BillingCustomer> {
+  async findOrCreate(
+    data: CreateBillingCustomerData,
+  ): Promise<BillingCustomer> {
     const db = getDb();
     const existing = await db
       .select()
       .from(billingCustomers)
-      .where(and(eq(billingCustomers.memberId, data.memberId), eq(billingCustomers.provider, data.provider)))
+      .where(
+        and(
+          eq(billingCustomers.memberId, data.memberId),
+          eq(billingCustomers.provider, data.provider),
+        ),
+      )
       .limit(1);
 
     if (existing[0]) return this.mapToDomain(existing[0]);
@@ -25,16 +44,24 @@ export class DrizzleBillingCustomerRepository implements BillingCustomerReposito
         updatedAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert billing customer');
+    if (!row) throw new Error("Failed to insert billing customer");
     return this.mapToDomain(row);
   }
 
-  async findByMemberId(memberId: string, provider: string): Promise<BillingCustomer | null> {
+  async findByMemberId(
+    memberId: string,
+    provider: string,
+  ): Promise<BillingCustomer | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(billingCustomers)
-      .where(and(eq(billingCustomers.memberId, memberId), eq(billingCustomers.provider, provider)))
+      .where(
+        and(
+          eq(billingCustomers.memberId, memberId),
+          eq(billingCustomers.provider, provider),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -45,19 +72,29 @@ export class DrizzleBillingCustomerRepository implements BillingCustomerReposito
     return {
       id: row.id,
       memberId: row.memberId,
-      provider: row.provider as BillingCustomer['provider'],
+      provider: row.provider as BillingCustomer["provider"],
       providerCustomerId: row.providerCustomerId,
     };
   }
 }
 
 export class DrizzleBillingPlanMappingRepository implements BillingPlanMappingRepository {
-  async upsert(data: { planId: string; provider: string; providerProductId: string; providerPriceId: string }): Promise<BillingPlanMapping> {
+  async upsert(data: {
+    planId: string;
+    provider: string;
+    providerProductId: string;
+    providerPriceId: string;
+  }): Promise<BillingPlanMapping> {
     const db = getDb();
     const existing = await db
       .select()
       .from(billingPlanMappings)
-      .where(and(eq(billingPlanMappings.planId, data.planId), eq(billingPlanMappings.provider, data.provider)))
+      .where(
+        and(
+          eq(billingPlanMappings.planId, data.planId),
+          eq(billingPlanMappings.provider, data.provider),
+        ),
+      )
       .limit(1);
 
     if (existing[0]) {
@@ -70,7 +107,7 @@ export class DrizzleBillingPlanMappingRepository implements BillingPlanMappingRe
         })
         .where(eq(billingPlanMappings.id, existing[0].id))
         .returning();
-      if (!row) throw new Error('Failed to update billing plan mapping');
+      if (!row) throw new Error("Failed to update billing plan mapping");
       return this.mapToDomain(row);
     }
 
@@ -86,16 +123,24 @@ export class DrizzleBillingPlanMappingRepository implements BillingPlanMappingRe
         updatedAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert billing plan mapping');
+    if (!row) throw new Error("Failed to insert billing plan mapping");
     return this.mapToDomain(row);
   }
 
-  async findByPlanId(planId: string, provider: string): Promise<BillingPlanMapping | null> {
+  async findByPlanId(
+    planId: string,
+    provider: string,
+  ): Promise<BillingPlanMapping | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(billingPlanMappings)
-      .where(and(eq(billingPlanMappings.planId, planId), eq(billingPlanMappings.provider, provider)))
+      .where(
+        and(
+          eq(billingPlanMappings.planId, planId),
+          eq(billingPlanMappings.provider, provider),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -106,7 +151,7 @@ export class DrizzleBillingPlanMappingRepository implements BillingPlanMappingRe
     return {
       id: row.id,
       planId: row.planId,
-      provider: row.provider as BillingPlanMapping['provider'],
+      provider: row.provider as BillingPlanMapping["provider"],
       providerProductId: row.providerProductId,
       providerPriceId: row.providerPriceId,
     };

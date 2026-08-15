@@ -2,32 +2,35 @@
    VIBRESS DEFAULT THEME - Reference Design Match (Vibress Casper Overhaul)
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap");
 
 :root {
   --vb-accent-color: #ff2865;
   --brand-pink: #ff2865;
   --brand-pink-hover: #e01f53;
   --brand-pink-light: rgba(255, 40, 101, 0.1);
-  
+
   --bg-base: #fdfdfd;
   --bg-surface: #ffffff;
   --bg-subtle: #f8fafc;
-  
+
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #64748b;
-  
+
   --border-hairline: rgba(15, 23, 42, 0.08);
   --border-subtle: #e2e8f0;
-  
-  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+
+  --font-sans:
+    "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
   --radius-full: 9999px;
   --radius-lg: 16px;
   --radius-md: 10px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -263,7 +266,7 @@ a {
 }
 
 .feed-section-header::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background-color: var(--border-hairline);
@@ -437,8 +440,12 @@ a {
 }
 
 @keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .subscribe-modal-container {
@@ -453,8 +460,14 @@ a {
 }
 
 @keyframes modalSlideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .subscribe-modal-close {
@@ -883,11 +896,21 @@ body.dark .site-footer-bottom {
 
 /* Animations */
 @keyframes vbFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes vbScaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

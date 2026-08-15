@@ -3,20 +3,22 @@ import {
   CreateMemberData,
   UpdateMemberData,
   ListMembersFilter,
-} from './member';
+} from "./member";
 import {
   MemberAuthToken,
   CreateMemberAuthTokenData,
   MemberSession,
   CreateMemberSessionData,
-} from './auth';
+} from "./auth";
 
 export interface MemberRepository {
   create(data: CreateMemberData): Promise<Member>;
   findById(id: string): Promise<Member | null>;
   findByEmailNormalized(emailNormalized: string): Promise<Member | null>;
   update(id: string, data: UpdateMemberData): Promise<Member>;
-  list(filter?: ListMembersFilter): Promise<{ members: Member[]; total: number }>;
+  list(
+    filter?: ListMembersFilter,
+  ): Promise<{ members: Member[]; total: number }>;
   countActiveSessions(memberId: string): Promise<number>;
 }
 

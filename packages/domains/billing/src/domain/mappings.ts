@@ -15,7 +15,10 @@ export interface CreateBillingCustomerData {
 
 export interface BillingCustomerRepository {
   findOrCreate(data: CreateBillingCustomerData): Promise<BillingCustomer>;
-  findByMemberId(memberId: string, provider: string): Promise<BillingCustomer | null>;
+  findByMemberId(
+    memberId: string,
+    provider: string,
+  ): Promise<BillingCustomer | null>;
 }
 
 export interface BillingPlanMapping {
@@ -27,6 +30,14 @@ export interface BillingPlanMapping {
 }
 
 export interface BillingPlanMappingRepository {
-  upsert(data: { planId: string; provider: string; providerProductId: string; providerPriceId: string }): Promise<BillingPlanMapping>;
-  findByPlanId(planId: string, provider: string): Promise<BillingPlanMapping | null>;
+  upsert(data: {
+    planId: string;
+    provider: string;
+    providerProductId: string;
+    providerPriceId: string;
+  }): Promise<BillingPlanMapping>;
+  findByPlanId(
+    planId: string,
+    provider: string,
+  ): Promise<BillingPlanMapping | null>;
 }

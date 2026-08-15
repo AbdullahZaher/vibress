@@ -1,11 +1,23 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { searchService, analyticsService, automationsService } from '../services';
-import { enqueueSearchRebuild } from '../async-bridge';
-import { SearchDomainError } from '@vibress/search';
-import { AutomationDomainError, AutomationAction, AutomationCondition } from '@vibress/automations';
-import { AnalyticsDomainError } from '@vibress/analytics';
-import { getConfig } from '@vibress/config';
+import { FastifyInstance, FastifyReply } from "fastify";
+import {
+  requireStaffSession,
+  requirePermission,
+  validateOrigin,
+} from "../middleware/auth";
+import {
+  searchService,
+  analyticsService,
+  automationsService,
+} from "../services";
+import { enqueueSearchRebuild } from "../async-bridge";
+import { SearchDomainError } from "@vibress/search";
+import {
+  AutomationDomainError,
+  AutomationAction,
+  AutomationCondition,
+} from "@vibress/automations";
+import { AnalyticsDomainError } from "@vibress/analytics";
+import { getConfig } from "@vibress/config";
 
 type SearchQuery = { q?: string; limit?: string; offset?: string };
 type AnalyticsQuery = { from?: string; to?: string; metricName?: string };
@@ -24,18 +36,30 @@ type AutomationUpdateBody = {
   conditions?: AutomationCondition[];
   actions?: AutomationAction[];
 };
-type AutomationRunListQuery = { automationId?: string; status?: string; limit?: string; offset?: string };
+type AutomationRunListQuery = {
+  automationId?: string;
+  status?: string;
+  limit?: string;
+  offset?: string;
+};
 
-const sendError = (reply: FastifyReply, code: string, message: string, requestId: string, status = 400) =>
-  reply.status(status).send({ errors: [{ code, message, requestId }] });
+const sendError = (
+  reply: FastifyReply,
+  code: string,
+  message: string,
+  requestId: string,
+  status = 400,
+) => reply.status(status).send({ errors: [{ code, message, requestId }] });
 
 // ---------------- Public Search ----------------
 export async function publicSearchRoutes(fastify: FastifyInstance) {
-  fastify.get('/search', {
-    config: { rateLimit: { max: getConfig().isTest ? 200 : 30, timeWindow: '1 minute' } },
+  fastify.get("/search", {
+    config: {
+      rateLimit: { max: getConfig().isTest ? 200 : 30, timeWindow: "1 minute" },
+    },
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as SearchQuery;
-      const q = typeof query.q === 'string' ? query.q : '';
+      const q = typeof query.q === "string" ? query.q : "";
       const limit = query.limit ? parseInt(query.limit, 10) : 20;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
       try {
@@ -43,7 +67,13 @@ export async function publicSearchRoutes(fastify: FastifyInstance) {
         return reply.status(200).send(result);
       } catch (err) {
         if (err instanceof SearchDomainError) {
-          return sendError(reply, err.code, err.message, req.id, err.code === 'QUERY_TOO_LONG' ? 400 : 400);
+          return sendError(
+            reply,
+            err.code,
+            err.message,
+            req.id,
+            err.code === "QUERY_TOO_LONG" ? 400 : 400,
+          );
         }
         throw err;
       }
@@ -53,18 +83,24 @@ export async function publicSearchRoutes(fastify: FastifyInstance) {
 
 // ---------------- Admin Analytics ----------------
 export async function adminAnalyticsRoutes(fastify: FastifyInstance) {
-  fastify.get('/analytics/metrics', {
-    preHandler: [requireStaffSession, requirePermission('analytics.read')],
+  fastify.get("/analytics/metrics", {
+    preHandler: [requireStaffSession, requirePermission("analytics.read")],
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as AnalyticsQuery;
-      const from = typeof query.from === 'string' ? query.from : undefined;
-      const to = typeof query.to === 'string' ? query.to : undefined;
-      const metricName = typeof query.metricName === 'string' ? query.metricName : undefined;
+      const from = typeof query.from === "string" ? query.from : undefined;
+      const to = typeof query.to === "string" ? query.to : undefined;
+      const metricName =
+        typeof query.metricName === "string" ? query.metricName : undefined;
       try {
-        const result = await analyticsService.getMetrics({ from: from || '', to: to || '', metricName });
+        const result = await analyticsService.getMetrics({
+          from: from || "",
+          to: to || "",
+          metricName,
+        });
         return reply.status(200).send(result);
       } catch (err) {
-        if (err instanceof AnalyticsDomainError) return sendError(reply, err.code, err.message, req.id);
+        if (err instanceof AnalyticsDomainError)
+          return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
     },
@@ -73,16 +109,20 @@ export async function adminAnalyticsRoutes(fastify: FastifyInstance) {
 
 // ---------------- Admin Search ----------------
 export async function adminSearchRoutes(fastify: FastifyInstance) {
-  fastify.post('/search/rebuild', {
-    preHandler: [requireStaffSession, requirePermission('search.manage'), validateOrigin],
+  fastify.post("/search/rebuild", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("search.manage"),
+      validateOrigin,
+    ],
     handler: async (_req, reply) => {
       await enqueueSearchRebuild();
       return reply.status(202).send({ accepted: true });
     },
   });
 
-  fastify.get('/search/index-count', {
-    preHandler: [requireStaffSession, requirePermission('search.manage')],
+  fastify.get("/search/index-count", {
+    preHandler: [requireStaffSession, requirePermission("search.manage")],
     handler: async (_req, reply) => {
       const count = await searchService.indexCount();
       return reply.status(200).send({ count });
@@ -92,108 +132,170 @@ export async function adminSearchRoutes(fastify: FastifyInstance) {
 
 // ---------------- Admin Automations ----------------
 export async function adminAutomationRoutes(fastify: FastifyInstance) {
-  fastify.get('/automations', {
-    preHandler: [requireStaffSession, requirePermission('automations.read')],
+  fastify.get("/automations", {
+    preHandler: [requireStaffSession, requirePermission("automations.read")],
     handler: async (_req, reply) => {
       const automations = await automationsService.listAutomations();
       return reply.status(200).send({ automations });
     },
   });
 
-  fastify.post('/automations', {
-    preHandler: [requireStaffSession, requirePermission('automations.manage'), validateOrigin],
+  fastify.post("/automations", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("automations.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const body = (req.body ?? {}) as AutomationCreateBody;
-      if (!body.key || !body.name || !body.triggerEvent || !Array.isArray(body.actions)) {
-        return sendError(reply, 'VALIDATION_ERROR', 'key, name, triggerEvent, and actions are required', req.id);
+      if (
+        !body.key ||
+        !body.name ||
+        !body.triggerEvent ||
+        !Array.isArray(body.actions)
+      ) {
+        return sendError(
+          reply,
+          "VALIDATION_ERROR",
+          "key, name, triggerEvent, and actions are required",
+          req.id,
+        );
       }
       try {
-        const automation = await automationsService.createAutomation({
-          key: body.key,
-          name: body.name,
-          description: body.description || null,
-          triggerEvent: body.triggerEvent,
-          conditions: body.conditions || [],
-          actions: body.actions,
-        }, req.user!.id);
+        const automation = await automationsService.createAutomation(
+          {
+            key: body.key,
+            name: body.name,
+            description: body.description || null,
+            triggerEvent: body.triggerEvent,
+            conditions: body.conditions || [],
+            actions: body.actions,
+          },
+          req.user!.id,
+        );
         return reply.status(201).send({ automation });
       } catch (err) {
-        if (err instanceof AutomationDomainError) return sendError(reply, err.code, err.message, req.id);
+        if (err instanceof AutomationDomainError)
+          return sendError(reply, err.code, err.message, req.id);
         throw err;
       }
     },
   });
 
-  fastify.patch('/automations/:id', {
-    preHandler: [requireStaffSession, requirePermission('automations.manage'), validateOrigin],
+  fastify.patch("/automations/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("automations.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const body = req.body as AutomationUpdateBody | undefined;
       try {
-        const update: Parameters<typeof automationsService.updateAutomation>[1] = {};
+        const update: Parameters<
+          typeof automationsService.updateAutomation
+        >[1] = {};
         if (body?.name !== undefined) update.name = body.name;
-        if (body?.description !== undefined) update.description = body.description;
-        if (body?.triggerEvent !== undefined) update.triggerEvent = body.triggerEvent;
+        if (body?.description !== undefined)
+          update.description = body.description;
+        if (body?.triggerEvent !== undefined)
+          update.triggerEvent = body.triggerEvent;
         if (body?.conditions !== undefined) update.conditions = body.conditions;
         if (body?.actions !== undefined) update.actions = body.actions;
-        const automation = await automationsService.updateAutomation(id, update, req.user!.id);
+        const automation = await automationsService.updateAutomation(
+          id,
+          update,
+          req.user!.id,
+        );
         return reply.status(200).send({ automation });
       } catch (err) {
         if (err instanceof AutomationDomainError) {
-          return sendError(reply, err.code, err.message, req.id, err.code === 'AUTOMATION_NOT_FOUND' ? 404 : 400);
+          return sendError(
+            reply,
+            err.code,
+            err.message,
+            req.id,
+            err.code === "AUTOMATION_NOT_FOUND" ? 404 : 400,
+          );
         }
         throw err;
       }
     },
   });
 
-  fastify.post('/automations/:id/activate', {
-    preHandler: [requireStaffSession, requirePermission('automations.manage'), validateOrigin],
+  fastify.post("/automations/:id/activate", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("automations.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const automation = await automationsService.activateAutomation(id, req.user!.id);
+        const automation = await automationsService.activateAutomation(
+          id,
+          req.user!.id,
+        );
         return reply.status(200).send({ automation });
       } catch (err) {
-        if (err instanceof AutomationDomainError) return sendError(reply, err.code, err.message, req.id, 400);
+        if (err instanceof AutomationDomainError)
+          return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
     },
   });
 
-  fastify.post('/automations/:id/deactivate', {
-    preHandler: [requireStaffSession, requirePermission('automations.manage'), validateOrigin],
+  fastify.post("/automations/:id/deactivate", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("automations.manage"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const automation = await automationsService.deactivateAutomation(id, req.user!.id);
+        const automation = await automationsService.deactivateAutomation(
+          id,
+          req.user!.id,
+        );
         return reply.status(200).send({ automation });
       } catch (err) {
-        if (err instanceof AutomationDomainError) return sendError(reply, err.code, err.message, req.id, 404);
+        if (err instanceof AutomationDomainError)
+          return sendError(reply, err.code, err.message, req.id, 404);
         throw err;
       }
     },
   });
 
-  fastify.post('/automations/:id/run', {
-    preHandler: [requireStaffSession, requirePermission('automations.run'), validateOrigin],
+  fastify.post("/automations/:id/run", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("automations.run"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         const run = await automationsService.manualRun(id, req.user!.id);
         return reply.status(201).send({ run });
       } catch (err) {
-        if (err instanceof AutomationDomainError) return sendError(reply, err.code, err.message, req.id, 400);
+        if (err instanceof AutomationDomainError)
+          return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
     },
   });
 
-  fastify.get('/automation-runs', {
-    preHandler: [requireStaffSession, requirePermission('automations.read')],
+  fastify.get("/automation-runs", {
+    preHandler: [requireStaffSession, requirePermission("automations.read")],
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as AutomationRunListQuery;
-      const params: { automationId?: string; status?: string; limit: number; offset: number } = {
+      const params: {
+        automationId?: string;
+        status?: string;
+        limit: number;
+        offset: number;
+      } = {
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
       };
@@ -218,8 +320,8 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
     },
   });
 
-  fastify.get('/automation-runs/:id/steps', {
-    preHandler: [requireStaffSession, requirePermission('automations.read')],
+  fastify.get("/automation-runs/:id/steps", {
+    preHandler: [requireStaffSession, requirePermission("automations.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const steps = await automationsService.getRunSteps(id);

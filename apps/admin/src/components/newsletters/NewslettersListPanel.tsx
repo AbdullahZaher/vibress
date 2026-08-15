@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
-import { AdminNewsletter, createNewsletterApi, archiveNewsletterApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Mail } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  AdminNewsletter,
+  createNewsletterApi,
+  archiveNewsletterApi,
+} from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Mail } from "lucide-react";
 
 interface NewslettersListPanelProps {
   newsletters: AdminNewsletter[];
@@ -13,9 +24,14 @@ interface NewslettersListPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function NewslettersListPanel({ newsletters, onError, onMessage, onChanged }: NewslettersListPanelProps) {
-  const [nlKey, setNlKey] = useState('');
-  const [nlName, setNlName] = useState('');
+export function NewslettersListPanel({
+  newsletters,
+  onError,
+  onMessage,
+  onChanged,
+}: NewslettersListPanelProps) {
+  const [nlKey, setNlKey] = useState("");
+  const [nlName, setNlName] = useState("");
 
   const handleCreateNewsletter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,25 +39,25 @@ export function NewslettersListPanel({ newsletters, onError, onMessage, onChange
       await createNewsletterApi({
         key: nlKey,
         name: nlName,
-        senderName: 'Vibress',
-        senderEmail: 'noreply@vibress.local',
+        senderName: "Vibress",
+        senderEmail: "noreply@vibress.local",
       });
-      setNlKey('');
-      setNlName('');
-      onMessage('Newsletter created');
+      setNlKey("");
+      setNlName("");
+      onMessage("Newsletter created");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleArchiveNewsletter = async (id: string) => {
     try {
       await archiveNewsletterApi(id);
-      onMessage('Newsletter archived');
+      onMessage("Newsletter archived");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -56,14 +72,34 @@ export function NewslettersListPanel({ newsletters, onError, onMessage, onChange
         <CardContent>
           <form onSubmit={handleCreateNewsletter} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Slug / Key</label>
-              <Input required value={nlKey} onChange={(e) => setNlKey(e.target.value)} placeholder="weekly-digest" className="h-8 text-xs font-mono bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Slug / Key
+              </label>
+              <Input
+                required
+                value={nlKey}
+                onChange={(e) => setNlKey(e.target.value)}
+                placeholder="weekly-digest"
+                className="h-8 text-xs font-mono bg-card border-border"
+              />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Newsletter Name</label>
-              <Input required value={nlName} onChange={(e) => setNlName(e.target.value)} placeholder="Weekly Engineering Digest" className="h-8 text-xs bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Newsletter Name
+              </label>
+              <Input
+                required
+                value={nlName}
+                onChange={(e) => setNlName(e.target.value)}
+                placeholder="Weekly Engineering Digest"
+                className="h-8 text-xs bg-card border-border"
+              />
             </div>
-            <Button type="submit" size="sm" className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2">
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+            >
               Create Newsletter
             </Button>
           </form>
@@ -76,23 +112,37 @@ export function NewslettersListPanel({ newsletters, onError, onMessage, onChange
             <TableRow className="border-border">
               <TableHead className="pl-6 text-xs">Newsletter Name</TableHead>
               <TableHead className="text-xs">Slug</TableHead>
-              <TableHead className="text-[10px] text-muted-foreground font-mono">Sender</TableHead>
+              <TableHead className="text-[10px] text-muted-foreground font-mono">
+                Sender
+              </TableHead>
               <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {newsletters.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="h-32 text-center text-xs text-muted-foreground"
+                >
                   No newsletters configured.
                 </TableCell>
               </TableRow>
             ) : (
               newsletters.map((n) => (
-                <TableRow key={n.id} className="hover:bg-muted/40 border-border">
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">{n.name}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{n.key}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground font-mono">{n.senderEmail}</TableCell>
+                <TableRow
+                  key={n.id}
+                  className="hover:bg-muted/40 border-border"
+                >
+                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                    {n.name}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">
+                    {n.key}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono">
+                    {n.senderEmail}
+                  </TableCell>
                   <TableCell className="text-right pr-6">
                     <Button
                       variant="ghost"

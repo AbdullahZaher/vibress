@@ -34,12 +34,12 @@ parseWebhookEvent(payload): Promise<{ id, type, created, data }>
 
 ## Configuration
 
-| Variable | Purpose |
-|---|---|
-| `BILLING_PROVIDER` | provider name (reserved) |
-| `STRIPE_SECRET_KEY` | server secret — never sent to browsers |
-| `STRIPE_PUBLISHABLE_KEY` | optional client credential for Portal |
-| `STRIPE_WEBHOOK_SECRET` | webhook signature verification |
+| Variable                 | Purpose                                |
+| ------------------------ | -------------------------------------- |
+| `BILLING_PROVIDER`       | provider name (reserved)               |
+| `STRIPE_SECRET_KEY`      | server secret — never sent to browsers |
+| `STRIPE_PUBLISHABLE_KEY` | optional client credential for Portal  |
+| `STRIPE_WEBHOOK_SECRET`  | webhook signature verification         |
 
 Secrets are environment configuration. They are never logged, never returned
 by APIs, never stored in audit payloads, and never shown in error messages.

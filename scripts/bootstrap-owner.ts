@@ -1,10 +1,10 @@
-import readline from 'readline';
-import { seedDatabase } from '@vibress/database';
-import { DrizzleUserRepository, UsersService } from '@vibress/users';
-import { DrizzleRoleRepository, RolesService } from '@vibress/roles';
-import { DrizzleAuditRepository, AuditService } from '@vibress/audit';
-import { hashPassword, validatePasswordPolicy } from '@vibress/security';
-import { closeDbPool } from '@vibress/database';
+import readline from "readline";
+import { seedDatabase } from "@vibress/database";
+import { DrizzleUserRepository, UsersService } from "@vibress/users";
+import { DrizzleRoleRepository, RolesService } from "@vibress/roles";
+import { DrizzleAuditRepository, AuditService } from "@vibress/audit";
+import { hashPassword, validatePasswordPolicy } from "@vibress/security";
+import { closeDbPool } from "@vibress/database";
 
 async function promptInput(question: string, hidden = false): Promise<string> {
   return new Promise((resolve) => {
@@ -16,23 +16,23 @@ async function promptInput(question: string, hidden = false): Promise<string> {
     if (hidden) {
       // Simple hidden terminal input
       process.stdout.write(question);
-      let input = '';
+      let input = "";
       process.stdin.setRawMode?.(true);
       process.stdin.resume();
 
       const onData = (char: Buffer) => {
-        const str = char.toString('utf8');
-        if (str === '\n' || str === '\r' || str === '\u0004') {
+        const str = char.toString("utf8");
+        if (str === "\n" || str === "\r" || str === "\u0004") {
           process.stdin.setRawMode?.(false);
           process.stdin.pause();
-          process.stdin.removeListener('data', onData);
-          process.stdout.write('\n');
+          process.stdin.removeListener("data", onData);
+          process.stdout.write("\n");
           rl.close();
           resolve(input);
-        } else if (str === '\u0003') {
+        } else if (str === "\u0003") {
           // Ctrl+C
           process.exit(1);
-        } else if (str === '\b' || str === '\x7f') {
+        } else if (str === "\b" || str === "\x7f") {
           if (input.length > 0) {
             input = input.slice(0, -1);
           }
@@ -41,7 +41,7 @@ async function promptInput(question: string, hidden = false): Promise<string> {
         }
       };
 
-      process.stdin.on('data', onData);
+      process.stdin.on("data", onData);
     } else {
       rl.question(question, (answer) => {
         rl.close();
@@ -56,7 +56,7 @@ export async function bootstrapOwner(options?: {
   name?: string;
   password?: string;
 }): Promise<void> {
-  console.log('Ensuring database roles and permissions are seeded...');
+  console.log("Ensuring database roles and permissions are seeded...");
   await seedDatabase({ skipDevUsers: true });
 
   const userRepo = new DrizzleUserRepository();
@@ -69,8 +69,10 @@ export async function bootstrapOwner(options?: {
 
   const activeOwners = await userRepo.countActiveOwners();
   if (activeOwners > 0) {
-    console.error('ERROR: Owner already exists. Initial owner bootstrap permitted only when zero active owners exist.');
-    throw new Error('OWNER_ALREADY_EXISTS');
+    console.error(
+      "ERROR: Owner already exists. Initial owner bootstrap permitted only when zero active owners exist.",
+    );
+    throw new Error("OWNER_ALREADY_EXISTS");
   }
 
   let email = options?.email || process.env.OWNER_EMAIL;
@@ -78,23 +80,27 @@ export async function bootstrapOwner(options?: {
   let password = options?.password || process.env.OWNER_PASSWORD;
 
   if (!email) {
-    email = await promptInput('Enter Owner Email: ');
+    email = await promptInput("Enter Owner Email: ");
   }
   if (!name) {
-    name = await promptInput('Enter Owner Name: ');
+    name = await promptInput("Enter Owner Name: ");
   }
   if (!password) {
-    password = await promptInput('Enter Owner Password: ', true);
+    password = await promptInput("Enter Owner Password: ", true);
   }
 
   if (!email || !name || !password) {
-    console.error('ERROR: Email, Name, and Password are required for owner bootstrap.');
-    throw new Error('MISSING_REQUIRED_FIELDS');
+    console.error(
+      "ERROR: Email, Name, and Password are required for owner bootstrap.",
+    );
+    throw new Error("MISSING_REQUIRED_FIELDS");
   }
 
   const passValidation = validatePasswordPolicy(password);
   if (!passValidation.valid) {
-    console.error(`ERROR: Password policy check failed: ${passValidation.reason}`);
+    console.error(
+      `ERROR: Password policy check failed: ${passValidation.reason}`,
+    );
     throw new Error(passValidation.reason);
   }
 
@@ -104,20 +110,20 @@ export async function bootstrapOwner(options?: {
     email,
     name,
     passwordHash,
-    status: 'active',
+    status: "active",
   });
 
-  const ownerRole = await rolesService.findByKey('owner');
+  const ownerRole = await rolesService.findByKey("owner");
   if (!ownerRole) {
-    throw new Error('Owner role not found in system roles.');
+    throw new Error("Owner role not found in system roles.");
   }
 
   await rolesService.assignRoleToUser(user.id, ownerRole.id);
 
   await auditService.record({
     actorUserId: user.id,
-    action: 'user.owner.bootstrapped',
-    targetType: 'user',
+    action: "user.owner.bootstrapped",
+    targetType: "user",
     targetId: user.id,
     metadata: { email: user.email },
   });
@@ -129,7 +135,7 @@ if (require.main === module) {
   bootstrapOwner()
     .then(() => closeDbPool())
     .catch(async (err) => {
-      console.error('Bootstrap owner failed:', err.message || err);
+      console.error("Bootstrap owner failed:", err.message || err);
       await closeDbPool();
       process.exit(1);
     });

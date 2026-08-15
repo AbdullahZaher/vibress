@@ -1,8 +1,15 @@
-import { AdminCommentReport, resolveCommentReportApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import { AdminCommentReport, resolveCommentReportApi } from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
 
 interface ReportsPanelProps {
   reports: AdminCommentReport[];
@@ -10,13 +17,17 @@ interface ReportsPanelProps {
   onChanged: () => Promise<void>;
 }
 
-export function ReportsPanel({ reports, onError, onChanged }: ReportsPanelProps) {
+export function ReportsPanel({
+  reports,
+  onError,
+  onChanged,
+}: ReportsPanelProps) {
   const handleResolveReport = async (id: string) => {
     try {
-      await resolveCommentReportApi(id, 'resolved');
+      await resolveCommentReportApi(id, "resolved");
       await onChanged();
     } catch (e: unknown) {
-      onError(e instanceof Error ? e.message : 'Failed');
+      onError(e instanceof Error ? e.message : "Failed");
     }
   };
 
@@ -34,22 +45,32 @@ export function ReportsPanel({ reports, onError, onChanged }: ReportsPanelProps)
         <TableBody>
           {reports.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-xs text-muted-foreground">
+              <TableCell
+                colSpan={4}
+                className="h-32 text-center text-xs text-muted-foreground"
+              >
                 No pending comment reports.
               </TableCell>
             </TableRow>
           ) : (
             reports.map((r) => (
               <TableRow key={r.id} className="hover:bg-muted/40 border-border">
-                <TableCell className="pl-6 font-semibold text-xs text-foreground">{r.reason}</TableCell>
-                <TableCell className="text-xs font-mono text-muted-foreground">{r.commentId}</TableCell>
+                <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  {r.reason}
+                </TableCell>
+                <TableCell className="text-xs font-mono text-muted-foreground">
+                  {r.commentId}
+                </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                  >
                     {r.status}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right pr-6">
-                  {r.status === 'open' && (
+                  {r.status === "open" && (
                     <Button
                       variant="outline"
                       size="sm"

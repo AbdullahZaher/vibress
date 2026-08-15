@@ -1,8 +1,14 @@
-import { getDb, members, MemberRow } from '@vibress/database';
-import { eq, and, isNull, ilike, count, desc, or } from 'drizzle-orm';
-import { MemberRepository } from '../domain/repository';
-import { Member, CreateMemberData, UpdateMemberData, ListMembersFilter, MemberStatus } from '../domain/member';
-import crypto from 'node:crypto';
+import { getDb, members, MemberRow } from "@vibress/database";
+import { eq, and, isNull, ilike, count, desc, or } from "drizzle-orm";
+import { MemberRepository } from "../domain/repository";
+import {
+  Member,
+  CreateMemberData,
+  UpdateMemberData,
+  ListMembersFilter,
+  MemberStatus,
+} from "../domain/member";
+import crypto from "node:crypto";
 
 export class DrizzleMemberRepository implements MemberRepository {
   async create(data: CreateMemberData): Promise<Member> {
@@ -17,20 +23,24 @@ export class DrizzleMemberRepository implements MemberRepository {
         email: data.email,
         emailNormalized: data.emailNormalized,
         name: data.name || null,
-        status: data.status || 'active',
+        status: data.status || "active",
         emailVerifiedAt: data.emailVerifiedAt || null,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
 
-    if (!row) throw new Error('Failed to insert member');
+    if (!row) throw new Error("Failed to insert member");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Member | null> {
     const db = getDb();
-    const rows = await db.select().from(members).where(eq(members.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -38,7 +48,11 @@ export class DrizzleMemberRepository implements MemberRepository {
 
   async findByEmailNormalized(emailNormalized: string): Promise<Member | null> {
     const db = getDb();
-    const rows = await db.select().from(members).where(eq(members.emailNormalized, emailNormalized)).limit(1);
+    const rows = await db
+      .select()
+      .from(members)
+      .where(eq(members.emailNormalized, emailNormalized))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -50,16 +64,25 @@ export class DrizzleMemberRepository implements MemberRepository {
 
     if (data.name !== undefined) updatePayload.name = data.name;
     if (data.status !== undefined) updatePayload.status = data.status;
-    if (data.emailVerifiedAt !== undefined) updatePayload.emailVerifiedAt = data.emailVerifiedAt;
-    if (data.lastSeenAt !== undefined) updatePayload.lastSeenAt = data.lastSeenAt;
-    if (data.disabledAt !== undefined) updatePayload.disabledAt = data.disabledAt;
+    if (data.emailVerifiedAt !== undefined)
+      updatePayload.emailVerifiedAt = data.emailVerifiedAt;
+    if (data.lastSeenAt !== undefined)
+      updatePayload.lastSeenAt = data.lastSeenAt;
+    if (data.disabledAt !== undefined)
+      updatePayload.disabledAt = data.disabledAt;
 
-    const [row] = await db.update(members).set(updatePayload).where(eq(members.id, id)).returning();
+    const [row] = await db
+      .update(members)
+      .set(updatePayload)
+      .where(eq(members.id, id))
+      .returning();
     if (!row) throw new Error(`Member not found for update: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async list(filter: ListMembersFilter = {}): Promise<{ members: Member[]; total: number }> {
+  async list(
+    filter: ListMembersFilter = {},
+  ): Promise<{ members: Member[]; total: number }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
@@ -70,7 +93,13 @@ export class DrizzleMemberRepository implements MemberRepository {
     }
     if (filter.search && filter.search.trim()) {
       const search = `%${filter.search.trim()}%`;
-      conditions.push(or(ilike(members.email, search), ilike(members.emailNormalized, search), ilike(members.name, search)));
+      conditions.push(
+        or(
+          ilike(members.email, search),
+          ilike(members.emailNormalized, search),
+          ilike(members.name, search),
+        ),
+      );
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -96,15 +125,15 @@ export class DrizzleMemberRepository implements MemberRepository {
 
   async countActiveSessions(memberId: string): Promise<number> {
     const db = getDb();
-    const { memberSessions } = await import('@vibress/database');
+    const { memberSessions } = await import("@vibress/database");
     const res = await db
       .select({ totalCount: count() })
       .from(memberSessions)
       .where(
         and(
           eq(memberSessions.memberId, memberId),
-          isNull(memberSessions.revokedAt)
-        )
+          isNull(memberSessions.revokedAt),
+        ),
       );
     return Number(res[0]?.totalCount || 0);
   }

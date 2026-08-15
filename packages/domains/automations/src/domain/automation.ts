@@ -1,28 +1,35 @@
-export type AutomationStatus = 'draft' | 'active' | 'inactive' | 'error';
+export type AutomationStatus = "draft" | "active" | "inactive" | "error";
 
-export type AutomationRunStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+export type AutomationRunStatus =
+  "pending" | "running" | "waiting" | "completed" | "failed" | "cancelled";
 
-export type AutomationStepStatus = 'pending' | 'executing' | 'completed' | 'failed' | 'waiting' | 'skipped';
+export type AutomationStepStatus =
+  "pending" | "executing" | "completed" | "failed" | "waiting" | "skipped";
 
 export const ALLOWED_TRIGGERS = [
-  'member.created',
-  'subscription.activated',
-  'subscription.cancelled',
-  'newsletter.sent',
-  'comment.created',
-  'manual',
+  "member.created",
+  "subscription.activated",
+  "subscription.cancelled",
+  "newsletter.sent",
+  "comment.created",
+  "manual",
 ] as const;
 
 export type AllowedTrigger = (typeof ALLOWED_TRIGGERS)[number];
 
 export interface AutomationCondition {
   field: string;
-  op: 'equals' | 'not_equals' | 'exists';
+  op: "equals" | "not_equals" | "exists";
   value?: unknown;
 }
 
 export interface AutomationAction {
-  type: 'email' | 'webhook' | 'newsletter_subscribe' | 'newsletter_unsubscribe' | 'wait';
+  type:
+    | "email"
+    | "webhook"
+    | "newsletter_subscribe"
+    | "newsletter_unsubscribe"
+    | "wait";
   config: Record<string, unknown>;
 }
 
@@ -45,7 +52,10 @@ export interface AutomationVersion {
   id: string;
   automationId: string;
   version: number;
-  definition: { conditions: AutomationCondition[]; actions: AutomationAction[] };
+  definition: {
+    conditions: AutomationCondition[];
+    actions: AutomationAction[];
+  };
   createdAt: Date;
 }
 

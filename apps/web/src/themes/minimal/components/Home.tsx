@@ -1,22 +1,32 @@
-import React from 'react';
-import { ThemeHomeProps, themeSetting } from '../../types';
-import { ThemeLayout } from './Layout';
-import { t } from '../../../lib/i18n';
+import React from "react";
+import { ThemeHomeProps, themeSetting } from "../../types";
+import { ThemeLayout } from "./Layout";
+import { t } from "../../../lib/i18n";
 
 export async function Home(props: ThemeHomeProps) {
-  const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
-  const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
-  const dateLocale = props.site.locale || 'en';
+  const showPublicationDate = themeSetting(
+    props.settings,
+    "showPublicationDate",
+    true,
+  ) as boolean;
+  const showAuthor = themeSetting(
+    props.settings,
+    "showAuthor",
+    true,
+  ) as boolean;
+  const dateLocale = props.site.locale || "en";
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
       <main className="vb-main">
         <section className="vb-container vb-outer">
           <div className="vb-container-inner vb-inner">
-            <h2 className="vb-container-title">{t('home.latestWriting')}</h2>
+            <h2 className="vb-container-title">{t("home.latestWriting")}</h2>
 
             {props.posts.length === 0 ? (
-              <p style={{ opacity: 0.6, padding: '3rem 0' }}>{t('home.emptyShort')}</p>
+              <p style={{ opacity: 0.6, padding: "3rem 0" }}>
+                {t("home.emptyShort")}
+              </p>
             ) : (
               <div className="vb-feed">
                 {props.posts.map((post) => (
@@ -33,23 +43,33 @@ export async function Home(props: ThemeHomeProps) {
                       )}
                       <div className="vb-card-wrapper">
                         {post.tags?.[0] && (
-                          <span className="vb-article-tag" style={{ marginBottom: '0.4rem' }}>
+                          <span
+                            className="vb-article-tag"
+                            style={{ marginBottom: "0.4rem" }}
+                          >
                             {post.tags[0].name}
                           </span>
                         )}
                         <h2 className="vb-card-title">{post.title}</h2>
-                        {post.excerpt && <p className="vb-card-excerpt">{post.excerpt}</p>}
+                        {post.excerpt && (
+                          <p className="vb-card-excerpt">{post.excerpt}</p>
+                        )}
                         <footer className="vb-card-meta">
                           {showAuthor && post.primaryAuthor && (
-                            <span style={{ marginRight: '0.75rem' }}>{post.primaryAuthor.name}</span>
+                            <span style={{ marginRight: "0.75rem" }}>
+                              {post.primaryAuthor.name}
+                            </span>
                           )}
                           {showPublicationDate && (
                             <time dateTime={post.publishedAt}>
-                              {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+                              {new Date(post.publishedAt).toLocaleDateString(
+                                dateLocale,
+                                {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                },
+                              )}
                             </time>
                           )}
                         </footer>
@@ -63,9 +83,13 @@ export async function Home(props: ThemeHomeProps) {
             {props.pagination.pages > 1 && (
               <div className="vb-more">
                 {props.pagination.page < props.pagination.pages ? (
-                  <a href={`/?page=${props.pagination.page + 1}`}>{t('home.olderArticles')} &rarr;</a>
+                  <a href={`/?page=${props.pagination.page + 1}`}>
+                    {t("home.olderArticles")} &rarr;
+                  </a>
                 ) : (
-                  <a href={`/?page=${props.pagination.page - 1}`}>&larr; {t('home.newerArticles')}</a>
+                  <a href={`/?page=${props.pagination.page - 1}`}>
+                    &larr; {t("home.newerArticles")}
+                  </a>
                 )}
               </div>
             )}

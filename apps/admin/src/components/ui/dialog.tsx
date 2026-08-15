@@ -1,7 +1,7 @@
-import * as React from 'react';
-import { createPortal } from 'react-dom';
-import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
+import * as React from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
 export function Dialog({
   isOpen,
@@ -21,25 +21,25 @@ export function Dialog({
   React.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === 'undefined') return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in-0">
       <div
         className={cn(
-          'relative w-full max-w-lg rounded-xl border bg-background p-6 shadow-2xl animate-in zoom-in-95',
-          className
+          "relative w-full max-w-lg rounded-xl border bg-background p-6 shadow-2xl animate-in zoom-in-95",
+          className,
         )}
       >
         <button
@@ -52,14 +52,20 @@ export function Dialog({
 
         {(title || description) && (
           <div className="flex flex-col space-y-1.5 text-center sm:text-left mb-4">
-            {title && <h2 className="text-lg font-semibold leading-none tracking-tight">{title}</h2>}
-            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+            {title && (
+              <h2 className="text-lg font-semibold leading-none tracking-tight">
+                {title}
+              </h2>
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground">{description}</p>
+            )}
           </div>
         )}
 
         <div>{children}</div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

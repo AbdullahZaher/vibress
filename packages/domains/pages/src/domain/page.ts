@@ -3,13 +3,13 @@ export class PageDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'PageDomainError';
+    this.name = "PageDomainError";
     this.code = code;
   }
 }
 
-export type PageStatus = 'draft' | 'scheduled' | 'published';
-export type PageVisibility = 'public' | 'members' | 'paid';
+export type PageStatus = "draft" | "scheduled" | "published";
+export type PageVisibility = "public" | "members" | "paid";
 
 export interface Page {
   id: string;

@@ -1,24 +1,34 @@
-import { ThemeTagArchiveProps, themeSetting } from '../../types';
-import { ThemeLayout } from './Layout';
-import { t } from '../../../lib/i18n';
+import { ThemeTagArchiveProps, themeSetting } from "../../types";
+import { ThemeLayout } from "./Layout";
+import { t } from "../../../lib/i18n";
 
 export async function TagArchive(props: ThemeTagArchiveProps) {
   const { tag, posts, pagination } = props;
-  const showAuthor = themeSetting(props.settings, 'showAuthor', true) as boolean;
-  const showPublicationDate = themeSetting(props.settings, 'showPublicationDate', true) as boolean;
-  const dateLocale = props.site.locale || 'en';
+  const showAuthor = themeSetting(
+    props.settings,
+    "showAuthor",
+    true,
+  ) as boolean;
+  const showPublicationDate = themeSetting(
+    props.settings,
+    "showPublicationDate",
+    true,
+  ) as boolean;
+  const dateLocale = props.site.locale || "en";
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
       <main>
         <header className="article-header">
           <h1 className="article-title">#{tag.name}</h1>
-          {tag.description && <p style={{ color: '#64748b' }}>{tag.description}</p>}
+          {tag.description && (
+            <p style={{ color: "#64748b" }}>{tag.description}</p>
+          )}
         </header>
 
         {posts.length === 0 ? (
-          <div style={{ padding: '32px 0', color: '#64748b' }}>
-            <p>{t('home.tagEmpty')}</p>
+          <div style={{ padding: "32px 0", color: "#64748b" }}>
+            <p>{t("home.tagEmpty")}</p>
           </div>
         ) : (
           <div className="posts-list">
@@ -30,43 +40,59 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                 <div className="article-meta">
                   {showPublicationDate && (
                     <span>
-                      {new Date(post.publishedAt).toLocaleDateString(dateLocale, {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
+                      {new Date(post.publishedAt).toLocaleDateString(
+                        dateLocale,
+                        {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        },
+                      )}
                     </span>
                   )}
                   {showAuthor && post.primaryAuthor && (
                     <span>
-                      {t('archive.by')}{' '}
+                      {t("archive.by")}{" "}
                       <a href={`/authors/${post.primaryAuthor.slug}`}>
                         {post.primaryAuthor.name}
                       </a>
                     </span>
                   )}
                 </div>
-                {post.excerpt && <p className="post-card-excerpt">{post.excerpt}</p>}
+                {post.excerpt && (
+                  <p className="post-card-excerpt">{post.excerpt}</p>
+                )}
               </article>
             ))}
           </div>
         )}
 
         {pagination.pages > 1 && (
-          <nav className="pagination" aria-label={t('home.pageInfo', { page: pagination.page, pages: pagination.pages })}>
+          <nav
+            className="pagination"
+            aria-label={t("home.pageInfo", {
+              page: pagination.page,
+              pages: pagination.pages,
+            })}
+          >
             {pagination.page > 1 ? (
               <a
                 href={`/tags/${tag.slug}?page=${pagination.page - 1}`}
                 className="pagination-btn"
               >
-                ← {t('archive.previous')}
+                ← {t("archive.previous")}
               </a>
             ) : (
-              <span className="pagination-btn disabled">← {t('archive.previous')}</span>
+              <span className="pagination-btn disabled">
+                ← {t("archive.previous")}
+              </span>
             )}
 
-            <span style={{ fontSize: '14px', color: '#64748b' }}>
-              {t('home.pageInfo', { page: pagination.page, pages: pagination.pages })}
+            <span style={{ fontSize: "14px", color: "#64748b" }}>
+              {t("home.pageInfo", {
+                page: pagination.page,
+                pages: pagination.pages,
+              })}
             </span>
 
             {pagination.page < pagination.pages ? (
@@ -74,10 +100,12 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                 href={`/tags/${tag.slug}?page=${pagination.page + 1}`}
                 className="pagination-btn"
               >
-                {t('archive.next')} →
+                {t("archive.next")} →
               </a>
             ) : (
-              <span className="pagination-btn disabled">{t('archive.next')} →</span>
+              <span className="pagination-btn disabled">
+                {t("archive.next")} →
+              </span>
             )}
           </nav>
         )}

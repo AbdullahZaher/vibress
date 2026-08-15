@@ -49,8 +49,8 @@ export interface UploadSession {
   originalFilename: string;
   declaredMime: string;
   expectedSize: number;
-  assetType: 'image' | 'video' | 'audio' | 'file';
-  state: 'pending' | 'uploaded' | 'verified' | 'failed';
+  assetType: "image" | "video" | "audio" | "file";
+  state: "pending" | "uploaded" | "verified" | "failed";
   expiresAt: Date;
   multipartUploadId?: string | null;
   createdAt: Date;

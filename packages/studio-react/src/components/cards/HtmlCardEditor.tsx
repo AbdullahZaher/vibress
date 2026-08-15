@@ -1,9 +1,8 @@
-import { useRef, useEffect } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
-import { NodeKey, $getNodeByKey } from 'lexical';
-import { HtmlCardData, StudioCardNode } from '@vibress/studio-cards';
-
+import { useRef, useEffect } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
+import { NodeKey, $getNodeByKey } from "lexical";
+import { HtmlCardData, StudioCardNode } from "@vibress/studio-cards";
 
 interface Props {
   nodeKey: NodeKey;
@@ -12,10 +11,11 @@ interface Props {
 
 export function HtmlCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
-  const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
+  const [isSelected, setSelected, clearSelection] =
+    useLexicalNodeSelection(nodeKey);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const html = cardData.html || '';
+  const html = cardData.html || "";
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -33,8 +33,9 @@ export function HtmlCardEditor({ nodeKey, cardData }: Props) {
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height =
+        textareaRef.current.scrollHeight + "px";
     }
   }, [html]);
 
@@ -49,12 +50,14 @@ export function HtmlCardEditor({ nodeKey, cardData }: Props) {
         }
       }}
       style={{
-        outline: isSelected ? '2px solid #6366f1' : 'none',
-        transition: 'outline 0.1s ease',
+        outline: isSelected ? "2px solid #6366f1" : "none",
+        transition: "outline 0.1s ease",
       }}
     >
       <div className="bg-muted/60 dark:bg-white/[0.04] border-b border-border/60 dark:border-white/10 px-3 py-1.5 flex items-center justify-between select-none">
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">HTML</span>
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          HTML
+        </span>
       </div>
       <div className="p-3">
         {isSelected ? (
@@ -64,7 +67,7 @@ export function HtmlCardEditor({ nodeKey, cardData }: Props) {
             onChange={handleTextChange}
             placeholder="Type your HTML here..."
             className="w-full font-mono text-sm bg-transparent outline-none resize-none text-blue-800"
-            rows={Math.max(3, html.split('\n').length)}
+            rows={Math.max(3, html.split("\n").length)}
             onFocus={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
             onKeyUp={(e) => e.stopPropagation()}
@@ -72,7 +75,9 @@ export function HtmlCardEditor({ nodeKey, cardData }: Props) {
           />
         ) : (
           <div className="font-mono text-sm text-blue-800 whitespace-pre-wrap">
-            {html || <span className="text-gray-400 italic">Empty HTML block</span>}
+            {html || (
+              <span className="text-gray-400 italic">Empty HTML block</span>
+            )}
           </div>
         )}
       </div>

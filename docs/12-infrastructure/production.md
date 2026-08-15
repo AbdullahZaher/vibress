@@ -36,13 +36,13 @@ postgres/redis images run their built-in non-root users.
 
 ## Images
 
-| Dockerfile        | Builds                                  | Runtime                      |
-|-------------------|-----------------------------------------|------------------------------|
-| `docker/api.Dockerfile`    | @vibress/api via tsc       | node:24-alpine, `pnpm run start` |
-| `docker/worker.Dockerfile` | @vibress/worker via tsc    | node:24-alpine, `pnpm run start` |
-| `docker/web.Dockerfile`    | Next standalone (`output: 'standalone'`) | node:24-alpine, `node apps/web/server.js` |
-| `docker/spa.Dockerfile`    | `--build-arg APP=admin\|portal` (Vite)   | nginx-unprivileged |
-| `docker/gateway.Dockerfile`| copies `infrastructure/nginx/nginx.prod.conf` | nginx-unprivileged |
+| Dockerfile                  | Builds                                        | Runtime                                   |
+| --------------------------- | --------------------------------------------- | ----------------------------------------- |
+| `docker/api.Dockerfile`     | @vibress/api via tsc                          | node:24-alpine, `pnpm run start`          |
+| `docker/worker.Dockerfile`  | @vibress/worker via tsc                       | node:24-alpine, `pnpm run start`          |
+| `docker/web.Dockerfile`     | Next standalone (`output: 'standalone'`)      | node:24-alpine, `node apps/web/server.js` |
+| `docker/spa.Dockerfile`     | `--build-arg APP=admin\|portal` (Vite)        | nginx-unprivileged                        |
+| `docker/gateway.Dockerfile` | copies `infrastructure/nginx/nginx.prod.conf` | nginx-unprivileged                        |
 
 `start` scripts run `tsx src/main.ts`: the workspace packages are consumed
 as TypeScript sources (`main: src/index.ts`), which Node's native loader
@@ -80,7 +80,7 @@ Rules:
   placeholder. The value becomes inert once installed, but must remain present
   for production startup.
 - After installation the setup surface is permanently locked: `POST
-  /api/setup/v1/complete` returns `409 SETUP_ALREADY_COMPLETED` even with the
+/api/setup/v1/complete` returns `409 SETUP_ALREADY_COMPLETED` even with the
   original token, and `/admin/setup` redirects away.
 - The setup secret travels only in the `X-Vibress-Setup-Token` header; it is
   never stored in the database, never sent in a request body, and never logged.
@@ -137,7 +137,7 @@ manager at deploy time; it is gitignored and required by compose.
 Back up independently:
 
 1. PostgreSQL (e.g. `pg_dump` from the `backend` network: `docker compose
-   -f compose.prod.yml exec -T postgres pg_dump -U vibress`; see
+-f compose.prod.yml exec -T postgres pg_dump -U vibress`; see
    `docs/12-infrastructure/backup-restore.md`)
 2. object storage/content volume
 3. encryption master key (`VIBRESS_ENCRYPTION_KEY`)

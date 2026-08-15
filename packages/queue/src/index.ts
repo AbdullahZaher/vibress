@@ -1,24 +1,34 @@
-import { Queue, Worker, Processor, QueueOptions, WorkerOptions, Job } from 'bullmq';
-import { getBullMqRedisConnection } from '@vibress/cache';
-import { getActiveTraceContext, withSpan } from '@vibress/observability';
+import {
+  Queue,
+  Worker,
+  Processor,
+  QueueOptions,
+  WorkerOptions,
+  Job,
+} from "bullmq";
+import { getBullMqRedisConnection } from "@vibress/cache";
+import { getActiveTraceContext, withSpan } from "@vibress/observability";
 
 export { Queue, Worker, Job, getBullMqRedisConnection };
 
-function buildTraceparent(traceCtx: { traceId: string; spanId: string }): string {
+function buildTraceparent(traceCtx: {
+  traceId: string;
+  spanId: string;
+}): string {
   return `00-${traceCtx.traceId}-${traceCtx.spanId}-01`;
 }
 export type { Processor, QueueOptions, WorkerOptions };
 
 export const QUEUE_NAMES = {
-  EMAIL_DELIVERY: 'vibress-email-delivery',
-  WEBHOOK_DELIVERY: 'vibress-webhook-delivery',
-  SEARCH: 'vibress-search',
-  ANALYTICS: 'vibress-analytics',
-  AUTOMATIONS_RUN: 'vibress-automations',
-  AUTOMATIONS_DELAYED: 'vibress-automations-delayed',
+  EMAIL_DELIVERY: "vibress-email-delivery",
+  WEBHOOK_DELIVERY: "vibress-webhook-delivery",
+  SEARCH: "vibress-search",
+  ANALYTICS: "vibress-analytics",
+  AUTOMATIONS_RUN: "vibress-automations",
+  AUTOMATIONS_DELAYED: "vibress-automations-delayed",
 } as const;
 
-export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
+export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
 export interface EmailDeliveryJob {
   sendId: string;
@@ -33,7 +43,7 @@ export interface WebhookDeliveryJob {
 }
 
 export interface SearchQueueJob {
-  op: 'upsert' | 'remove' | 'rebuild';
+  op: "upsert" | "remove" | "rebuild";
   doc?: {
     entityType: string;
     entityId: string;
@@ -82,7 +92,7 @@ export interface AutomationDelayedQueueJob {
 export const QUEUE_DEFAULTS = {
   EMAIL: {
     attempts: 5,
-    backoff: { type: 'exponential' as const, delay: 5000 },
+    backoff: { type: "exponential" as const, delay: 5000 },
     removeOnComplete: 500,
     removeOnFail: 1000,
   },
@@ -95,7 +105,7 @@ export const QUEUE_DEFAULTS = {
 
 export function createQueue<T = unknown>(
   queueName: string,
-  defaultJobOptions?: QueueOptions['defaultJobOptions']
+  defaultJobOptions?: QueueOptions["defaultJobOptions"],
 ): Queue<T> {
   return new Queue<T>(queueName, {
     connection: getBullMqRedisConnection(),
@@ -106,7 +116,7 @@ export function createQueue<T = unknown>(
 export function createWorker<T = unknown>(
   queueName: string,
   processor: Processor<T>,
-  options?: Partial<WorkerOptions>
+  options?: Partial<WorkerOptions>,
 ): Worker<T> {
   return new Worker<T>(queueName, processor, {
     connection: getBullMqRedisConnection(),
@@ -125,18 +135,25 @@ export async function enqueueTraced<T extends { traceparent?: string }>(
   queue: Queue<T>,
   jobName: string,
   payload: T,
-  options?: QueueOptions['defaultJobOptions'] & { jobId?: string }
+  options?: QueueOptions["defaultJobOptions"] & { jobId?: string },
 ): Promise<unknown> {
   const traceCtx = getActiveTraceContext();
-  const data = (traceCtx ? { ...payload, traceparent: buildTraceparent(traceCtx) } : payload) as T;
+  const data = (
+    traceCtx ? { ...payload, traceparent: buildTraceparent(traceCtx) } : payload
+  ) as T;
   return withSpan(
     `queue.enqueue.${jobName}`,
-    () => queue.add(jobName as never, data as Parameters<Queue<T>['add']>[1], options),
+    () =>
+      queue.add(
+        jobName as never,
+        data as Parameters<Queue<T>["add"]>[1],
+        options,
+      ),
     {
-      'messaging.system': 'bullmq',
-      'messaging.operation': 'enqueue',
-      'messaging.destination': queue.name,
-      ...(traceCtx ? { 'vibress.trace_id': traceCtx.traceId } : {}),
-    }
+      "messaging.system": "bullmq",
+      "messaging.operation": "enqueue",
+      "messaging.destination": queue.name,
+      ...(traceCtx ? { "vibress.trace_id": traceCtx.traceId } : {}),
+    },
   );
 }

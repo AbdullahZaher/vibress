@@ -1,15 +1,15 @@
-import { MediaService } from '@vibress/media';
-import { Post } from '@vibress/posts';
-import { Page } from '@vibress/pages';
-import { Tag } from '@vibress/tags';
-import { Author } from '@vibress/authors';
+import { MediaService } from "@vibress/media";
+import { Post } from "@vibress/posts";
+import { Page } from "@vibress/pages";
+import { Tag } from "@vibress/tags";
+import { Author } from "@vibress/authors";
 import {
   renderStudioDocumentToHtml,
   renderStudioDocumentToPlainText,
   extractTableOfContentsFromDocument,
-} from '@vibress/studio-renderer';
-import { normalizeStudioDocument } from '@vibress/studio-core';
-import { slugify } from '@vibress/utils';
+} from "@vibress/studio-renderer";
+import { normalizeStudioDocument } from "@vibress/studio-core";
+import { slugify } from "@vibress/utils";
 import {
   PublicAuthorDto,
   PublicTagDto,
@@ -17,28 +17,32 @@ import {
   PublicPostSummaryDto,
   PublicPostDetailDto,
   PublicPageDetailDto,
-} from '@vibress/api-contracts';
-import { getConfig } from '@vibress/config';
+} from "@vibress/api-contracts";
+import { getConfig } from "@vibress/config";
 
 export function getSiteUrl(): string {
   const envUrl = getConfig().site.url;
   try {
     const parsed = new URL(envUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return 'http://localhost:7777';
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "http://localhost:7777";
     }
     return `${parsed.protocol}//${parsed.host}`;
   } catch {
-    return 'http://localhost:7777';
+    return "http://localhost:7777";
   }
 }
 
 export async function resolveDocumentMedia(
   docInput: unknown,
-  mediaService: MediaService
+  mediaService: MediaService,
 ): Promise<Record<string, unknown>> {
-  if (!docInput || typeof docInput !== 'object') {
-    return { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } };
+  if (!docInput || typeof docInput !== "object") {
+    return {
+      schema: "vibress-studio",
+      version: 1,
+      root: { type: "root", children: [] },
+    };
   }
 
   // Canonicalization first: legacy react-studio-card nodes become
@@ -46,25 +50,26 @@ export async function resolveDocumentMedia(
   // canonical representation (no permanent dual branches).
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
   const canonical = normalizeStudioDocument(doc) as Record<string, unknown>;
-  const root = canonical.root as { type?: string; children?: unknown[] } | undefined;
+  const root = canonical.root as
+    { type?: string; children?: unknown[] } | undefined;
   if (!root || !Array.isArray(root.children)) {
     return canonical;
   }
 
   async function processNode(node: unknown): Promise<void> {
-    if (!node || typeof node !== 'object') return;
+    if (!node || typeof node !== "object") return;
     const n = node as Record<string, unknown>;
 
-    if (n.type === 'studio-card' && n.cardData) {
+    if (n.type === "studio-card" && n.cardData) {
       const data = n.cardData as Record<string, unknown>;
 
       // Handle singular assetId (image, video, audio, file)
-      if (typeof data.assetId === 'string' && data.assetId.trim()) {
+      if (typeof data.assetId === "string" && data.assetId.trim()) {
         try {
           const asset = await mediaService.getMediaById(data.assetId.trim());
           if (asset) {
             data.src = await mediaService.getMediaUrl(asset);
-            if (n.cardType === 'image') {
+            if (n.cardType === "image") {
               if (asset.width) data.width = asset.width;
               if (asset.height) data.height = asset.height;
               if (asset.displayName && !data.alt) data.alt = asset.displayName;
@@ -79,7 +84,11 @@ export async function resolveDocumentMedia(
       if (Array.isArray(data.images)) {
         for (const imgItem of data.images) {
           const img = imgItem as Record<string, unknown> | null;
-          if (img && typeof img === 'object' && typeof img.assetId === 'string') {
+          if (
+            img &&
+            typeof img === "object" &&
+            typeof img.assetId === "string"
+          ) {
             try {
               const asset = await mediaService.getMediaById(img.assetId.trim());
               if (asset) {
@@ -109,9 +118,10 @@ export async function resolveDocumentMedia(
 }
 
 export function extractFeatureImage(
-  resolvedDoc: Record<string, unknown>
+  resolvedDoc: Record<string, unknown>,
 ): PublicMediaDto | null {
-  const root = resolvedDoc.root as { type?: string; children?: unknown[] } | undefined;
+  const root = resolvedDoc.root as
+    { type?: string; children?: unknown[] } | undefined;
   if (!resolvedDoc || !root || !Array.isArray(root.children)) {
     return null;
   }
@@ -119,20 +129,20 @@ export function extractFeatureImage(
   let found: PublicMediaDto | null = null;
 
   function findImage(node: unknown) {
-    if (found || !node || typeof node !== 'object') return;
+    if (found || !node || typeof node !== "object") return;
     const n = node as Record<string, unknown>;
 
-    if (n.type === 'studio-card' && n.cardType === 'image' && n.cardData) {
+    if (n.type === "studio-card" && n.cardType === "image" && n.cardData) {
       const cardData = n.cardData as Record<string, unknown>;
       const src = cardData.src;
-      if (src && typeof src === 'string') {
+      if (src && typeof src === "string") {
         found = {
-          id: (cardData.assetId as string) || 'embedded-img',
+          id: (cardData.assetId as string) || "embedded-img",
           url: src,
           alt: (cardData.alt as string | null) || null,
-          assetType: 'image',
-          width: typeof cardData.width === 'number' ? cardData.width : null,
-          height: typeof cardData.height === 'number' ? cardData.height : null,
+          assetType: "image",
+          width: typeof cardData.width === "number" ? cardData.width : null,
+          height: typeof cardData.height === "number" ? cardData.height : null,
         };
         return;
       }
@@ -154,22 +164,27 @@ export function extractFeatureImage(
   return found;
 }
 
-export function deriveExcerpt(excerpt: string | null | undefined, docInput: unknown): string {
+export function deriveExcerpt(
+  excerpt: string | null | undefined,
+  docInput: unknown,
+): string {
   if (excerpt && excerpt.trim()) {
     return excerpt.trim();
   }
 
   try {
     const plainText = renderStudioDocumentToPlainText(docInput);
-    const cleaned = plainText.replace(/\s+/g, ' ').trim();
+    const cleaned = plainText.replace(/\s+/g, " ").trim();
     if (cleaned.length <= 250) {
       return cleaned;
     }
     const truncated = cleaned.slice(0, 250);
-    const lastSpace = truncated.lastIndexOf(' ');
-    return (lastSpace > 150 ? truncated.slice(0, lastSpace) : truncated) + '...';
+    const lastSpace = truncated.lastIndexOf(" ");
+    return (
+      (lastSpace > 150 ? truncated.slice(0, lastSpace) : truncated) + "..."
+    );
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -195,19 +210,22 @@ export async function buildPublicPostSummaryDto(
   post: Post,
   authors: Author[],
   tags: Tag[],
-  mediaService: MediaService
+  mediaService: MediaService,
 ): Promise<PublicPostSummaryDto> {
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
   const featureImage = extractFeatureImage(resolvedDoc);
   const siteUrl = getSiteUrl();
 
   const formattedAuthors = authors.map(formatPublicAuthor);
-  const primaryAuthor = formattedAuthors.find((a) => a.id === post.primaryAuthorId) || formattedAuthors[0] || {
-    id: post.primaryAuthorId,
-    name: 'Author',
-    slug: post.primaryAuthorId,
-    bio: null,
-  };
+  const primaryAuthor = formattedAuthors.find(
+    (a) => a.id === post.primaryAuthorId,
+  ) ||
+    formattedAuthors[0] || {
+      id: post.primaryAuthorId,
+      name: "Author",
+      slug: post.primaryAuthorId,
+      bio: null,
+    };
 
   const formattedTags = tags.map(formatPublicTag);
 
@@ -232,7 +250,7 @@ export async function buildPublicPostSummaryDto(
       description: seoDescription,
       canonicalUrl,
       ogImage: featureImage?.url || undefined,
-      ogType: 'article',
+      ogType: "article",
     },
   };
 }
@@ -251,16 +269,21 @@ export async function buildPublicPostDetailDto(
   post: Post,
   authors: Author[],
   tags: Tag[],
-  mediaService: MediaService
+  mediaService: MediaService,
 ): Promise<PublicPostDetailDto> {
-  const summary = await buildPublicPostSummaryDto(post, authors, tags, mediaService);
+  const summary = await buildPublicPostSummaryDto(
+    post,
+    authors,
+    tags,
+    mediaService,
+  );
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
 
   let html: string;
   try {
     html = renderStudioDocumentToHtml(resolvedDoc);
   } catch {
-    html = '<p>Content rendering unavailable.</p>';
+    html = "<p>Content rendering unavailable.</p>";
   }
 
   const toc = extractTableOfContentsFromDocument(resolvedDoc);
@@ -277,7 +300,7 @@ export async function buildPublicPostDetailDto(
 
 export async function buildPublicPageDetailDto(
   page: Page,
-  mediaService: MediaService
+  mediaService: MediaService,
 ): Promise<PublicPageDetailDto> {
   const resolvedDoc = await resolveDocumentMedia(page.content, mediaService);
   const featureImage = extractFeatureImage(resolvedDoc);
@@ -292,7 +315,7 @@ export async function buildPublicPageDetailDto(
   try {
     html = renderStudioDocumentToHtml(resolvedDoc);
   } catch {
-    html = '<p>Content rendering unavailable.</p>';
+    html = "<p>Content rendering unavailable.</p>";
   }
 
   const toc = extractTableOfContentsFromDocument(resolvedDoc);
@@ -312,7 +335,7 @@ export async function buildPublicPageDetailDto(
       description: seoDescription,
       canonicalUrl,
       ogImage: featureImage?.url || undefined,
-      ogType: 'website',
+      ogType: "website",
     },
     toc,
   };

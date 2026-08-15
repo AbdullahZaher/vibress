@@ -55,12 +55,14 @@ Vibress uses a modern, full-stack JavaScript/TypeScript ecosystem:
 - Docker Compose
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/vibress/vibress.git
    cd vibress
    ```
 
 2. **Copy environment example files**:
+
    ```bash
    cp .env.example .env
    ```
@@ -69,12 +71,14 @@ Vibress uses a modern, full-stack JavaScript/TypeScript ecosystem:
    secrets (the defaults work well for local development).
 
 4. **Start the project infrastructure**:
+
    ```bash
    # Start Postgres, Redis, Minio, Mailpit
    pnpm dev:infra
    ```
 
 5. **Start the development servers**:
+
    ```bash
    # Start the API, Worker, Web, Admin, and Portal applications
    pnpm dev
@@ -93,6 +97,7 @@ Vibress uses a modern, full-stack JavaScript/TypeScript ecosystem:
    installation the wizard is permanently locked.
 
    Production: generate a secret and set it before starting —
+
    ```bash
    openssl rand -hex 32   # → set VIBRESS_SETUP_TOKEN=<value> in .env
    ```
@@ -110,12 +115,14 @@ If you prefer to run the infrastructure yourself:
    - Redis (7+)
 
 2. **Install dependencies**:
+
    ```bash
    pnpm install
    ```
 
 3. **Database setup**: Ensure PostgreSQL is running and update your `.env` with
    the correct `DATABASE_URL`.
+
    ```bash
    pnpm db:generate
    pnpm db:migrate
@@ -139,17 +146,20 @@ Docker.
 - Docker and Docker Compose installed.
 
 1. **Connect to your VPS**:
+
    ```bash
    ssh user@your-vps-ip
    ```
 
 2. **Clone Vibress**:
+
    ```bash
    git clone https://github.com/vibress/vibress.git
    cd vibress
    ```
 
 3. **Configure environment**:
+
    ```bash
    cp infrastructure/env.prod.example .env
    # Edit .env with your domain, secure passwords, and secrets
@@ -157,6 +167,7 @@ Docker.
    ```
 
 4. **Start containers**:
+
    ```bash
    pnpm prod:up
    ```

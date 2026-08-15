@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildApp } from '../main';
-import { FastifyInstance } from 'fastify';
-import { postsService, pagesService, tagsService, authorsService, usersService } from '../services';
-import { hashPassword } from '@vibress/security';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { buildApp } from "../main";
+import { FastifyInstance } from "fastify";
+import {
+  postsService,
+  pagesService,
+  tagsService,
+  usersService,
+} from "../services";
+import { hashPassword } from "@vibress/security";
 
-describe('Batch 6 — Public Content API & Visibility Security Integration', () => {
+describe("Batch 6 — Public Content API & Visibility Security Integration", () => {
   let app: FastifyInstance;
   let testAuthorId: string;
   let testAuthorSlug: string;
@@ -22,14 +27,14 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     await app.ready();
 
     // Create a test author user
-    const pwHash = await hashPassword('AuthorPass123!');
+    const pwHash = await hashPassword("AuthorPass123!");
     const author = await usersService.createUser({
       email: `public.author.${Date.now()}@example.com`,
-      name: 'Public Test Author',
+      name: "Public Test Author",
       slug: `public-author-${Date.now()}`,
-      bio: 'Lover of open publishing.',
+      bio: "Lover of open publishing.",
       passwordHash: pwHash,
-      status: 'active',
+      status: "active",
     });
     testAuthorId = author.id;
     testAuthorSlug = author.slug!;
@@ -38,7 +43,7 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     const tag = await tagsService.createTag({
       name: `PublicTag-${Date.now()}`,
       slug: `public-tag-${Date.now()}`,
-      description: 'A tag for public tests',
+      description: "A tag for public tests",
     });
     testTagId = tag.id;
     testTagSlug = tag.slug;
@@ -46,18 +51,20 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     // Create Published Post
     const pubPost = await postsService.createPost(
       {
-        title: 'Published Public Post',
+        title: "Published Public Post",
         slug: `pub-post-${Date.now()}`,
-        excerpt: 'Summary of published post',
+        excerpt: "Summary of published post",
         content: {
-          schema: 'vibress-studio',
+          schema: "vibress-studio",
           version: 1,
           root: {
-            type: 'root',
+            type: "root",
             children: [
               {
-                type: 'paragraph',
-                children: [{ type: 'text', text: 'Hello public world of Vibress!' }],
+                type: "paragraph",
+                children: [
+                  { type: "text", text: "Hello public world of Vibress!" },
+                ],
               },
             ],
           },
@@ -65,7 +72,7 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
         primaryAuthorId: testAuthorId,
         tagIds: [testTagId],
       },
-      testAuthorId
+      testAuthorId,
     );
     await postsService.publishPost(pubPost.id, testAuthorId);
     publishedPostSlug = pubPost.slug;
@@ -73,17 +80,25 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     // Create Draft Post
     const draftPost = await postsService.createPost(
       {
-        title: 'Draft Secret Post',
+        title: "Draft Secret Post",
         slug: `draft-post-${Date.now()}`,
-        excerpt: 'Secret draft post summary',
+        excerpt: "Secret draft post summary",
         content: {
-          schema: 'vibress-studio',
+          schema: "vibress-studio",
           version: 1,
-          root: { type: 'root', children: [{ type: 'paragraph', children: [{ type: 'text', text: 'Draft content' }] }] },
+          root: {
+            type: "root",
+            children: [
+              {
+                type: "paragraph",
+                children: [{ type: "text", text: "Draft content" }],
+              },
+            ],
+          },
         },
         primaryAuthorId: testAuthorId,
       },
-      testAuthorId
+      testAuthorId,
     );
     draftPostSlug = draftPost.slug;
 
@@ -91,13 +106,17 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const schedPost = await postsService.createPost(
       {
-        title: 'Future Scheduled Post',
+        title: "Future Scheduled Post",
         slug: `sched-post-${Date.now()}`,
-        excerpt: 'Future scheduled post summary',
-        content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },
+        excerpt: "Future scheduled post summary",
+        content: {
+          schema: "vibress-studio",
+          version: 1,
+          root: { type: "root", children: [] },
+        },
         primaryAuthorId: testAuthorId,
       },
-      testAuthorId
+      testAuthorId,
     );
     await postsService.schedulePost(schedPost.id, futureDate, testAuthorId);
     scheduledPostSlug = schedPost.slug;
@@ -105,20 +124,25 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     // Create Published Page
     const pubPage = await pagesService.createPage(
       {
-        title: 'Published About Page',
+        title: "Published About Page",
         slug: `about-page-${Date.now()}`,
-        excerpt: 'About us page summary',
+        excerpt: "About us page summary",
         content: {
-          schema: 'vibress-studio',
+          schema: "vibress-studio",
           version: 1,
           root: {
-            type: 'root',
-            children: [{ type: 'paragraph', children: [{ type: 'text', text: 'About Vibress platform.' }] }],
+            type: "root",
+            children: [
+              {
+                type: "paragraph",
+                children: [{ type: "text", text: "About Vibress platform." }],
+              },
+            ],
           },
         },
         primaryAuthorId: testAuthorId,
       },
-      testAuthorId
+      testAuthorId,
     );
     await pagesService.publishPage(pubPage.id, testAuthorId);
     publishedPageSlug = pubPage.slug;
@@ -126,13 +150,17 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     // Create Draft Page
     const draftPage = await pagesService.createPage(
       {
-        title: 'Draft Private Page',
+        title: "Draft Private Page",
         slug: `draft-page-${Date.now()}`,
-        excerpt: 'Private page summary',
-        content: { schema: 'vibress-studio', version: 1, root: { type: 'root', children: [] } },
+        excerpt: "Private page summary",
+        content: {
+          schema: "vibress-studio",
+          version: 1,
+          root: { type: "root", children: [] },
+        },
         primaryAuthorId: testAuthorId,
       },
-      testAuthorId
+      testAuthorId,
     );
     draftPageSlug = draftPage.slug;
   });
@@ -141,10 +169,10 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     await app.close();
   });
 
-  it('should list published posts and exclude drafts and scheduled future posts', async () => {
+  it("should list published posts and exclude drafts and scheduled future posts", async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: '/api/content/v1/posts',
+      method: "GET",
+      url: "/api/content/v1/posts",
     });
 
     expect(res.statusCode).toBe(200);
@@ -158,9 +186,9 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     expect(slugs).not.toContain(scheduledPostSlug);
   });
 
-  it('should fetch published post by slug with rendered HTML and DTO allowlisting', async () => {
+  it("should fetch published post by slug with rendered HTML and DTO allowlisting", async () => {
     const res = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/posts/${publishedPostSlug}`,
     });
 
@@ -168,7 +196,7 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     const body = JSON.parse(res.body);
     expect(body.post).toBeDefined();
     expect(body.post.slug).toBe(publishedPostSlug);
-    expect(body.post.html).toContain('<p>Hello public world of Vibress!</p>');
+    expect(body.post.html).toContain("<p>Hello public world of Vibress!</p>");
     expect(body.post.seo).toBeDefined();
     expect(body.post.seo.canonicalUrl).toContain(publishedPostSlug);
 
@@ -180,69 +208,69 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     expect(body.post.primaryAuthorId).toBeUndefined();
   });
 
-  it('should return 404 for draft post, scheduled future post, and invalid slug', async () => {
+  it("should return 404 for draft post, scheduled future post, and invalid slug", async () => {
     const draftRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/posts/${draftPostSlug}`,
     });
     expect(draftRes.statusCode).toBe(404);
     const draftErr = JSON.parse(draftRes.body);
-    expect(draftErr.errors[0].code).toBe('CONTENT_NOT_FOUND');
+    expect(draftErr.errors[0].code).toBe("CONTENT_NOT_FOUND");
 
     const schedRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/posts/${scheduledPostSlug}`,
     });
     expect(schedRes.statusCode).toBe(404);
 
     const invalidRes = await app.inject({
-      method: 'GET',
-      url: '/api/content/v1/posts/non-existent-slug-xyz',
+      method: "GET",
+      url: "/api/content/v1/posts/non-existent-slug-xyz",
     });
     expect(invalidRes.statusCode).toBe(404);
   });
 
-  it('should prevent draft leakage through authenticated staff session on public endpoints', async () => {
+  it("should prevent draft leakage through authenticated staff session on public endpoints", async () => {
     // Even if auth headers or cookies are sent, public content endpoints MUST NOT leak drafts!
     const res = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/posts/${draftPostSlug}`,
       headers: {
-        authorization: 'Bearer fake-staff-token',
-        cookie: 'sessionToken=fake-staff-session',
+        authorization: "Bearer fake-staff-token",
+        cookie: "sessionToken=fake-staff-session",
       },
     });
 
     expect(res.statusCode).toBe(404);
   });
 
-  it('should fetch published page by slug and return 404 for draft page', async () => {
+  it("should fetch published page by slug and return 404 for draft page", async () => {
     const pubRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/pages/${publishedPageSlug}`,
     });
 
     expect(pubRes.statusCode).toBe(200);
     const body = JSON.parse(pubRes.body);
     expect(body.page.slug).toBe(publishedPageSlug);
-    expect(body.page.html).toContain('<p>About Vibress platform.</p>');
+    expect(body.page.html).toContain("<p>About Vibress platform.</p>");
 
     const draftRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/pages/${draftPageSlug}`,
     });
     expect(draftRes.statusCode).toBe(404);
   });
 
-  it('should list tags and fetch tag posts archive', async () => {
+  it("should list tags and fetch tag posts archive", async () => {
     const tagsRes = await app.inject({
-      method: 'GET',
-      url: '/api/content/v1/tags',
+      method: "GET",
+      url: "/api/content/v1/tags",
     });
     expect(tagsRes.statusCode).toBe(200);
 
     const tagPostsRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/tags/${testTagSlug}/posts`,
     });
     expect(tagPostsRes.statusCode).toBe(200);
@@ -252,9 +280,9 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     expect(body.posts[0].slug).toBe(publishedPostSlug);
   });
 
-  it('should list authors and fetch author posts archive', async () => {
+  it("should list authors and fetch author posts archive", async () => {
     const authorPostsRes = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/authors/${testAuthorSlug}/posts`,
     });
 
@@ -264,46 +292,46 @@ describe('Batch 6 — Public Content API & Visibility Security Integration', () 
     expect(body.posts.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should enforce Studio renderer XSS protection on public HTML output', async () => {
+  it("should enforce Studio renderer XSS protection on public HTML output", async () => {
     const xssPost = await postsService.createPost(
       {
-        title: 'Malicious XSS Post',
+        title: "Malicious XSS Post",
         slug: `xss-post-${Date.now()}`,
         content: {
-          schema: 'vibress-studio',
+          schema: "vibress-studio",
           version: 1,
           root: {
-            type: 'root',
+            type: "root",
             children: [
               {
-                type: 'paragraph',
+                type: "paragraph",
                 children: [
-                  { type: 'text', text: '<script>alert("xss")</script>' },
+                  { type: "text", text: '<script>alert("xss")</script>' },
                 ],
               },
               {
-                type: 'link',
-                url: 'javascript:alert(1)',
-                children: [{ type: 'text', text: 'Unsafe link' }],
+                type: "link",
+                url: "javascript:alert(1)",
+                children: [{ type: "text", text: "Unsafe link" }],
               },
             ],
           },
         },
         primaryAuthorId: testAuthorId,
       },
-      testAuthorId
+      testAuthorId,
     );
     await postsService.publishPost(xssPost.id, testAuthorId);
 
     const res = await app.inject({
-      method: 'GET',
+      method: "GET",
       url: `/api/content/v1/posts/${xssPost.slug}`,
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.post.html).not.toContain('<script>');
-    expect(body.post.html).toContain('&lt;script&gt;');
+    expect(body.post.html).not.toContain("<script>");
+    expect(body.post.html).toContain("&lt;script&gt;");
     expect(body.post.html).not.toContain('href="javascript:');
   });
 });

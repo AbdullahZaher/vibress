@@ -8,7 +8,7 @@
  * commit sets installed=true. There is deliberately no intermediate state.
  */
 
-export type InstallationSource = 'fresh' | 'legacy_backfill';
+export type InstallationSource = "fresh" | "legacy_backfill";
 
 export interface InstallationRecord {
   id: string;
@@ -20,7 +20,7 @@ export interface InstallationRecord {
   updatedAt: Date;
 }
 
-export const INSTALLATION_SINGLETON_ID = 'singleton';
+export const INSTALLATION_SINGLETON_ID = "singleton";
 
 export interface InstallationRepository {
   /**
@@ -36,7 +36,12 @@ export interface InstallationRepository {
   getSingletonForUpdate(): Promise<InstallationRecord | null>;
 
   /** Marks the installation complete (idempotent, inside a transaction). */
-  markInstalled(input: { version: string | null; source: InstallationSource; installedAt?: Date | null; now?: Date }): Promise<void>;
+  markInstalled(input: {
+    version: string | null;
+    source: InstallationSource;
+    installedAt?: Date | null;
+    now?: Date;
+  }): Promise<void>;
 
   /**
    * Counts trustworthy legacy-installation signals for the boot backfill:
@@ -55,7 +60,7 @@ export class SetupDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'SetupDomainError';
+    this.name = "SetupDomainError";
     this.code = code;
   }
 }

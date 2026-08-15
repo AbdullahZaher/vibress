@@ -1,8 +1,15 @@
-import { FastifyInstance } from 'fastify';
-import { ListMediaFilterSchema, UpdateMediaInputSchema } from '@vibress/api-contracts';
-import { defaultStorageRegistry } from '@vibress/storage-core';
-import { mediaService } from '../services';
-import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
+import { FastifyInstance } from "fastify";
+import {
+  ListMediaFilterSchema,
+  UpdateMediaInputSchema,
+} from "@vibress/api-contracts";
+import { defaultStorageRegistry } from "@vibress/storage-core";
+import { mediaService } from "../services";
+import {
+  requireStaffSession,
+  requirePermission,
+  validateOrigin,
+} from "../middleware/auth";
 import {
   MediaInUseError,
   MediaInvalidFileError,
@@ -10,13 +17,17 @@ import {
   MediaNotFoundError,
   MediaTooLargeError,
   MediaTypeNotAllowedError,
-} from '@vibress/media';
-import { asCodedError, errorMessage } from '../helpers/errors';
+} from "@vibress/media";
+import { errorMessage } from "../helpers/errors";
 
 export async function mediaRoutes(fastify: FastifyInstance) {
   // Upload media asset
-  fastify.post('/media', {
-    preHandler: [requireStaffSession, requirePermission('media.upload'), validateOrigin],
+  fastify.post("/media", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.upload"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       let fileData;
       try {
@@ -25,8 +36,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'MEDIA_UPLOAD_FAILED',
-              message: errorMessage(err) || 'Failed to parse multipart upload',
+              code: "MEDIA_UPLOAD_FAILED",
+              message: errorMessage(err) || "Failed to parse multipart upload",
               requestId: req.id,
             },
           ],
@@ -37,8 +48,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: 'No file uploaded in multipart request',
+              code: "VALIDATION_ERROR",
+              message: "No file uploaded in multipart request",
               requestId: req.id,
             },
           ],
@@ -52,7 +63,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'MEDIA_UPLOAD_FAILED',
+              code: "MEDIA_UPLOAD_FAILED",
               message: `Failed to read file buffer: ${errorMessage(err)}`,
               requestId: req.id,
             },
@@ -60,8 +71,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const filename = fileData.filename || 'unnamed-file';
-      const mimeType = fileData.mimetype || 'application/octet-stream';
+      const filename = fileData.filename || "unnamed-file";
+      const mimeType = fileData.mimetype || "application/octet-stream";
 
       try {
         const asset = await mediaService.uploadMedia(
@@ -70,7 +81,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             mimeType,
             buffer,
           },
-          req.user!.id
+          req.user!.id,
         );
 
         const storageProvider = defaultStorageRegistry.getActiveProvider();
@@ -85,7 +96,9 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       } catch (err) {
         if (err instanceof MediaTooLargeError) {
           return reply.status(413).send({
-            errors: [{ code: err.code, message: err.message, requestId: req.id }],
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
           });
         }
         if (
@@ -94,7 +107,9 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           err instanceof MediaInvalidFileError
         ) {
           return reply.status(422).send({
-            errors: [{ code: err.code, message: err.message, requestId: req.id }],
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
           });
         }
         throw err;
@@ -103,16 +118,17 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // List media assets
-  fastify.get('/media', {
-    preHandler: [requireStaffSession, requirePermission('media.read')],
+  fastify.get("/media", {
+    preHandler: [requireStaffSession, requirePermission("media.read")],
     handler: async (req, reply) => {
       const parseResult = ListMediaFilterSchema.safeParse(req.query);
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid query filters',
+              code: "VALIDATION_ERROR",
+              message:
+                parseResult.error.errors[0]?.message || "Invalid query filters",
               requestId: req.id,
             },
           ],
@@ -126,7 +142,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         result.items.map(async (item) => {
           const url = await storageProvider.getUrl(item.storageKey);
           return { ...item, url };
-        })
+        }),
       );
 
       return reply.status(200).send({
@@ -137,8 +153,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // Get media asset by ID
-  fastify.get('/media/:id', {
-    preHandler: [requireStaffSession, requirePermission('media.read')],
+  fastify.get("/media/:id", {
+    preHandler: [requireStaffSession, requirePermission("media.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -152,7 +168,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEDIA_NOT_FOUND",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -161,8 +183,12 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // Update media asset metadata
-  fastify.patch('/media/:id', {
-    preHandler: [requireStaffSession, requirePermission('media.edit'), validateOrigin],
+  fastify.patch("/media/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const parseResult = UpdateMediaInputSchema.safeParse(req.body);
@@ -171,8 +197,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -180,7 +206,11 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const updated = await mediaService.updateMediaMetadata(id, parseResult.data, req.user!.id);
+        const updated = await mediaService.updateMediaMetadata(
+          id,
+          parseResult.data,
+          req.user!.id,
+        );
         const storageProvider = defaultStorageRegistry.getActiveProvider();
         const url = await storageProvider.getUrl(updated.storageKey);
 
@@ -190,7 +220,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEDIA_NOT_FOUND",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -199,8 +235,12 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // Delete media asset
-  fastify.delete('/media/:id', {
-    preHandler: [requireStaffSession, requirePermission('media.delete'), validateOrigin],
+  fastify.delete("/media/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("media.delete"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -212,7 +252,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           return reply.status(409).send({
             errors: [
               {
-                code: 'MEDIA_IN_USE',
+                code: "MEDIA_IN_USE",
                 message: err.message,
                 referenceCount: inUse.referenceCount,
                 requestId: req.id,
@@ -222,7 +262,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         }
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEDIA_NOT_FOUND",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -231,8 +277,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // Get media references
-  fastify.get('/media/:id/references', {
-    preHandler: [requireStaffSession, requirePermission('media.read')],
+  fastify.get("/media/:id/references", {
+    preHandler: [requireStaffSession, requirePermission("media.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -241,7 +287,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       } catch (err) {
         if (err instanceof MediaNotFoundError) {
           return reply.status(404).send({
-            errors: [{ code: 'MEDIA_NOT_FOUND', message: err.message, requestId: req.id }],
+            errors: [
+              {
+                code: "MEDIA_NOT_FOUND",
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;

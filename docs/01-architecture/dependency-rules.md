@@ -40,7 +40,7 @@ apps/api
 Bad:
 
 ```ts
-import {SubscriptionRepositoryImpl} from '@vibress/members/internal';
+import { SubscriptionRepositoryImpl } from "@vibress/members/internal";
 ```
 
 Good:

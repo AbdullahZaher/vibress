@@ -1,6 +1,8 @@
 /* Minimal Built-In Public Presentation Styling for Vibress */
 :root {
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
   --bg-primary: #ffffff;
   --text-primary: #1e293b;
   --text-muted: #64748b;

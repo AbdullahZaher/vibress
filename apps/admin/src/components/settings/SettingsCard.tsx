@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 export interface SettingsCardProps {
   id?: string | undefined;
@@ -11,13 +11,15 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
   id,
   isHighlighted,
   children,
-  className = '',
+  className = "",
 }) => {
   return (
     <div
       id={id}
       className={`transition-colors duration-200 ${
-        isHighlighted ? 'bg-primary/10 ring-1 ring-primary/40' : 'hover:bg-muted/15'
+        isHighlighted
+          ? "bg-primary/10 ring-1 ring-primary/40"
+          : "hover:bg-muted/15"
       } ${className}`}
     >
       {children}

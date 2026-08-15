@@ -3,7 +3,7 @@ export class AuthDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'AuthDomainError';
+    this.name = "AuthDomainError";
     this.code = code;
   }
 }

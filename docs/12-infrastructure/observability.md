@@ -17,7 +17,18 @@ All application logs flow through `@vibress/observability`:
 Output is one JSON object per line to stdout (info) / stderr (error/warn):
 
 ```json
-{"timestamp":"...","level":"info","logger":"api","message":"request completed","requestId":"...","traceId":"...","method":"GET","path":"/api/content/v1/posts","statusCode":200,"durationMs":12}
+{
+  "timestamp": "...",
+  "level": "info",
+  "logger": "api",
+  "message": "request completed",
+  "requestId": "...",
+  "traceId": "...",
+  "method": "GET",
+  "path": "/api/content/v1/posts",
+  "statusCode": 200,
+  "durationMs": 12
+}
 ```
 
 Sensitive fields (`password`, `token`, `secret`, `authorization`, `cookie`,
@@ -73,6 +84,7 @@ API/worker network; do not expose `/metrics` publicly.
 - When debugging async jobs (queue/outbox), the worker logs identify the
   job type via `logger=worker`; the API side of the same work carries the
   originating `requestId` in events persisted to the outbox.
+
 ## Optional OpenTelemetry exporter
 
 OpenTelemetry export is optional and fail-open: the app never depends on a
@@ -80,14 +92,14 @@ collector being reachable.
 
 ### Configuration (`@vibress/config` → `observability.tracing`)
 
-| Env var | Default | Purpose |
-|---|---|---|
-| `TRACING_ENABLED` | `true` | Master switch; `false` → no exporter is initialized (zero OTel overhead) |
-| `OTEL_SERVICE_NAME` | `vibress` | Service name attribute (API overrides to `vibress-api`, worker to `vibress-worker`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | OTLP/HTTP endpoint (traces are exported to `<endpoint>/v1/traces`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | – | Optional comma-separated `Key=Value` list (e.g. auth headers) |
-| `OTEL_SAMPLING_RATIO` | `1` | 0..1 head-sampling ratio |
-| `OTEL_RESOURCE_ATTRIBUTES` | – | Optional `Key=Value` resource attributes |
+| Env var                       | Default                 | Purpose                                                                             |
+| ----------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| `TRACING_ENABLED`             | `true`                  | Master switch; `false` → no exporter is initialized (zero OTel overhead)            |
+| `OTEL_SERVICE_NAME`           | `vibress`               | Service name attribute (API overrides to `vibress-api`, worker to `vibress-worker`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | OTLP/HTTP endpoint (traces are exported to `<endpoint>/v1/traces`)                  |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | –                       | Optional comma-separated `Key=Value` list (e.g. auth headers)                       |
+| `OTEL_SAMPLING_RATIO`         | `1`                     | 0..1 head-sampling ratio                                                            |
+| `OTEL_RESOURCE_ATTRIBUTES`    | –                       | Optional `Key=Value` resource attributes                                            |
 
 ### Behavior
 

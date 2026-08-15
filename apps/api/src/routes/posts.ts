@@ -1,31 +1,41 @@
-import { FastifyInstance } from 'fastify';
-import { CreatePostInputSchema, UpdatePostInputSchema, SchedulePostInputSchema } from '@vibress/api-contracts';
-import { postsService, authorsService, revisionsService } from '../services';
-import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { PostDomainError, ListPostsFilter } from '@vibress/posts';
+import { FastifyInstance } from "fastify";
+import {
+  CreatePostInputSchema,
+  UpdatePostInputSchema,
+  SchedulePostInputSchema,
+} from "@vibress/api-contracts";
+import { postsService, authorsService, revisionsService } from "../services";
+import {
+  requireStaffSession,
+  requirePermission,
+  validateOrigin,
+} from "../middleware/auth";
+import { PostDomainError, ListPostsFilter } from "@vibress/posts";
 
 export async function postRoutes(fastify: FastifyInstance) {
   // List posts
-  fastify.get('/posts', {
-    preHandler: [requireStaffSession, requirePermission('posts.read')],
+  fastify.get("/posts", {
+    preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
-      const { status, authorId, search, limit, offset, sortBy, sortOrder } = (req.query ?? {}) as {
-        status?: string;
-        authorId?: string;
-        search?: string;
-        limit?: string;
-        offset?: string;
-        sortBy?: string;
-        sortOrder?: string;
-      };
+      const { status, authorId, search, limit, offset, sortBy, sortOrder } =
+        (req.query ?? {}) as {
+          status?: string;
+          authorId?: string;
+          search?: string;
+          limit?: string;
+          offset?: string;
+          sortBy?: string;
+          sortOrder?: string;
+        };
       const params: ListPostsFilter = {};
-      if (status) params.status = status as ListPostsFilter['status'];
+      if (status) params.status = status as ListPostsFilter["status"];
       if (authorId) params.authorId = authorId;
       if (search) params.search = search;
       if (limit) params.limit = parseInt(limit, 10);
       if (offset) params.offset = parseInt(offset, 10);
-      if (sortBy) params.sortBy = sortBy as ListPostsFilter['sortBy'];
-      if (sortOrder) params.sortOrder = sortOrder as ListPostsFilter['sortOrder'];
+      if (sortBy) params.sortBy = sortBy as ListPostsFilter["sortBy"];
+      if (sortOrder)
+        params.sortOrder = sortOrder as ListPostsFilter["sortOrder"];
       const result = await postsService.listPosts(params);
 
       const postsWithDetails = await Promise.all(
@@ -33,7 +43,7 @@ export async function postRoutes(fastify: FastifyInstance) {
           const authors = await authorsService.getPostAuthors(p.id);
           const tagIds = await postsService.getPostTagIds(p.id);
           return { ...p, authors, tagIds };
-        })
+        }),
       );
 
       return reply.status(200).send({
@@ -44,14 +54,20 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Get post by ID
-  fastify.get('/posts/:id', {
-    preHandler: [requireStaffSession, requirePermission('posts.read')],
+  fastify.get("/posts/:id", {
+    preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const post = await postsService.findById(id);
       if (!post) {
         return reply.status(404).send({
-          errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+          errors: [
+            {
+              code: "POST_NOT_FOUND",
+              message: "Post not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
@@ -65,16 +81,20 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Create post
-  fastify.post('/posts', {
-    preHandler: [requireStaffSession, requirePermission('posts.create'), validateOrigin],
+  fastify.post("/posts", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.create"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const parseResult = CreatePostInputSchema.safeParse(req.body);
       if (!parseResult.success) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -84,9 +104,11 @@ export async function postRoutes(fastify: FastifyInstance) {
       const post = await postsService.createPost(
         {
           ...parseResult.data,
-          scheduledAt: parseResult.data.scheduledAt ? new Date(parseResult.data.scheduledAt) : null,
+          scheduledAt: parseResult.data.scheduledAt
+            ? new Date(parseResult.data.scheduledAt)
+            : null,
         },
-        req.user!.id
+        req.user!.id,
       );
 
       const authors = await authorsService.getPostAuthors(post.id);
@@ -99,8 +121,12 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Update post
-  fastify.put('/posts/:id', {
-    preHandler: [requireStaffSession, requirePermission('posts.edit'), validateOrigin],
+  fastify.put("/posts/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const parseResult = UpdatePostInputSchema.safeParse(req.body);
@@ -108,8 +134,8 @@ export async function postRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid input',
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -117,7 +143,11 @@ export async function postRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const post = await postsService.updatePost(id, parseResult.data, req.user!.id);
+        const post = await postsService.updatePost(
+          id,
+          parseResult.data,
+          req.user!.id,
+        );
         const authors = await authorsService.getPostAuthors(post.id);
         const tagIds = await postsService.getPostTagIds(post.id);
 
@@ -126,14 +156,26 @@ export async function postRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
-          if (err.code === 'CONTENT_CONFLICT') {
+          if (err.code === "CONTENT_CONFLICT") {
             return reply.status(409).send({
-              errors: [{ code: 'CONTENT_CONFLICT', message: err.message, requestId: req.id }],
+              errors: [
+                {
+                  code: "CONTENT_CONFLICT",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
             });
           }
-          if (err.code === 'POST_NOT_FOUND') {
+          if (err.code === "POST_NOT_FOUND") {
             return reply.status(404).send({
-              errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
             });
           }
         }
@@ -143,17 +185,27 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Delete post
-  fastify.delete('/posts/:id', {
-    preHandler: [requireStaffSession, requirePermission('posts.delete'), validateOrigin],
+  fastify.delete("/posts/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.delete"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         await postsService.deletePost(id, req.user!.id);
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
-        if (err instanceof PostDomainError && err.code === 'POST_NOT_FOUND') {
+        if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
           return reply.status(404).send({
-            errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+            errors: [
+              {
+                code: "POST_NOT_FOUND",
+                message: "Post not found",
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -162,8 +214,12 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Publish post
-  fastify.post('/posts/:id/publish', {
-    preHandler: [requireStaffSession, requirePermission('posts.publish'), validateOrigin],
+  fastify.post("/posts/:id/publish", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.publish"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
@@ -171,14 +227,26 @@ export async function postRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
-          if (err.code === 'POST_NOT_FOUND') {
+          if (err.code === "POST_NOT_FOUND") {
             return reply.status(404).send({
-              errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
             });
           }
-          if (err.code === 'VALIDATION_ERROR') {
+          if (err.code === "VALIDATION_ERROR") {
             return reply.status(400).send({
-              errors: [{ code: 'VALIDATION_ERROR', message: err.message, requestId: req.id }],
+              errors: [
+                {
+                  code: "VALIDATION_ERROR",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
             });
           }
         }
@@ -188,17 +256,27 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Unpublish post
-  fastify.post('/posts/:id/unpublish', {
-    preHandler: [requireStaffSession, requirePermission('posts.publish'), validateOrigin],
+  fastify.post("/posts/:id/unpublish", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.publish"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         const post = await postsService.unpublishPost(id, req.user!.id);
         return reply.status(200).send({ post });
       } catch (err: unknown) {
-        if (err instanceof PostDomainError && err.code === 'POST_NOT_FOUND') {
+        if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
           return reply.status(404).send({
-            errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+            errors: [
+              {
+                code: "POST_NOT_FOUND",
+                message: "Post not found",
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -207,31 +285,59 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Schedule post
-  fastify.post('/posts/:id/schedule', {
-    preHandler: [requireStaffSession, requirePermission('posts.publish'), validateOrigin],
+  fastify.post("/posts/:id/schedule", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.publish"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const parseResult = SchedulePostInputSchema.safeParse(req.body);
       if (!parseResult.success) {
         return reply.status(400).send({
-          errors: [{ code: 'VALIDATION_ERROR', message: parseResult.error.errors[0]?.message || 'Invalid schedule timestamp', requestId: req.id }],
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message:
+                parseResult.error.errors[0]?.message ||
+                "Invalid schedule timestamp",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
       try {
         const scheduledAt = new Date(parseResult.data.scheduledAt);
-        const post = await postsService.schedulePost(id, scheduledAt, req.user!.id);
+        const post = await postsService.schedulePost(
+          id,
+          scheduledAt,
+          req.user!.id,
+        );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
-          if (err.code === 'INVALID_SCHEDULE_TIME') {
+          if (err.code === "INVALID_SCHEDULE_TIME") {
             return reply.status(400).send({
-              errors: [{ code: 'INVALID_SCHEDULE_TIME', message: err.message, requestId: req.id }],
+              errors: [
+                {
+                  code: "INVALID_SCHEDULE_TIME",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
             });
           }
-          if (err.code === 'POST_NOT_FOUND') {
+          if (err.code === "POST_NOT_FOUND") {
             return reply.status(404).send({
-              errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
             });
           }
         }
@@ -241,17 +347,27 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Cancel post schedule
-  fastify.post('/posts/:id/cancel-schedule', {
-    preHandler: [requireStaffSession, requirePermission('posts.publish'), validateOrigin],
+  fastify.post("/posts/:id/cancel-schedule", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.publish"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
         const post = await postsService.cancelSchedule(id, req.user!.id);
         return reply.status(200).send({ post });
       } catch (err: unknown) {
-        if (err instanceof PostDomainError && err.code === 'POST_NOT_FOUND') {
+        if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
           return reply.status(404).send({
-            errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+            errors: [
+              {
+                code: "POST_NOT_FOUND",
+                message: "Post not found",
+                requestId: req.id,
+              },
+            ],
           });
         }
         throw err;
@@ -260,40 +376,69 @@ export async function postRoutes(fastify: FastifyInstance) {
   });
 
   // Get post revisions
-  fastify.get('/posts/:id/revisions', {
-    preHandler: [requireStaffSession, requirePermission('posts.read')],
+  fastify.get("/posts/:id/revisions", {
+    preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const post = await postsService.findById(id);
       if (!post) {
         return reply.status(404).send({
-          errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+          errors: [
+            {
+              code: "POST_NOT_FOUND",
+              message: "Post not found",
+              requestId: req.id,
+            },
+          ],
         });
       }
 
-      const revisions = await revisionsService.getRevisions('post', id);
+      const revisions = await revisionsService.getRevisions("post", id);
       return reply.status(200).send({ revisions });
     },
   });
 
   // Restore post revision
-  fastify.post('/posts/:id/revisions/:revisionId/restore', {
-    preHandler: [requireStaffSession, requirePermission('posts.edit'), validateOrigin],
+  fastify.post("/posts/:id/revisions/:revisionId/restore", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
-      const { id, revisionId } = req.params as { id: string; revisionId: string };
+      const { id, revisionId } = req.params as {
+        id: string;
+        revisionId: string;
+      };
       try {
-        const post = await postsService.restoreRevision(id, revisionId, req.user!.id);
+        const post = await postsService.restoreRevision(
+          id,
+          revisionId,
+          req.user!.id,
+        );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
-          if (err.code === 'POST_NOT_FOUND') {
+          if (err.code === "POST_NOT_FOUND") {
             return reply.status(404).send({
-              errors: [{ code: 'POST_NOT_FOUND', message: 'Post not found', requestId: req.id }],
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
             });
           }
-          if (err.code === 'REVISION_NOT_FOUND') {
+          if (err.code === "REVISION_NOT_FOUND") {
             return reply.status(404).send({
-              errors: [{ code: 'REVISION_NOT_FOUND', message: 'Revision not found', requestId: req.id }],
+              errors: [
+                {
+                  code: "REVISION_NOT_FOUND",
+                  message: "Revision not found",
+                  requestId: req.id,
+                },
+              ],
             });
           }
         }

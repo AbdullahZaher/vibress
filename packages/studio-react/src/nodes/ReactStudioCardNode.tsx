@@ -1,7 +1,7 @@
 // Remove unused React import
-import { NodeKey, SerializedLexicalNode, Spread } from 'lexical';
-import { StudioCardNode } from '@vibress/studio-cards';
-import { StudioCardComponent } from '../components/StudioCardComponent';
+import { NodeKey, SerializedLexicalNode, Spread } from "lexical";
+import { StudioCardNode } from "@vibress/studio-cards";
+import { StudioCardComponent } from "../components/StudioCardComponent";
 
 export type SerializedReactStudioCardNode = Spread<
   {
@@ -13,20 +13,33 @@ export type SerializedReactStudioCardNode = Spread<
 
 export class ReactStudioCardNode extends StudioCardNode {
   static getType(): string {
-    return 'react-studio-card';
+    return "react-studio-card";
   }
 
   static clone(node: ReactStudioCardNode): ReactStudioCardNode {
-    return new ReactStudioCardNode(node.__cardType, node.__cardData, node.__key);
+    return new ReactStudioCardNode(
+      node.__cardType,
+      node.__cardData,
+      node.__key,
+    );
   }
 
-  static importJSON(serializedNode: SerializedReactStudioCardNode): ReactStudioCardNode {
+  static importJSON(
+    serializedNode: SerializedReactStudioCardNode,
+  ): ReactStudioCardNode {
     // Imported (possibly canonical 'studio-card') nodes must become the
     // interactive editor node, not the base static node.
-    return new ReactStudioCardNode(serializedNode.cardType, serializedNode.cardData);
+    return new ReactStudioCardNode(
+      serializedNode.cardType,
+      serializedNode.cardData,
+    );
   }
 
-  constructor(cardType: string, cardData: Record<string, unknown>, key?: NodeKey) {
+  constructor(
+    cardType: string,
+    cardData: Record<string, unknown>,
+    key?: NodeKey,
+  ) {
     super(cardType, cardData, key);
   }
 
@@ -37,7 +50,7 @@ export class ReactStudioCardNode extends StudioCardNode {
     // (studio-serializer), and on every read via normalizeStudioDocument()
     // (studio-core) — the single normalization layer.
     return {
-      type: 'react-studio-card',
+      type: "react-studio-card",
       cardType: this.__cardType,
       cardData: this.__cardData,
       version: 1,
@@ -57,11 +70,13 @@ export class ReactStudioCardNode extends StudioCardNode {
 
 export function $createReactStudioCardNode(
   cardType: string,
-  cardData: Record<string, unknown>
+  cardData: Record<string, unknown>,
 ): ReactStudioCardNode {
   return new ReactStudioCardNode(cardType, cardData);
 }
 
-export function $isReactStudioCardNode(node: unknown): node is ReactStudioCardNode {
+export function $isReactStudioCardNode(
+  node: unknown,
+): node is ReactStudioCardNode {
   return node instanceof ReactStudioCardNode;
 }

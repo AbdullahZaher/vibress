@@ -1,4 +1,5 @@
-export type CommentStatus = 'published' | 'pending_review' | 'hidden' | 'deleted';
+export type CommentStatus =
+  "published" | "pending_review" | "hidden" | "deleted";
 
 export interface Comment {
   id: string;

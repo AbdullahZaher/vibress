@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { SubscribeModal } from './SubscribeModal';
-import { ThemeToggle } from '../../../components/reader/ThemeToggle';
-import { t } from '../../../lib/i18n';
+import React, { useState } from "react";
+import { SubscribeModal } from "./SubscribeModal";
+import { ThemeToggle } from "../../../components/reader/ThemeToggle";
+import { t } from "../../../lib/i18n";
 
 interface HeaderNavProps {
   siteTitle: string;
@@ -12,7 +12,12 @@ interface HeaderNavProps {
   primaryNav?: Array<{ label: string; url: string }> | undefined;
 }
 
-export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderNavProps) {
+export function HeaderNav({
+  siteTitle,
+  siteIcon,
+  siteLogo,
+  primaryNav,
+}: HeaderNavProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -29,8 +34,12 @@ export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderN
                 ))
               ) : (
                 <>
-                  <li className="nav-home nav-current"><a href="/">{t('nav.home')}</a></li>
-                  <li className="nav-about"><a href="/about">{t('nav.about')}</a></li>
+                  <li className="nav-home nav-current">
+                    <a href="/">{t("nav.home")}</a>
+                  </li>
+                  <li className="nav-about">
+                    <a href="/about">{t("nav.about")}</a>
+                  </li>
                 </>
               )}
             </ul>
@@ -39,9 +48,18 @@ export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderN
           <div className="vb-head-brand">
             <a className="vb-head-logo" href="/">
               {siteLogo ? (
-                <img src={siteLogo} alt={siteTitle} className="vb-head-logo-img" style={{ maxHeight: '36px' }} />
+                <img
+                  src={siteLogo}
+                  alt={siteTitle}
+                  className="vb-head-logo-img"
+                  style={{ maxHeight: "36px" }}
+                />
               ) : siteIcon ? (
-                <img src={siteIcon} alt={siteTitle} className="vb-head-logo-icon" />
+                <img
+                  src={siteIcon}
+                  alt={siteTitle}
+                  className="vb-head-logo-icon"
+                />
               ) : null}
               <span>{siteTitle}</span>
             </a>
@@ -50,15 +68,29 @@ export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderN
           <div className="vb-head-actions">
             <ThemeToggle />
 
-            <button type="button" className="vb-search-btn" aria-label={t('search.label')} title={t('search.label')}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <button
+              type="button"
+              className="vb-search-btn"
+              aria-label={t("search.label")}
+              title={t("search.label")}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
             </button>
 
             <a href="#/portal/signin" className="vb-head-signin">
-              {t('nav.signin')}
+              {t("nav.signin")}
             </a>
 
             <button
@@ -66,7 +98,7 @@ export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderN
               className="vb-head-subscribe-btn"
               onClick={() => setIsModalOpen(true)}
             >
-              {t('nav.subscribe')}
+              {t("nav.subscribe")}
             </button>
           </div>
         </div>

@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
-import { AdminNewsletter, AdminNewsletterSend, createNewsletterSendApi, sendNewsletterNowApi, cancelNewsletterSendApi } from '../../lib/api';
-import { Button } from '../ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Send, Play, Ban } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  AdminNewsletter,
+  AdminNewsletterSend,
+  createNewsletterSendApi,
+  sendNewsletterNowApi,
+  cancelNewsletterSendApi,
+} from "../../lib/api";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Send, Play, Ban } from "lucide-react";
 
 interface BroadcastsPanelProps {
   newsletters: AdminNewsletter[];
@@ -26,7 +39,7 @@ export function BroadcastsPanel({
   onMessage,
   onChanged,
 }: BroadcastsPanelProps) {
-  const [sendSubject, setSendSubject] = useState('');
+  const [sendSubject, setSendSubject] = useState("");
 
   const handleCreateSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,34 +48,34 @@ export function BroadcastsPanel({
       await createNewsletterSendApi({
         newsletterId: sendNlId,
         subject: sendSubject,
-        content: { type: 'doc', content: [] },
-        audience: { filter: 'all' },
+        content: { type: "doc", content: [] },
+        audience: { filter: "all" },
       });
-      setSendSubject('');
-      onMessage('Broadcast created');
+      setSendSubject("");
+      onMessage("Broadcast created");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleSendNow = async (id: string) => {
     try {
       await sendNewsletterNowApi(id);
-      onMessage('Newsletter dispatch initiated');
+      onMessage("Newsletter dispatch initiated");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
   const handleCancelSend = async (id: string) => {
     try {
       await cancelNewsletterSendApi(id);
-      onMessage('Newsletter dispatch canceled');
+      onMessage("Newsletter dispatch canceled");
       await onChanged();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : 'Failed');
+      onError(err instanceof Error ? err.message : "Failed");
     }
   };
 
@@ -77,22 +90,38 @@ export function BroadcastsPanel({
         <CardContent>
           <form onSubmit={handleCreateSend} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Select Newsletter</label>
+              <label className="text-xs font-medium text-foreground">
+                Select Newsletter
+              </label>
               <select
                 value={sendNlId}
                 onChange={(e) => onSendNlIdChange(e.target.value)}
                 className="w-full h-8 text-xs bg-card border border-border rounded-md px-2 text-foreground font-medium"
               >
                 {newsletters.map((n) => (
-                  <option key={n.id} value={n.id}>{n.name}</option>
+                  <option key={n.id} value={n.id}>
+                    {n.name}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Subject Line</label>
-              <Input required value={sendSubject} onChange={(e) => setSendSubject(e.target.value)} placeholder="Issue #10: Monorepos Unleashed" className="h-8 text-xs bg-card border-border" />
+              <label className="text-xs font-medium text-foreground">
+                Subject Line
+              </label>
+              <Input
+                required
+                value={sendSubject}
+                onChange={(e) => setSendSubject(e.target.value)}
+                placeholder="Issue #10: Monorepos Unleashed"
+                className="h-8 text-xs bg-card border-border"
+              />
             </div>
-            <Button type="submit" size="sm" className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2">
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+            >
               Create Draft Broadcast
             </Button>
           </form>
@@ -111,22 +140,33 @@ export function BroadcastsPanel({
           <TableBody>
             {sends.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="h-32 text-center text-xs text-muted-foreground">
+                <TableCell
+                  colSpan={3}
+                  className="h-32 text-center text-xs text-muted-foreground"
+                >
                   No broadcast sends recorded.
                 </TableCell>
               </TableRow>
             ) : (
               sends.map((s) => (
-                <TableRow key={s.id} className="hover:bg-muted/40 border-border">
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">{s.subject}</TableCell>
+                <TableRow
+                  key={s.id}
+                  className="hover:bg-muted/40 border-border"
+                >
+                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                    {s.subject}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border"
+                    >
                       {s.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-1.5">
-                      {s.status === 'draft' && (
+                      {s.status === "draft" && (
                         <Button
                           size="sm"
                           onClick={() => handleSendNow(s.id)}
@@ -135,7 +175,7 @@ export function BroadcastsPanel({
                           <Play className="h-3 w-3" /> Dispatch Now
                         </Button>
                       )}
-                      {s.status === 'scheduled' && (
+                      {s.status === "scheduled" && (
                         <Button
                           variant="outline"
                           size="sm"

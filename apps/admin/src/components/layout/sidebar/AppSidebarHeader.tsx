@@ -1,6 +1,6 @@
-import React from 'react';
-import { Search, Sun, Moon, X } from 'lucide-react';
-import vibressLogo from '../../../assets/images/vibress-logo.png';
+import React from "react";
+import { Search, Sun, Moon, X } from "lucide-react";
+import vibressLogo from "../../../assets/images/vibress-logo.png";
 
 interface AppSidebarHeaderProps {
   darkMode: boolean;
@@ -24,13 +24,15 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
         <div
           className="flex items-center gap-2 cursor-pointer min-w-0"
           onClick={() => {
-            onNavigate('/admin');
+            onNavigate("/admin");
             onCloseSidebar?.();
           }}
           title="Vibress Admin"
         >
           <img src={vibressLogo} alt="" className="h-6 w-auto object-contain" />
-          <span className="font-bold text-lg tracking-tight text-foreground truncate">Vibress</span>
+          <span className="font-bold text-lg tracking-tight text-foreground truncate">
+            Vibress
+          </span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -41,7 +43,11 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
             title="Toggle theme"
             aria-label="Toggle theme"
           >
-            {darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
+            {darkMode ? (
+              <Sun className="h-4 w-4 text-amber-400" />
+            ) : (
+              <Moon className="h-4 w-4 text-slate-700" />
+            )}
           </button>
 
           {/* Close button visible only on mobile drawer */}
@@ -66,7 +72,7 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           if (onOpenCommandPalette) {
             onOpenCommandPalette();
           } else {
-            onNavigate('/admin/posts');
+            onNavigate("/admin/posts");
           }
           onCloseSidebar?.();
         }}

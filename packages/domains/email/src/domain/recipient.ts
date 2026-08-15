@@ -1,4 +1,4 @@
-import { RecipientStatus } from './recipient-status';
+import { RecipientStatus } from "./recipient-status";
 
 export interface EmailRecipient {
   id: string;
@@ -33,9 +33,16 @@ export interface EmailRecipientRepository {
   findPending(sendId: string, limit: number): Promise<EmailRecipient[]>;
   findById(id: string): Promise<EmailRecipient | null>;
   findByMessageId(messageId: string): Promise<EmailRecipient | null>;
-  findByEmailAndSend(email: string, sendId: string): Promise<EmailRecipient | null>;
+  findByEmailAndSend(
+    email: string,
+    sendId: string,
+  ): Promise<EmailRecipient | null>;
   markSent(id: string, messageId: string, at: Date): Promise<EmailRecipient>;
-  markFailed(id: string, error: string, attemptCount: number): Promise<EmailRecipient>;
+  markFailed(
+    id: string,
+    error: string,
+    attemptCount: number,
+  ): Promise<EmailRecipient>;
   markDelivered(id: string, at: Date): Promise<EmailRecipient>;
   markOpened(id: string, at: Date): Promise<EmailRecipient>;
   markClicked(id: string, at: Date): Promise<EmailRecipient>;
@@ -66,7 +73,8 @@ export interface EmailEventRepository {
   }): Promise<EmailEvent>;
 }
 
-export type SuppressionReason = 'hard_bounce' | 'spam_complaint' | 'manual' | 'provider_suppression';
+export type SuppressionReason =
+  "hard_bounce" | "spam_complaint" | "manual" | "provider_suppression";
 
 export interface EmailSuppression {
   id: string;
@@ -88,6 +96,9 @@ export interface EmailSuppressionRepository {
   }): Promise<void>;
   isSuppressed(email: string): Promise<boolean>;
   findByEmail(email: string): Promise<EmailSuppression | null>;
-  list(limit?: number, offset?: number): Promise<{ suppressions: EmailSuppression[]; total: number }>;
+  list(
+    limit?: number,
+    offset?: number,
+  ): Promise<{ suppressions: EmailSuppression[]; total: number }>;
   remove(email: string, reason: SuppressionReason): Promise<void>;
 }

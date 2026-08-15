@@ -1,5 +1,5 @@
-export type ProductStatus = 'active' | 'archived';
-export type ProductVisibility = 'public' | 'private';
+export type ProductStatus = "active" | "archived";
+export type ProductVisibility = "public" | "private";
 
 export interface Product {
   id: string;

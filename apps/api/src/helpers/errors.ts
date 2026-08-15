@@ -10,7 +10,9 @@ export type CodedError = Error & { code?: string };
  */
 export function asCodedError(err: unknown): CodedError {
   if (err instanceof Error) return err as CodedError;
-  return new Error(typeof err === 'string' ? err : 'Unknown error') as CodedError;
+  return new Error(
+    typeof err === "string" ? err : "Unknown error",
+  ) as CodedError;
 }
 
 /**
@@ -18,5 +20,5 @@ export function asCodedError(err: unknown): CodedError {
  */
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
-  return typeof err === 'string' ? err : 'Unknown error';
+  return typeof err === "string" ? err : "Unknown error";
 }

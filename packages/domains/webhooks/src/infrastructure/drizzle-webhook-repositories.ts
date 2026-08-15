@@ -1,11 +1,25 @@
-import { getDb, webhookEndpoints, WebhookEndpointRow, webhookDeliveries, WebhookDeliveryRow } from '@vibress/database';
-import { eq, and, count, desc, sql } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { WebhookRepository, WebhookEndpoint, WebhookDelivery, CreateWebhookEndpointData, ListDeliveriesFilter } from '../domain/webhook';
-import { encryptSecret, decryptSecret } from '@vibress/security';
+import {
+  getDb,
+  webhookEndpoints,
+  WebhookEndpointRow,
+  webhookDeliveries,
+  WebhookDeliveryRow,
+} from "@vibress/database";
+import { eq, and, count, desc, sql } from "drizzle-orm";
+import crypto from "node:crypto";
+import {
+  WebhookRepository,
+  WebhookEndpoint,
+  WebhookDelivery,
+  CreateWebhookEndpointData,
+  ListDeliveriesFilter,
+} from "../domain/webhook";
+import { encryptSecret } from "@vibress/security";
 
 export class DrizzleWebhookRepository implements WebhookRepository {
-  async createEndpoint(data: CreateWebhookEndpointData): Promise<WebhookEndpoint> {
+  async createEndpoint(
+    data: CreateWebhookEndpointData,
+  ): Promise<WebhookEndpoint> {
     const db = getDb();
     const now = new Date();
     const [row] = await db
@@ -21,13 +35,17 @@ export class DrizzleWebhookRepository implements WebhookRepository {
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert webhook endpoint');
+    if (!row) throw new Error("Failed to insert webhook endpoint");
     return this.mapEndpointToDomain(row);
   }
 
   async findEndpointById(id: string): Promise<WebhookEndpoint | null> {
     const db = getDb();
-    const rows = await db.select().from(webhookEndpoints).where(eq(webhookEndpoints.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(webhookEndpoints)
+      .where(eq(webhookEndpoints.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapEndpointToDomain(row);
@@ -35,11 +53,17 @@ export class DrizzleWebhookRepository implements WebhookRepository {
 
   async listEndpoints(): Promise<WebhookEndpoint[]> {
     const db = getDb();
-    const rows = await db.select().from(webhookEndpoints).orderBy(webhookEndpoints.createdAt);
+    const rows = await db
+      .select()
+      .from(webhookEndpoints)
+      .orderBy(webhookEndpoints.createdAt);
     return rows.map((r) => this.mapEndpointToDomain(r));
   }
 
-  async updateEndpoint(id: string, data: Partial<CreateWebhookEndpointData>): Promise<WebhookEndpoint> {
+  async updateEndpoint(
+    id: string,
+    data: Partial<CreateWebhookEndpointData>,
+  ): Promise<WebhookEndpoint> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
@@ -48,9 +72,14 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     if (data.eventTypes !== undefined) payload.eventTypes = data.eventTypes;
     if (data.secret !== undefined) {
       // Replace-only: undefined means keep existing
-      payload.secretEncrypted = data.secret === null ? null : encryptSecret(data.secret);
+      payload.secretEncrypted =
+        data.secret === null ? null : encryptSecret(data.secret);
     }
-    const [row] = await db.update(webhookEndpoints).set(payload).where(eq(webhookEndpoints.id, id)).returning();
+    const [row] = await db
+      .update(webhookEndpoints)
+      .set(payload)
+      .where(eq(webhookEndpoints.id, id))
+      .returning();
     if (!row) throw new Error(`Webhook endpoint not found: ${id}`);
     return this.mapEndpointToDomain(row);
   }
@@ -60,18 +89,29 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
   }
 
-  async findActiveEndpointsForEvent(eventType: string): Promise<WebhookEndpoint[]> {
+  async findActiveEndpointsForEvent(
+    eventType: string,
+  ): Promise<WebhookEndpoint[]> {
     const db = getDb();
     const rows = await db
       .select()
       .from(webhookEndpoints)
       .where(eq(webhookEndpoints.enabled, true));
     return rows
-      .filter((r) => (r.eventTypes as string[]).includes(eventType) || (r.eventTypes as string[]).includes('*'))
+      .filter(
+        (r) =>
+          (r.eventTypes as string[]).includes(eventType) ||
+          (r.eventTypes as string[]).includes("*"),
+      )
       .map((r) => this.mapEndpointToDomain(r));
   }
 
-  async createDelivery(data: { endpointId: string; eventId: string; eventType: string; payloadHash: string }): Promise<WebhookDelivery> {
+  async createDelivery(data: {
+    endpointId: string;
+    eventId: string;
+    eventType: string;
+    payloadHash: string;
+  }): Promise<WebhookDelivery> {
     const db = getDb();
     const now = new Date();
     const [row] = await db
@@ -82,22 +122,30 @@ export class DrizzleWebhookRepository implements WebhookRepository {
         eventId: data.eventId,
         eventType: data.eventType,
         payloadHash: data.payloadHash,
-        status: 'pending',
+        status: "pending",
         attemptCount: 0,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert webhook delivery');
+    if (!row) throw new Error("Failed to insert webhook delivery");
     return this.mapDeliveryToDomain(row);
   }
 
-  async findDelivery(endpointId: string, eventId: string): Promise<WebhookDelivery | null> {
+  async findDelivery(
+    endpointId: string,
+    eventId: string,
+  ): Promise<WebhookDelivery | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(webhookDeliveries)
-      .where(and(eq(webhookDeliveries.endpointId, endpointId), eq(webhookDeliveries.eventId, eventId)))
+      .where(
+        and(
+          eq(webhookDeliveries.endpointId, endpointId),
+          eq(webhookDeliveries.eventId, eventId),
+        ),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -106,39 +154,73 @@ export class DrizzleWebhookRepository implements WebhookRepository {
 
   async findDeliveryById(id: string): Promise<WebhookDelivery | null> {
     const db = getDb();
-    const rows = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapDeliveryToDomain(row);
   }
 
-  async listDeliveries(filter: ListDeliveriesFilter = {}): Promise<{ deliveries: WebhookDelivery[]; total: number }> {
+  async listDeliveries(
+    filter: ListDeliveriesFilter = {},
+  ): Promise<{ deliveries: WebhookDelivery[]; total: number }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 50, 100);
     const offset = filter.offset || 0;
     const conditions = [];
-    if (filter.endpointId) conditions.push(eq(webhookDeliveries.endpointId, filter.endpointId));
-    if (filter.status) conditions.push(eq(webhookDeliveries.status, filter.status));
+    if (filter.endpointId)
+      conditions.push(eq(webhookDeliveries.endpointId, filter.endpointId));
+    if (filter.status)
+      conditions.push(eq(webhookDeliveries.status, filter.status));
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
-    const countRes = await db.select({ total: count() }).from(webhookDeliveries).where(whereClause);
-    const rows = await db.select().from(webhookDeliveries).where(whereClause).orderBy(desc(webhookDeliveries.createdAt)).limit(limit).offset(offset);
-    return { deliveries: rows.map((r) => this.mapDeliveryToDomain(r)), total: Number(countRes[0]?.total || 0) };
+    const countRes = await db
+      .select({ total: count() })
+      .from(webhookDeliveries)
+      .where(whereClause);
+    const rows = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(whereClause)
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return {
+      deliveries: rows.map((r) => this.mapDeliveryToDomain(r)),
+      total: Number(countRes[0]?.total || 0),
+    };
   }
 
   async markDelivered(id: string, responseStatus: number): Promise<void> {
     const db = getDb();
     await db
       .update(webhookDeliveries)
-      .set({ status: 'delivered', responseStatus, lastError: null, updatedAt: new Date() })
+      .set({
+        status: "delivered",
+        responseStatus,
+        lastError: null,
+        updatedAt: new Date(),
+      })
       .where(eq(webhookDeliveries.id, id));
   }
 
-  async markFailed(id: string, error: string, attemptCount: number): Promise<void> {
+  async markFailed(
+    id: string,
+    error: string,
+    attemptCount: number,
+  ): Promise<void> {
     const db = getDb();
     await db
       .update(webhookDeliveries)
-      .set({ status: 'failed', lastError: error.slice(0, 500), attemptCount, updatedAt: new Date() })
+      .set({
+        status: "failed",
+        lastError: error.slice(0, 500),
+        attemptCount,
+        updatedAt: new Date(),
+      })
       .where(eq(webhookDeliveries.id, id));
   }
 
@@ -146,7 +228,11 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     const db = getDb();
     await db
       .update(webhookDeliveries)
-      .set({ status: 'dead_letter', lastError: error.slice(0, 500), updatedAt: new Date() })
+      .set({
+        status: "dead_letter",
+        lastError: error.slice(0, 500),
+        updatedAt: new Date(),
+      })
       .where(eq(webhookDeliveries.id, id));
   }
 
@@ -155,7 +241,7 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     const rows = await db
       .select()
       .from(webhookDeliveries)
-      .where(eq(webhookDeliveries.status, 'pending'))
+      .where(eq(webhookDeliveries.status, "pending"))
       .orderBy(webhookDeliveries.createdAt)
       .limit(limit);
     return rows.map((r) => this.mapDeliveryToDomain(r));
@@ -165,7 +251,10 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     const db = getDb();
     await db
       .update(webhookDeliveries)
-      .set({ attemptCount: sql`${webhookDeliveries.attemptCount} + 1`, updatedAt: new Date() })
+      .set({
+        attemptCount: sql`${webhookDeliveries.attemptCount} + 1`,
+        updatedAt: new Date(),
+      })
       .where(eq(webhookDeliveries.id, id));
   }
 
@@ -189,7 +278,7 @@ export class DrizzleWebhookRepository implements WebhookRepository {
       eventId: row.eventId,
       eventType: row.eventType,
       payloadHash: row.payloadHash,
-      status: row.status as WebhookDelivery['status'],
+      status: row.status as WebhookDelivery["status"],
       attemptCount: row.attemptCount,
       lastError: row.lastError,
       responseStatus: row.responseStatus,

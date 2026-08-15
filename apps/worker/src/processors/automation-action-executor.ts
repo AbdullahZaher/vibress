@@ -1,9 +1,14 @@
-import { AutomationAction } from '@vibress/automations';
-import { DrizzleEmailRecipientRepository, DrizzleEmailEventRepository, SmtpEmailProvider, EmailMessage } from '@vibress/email';
-import { WebhooksService, DrizzleWebhookRepository } from '@vibress/webhooks';
-import { DrizzleNewsletterPreferenceRepository } from '@vibress/newsletters';
-import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
-import { getConfig } from '@vibress/config';
+import { AutomationAction } from "@vibress/automations";
+import { SmtpEmailProvider, EmailMessage } from "@vibress/email";
+import { WebhooksService, DrizzleWebhookRepository } from "@vibress/webhooks";
+import { DrizzleNewsletterPreferenceRepository } from "@vibress/newsletters";
+import {
+  Queue,
+  QUEUE_NAMES,
+  enqueueTraced,
+  getBullMqRedisConnection,
+} from "@vibress/queue";
+import { getConfig } from "@vibress/config";
 
 const WEBHOOK_QUEUE = QUEUE_NAMES.WEBHOOK_DELIVERY;
 
@@ -22,30 +27,46 @@ export class AutomationActionExecutor {
     user: this.config.smtp.user,
     pass: this.config.smtp.pass,
   });
-  private webhooksService = new WebhooksService(new DrizzleWebhookRepository(), {
-    enqueue: async (deliveryId: string, endpointId: string) => {
-      const queue = new Queue(WEBHOOK_QUEUE, { connection: getBullMqRedisConnection() });
-      await enqueueTraced(queue, 'deliver', { deliveryId, endpointId }, { jobId: `delivery-${deliveryId}` });
-      await queue.close();
+  private webhooksService = new WebhooksService(
+    new DrizzleWebhookRepository(),
+    {
+      enqueue: async (deliveryId: string, endpointId: string) => {
+        const queue = new Queue(WEBHOOK_QUEUE, {
+          connection: getBullMqRedisConnection(),
+        });
+        await enqueueTraced(
+          queue,
+          "deliver",
+          { deliveryId, endpointId },
+          { jobId: `delivery-${deliveryId}` },
+        );
+        await queue.close();
+      },
     },
-  });
+  );
   private newsletterPrefRepo = new DrizzleNewsletterPreferenceRepository();
 
   async execute(
     action: AutomationAction,
-    context: { runId: string; stepIndex: number; memberId?: string | null; eventPayload: Record<string, unknown> | null }
+    context: {
+      runId: string;
+      stepIndex: number;
+      memberId?: string | null;
+      eventPayload: Record<string, unknown> | null;
+    },
   ): Promise<{ result: Record<string, unknown> }> {
     switch (action.type) {
-      case 'email': {
-        const to = String(action.config.to || '');
-        const subject = String(action.config.subject || '');
-        const body = String(action.config.body || '');
-        if (!to || !subject) throw new Error('email action requires to and subject');
+      case "email": {
+        const to = String(action.config.to || "");
+        const subject = String(action.config.subject || "");
+        const body = String(action.config.body || "");
+        if (!to || !subject)
+          throw new Error("email action requires to and subject");
         const message: EmailMessage = {
           to,
           toName: null,
           from: this.config.smtp.from,
-          fromName: 'Vibress',
+          fromName: "Vibress",
           replyTo: null,
           subject,
           html: `<div style="font-family:sans-serif">${escapeHtml(body)}</div>`,
@@ -55,32 +76,48 @@ export class AutomationActionExecutor {
         return { result: { messageId: result.messageId } };
       }
 
-      case 'webhook': {
-        const url = String(action.config.url || '');
-        const eventType = String(action.config.eventType || 'automation.action');
-        if (!url) throw new Error('webhook action requires url');
+      case "webhook": {
+        const url = String(action.config.url || "");
+        const eventType = String(
+          action.config.eventType || "automation.action",
+        );
+        if (!url) throw new Error("webhook action requires url");
         // Validate SSRF at execution time; delivery happens via the outbound webhook pipeline
-        const { isSafeUrl } = await import('@vibress/security');
-        if (!isSafeUrl(url)) throw new Error('webhook action URL is unsafe');
-        const endpoint = await this.webhooksService.createEndpoint({
-          name: `automation:${context.runId}`,
-          url,
-          secret: null,
-          eventTypes: [eventType],
-        }, null);
-        await this.webhooksService.dispatchEvent(eventType, { ...context.eventPayload, originAutomationId: context.runId });
+        const { isSafeUrl } = await import("@vibress/security");
+        if (!isSafeUrl(url)) throw new Error("webhook action URL is unsafe");
+        const endpoint = await this.webhooksService.createEndpoint(
+          {
+            name: `automation:${context.runId}`,
+            url,
+            secret: null,
+            eventTypes: [eventType],
+          },
+          null,
+        );
+        await this.webhooksService.dispatchEvent(eventType, {
+          ...context.eventPayload,
+          originAutomationId: context.runId,
+        });
         // Clean up the transient endpoint after dispatch
         await this.webhooksService.deleteEndpoint(endpoint.id, null);
         return { result: { dispatched: true, eventType } };
       }
 
-      case 'newsletter_subscribe':
-      case 'newsletter_unsubscribe': {
-        const newsletterId = String(action.config.newsletterId || '');
-        const memberId = context.memberId || String(action.config.memberId || '');
-        if (!newsletterId || !memberId) throw new Error(`${action.type} action requires newsletterId and memberId`);
-        const subscribed = action.type === 'newsletter_subscribe';
-        await this.newsletterPrefRepo.setSubscription(memberId, newsletterId, subscribed);
+      case "newsletter_subscribe":
+      case "newsletter_unsubscribe": {
+        const newsletterId = String(action.config.newsletterId || "");
+        const memberId =
+          context.memberId || String(action.config.memberId || "");
+        if (!newsletterId || !memberId)
+          throw new Error(
+            `${action.type} action requires newsletterId and memberId`,
+          );
+        const subscribed = action.type === "newsletter_subscribe";
+        await this.newsletterPrefRepo.setSubscription(
+          memberId,
+          newsletterId,
+          subscribed,
+        );
         return { result: { memberId, newsletterId, subscribed } };
       }
 
@@ -92,8 +129,8 @@ export class AutomationActionExecutor {
 
 function escapeHtml(input: string): string {
   return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

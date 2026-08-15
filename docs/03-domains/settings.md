@@ -12,12 +12,12 @@ each domain owns the meaning of its settings.
 
 Every setting is explicitly classified:
 
-| Classification | Visibility |
-|---|---|
-| `public` | Exposed via the public settings endpoint |
-| `staff-visible` | Exposed to staff (masked never applied) |
-| `secret` | Masked as `••••••••` for staff; never logged/exported |
-| `internal` | Masked as `••••••••`; never exposed/exported |
+| Classification  | Visibility                                            |
+| --------------- | ----------------------------------------------------- |
+| `public`        | Exposed via the public settings endpoint              |
+| `staff-visible` | Exposed to staff (masked never applied)               |
+| `secret`        | Masked as `••••••••` for staff; never logged/exported |
+| `internal`      | Masked as `••••••••`; never exposed/exported          |
 
 Public APIs never leak staff/internal/secret values. Secret provider
 credentials continue using encrypted secret storage (integrations domain),

@@ -1,8 +1,17 @@
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
-import { StorageProvider, StorageCapabilities, PutObjectInput, StoredObject } from './storage-provider';
-import { StorageError, StoragePathTraversalError, StorageKeyInvalidError } from './errors';
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import {
+  StorageProvider,
+  StorageCapabilities,
+  PutObjectInput,
+  StoredObject,
+} from "./storage-provider";
+import {
+  StorageError,
+  StoragePathTraversalError,
+  StorageKeyInvalidError,
+} from "./errors";
 
 export interface LocalStorageOptions {
   storageRoot?: string;
@@ -11,15 +20,19 @@ export interface LocalStorageOptions {
 }
 
 export class LocalStorageProvider implements StorageProvider {
-  readonly name = 'local';
+  readonly name = "local";
   private readonly storageRoot: string;
   private readonly tempDir: string;
   private readonly baseUrl: string;
 
   constructor(options: LocalStorageOptions = {}) {
-    this.storageRoot = path.resolve(options.storageRoot || path.join(process.cwd(), 'content', 'media'));
-    this.tempDir = path.resolve(options.tempDir || path.join(process.cwd(), 'content', 'temp'));
-    this.baseUrl = (options.baseUrl || '/content/media').replace(/\/+$/, '');
+    this.storageRoot = path.resolve(
+      options.storageRoot || path.join(process.cwd(), "content", "media"),
+    );
+    this.tempDir = path.resolve(
+      options.tempDir || path.join(process.cwd(), "content", "temp"),
+    );
+    this.baseUrl = (options.baseUrl || "/content/media").replace(/\/+$/, "");
   }
 
   getCapabilities(): StorageCapabilities {
@@ -33,20 +46,20 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   private resolveKeyPath(key: string): string {
-    if (!key || typeof key !== 'string') {
-      throw new StorageKeyInvalidError(key, 'Key must be a non-empty string');
+    if (!key || typeof key !== "string") {
+      throw new StorageKeyInvalidError(key, "Key must be a non-empty string");
     }
 
-    if (key.includes('\0')) {
+    if (key.includes("\0")) {
       throw new StoragePathTraversalError(key);
     }
 
     // Standardize slashes
-    const normalizedKey = key.replace(/\\/g, '/');
+    const normalizedKey = key.replace(/\\/g, "/");
 
     // Check for explicit path traversal components
-    const parts = normalizedKey.split('/');
-    if (parts.includes('..') || parts.includes('.')) {
+    const parts = normalizedKey.split("/");
+    if (parts.includes("..") || parts.includes(".")) {
       throw new StoragePathTraversalError(key);
     }
 
@@ -57,7 +70,7 @@ export class LocalStorageProvider implements StorageProvider {
     const resolvedPath = path.resolve(this.storageRoot, normalizedKey);
 
     const relative = path.relative(this.storageRoot, resolvedPath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new StoragePathTraversalError(key);
     }
 
@@ -98,7 +111,9 @@ export class LocalStorageProvider implements StorageProvider {
       if (error instanceof StorageError) {
         throw error;
       }
-      throw new StorageError(`Failed to write local storage object '${input.key}': ${(error as Error).message}`);
+      throw new StorageError(
+        `Failed to write local storage object '${input.key}': ${(error as Error).message}`,
+      );
     }
   }
 
@@ -107,10 +122,15 @@ export class LocalStorageProvider implements StorageProvider {
     try {
       await fs.promises.unlink(targetPath);
     } catch (error) {
-      if (error instanceof Error && (error as { code?: string }).code === 'ENOENT') {
+      if (
+        error instanceof Error &&
+        (error as { code?: string }).code === "ENOENT"
+      ) {
         return; // Idempotent deletion
       }
-      throw new StorageError(`Failed to delete local storage object '${key}': ${error instanceof Error ? error.message : String(error)}`);
+      throw new StorageError(
+        `Failed to delete local storage object '${key}': ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -126,7 +146,7 @@ export class LocalStorageProvider implements StorageProvider {
 
   async getUrl(key: string): Promise<string> {
     this.resolveKeyPath(key); // Validates key safety
-    const cleanKey = key.replace(/\\/g, '/').replace(/^\/+/, '');
+    const cleanKey = key.replace(/\\/g, "/").replace(/^\/+/, "");
     return `${this.baseUrl}/${cleanKey}`;
   }
 }

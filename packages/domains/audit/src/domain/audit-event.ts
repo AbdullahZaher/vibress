@@ -24,15 +24,29 @@ export interface CreateAuditEventData {
 }
 
 // Redact any sensitive keys from metadata to prevent leaking secrets in audit logs
-export function sanitizeAuditMetadata(metadata?: Record<string, unknown> | null): Record<string, unknown> | null {
+export function sanitizeAuditMetadata(
+  metadata?: Record<string, unknown> | null,
+): Record<string, unknown> | null {
   if (!metadata) return null;
-  const sensitiveKeys = ['password', 'password_hash', 'token', 'secret', 'authorization', 'cookie', 'set-cookie'];
+  const sensitiveKeys = [
+    "password",
+    "password_hash",
+    "token",
+    "secret",
+    "authorization",
+    "cookie",
+    "set-cookie",
+  ];
   const sanitized: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(metadata)) {
-    if (sensitiveKeys.some(s => key.toLowerCase().includes(s))) {
-      sanitized[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    if (sensitiveKeys.some((s) => key.toLowerCase().includes(s))) {
+      sanitized[key] = "[REDACTED]";
+    } else if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value)
+    ) {
       sanitized[key] = sanitizeAuditMetadata(value as Record<string, unknown>);
     } else {
       sanitized[key] = value;

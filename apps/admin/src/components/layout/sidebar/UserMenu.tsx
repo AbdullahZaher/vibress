@@ -1,7 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronsUpDown, ExternalLink, Settings, Shield, LogOut } from 'lucide-react';
-import { ApiUser } from '../../../lib/api';
-import { Avatar } from '../../ui/avatar';
+import React, { useState, useRef, useEffect } from "react";
+import {
+  ChevronsUpDown,
+  ExternalLink,
+  Settings,
+  Shield,
+  LogOut,
+} from "lucide-react";
+import { ApiUser } from "../../../lib/api";
+import { Avatar } from "../../ui/avatar";
 
 interface UserMenuProps {
   user: ApiUser;
@@ -9,7 +15,11 @@ interface UserMenuProps {
   onNavigate?: (path: string) => void;
 }
 
-export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }) => {
+export const UserMenu: React.FC<UserMenuProps> = ({
+  user,
+  onLogout,
+  onNavigate,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -21,20 +31,20 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
       }
     };
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsOpen(false);
+      if (event.key === "Escape") setIsOpen(false);
     };
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener("keydown", handleKeyDown);
     }
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
   return (
@@ -55,8 +65,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
             <span className="absolute bottom-0 right-0 size-2 rounded-full bg-[#3eb083] ring-2 ring-card" />
           </div>
           <div className="flex flex-col overflow-hidden text-left">
-            <span className="text-xs font-semibold text-foreground truncate leading-none">{user.name}</span>
-            <span className="text-[10px] text-muted-foreground truncate">{user.email}</span>
+            <span className="text-xs font-semibold text-foreground truncate leading-none">
+              {user.name}
+            </span>
+            <span className="text-[10px] text-muted-foreground truncate">
+              {user.email}
+            </span>
           </div>
         </div>
 
@@ -67,18 +81,20 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
 
       {/* Popover Dropdown Menu */}
       {isOpen && (
-        <div
-          className="absolute bottom-full left-0 mb-2 w-full min-w-[240px] rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150"
-        >
+        <div className="absolute bottom-full left-0 mb-2 w-full min-w-[240px] rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150">
           {/* Header Identity */}
           <div className="px-2.5 py-2 border-b border-border/60 mb-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground truncate">{user.name}</span>
+              <span className="text-xs font-bold text-foreground truncate">
+                {user.name}
+              </span>
               <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold border border-primary/20">
                 Staff
               </span>
             </div>
-            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.email}</p>
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+              {user.email}
+            </p>
           </div>
 
           {/* Quick Actions */}
@@ -102,7 +118,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
-                    onNavigate('/admin/settings/general');
+                    onNavigate("/admin/settings/general");
                   }}
                   className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
                 >
@@ -116,7 +132,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
-                    onNavigate('/admin/settings/advanced');
+                    onNavigate("/admin/settings/advanced");
                   }}
                   className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
                 >

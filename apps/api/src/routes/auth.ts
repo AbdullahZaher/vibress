@@ -1,17 +1,21 @@
-import { FastifyInstance } from 'fastify';
-import { LoginRequestSchema } from '@vibress/api-contracts';
-import { authService } from '../services';
-import { requireStaffSession, validateOrigin, COOKIE_NAME } from '../middleware/auth';
-import { getConfig } from '@vibress/config';
-import { AuthDomainError } from '@vibress/auth';
+import { FastifyInstance } from "fastify";
+import { LoginRequestSchema } from "@vibress/api-contracts";
+import { authService } from "../services";
+import {
+  requireStaffSession,
+  validateOrigin,
+  COOKIE_NAME,
+} from "../middleware/auth";
+import { getConfig } from "@vibress/config";
+import { AuthDomainError } from "@vibress/auth";
 
 export async function authRoutes(fastify: FastifyInstance) {
   // Login
-  fastify.post('/login', {
+  fastify.post("/login", {
     config: {
       rateLimit: {
         max: getConfig().isProduction ? 5 : 1000,
-        timeWindow: '1 minute',
+        timeWindow: "1 minute",
       },
     },
     preHandler: [validateOrigin],
@@ -21,8 +25,10 @@ export async function authRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           errors: [
             {
-              code: 'VALIDATION_ERROR',
-              message: parseResult.error.errors[0]?.message || 'Invalid login request payload',
+              code: "VALIDATION_ERROR",
+              message:
+                parseResult.error.errors[0]?.message ||
+                "Invalid login request payload",
               requestId: req.id,
             },
           ],
@@ -31,7 +37,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
       const { email, password } = parseResult.data;
       const ipAddress = req.ip;
-      const userAgent = req.headers['user-agent'] || null;
+      const userAgent = req.headers["user-agent"] || null;
 
       try {
         const result = await authService.loginStaff(email, password, {
@@ -42,10 +48,10 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         const isProduction = getConfig().isProduction;
         reply.setCookie(COOKIE_NAME, result.sessionToken, {
-          path: '/',
+          path: "/",
           httpOnly: true,
           secure: isProduction,
-          sameSite: 'lax',
+          sameSite: "lax",
           maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
         });
 
@@ -61,12 +67,15 @@ export async function authRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (err: unknown) {
-        if (err instanceof AuthDomainError && err.code === 'INVALID_CREDENTIALS') {
+        if (
+          err instanceof AuthDomainError &&
+          err.code === "INVALID_CREDENTIALS"
+        ) {
           return reply.status(401).send({
             errors: [
               {
-                code: 'INVALID_CREDENTIALS',
-                message: 'Invalid credentials',
+                code: "INVALID_CREDENTIALS",
+                message: "Invalid credentials",
                 requestId: req.id,
               },
             ],
@@ -78,25 +87,25 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Logout
-  fastify.post('/logout', {
+  fastify.post("/logout", {
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
       const cookieToken = req.cookies[COOKIE_NAME];
       if (cookieToken) {
         await authService.logoutStaff(cookieToken, {
           ipAddress: req.ip,
-          userAgent: req.headers['user-agent'] || null,
+          userAgent: req.headers["user-agent"] || null,
           requestId: req.id,
         });
       }
 
-      reply.clearCookie(COOKIE_NAME, { path: '/' });
+      reply.clearCookie(COOKIE_NAME, { path: "/" });
       return reply.status(200).send({ success: true });
     },
   });
 
   // Get current user details
-  fastify.get('/me', {
+  fastify.get("/me", {
     preHandler: [requireStaffSession],
     handler: async (req, reply) => {
       return reply.status(200).send({

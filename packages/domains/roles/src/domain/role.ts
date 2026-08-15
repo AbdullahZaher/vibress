@@ -3,7 +3,7 @@ export class RoleDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'RoleDomainError';
+    this.name = "RoleDomainError";
     this.code = code;
   }
 }

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, X } from 'lucide-react';
+import React from "react";
+import { Search, X } from "lucide-react";
 
 export interface SettingsSearchProps {
   query: string;
@@ -28,7 +28,7 @@ export const SettingsSearch: React.FC<SettingsSearchProps> = ({
       {query ? (
         <button
           type="button"
-          onClick={() => onQueryChange('')}
+          onClick={() => onQueryChange("")}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer transition-colors"
           title="Clear search"
           aria-label="Clear search"
@@ -36,7 +36,8 @@ export const SettingsSearch: React.FC<SettingsSearchProps> = ({
           <X className="h-3.5 w-3.5" />
         </button>
       ) : (
-        resultCount !== undefined && totalCount !== undefined && (
+        resultCount !== undefined &&
+        totalCount !== undefined && (
           <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-foreground pointer-events-none">
             {resultCount}/{totalCount}
           </span>

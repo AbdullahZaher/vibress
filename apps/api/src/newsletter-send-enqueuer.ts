@@ -1,6 +1,11 @@
-import { Queue, QUEUE_NAMES, enqueueTraced, getBullMqRedisConnection } from '@vibress/queue';
-import { NewslettersService } from '@vibress/newsletters';
-import { DrizzleEmailRecipientRepository } from '@vibress/email';
+import {
+  Queue,
+  QUEUE_NAMES,
+  enqueueTraced,
+  getBullMqRedisConnection,
+} from "@vibress/queue";
+import { NewslettersService } from "@vibress/newsletters";
+import { DrizzleEmailRecipientRepository } from "@vibress/email";
 
 const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
 const BATCH_SIZE = 25;
@@ -23,7 +28,7 @@ export class NewsletterSendEnqueuer {
         connection: getBullMqRedisConnection(),
         defaultJobOptions: {
           attempts: 5,
-          backoff: { type: 'exponential', delay: 5000 },
+          backoff: { type: "exponential", delay: 5000 },
           removeOnComplete: 500,
           removeOnFail: 1000,
         },
@@ -32,17 +37,27 @@ export class NewsletterSendEnqueuer {
     return this.queue;
   }
 
-  async startSendAndEnqueue(sendId: string): Promise<{ recipientCount: number; batchCount: number }> {
-    const { send, recipientCount } = await this.newslettersService.startSend(sendId, async (rows) => {
-      return this.recipientRepo.createMany(rows.map((r) => ({ ...r, sendId })));
-    });
+  async startSendAndEnqueue(
+    sendId: string,
+  ): Promise<{ recipientCount: number; batchCount: number }> {
+    const { recipientCount } = await this.newslettersService.startSend(
+      sendId,
+      async (rows) => {
+        return this.recipientRepo.createMany(
+          rows.map((r) => ({ ...r, sendId })),
+        );
+      },
+    );
     if (recipientCount === 0) {
       await this.newslettersService.completeSend(sendId);
       return { recipientCount: 0, batchCount: 0 };
     }
 
     const queue = this.getQueue();
-    const pending = await this.recipientRepo.findPending(sendId, recipientCount);
+    const pending = await this.recipientRepo.findPending(
+      sendId,
+      recipientCount,
+    );
     const batches: string[][] = [];
     for (let i = 0; i < pending.length; i += BATCH_SIZE) {
       batches.push(pending.slice(i, i + BATCH_SIZE).map((r) => r.id));
@@ -51,9 +66,13 @@ export class NewsletterSendEnqueuer {
     for (let i = 0; i < batches.length; i++) {
       await enqueueTraced(
         queue,
-        'deliver',
+        "deliver",
         { sendId, recipientIds: batches[i] },
-        { jobId: `send-${sendId}-batch-${i}`, removeOnComplete: true, removeOnFail: 1000 }
+        {
+          jobId: `send-${sendId}-batch-${i}`,
+          removeOnComplete: true,
+          removeOnFail: 1000,
+        },
       );
     }
     return { recipientCount, batchCount: batches.length };

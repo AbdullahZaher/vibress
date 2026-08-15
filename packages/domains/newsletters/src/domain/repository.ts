@@ -1,4 +1,8 @@
-import { Newsletter, CreateNewsletterData, UpdateNewsletterData } from './newsletter';
+import {
+  Newsletter,
+  CreateNewsletterData,
+  UpdateNewsletterData,
+} from "./newsletter";
 
 export interface NewsletterRepository {
   create(data: CreateNewsletterData): Promise<Newsletter>;

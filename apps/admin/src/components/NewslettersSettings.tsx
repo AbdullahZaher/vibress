@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
   AdminNewsletter,
   AdminNewsletterSend,
@@ -6,23 +6,23 @@ import {
   listNewslettersApi,
   listNewsletterSendsApi,
   listSuppressionsApi,
-} from '../lib/api';
+} from "../lib/api";
 
-import { Mail, Send, ShieldX } from 'lucide-react';
-import { NewslettersListPanel } from './newsletters/NewslettersListPanel';
-import { BroadcastsPanel } from './newsletters/BroadcastsPanel';
-import { SuppressionsPanel } from './newsletters/SuppressionsPanel';
+import { Mail, Send, ShieldX } from "lucide-react";
+import { NewslettersListPanel } from "./newsletters/NewslettersListPanel";
+import { BroadcastsPanel } from "./newsletters/BroadcastsPanel";
+import { SuppressionsPanel } from "./newsletters/SuppressionsPanel";
 
-type Tab = 'newsletters' | 'sends' | 'suppressions';
+type Tab = "newsletters" | "sends" | "suppressions";
 
 export function NewslettersSettings() {
-  const [tab, setTab] = useState<Tab>('newsletters');
+  const [tab, setTab] = useState<Tab>("newsletters");
   const [newsletters, setNewsletters] = useState<AdminNewsletter[]>([]);
   const [sends, setSends] = useState<AdminNewsletterSend[]>([]);
   const [suppressions, setSuppressions] = useState<AdminSuppression[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [sendNlId, setSendNlId] = useState('');
+  const [sendNlId, setSendNlId] = useState("");
 
   const refresh = async () => {
     try {
@@ -39,7 +39,9 @@ export function NewslettersSettings() {
       }
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load newsletters');
+      setError(
+        err instanceof Error ? err.message : "Failed to load newsletters",
+      );
     }
   };
 
@@ -51,7 +53,9 @@ export function NewslettersSettings() {
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-foreground">Newsletters & Email Broadcasts</h1>
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          Newsletters & Email Broadcasts
+        </h1>
       </div>
 
       {error && (
@@ -69,42 +73,48 @@ export function NewslettersSettings() {
       {/* Tabs Bar */}
       <div className="flex items-center gap-1.5">
         <button
-          onClick={() => setTab('newsletters')}
+          onClick={() => setTab("newsletters")}
           className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-            tab === 'newsletters'
-              ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-              : 'text-muted-foreground hover:text-foreground'
+            tab === "newsletters"
+              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <Mail className="h-3.5 w-3.5" /> Newsletters ({newsletters.length})
         </button>
         <button
-          onClick={() => setTab('sends')}
+          onClick={() => setTab("sends")}
           className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-            tab === 'sends'
-              ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-              : 'text-muted-foreground hover:text-foreground'
+            tab === "sends"
+              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <Send className="h-3.5 w-3.5" /> Broadcasts ({sends.length})
         </button>
         <button
-          onClick={() => setTab('suppressions')}
+          onClick={() => setTab("suppressions")}
           className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-            tab === 'suppressions'
-              ? 'bg-card text-foreground border border-border shadow-2xs font-semibold'
-              : 'text-muted-foreground hover:text-foreground'
+            tab === "suppressions"
+              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <ShieldX className="h-3.5 w-3.5" /> Suppressions ({suppressions.length})
+          <ShieldX className="h-3.5 w-3.5" /> Suppressions (
+          {suppressions.length})
         </button>
       </div>
 
       {/* Panels stay mounted so form state survives tab switches */}
-      <div className={tab === 'newsletters' ? '' : 'hidden'}>
-        <NewslettersListPanel newsletters={newsletters} onError={setError} onMessage={setMessage} onChanged={refresh} />
+      <div className={tab === "newsletters" ? "" : "hidden"}>
+        <NewslettersListPanel
+          newsletters={newsletters}
+          onError={setError}
+          onMessage={setMessage}
+          onChanged={refresh}
+        />
       </div>
-      <div className={tab === 'sends' ? '' : 'hidden'}>
+      <div className={tab === "sends" ? "" : "hidden"}>
         <BroadcastsPanel
           newsletters={newsletters}
           sends={sends}
@@ -115,8 +125,13 @@ export function NewslettersSettings() {
           onChanged={refresh}
         />
       </div>
-      <div className={tab === 'suppressions' ? '' : 'hidden'}>
-        <SuppressionsPanel suppressions={suppressions} onError={setError} onMessage={setMessage} onChanged={refresh} />
+      <div className={tab === "suppressions" ? "" : "hidden"}>
+        <SuppressionsPanel
+          suppressions={suppressions}
+          onError={setError}
+          onMessage={setMessage}
+          onChanged={refresh}
+        />
       </div>
     </div>
   );

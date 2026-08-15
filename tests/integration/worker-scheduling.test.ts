@@ -1,15 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { runMigrations, seedDatabase, getDbPool, closeDbPool } from '@vibress/database';
-import { DrizzleUserRepository, UsersService } from '@vibress/users';
-import { DrizzleRoleRepository, RolesService } from '@vibress/roles';
-import { DrizzleAuditRepository } from '@vibress/audit';
-import { DrizzleRevisionRepository, RevisionsService } from '@vibress/revisions';
-import { DrizzleAuthorRepository } from '@vibress/authors';
-import { DrizzlePostRepository, PostsService } from '@vibress/posts';
-import { ContentSchedulerWorker } from '../../apps/worker/src/scheduler';
-import { hashPassword } from '@vibress/security';
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import {
+  runMigrations,
+  seedDatabase,
+  getDbPool,
+  closeDbPool,
+} from "@vibress/database";
+import { DrizzleUserRepository, UsersService } from "@vibress/users";
+import { DrizzleRoleRepository, RolesService } from "@vibress/roles";
+import { DrizzleAuditRepository } from "@vibress/audit";
+import {
+  DrizzleRevisionRepository,
+  RevisionsService,
+} from "@vibress/revisions";
+import { DrizzleAuthorRepository } from "@vibress/authors";
+import { DrizzlePostRepository, PostsService } from "@vibress/posts";
+import { ContentSchedulerWorker } from "../../apps/worker/src/scheduler";
+import { hashPassword } from "@vibress/security";
 
-describe('Worker Scheduled Publishing & Downtime Recovery', () => {
+describe("Worker Scheduled Publishing & Downtime Recovery", () => {
   let userRepo: DrizzleUserRepository;
   let roleRepo: DrizzleRoleRepository;
   let auditRepo: DrizzleAuditRepository;
@@ -45,15 +53,20 @@ describe('Worker Scheduled Publishing & Downtime Recovery', () => {
     rolesService = new RolesService(roleRepo);
 
     const revisionsService = new RevisionsService(revisionRepo);
-    postsService = new PostsService(postRepo, revisionsService, authorRepo, auditRepo);
+    postsService = new PostsService(
+      postRepo,
+      revisionsService,
+      authorRepo,
+      auditRepo,
+    );
 
-    const passHash = await hashPassword('WorkerPass123!');
+    const passHash = await hashPassword("WorkerPass123!");
     testUser = await usersService.createUser({
-      email: 'worker.admin@vibress.local',
-      name: 'Worker Admin',
+      email: "worker.admin@vibress.local",
+      name: "Worker Admin",
       passwordHash: passHash,
     });
-    const ownerRole = await rolesService.findByKey('owner');
+    const ownerRole = await rolesService.findByKey("owner");
     await rolesService.assignRoleToUser(testUser.id, ownerRole!.id);
 
     schedulerWorker = new ContentSchedulerWorker();
@@ -64,22 +77,22 @@ describe('Worker Scheduled Publishing & Downtime Recovery', () => {
     await closeDbPool();
   });
 
-  it('publishes scheduled post when scheduled timestamp arrives', async () => {
+  it("publishes scheduled post when scheduled timestamp arrives", async () => {
     const post = await postsService.createPost(
-      { title: 'Scheduled Post Test', primaryAuthorId: testUser.id },
-      testUser.id
+      { title: "Scheduled Post Test", primaryAuthorId: testUser.id },
+      testUser.id,
     );
 
     const futureTime = new Date(Date.now() + 1000); // 1s in future
     await postsService.schedulePost(post.id, futureTime, testUser.id);
 
     const postBefore = await postsService.findById(post.id);
-    expect(postBefore?.status).toBe('scheduled');
+    expect(postBefore?.status).toBe("scheduled");
 
     // Run sweep before timestamp -> remains scheduled
     await schedulerWorker.runReconciliationSweep();
     const postMid = await postsService.findById(post.id);
-    expect(postMid?.status).toBe('scheduled');
+    expect(postMid?.status).toBe("scheduled");
 
     // Wait until scheduled time passes
     await new Promise((res) => setTimeout(res, 1200));
@@ -89,14 +102,14 @@ describe('Worker Scheduled Publishing & Downtime Recovery', () => {
     expect(result.publishedPostsCount).toBeGreaterThanOrEqual(1);
 
     const postAfter = await postsService.findById(post.id);
-    expect(postAfter?.status).toBe('published');
+    expect(postAfter?.status).toBe("published");
     expect(postAfter?.publishedAt).toBeDefined();
   });
 
-  it('reconciles overdue scheduled posts after worker downtime recovery', async () => {
+  it("reconciles overdue scheduled posts after worker downtime recovery", async () => {
     const post = await postsService.createPost(
-      { title: 'Downtime Recovery Post', primaryAuthorId: testUser.id },
-      testUser.id
+      { title: "Downtime Recovery Post", primaryAuthorId: testUser.id },
+      testUser.id,
     );
 
     const futureTime = new Date(Date.now() + 500);
@@ -108,17 +121,17 @@ describe('Worker Scheduled Publishing & Downtime Recovery', () => {
 
     // Post is still in 'scheduled' status in DB while worker is offline
     const postDuringDowntime = await postsService.findById(post.id);
-    expect(postDuringDowntime?.status).toBe('scheduled');
+    expect(postDuringDowntime?.status).toBe("scheduled");
 
     // Worker restarts and performs reconciliation sweep
     const result = await schedulerWorker.runReconciliationSweep();
     expect(result.publishedPostsCount).toBeGreaterThanOrEqual(1);
 
     const postAfterRecovery = await postsService.findById(post.id);
-    expect(postAfterRecovery?.status).toBe('published');
+    expect(postAfterRecovery?.status).toBe("published");
   });
 
-  it('handles scheduled publishing idempotency cleanly', async () => {
+  it("handles scheduled publishing idempotency cleanly", async () => {
     // Running sweep again when no posts are due performs zero mutations
     const result = await schedulerWorker.runReconciliationSweep();
     expect(result.publishedPostsCount).toBe(0);

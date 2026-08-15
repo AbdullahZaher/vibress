@@ -1,11 +1,15 @@
-import { MemberRepository, MemberAuthTokenRepository, MemberSessionRepository } from '../domain/repository';
-import { Member, normalizeMemberEmail } from '../domain/member';
-import { MemberAuthMailer } from '../domain/mailer';
-import { generateOpaqueToken, hashToken } from '@vibress/security';
-import { domainEvents } from '@vibress/events';
-import { runInTransaction } from '@vibress/database';
-import { getConfig } from '@vibress/config';
-import crypto from 'node:crypto';
+import {
+  MemberRepository,
+  MemberAuthTokenRepository,
+  MemberSessionRepository,
+} from "../domain/repository";
+import { Member, normalizeMemberEmail } from "../domain/member";
+import { MemberAuthMailer } from "../domain/mailer";
+import { generateOpaqueToken, hashToken } from "@vibress/security";
+import { domainEvents } from "@vibress/events";
+import { runInTransaction } from "@vibress/database";
+import { getConfig } from "@vibress/config";
+import crypto from "node:crypto";
 
 export interface MemberAuthContext {
   ipAddress?: string | null;
@@ -18,7 +22,7 @@ export class MemberAuthError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'MemberAuthError';
+    this.name = "MemberAuthError";
     this.code = code;
   }
 }
@@ -37,13 +41,19 @@ export class MemberAuthService {
     private tokenRepo: MemberAuthTokenRepository,
     private sessionRepo: MemberSessionRepository,
     private mailer: MemberAuthMailer,
-    private signupEnabled: () => boolean = () => true
+    private signupEnabled: () => boolean = () => true,
   ) {}
 
-  async requestAuthLink(emailInput: string, context: MemberAuthContext = {}): Promise<RequestAuthLinkResult> {
+  async requestAuthLink(
+    emailInput: string,
+    context: MemberAuthContext = {},
+  ): Promise<RequestAuthLinkResult> {
     const emailNormalized = normalizeMemberEmail(emailInput);
     if (!emailNormalized) {
-      throw new MemberAuthError('VALIDATION_ERROR', 'A valid email is required');
+      throw new MemberAuthError(
+        "VALIDATION_ERROR",
+        "A valid email is required",
+      );
     }
 
     let member = await this.memberRepo.findByEmailNormalized(emailNormalized);
@@ -56,19 +66,22 @@ export class MemberAuthService {
       member = await this.memberRepo.create({
         email: emailInput.trim(),
         emailNormalized,
-        status: 'active',
+        status: "active",
         emailVerifiedAt: null,
       });
-      domainEvents.emit('member.created', { memberId: member.id, emailNormalized });
+      domainEvents.emit("member.created", {
+        memberId: member.id,
+        emailNormalized,
+      });
     }
 
-    if (member.status === 'disabled') {
+    if (member.status === "disabled") {
       // Do not issue usable tokens for disabled members; keep external behavior generic.
       return { sent: false, memberId: member.id };
     }
 
     // Latest valid token wins: invalidate previous outstanding tokens.
-    await this.tokenRepo.invalidateForMember(member.id, 'authenticate');
+    await this.tokenRepo.invalidateForMember(member.id, "authenticate");
 
     const rawToken = generateOpaqueToken();
     const tokenHash = hashToken(rawToken);
@@ -77,14 +90,17 @@ export class MemberAuthService {
     await this.tokenRepo.create({
       memberId: member.id,
       tokenHash,
-      purpose: 'authenticate',
+      purpose: "authenticate",
       expiresAt,
       userAgent: context.userAgent || null,
       ipAddress: context.ipAddress || null,
     });
 
     const magicLinkUrl = this.buildMagicLinkUrl(rawToken);
-    domainEvents.emit('member.auth.requested', { memberId: member.id, requestId: context.requestId });
+    domainEvents.emit("member.auth.requested", {
+      memberId: member.id,
+      requestId: context.requestId,
+    });
 
     try {
       await this.mailer.sendMagicLink({
@@ -94,61 +110,95 @@ export class MemberAuthService {
       });
     } catch {
       // Mail delivery failure: keep the short-lived token but report failure safely.
-      domainEvents.emit('member.auth.mail_failed', { memberId: member.id, requestId: context.requestId });
-      throw new MemberAuthError('MAIL_DELIVERY_FAILED', 'Unable to send sign-in email');
+      domainEvents.emit("member.auth.mail_failed", {
+        memberId: member.id,
+        requestId: context.requestId,
+      });
+      throw new MemberAuthError(
+        "MAIL_DELIVERY_FAILED",
+        "Unable to send sign-in email",
+      );
     }
 
     return { sent: true, memberId: member.id };
   }
 
-  async verifyAndCreateSession(rawToken: string, context: MemberAuthContext = {}): Promise<{
+  async verifyAndCreateSession(
+    rawToken: string,
+    context: MemberAuthContext = {},
+  ): Promise<{
     member: Member;
     sessionToken: string;
     sessionExpiresAt: Date;
   }> {
-    return runInTransaction(() => this.verifyAndCreateSessionTx(rawToken, context));
+    return runInTransaction(() =>
+      this.verifyAndCreateSessionTx(rawToken, context),
+    );
   }
 
-  private async verifyAndCreateSessionTx(rawToken: string, context: MemberAuthContext = {}): Promise<{
+  private async verifyAndCreateSessionTx(
+    rawToken: string,
+    context: MemberAuthContext = {},
+  ): Promise<{
     member: Member;
     sessionToken: string;
     sessionExpiresAt: Date;
   }> {
     if (!rawToken) {
-      throw new MemberAuthError('AUTH_TOKEN_INVALID', 'Invalid or missing token');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_INVALID",
+        "Invalid or missing token",
+      );
     }
 
     const tokenHash = hashToken(rawToken);
     const token = await this.tokenRepo.findByTokenHash(tokenHash);
 
     if (!token) {
-      throw new MemberAuthError('AUTH_TOKEN_INVALID', 'Invalid or missing token');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_INVALID",
+        "Invalid or missing token",
+      );
     }
     if (token.usedAt) {
-      throw new MemberAuthError('AUTH_TOKEN_USED', 'This sign-in link has already been used');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_USED",
+        "This sign-in link has already been used",
+      );
     }
     if (token.expiresAt.getTime() < Date.now()) {
-      throw new MemberAuthError('AUTH_TOKEN_EXPIRED', 'This sign-in link has expired');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_EXPIRED",
+        "This sign-in link has expired",
+      );
     }
 
     // Race-safe single-use consumption (atomic compare-and-set on usedAt).
     const consumed = await this.tokenRepo.markUsed(token.id, new Date());
     if (!consumed) {
-      throw new MemberAuthError('AUTH_TOKEN_USED', 'This sign-in link has already been used');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_USED",
+        "This sign-in link has already been used",
+      );
     }
 
     const member = await this.memberRepo.findById(token.memberId);
     if (!member) {
-      throw new MemberAuthError('AUTH_TOKEN_INVALID', 'Invalid or missing token');
+      throw new MemberAuthError(
+        "AUTH_TOKEN_INVALID",
+        "Invalid or missing token",
+      );
     }
-    if (member.status === 'disabled') {
-      throw new MemberAuthError('MEMBER_DISABLED', 'This account is disabled');
+    if (member.status === "disabled") {
+      throw new MemberAuthError("MEMBER_DISABLED", "This account is disabled");
     }
 
     let verifiedMember = member;
     if (!member.emailVerifiedAt) {
-      verifiedMember = await this.memberRepo.update(member.id, { emailVerifiedAt: new Date() });
-      domainEvents.emit('member.email_verified', { memberId: member.id });
+      verifiedMember = await this.memberRepo.update(member.id, {
+        emailVerifiedAt: new Date(),
+      });
+      domainEvents.emit("member.email_verified", { memberId: member.id });
     }
 
     // Create fresh opaque session token.
@@ -164,9 +214,13 @@ export class MemberAuthService {
       ipAddress: context.ipAddress || null,
     });
 
-    domainEvents.emit('member.authenticated', { memberId: member.id });
+    domainEvents.emit("member.authenticated", { memberId: member.id });
 
-    return { member: verifiedMember, sessionToken, sessionExpiresAt: expiresAt };
+    return {
+      member: verifiedMember,
+      sessionToken,
+      sessionExpiresAt: expiresAt,
+    };
   }
 
   async resolveSession(rawSessionToken: string): Promise<Member | null> {
@@ -180,7 +234,7 @@ export class MemberAuthService {
 
     const member = await this.memberRepo.findById(session.memberId);
     if (!member) return null;
-    if (member.status === 'disabled') return null;
+    if (member.status === "disabled") return null;
 
     return member;
   }
@@ -191,7 +245,7 @@ export class MemberAuthService {
     const session = await this.sessionRepo.findByTokenHash(tokenHash);
     if (session) {
       await this.sessionRepo.revoke(session.id);
-      domainEvents.emit('member.logged_out', { memberId: session.memberId });
+      domainEvents.emit("member.logged_out", { memberId: session.memberId });
     }
   }
 

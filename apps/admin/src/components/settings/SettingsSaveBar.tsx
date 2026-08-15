@@ -1,8 +1,14 @@
-import React, { useEffect } from 'react';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Sparkles, RefreshCw, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
-import { useUnsavedChanges } from './hooks/useUnsavedChanges';
+import React, { useEffect } from "react";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import {
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+} from "lucide-react";
+import { useUnsavedChanges } from "./hooks/useUnsavedChanges";
 
 interface SettingsSaveBarProps {
   isDirty: boolean;
@@ -29,15 +35,15 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
   // Global ⌘S / Ctrl+S keyboard shortcut to save
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         if (isDirty && !saving) {
           onSave();
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isDirty, saving, onSave]);
 
   return (
@@ -75,8 +81,11 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
               </span>
               <span className="text-xs font-medium">Unsaved changes</span>
               {dirtyCount > 0 && (
-                <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 h-4.5 bg-muted">
-                  {dirtyCount} {dirtyCount === 1 ? 'field' : 'fields'}
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] font-mono px-1.5 py-0 h-4.5 bg-muted"
+                >
+                  {dirtyCount} {dirtyCount === 1 ? "field" : "fields"}
                 </Badge>
               )}
             </div>
@@ -98,8 +107,12 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 disabled={saving}
                 className="h-8 text-xs gap-1.5 cursor-pointer shadow-sm"
               >
-                {saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                {saving ? 'Saving...' : 'Save (⌘S)'}
+                {saving ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
+                {saving ? "Saving..." : "Save (⌘S)"}
               </Button>
             </div>
           </div>

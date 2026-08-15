@@ -36,7 +36,7 @@ Receivers verify by recomputing the HMAC with their shared secret.
 - Retries reuse the same `event_id` and payload.
 - Worker re-delivery cannot double-send: the delivery row is the source of
   truth and status transitions are monotonic (`pending → delivered/failed →
-  dead_letter`).
+dead_letter`).
 
 ## Retry / Dead Letter
 

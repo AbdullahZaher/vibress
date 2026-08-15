@@ -1,6 +1,6 @@
-export type PlanBillingType = 'free' | 'recurring';
-export type PlanStatus = 'active' | 'archived';
-export type PlanVisibility = 'public' | 'private';
+export type PlanBillingType = "free" | "recurring";
+export type PlanStatus = "active" | "archived";
+export type PlanVisibility = "public" | "private";
 
 export interface Plan {
   id: string;
@@ -47,9 +47,11 @@ export function isValidCurrency(code: string): boolean {
   return /^[A-Z]{3}$/.test(code);
 }
 
-export function isValidBillingInterval(interval: string | null | undefined): boolean {
+export function isValidBillingInterval(
+  interval: string | null | undefined,
+): boolean {
   if (!interval) return true; // free plans have no interval
-  return ['month', 'year'].includes(interval);
+  return ["month", "year"].includes(interval);
 }
 
 export const MAX_TRIAL_DAYS = 365;

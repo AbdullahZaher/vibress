@@ -3,7 +3,7 @@ export class TagDomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'TagDomainError';
+    this.name = "TagDomainError";
     this.code = code;
   }
 }

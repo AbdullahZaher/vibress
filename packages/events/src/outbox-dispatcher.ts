@@ -1,4 +1,8 @@
-import { OutboxEventRow, OutboxRepository, defaultOutboxRepository } from './outbox-repository';
+import {
+  OutboxEventRow,
+  OutboxRepository,
+  defaultOutboxRepository,
+} from "./outbox-repository";
 
 /**
  * Polls the transactional outbox and delivers claimed rows to a relay.
@@ -31,7 +35,7 @@ export class OutboxDispatcherWorker {
       staleClaimMs?: number;
       publishedRetentionDays?: number;
       failedRetentionDays?: number;
-    } = {}
+    } = {},
   ) {}
 
   get failureCount(): number {
@@ -45,9 +49,13 @@ export class OutboxDispatcherWorker {
   start(intervalMs = 5000): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.runDispatchCycle().catch((err) => console.error('[OutboxDispatcher] Initial sweep failed:', err));
+    this.runDispatchCycle().catch((err) =>
+      console.error("[OutboxDispatcher] Initial sweep failed:", err),
+    );
     this.timer = setInterval(() => {
-      this.runDispatchCycle().catch((err) => console.error('[OutboxDispatcher] Sweep error:', err));
+      this.runDispatchCycle().catch((err) =>
+        console.error("[OutboxDispatcher] Sweep error:", err),
+      );
     }, intervalMs);
   }
 
@@ -61,23 +69,31 @@ export class OutboxDispatcherWorker {
 
   async runDispatchCycle(): Promise<void> {
     await this.purgeExpired();
-    await this.repository.reclaimStaleClaims({ staleAfterMs: this.options.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS });
+    await this.repository.reclaimStaleClaims({
+      staleAfterMs: this.options.staleClaimMs ?? DEFAULT_STALE_CLAIM_MS,
+    });
 
     const maxAttempts = this.options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     // Loop until no more immediately dispatchable rows remain.
     for (;;) {
-      const claimed = await this.repository.claimReady({ limit: CLAIM_BATCH_SIZE });
+      const claimed = await this.repository.claimReady({
+        limit: CLAIM_BATCH_SIZE,
+      });
       if (claimed.length === 0) break;
       for (const row of claimed) {
         try {
           await this.relay.deliver(row);
           await this.repository.markPublished([row.id]);
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'dispatch failed';
+          const message =
+            err instanceof Error ? err.message : "dispatch failed";
           await this.repository.markFailed(row.id, message, { maxAttempts });
           this.failures.push({ eventType: row.eventType, error: message });
           if (this.failures.length > 100) this.failures.shift();
-          console.error(`[OutboxDispatcher] Failed to dispatch ${row.eventType} (${row.id}):`, message);
+          console.error(
+            `[OutboxDispatcher] Failed to dispatch ${row.eventType} (${row.id}):`,
+            message,
+          );
         }
       }
     }
@@ -85,9 +101,13 @@ export class OutboxDispatcherWorker {
 
   private async purgeExpired(): Promise<void> {
     const publishedBefore = new Date();
-    publishedBefore.setDate(publishedBefore.getDate() - (this.options.publishedRetentionDays ?? 7));
+    publishedBefore.setDate(
+      publishedBefore.getDate() - (this.options.publishedRetentionDays ?? 7),
+    );
     const failedBefore = new Date();
-    failedBefore.setDate(failedBefore.getDate() - (this.options.failedRetentionDays ?? 30));
+    failedBefore.setDate(
+      failedBefore.getDate() - (this.options.failedRetentionDays ?? 30),
+    );
     await this.repository.purge({ publishedBefore, failedBefore });
   }
 }

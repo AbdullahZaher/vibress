@@ -1,4 +1,4 @@
-export type MemberStatus = 'active' | 'disabled';
+export type MemberStatus = "active" | "disabled";
 
 export interface Member {
   id: string;
@@ -38,6 +38,6 @@ export interface ListMembersFilter {
 }
 
 export function normalizeMemberEmail(email: string): string {
-  if (typeof email !== 'string') return '';
+  if (typeof email !== "string") return "";
   return email.trim().toLowerCase();
 }

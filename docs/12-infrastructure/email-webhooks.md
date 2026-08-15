@@ -34,14 +34,14 @@ from the durable record.
 
 ## Supported Events
 
-| Provider type | Vibress mapping | Recipient effect |
-|---|---|---|
-| `delivered` | `delivered` | `markDelivered` |
-| `opened` | `opened` | `markOpened` |
-| `clicked` | `clicked` | `markClicked` |
-| `bounce` | `bounced` | `markFailed` + suppress `hard_bounce` |
-| `complaint` | `complained` | `markFailed` + suppress `spam_complaint` |
-| `failed` / `permanent_failure` | `failed` | `markFailed` + suppress `hard_bounce` |
+| Provider type                  | Vibress mapping | Recipient effect                         |
+| ------------------------------ | --------------- | ---------------------------------------- |
+| `delivered`                    | `delivered`     | `markDelivered`                          |
+| `opened`                       | `opened`        | `markOpened`                             |
+| `clicked`                      | `clicked`       | `markClicked`                            |
+| `bounce`                       | `bounced`       | `markFailed` + suppress `hard_bounce`    |
+| `complaint`                    | `complained`    | `markFailed` + suppress `spam_complaint` |
+| `failed` / `permanent_failure` | `failed`        | `markFailed` + suppress `hard_bounce`    |
 
 ## Safe Logging
 

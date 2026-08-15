@@ -5,20 +5,20 @@ Premium → Yearly).
 
 ## Model
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | text | UUID |
-| `product_id` | text FK | |
-| `key` | text | Unique per product |
-| `name` / `description` | text | |
-| `billing_type` | `free` / `recurring` | |
-| `billing_interval` | `month` / `year` null | Null for free plans |
-| `interval_count` | int | e.g. `month × 1` |
-| `currency` | text | ISO 4217, uppercase |
-| `amount_minor` | int | Integer minor units, never floats |
-| `trial_days` | int | 0 = no trial, max 365 |
-| `status` / `visibility` | | `active` / `archived`, `public` / `private` |
-| `archived_at` | timestamptz null | |
+| Field                   | Type                  | Notes                                       |
+| ----------------------- | --------------------- | ------------------------------------------- |
+| `id`                    | text                  | UUID                                        |
+| `product_id`            | text FK               |                                             |
+| `key`                   | text                  | Unique per product                          |
+| `name` / `description`  | text                  |                                             |
+| `billing_type`          | `free` / `recurring`  |                                             |
+| `billing_interval`      | `month` / `year` null | Null for free plans                         |
+| `interval_count`        | int                   | e.g. `month × 1`                            |
+| `currency`              | text                  | ISO 4217, uppercase                         |
+| `amount_minor`          | int                   | Integer minor units, never floats           |
+| `trial_days`            | int                   | 0 = no trial, max 365                       |
+| `status` / `visibility` |                       | `active` / `archived`, `public` / `private` |
+| `archived_at`           | timestamptz null      |                                             |
 
 ## Money
 

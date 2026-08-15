@@ -22,9 +22,9 @@ interface PluginContext {
   manifestId: string;
   name: string;
   version: string;
-  settings: Record<string, unknown>;          // plain (non-secret) settings
+  settings: Record<string, unknown>; // plain (non-secret) settings
   getSecret(key: string): Promise<string | null>; // decrypted secret
-  log(message: string, level?: 'info' | 'warn' | 'error'): void;
+  log(message: string, level?: "info" | "warn" | "error"): void;
 }
 
 interface PluginModule {

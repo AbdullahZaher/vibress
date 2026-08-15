@@ -1,9 +1,9 @@
-import { lookup } from 'node:dns/promises';
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
-import { URL } from 'node:url';
-import { Socket, isIP, isIPv4, isIPv6 } from 'node:net';
-import { withSpan } from '@vibress/observability';
+import { lookup } from "node:dns/promises";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { URL } from "node:url";
+import { Socket, isIP, isIPv4, isIPv6 } from "node:net";
+import { withSpan } from "@vibress/observability";
 
 export class SafeFetchError extends Error {
   code: string;
@@ -20,7 +20,7 @@ export class SafeFetchError extends Error {
 export function normalizeIP(ip: string): string {
   let cleaned = ip.trim();
   // Strip surrounding brackets for IPv6 if present
-  if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+  if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
     cleaned = cleaned.slice(1, -1);
   }
   // IPv4-mapped IPv6: ::ffff:192.0.2.128
@@ -39,7 +39,7 @@ export function isPrivateIP(rawIp: string): boolean {
   const ip = normalizeIP(rawIp);
 
   if (isIPv4(ip)) {
-    const parts = ip.split('.').map((p) => parseInt(p, 10));
+    const parts = ip.split(".").map((p) => parseInt(p, 10));
     if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
       return true; // Malformed IPv4 treated as unsafe
     }
@@ -81,7 +81,12 @@ export function isPrivateIP(rawIp: string): boolean {
   if (isIPv6(ip)) {
     const lower = ip.toLowerCase();
     // Unspecified :: or Loopback ::1
-    if (lower === '::' || lower === '::1' || lower === '0:0:0:0:0:0:0:0' || lower === '0:0:0:0:0:0:0:1') {
+    if (
+      lower === "::" ||
+      lower === "::1" ||
+      lower === "0:0:0:0:0:0:0:0" ||
+      lower === "0:0:0:0:0:0:0:1"
+    ) {
       return true;
     }
     // Unique Local (fc00::/7 -> fc.. or fd..)
@@ -91,11 +96,11 @@ export function isPrivateIP(rawIp: string): boolean {
     // Multicast (ff00::/8)
     if (/^ff[0-9a-f]{2}:/i.test(lower)) return true;
     // Documentation (2001:db8::/32)
-    if (lower.startsWith('2001:db8:')) return true;
+    if (lower.startsWith("2001:db8:")) return true;
     // Discard (100::/64)
-    if (lower.startsWith('100:')) return true;
+    if (lower.startsWith("100:")) return true;
     // IPv4-translated (64:ff9b::/96)
-    if (lower.startsWith('64:ff9b:')) return true;
+    if (lower.startsWith("64:ff9b:")) return true;
 
     return false;
   }
@@ -105,7 +110,7 @@ export function isPrivateIP(rawIp: string): boolean {
 }
 
 export interface SafeFetchOptions {
-  method?: 'GET' | 'HEAD' | 'POST';
+  method?: "GET" | "HEAD" | "POST";
   timeout?: number;
   maxRedirects?: number;
   maxSize?: number;
@@ -130,26 +135,31 @@ export interface SafeFetchResult {
  */
 export async function safeFetch(
   urlInput: string,
-  options: SafeFetchOptions = {}
+  options: SafeFetchOptions = {},
 ): Promise<SafeFetchResult> {
   return withSpan(
-    'safeFetch',
+    "safeFetch",
     async () => {
       return safeFetchInner(urlInput, options);
     },
     {
-      'http.method': options.method || 'GET',
+      "http.method": options.method || "GET",
       // Never record query strings or fragments: they can carry secrets.
-      'url.full': urlInput.split('?')[0],
-    }
+      "url.full": urlInput.split("?")[0],
+    },
   );
 }
 
 async function safeFetchInner(
   urlInput: string,
-  options: SafeFetchOptions = {}
+  options: SafeFetchOptions = {},
 ): Promise<SafeFetchResult> {
-  const { method = 'GET', timeout = 10000, maxRedirects = 5, maxSize = 1048576 } = options;
+  const {
+    method = "GET",
+    timeout = 10000,
+    maxRedirects = 5,
+    maxSize = 1048576,
+  } = options;
   let currentUrl = urlInput;
   let redirectCount = 0;
 
@@ -158,11 +168,14 @@ async function safeFetchInner(
     try {
       parsedUrl = new URL(currentUrl);
     } catch {
-      throw new SafeFetchError('INVALID_URL', 'Invalid URL');
+      throw new SafeFetchError("INVALID_URL", "Invalid URL");
     }
 
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      throw new SafeFetchError('UNSAFE_PROTOCOL', 'Only http/https protocols are allowed');
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new SafeFetchError(
+        "UNSAFE_PROTOCOL",
+        "Only http/https protocols are allowed",
+      );
     }
 
     const hostname = parsedUrl.hostname;
@@ -173,21 +186,30 @@ async function safeFetchInner(
       const result = await lookup(hostname, { all: true });
       addresses = result.map((a) => a.address);
     } catch {
-      throw new SafeFetchError('DNS_RESOLUTION_FAILED', `Failed to resolve ${hostname}`);
+      throw new SafeFetchError(
+        "DNS_RESOLUTION_FAILED",
+        `Failed to resolve ${hostname}`,
+      );
     }
 
     if (addresses.length === 0) {
-      throw new SafeFetchError('DNS_RESOLUTION_FAILED', `No DNS records for ${hostname}`);
+      throw new SafeFetchError(
+        "DNS_RESOLUTION_FAILED",
+        `No DNS records for ${hostname}`,
+      );
     }
 
     for (const ip of addresses) {
       if (isPrivateIP(ip)) {
-        throw new SafeFetchError('BLOCKED_PRIVATE_IP', `Resolved to private/reserved IP range: ${ip}`);
+        throw new SafeFetchError(
+          "BLOCKED_PRIVATE_IP",
+          `Resolved to private/reserved IP range: ${ip}`,
+        );
       }
     }
 
     // Perform the request with an IP guard on the socket (rebinding guard part 2)
-    const isHttps = parsedUrl.protocol === 'https:';
+    const isHttps = parsedUrl.protocol === "https:";
     const fn = isHttps ? httpsRequest : httpRequest;
     const port = parsedUrl.port || (isHttps ? 443 : 80);
     const bodyChunks: Buffer[] = [];
@@ -204,23 +226,41 @@ async function safeFetchInner(
         },
         (res) => {
           // Redirect handling
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (
+            res.statusCode &&
+            res.statusCode >= 300 &&
+            res.statusCode < 400 &&
+            res.headers.location
+          ) {
             res.destroy();
             // Never follow redirects for POST (credential/body leakage risk);
             // treat as terminal response.
-            if (method === 'POST') {
-              reject(new SafeFetchError('UNSAFE_REDIRECT', 'Redirects are not allowed for POST requests'));
+            if (method === "POST") {
+              reject(
+                new SafeFetchError(
+                  "UNSAFE_REDIRECT",
+                  "Redirects are not allowed for POST requests",
+                ),
+              );
               return;
             }
             redirectCount++;
             if (redirectCount > maxRedirects) {
-              reject(new SafeFetchError('TOO_MANY_REDIRECTS', `Exceeded ${maxRedirects} redirects`));
+              reject(
+                new SafeFetchError(
+                  "TOO_MANY_REDIRECTS",
+                  `Exceeded ${maxRedirects} redirects`,
+                ),
+              );
               return;
             }
             const nextUrl = new URL(res.headers.location, currentUrl).href;
             resolve({
               status: res.statusCode,
-              headers: res.headers as Record<string, string | string[] | undefined>,
+              headers: res.headers as Record<
+                string,
+                string | string[] | undefined
+              >,
               body: Buffer.alloc(0),
               finalUrl: nextUrl,
             });
@@ -230,54 +270,69 @@ async function safeFetchInner(
           let totalSize = 0;
           let aborted = false;
 
-          res.on('data', (chunk: Buffer) => {
+          res.on("data", (chunk: Buffer) => {
             if (aborted) return;
             totalSize += chunk.length;
             if (totalSize > maxSize) {
               aborted = true;
               res.destroy();
-              reject(new SafeFetchError('RESPONSE_TOO_LARGE', `Response exceeded ${maxSize} bytes`));
+              reject(
+                new SafeFetchError(
+                  "RESPONSE_TOO_LARGE",
+                  `Response exceeded ${maxSize} bytes`,
+                ),
+              );
               return;
             }
             bodyChunks.push(chunk);
           });
 
-          res.on('end', () => {
+          res.on("end", () => {
             if (!aborted) {
               resolve({
                 status: res.statusCode || 0,
-                headers: res.headers as Record<string, string | string[] | undefined>,
+                headers: res.headers as Record<
+                  string,
+                  string | string[] | undefined
+                >,
                 body: Buffer.concat(bodyChunks),
                 finalUrl: currentUrl,
               });
             }
           });
 
-          res.on('error', (err) => {
-            reject(new SafeFetchError('FETCH_FAILED', err.message));
+          res.on("error", (err) => {
+            reject(new SafeFetchError("FETCH_FAILED", err.message));
           });
-        }
+        },
       );
 
       // DNS rebinding guard: check the socket's remote IP after connect
-      req.on('socket', (socket: Socket) => {
-        socket.on('connect', () => {
+      req.on("socket", (socket: Socket) => {
+        socket.on("connect", () => {
           const remoteIP = socket.remoteAddress;
           if (remoteIP && isPrivateIP(remoteIP)) {
             socket.destroy();
             req.destroy();
-            reject(new SafeFetchError('BLOCKED_PRIVATE_IP', `Connected to private IP: ${remoteIP}`));
+            reject(
+              new SafeFetchError(
+                "BLOCKED_PRIVATE_IP",
+                `Connected to private IP: ${remoteIP}`,
+              ),
+            );
           }
         });
       });
 
-      req.on('timeout', () => {
+      req.on("timeout", () => {
         req.destroy();
-        reject(new SafeFetchError('TIMEOUT', `Request timed out after ${timeout}ms`));
+        reject(
+          new SafeFetchError("TIMEOUT", `Request timed out after ${timeout}ms`),
+        );
       });
 
-      req.on('error', (err) => {
-        reject(new SafeFetchError('FETCH_FAILED', err.message));
+      req.on("error", (err) => {
+        reject(new SafeFetchError("FETCH_FAILED", err.message));
       });
 
       if (options.body !== undefined) {
@@ -287,7 +342,11 @@ async function safeFetchInner(
     });
 
     // If we got a redirect (body is empty and 3xx), follow it
-    if (result.status >= 300 && result.status < 400 && bodyChunks.length === 0) {
+    if (
+      result.status >= 300 &&
+      result.status < 400 &&
+      bodyChunks.length === 0
+    ) {
       currentUrl = result.finalUrl;
       continue;
     }
@@ -295,28 +354,32 @@ async function safeFetchInner(
     return result;
   }
 
-  throw new SafeFetchError('TOO_MANY_REDIRECTS', `Exceeded ${maxRedirects} redirects`);
+  throw new SafeFetchError(
+    "TOO_MANY_REDIRECTS",
+    `Exceeded ${maxRedirects} redirects`,
+  );
 }
 
 export function isSafeUrl(urlInput: string): boolean {
   try {
     const parsed = new URL(urlInput);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      return false;
 
     let hostname = parsed.hostname.toLowerCase();
     // Strip surrounding brackets for IPv6 literals
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
       hostname = hostname.slice(1, -1);
     }
     // Strip trailing dot (FQDN form, e.g. 'localhost.')
-    hostname = hostname.replace(/\.$/, '');
+    hostname = hostname.replace(/\.$/, "");
 
     // Block obvious local hostnames
     if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') ||
-      hostname.endsWith('.internal')
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal")
     ) {
       return false;
     }
@@ -331,4 +394,3 @@ export function isSafeUrl(urlInput: string): boolean {
     return false;
   }
 }
-

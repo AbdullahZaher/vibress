@@ -1,13 +1,19 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from "node:async_hooks";
 
-export { initTracing, getTracer, withSpan, getActiveTraceContext, withRemoteTraceContext } from './tracing';
-export type { TracingOptions, TracingStopHandle } from './tracing';
+export {
+  initTracing,
+  getTracer,
+  withSpan,
+  getActiveTraceContext,
+  withRemoteTraceContext,
+} from "./tracing";
+export type { TracingOptions, TracingStopHandle } from "./tracing";
 
 export interface RequestTraceContext {
   requestId?: string;
   traceId?: string;
   actorId?: string | null;
-  actorType?: 'staff' | 'member' | 'system' | null;
+  actorType?: "staff" | "member" | "system" | null;
   path?: string;
   method?: string;
   ipAddress?: string | null;
@@ -15,7 +21,10 @@ export interface RequestTraceContext {
 
 const traceStorage = new AsyncLocalStorage<RequestTraceContext>();
 
-export function setRequestTraceContext<T>(context: RequestTraceContext, fn: () => Promise<T>): Promise<T> {
+export function setRequestTraceContext<T>(
+  context: RequestTraceContext,
+  fn: () => Promise<T>,
+): Promise<T> {
   return traceStorage.run(context, fn);
 }
 
@@ -23,7 +32,7 @@ export function getRequestTraceContext(): RequestTraceContext | undefined {
   return traceStorage.getStore();
 }
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface LoggerOptions {
   name?: string;
@@ -44,12 +53,21 @@ export class Logger {
   private redactKeys: Set<string>;
 
   constructor(options: LoggerOptions = {}) {
-    this.name = options.name || 'app';
-    this.minLevelNum = LOG_LEVEL_ORDER[options.minLevel || 'info'];
+    this.name = options.name || "app";
+    this.minLevelNum = LOG_LEVEL_ORDER[options.minLevel || "info"];
     this.redactKeys = new Set(
-      (options.redactKeys || ['password', 'passwordHash', 'token', 'secret', 'authorization', 'cookie', 'x-vibress-setup-token', 'setup-token']).map((k) =>
-        k.toLowerCase()
-      )
+      (
+        options.redactKeys || [
+          "password",
+          "passwordHash",
+          "token",
+          "secret",
+          "authorization",
+          "cookie",
+          "x-vibress-setup-token",
+          "setup-token",
+        ]
+      ).map((k) => k.toLowerCase()),
     );
   }
 
@@ -58,14 +76,14 @@ export class Logger {
   }
 
   private redact(obj: unknown): unknown {
-    if (!obj || typeof obj !== 'object') return obj;
+    if (!obj || typeof obj !== "object") return obj;
     if (Array.isArray(obj)) return obj.map((item) => this.redact(item));
 
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       if (this.redactKeys.has(key.toLowerCase())) {
-        result[key] = '[REDACTED]';
-      } else if (typeof value === 'object' && value !== null) {
+        result[key] = "[REDACTED]";
+      } else if (typeof value === "object" && value !== null) {
         result[key] = this.redact(value);
       } else {
         result[key] = value;
@@ -74,7 +92,12 @@ export class Logger {
     return result;
   }
 
-  private log(level: LogLevel, message: string, meta?: Record<string, unknown>, err?: Error): void {
+  private log(
+    level: LogLevel,
+    message: string,
+    meta?: Record<string, unknown>,
+    err?: Error,
+  ): void {
     if (!this.shouldLog(level)) return;
 
     const trace = getRequestTraceContext() || {};
@@ -90,7 +113,7 @@ export class Logger {
     };
 
     if (err) {
-      entry['error'] = {
+      entry["error"] = {
         name: err.name,
         message: err.message,
         stack: err.stack,
@@ -98,9 +121,9 @@ export class Logger {
     }
 
     const output = JSON.stringify(entry);
-    if (level === 'error') {
+    if (level === "error") {
       console.error(output);
-    } else if (level === 'warn') {
+    } else if (level === "warn") {
       console.warn(output);
     } else {
       console.log(output);
@@ -108,19 +131,19 @@ export class Logger {
   }
 
   debug(message: string, meta?: Record<string, unknown>): void {
-    this.log('debug', message, meta);
+    this.log("debug", message, meta);
   }
 
   info(message: string, meta?: Record<string, unknown>): void {
-    this.log('info', message, meta);
+    this.log("info", message, meta);
   }
 
   warn(message: string, meta?: Record<string, unknown>, err?: Error): void {
-    this.log('warn', message, meta, err);
+    this.log("warn", message, meta, err);
   }
 
   error(message: string, meta?: Record<string, unknown>, err?: Error): void {
-    this.log('error', message, meta, err);
+    this.log("error", message, meta, err);
   }
 }
 
@@ -130,7 +153,7 @@ export function createLogger(name: string, options?: LoggerOptions): Logger {
 
 export interface MetricEntry {
   name: string;
-  type: 'counter' | 'gauge';
+  type: "counter" | "gauge";
   value: number;
   tags?: Record<string, string>;
 }
@@ -144,7 +167,7 @@ class SimpleMetricsRegistry {
     if (existing) {
       existing.value += value;
     } else {
-      const entry: MetricEntry = { name, type: 'counter', value };
+      const entry: MetricEntry = { name, type: "counter", value };
       if (tags !== undefined) entry.tags = tags;
       this.metrics.set(key, entry);
     }
@@ -152,7 +175,7 @@ class SimpleMetricsRegistry {
 
   gauge(name: string, value: number, tags?: Record<string, string>): void {
     const key = `${name}:${JSON.stringify(tags || {})}`;
-    const entry: MetricEntry = { name, type: 'gauge', value };
+    const entry: MetricEntry = { name, type: "gauge", value };
     if (tags !== undefined) entry.tags = tags;
     this.metrics.set(key, entry);
   }
@@ -170,10 +193,10 @@ export const metrics = new SimpleMetricsRegistry();
 
 export function collectProcessMetrics(): void {
   const memory = process.memoryUsage();
-  metrics.gauge('nodejs_process_uptime_seconds', process.uptime());
-  metrics.gauge('nodejs_process_memory_rss_bytes', memory.rss);
-  metrics.gauge('nodejs_process_memory_heap_used_bytes', memory.heapUsed);
-  metrics.gauge('nodejs_process_memory_heap_total_bytes', memory.heapTotal);
+  metrics.gauge("nodejs_process_uptime_seconds", process.uptime());
+  metrics.gauge("nodejs_process_memory_rss_bytes", memory.rss);
+  metrics.gauge("nodejs_process_memory_heap_used_bytes", memory.heapUsed);
+  metrics.gauge("nodejs_process_memory_heap_total_bytes", memory.heapTotal);
 }
 
 export interface StopHandle {
@@ -184,7 +207,10 @@ export function startEventLoopLagMonitor(intervalMs = 1000): StopHandle {
   const timer = setInterval(() => {
     const start = performance.now();
     setImmediate(() => {
-      metrics.gauge('nodejs_event_loop_lag_seconds', (performance.now() - start) / 1000);
+      metrics.gauge(
+        "nodejs_event_loop_lag_seconds",
+        (performance.now() - start) / 1000,
+      );
     });
   }, intervalMs);
   timer.unref();
@@ -192,11 +218,14 @@ export function startEventLoopLagMonitor(intervalMs = 1000): StopHandle {
 }
 
 function sanitizeMetricName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_:]/g, '_');
+  return name.replace(/[^a-zA-Z0-9_:]/g, "_");
 }
 
 function escapeLabelValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n");
 }
 
 export function exportMetricsText(): string {
@@ -206,7 +235,9 @@ export function exportMetricsText(): string {
   const entries = metrics.getMetrics().sort((a, b) => {
     const nameCompare = a.name.localeCompare(b.name);
     if (nameCompare !== 0) return nameCompare;
-    return JSON.stringify(a.tags || {}).localeCompare(JSON.stringify(b.tags || {}));
+    return JSON.stringify(a.tags || {}).localeCompare(
+      JSON.stringify(b.tags || {}),
+    );
   });
 
   let currentName: string | null = null;
@@ -221,17 +252,18 @@ export function exportMetricsText(): string {
       ? Object.entries(entry.tags)
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([key, value]) => `${key}="${escapeLabelValue(value)}"`)
-          .join(',')
-      : '';
+          .join(",")
+      : "";
     const seriesName = sanitizeSeriesName(entry.name, entry.type);
-    lines.push(`${seriesName}${labels ? `{${labels}}` : ''} ${entry.value}`);
+    lines.push(`${seriesName}${labels ? `{${labels}}` : ""} ${entry.value}`);
   }
 
-  return lines.join('\n') + '\n';
+  return lines.join("\n") + "\n";
 }
 
-function sanitizeSeriesName(name: string, type: 'counter' | 'gauge'): string {
+function sanitizeSeriesName(name: string, type: "counter" | "gauge"): string {
   const sanitized = sanitizeMetricName(name);
-  if (type === 'counter' && !sanitized.endsWith('_total')) return `${sanitized}_total`;
+  if (type === "counter" && !sanitized.endsWith("_total"))
+    return `${sanitized}_total`;
   return sanitized;
 }

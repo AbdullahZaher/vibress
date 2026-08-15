@@ -1,8 +1,24 @@
-import { getDb, comments, CommentRow, commentLikes, commentReports } from '@vibress/database';
-import { eq, and, count, desc, sql, isNull } from 'drizzle-orm';
-import crypto from 'node:crypto';
-import { CommentRepository, CommentLikeRepository, CommentReportRepository } from '../domain/repository';
-import { Comment, CreateCommentData, UpdateCommentData, ListCommentsFilter, CommentStatus } from '../domain/comment';
+import {
+  getDb,
+  comments,
+  CommentRow,
+  commentLikes,
+  commentReports,
+} from "@vibress/database";
+import { eq, and, count, desc, sql, isNull } from "drizzle-orm";
+import crypto from "node:crypto";
+import {
+  CommentRepository,
+  CommentLikeRepository,
+  CommentReportRepository,
+} from "../domain/repository";
+import {
+  Comment,
+  CreateCommentData,
+  UpdateCommentData,
+  ListCommentsFilter,
+  CommentStatus,
+} from "../domain/comment";
 
 export class DrizzleCommentRepository implements CommentRepository {
   async create(data: CreateCommentData): Promise<Comment> {
@@ -16,19 +32,23 @@ export class DrizzleCommentRepository implements CommentRepository {
         memberId: data.memberId,
         parentId: data.parentId || null,
         body: data.body,
-        status: data.status || 'published',
+        status: data.status || "published",
         depth: data.depth || 0,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
-    if (!row) throw new Error('Failed to insert comment');
+    if (!row) throw new Error("Failed to insert comment");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Comment | null> {
     const db = getDb();
-    const rows = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.id, id))
+      .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
@@ -45,12 +65,20 @@ export class DrizzleCommentRepository implements CommentRepository {
     return this.mapToDomain(row);
   }
 
-  async updateStatus(id: string, status: string, deletedAt: Date | null = null): Promise<Comment> {
+  async updateStatus(
+    id: string,
+    status: string,
+    deletedAt: Date | null = null,
+  ): Promise<Comment> {
     const db = getDb();
     const payload: Record<string, unknown> = { status, updatedAt: new Date() };
-    if (status === 'deleted') payload.deletedAt = deletedAt || new Date();
-    if (status === 'published') payload.deletedAt = null;
-    const [row] = await db.update(comments).set(payload).where(eq(comments.id, id)).returning();
+    if (status === "deleted") payload.deletedAt = deletedAt || new Date();
+    if (status === "published") payload.deletedAt = null;
+    const [row] = await db
+      .update(comments)
+      .set(payload)
+      .where(eq(comments.id, id))
+      .returning();
     if (!row) throw new Error(`Comment not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -59,7 +87,10 @@ export class DrizzleCommentRepository implements CommentRepository {
     const db = getDb();
     await db
       .update(comments)
-      .set({ likeCount: sql`${comments.likeCount} + ${delta}`, updatedAt: new Date() })
+      .set({
+        likeCount: sql`${comments.likeCount} + ${delta}`,
+        updatedAt: new Date(),
+      })
       .where(eq(comments.id, id));
   }
 
@@ -67,42 +98,79 @@ export class DrizzleCommentRepository implements CommentRepository {
     const db = getDb();
     await db
       .update(comments)
-      .set({ replyCount: sql`${comments.replyCount} + ${delta}`, updatedAt: new Date() })
+      .set({
+        replyCount: sql`${comments.replyCount} + ${delta}`,
+        updatedAt: new Date(),
+      })
       .where(eq(comments.id, id));
   }
 
-  async list(filter: ListCommentsFilter = {}): Promise<{ comments: Comment[]; total: number }> {
+  async list(
+    filter: ListCommentsFilter = {},
+  ): Promise<{ comments: Comment[]; total: number }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
     const conditions = [];
     if (filter.postId) conditions.push(eq(comments.postId, filter.postId));
-    if (filter.memberId) conditions.push(eq(comments.memberId, filter.memberId));
+    if (filter.memberId)
+      conditions.push(eq(comments.memberId, filter.memberId));
     if (filter.status) conditions.push(eq(comments.status, filter.status));
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
-    const countRes = await db.select({ total: count() }).from(comments).where(whereClause);
-    const rows = await db.select().from(comments).where(whereClause).orderBy(desc(comments.createdAt)).limit(limit).offset(offset);
-    return { comments: rows.map((r) => this.mapToDomain(r)), total: Number(countRes[0]?.total || 0) };
+    const countRes = await db
+      .select({ total: count() })
+      .from(comments)
+      .where(whereClause);
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(whereClause)
+      .orderBy(desc(comments.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return {
+      comments: rows.map((r) => this.mapToDomain(r)),
+      total: Number(countRes[0]?.total || 0),
+    };
   }
 
-  async listThreaded(postId: string, limit = 50, offset = 0): Promise<{ comments: Comment[]; total: number }> {
+  async listThreaded(
+    postId: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<{ comments: Comment[]; total: number }> {
     const db = getDb();
     // List published + not deleted comments for a post, ordered for threaded display
     const countRes = await db
       .select({ total: count() })
       .from(comments)
-      .where(and(eq(comments.postId, postId), eq(comments.status, 'published'), isNull(comments.deletedAt)));
+      .where(
+        and(
+          eq(comments.postId, postId),
+          eq(comments.status, "published"),
+          isNull(comments.deletedAt),
+        ),
+      );
 
     const rows = await db
       .select()
       .from(comments)
-      .where(and(eq(comments.postId, postId), eq(comments.status, 'published'), isNull(comments.deletedAt)))
+      .where(
+        and(
+          eq(comments.postId, postId),
+          eq(comments.status, "published"),
+          isNull(comments.deletedAt),
+        ),
+      )
       .orderBy(comments.createdAt)
       .limit(Math.min(limit, 100))
       .offset(offset);
 
-    return { comments: rows.map((r) => this.mapToDomain(r)), total: Number(countRes[0]?.total || 0) };
+    return {
+      comments: rows.map((r) => this.mapToDomain(r)),
+      total: Number(countRes[0]?.total || 0),
+    };
   }
 
   async countForPost(postId: string): Promise<number> {
@@ -110,7 +178,13 @@ export class DrizzleCommentRepository implements CommentRepository {
     const rows = await db
       .select({ total: count() })
       .from(comments)
-      .where(and(eq(comments.postId, postId), eq(comments.status, 'published'), isNull(comments.deletedAt)));
+      .where(
+        and(
+          eq(comments.postId, postId),
+          eq(comments.status, "published"),
+          isNull(comments.deletedAt),
+        ),
+      );
     return Number(rows[0]?.total || 0);
   }
 
@@ -133,19 +207,32 @@ export class DrizzleCommentRepository implements CommentRepository {
 }
 
 export class DrizzleCommentLikeRepository implements CommentLikeRepository {
-  async toggle(commentId: string, memberId: string): Promise<{ liked: boolean }> {
+  async toggle(
+    commentId: string,
+    memberId: string,
+  ): Promise<{ liked: boolean }> {
     const db = getDb();
     // Try to insert; if exists, delete (toggle)
     const existing = await db
       .select()
       .from(commentLikes)
-      .where(and(eq(commentLikes.commentId, commentId), eq(commentLikes.memberId, memberId)))
+      .where(
+        and(
+          eq(commentLikes.commentId, commentId),
+          eq(commentLikes.memberId, memberId),
+        ),
+      )
       .limit(1);
 
     if (existing[0]) {
       await db
         .delete(commentLikes)
-        .where(and(eq(commentLikes.commentId, commentId), eq(commentLikes.memberId, memberId)));
+        .where(
+          and(
+            eq(commentLikes.commentId, commentId),
+            eq(commentLikes.memberId, memberId),
+          ),
+        );
       return { liked: false };
     }
 
@@ -163,14 +250,23 @@ export class DrizzleCommentLikeRepository implements CommentLikeRepository {
     const rows = await db
       .select({ id: commentLikes.id })
       .from(commentLikes)
-      .where(and(eq(commentLikes.commentId, commentId), eq(commentLikes.memberId, memberId)))
+      .where(
+        and(
+          eq(commentLikes.commentId, commentId),
+          eq(commentLikes.memberId, memberId),
+        ),
+      )
       .limit(1);
     return rows.length > 0;
   }
 }
 
 export class DrizzleCommentReportRepository implements CommentReportRepository {
-  async create(commentId: string, reporterId: string, reason: string): Promise<{ id: string; status: string }> {
+  async create(
+    commentId: string,
+    reporterId: string,
+    reason: string,
+  ): Promise<{ id: string; status: string }> {
     const db = getDb();
     const [row] = await db
       .insert(commentReports)
@@ -179,11 +275,11 @@ export class DrizzleCommentReportRepository implements CommentReportRepository {
         commentId,
         reporterId,
         reason,
-        status: 'pending',
+        status: "pending",
         createdAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error('Failed to insert report');
+    if (!row) throw new Error("Failed to insert report");
     return { id: row.id, status: row.status };
   }
 
@@ -192,21 +288,50 @@ export class DrizzleCommentReportRepository implements CommentReportRepository {
     const rows = await db
       .select({ id: commentReports.id })
       .from(commentReports)
-      .where(and(eq(commentReports.commentId, commentId), eq(commentReports.reporterId, reporterId)))
+      .where(
+        and(
+          eq(commentReports.commentId, commentId),
+          eq(commentReports.reporterId, reporterId),
+        ),
+      )
       .limit(1);
     return rows.length > 0;
   }
 
-  async list(filter: { status?: string; limit?: number; offset?: number } = {}): Promise<{ reports: Array<{ id: string; commentId: string; reporterId: string; reason: string; status: string; resolvedAt: Date | null; resolvedBy: string | null; createdAt: Date }>; total: number }> {
+  async list(
+    filter: { status?: string; limit?: number; offset?: number } = {},
+  ): Promise<{
+    reports: Array<{
+      id: string;
+      commentId: string;
+      reporterId: string;
+      reason: string;
+      status: string;
+      resolvedAt: Date | null;
+      resolvedBy: string | null;
+      createdAt: Date;
+    }>;
+    total: number;
+  }> {
     const db = getDb();
     const limit = Math.min(filter.limit || 50, 100);
     const offset = filter.offset || 0;
     const conditions = [];
-    if (filter.status) conditions.push(eq(commentReports.status, filter.status));
+    if (filter.status)
+      conditions.push(eq(commentReports.status, filter.status));
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
-    const countRes = await db.select({ total: count() }).from(commentReports).where(whereClause);
-    const rows = await db.select().from(commentReports).where(whereClause).orderBy(desc(commentReports.createdAt)).limit(limit).offset(offset);
+    const countRes = await db
+      .select({ total: count() })
+      .from(commentReports)
+      .where(whereClause);
+    const rows = await db
+      .select()
+      .from(commentReports)
+      .where(whereClause)
+      .orderBy(desc(commentReports.createdAt))
+      .limit(limit)
+      .offset(offset);
 
     return {
       reports: rows.map((r) => ({

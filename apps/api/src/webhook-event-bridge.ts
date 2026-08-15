@@ -1,5 +1,5 @@
-import { domainEvents, DomainEvent } from '@vibress/events';
-import { webhooksService } from './services';
+import { domainEvents, DomainEvent } from "@vibress/events";
+import { webhooksService } from "./services";
 
 /**
  * Bridges domain events to outbound webhook deliveries.
@@ -8,14 +8,14 @@ import { webhooksService } from './services';
  * enqueues them for the worker).
  */
 const SUBSCRIBED_EVENTS = [
-  'post.published',
-  'comment.created',
-  'comment.replied',
-  'subscription.activated',
-  'subscription.cancelled',
-  'newsletter.sent',
-  'member.newsletter_subscribed',
-  'member.newsletter_unsubscribed',
+  "post.published",
+  "comment.created",
+  "comment.replied",
+  "subscription.activated",
+  "subscription.cancelled",
+  "newsletter.sent",
+  "member.newsletter_subscribed",
+  "member.newsletter_unsubscribed",
 ];
 
 export function startWebhookEventBridge(): void {
@@ -24,7 +24,10 @@ export function startWebhookEventBridge(): void {
       webhooksService
         .dispatchEvent(event.name, event.payload)
         .catch((err: unknown) => {
-          console.error(`[WebhookBridge] dispatch of ${event.name} failed:`, err instanceof Error ? err.message : String(err));
+          console.error(
+            `[WebhookBridge] dispatch of ${event.name} failed:`,
+            err instanceof Error ? err.message : String(err),
+          );
         });
     });
   }
