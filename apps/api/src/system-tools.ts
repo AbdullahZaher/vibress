@@ -148,6 +148,7 @@ export async function runMaintenanceOperation(operation: string, actorId: string
       await emailService.retryFailedRecipients();
       return { operation, accepted: true };
     }
+    case 'cache-purge':
     case 'cache.clear-safe': {
       // Only safe namespaces: webhook/email job caches are redis queues, not cleared here.
       // Clear the safe in-memory search cache if any — no-op by design.

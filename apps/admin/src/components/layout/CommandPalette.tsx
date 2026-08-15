@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   PenLine,
@@ -309,9 +310,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
@@ -329,80 +330,76 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search anything or run a command... (Posts, Settings, Actions)"
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-hidden"
+            placeholder="Search commands, actions, settings..."
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
-          {query ? (
+          {query && (
             <button
               onClick={() => setQuery('')}
-              className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+              className="text-muted-foreground hover:text-foreground p-1 rounded-sm cursor-pointer"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
-          ) : (
-            <kbd className="hidden sm:inline-flex bg-muted text-muted-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-border">
-              ESC to close
-            </kbd>
           )}
+          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border rounded">
+            ESC
+          </kbd>
         </div>
 
         {/* Results List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="overflow-y-auto p-2 space-y-1 flex-1">
           {filteredItems.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              No results found for &ldquo;<span className="font-semibold text-foreground">{query}</span>&rdquo;
+            <div className="p-8 text-center text-xs text-muted-foreground">
+              No matching commands found for <span className="font-semibold text-foreground">&quot;{query}&quot;</span>
             </div>
           ) : (
-            filteredItems.map((item, index) => {
-              const isSelected = selectedIndex === index;
+            filteredItems.map((item, idx) => {
+              const isSelected = idx === selectedIndex;
               return (
-                <div
+                <button
                   key={item.id}
+                  type="button"
                   onClick={() => {
                     item.action();
                     onClose();
                   }}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
                     isSelected
-                      ? 'bg-primary text-primary-foreground font-medium shadow-xs'
-                      : 'text-foreground hover:bg-muted/60'
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'text-foreground hover:bg-muted/50'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-lg border ${
-                        isSelected
-                          ? 'border-white/20 bg-white/10 text-white'
-                          : 'border-border/80 bg-muted/40 text-muted-foreground'
-                      }`}
-                    >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={isSelected ? 'text-primary-foreground' : 'text-muted-foreground'}>
                       {item.icon}
-                    </div>
-                    <div className="flex flex-col min-w-0 text-left">
-                      <span className="text-xs font-semibold truncate leading-tight">{item.title}</span>
+                    </span>
+                    <div className="truncate">
+                      <p className="truncate font-medium">{item.title}</p>
                       {item.description && (
-                        <span
-                          className={`text-[11px] truncate leading-normal ${
+                        <p
+                          className={`text-[11px] truncate ${
                             isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
                           }`}
                         >
                           {item.description}
-                        </span>
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <span
-                    className={`text-[10px] uppercase font-mono tracking-wider px-1.5 py-0.5 rounded ${
-                      isSelected
-                        ? 'bg-white/20 text-white'
-                        : 'bg-muted text-muted-foreground border border-border/50'
-                    }`}
-                  >
-                    {item.category}
-                  </span>
-                </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <span
+                      className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${
+                        isSelected
+                          ? 'bg-primary-foreground/20 text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {item.category}
+                    </span>
+                  </div>
+                </button>
               );
             })
           )}
@@ -420,6 +417,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <span>Vibress Fast Command Bar</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -29,6 +29,45 @@ export const SETTING_NAMESPACES: SettingNamespaceDefinition[] = [
         default: 'en',
         validate: (v) => (/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/.test(String(v)) ? null : 'Invalid locale'),
       },
+      {
+        key: 'timezone',
+        type: 'string',
+        classification: 'public',
+        default: 'UTC',
+      },
+      {
+        key: 'accentColor',
+        type: 'string',
+        classification: 'public',
+        default: '#6366f1',
+        validate: (v) => (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(String(v)) ? null : 'Invalid hex color'),
+      },
+      { key: 'iconUrl', type: 'string', classification: 'public', default: '' },
+      { key: 'logoUrl', type: 'string', classification: 'public', default: '' },
+      { key: 'coverUrl', type: 'string', classification: 'public', default: '' },
+      {
+        key: 'primaryNav',
+        type: 'json',
+        classification: 'public',
+        default: [
+          { id: '1', label: 'Home', url: '/' },
+          { id: '2', label: 'Articles', url: '/posts' },
+          { id: '3', label: 'Authors', url: '/authors' },
+          { id: '4', label: 'About', url: '/pages/about' },
+        ],
+      },
+      {
+        key: 'secondaryNav',
+        type: 'json',
+        classification: 'public',
+        default: [
+          { id: '5', label: 'Privacy Policy', url: '/pages/privacy' },
+          { id: '6', label: 'Terms of Service', url: '/pages/terms' },
+        ],
+      },
+      { key: 'announcementEnabled', type: 'boolean', classification: 'public', default: false },
+      { key: 'announcementText', type: 'string', classification: 'public', default: '' },
+      { key: 'announcementUrl', type: 'string', classification: 'public', default: '' },
     ],
   },
   {
@@ -76,8 +115,33 @@ export const SETTING_NAMESPACES: SettingNamespaceDefinition[] = [
   {
     namespace: 'security',
     settings: [
+      { key: 'isPrivate', type: 'boolean', classification: 'public', default: false },
+      { key: 'passwordHash', type: 'string', classification: 'secret', default: '' },
       { key: 'memberSessionTtlHours', type: 'number', classification: 'staff-visible', default: 720, validate: (v) => (Number(v) >= 1 && Number(v) <= 8760 ? null : 'Must be 1-8760') },
       { key: 'authRateLimitPerMinute', type: 'number', classification: 'internal', default: 20, validate: (v) => (Number(v) >= 1 ? null : 'Must be positive') },
+    ],
+  },
+  {
+    namespace: 'analytics',
+    settings: [
+      { key: 'gaId', type: 'string', classification: 'public', default: '' },
+      { key: 'plausibleDomain', type: 'string', classification: 'public', default: '' },
+      { key: 'posthogKey', type: 'string', classification: 'public', default: '' },
+      { key: 'posthogHost', type: 'string', classification: 'public', default: 'https://app.posthog.com' },
+    ],
+  },
+  {
+    namespace: 'comments',
+    settings: [
+      { key: 'commentAccess', type: 'string', classification: 'public', default: 'all', validate: (v) => (['all', 'paid', 'disabled'].includes(String(v)) ? null : 'Invalid comment access') },
+      { key: 'preModeration', type: 'boolean', classification: 'staff-visible', default: false },
+    ],
+  },
+  {
+    namespace: 'code',
+    settings: [
+      { key: 'headerCode', type: 'string', classification: 'public', default: '' },
+      { key: 'footerCode', type: 'string', classification: 'public', default: '' },
     ],
   },
 ];
@@ -200,7 +264,14 @@ export class SettingsService {
         if (value === 'false') return false;
         throw new SettingsDomainError('VALIDATION_ERROR', `${def.key} must be a boolean`);
       case 'json':
-        if (typeof value === 'object') return value;
+        if (typeof value === 'object' && value !== null) return value;
+        if (typeof value === 'string') {
+          try {
+            return JSON.parse(value);
+          } catch {
+            throw new SettingsDomainError('VALIDATION_ERROR', `${def.key} must be valid JSON`);
+          }
+        }
         throw new SettingsDomainError('VALIDATION_ERROR', `${def.key} must be JSON`);
       case 'string':
         return String(value ?? '');

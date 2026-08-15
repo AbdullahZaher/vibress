@@ -16,7 +16,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
   fastify.post('/auth/request', {
     config: {
       rateLimit: {
-        max: getConfig().isTest ? 100 : 10,
+        max: getConfig().isProduction ? 10 : 200,
         timeWindow: '1 minute',
       },
     },

@@ -133,6 +133,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onLogout, onNavigate }
           <div className="border-t border-border/60 my-1 pt-1">
             <button
               type="button"
+              aria-label="Sign out"
               onClick={() => {
                 setIsOpen(false);
                 onLogout();

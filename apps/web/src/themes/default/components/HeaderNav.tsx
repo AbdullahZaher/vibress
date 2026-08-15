@@ -8,9 +8,11 @@ import { t } from '../../../lib/i18n';
 interface HeaderNavProps {
   siteTitle: string;
   siteIcon?: string | undefined;
+  siteLogo?: string | undefined;
+  primaryNav?: Array<{ label: string; url: string }> | undefined;
 }
 
-export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
+export function HeaderNav({ siteTitle, siteIcon, siteLogo, primaryNav }: HeaderNavProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -19,14 +21,26 @@ export function HeaderNav({ siteTitle, siteIcon }: HeaderNavProps) {
         <div className="vb-head-inner inner">
           <nav className="vb-head-menu-left">
             <ul className="nav">
-              <li className="nav-home nav-current"><a href="/">{t('nav.home')}</a></li>
-              <li className="nav-about"><a href="/about">{t('nav.about')}</a></li>
+              {primaryNav && primaryNav.length > 0 ? (
+                primaryNav.map((item, idx) => (
+                  <li key={idx} className="nav-item">
+                    <a href={item.url}>{item.label}</a>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li className="nav-home nav-current"><a href="/">{t('nav.home')}</a></li>
+                  <li className="nav-about"><a href="/about">{t('nav.about')}</a></li>
+                </>
+              )}
             </ul>
           </nav>
 
           <div className="vb-head-brand">
             <a className="vb-head-logo" href="/">
-              {siteIcon ? (
+              {siteLogo ? (
+                <img src={siteLogo} alt={siteTitle} className="vb-head-logo-img" style={{ maxHeight: '36px' }} />
+              ) : siteIcon ? (
                 <img src={siteIcon} alt={siteTitle} className="vb-head-logo-icon" />
               ) : null}
               <span>{siteTitle}</span>

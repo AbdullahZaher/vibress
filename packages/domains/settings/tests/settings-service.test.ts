@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { SettingsService, SettingsDomainError } from '../src/application/settings-service';
+import { SettingsService } from '../src/application/settings-service';
 import { SettingRepository, SettingRecord, AuditRecorder } from '../src/domain/setting';
 
 beforeAll(() => {
@@ -72,6 +72,42 @@ describe('SettingsService', () => {
     expect(record.value).toBe(25);
     const boolRecord = await service.updateSetting('members', 'signupEnabled', 'false', null);
     expect(boolRecord.value).toBe(false);
+  });
+
+  it('updates extended site branding and navigation settings', async () => {
+    const service = makeService();
+    const color = await service.updateSetting('site', 'accentColor', '#10b981', 'u1');
+    expect(color.value).toBe('#10b981');
+
+    const tz = await service.updateSetting('site', 'timezone', 'Asia/Riyadh', 'u1');
+    expect(tz.value).toBe('Asia/Riyadh');
+
+    const nav = await service.updateSetting('site', 'primaryNav', JSON.stringify([{ label: 'Home', url: '/' }]), 'u1');
+    expect(nav.value).toEqual([{ label: 'Home', url: '/' }]);
+
+    const announce = await service.updateSetting('site', 'announcementEnabled', true, 'u1');
+    expect(announce.value).toBe(true);
+  });
+
+  it('updates security settings (isPrivate, passwordHash)', async () => {
+    const service = makeService();
+    const isPrivate = await service.updateSetting('security', 'isPrivate', true, 'u1');
+    expect(isPrivate.value).toBe(true);
+
+    const hash = await service.updateSetting('security', 'passwordHash', 'argon2id$hashed', 'u1');
+    expect(hash.value).toBe('argon2id$hashed');
+  });
+
+  it('updates analytics, comments, and code injection settings', async () => {
+    const service = makeService();
+    const ga = await service.updateSetting('analytics', 'gaId', 'G-1234567890', 'u1');
+    expect(ga.value).toBe('G-1234567890');
+
+    const comments = await service.updateSetting('comments', 'commentAccess', 'paid', 'u1');
+    expect(comments.value).toBe('paid');
+
+    const code = await service.updateSetting('code', 'headerCode', '<script>console.log(1);</script>', 'u1');
+    expect(code.value).toBe('<script>console.log(1);</script>');
   });
 
   it('masks secret and internal values for staff', async () => {

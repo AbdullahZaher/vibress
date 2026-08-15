@@ -7,11 +7,7 @@ import { PageEditor } from './PageEditor';
 import { TagsManager } from './TagsManager';
 import { MediaLibrary } from './MediaLibrary';
 import { MembersList } from './MembersList';
-import { GeneralSettings } from './GeneralSettings';
-import { SiteSettings } from './SiteSettings';
-import { MembershipSettings } from './MembershipSettings';
-import { GrowthSettings } from './GrowthSettings';
-import { AdvancedSettings } from './AdvancedSettings';
+import { SettingsHub } from './settings/SettingsHub';
 
 import { AppSidebar } from './layout/sidebar/AppSidebar';
 import { AnalyticsDashboard } from './layout/AnalyticsDashboard';
@@ -106,61 +102,46 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       return <MembersList />;
     }
 
-    // 4. Five Core Settings Pillars:
-    // Pillar 1: General settings
+    // 4. Unified Settings Hub Routes (All 5 Pillars + Legacy Route Aliases)
     if (
       currentPath === '/admin/settings' ||
       currentPath === '/admin/settings/' ||
       currentPath.startsWith('/admin/settings/general')
     ) {
-      return <GeneralSettings />;
+      return <SettingsHub initialSection="general" can={can} />;
     }
 
-    // Pillar 2: Site Settings (Themes & Design, Storage)
-    if (currentPath.startsWith('/admin/settings/site')) {
-      return <SiteSettings />;
-    }
-    if (currentPath.startsWith('/admin/settings/themes')) {
-      return <SiteSettings initialTab="themes" />;
-    }
-    if (currentPath.startsWith('/admin/settings/storage')) {
-      return <SiteSettings initialTab="storage" />;
+    if (
+      currentPath.startsWith('/admin/settings/site') ||
+      currentPath.startsWith('/admin/settings/themes') ||
+      currentPath.startsWith('/admin/settings/storage')
+    ) {
+      return <SettingsHub initialSection="site" can={can} />;
     }
 
-    // Pillar 3: Membership Settings (Billing, Access, Subscriptions)
-    if (currentPath.startsWith('/admin/settings/membership')) {
-      return <MembershipSettings />;
-    }
-    if (currentPath.startsWith('/admin/settings/billing')) {
-      return <MembershipSettings initialTab="billing" />;
-    }
-    if (currentPath.startsWith('/admin/subscriptions')) {
-      return <MembershipSettings initialTab="subscriptions" />;
+    if (
+      currentPath.startsWith('/admin/settings/membership') ||
+      currentPath.startsWith('/admin/settings/billing') ||
+      currentPath.startsWith('/admin/subscriptions')
+    ) {
+      return <SettingsHub initialSection="membership" can={can} />;
     }
 
-    // Pillar 4: Growth Settings (Newsletters, Intelligence, Community)
-    if (currentPath.startsWith('/admin/settings/growth')) {
-      return <GrowthSettings />;
-    }
-    if (currentPath.startsWith('/admin/newsletters')) {
-      return <GrowthSettings initialTab="newsletters" />;
-    }
-    if (currentPath.startsWith('/admin/analytics')) {
-      return <GrowthSettings initialTab="intelligence" />;
-    }
-    if (currentPath.startsWith('/admin/community')) {
-      return <GrowthSettings initialTab="community" />;
+    if (
+      currentPath.startsWith('/admin/settings/growth') ||
+      currentPath.startsWith('/admin/newsletters') ||
+      currentPath.startsWith('/admin/analytics') ||
+      currentPath.startsWith('/admin/community')
+    ) {
+      return <SettingsHub initialSection="growth" can={can} />;
     }
 
-    // Pillar 5: Advanced Settings (Platform & APIs, System Operations)
-    if (currentPath.startsWith('/admin/settings/advanced')) {
-      return <AdvancedSettings />;
-    }
-    if (currentPath.startsWith('/admin/settings/platform')) {
-      return <AdvancedSettings initialTab="platform" />;
-    }
-    if (currentPath.startsWith('/admin/settings/operations')) {
-      return <AdvancedSettings initialTab="operations" />;
+    if (
+      currentPath.startsWith('/admin/settings/advanced') ||
+      currentPath.startsWith('/admin/settings/platform') ||
+      currentPath.startsWith('/admin/settings/operations')
+    ) {
+      return <SettingsHub initialSection="advanced" can={can} />;
     }
 
     // Default Fallback View: Analytics Dashboard
@@ -169,7 +150,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
 
   return (
     <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
-      {/* Mobile Top Header (only visible on mobile/tablet screens < md) */}
+      {/* Mobile Top Header */}
       <MobileHeader
         currentPath={currentPath}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -180,7 +161,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         canPublishPosts={canPublishPosts}
       />
 
-      {/* Vibress Modular Sidebar (Desktop Static + Mobile Off-Canvas Drawer) */}
+      {/* Vibress Modular Sidebar */}
       <AppSidebar
         user={user}
         currentPath={currentPath}

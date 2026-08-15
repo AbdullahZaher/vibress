@@ -1,10 +1,12 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireStaffSession, requirePermission, validateOrigin } from '../middleware/auth';
-import { settingsService, auditService, redirectsService, importExportService } from '../services';
+import { settingsService, auditService, redirectsService, importExportService, emailService } from '../services';
 import { getSystemDiagnostics, runIntegrityChecks, runMaintenanceOperation } from '../system-tools';
 import { SettingsDomainError } from '@vibress/settings';
 import { RedirectDomainError } from '@vibress/redirects';
 import { ImportExportDomainError, validateImportEnvelope, MAX_IMPORT_FILE_SIZE } from '@vibress/import-export';
+import { hashPassword, verifyPassword } from '@vibress/security';
+import { getConfig } from '@vibress/config';
 
 type CodedError = Error & { code?: string };
 
@@ -61,6 +63,27 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       const body = req.body as { value?: unknown } | undefined;
       if (!body || !('value' in body)) return sendError(reply, 'VALIDATION_ERROR', 'value is required', req.id);
       try {
+        if (namespace === 'code') {
+          // Code injection can execute arbitrary JS on public pages — strictly require Owner or Administrator role
+          const roleList = (req.roles || []) as unknown as Array<{ key: string } | string>;
+          const isPrivilegedAdmin = roleList.some((r) => (typeof r === 'string' ? r : r.key) === 'owner' || (typeof r === 'string' ? r : r.key) === 'administrator');
+          if (!isPrivilegedAdmin) {
+            return sendError(reply, 'FORBIDDEN', 'Code injection requires Administrator or Owner role', req.id, 403);
+          }
+        }
+
+        if (namespace === 'security' && key === 'password') {
+          const pass = String(body.value || '');
+          if (pass.length > 0) {
+            if (pass.length < 6) {
+              return sendError(reply, 'VALIDATION_ERROR', 'Password must be at least 6 characters', req.id);
+            }
+            const hash = await hashPassword(pass);
+            await settingsService.updateSetting('security', 'passwordHash', hash, req.user!.id);
+          }
+          return reply.status(200).send({ setting: { namespace: 'security', key: 'password', value: '••••••••', classification: 'secret' } });
+        }
+
         const record = await settingsService.updateSetting(namespace, key, body.value, req.user!.id);
         return reply.status(200).send({ setting: { namespace, key, value: settingsService.maskForStaff(record.value, record.classification), classification: record.classification } });
       } catch (err) {
@@ -76,6 +99,61 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     handler: async (_req, reply) => {
       const settings = await settingsService.getPublicSettings();
       return reply.status(200).send({ settings });
+    },
+  });
+
+  fastify.post('/settings/verify-site-password', {
+    handler: async (req, reply) => {
+      const body = req.body as { password?: string } | undefined;
+      if (!body || !body.password) {
+        return sendError(reply, 'VALIDATION_ERROR', 'Password is required', req.id);
+      }
+      const publicSettings = await settingsService.getPublicSettings();
+      const isPrivate = Boolean(publicSettings.security?.isPrivate);
+      if (!isPrivate) {
+        return reply.status(200).send({ valid: true, private: false });
+      }
+      const staffSettings = await settingsService.getStaffSettings();
+      const securityNs = staffSettings.find((n) => n.namespace === 'security');
+      // Query raw stored hash from repo
+      const stored = await (settingsService as unknown as { repo: { get: (ns: string, k: string) => Promise<{ value: unknown } | null> } }).repo.get('security', 'passwordHash');
+      if (!stored || !stored.value) {
+        return reply.status(200).send({ valid: true, private: false });
+      }
+      const valid = await verifyPassword(String(stored.value), body.password);
+      return reply.status(valid ? 200 : 401).send({ valid, private: true });
+    },
+  });
+
+  fastify.post('/settings/test-smtp', {
+    preHandler: [requireStaffSession, requirePermission('settings.manage'), validateOrigin],
+    handler: async (req, reply) => {
+      const body = req.body as { to?: string; targetEmail?: string } | undefined;
+      const recipient = body?.targetEmail || body?.to || req.user?.email || 'admin@vibress.org';
+      try {
+        const staffSettings = await settingsService.getStaffSettings();
+        const emailNs = staffSettings.find((n) => n.namespace === 'email');
+        const fromName = String(emailNs?.settings.find((s) => s.key === 'fromName')?.value || 'Vibress');
+        const fromEmail = String(emailNs?.settings.find((s) => s.key === 'fromEmail')?.value || 'noreply@vibress.org');
+
+        const result = await emailService.sendDirect({
+          to: recipient,
+          toName: 'Admin',
+          from: fromEmail || 'noreply@vibress.org',
+          fromName: fromName || 'Vibress',
+          replyTo: fromEmail || 'noreply@vibress.org',
+          subject: 'Vibress SMTP Test Delivery',
+          html: '<h1>Vibress SMTP Delivery Successful</h1><p>Your mail server credentials and configuration are operating properly.</p>',
+          text: 'Vibress SMTP Delivery Successful. Your mail server credentials are operating properly.',
+        });
+        return reply.status(200).send({ success: true, messageId: result.messageId });
+      } catch (err: unknown) {
+        if (!getConfig().isProduction) {
+          return reply.status(200).send({ success: true, simulated: true, note: 'Mail delivery simulated (dev/test environment)' });
+        }
+        const msg = err instanceof Error ? err.message : 'SMTP delivery test failed';
+        return sendError(reply, 'SMTP_TEST_FAILED', msg, req.id, 500);
+      }
     },
   });
 

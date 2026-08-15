@@ -16,7 +16,7 @@ export class DrizzleCommentRepository implements CommentRepository {
         memberId: data.memberId,
         parentId: data.parentId || null,
         body: data.body,
-        status: 'published',
+        status: data.status || 'published',
         depth: data.depth || 0,
         createdAt: now,
         updatedAt: now,

@@ -20,6 +20,7 @@ test.describe('Admin Identity & Authorization E2E Flow', () => {
     await expect(page.getByRole('button', { name: 'Posts', exact: true })).toBeVisible();
 
     // 4. Click Logout
+    await page.click('div[title="Account menu"]');
     await page.click('button[aria-label="Sign out"]');
 
     // Should redirect back to /admin/login

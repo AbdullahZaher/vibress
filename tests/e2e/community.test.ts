@@ -4,14 +4,20 @@ const API = 'http://localhost:7777';
 
 test.describe('Batch 11 Community E2E Suite', () => {
   async function getLatestMagicLink(email: string): Promise<string> {
-    const res = await fetch('http://127.0.0.1:8025/api/v1/messages');
-    const data = await res.json();
-    const msg = (data.messages || []).find((m: any) => m.To?.[0]?.Address === email);
-    expect(msg, `expected a mail to ${email}`).toBeTruthy();
-    const detail = await (await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)).json();
-    const link = (detail.HTML || '').match(/href="([^"]+)"/)?.[1];
-    expect(link).toBeTruthy();
-    return link!;
+    for (let i = 0; i < 20; i++) {
+      try {
+        const res = await fetch('http://127.0.0.1:8025/api/v1/messages');
+        const data = await res.json();
+        const msg = (data.messages || []).find((m: any) => m.To?.[0]?.Address === email);
+        if (msg) {
+          const detail = await (await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)).json();
+          const link = (detail.HTML || '').match(/href="([^"]+)"/)?.[1];
+          if (link) return link;
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(`Magic link for ${email} not found in MailPit`);
   }
 
   async function signupMember(page: any, email: string): Promise<void> {

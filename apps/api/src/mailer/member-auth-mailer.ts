@@ -20,13 +20,18 @@ export class SmtpMemberAuthMailer implements MemberAuthMailer {
   }
 
   async sendMagicLink(input: MemberMagicLinkEmail): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.from,
-      to: input.to,
-      subject: 'Your Vibress sign-in link',
-      text: `Sign in to Vibress by opening this link: ${input.magicLinkUrl}\n\nThis link expires in ${input.expiresInMinutes} minutes.`,
-      html: `<p>Sign in to Vibress by clicking the link below:</p><p><a href="${escapeHtml(input.magicLinkUrl)}">Sign in</a></p><p>This link expires in ${input.expiresInMinutes} minutes.</p>`,
-    });
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: input.to,
+        subject: 'Your Vibress sign-in link',
+        text: `Sign in to Vibress by opening this link: ${input.magicLinkUrl}\n\nThis link expires in ${input.expiresInMinutes} minutes.`,
+        html: `<p>Sign in to Vibress by clicking the link below:</p><p><a href="${escapeHtml(input.magicLinkUrl)}">Sign in</a></p><p>This link expires in ${input.expiresInMinutes} minutes.</p>`,
+      });
+    } catch (err) {
+      console.error('sendMagicLink error:', err);
+      throw err;
+    }
   }
 }
 

@@ -20,6 +20,7 @@ import {
 } from '../helpers/public-content-helpers';
 import type { Author } from '@vibress/authors';
 import { getConfig } from '@vibress/config';
+import { verifyPassword, signSiteAuthToken, SITE_AUTH_COOKIE_NAME } from '@vibress/security';
 
 /**
  * Wizard-managed site identity, precedence: DB setting → environment →
@@ -33,6 +34,20 @@ async function buildPublicSiteIdentity(): Promise<{
   url: string;
   locale: string;
   tagline: string;
+  timezone: string;
+  accentColor: string;
+  iconUrl: string;
+  logoUrl: string;
+  coverUrl: string;
+  primaryNav: Array<{ label: string; url: string }>;
+  secondaryNav: Array<{ label: string; url: string }>;
+  announcementEnabled: boolean;
+  announcementText: string;
+  announcementUrl: string;
+  security: { isPrivate: boolean };
+  analytics: Record<string, unknown>;
+  code: Record<string, unknown>;
+  comments: Record<string, unknown>;
 }> {
   const config = getConfig();
   const stored = await settingsService.getPublicSettings();
@@ -47,6 +62,22 @@ async function buildPublicSiteIdentity(): Promise<{
     tagline: str(site.tagline, ''),
     url: config.site.url,
     locale: str(site.locale, config.site.locale),
+    timezone: str(site.timezone, 'UTC'),
+    accentColor: str(site.accentColor, '#6366f1'),
+    iconUrl: str(site.iconUrl, ''),
+    logoUrl: str(site.logoUrl, ''),
+    coverUrl: str(site.coverUrl, ''),
+    primaryNav: Array.isArray(site.primaryNav) ? site.primaryNav : [],
+    secondaryNav: Array.isArray(site.secondaryNav) ? site.secondaryNav : [],
+    announcementEnabled: Boolean(site.announcementEnabled),
+    announcementText: str(site.announcementText, ''),
+    announcementUrl: str(site.announcementUrl, ''),
+    security: {
+      isPrivate: Boolean(stored.security?.isPrivate),
+    },
+    analytics: (stored.analytics ?? {}) as Record<string, unknown>,
+    code: (stored.code ?? {}) as Record<string, unknown>,
+    comments: (stored.comments ?? {}) as Record<string, unknown>,
   };
 }
 export async function publicContentRoutes(fastify: FastifyInstance) {
@@ -63,12 +94,59 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
           url: site.url,
           locale: site.locale,
           tagline: site.tagline,
+          timezone: site.timezone,
+          accentColor: site.accentColor,
+          iconUrl: site.iconUrl,
+          logoUrl: site.logoUrl,
+          coverUrl: site.coverUrl,
+          primaryNav: site.primaryNav,
+          secondaryNav: site.secondaryNav,
+          announcementEnabled: site.announcementEnabled,
+          announcementText: site.announcementText,
+          announcementUrl: site.announcementUrl,
         },
+        security: site.security,
+        analytics: site.analytics,
+        code: site.code,
+        comments: site.comments,
         theme: {
           themeId: active?.manifest.id || 'vibress-default',
           settings: active?.settings || {},
         },
       });
+    },
+  });
+
+  // Public Verify Site Password
+  fastify.post('/verify-site-password', {
+    handler: async (req, reply) => {
+      const body = req.body as { password?: string } | undefined;
+      if (!body || typeof body.password !== 'string') {
+        return reply.status(400).send({ errors: [{ code: 'VALIDATION_ERROR', message: 'Password is required', requestId: req.id }] });
+      }
+      const publicSettings = await settingsService.getPublicSettings();
+      const isPrivate = Boolean(publicSettings.security?.isPrivate);
+      if (!isPrivate) {
+        return reply.status(200).send({ valid: true, private: false });
+      }
+      const stored = await (settingsService as unknown as { repo: { get: (ns: string, k: string) => Promise<{ value: unknown } | null> } }).repo.get('security', 'passwordHash');
+      if (!stored || !stored.value) {
+        return reply.status(200).send({ valid: true, private: false });
+      }
+      const valid = await verifyPassword(String(stored.value), body.password);
+      if (valid) {
+        const secret = getConfig().secrets.encryptionKey || process.env.VIBRESS_ENCRYPTION_KEY || 'vibress-site-privacy-secret';
+        const token = signSiteAuthToken(secret);
+        reply.setCookie(SITE_AUTH_COOKIE_NAME, token, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60,
+        });
+        return reply.status(200).send({ valid: true, private: true });
+      }
+      return reply.status(401).send({ valid: false, private: true, message: 'Invalid password' });
     },
   });
 

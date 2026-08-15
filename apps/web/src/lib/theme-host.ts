@@ -71,7 +71,21 @@ export interface ThemeSiteSettings {
   description: string;
   url: string;
   locale: string;
-  tagline?: string;
+  tagline?: string | undefined;
+  timezone?: string | undefined;
+  accentColor?: string | undefined;
+  iconUrl?: string | undefined;
+  logoUrl?: string | undefined;
+  coverUrl?: string | undefined;
+  primaryNav?: Array<{ label: string; url: string }> | undefined;
+  secondaryNav?: Array<{ label: string; url: string }> | undefined;
+  announcementEnabled?: boolean | undefined;
+  announcementText?: string | undefined;
+  announcementUrl?: string | undefined;
+  security?: { isPrivate: boolean } | undefined;
+  analytics?: { gaId?: string | undefined; plausibleDomain?: string | undefined; posthogKey?: string | undefined; posthogHost?: string | undefined } | undefined;
+  code?: { headerCode?: string | undefined; footerCode?: string | undefined } | undefined;
+  comments?: { commentAccess?: string | undefined; preModeration?: boolean | undefined } | undefined;
 }
 
 /**
@@ -85,6 +99,16 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     description: process.env.SITE_DESCRIPTION || 'Publishing Platform',
     url: getPublicSiteUrl(),
     locale: process.env.SITE_LOCALE || 'en',
+    accentColor: '#6366f1',
+    primaryNav: [],
+    secondaryNav: [],
+    announcementEnabled: false,
+    announcementText: '',
+    announcementUrl: '',
+    security: { isPrivate: false },
+    analytics: {},
+    code: {},
+    comments: { commentAccess: 'all', preModeration: false },
   };
   try {
     const baseUrl = process.env.API_URL || 'http://127.0.0.1:7780';
@@ -93,15 +117,35 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       headers: { Accept: 'application/json' },
     });
     if (!res.ok) return fallback;
-    const data = (await res.json()) as { site?: ThemeSiteSettings };
+    const data = (await res.json()) as {
+      site?: Record<string, unknown>;
+      security?: { isPrivate: boolean };
+      analytics?: Record<string, unknown>;
+      code?: Record<string, unknown>;
+      comments?: Record<string, unknown>;
+    };
     const site = data?.site;
     if (!site || typeof site.title !== 'string') return fallback;
     return {
-      title: site.title,
-      description: site.description || fallback.description,
-      url: site.url || fallback.url,
-      locale: site.locale || fallback.locale,
-      ...(typeof site.tagline === 'string' && site.tagline ? { tagline: site.tagline } : {}),
+      title: site.title as string,
+      description: (site.description as string) || fallback.description,
+      url: (site.url as string) || fallback.url,
+      locale: (site.locale as string) || fallback.locale,
+      timezone: (site.timezone as string) || 'UTC',
+      accentColor: (site.accentColor as string) || fallback.accentColor,
+      iconUrl: (site.iconUrl as string) || undefined,
+      logoUrl: (site.logoUrl as string) || undefined,
+      coverUrl: (site.coverUrl as string) || undefined,
+      primaryNav: Array.isArray(site.primaryNav) ? (site.primaryNav as Array<{ label: string; url: string }>) : [],
+      secondaryNav: Array.isArray(site.secondaryNav) ? (site.secondaryNav as Array<{ label: string; url: string }>) : [],
+      announcementEnabled: Boolean(site.announcementEnabled),
+      announcementText: (site.announcementText as string) || '',
+      announcementUrl: (site.announcementUrl as string) || '',
+      tagline: typeof site.tagline === 'string' && site.tagline ? site.tagline : undefined,
+      security: data.security || { isPrivate: false },
+      analytics: (data.analytics as ThemeSiteSettings['analytics']) || {},
+      code: (data.code as ThemeSiteSettings['code']) || {},
+      comments: (data.comments as ThemeSiteSettings['comments']) || {},
     };
   } catch {
     return fallback;

@@ -98,3 +98,29 @@ export async function runMaintenanceApi(operation: string): Promise<{ operation:
 export async function getIntegrityApi(): Promise<{ checks: AdminIntegrityCheck[] }> {
   return apiRequest('/system/integrity');
 }
+
+export interface AdminStaffUser {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  roles: string[];
+  createdAt: string;
+  lastLoginAt?: string | null;
+}
+
+export async function listStaffUsersApi(): Promise<{ users: AdminStaffUser[] }> {
+  return apiRequest('/users');
+}
+
+export async function inviteStaffUserApi(data: { email: string; name?: string; roleKey?: string }): Promise<{ user: AdminStaffUser }> {
+  return apiRequest('/users/invite', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function testSmtpApi(data: { to?: string } = {}): Promise<{ success: boolean; messageId?: string | null }> {
+  return apiRequest('/settings/test-smtp', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function verifySitePasswordApi(password: string): Promise<{ valid: boolean; private: boolean }> {
+  return apiRequest('/settings/verify-site-password', { method: 'POST', body: JSON.stringify({ password }) });
+}

@@ -294,4 +294,181 @@ describe('Batch 14 — Operations Integration & Security', () => {
     const res2 = await app.inject({ method: 'POST', url: '/api/admin/v1/system/sql', headers: { cookie: staffCookie }, payload: { q: 'SELECT 1' } });
     expect(res2.statusCode).toBe(404);
   });
+
+  // ---------------- Site Privacy & Password Protection ----------------
+  it('hashes site password on PUT /settings/security/password and verifies via /settings/verify-site-password', async () => {
+    const putRes = await app.inject({
+      method: 'PUT',
+      url: '/api/admin/v1/settings/security/password',
+      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      payload: { value: 'SecretSitePass123' },
+    });
+    expect(putRes.statusCode).toBe(200);
+    const putBody = putRes.json();
+    expect(putBody.setting.key).toBe('password');
+    expect(putBody.setting.value).toBe('••••••••');
+
+    // Enable isPrivate
+    await app.inject({
+      method: 'PUT',
+      url: '/api/admin/v1/settings/security/isPrivate',
+      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      payload: { value: true },
+    });
+
+    // Test correct password
+    const okVerify = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/settings/verify-site-password',
+      payload: { password: 'SecretSitePass123' },
+    });
+    expect(okVerify.statusCode).toBe(200);
+    expect(okVerify.json().valid).toBe(true);
+
+    // Test wrong password
+    const badVerify = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/settings/verify-site-password',
+      payload: { password: 'WrongPassword' },
+    });
+    expect(badVerify.statusCode).toBe(401);
+    expect(badVerify.json().valid).toBe(false);
+  });
+
+  // ---------------- SMTP Test Delivery ----------------
+  it('POST /settings/test-smtp requires authentication and dispatches', async () => {
+    const unauth = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/settings/test-smtp',
+      payload: { targetEmail: 'test@example.com' },
+    });
+    expect(unauth.statusCode).toBe(401);
+
+    const auth = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/settings/test-smtp',
+      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      payload: { targetEmail: 'owner@example.com' },
+    });
+    expect(auth.statusCode).toBe(200);
+    expect(auth.json().success).toBe(true);
+  });
+
+  // ---------------- Staff User Invitation ----------------
+  it('POST /users/invite creates new staff member with assigned role', async () => {
+    const inviteRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/v1/users/invite',
+      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      payload: {
+        email: `colleague-${Date.now()}@example.com`,
+        name: 'New Editor',
+        roleKey: 'editor',
+      },
+    });
+    expect(inviteRes.statusCode).toBe(201);
+    const body = inviteRes.json();
+    expect(body.user).toBeDefined();
+    expect(body.user.name).toBe('New Editor');
+    expect(body.user.roles).toContain('editor');
+  });
+
+  // ---------------- Public Content API Site Settings & Privacy ----------------
+  it('GET /api/content/v1/site returns public settings and active theme metadata', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/content/v1/site',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.site).toBeDefined();
+    expect(body.site.title).toBeDefined();
+    expect(body.security).toBeDefined();
+    expect(typeof body.security.isPrivate).toBe('boolean');
+    expect(body.analytics).toBeDefined();
+    expect(body.code).toBeDefined();
+    expect(body.theme).toBeDefined();
+  });
+
+  it('POST /api/content/v1/verify-site-password sets signed HMAC vb_site_auth cookie', async () => {
+    const { verifySiteAuthToken } = await import('@vibress/security');
+    // Correct password
+    const okRes = await app.inject({
+      method: 'POST',
+      url: '/api/content/v1/verify-site-password',
+      payload: { password: 'SecretSitePass123' },
+    });
+    expect(okRes.statusCode).toBe(200);
+    expect(okRes.json().valid).toBe(true);
+
+    const setCookie = okRes.headers['set-cookie'] as unknown as string;
+    expect(setCookie).toContain('vb_site_auth=v1.');
+
+    // Extract cookie value
+    const match = /vb_site_auth=([^;]+)/.exec(setCookie);
+    expect(match).not.toBeNull();
+    const token = match![1]!;
+
+    const secret = process.env.VIBRESS_ENCRYPTION_KEY || 'test-encryption-key-for-batch-14';
+    expect(verifySiteAuthToken(token, secret)).toBe(true);
+
+    // Tampered cookie must fail
+    expect(verifySiteAuthToken('1', secret)).toBe(false);
+    expect(verifySiteAuthToken('vb_site_auth=1', secret)).toBe(false);
+    expect(verifySiteAuthToken(`${token}-tampered`, secret)).toBe(false);
+    expect(verifySiteAuthToken('v1.invalid.fakehmac', secret)).toBe(false);
+    expect(verifySiteAuthToken(null, secret)).toBe(false);
+    expect(verifySiteAuthToken(undefined, secret)).toBe(false);
+
+    // Incorrect password
+    const badRes = await app.inject({
+      method: 'POST',
+      url: '/api/content/v1/verify-site-password',
+      payload: { password: 'IncorrectPassword' },
+    });
+    expect(badRes.statusCode).toBe(401);
+    expect(badRes.json().valid).toBe(false);
+  });
+
+  // ---------------- Code Injection Security & RBAC ----------------
+  it('PUT /settings/code/headerCode allows Owner / Administrator', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/admin/v1/settings/code/headerCode',
+      headers: { cookie: staffCookie, origin: 'http://localhost:7777' },
+      payload: { value: '<style>:root { --custom: 1; }</style>' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().setting.value).toBe('<style>:root { --custom: 1; }</style>');
+  });
+
+  it('PUT /settings/code/headerCode rejects non-admin staff (403 Forbidden)', async () => {
+    // Create an editor session
+    const db = getDb();
+    const { users, userRoles, roles } = await import('@vibress/database');
+    const existing = await db.select().from(users).where(eq(users.email, 'editor-restricted@example.com')).limit(1);
+    let editorId: string;
+    if (existing.length > 0) {
+      editorId = existing[0]!.id;
+    } else {
+      editorId = crypto.randomUUID();
+      const hash = await hashPassword('EditorPass123!');
+      await db.insert(users).values({ id: editorId, email: 'editor-restricted@example.com', name: 'Restricted Editor', slug: `restricted-editor-${Date.now()}`, passwordHash: hash, status: 'active' });
+      const editorRole = await db.select({ id: roles.id }).from(roles).where(eq(roles.key, 'editor')).limit(1);
+      if (editorRole[0]) await db.insert(userRoles).values({ userId: editorId, roleId: editorRole[0].id });
+    }
+
+    const loginRes = await app.inject({ method: 'POST', url: '/api/admin/v1/auth/login', payload: { email: 'editor-restricted@example.com', password: 'EditorPass123!' } });
+    expect(loginRes.statusCode).toBe(200);
+    const editorCookie = (loginRes.headers['set-cookie'] as unknown as string).split(';')[0] ?? '';
+
+    const putRes = await app.inject({
+      method: 'PUT',
+      url: '/api/admin/v1/settings/code/headerCode',
+      headers: { cookie: editorCookie, origin: 'http://localhost:7777' },
+      payload: { value: '<script>alert("xss")</script>' },
+    });
+    expect(putRes.statusCode).toBe(403);
+  });
 });
+

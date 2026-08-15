@@ -22,6 +22,7 @@ export interface CreateCommentData {
   parentId?: string | null | undefined;
   body: string;
   depth?: number | undefined;
+  status?: CommentStatus | undefined;
 }
 
 export interface UpdateCommentData {

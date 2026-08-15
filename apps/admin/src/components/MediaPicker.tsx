@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listMediaApi, uploadMediaApi, ApiMediaAsset } from '../lib/api';
 import { X, Search, UploadCloud, CheckCircle2, Film, Music, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -87,7 +88,24 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  return (
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
       <div className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
         {/* Header */}
@@ -273,6 +291,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

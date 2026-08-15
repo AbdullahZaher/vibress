@@ -67,7 +67,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="user@vibress.local"
+                    placeholder="user@vibress.com"
                     className="pl-9 h-9 text-xs"
                   />
                 </div>
@@ -82,7 +82,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="•••••••••••• (Leave blank for default)"
+                    placeholder="••••••••••••"
                     className="pl-9 h-9 text-xs"
                   />
                 </div>
@@ -108,7 +108,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ loginFn, onLoginSuccess })
           </CardContent>
           <CardFooter className="border-t border-border pt-4 text-center justify-center">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session Secured via Monorepo Engine
+              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session Secured
             </p>
           </CardFooter>
         </Card>

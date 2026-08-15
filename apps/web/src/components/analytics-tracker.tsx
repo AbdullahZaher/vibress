@@ -90,7 +90,14 @@ function send(path: string, eventId: string): void {
   });
 }
 
-export function AnalyticsTracker(): null {
+export interface AnalyticsConfig {
+  gaId?: string | undefined;
+  plausibleDomain?: string | undefined;
+  posthogKey?: string | undefined;
+  posthogHost?: string | undefined;
+}
+
+export function AnalyticsTracker({ analytics }: { analytics?: AnalyticsConfig | undefined }): null {
   const sentRef = useRef(false);
 
   useEffect(() => {
@@ -110,7 +117,34 @@ export function AnalyticsTracker(): null {
     // duplicate delivery count exactly once.
     const eventId = randomId();
     send(path, eventId);
-  }, []);
+
+    // Third-party scripts
+    if (analytics?.gaId && typeof document !== 'undefined') {
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(analytics.gaId)}`;
+      document.head.appendChild(script);
+
+      const initScript = document.createElement('script');
+      initScript.innerHTML = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${analytics.gaId}');`;
+      document.head.appendChild(initScript);
+    }
+
+    if (analytics?.plausibleDomain && typeof document !== 'undefined') {
+      const script = document.createElement('script');
+      script.defer = true;
+      script.setAttribute('data-domain', analytics.plausibleDomain);
+      script.src = 'https://plausible.io/js/script.js';
+      document.head.appendChild(script);
+    }
+
+    if (analytics?.posthogKey && typeof document !== 'undefined') {
+      const host = analytics.posthogHost || 'https://app.posthog.com';
+      const script = document.createElement('script');
+      script.innerHTML = `!function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);posthog.init('${analytics.posthogKey}',{api_host:'${host}'});`;
+      document.head.appendChild(script);
+    }
+  }, [analytics]);
 
   return null;
 }

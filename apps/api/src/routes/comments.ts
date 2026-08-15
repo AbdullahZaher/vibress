@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { commentsService } from '../services';
+import { commentsService, settingsService, subscriptionsService } from '../services';
 import { requireMemberSession, validateMemberOrigin } from '../middleware/member-auth';
 import { CreateCommentSchema, UpdateCommentSchema, ReportCommentSchema } from '@vibress/api-contracts';
 import { CommentDomainError, Comment } from '@vibress/comments';
@@ -53,8 +53,27 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const parsed = CreateCommentSchema.safeParse(req.body);
       if (!parsed.success) return reply.status(400).send({ errors: [{ code: 'VALIDATION_ERROR', message: 'Invalid comment', requestId: req.id }] });
+
+      const publicSettings = await settingsService.getPublicSettings();
+      const commentAccess = (publicSettings.comments?.commentAccess as string) || 'all';
+      if (commentAccess === 'disabled') {
+        return reply.status(403).send({ errors: [{ code: 'COMMENTS_DISABLED', message: 'Comments are disabled for this publication', requestId: req.id }] });
+      }
+      if (commentAccess === 'paid') {
+        const hasActivePaidSub = await subscriptionsService.memberHasActiveSubscription(req.member!.id);
+        if (!hasActivePaidSub) {
+          return reply.status(403).send({ errors: [{ code: 'PAID_MEMBERS_ONLY', message: 'Only paid subscribers can participate in comments', requestId: req.id }] });
+        }
+      }
+
+      const preModeration = Boolean(publicSettings.comments?.preModeration);
+
       try {
-        const comment = await commentsService.createComment({ ...parsed.data, memberId: req.member!.id });
+        const comment = await commentsService.createComment({
+          ...parsed.data,
+          memberId: req.member!.id,
+          status: preModeration ? 'pending_review' : 'published',
+        });
         return reply.status(201).send({ comment: publicCommentDto(comment) });
       } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
