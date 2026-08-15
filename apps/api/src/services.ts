@@ -12,7 +12,11 @@ import {
   DrizzleRevisionRepository,
   RevisionsService,
 } from "@vibress/revisions";
-import { DrizzlePostRepository, PostsService } from "@vibress/posts";
+import {
+  DrizzlePostRepository,
+  PostsService,
+  EditorialCollaborationService,
+} from "@vibress/posts";
 import { DrizzlePageRepository, PagesService } from "@vibress/pages";
 import {
   LocalStorageProvider,
@@ -21,6 +25,7 @@ import {
 import { DrizzleMediaRepository, MediaService } from "@vibress/media";
 import { getConfig } from "@vibress/config";
 import { SetupService, DrizzleInstallationRepository } from "@vibress/setup";
+import { ContentModelerService } from "@vibress/content-modeler";
 
 import {
   DrizzleStorageRepository,
@@ -439,6 +444,9 @@ export const postsService = new PostsService(
   auditRepo,
   mediaService,
 );
+export const editorialCollaborationService =
+  new EditorialCollaborationService();
+export const contentModelerService = new ContentModelerService();
 export const pagesService = new PagesService(
   pageRepo,
   revisionsService,
@@ -463,3 +471,46 @@ export const importExportService = new ImportExportService(
   new NativeImportProcessor({ settingsService, redirectsService }),
   new NativeExportCollector({ settingsService, redirectsService }),
 );
+
+// ---------------- AI Gateway Subsystem ----------------
+import { AiGatewayService, AiGatewayConfig, AiProviderType } from "@vibress/ai";
+
+export async function getAiGatewayService(): Promise<AiGatewayService> {
+  const aiSettings = await settingsService
+    .getRawSettings("ai")
+    .catch(() => ({} as Record<string, unknown>));
+
+  const providers: AiGatewayConfig["providers"] = {};
+
+  const openaiKey =
+    (aiSettings.openaiApiKey as string) || process.env.OPENAI_API_KEY;
+  if (openaiKey) providers.openai = { apiKey: openaiKey };
+
+  const anthropicKey =
+    (aiSettings.anthropicApiKey as string) || process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey) providers.anthropic = { apiKey: anthropicKey };
+
+  const geminiKey =
+    (aiSettings.geminiApiKey as string) || process.env.GEMINI_API_KEY;
+  if (geminiKey) providers.gemini = { apiKey: geminiKey };
+
+  const deepseekKey =
+    (aiSettings.deepseekApiKey as string) || process.env.DEEPSEEK_API_KEY;
+  if (deepseekKey) providers.deepseek = { apiKey: deepseekKey };
+
+  const ollamaUrl =
+    (aiSettings.ollamaBaseUrl as string) || "http://localhost:11434";
+  if (ollamaUrl) providers.ollama = { baseUrl: ollamaUrl };
+
+  const config: AiGatewayConfig = {
+    enabled: Boolean(aiSettings.enabled ?? false),
+    primaryProvider: (aiSettings.provider as AiProviderType) || "openai",
+    defaultModel: (aiSettings.defaultModel as string) || "gpt-4o",
+    rateLimitPerMinute: Number(aiSettings.rateLimitPerMinute ?? 60),
+    monthlyTokenBudget: Number(aiSettings.monthlyTokenBudget ?? 1000000),
+    providers,
+  };
+
+  return new AiGatewayService(config);
+}
+

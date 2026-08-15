@@ -431,6 +431,49 @@ export class AutomationsService {
       attempts: s.attempts,
     }));
   }
+
+  async retryRun(runId: string): Promise<AutomationRun> {
+    const run = await this.repo.findRunById(runId);
+    if (!run) {
+      throw new AutomationDomainError("RUN_NOT_FOUND", "Automation run not found");
+    }
+    if (run.status !== "failed" && run.status !== "cancelled") {
+      throw new AutomationDomainError(
+        "RUN_NOT_FAILED",
+        "Only failed or cancelled runs can be retried",
+      );
+    }
+    await this.repo.updateRunStatus(runId, "pending", { error: null });
+    await this.dispatcher.enqueueRun(runId);
+    const updated = await this.repo.findRunById(runId);
+    return updated!;
+  }
+
+  async getRunDetails(runId: string): Promise<{
+    run: AutomationRun;
+    steps: Array<{
+      stepIndex: number;
+      actionType: string;
+      status: string;
+      result: Record<string, unknown> | null;
+      error: string | null;
+      attempts: number;
+    }>;
+    durationMs: number | null;
+  } | null> {
+    const run = await this.repo.findRunById(runId);
+    if (!run) return null;
+    const steps = await this.getRunSteps(runId);
+    const durationMs =
+      run.startedAt && run.completedAt
+        ? run.completedAt.getTime() - run.startedAt.getTime()
+        : null;
+    return {
+      run,
+      steps,
+      durationMs,
+    };
+  }
 }
 
 function extractMemberId(

@@ -127,6 +127,34 @@
       "when": 1786582270569,
       "tag": "0017_analytics_traffic",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786600000000,
+      "tag": "0018_editorial_collaboration",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786600500000,
+      "tag": "0019_content_modeler",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786601000000,
+      "tag": "0020_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786602000000,
+      "tag": "0021_master_plan_extensions",
+      "breakpoints": true
     }
   ]
 }

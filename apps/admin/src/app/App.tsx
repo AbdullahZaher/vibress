@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAdminQueryClient } from "../lib/query-keys";
+import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { useAuth } from "../hooks/useAuth";
 import { LoginPage } from "../components/LoginPage";
 import { AdminShell } from "../components/AdminShell";
 import { SetupWizard } from "../features/setup/SetupWizard";
 import { fetchSetupStatus } from "../features/setup/lib";
 
-const queryClient = new QueryClient();
+const queryClient = createAdminQueryClient();
 
 type SetupState = "loading" | "uninstalled" | "installed" | "error";
 
@@ -142,19 +144,22 @@ const AppContent: React.FC = () => {
   }
 
   // If authenticated and on /admin/login or the setup route, redirect to /admin
-  if (
+  const effectivePath =
     currentPath === "/admin/login" ||
     currentPath === "/admin/login/" ||
     currentPath === "/admin/setup" ||
     currentPath === "/admin/setup/"
-  ) {
-    window.history.replaceState({}, "", "/admin");
+      ? "/admin"
+      : currentPath;
+
+  if (effectivePath !== currentPath) {
+    window.history.replaceState({}, "", effectivePath);
   }
 
   return (
     <AdminShell
       user={user!}
-      currentPath={currentPath}
+      currentPath={effectivePath}
       onNavigate={navigate}
       onLogout={async () => {
         await logout();
@@ -168,7 +173,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <RouteErrorBoundary fallbackTitle="Vibress Admin Application Error">
+        <AppContent />
+      </RouteErrorBoundary>
     </QueryClientProvider>
   );
 };

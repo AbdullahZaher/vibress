@@ -8,10 +8,13 @@ export type AutomationStepStatus =
 
 export const ALLOWED_TRIGGERS = [
   "member.created",
+  "member.tier_changed",
   "subscription.activated",
   "subscription.cancelled",
   "newsletter.sent",
   "comment.created",
+  "post.published",
+  "page.published",
   "manual",
 ] as const;
 
@@ -29,6 +32,8 @@ export interface AutomationAction {
     | "webhook"
     | "newsletter_subscribe"
     | "newsletter_unsubscribe"
+    | "tag_add"
+    | "tag_remove"
     | "wait";
   config: Record<string, unknown>;
 }

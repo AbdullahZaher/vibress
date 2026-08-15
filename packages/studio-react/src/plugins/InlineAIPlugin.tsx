@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getSelection,
@@ -16,30 +16,40 @@ import {
   RefreshCw,
   X,
   Wand2,
-  Globe,
-  FileText,
-  CheckCheck,
+  AlertCircle,
 } from "lucide-react";
+
+export interface InlineAIPluginProps {
+  anchorElem?: HTMLElement | undefined;
+  /** Optional AI completion provider function. When omitted, indicates AI Gateway is offline. */
+  onGenerate?: ((prompt: string) => Promise<string>) | undefined;
+  disabled?: boolean | undefined;
+}
 
 export function InlineAIPlugin({
   anchorElem = document.body,
-}: {
-  anchorElem?: HTMLElement;
-}) {
+  onGenerate,
+  disabled = false,
+}: InlineAIPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [generatedText, setGeneratedText] = useState<string | null>(null);
+  const [diffMode, setDiffMode] = useState(false);
   const [position, setPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Listen for Space key on empty line to trigger AI
+  // Listen for Space key on empty line to trigger AI if enabled
   useEffect(() => {
+    if (disabled) return;
+
     return editor.registerCommand(
       KEY_DOWN_COMMAND,
       (event: KeyboardEvent) => {
@@ -65,6 +75,7 @@ export function InlineAIPlugin({
                 left: Math.max(20, rect.left + window.scrollX),
               });
               setIsOpen(true);
+              setErrorMessage(null);
               setTimeout(() => inputRef.current?.focus(), 50);
               return true; // prevent extra space
             }
@@ -74,7 +85,7 @@ export function InlineAIPlugin({
       },
       COMMAND_PRIORITY_LOW,
     );
-  }, [editor, isOpen]);
+  }, [editor, isOpen, disabled]);
 
   // Click outside to close
   useEffect(() => {
@@ -84,6 +95,7 @@ export function InlineAIPlugin({
           setIsOpen(false);
           setGeneratedText(null);
           setPrompt("");
+          setErrorMessage(null);
         }
       }
     };
@@ -94,40 +106,48 @@ export function InlineAIPlugin({
     }
   }, [isOpen, loading]);
 
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+  };
+
   const handleGenerate = async (customPrompt?: string) => {
     const promptToUse = customPrompt || prompt;
     if (!promptToUse.trim()) return;
 
     setLoading(true);
     setGeneratedText(null);
+    setErrorMessage(null);
+    abortControllerRef.current = new AbortController();
 
-    // AI Generation simulation/engine
-    setTimeout(() => {
-      let result = "";
-      const p = promptToUse.toLowerCase();
-
-      if (p.includes("continue") || p.includes("أكمل")) {
-        result =
-          "Here is the continuation of your thoughts with deeper insights, supporting arguments, and practical action items.";
-      } else if (p.includes("summarize") || p.includes("لخص")) {
-        result =
-          "Summary: The core concept revolves around high-efficiency modern publishing, structured content architecture, and seamless user interaction.";
-      } else if (p.includes("improve") || p.includes("حسّن")) {
-        result =
-          "Refined version: Empowering creators with high-fidelity, distraction-free editing tools engineered for ultimate performance and clarity.";
-      } else if (p.includes("arabic") || p.includes("عربي")) {
-        result =
-          "تمكين صناع المحتوى بأدوات تحرير متقدمة وسلسة مصممة لأعلى مستويات الأداء والإنتاجية.";
-      } else if (p.includes("english") || p.includes("إنجليزي")) {
-        result =
-          "Empowering modern publishers with clean, modular editing workflows.";
-      } else {
-        result = `Insights on "${promptToUse}":\n• Structured content improves readability\n• Modular components ensure high scalability\n• Rich interactions keep readers engaged`;
+    try {
+      if (!onGenerate) {
+        // Honest state: AI Gateway is not configured
+        setErrorMessage(
+          "Vibress AI Gateway is not configured or offline. Configure an AI provider to enable completions.",
+        );
+        setLoading(false);
+        return;
       }
 
-      setGeneratedText(result);
+      const result = await onGenerate(promptToUse);
+      if (!abortControllerRef.current?.signal.aborted) {
+        setGeneratedText(result);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return; // Request was cleanly cancelled
+      }
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to generate AI response.",
+      );
+    } finally {
       setLoading(false);
-    }, 600);
+      abortControllerRef.current = null;
+    }
   };
 
   const handleAccept = () => {
@@ -146,22 +166,24 @@ export function InlineAIPlugin({
     setIsOpen(false);
     setGeneratedText(null);
     setPrompt("");
+    setErrorMessage(null);
   };
 
   const handleDiscard = () => {
     setIsOpen(false);
     setGeneratedText(null);
     setPrompt("");
+    setErrorMessage(null);
   };
 
-  if (!isOpen || !position) {
+  if (!isOpen || !position || disabled) {
     return null;
   }
 
   return createPortal(
     <div
       ref={popupRef}
-      className="notion-ai-popup studio-glassy-menu studio-ai-popup"
+      className="vibress-ai-popup studio-glassy-menu studio-ai-popup"
       style={{
         position: "absolute",
         top: `${position.top}px`,
@@ -206,7 +228,7 @@ export function InlineAIPlugin({
               handleGenerate();
             }
           }}
-          placeholder="Ask Notion AI to write, summarize, or edit..."
+          placeholder="Ask Vibress AI to assist with writing..."
           style={{
             flex: 1,
             border: "none",
@@ -236,39 +258,78 @@ export function InlineAIPlugin({
         </button>
       </div>
 
-      {/* Loading state */}
+      {/* Loading state with Cancel button */}
       {loading && (
         <div
           style={{
-            padding: "16px 8px",
+            padding: "12px 8px",
             display: "flex",
             alignItems: "center",
-            gap: "8px",
+            justifyContent: "space-between",
             color: "#6366f1",
             fontSize: "13px",
           }}
         >
-          <Wand2 size={16} className="animate-spin" />
-          <span>Generating content with Notion AI...</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Wand2 size={16} className="animate-spin" />
+            <span>Connecting to Vibress AI Gateway...</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancel}
+            style={{
+              padding: "4px 8px",
+              borderRadius: "4px",
+              border: "1px solid #e2e8f0",
+              background: "#fff",
+              fontSize: "11px",
+              color: "#64748b",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
         </div>
       )}
 
-      {/* Result Display */}
+      {/* Error / Offline state */}
+      {errorMessage && !loading && (
+        <div
+          style={{
+            backgroundColor: "#fff1f2",
+            border: "1px solid #fecdd3",
+            borderRadius: "8px",
+            padding: "10px 12px",
+            marginBottom: "10px",
+            fontSize: "13px",
+            lineHeight: 1.5,
+            color: "#9f1239",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "8px",
+          }}
+        >
+          <AlertCircle size={16} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <div>{errorMessage}</div>
+        </div>
+      )}
+
+      {/* Result Display with Diff Preview */}
       {generatedText && !loading && (
         <div
           style={{
-            backgroundColor: "#f8fafc",
-            border: "1px solid #e2e8f0",
+            backgroundColor: diffMode ? "#f0fdf4" : "#f8fafc",
+            border: diffMode ? "1px solid #bbf7d0" : "1px solid #e2e8f0",
             borderRadius: "8px",
             padding: "10px 12px",
             marginBottom: "10px",
             fontSize: "13px",
             lineHeight: 1.6,
             whiteSpace: "pre-wrap",
-            color: "#1e293b",
+            color: diffMode ? "#166534" : "#1e293b",
           }}
         >
-          {generatedText}
+          {diffMode ? `+ ${generatedText}` : generatedText}
         </div>
       )}
 
@@ -278,138 +339,81 @@ export function InlineAIPlugin({
           style={{
             display: "flex",
             gap: "6px",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
+            alignItems: "center",
             paddingTop: "4px",
           }}
         >
           <button
             type="button"
-            onClick={handleDiscard}
+            onClick={() => setDiffMode(!diffMode)}
             style={{
-              padding: "6px 12px",
-              borderRadius: "6px",
+              padding: "4px 8px",
+              borderRadius: "4px",
               border: "1px solid #e2e8f0",
-              backgroundColor: "#fff",
-              fontSize: "12px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              color: "#64748b",
-            }}
-          >
-            <X size={13} /> Discard
-          </button>
-          <button
-            type="button"
-            onClick={() => handleGenerate()}
-            style={{
-              padding: "6px 12px",
-              borderRadius: "6px",
-              border: "1px solid #e2e8f0",
-              backgroundColor: "#fff",
-              fontSize: "12px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              color: "#0f172a",
-            }}
-          >
-            <RefreshCw size={13} /> Try Again
-          </button>
-          <button
-            type="button"
-            onClick={handleAccept}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "6px",
-              border: "none",
-              backgroundColor: "#0f172a",
-              color: "#fff",
-              fontSize: "12px",
-              fontWeight: 500,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <Check size={13} /> Insert Below
-          </button>
-        </div>
-      )}
-
-      {/* Suggestions Chips */}
-      {!generatedText && !loading && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px",
-            borderTop: "1px solid #f1f5f9",
-            paddingTop: "8px",
-          }}
-        >
-          <div
-            style={{
+              background: diffMode ? "#e0e7ff" : "#fff",
               fontSize: "11px",
-              fontWeight: 600,
-              color: "#94a3b8",
-              textTransform: "uppercase",
-              paddingLeft: "4px",
+              color: "#4338ca",
+              cursor: "pointer",
             }}
           >
-            Quick Prompts
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, 1fr)",
-              gap: "4px",
-            }}
-          >
+            {diffMode ? "Normal Preview" : "Diff View"}
+          </button>
+          <div style={{ display: "flex", gap: "6px" }}>
             <button
               type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Continue writing")}
+              onClick={handleDiscard}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                backgroundColor: "#fff",
+                fontSize: "12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                color: "#64748b",
+              }}
             >
-              <Wand2 size={13} color="#a855f7" /> Continue writing
+              <X size={13} /> Discard
             </button>
             <button
               type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Improve writing")}
+              onClick={() => handleGenerate()}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
+                backgroundColor: "#fff",
+                fontSize: "12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                color: "#0f172a",
+              }}
             >
-              <Sparkles size={13} color="#6366f1" /> Improve writing
+              <RefreshCw size={13} /> Try Again
             </button>
             <button
               type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Summarize this")}
+              onClick={handleAccept}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "6px",
+                border: "none",
+                backgroundColor: "#0f172a",
+                color: "#fff",
+                fontSize: "12px",
+                fontWeight: 500,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
             >
-              <FileText size={13} color="#3b82f6" /> Summarize
-            </button>
-            <button
-              type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Fix spelling & grammar")}
-            >
-              <CheckCheck size={13} color="#10b981" /> Fix grammar
-            </button>
-            <button
-              type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Translate to Arabic")}
-            >
-              <Globe size={13} color="#f59e0b" /> Translate (Arabic)
-            </button>
-            <button
-              type="button"
-              style={chipStyle}
-              onClick={() => handleGenerate("Translate to English")}
-            >
-              <Globe size={13} color="#06b6d4" /> Translate (English)
+              <Check size={13} /> Insert Below
             </button>
           </div>
         </div>
@@ -419,17 +423,3 @@ export function InlineAIPlugin({
   );
 }
 
-const chipStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
-  padding: "6px 8px",
-  borderRadius: "6px",
-  border: "1px solid #f1f5f9",
-  backgroundColor: "#f8fafc",
-  fontSize: "12px",
-  color: "#334155",
-  cursor: "pointer",
-  textAlign: "left",
-  transition: "background-color 0.1s",
-};

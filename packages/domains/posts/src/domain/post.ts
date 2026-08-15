@@ -8,7 +8,14 @@ export class PostDomainError extends Error {
   }
 }
 
-export type PostStatus = "draft" | "scheduled" | "published";
+export type PostStatus =
+  | "draft"
+  | "in_review"
+  | "changes_requested"
+  | "approved"
+  | "scheduled"
+  | "published"
+  | "archived";
 export type PostVisibility = "public" | "members" | "paid";
 
 export interface Post {

@@ -19,6 +19,7 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import LexicalErrorBoundary from "@lexical/react/LexicalErrorBoundary";
+import { CollaborationPlugin } from "@lexical/react/LexicalCollaborationPlugin";
 import { $getRoot, $createParagraphNode } from "lexical";
 import { SlashMenuPlugin } from "./plugins/SlashMenuPlugin";
 import { FloatingFormatToolbarPlugin } from "./plugins/FloatingFormatToolbarPlugin";
@@ -31,11 +32,14 @@ import { ReactStudioCardNode } from "./nodes/ReactStudioCardNode";
 import { StudioDocument, migrateDocument } from "@vibress/studio-core";
 import { serializeStudioDocument } from "@vibress/studio-serializer";
 import { StudioUploadContext, StudioUploadApi } from "./upload-context";
+import { CollaborationConfig } from "./collaboration/types";
 
 export interface VibressStudioProps {
   value?: unknown;
   onChange?: (doc: StudioDocument) => void;
   readOnly?: boolean;
+  enableAi?: boolean;
+  onAiGenerate?: (prompt: string) => Promise<string>;
   placeholder?: string;
   onError?: (error: Error) => void;
   requestMedia?: (req: {
@@ -44,6 +48,7 @@ export interface VibressStudioProps {
   /** Durable upload adapter: local file → assetId/src payload. Card editors
    *  must use this instead of transient blob: URLs. */
   uploadMedia?: StudioUploadApi["uploadMedia"];
+  collaboration?: CollaborationConfig;
   className?: string;
 }
 
@@ -124,10 +129,13 @@ export function VibressStudio({
   value,
   onChange,
   readOnly = false,
-  placeholder = 'Write content with Vibress Studio (type "/" for commands, Space for AI)...',
+  enableAi = false,
+  onAiGenerate,
+  placeholder = 'Write content with Vibress Studio (type "/" for commands)...',
   onError,
   requestMedia,
   uploadMedia,
+  collaboration,
   className = "",
 }: VibressStudioProps) {
   const parsedDoc = useMemo(() => migrateDocument(value), [value]);
@@ -231,7 +239,17 @@ export function VibressStudio({
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <HistoryPlugin />
+              {collaboration ? (
+                <CollaborationPlugin
+                  id={collaboration.id}
+                  providerFactory={collaboration.providerFactory}
+                  shouldBootstrap={true}
+                  username={collaboration.user.name}
+                  cursorColor={collaboration.cursorColor || collaboration.user.color}
+                />
+              ) : (
+                <HistoryPlugin />
+              )}
               <ListPlugin />
               <CheckListPlugin />
               <TablePlugin hasCellMerge hasCellBackgroundColor hasTabHandler />
@@ -241,8 +259,13 @@ export function VibressStudio({
               <FloatingFormatToolbarPlugin />
               <FloatingCardActionToolbarPlugin />
               {!readOnly && <BlockHandleGutterPlugin />}
-              {!readOnly && <InlineAIPlugin />}
-              <InitialStatePlugin document={parsedDoc} />
+              {!readOnly && enableAi && (
+                <InlineAIPlugin
+                  disabled={!enableAi}
+                  onGenerate={onAiGenerate}
+                />
+              )}
+              {!collaboration && <InitialStatePlugin document={parsedDoc} />}
               {onChange && (
                 <OnChangePlugin
                   onChange={(editorState) => {

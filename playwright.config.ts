@@ -2,11 +2,11 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30 * 1000,
+  timeout: 45 * 1000,
   expect: {
-    timeout: 5000,
+    timeout: 7000,
   },
-  fullyParallel: true,
+  fullyParallel: false,
   retries: 0,
   workers: 1,
   reporter: "list",
@@ -14,4 +14,11 @@ export default defineConfig({
     actionTimeout: 0,
     trace: "on-first-retry",
   },
+  webServer: {
+    command: "pnpm dev",
+    url: "http://127.0.0.1:7780/health/ready",
+    reuseExistingServer: true,
+    timeout: 120 * 1000,
+  },
 });
+

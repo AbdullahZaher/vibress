@@ -1,19 +1,33 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Batch 8 Member Auth E2E Suite", () => {
+  test.beforeEach(async () => {
+    await fetch("http://127.0.0.1:8025/api/v1/messages", {
+      method: "DELETE",
+    }).catch(() => {});
+  });
+
   async function getLatestMagicLink(email: string): Promise<string> {
-    const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
-    const data = await res.json();
-    const msg = (data.messages || []).find(
-      (m: any) => m.To?.[0]?.Address === email,
-    );
-    expect(msg, `expected a mail to ${email}`).toBeTruthy();
-    const detail = await (
-      await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
-    ).json();
-    const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
-    expect(link).toBeTruthy();
-    return link!;
+    for (let i = 0; i < 25; i++) {
+      const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
+      const data = await res.json();
+      const matches = (data.messages || [])
+        .filter((m: any) => m.To?.[0]?.Address === email)
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.Created).getTime() - new Date(a.Created).getTime(),
+        );
+      if (matches.length > 0) {
+        const msg = matches[0];
+        const detail = await (
+          await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
+        ).json();
+        const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
+        if (link) return link;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new Error(`expected a mail to ${email}`);
   }
 
   async function loginAsStaff(request: any) {
@@ -233,6 +247,7 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     );
 
     // New magic link works
+    await fetch("http://127.0.0.1:8025/api/v1/messages", { method: "DELETE" }).catch(() => {});
     await page.goto("http://localhost:7777/portal/");
     await page.fill("#email", email);
     await page.click('button[type="submit"]');

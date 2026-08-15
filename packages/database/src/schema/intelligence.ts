@@ -260,3 +260,38 @@ export const automationRunSteps = pgTable(
 
 export type AutomationRunStepRow = typeof automationRunSteps.$inferSelect;
 export type NewAutomationRunStepRow = typeof automationRunSteps.$inferInsert;
+
+export const aiAuditLogs = pgTable(
+  "ai_audit_logs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    task: text("task").notNull().default("completion"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    status: text("status").notNull().default("success"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => {
+    return {
+      userIdIdx: index("ai_audit_logs_user_id_idx").on(table.userId),
+      createdAtIdx: index("ai_audit_logs_created_at_idx").on(table.createdAt),
+      providerModelIdx: index("ai_audit_logs_provider_model_idx").on(
+        table.provider,
+        table.model,
+      ),
+    };
+  },
+);
+
+export type AiAuditLogRow = typeof aiAuditLogs.$inferSelect;
+export type NewAiAuditLogRow = typeof aiAuditLogs.$inferInsert;

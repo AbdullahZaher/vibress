@@ -1,11 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { X, Sparkles } from "lucide-react";
+import { generateAiCompletion } from "../../lib/api";
 
 interface PageSettingsSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  pageTitle?: string | undefined;
+  contentContext?: string | undefined;
   slug: string;
   setSlug: (val: string) => void;
   excerpt: string;
@@ -21,6 +24,8 @@ interface PageSettingsSidebarProps {
 export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
   isOpen,
   onClose,
+  pageTitle,
+  contentContext,
   slug,
   setSlug,
   excerpt,
@@ -32,6 +37,28 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
   canonicalUrl,
   setCanonicalUrl,
 }) => {
+  const [generatingSeo, setGeneratingSeo] = useState(false);
+
+  const handleGenerateSeoWithAi = async () => {
+    if (!pageTitle && !slug) return;
+    setGeneratingSeo(true);
+    try {
+      const resText = await generateAiCompletion({
+        prompt: pageTitle || slug,
+        context: contentContext || excerpt,
+        task: "seo",
+      });
+      const parsed = JSON.parse(resText);
+      if (parsed.metaTitle) setMetaTitle(parsed.metaTitle);
+      if (parsed.metaDescription) setMetaDescription(parsed.metaDescription);
+    } catch {
+      if (pageTitle && !metaTitle) setMetaTitle(pageTitle);
+      if (excerpt && !metaDescription) setMetaDescription(excerpt);
+    } finally {
+      setGeneratingSeo(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -83,9 +110,21 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
 
           {/* SEO Meta */}
           <div className="space-y-4 border-t pt-6">
-            <h3 className="text-sm font-bold flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" /> Meta Data
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" /> Meta Data
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleGenerateSeoWithAi}
+                disabled={generatingSeo}
+              >
+                <Sparkles className="h-3 w-3 text-primary" />
+                {generatingSeo ? "Generating..." : "Generate AI"}
+              </Button>
+            </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
                 Meta Title
@@ -120,6 +159,9 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
                 placeholder="https://..."
                 className="text-sm font-mono h-9"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Leave blank to use the default canonical URL.
+              </p>
             </div>
           </div>
         </div>

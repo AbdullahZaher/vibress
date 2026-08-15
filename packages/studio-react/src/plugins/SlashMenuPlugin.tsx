@@ -399,25 +399,29 @@ export function SlashMenuPlugin({
             }}
           >
             <div className="studio-slash-header">Blocks & Cards</div>
-            {options.map((option, index) => {
-              const isSelected = selectedIndex === index;
-              return (
-                <div
-                  key={option.title}
-                  onClick={() => selectOptionAndCleanUp(option)}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  className={`studio-slash-item ${isSelected ? "is-selected" : ""}`}
-                >
-                  <div className="studio-slash-icon">{option.icon}</div>
-                  <div className="studio-slash-content">
-                    <span className="studio-slash-title">{option.title}</span>
-                    <span className="studio-slash-desc">
-                      {option.description}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            <ul className="studio-slash-list" role="listbox" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {options.map((option, index) => {
+                const isSelected = selectedIndex === index;
+                return (
+                  <li
+                    key={option.title}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => selectOptionAndCleanUp(option)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    className={`studio-slash-item ${isSelected ? "is-selected" : ""}`}
+                  >
+                    <div className="studio-slash-icon">{option.icon}</div>
+                    <div className="studio-slash-content">
+                      <span className="studio-slash-title">{option.title}</span>
+                      <span className="studio-slash-desc">
+                        {option.description}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>,
           anchorElementRef.current,
         );

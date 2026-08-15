@@ -1,0 +1,10 @@
+{
+  "id": "sample-seo-enhancer",
+  "name": "Sample SEO Enhancer",
+  "version": "1.0.0",
+  "description": "Demonstrates the official Vibress Plugin SDK hooks without internal imports.",
+  "author": "Vibress Community",
+  "entrypoint": "index.js",
+  "capabilities": ["content:read", "content:write", "webhooks:register"],
+  "checksum": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

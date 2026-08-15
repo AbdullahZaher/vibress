@@ -61,3 +61,8 @@ export function validatePluginManifest(manifest: unknown): PluginManifest {
   }
   return result.data;
 }
+
+export * from "./sandbox";
+export * from "./extension-host";
+
+

@@ -36,7 +36,14 @@ async function insertCard(page: Page, label: string) {
   await page.keyboard.press("Control+End");
   await page.keyboard.press("Enter");
   await page.keyboard.type(" /");
-  const item = page.locator(`li:has-text("${label}")`).first();
+  const item = page
+    .locator(".studio-slash-item")
+    .filter({
+      has: page.locator(".studio-slash-title", {
+        hasText: new RegExp(`^${label}$`, "i"),
+      }),
+    })
+    .first();
   await item.waitFor({ timeout: 8000 });
   await item.click();
   await page.waitForTimeout(600);
@@ -51,6 +58,18 @@ async function insertCard(page: Page, label: string) {
 async function selectCard(page: Page, cardSelector: string) {
   const card = page.locator(cardSelector).last();
   await card.scrollIntoViewIfNeeded();
+  if (cardSelector === ".vb-button-card") {
+    const input = card.locator('input[placeholder="Add button text"]');
+    if (await input.isVisible().catch(() => false)) {
+      return;
+    }
+    const trigger = card.locator('button[data-testid="vb-button-trigger"], button').first();
+    if (await trigger.isVisible()) {
+      await trigger.click({ force: true });
+      await page.waitForTimeout(400);
+      return;
+    }
+  }
   const box = await card.boundingBox();
   if (!box) throw new Error(`card not visible: ${cardSelector}`);
   await page.mouse.click(box.x + box.width - 15, box.y + box.height - 10);

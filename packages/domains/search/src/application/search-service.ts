@@ -3,6 +3,7 @@ import {
   SearchDocumentInput,
   SearchResult,
 } from "../domain/search";
+import { normalizeArabicText, isArabicText } from "../domain/arabic-normalizer";
 import { domainEvents } from "@vibress/events";
 
 export class SearchDomainError extends Error {
@@ -16,8 +17,17 @@ export class SearchDomainError extends Error {
 
 export const MAX_QUERY_LENGTH = 100;
 
+export interface SearchTelemetry {
+  query: string;
+  totalResults: number;
+  durationMs: number;
+  isZeroResult: boolean;
+  timestamp: string;
+}
+
 /**
- * Sanitizes a search query: bounded length, no pathological wildcards.
+ * Sanitizes a search query: bounded length, no pathological wildcards,
+ * and normalizes Arabic script if present.
  */
 export function sanitizeSearchQuery(q: string): string {
   const trimmed = q.trim();
@@ -45,6 +55,12 @@ export function sanitizeSearchQuery(q: string): string {
   if (/^[*%_]+$/.test(cleaned)) {
     throw new SearchDomainError("INVALID_QUERY", "Invalid query");
   }
+
+  // Normalize Arabic forms if query contains Arabic text
+  if (isArabicText(cleaned)) {
+    cleaned = normalizeArabicText(cleaned);
+  }
+
   return cleaned;
 }
 
@@ -60,17 +76,37 @@ export class SearchService {
     limit = 20,
     offset = 0,
   ): Promise<{ results: SearchResult[]; total: number }> {
+    const start = performance.now();
     const sanitized = sanitizeSearchQuery(q);
-    return this.repo.query(
+    const result = await this.repo.query(
       sanitized,
       Math.min(Math.max(limit, 1), 50),
       Math.max(offset, 0),
     );
+    const durationMs = Math.round(performance.now() - start);
+
+    domainEvents.emit("search.queried", {
+      query: sanitized,
+      totalResults: result.total,
+      durationMs,
+      isZeroResult: result.total === 0,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result;
   }
 
   async indexDocument(doc: SearchDocumentInput): Promise<void> {
     if (!doc.title.trim()) return;
-    await this.repo.upsert(doc);
+
+    // Normalize Arabic text in title and bodyText for high-recall index matching
+    const normalizedDoc: SearchDocumentInput = {
+      ...doc,
+      title: isArabicText(doc.title) ? normalizeArabicText(doc.title) : doc.title,
+      bodyText: doc.bodyText && isArabicText(doc.bodyText) ? normalizeArabicText(doc.bodyText) : doc.bodyText,
+    };
+
+    await this.repo.upsert(normalizedDoc);
     domainEvents.emit("search.indexed", {
       entityType: doc.entityType,
       entityId: doc.entityId,
@@ -91,7 +127,7 @@ export class SearchService {
     const docs = await source.listIndexableContent();
     let indexed = 0;
     for (const doc of docs) {
-      await this.repo.upsert(doc);
+      await this.indexDocument(doc);
       indexed++;
     }
     return indexed;

@@ -1,8 +1,29 @@
 import { FastifyInstance } from "fastify";
 import { getDbPool } from "@vibress/database";
 import { getRedisClient } from "@vibress/cache";
+import { getConfig } from "@vibress/config";
 
 export async function healthRoutes(fastify: FastifyInstance) {
+  fastify.get("/health", async () => {
+    const config = getConfig();
+    return {
+      status: "ok",
+      version: config.system.version || process.env.VIBRESS_VERSION || "0.1.0",
+      commit: process.env.GIT_SHA || "dev",
+      environment: config.env,
+    };
+  });
+
+  fastify.get("/api/health", async () => {
+    const config = getConfig();
+    return {
+      status: "ok",
+      version: config.system.version || process.env.VIBRESS_VERSION || "0.1.0",
+      commit: process.env.GIT_SHA || "dev",
+      environment: config.env,
+    };
+  });
+
   fastify.get("/health/live", async () => {
     return { status: "ok" };
   });
@@ -88,6 +109,12 @@ export async function healthRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/api", async () => {
-    return { name: "Vibress API", status: "ok" };
+    const config = getConfig();
+    return {
+      name: "Vibress API",
+      status: "ok",
+      version: config.system.version || process.env.VIBRESS_VERSION || "0.1.0",
+      commit: process.env.GIT_SHA || "dev",
+    };
   });
 }

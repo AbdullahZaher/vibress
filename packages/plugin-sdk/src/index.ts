@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
  * Plugins must never import database, admin, or private domain internals.
@@ -13,6 +15,7 @@ export interface PluginManifest {
   capabilities: string[];
   settingsSchema?: Record<string, unknown> | undefined;
   hooks?: string[] | undefined;
+  checksum?: string | undefined;
 }
 
 export interface PluginContext {
@@ -96,5 +99,42 @@ export function validateManifest(manifest: unknown): PluginManifest {
         ? (m.settingsSchema as Record<string, unknown>)
         : undefined,
     hooks: Array.isArray(m.hooks) ? (m.hooks as string[]) : undefined,
+    checksum: typeof m.checksum === "string" ? m.checksum : undefined,
   };
+}
+
+/**
+ * Verifies SHA-256 cryptographic checksum of plugin code or package artifact.
+ */
+export function verifyPluginChecksum(
+  data: Buffer | string,
+  expectedSha256: string,
+): boolean {
+  const actualHash = crypto
+    .createHash("sha256")
+    .update(data)
+    .digest("hex")
+    .toLowerCase();
+  return actualHash === expectedSha256.trim().toLowerCase();
+}
+
+/**
+ * Sandboxed timeout guard for plugin execution.
+ */
+export async function executeWithTimeout<T>(
+  fn: () => Promise<T> | T,
+  timeoutMs = 5000,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Plugin execution exceeded timeout of ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(fn()), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

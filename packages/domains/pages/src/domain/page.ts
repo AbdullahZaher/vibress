@@ -8,7 +8,14 @@ export class PageDomainError extends Error {
   }
 }
 
-export type PageStatus = "draft" | "scheduled" | "published";
+export type PageStatus =
+  | "draft"
+  | "in_review"
+  | "changes_requested"
+  | "approved"
+  | "scheduled"
+  | "published"
+  | "archived";
 export type PageVisibility = "public" | "members" | "paid";
 
 export interface Page {

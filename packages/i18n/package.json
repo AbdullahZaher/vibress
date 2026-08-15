@@ -9,7 +9,10 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@vibress/database": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
   "devDependencies": {
     "typescript": "^5.5.3",
     "@types/node": "^20.14.10"

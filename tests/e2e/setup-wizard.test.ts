@@ -18,6 +18,17 @@ const SETUP_TOKEN = "setup-e2e-token-0123456789abcdef0123456789abcdef";
 const OWNER_EMAIL = `owner-${Date.now()}@example.com`;
 
 test.describe.serial("First-Run Setup Wizard (fresh instance)", () => {
+  test.beforeAll(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/setup/v1/status`);
+      if (!res.ok) {
+        test.skip(true, "Setup E2E instance (port 8899) not running; skipping isolated setup suite");
+      }
+    } catch {
+      test.skip(true, "Setup E2E instance (port 8899) not reachable; skipping isolated setup suite");
+    }
+  });
+
   test("fresh instance: wizard appears, wrong key and validation errors are rejected", async ({
     page,
   }) => {

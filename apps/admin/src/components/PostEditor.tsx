@@ -4,6 +4,8 @@ import {
   ApiMediaAsset,
   ApiError,
   uploadMediaApi,
+  fetchAiStatus,
+  generateAiCompletion,
 } from "../lib/api";
 import { VibressStudio } from "@vibress/studio-react";
 import {
@@ -14,8 +16,6 @@ import {
 import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import { Dialog } from "./ui/dialog";
 import {
   ArrowLeft,
   Save,
@@ -23,8 +23,13 @@ import {
   AlertCircle,
   Clock,
   Settings,
+  Users,
+  ArrowLeftRight,
 } from "lucide-react";
 import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
+import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
+import { RevisionDiffModal } from "./editor/RevisionDiffModal";
+import { transitionPostWorkflow } from "../lib/api/collaboration";
 
 interface AdminPostDetail {
   id: string;
@@ -85,6 +90,26 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [scheduledAtStr, setScheduledAtStr] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showCollabPanel, setShowCollabPanel] = useState(false);
+  const [showDiffModal, setShowDiffModal] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    fetchAiStatus()
+      .then((res) => setAiEnabled(res.enabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
+
+  const handleAiGenerate = useCallback(
+    async (prompt: string) => {
+      return generateAiCompletion({
+        prompt,
+        context: title ? `Title: ${title}` : undefined,
+        task: "inline",
+      });
+    },
+    [title],
+  );
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -365,15 +390,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     // Auto-generate slug if it's currently empty or matches the old title's slug
     if (!slug || slug === generateSlug(title)) {
       setSlug(generatedSlug);
-
-      // Auto-generate canonicalUrl if it's currently empty
-      if (!canonicalUrl) {
-        const origin =
-          typeof window !== "undefined"
-            ? window.location.origin
-            : "https://vibress.com";
-        setCanonicalUrl(`${origin}/${generatedSlug}`);
-      }
     }
     triggerAutosaveDebounced();
   };
@@ -551,21 +567,65 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             <ArrowLeft className="h-4 w-4" /> Back to Posts
           </Button>
           <div className="h-4 w-[1px] bg-border" />
-          <Badge
-            variant={
-              status === "published"
-                ? "success"
-                : status === "scheduled"
-                  ? "warning"
-                  : "secondary"
-            }
+          <select
+            value={status}
+            onChange={async (e) => {
+              const newStatus = e.target.value;
+              if (postId) {
+                try {
+                  await transitionPostWorkflow(postId, newStatus);
+                  setStatus(newStatus);
+                } catch (err) {
+                  setErrorMsg(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to transition workflow status",
+                  );
+                }
+              } else {
+                setStatus(newStatus);
+              }
+            }}
+            className="text-xs font-semibold px-2 py-1 rounded border bg-background text-foreground uppercase cursor-pointer"
           >
-            {status.toUpperCase()}
-          </Badge>
+            <option value="draft">Draft</option>
+            <option value="in_review">In Review</option>
+            <option value="changes_requested">Changes Requested</option>
+            <option value="approved">Approved</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </select>
           {renderAutosaveStatus()}
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDiffModal(true)}
+            className="text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            title="Compare Revisions"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Diff
+          </Button>
+
+          {postId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCollabPanel((prev) => !prev)}
+              className={`text-xs gap-1.5 ${
+                showCollabPanel ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Editorial Collaboration & Presence"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Collaborate
+            </Button>
+          )}
+
           {postId && canPublish && (
             <>
               {status === "published" ? (
@@ -603,7 +663,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             variant="ghost"
             size="icon"
             onClick={() => setShowSettings(true)}
-            className="ml-2 text-muted-foreground hover:text-foreground"
+            className="ml-1 text-muted-foreground hover:text-foreground"
           >
             <Settings className="h-5 w-5" />
           </Button>
@@ -613,6 +673,22 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       {/* Main Canvas */}
       <main className="flex-1 overflow-y-auto px-6 py-12 pb-32">
         <div className="max-w-[740px] mx-auto space-y-8">
+          {autosaveState === "conflict" && (
+            <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
+              <div>
+                <strong>Version Conflict Detected:</strong> This post was updated in another session.
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.reload()}
+                className="h-8 text-xs font-semibold ml-4 shrink-0"
+              >
+                Reload Latest
+              </Button>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
@@ -637,6 +713,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             onChange={handleDocChange}
             requestMedia={handleRequestMedia}
             uploadMedia={handleUploadMedia}
+            enableAi={aiEnabled}
+            onAiGenerate={handleAiGenerate}
           />
         </div>
       </main>
@@ -644,6 +722,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       <PostSettingsSidebar
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+        postTitle={title}
+        contentContext={excerpt}
         slug={slug}
         setSlug={setSlug}
         excerpt={excerpt}
@@ -666,12 +746,25 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         handleRestoreRevision={handleRestoreRevision}
       />
 
+      {postId && (
+        <EditorialCollaborationPanel
+          postId={postId}
+          isOpen={showCollabPanel}
+          onClose={() => setShowCollabPanel(false)}
+        />
+      )}
+
+      <RevisionDiffModal
+        isOpen={showDiffModal}
+        onClose={() => setShowDiffModal(false)}
+        revisions={revisions}
+        currentTitle={title}
+        currentContent={studioDoc as unknown as Record<string, unknown>}
+        onRestore={handleRestoreRevision}
+      />
+
       {/* Media Picker Modal Host */}
-      <Dialog
-        isOpen={showPicker}
-        onClose={handlePickerClose}
-        title="Select Media Asset"
-      >
+      {showPicker && (
         <MediaPicker
           allowedTypes={
             pickerConfig?.cardType === "gallery"
@@ -683,7 +776,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           onSelectAssets={handlePickerSelectAssets}
           onClose={handlePickerClose}
         />
-      </Dialog>
+      )}
     </div>
   );
 };

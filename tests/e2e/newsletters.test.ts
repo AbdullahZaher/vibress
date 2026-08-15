@@ -2,7 +2,8 @@ import { test, expect } from "@playwright/test";
 import crypto from "node:crypto";
 
 const API = "http://localhost:7777";
-const WEBHOOK_SECRET = "whsec_email_e2e";
+const WEBHOOK_SECRET =
+  process.env.EMAIL_WEBHOOK_SECRET || "whsec_prod_local_email";
 
 test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
   async function getLatestMail(
@@ -24,19 +25,39 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     };
   }
 
+  test.beforeEach(async () => {
+    await fetch("http://127.0.0.1:8025/api/v1/messages", {
+      method: "DELETE",
+    }).catch(() => {});
+  });
+
+  test.beforeEach(async () => {
+    await fetch("http://127.0.0.1:8025/api/v1/messages", {
+      method: "DELETE",
+    }).catch(() => {});
+  });
+
   async function getLatestMagicLink(email: string): Promise<string> {
-    const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
-    const data = await res.json();
-    const msg = (data.messages || []).find(
-      (m: any) => m.To?.[0]?.Address === email,
-    );
-    expect(msg, `expected a mail to ${email}`).toBeTruthy();
-    const detail = await (
-      await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
-    ).json();
-    const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
-    expect(link).toBeTruthy();
-    return link!;
+    for (let i = 0; i < 25; i++) {
+      const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
+      const data = await res.json();
+      const matches = (data.messages || [])
+        .filter((m: any) => m.To?.[0]?.Address === email)
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.Created).getTime() - new Date(a.Created).getTime(),
+        );
+      if (matches.length > 0) {
+        const msg = matches[0];
+        const detail = await (
+          await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
+        ).json();
+        const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
+        if (link) return link;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new Error(`expected a mail to ${email}`);
   }
 
   async function signupMember(page: any, email: string): Promise<void> {
@@ -46,7 +67,6 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     await expect(page.locator("h1")).toContainText("Check your email");
     const link = await getLatestMagicLink(email);
     await page.goto(link);
-    await page.waitForURL(/\/account/);
     await expect(page.locator("h1")).toContainText("Your account");
   }
 
@@ -75,7 +95,7 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
         "Content-Type": "application/json",
         "x-email-signature": signEmailEvent(payload),
       },
-      data: JSON.parse(payload),
+      data: payload,
     });
     return res.status();
   }

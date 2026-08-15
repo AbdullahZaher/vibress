@@ -1,0 +1,24 @@
+{
+  "id": "starter-minimal",
+  "name": "Starter Minimal Theme",
+  "version": "1.0.0",
+  "author": "Vibress Community",
+  "description": "A clean, modern starter theme built using only the Vibress Theme SDK contract.",
+  "settingsSchema": {
+    "version": 1,
+    "fields": [
+      {
+        "id": "accentColor",
+        "type": "color",
+        "label": "Accent Color",
+        "default": "#3b82f6"
+      },
+      {
+        "id": "showAuthor",
+        "type": "boolean",
+        "label": "Show Author Name",
+        "default": true
+      }
+    ]
+  }
+}

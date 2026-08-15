@@ -25,7 +25,10 @@ export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith(API_BASE)
+    ? endpoint.slice(API_BASE.length)
+    : endpoint;
+  const url = `${API_BASE}${cleanEndpoint.startsWith("/") ? cleanEndpoint : `/${cleanEndpoint}`}`;
   const hasBody = options.body != null;
   const response = await fetch(url, {
     ...options,

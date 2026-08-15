@@ -23,6 +23,14 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     });
   }
 
+  test.afterAll(async ({ request }) => {
+    await loginAsStaff(request);
+    await request.put(`${BASE_URL}/api/admin/v1/settings/security/isPrivate`, {
+      headers: { Origin: BASE_URL },
+      data: { value: false },
+    }).catch(() => {});
+  });
+
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test("1. Admin Settings Navigation & Tabs routing", async ({ page }) => {

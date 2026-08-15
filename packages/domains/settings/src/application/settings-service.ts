@@ -285,6 +285,79 @@ export const SETTING_NAMESPACES: SettingNamespaceDefinition[] = [
     ],
   },
   {
+    namespace: "ai",
+    settings: [
+      {
+        key: "enabled",
+        type: "boolean",
+        classification: "public",
+        default: false,
+      },
+      {
+        key: "provider",
+        type: "string",
+        classification: "staff-visible",
+        default: "openai",
+        validate: (v) =>
+          ["openai", "anthropic", "gemini", "deepseek", "ollama"].includes(
+            String(v),
+          )
+            ? null
+            : "Provider must be openai, anthropic, gemini, deepseek, or ollama",
+      },
+      {
+        key: "defaultModel",
+        type: "string",
+        classification: "staff-visible",
+        default: "gpt-4o",
+      },
+      {
+        key: "openaiApiKey",
+        type: "string",
+        classification: "secret",
+        default: "",
+      },
+      {
+        key: "anthropicApiKey",
+        type: "string",
+        classification: "secret",
+        default: "",
+      },
+      {
+        key: "geminiApiKey",
+        type: "string",
+        classification: "secret",
+        default: "",
+      },
+      {
+        key: "deepseekApiKey",
+        type: "string",
+        classification: "secret",
+        default: "",
+      },
+      {
+        key: "ollamaBaseUrl",
+        type: "string",
+        classification: "staff-visible",
+        default: "http://localhost:11434",
+      },
+      {
+        key: "rateLimitPerMinute",
+        type: "number",
+        classification: "internal",
+        default: 60,
+        validate: (v) => (Number(v) >= 1 ? null : "Must be at least 1"),
+      },
+      {
+        key: "monthlyTokenBudget",
+        type: "number",
+        classification: "staff-visible",
+        default: 1000000,
+        validate: (v) => (Number(v) >= 0 ? null : "Must be positive"),
+      },
+    ],
+  },
+  {
     namespace: "comments",
     settings: [
       {
@@ -396,6 +469,22 @@ export class SettingsService {
         };
       });
       result.push({ namespace: ns.namespace, settings: values });
+    }
+    return result;
+  }
+
+  /**
+   * Internal server-side access: returns unmasked settings for a namespace
+   * with schema defaults applied.
+   */
+  async getRawSettings(namespace: string): Promise<Record<string, unknown>> {
+    const ns = NAMESPACE_MAP.get(namespace);
+    if (!ns) return {};
+    const stored = await this.repo.getMany(namespace);
+    const result: Record<string, unknown> = {};
+    for (const def of ns.settings) {
+      const found = stored.find((s) => s.key === def.key);
+      result[def.key] = found ? found.value : def.default;
     }
     return result;
   }

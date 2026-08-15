@@ -1,4 +1,4 @@
-import "./tracing-init";
+import "./tracing-init.js";
 import { getRedisClient, closeRedisClient } from "@vibress/cache";
 import { closeDbPool } from "@vibress/database";
 import { ContentSchedulerWorker } from "./scheduler";

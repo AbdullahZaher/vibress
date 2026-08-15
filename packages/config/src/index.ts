@@ -4,12 +4,12 @@ export type NodeEnvironment = "development" | "test" | "production";
 export type EventDeliveryMode = "outbox" | "direct";
 
 export class ConfigError extends Error {
-  constructor(
-    message: string,
-    public issues: string[] = [],
-  ) {
+  public issues: string[];
+
+  constructor(message: string, issues: string[] = []) {
     super(message);
     this.name = "ConfigError";
+    this.issues = issues;
   }
 }
 
@@ -285,7 +285,10 @@ export function loadConfig(env: EnvSource): AppConfig {
       pass: raw.SMTP_PASS || raw.SMTP_PASSWORD || null,
       from: raw.SMTP_FROM,
     },
-    email: { webhookSecret: raw.EMAIL_WEBHOOK_SECRET || null },
+    email: {
+      webhookSecret:
+        raw.EMAIL_WEBHOOK_SECRET || (isProduction ? null : "whsec_email_e2e"),
+    },
     newsletters: {
       unsubscribeSecret: raw.NEWSLETTER_UNSUBSCRIBE_SECRET || null,
     },

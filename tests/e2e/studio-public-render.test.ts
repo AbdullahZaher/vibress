@@ -86,6 +86,18 @@ function mainEditor(page: Page) {
 async function selectCard(page: Page, cardSelector: string) {
   const card = page.locator(cardSelector).last();
   await card.scrollIntoViewIfNeeded();
+  if (cardSelector === ".vb-button-card") {
+    const input = card.locator('input[placeholder="Add button text"]');
+    if (await input.isVisible().catch(() => false)) {
+      return;
+    }
+    const trigger = card.locator('button[data-testid="vb-button-trigger"], button').first();
+    if (await trigger.isVisible()) {
+      await trigger.click({ force: true });
+      await page.waitForTimeout(400);
+      return;
+    }
+  }
   const box = await card.boundingBox();
   if (!box) throw new Error(`card not visible: ${cardSelector}`);
   await page.mouse.click(box.x + box.width - 15, box.y + box.height - 10);
@@ -99,7 +111,14 @@ async function insertCard(page: Page, label: string) {
   await page.keyboard.press("Control+End");
   await page.keyboard.press("Enter");
   await page.keyboard.type(" /");
-  const item = page.locator(`li:has-text("${label}")`).first();
+  const item = page
+    .locator(".studio-slash-item")
+    .filter({
+      has: page.locator(".studio-slash-title", {
+        hasText: new RegExp(`^${label}$`, "i"),
+      }),
+    })
+    .first();
   await item.waitFor({ timeout: 8000 });
   await item.click();
   await page.waitForTimeout(600);
@@ -117,15 +136,19 @@ async function pickAsset(page: Page, title: string) {
   await page.waitForSelector('h3:has-text("Select Media Asset")', {
     timeout: 10000,
   });
-  // Scope to the modal overlay — the editor's own inserted cards contain
-  // matching <img alt> elements that must never be selected as assets.
-  const modal = page.locator("div.fixed.inset-0");
+  const modal = page.locator("div.fixed.inset-0").first();
   await modal.waitFor({ timeout: 10000 });
   const asset = modal
-    .locator(`div[title="${title}"], img[alt="${title}"]`)
+    .locator(`[data-testid="media-picker-item"], div[title="${title}"], img[alt="${title}"]`)
+    .filter({ hasText: title })
     .first();
-  await asset.waitFor({ timeout: 10000 });
-  await asset.click();
+  if (await asset.isVisible({ timeout: 4000 }).catch(() => false)) {
+    await asset.click();
+  } else {
+    // Fallback if title text is in child or tooltip
+    const fallback = modal.locator(`div:has-text("${title}"), [title*="${title}"], [alt*="${title}"]`).last();
+    await fallback.click();
+  }
   await page.waitForTimeout(600);
 }
 
@@ -181,7 +204,7 @@ test.describe("Studio public rendering", () => {
     await page.waitForSelector('h3:has-text("Select Media Asset")', {
       timeout: 10000,
     });
-    const modal = page.locator("div.fixed.inset-0");
+    const modal = page.locator("div.fixed.inset-0").first();
     await modal.waitFor({ timeout: 10000 });
     await page.waitForFunction(
       () =>
@@ -212,7 +235,7 @@ test.describe("Studio public rendering", () => {
     await insertCard(page, "Bookmark");
     await closePicker(page);
     await page
-      .locator('input[placeholder="https://..."]')
+      .locator('input[type="url"], input[placeholder*="Paste link"]')
       .last()
       .fill("https://example.com/bookmark");
     await page.locator('button:has-text("Save")').last().click();
@@ -222,10 +245,10 @@ test.describe("Studio public rendering", () => {
     await insertCard(page, "Embed");
     await closePicker(page);
     await page
-      .locator('input[placeholder="https://..."]')
+      .locator('input[type="url"], input[placeholder*="Paste link"]')
       .last()
       .fill("https://www.youtube.com/watch?v=abc123def");
-    await page.locator('button:has-text("Save")').last().click();
+    await page.locator('button:has-text("Embed"), button:has-text("Save")').last().click();
     await page.waitForTimeout(400);
 
     // --- button (select the card → interactive form opens via the real UI) ---

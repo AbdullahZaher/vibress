@@ -11,6 +11,7 @@
   "dependencies": {
     "@vibress/audit": "workspace:*",
     "@vibress/database": "workspace:*",
+    "@vibress/events": "workspace:*",
     "@vibress/permissions": "workspace:*",
     "@vibress/roles": "workspace:*",
     "@vibress/security": "workspace:*",

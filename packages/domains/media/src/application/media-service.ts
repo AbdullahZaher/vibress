@@ -157,6 +157,30 @@ export class MediaService {
     return updated;
   }
 
+  async updateFocalPoint(
+    id: string,
+    focalPoint: { x: number; y: number },
+    actorId?: string,
+  ): Promise<MediaAsset> {
+    const asset = await this.getMediaById(id);
+    const existingMeta = (asset.metadata as Record<string, unknown>) || {};
+    const clampedFocalPoint = {
+      x: Math.max(0, Math.min(1, focalPoint.x)),
+      y: Math.max(0, Math.min(1, focalPoint.y)),
+    };
+
+    return this.updateMediaMetadata(
+      id,
+      {
+        metadata: {
+          ...existingMeta,
+          focalPoint: clampedFocalPoint,
+        },
+      },
+      actorId,
+    );
+  }
+
   async deleteMedia(id: string, actorId?: string): Promise<void> {
     const asset = await this.getMediaById(id);
 

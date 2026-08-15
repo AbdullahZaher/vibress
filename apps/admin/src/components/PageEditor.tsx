@@ -1,5 +1,11 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { apiRequest, ApiMediaAsset, uploadMediaApi } from "../lib/api";
+import {
+  apiRequest,
+  ApiMediaAsset,
+  uploadMediaApi,
+  fetchAiStatus,
+  generateAiCompletion,
+} from "../lib/api";
 import { VibressStudio } from "@vibress/studio-react";
 import {
   StudioDocument,
@@ -10,7 +16,6 @@ import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Dialog } from "./ui/dialog";
 import { ArrowLeft, Save, CheckCircle2, Clock, Settings } from "lucide-react";
 import { PageSettingsSidebar } from "./editor/PageSettingsSidebar";
 
@@ -45,6 +50,24 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    fetchAiStatus()
+      .then((res) => setAiEnabled(res.enabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
+
+  const handleAiGenerate = useCallback(
+    async (prompt: string) => {
+      return generateAiCompletion({
+        prompt,
+        context: title ? `Title: ${title}` : undefined,
+        task: "inline",
+      });
+    },
+    [title],
+  );
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -379,6 +402,22 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       {/* Main Canvas */}
       <main className="flex-1 overflow-y-auto px-6 py-12 pb-32">
         <div className="max-w-[740px] mx-auto space-y-8">
+          {autosaveState === "conflict" && (
+            <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
+              <div>
+                <strong>Version Conflict Detected:</strong> This page was updated in another session.
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.reload()}
+                className="h-8 text-xs font-semibold ml-4 shrink-0"
+              >
+                Reload Latest
+              </Button>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
@@ -403,6 +442,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             onChange={handleStudioChange}
             requestMedia={handleRequestMedia}
             uploadMedia={handleUploadMedia}
+            enableAi={aiEnabled}
+            onAiGenerate={handleAiGenerate}
           />
         </div>
       </main>
@@ -410,6 +451,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       <PageSettingsSidebar
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+        pageTitle={title}
+        contentContext={excerpt}
         slug={slug}
         setSlug={setSlug}
         excerpt={excerpt}
@@ -423,11 +466,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       />
 
       {/* Media Modal */}
-      <Dialog
-        isOpen={showPicker}
-        onClose={handlePickerClose}
-        title="Select Asset"
-      >
+      {showPicker && (
         <MediaPicker
           allowedTypes={
             pickerConfig?.cardType === "gallery"
@@ -439,7 +478,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           onSelectAssets={handlePickerSelectAssets}
           onClose={handlePickerClose}
         />
-      </Dialog>
+      )}
     </div>
   );
 };

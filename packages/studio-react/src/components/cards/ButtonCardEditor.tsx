@@ -12,7 +12,7 @@ interface Props {
 export function ButtonCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected] = useLexicalNodeSelection(nodeKey);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(!cardData.text && !cardData.url);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const text = cardData.text || "";
@@ -79,6 +79,7 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
         <div className="relative inline-flex flex-col items-center">
           <button
             type="button"
+            data-testid="vb-button-trigger"
             onClick={handleToggle}
             className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg cursor-pointer hover:opacity-90 select-none text-sm leading-snug shadow-sm transition"
             style={{

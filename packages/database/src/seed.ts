@@ -239,7 +239,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
   const isEditor = (roleId: string) => roleId === editorRoleRows[0]?.id;
 
   for (const roleId of targetRoleIds) {
-    for (const [permKey, permId] of permMap.entries()) {
+    for (const [permKey, permId] of Array.from(permMap.entries())) {
       if (
         roleId === authorRoleRows[0]?.id ||
         roleId === contributorRoleRows[0]?.id

@@ -1,4 +1,4 @@
-import "./tracing-init";
+import "./tracing-init.js";
 import Fastify from "fastify";
 import helmet from "@fastify/helmet";
 import cors from "@fastify/cors";
@@ -6,7 +6,12 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import crypto from "node:crypto";
 import multipart from "@fastify/multipart";
-import { getDbPool, closeDbPool, seedDatabase } from "@vibress/database";
+import {
+  getDbPool,
+  closeDbPool,
+  seedDatabase,
+  assertDatabaseSchemaReady,
+} from "@vibress/database";
 import { getRedisClient, closeRedisClient } from "@vibress/cache";
 import { authRoutes } from "./routes/auth";
 import { adminRoutes } from "./routes/admin";
@@ -52,6 +57,14 @@ import { analyticsCollectorRoutes } from "./routes/analytics-public";
 import { setupService } from "./services";
 import { mediaStreamRoutes } from "./routes/media-stream";
 import { adminOperationsRoutes } from "./routes/operations";
+import { aiRoutes } from "./routes/ai";
+import { collaborationRoutes } from "./routes/collaboration";
+import {
+  contentModelerRoutes,
+  publicContentModelRoutes,
+} from "./routes/content-models";
+import { distributionRoutes } from "./routes/distribution";
+import { openApiDocsRoutes } from "./routes/docs";
 import { storageService, themeService } from "./services";
 import { getConfig } from "@vibress/config";
 import {
@@ -181,6 +194,9 @@ export const buildApp = () => {
   fastify.register(adminSearchRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminAutomationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminOperationsRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(aiRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(collaborationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(contentModelerRoutes, { prefix: "/api/admin/v1" });
 
   // Register Member Routes
   fastify.register(memberRoutes, { prefix: "/api/members/v1" });
@@ -195,6 +211,7 @@ export const buildApp = () => {
   fastify.register(publicCommentRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicRecommendationRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicSearchRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicContentModelRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicUnsubscribeRoutes, { prefix: "/api/public/v1" });
 
   // Machine API key surface (separate from staff/member sessions)
@@ -203,6 +220,12 @@ export const buildApp = () => {
   // Register Billing Webhooks (signature-authenticated, NOT cookie auth)
   fastify.register(billingWebhookRoutes, { prefix: "/api/webhooks/v1" });
   fastify.register(emailWebhookRoutes, { prefix: "/api/webhooks/v1/email" });
+
+  // Public Distribution & Feeds (/llms.txt, /.well-known/webfinger, /activitypub/actor, /rss.xml, /feed.json)
+  fastify.register(distributionRoutes);
+
+  // Developer Platform OpenAPI 3.1 Documentation & Swagger UI
+  fastify.register(openApiDocsRoutes);
 
   return fastify;
 };
@@ -214,6 +237,7 @@ const start = async () => {
 
     // Initialize clients eagerly on startup
     getDbPool();
+    await assertDatabaseSchemaReady();
     getRedisClient();
     await storageService.initializeStartupProvider();
 

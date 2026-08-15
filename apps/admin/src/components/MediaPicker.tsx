@@ -39,6 +39,10 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
   );
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setSelectedType(allowedTypes?.[0] || "all");
+  }, [allowedTypes]);
+
   const filterType =
     selectedType === "all"
       ? undefined
@@ -256,6 +260,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                 return (
                   <div
                     key={asset.id}
+                    data-testid="media-picker-item"
                     onClick={() => toggleSelect(asset)}
                     className={`group relative rounded-xl overflow-hidden cursor-pointer border transition-all duration-200 ${
                       isSelected

@@ -26,6 +26,14 @@ test.describe("Batch 6 Public Web, SEO & Discovery E2E Suite", () => {
     const ownerId = loginData.user.id;
     authorSlug = loginData.user.slug || "e2e-owner";
 
+    // Ensure Default theme is active
+    await request.post(
+      "http://localhost:7777/api/admin/v1/themes/vibress-default/activate",
+      {
+        headers: { Origin: "http://localhost:7777" },
+      },
+    );
+
     // 2. Create Tag
     const tagRes = await request.post(
       "http://localhost:7777/api/admin/v1/tags",

@@ -1,18 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { ApiUser } from "../lib/api";
-import { PostsList } from "./PostsList";
-import { PostEditor } from "./PostEditor";
-import { PagesList } from "./PagesList";
-import { PageEditor } from "./PageEditor";
-import { TagsManager } from "./TagsManager";
-import { MediaLibrary } from "./MediaLibrary";
-import { MembersList } from "./MembersList";
-import { SettingsHub } from "./settings/SettingsHub";
-
 import { AppSidebar } from "./layout/sidebar/AppSidebar";
-import { AnalyticsDashboard } from "./layout/AnalyticsDashboard";
 import { MobileHeader } from "./layout/MobileHeader";
 import { CommandPalette } from "./layout/CommandPalette";
+import { renderAdminRoute } from "../lib/router";
 
 interface AdminShellProps {
   user: ApiUser;
@@ -30,6 +21,9 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   can,
 }) => {
   const [darkMode, setDarkMode] = useState(true);
+  const [locale] = useState<"en" | "ar">(() => {
+    return (typeof document !== "undefined" && (document.documentElement.lang as "en" | "ar")) || "en";
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
@@ -40,6 +34,12 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    const isArabic = locale === "ar";
+    document.documentElement.dir = isArabic ? "rtl" : "ltr";
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -54,151 +54,6 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canPublishPosts = can("posts.publish");
-  const canPublishPages = can("pages.publish");
-
-  // Route Views Renderer
-  const renderContent = () => {
-    // 1. Posts & Editor Routes
-    if (currentPath === "/admin/posts" || currentPath === "/admin/posts/") {
-      return <PostsList onNavigate={onNavigate} canPublish={canPublishPosts} />;
-    }
-    if (currentPath === "/admin/posts/drafts") {
-      return (
-        <PostsList
-          onNavigate={onNavigate}
-          canPublish={canPublishPosts}
-          filterStatus="draft"
-        />
-      );
-    }
-    if (currentPath === "/admin/posts/scheduled") {
-      return (
-        <PostsList
-          onNavigate={onNavigate}
-          canPublish={canPublishPosts}
-          filterStatus="scheduled"
-        />
-      );
-    }
-    if (currentPath === "/admin/posts/published") {
-      return (
-        <PostsList
-          onNavigate={onNavigate}
-          canPublish={canPublishPosts}
-          filterStatus="published"
-        />
-      );
-    }
-    if (currentPath === "/admin/posts/new") {
-      return (
-        <PostEditor
-          currentUserId={user.id}
-          canPublish={canPublishPosts}
-          onNavigate={onNavigate}
-        />
-      );
-    }
-    if (currentPath.startsWith("/admin/posts/")) {
-      const postId = currentPath.split("/admin/posts/")[1];
-      return (
-        <PostEditor
-          postId={postId}
-          currentUserId={user.id}
-          canPublish={canPublishPosts}
-          onNavigate={onNavigate}
-        />
-      );
-    }
-
-    // 2. Pages Routes
-    if (currentPath === "/admin/pages" || currentPath === "/admin/pages/") {
-      return <PagesList onNavigate={onNavigate} canPublish={canPublishPages} />;
-    }
-    if (currentPath === "/admin/pages/new") {
-      return (
-        <PageEditor
-          currentUserId={user.id}
-          canPublish={canPublishPages}
-          onNavigate={onNavigate}
-        />
-      );
-    }
-    if (currentPath.startsWith("/admin/pages/")) {
-      const pageId = currentPath.split("/admin/pages/")[1];
-      return (
-        <PageEditor
-          pageId={pageId}
-          currentUserId={user.id}
-          canPublish={canPublishPages}
-          onNavigate={onNavigate}
-        />
-      );
-    }
-
-    // 3. Taxonomy & Content Assets
-    if (currentPath === "/admin/tags" || currentPath === "/admin/tags/") {
-      return <TagsManager />;
-    }
-    if (
-      currentPath === "/admin/media" ||
-      currentPath === "/admin/media/" ||
-      currentPath.startsWith("/admin/media/")
-    ) {
-      return <MediaLibrary />;
-    }
-    if (
-      currentPath === "/admin/members" ||
-      currentPath === "/admin/members/" ||
-      currentPath.startsWith("/admin/members")
-    ) {
-      return <MembersList />;
-    }
-
-    // 4. Unified Settings Hub Routes (All 5 Pillars + Legacy Route Aliases)
-    if (
-      currentPath === "/admin/settings" ||
-      currentPath === "/admin/settings/" ||
-      currentPath.startsWith("/admin/settings/general")
-    ) {
-      return <SettingsHub initialSection="general" can={can} />;
-    }
-
-    if (
-      currentPath.startsWith("/admin/settings/site") ||
-      currentPath.startsWith("/admin/settings/themes") ||
-      currentPath.startsWith("/admin/settings/storage")
-    ) {
-      return <SettingsHub initialSection="site" can={can} />;
-    }
-
-    if (
-      currentPath.startsWith("/admin/settings/membership") ||
-      currentPath.startsWith("/admin/settings/billing") ||
-      currentPath.startsWith("/admin/subscriptions")
-    ) {
-      return <SettingsHub initialSection="membership" can={can} />;
-    }
-
-    if (
-      currentPath.startsWith("/admin/settings/growth") ||
-      currentPath.startsWith("/admin/newsletters") ||
-      currentPath.startsWith("/admin/analytics") ||
-      currentPath.startsWith("/admin/community")
-    ) {
-      return <SettingsHub initialSection="growth" can={can} />;
-    }
-
-    if (
-      currentPath.startsWith("/admin/settings/advanced") ||
-      currentPath.startsWith("/admin/settings/platform") ||
-      currentPath.startsWith("/admin/settings/operations")
-    ) {
-      return <SettingsHub initialSection="advanced" can={can} />;
-    }
-
-    // Default Fallback View: Analytics Dashboard
-    return <AnalyticsDashboard user={user} />;
-  };
 
   return (
     <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
@@ -227,9 +82,14 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}
       <main className="flex-1 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto p-4 sm:p-6 md:p-8">
-        {renderContent()}
+        {renderAdminRoute({
+          pathname: currentPath,
+          user,
+          onNavigate,
+          can,
+        })}
       </main>
 
       {/* Global Interactive Command Palette (⌘K) */}

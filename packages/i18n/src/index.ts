@@ -1,9 +1,24 @@
+import { arDictionary } from "./dictionaries/ar";
+import { enDictionary } from "./dictionaries/en";
+
 export type TranslationDictionary = Record<string, Record<string, string>>;
 
 export interface TranslatorOptions {
-  locale?: string;
-  fallbackLocale?: string;
-  dictionary?: TranslationDictionary;
+  locale?: string | undefined;
+  fallbackLocale?: string | undefined;
+  dictionary?: TranslationDictionary | undefined;
+}
+
+export const RTL_LOCALES = new Set(["ar", "he", "fa", "ur"]);
+
+export function isRtl(locale: string): boolean {
+  if (!locale) return false;
+  const lang = locale.split("-")[0]?.toLowerCase() || "";
+  return RTL_LOCALES.has(lang);
+}
+
+export function getDirection(locale: string): "rtl" | "ltr" {
+  return isRtl(locale) ? "rtl" : "ltr";
 }
 
 export class Translator {
@@ -14,7 +29,10 @@ export class Translator {
   constructor(options: TranslatorOptions = {}) {
     this.locale = options.locale || options.fallbackLocale || "en";
     this.fallbackLocale = options.fallbackLocale || "en";
-    this.dictionary = options.dictionary || {};
+    this.dictionary = options.dictionary || {
+      ar: arDictionary,
+      en: enDictionary,
+    };
   }
 
   setDictionary(dictionary: TranslationDictionary): void {
@@ -27,6 +45,14 @@ export class Translator {
 
   getLocale(): string {
     return this.locale;
+  }
+
+  isRtl(): boolean {
+    return isRtl(this.locale);
+  }
+
+  getDirection(): "rtl" | "ltr" {
+    return getDirection(this.locale);
   }
 
   translate(
@@ -62,3 +88,30 @@ export class Translator {
 export function createTranslator(options?: TranslatorOptions): Translator {
   return new Translator(options);
 }
+
+export function formatDate(
+  date: Date | string | number,
+  locale = "en",
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  const d = typeof date === "object" ? date : new Date(date);
+  return new Intl.DateTimeFormat(locale, options || {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
+export function formatHijriDate(
+  date: Date | string | number,
+  locale = "ar-SA",
+): string {
+  const d = typeof date === "object" ? date : new Date(date);
+  return new Intl.DateTimeFormat(`${locale}-u-ca-islamic-umalqura`, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(d);
+}
+
+export { arDictionary, enDictionary };

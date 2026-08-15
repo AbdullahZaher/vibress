@@ -7,6 +7,7 @@
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
     "start": "tsx src/main.ts",
+    "start:prod": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit"
   },
@@ -16,6 +17,7 @@
     "@fastify/helmet": "^13.1.0",
     "@fastify/multipart": "^10.1.0",
     "@fastify/rate-limit": "^11.2.0",
+    "@vibress/ai": "workspace:*",
     "@vibress/analytics": "workspace:*",
     "@vibress/api-contracts": "workspace:*",
     "@vibress/audit": "workspace:*",
@@ -26,6 +28,7 @@
     "@vibress/cache": "workspace:*",
     "@vibress/comments": "workspace:*",
     "@vibress/config": "workspace:*",
+    "@vibress/content-modeler": "workspace:*",
     "@vibress/database": "workspace:*",
     "@vibress/email": "workspace:*",
     "@vibress/events": "workspace:*",

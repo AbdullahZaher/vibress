@@ -222,3 +222,24 @@ export function mergeThemeSettings(
     throw err;
   }
 }
+
+export const REQUIRED_THEME_TEMPLATES = [
+  "index",
+  "post",
+  "page",
+] as const;
+
+export function validateThemeTemplateContract(
+  availableTemplates: string[],
+): { valid: boolean; missing: string[] } {
+  const normalized = availableTemplates.map((t) =>
+    t.replace(/\.(hbs|html|jsx|tsx)$/, "").toLowerCase(),
+  );
+  const missing = REQUIRED_THEME_TEMPLATES.filter(
+    (req) => !normalized.includes(req),
+  );
+  return {
+    valid: missing.length === 0,
+    missing,
+  };
+}

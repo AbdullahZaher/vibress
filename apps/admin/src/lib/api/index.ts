@@ -12,3 +12,4 @@ export * from "./recommendations";
 export * from "./platform";
 export * from "./intelligence";
 export * from "./operations";
+export * from "./ai";
