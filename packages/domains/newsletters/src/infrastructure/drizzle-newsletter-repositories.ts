@@ -345,6 +345,26 @@ export class DrizzleSendRepository implements SendRepository {
     return rows.map((r) => this.mapToDomain(r));
   }
 
+  async claimDueScheduled(id: string, now: Date): Promise<NewsletterSend | null> {
+    const db = getDb();
+    const [row] = await db
+      .update(newsletterSends)
+      .set({
+        status: "sending",
+        startedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(newsletterSends.id, id),
+          eq(newsletterSends.status, "scheduled"),
+          lte(newsletterSends.scheduledAt, now),
+        ),
+      )
+      .returning();
+    return row ? this.mapToDomain(row) : null;
+  }
+
   private mapToDomain(row: NewsletterSendRow): NewsletterSend {
     return {
       id: row.id,

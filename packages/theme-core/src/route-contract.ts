@@ -10,6 +10,7 @@ export interface RouteContract {
     account(): string;
   };
   themeAsset(themeId: string, version: string, assetPath: string): string;
+  themePreview(token: string, subpath?: string): string;
 }
 
 export const routes: RouteContract = {
@@ -26,5 +27,9 @@ export const routes: RouteContract = {
   themeAsset: (themeId: string, version: string, assetPath: string) => {
     const cleanPath = assetPath.replace(/^\/+/, "");
     return `/theme-assets/${encodeURIComponent(themeId)}/${encodeURIComponent(version)}/${cleanPath}`;
+  },
+  themePreview: (token: string, subpath = "") => {
+    const cleanSubpath = subpath ? `/${subpath.replace(/^\/+/, "")}` : "";
+    return `/preview/${encodeURIComponent(token)}${cleanSubpath}`;
   },
 };

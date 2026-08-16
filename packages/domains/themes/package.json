@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@vibress/database": "workspace:*",
+    "@vibress/storage-core": "workspace:*",
     "@vibress/theme-core": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },

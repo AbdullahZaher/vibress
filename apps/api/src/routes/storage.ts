@@ -14,7 +14,7 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { validateAndDetectFile } from "@vibress/media";
+import { validateAndDetectFile, validateMediaMetadata } from "@vibress/media";
 import { defaultStorageRegistry } from "@vibress/storage-core";
 import crypto from "node:crypto";
 
@@ -345,6 +345,27 @@ export async function storageRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Pre-validate file metadata (size, mime safety, extension) without dummy buffers
+      const inputData = parseResult.data;
+      try {
+        validateMediaMetadata(
+          inputData.originalFilename,
+          inputData.declaredMime,
+          inputData.expectedSize,
+        );
+      } catch (validationErr) {
+        const ve = asCodedError(validationErr);
+        return reply.status(400).send({
+          errors: [
+            {
+              code: ve.code || "MEDIA_INVALID_FILE",
+              message: ve.message,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       const activeProvider = defaultStorageRegistry.getActiveProvider();
       const caps = activeProvider.getCapabilities();
 
@@ -357,28 +378,6 @@ export async function storageRoutes(fastify: FastifyInstance) {
             {
               code: "STORAGE_CAPABILITY_NOT_SUPPORTED",
               message: `Active storage provider '${activeProvider.name}' does not support direct signed uploads. Use standard API upload.`,
-              requestId: req.id,
-            },
-          ],
-        });
-      }
-
-      // Pre-validate file inputs (size, mime safety)
-      const inputData = parseResult.data;
-      const dummyBuf = Buffer.alloc(10); // dummy for initial checks
-      try {
-        validateAndDetectFile({
-          filename: inputData.originalFilename,
-          buffer: dummyBuf,
-          mimeType: inputData.declaredMime,
-        });
-      } catch (validationErr) {
-        const ve = asCodedError(validationErr);
-        return reply.status(400).send({
-          errors: [
-            {
-              code: ve.code || "MEDIA_INVALID_FILE",
-              message: ve.message,
               requestId: req.id,
             },
           ],
@@ -760,6 +759,40 @@ export async function storageRoutes(fastify: FastifyInstance) {
           ],
         });
       }
+      if (session.actorId !== req.user!.id) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "FORBIDDEN",
+              message: "Upload session belongs to another user",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+      if (session.state !== "pending") {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_INVALID",
+              message: `Session state is '${session.state}', expected 'pending'`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+      if (session.expiresAt.getTime() < Date.now()) {
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "STORAGE_UPLOAD_EXPIRED",
+              message: "Upload session has expired",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
 
       const activeProvider = defaultStorageRegistry.getActiveProvider();
       if (typeof activeProvider.completeMultipartUpload !== "function") {
@@ -779,6 +812,56 @@ export async function storageRoutes(fastify: FastifyInstance) {
         uploadId: session.multipartUploadId,
         parts,
       });
+
+      // Check size > 0
+      if (storedObj.size <= 0) {
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        await activeProvider.delete(session.storageKey).catch(() => {});
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "MEDIA_INVALID_FILE",
+              message: "Multipart uploaded file is zero bytes",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // Signature verification on byte range if getSignedUrl is supported
+      if (activeProvider.getSignedUrl) {
+        try {
+          const downloadUrl = await activeProvider.getSignedUrl(
+            session.storageKey,
+            { operation: "get", expiresInSeconds: 60 },
+          );
+          const rangeRes = await fetch(downloadUrl, {
+            headers: { Range: "bytes=0-512" },
+          });
+          if (rangeRes.ok) {
+            const arrBuf = await rangeRes.arrayBuffer();
+            const headBuf = Buffer.from(arrBuf);
+            validateAndDetectFile({
+              filename: session.originalFilename,
+              buffer: headBuf,
+              mimeType: session.declaredMime,
+            });
+          }
+        } catch (valErr) {
+          const ve = asCodedError(valErr);
+          await repo.updateUploadSessionState(uploadSessionId, "failed");
+          await activeProvider.delete(session.storageKey).catch(() => {});
+          return reply.status(400).send({
+            errors: [
+              {
+                code: ve.code || "MEDIA_MIME_MISMATCH",
+                message: `Multipart upload signature verification failed: ${ve.message}`,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+      }
 
       const assetId = session.storageKey.split("/")[1] || crypto.randomUUID();
       const ext = session.originalFilename.split(".").pop() || "";
@@ -819,18 +902,40 @@ export async function storageRoutes(fastify: FastifyInstance) {
       const repo = storageRepoOf(storageService);
       const session = await repo.findUploadSessionById(uploadSessionId);
 
-      if (session && session.multipartUploadId) {
-        const activeProvider = defaultStorageRegistry.getActiveProvider();
-        if (typeof activeProvider.abortMultipartUpload === "function") {
-          await activeProvider
-            .abortMultipartUpload({
-              key: session.storageKey,
-              uploadId: session.multipartUploadId,
-            })
-            .catch(() => {});
-        }
-        await repo.updateUploadSessionState(uploadSessionId, "failed");
+      if (!session || !session.multipartUploadId) {
+        return reply.status(404).send({
+          errors: [
+            {
+              code: "STORAGE_MULTIPART_INVALID",
+              message: "Multipart upload session not found",
+              requestId: req.id,
+            },
+          ],
+        });
       }
+
+      if (session.actorId !== req.user!.id) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "FORBIDDEN",
+              message: "Upload session belongs to another user",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const activeProvider = defaultStorageRegistry.getActiveProvider();
+      if (typeof activeProvider.abortMultipartUpload === "function") {
+        await activeProvider
+          .abortMultipartUpload({
+            key: session.storageKey,
+            uploadId: session.multipartUploadId,
+          })
+          .catch(() => {});
+      }
+      await repo.updateUploadSessionState(uploadSessionId, "failed");
 
       return reply.status(200).send({ success: true });
     },

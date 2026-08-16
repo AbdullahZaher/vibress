@@ -60,4 +60,5 @@ export interface SendRepository {
     offset?: number;
   }): Promise<{ sends: NewsletterSend[]; total: number }>;
   findDueScheduled(now: Date, limit: number): Promise<NewsletterSend[]>;
+  claimDueScheduled(id: string, now: Date): Promise<NewsletterSend | null>;
 }

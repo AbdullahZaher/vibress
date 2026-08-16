@@ -88,9 +88,10 @@ export class NewsletterSendSchedulerWorker {
     let started = 0;
     for (const send of due) {
       try {
-        // Guard against races: only start sends still in 'scheduled' state.
-        const current = await this.sendRepo.findById(send.id);
-        if (!current || current.status !== "scheduled") continue;
+        // Guard against races: atomically claim due send in the database
+        const claimed = await this.sendRepo.claimDueScheduled(send.id, now);
+        if (!claimed) continue;
+
         await this.startSendAndEnqueue(send.id);
         started++;
         console.log(

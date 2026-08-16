@@ -1,4 +1,4 @@
-# Vibress LiquidJS Templating Guide
+# Vibress LiquidJS Templating Guide (Theme API v1)
 
 Vibress uses **LiquidJS** as its safe, sandboxed declarative template engine for external themes.
 
@@ -23,7 +23,7 @@ Every template receives clean, decoupled View Models populated by Vibress:
 ### `settings` Object
 Contains all variables defined in `settings.json` and saved in the Admin Settings panel:
 ```liquid
-<body class="font-{{ settings.typographyFamily | default: 'sans' }}">
+<div class="theme-wrapper theme-{{ settings.typographyFamily | default: 'sans' }}">
 ```
 
 ### `post` Object (Single Article)
@@ -61,7 +61,6 @@ Generates the correct URL to a file located inside the theme's `assets/` directo
 
 ```liquid
 <link rel="stylesheet" href="{% asset 'assets/css/theme.css' %}" />
-<script src="{% asset 'assets/js/theme.js' %}"></script>
 ```
 
 ### `{% route 'name', param %}`
@@ -89,7 +88,7 @@ Includes a reusable template from the `partials/` or `templates/` folder:
 
 | Filter | Example | Result |
 | :--- | :--- | :--- |
-| `asset_url` | `{{ 'css/theme.css' \| asset_url }}` | `/theme-assets/my-theme/1.0.0/assets/css/theme.css` |
+| `asset_url` | `{{ 'assets/css/theme.css' \| asset_url }}` | `/theme-assets/my-theme/1.0.0/assets/css/theme.css` |
 | `post_url` | `{{ post.slug \| post_url }}` | `/posts/my-slug` |
 | `tag_url` | `{{ tag.slug \| tag_url }}` | `/tags/tech` |
 | `author_url` | `{{ author.slug \| author_url }}` | `/authors/jane` |

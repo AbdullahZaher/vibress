@@ -6,10 +6,11 @@ import {
 import {
   getDb,
   installedThemes,
+  themeSettings,
   InstalledThemeRow,
 } from "@vibress/database";
 import { ThemeManifest, ThemeSettingsSchema } from "@vibress/theme-core";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import crypto from "node:crypto";
 
 export class DrizzleInstalledThemeRepository implements InstalledThemeRepository {
@@ -35,7 +36,10 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
 
   async listAll(): Promise<InstalledTheme[]> {
     const db = getDb();
-    const rows = await db.select().from(installedThemes);
+    const rows = await db
+      .select()
+      .from(installedThemes)
+      .orderBy(desc(installedThemes.updatedAt));
     return rows.map((r) => this.mapToDomain(r));
   }
 
@@ -52,13 +56,44 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
 
   async findByThemeId(themeId: string): Promise<InstalledTheme | null> {
     const db = getDb();
+    // Return latest version or active version
     const rows = await db
       .select()
       .from(installedThemes)
       .where(eq(installedThemes.themeId, themeId))
+      .orderBy(desc(installedThemes.updatedAt))
       .limit(1);
     if (!rows[0]) return null;
     return this.mapToDomain(rows[0]);
+  }
+
+  async findByThemeIdAndVersion(
+    themeId: string,
+    version: string,
+  ): Promise<InstalledTheme | null> {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(installedThemes)
+      .where(
+        and(
+          eq(installedThemes.themeId, themeId),
+          eq(installedThemes.version, version),
+        ),
+      )
+      .limit(1);
+    if (!rows[0]) return null;
+    return this.mapToDomain(rows[0]);
+  }
+
+  async listVersions(themeId: string): Promise<InstalledTheme[]> {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(installedThemes)
+      .where(eq(installedThemes.themeId, themeId))
+      .orderBy(desc(installedThemes.version));
+    return rows.map((r) => this.mapToDomain(r));
   }
 
   async create(theme: InstalledTheme): Promise<InstalledTheme> {
@@ -94,7 +129,6 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
       .update(installedThemes)
       .set({
         name: theme.name,
-        version: theme.version,
         themeApiVersion: theme.themeApiVersion,
         description: theme.description ?? null,
         author: theme.author ?? null,
@@ -106,7 +140,12 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
         isBuiltIn: theme.isBuiltIn,
         updatedAt: new Date(),
       })
-      .where(eq(installedThemes.themeId, theme.themeId))
+      .where(
+        and(
+          eq(installedThemes.themeId, theme.themeId),
+          eq(installedThemes.version, theme.version),
+        ),
+      )
       .returning();
     if (!row) throw new Error("Failed to update installed theme");
     return this.mapToDomain(row);
@@ -117,5 +156,55 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
     await db
       .delete(installedThemes)
       .where(eq(installedThemes.themeId, themeId));
+    await db
+      .delete(themeSettings)
+      .where(eq(themeSettings.themeId, themeId));
+  }
+
+  async deleteVersion(themeId: string, version: string): Promise<void> {
+    const db = getDb();
+    await db
+      .delete(installedThemes)
+      .where(
+        and(
+          eq(installedThemes.themeId, themeId),
+          eq(installedThemes.version, version),
+        ),
+      );
+  }
+
+  async getThemeSettings(themeId: string): Promise<Record<string, unknown> | null> {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(themeSettings)
+      .where(eq(themeSettings.themeId, themeId))
+      .limit(1);
+    if (!rows[0]) return null;
+    return rows[0].settingsJson as Record<string, unknown>;
+  }
+
+  async saveThemeSettings(
+    themeId: string,
+    settings: Record<string, unknown>,
+  ): Promise<void> {
+    const db = getDb();
+    const existing = await this.getThemeSettings(themeId);
+    if (existing) {
+      await db
+        .update(themeSettings)
+        .set({
+          settingsJson: settings,
+          updatedAt: new Date(),
+        })
+        .where(eq(themeSettings.themeId, themeId));
+    } else {
+      await db.insert(themeSettings).values({
+        id: crypto.randomUUID(),
+        themeId,
+        settingsJson: settings,
+        updatedAt: new Date(),
+      });
+    }
   }
 }

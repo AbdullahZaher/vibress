@@ -332,11 +332,13 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await expect(manageThemesBtn).toBeVisible({ timeout: 5000 });
     await manageThemesBtn.click();
 
-    // Verify Themes Drawer is displayed with registry notice
+    // Verify Themes Drawer is displayed with zero-rebuild notice
     await expect(page.locator("text=Themes Manager")).toBeVisible({
       timeout: 5000,
     });
-    await expect(page.locator("text=Official Theme Registry")).toBeVisible({
+    await expect(
+      page.locator("text=Zero-Rebuild Theme System"),
+    ).toBeVisible({
       timeout: 5000,
     });
 

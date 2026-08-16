@@ -316,7 +316,10 @@ export class NewslettersService {
     const send = await this.deps.sendRepo.findById(sendId);
     if (!send)
       throw new NewsletterDomainError("SEND_NOT_FOUND", "Send not found");
-    if (send.status === "sending" || send.status === "sent") {
+    if (
+      (send.status === "sending" && send.startedAt !== null && send.totalRecipients > 0) ||
+      send.status === "sent"
+    ) {
       return { send, recipientCount: send.totalRecipients };
     }
 

@@ -20,6 +20,9 @@ export async function requireStaffSession(
   req: FastifyRequest,
   reply: FastifyReply,
 ) {
+  if (req.user && req.permissions) {
+    return;
+  }
   const token = extractSessionToken(req);
   if (!token) {
     return reply.status(401).send({

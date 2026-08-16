@@ -8,21 +8,35 @@ const WEBHOOK_SECRET =
 test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
   async function getLatestMail(
     to: string,
+    expectedSubject?: string,
   ): Promise<{ subject: string; html: string; text: string } | null> {
     const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
     const data = await res.json();
-    const msg = (data.messages || []).find(
-      (m: any) => m.To?.[0]?.Address === to,
+    const messages = (data.messages || []).sort(
+      (a: any, b: any) =>
+        new Date(b.Created).getTime() - new Date(a.Created).getTime(),
     );
-    if (!msg) return null;
-    const detail = await (
-      await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
-    ).json();
-    return {
-      subject: detail.Subject || "",
-      html: detail.HTML || "",
-      text: detail.Text || "",
-    };
+
+    for (const msg of messages) {
+      const toAddresses = [
+        ...(msg.To || []).map((t: any) => (t.Address || "").toLowerCase()),
+        ...(msg.Raw?.To || []).map((a: string) => a.toLowerCase()),
+      ];
+      if (toAddresses.some((addr) => addr.includes(to.toLowerCase()))) {
+        const detail = await (
+          await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
+        ).json();
+        const subject = detail.Subject || "";
+        if (!expectedSubject || subject.includes(expectedSubject)) {
+          return {
+            subject,
+            html: detail.HTML || "",
+            text: detail.Text || "",
+          };
+        }
+      }
+    }
+    return null;
   }
 
 
@@ -460,8 +474,8 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
       data: { newsletterId, subscribed: true },
     });
 
-    // Schedule ~10 seconds in the future
-    const scheduledAt = new Date(Date.now() + 10000).toISOString();
+    // Schedule ~2 seconds in the future so next worker sweep immediately claims it
+    const scheduledAt = new Date(Date.now() + 2000).toISOString();
     const sendRes = await request.post(`${API}/api/admin/v1/newsletter-sends`, {
       headers: { Origin: API },
       data: {
@@ -479,11 +493,11 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     expect(sendRes.status()).toBe(201);
     expect((await sendRes.json()).send.status).toBe("scheduled");
 
-    // Worker scheduler picks it up within ~15s and delivers
+    // Worker scheduler picks it up within ~10s and delivers
     let delivered = false;
-    for (let i = 0; i < 30; i++) {
-      const mail = await getLatestMail(memberEmail);
-      if (mail?.subject === `Scheduled ${suffix}`) {
+    for (let i = 0; i < 40; i++) {
+      const mail = await getLatestMail(memberEmail, `Scheduled ${suffix}`);
+      if (mail) {
         delivered = true;
         break;
       }

@@ -9,12 +9,15 @@ import {
 import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 
+const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
+const CACHE_TTL_MS = 60 * 1000; // 1 minute in-memory cache
+
 function findThemeDirectory(themeId: string, version: string): string | null {
   const candidates = [
     path.join(process.cwd(), "content", "themes", themeId, version),
     path.join(process.cwd(), "..", "..", "content", "themes", themeId, version),
-    path.join(process.cwd(), "content", "themes", themeId),
-    path.join(process.cwd(), "..", "..", "content", "themes", themeId),
+    path.join(process.cwd(), "content", "theme-starter"),
+    path.join(process.cwd(), "..", "..", "content", "theme-starter"),
   ];
 
   for (const p of candidates) {
@@ -49,6 +52,20 @@ function loadThemeFilesMap(themeDir: string): Map<string, string> {
 
   walk(themeDir);
   return fileMap;
+}
+
+function cleanThemeHtml(html: string): string {
+  // If template contains full html document, extract body content
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch && bodyMatch[1]) {
+    return bodyMatch[1].trim();
+  }
+  // Strip doctype and html/head tags if present
+  return html
+    .replace(/<!DOCTYPE[^>]*>/gi, "")
+    .replace(/<\/?html[^>]*>/gi, "")
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+    .trim();
 }
 
 export interface RenderThemeOptions {
@@ -133,8 +150,23 @@ export async function renderThemeTemplate(
   }
 
   // External Liquid Theme Branch
-  const themeDir = findThemeDirectory(themeId, themeVersion);
-  if (!themeDir) {
+  const cacheKey = `${themeId}@${themeVersion}`;
+  let fileMap: Map<string, string>;
+
+  const cached = themeFilesCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
+    fileMap = cached.files;
+  } else {
+    const themeDir = findThemeDirectory(themeId, themeVersion);
+    if (themeDir) {
+      fileMap = loadThemeFilesMap(themeDir);
+    } else {
+      fileMap = new Map();
+    }
+    themeFilesCache.set(cacheKey, { files: fileMap, loadedAt: Date.now() });
+  }
+
+  if (fileMap.size === 0) {
     // Fallback to built-in default theme
     const fallbackTheme = getFallbackTheme();
     return fallbackTheme.components.Home({
@@ -146,7 +178,6 @@ export async function renderThemeTemplate(
     });
   }
 
-  const fileMap = loadThemeFilesMap(themeDir);
   const engine = createLiquidThemeEngine({
     files: fileMap,
     themeId,
@@ -159,7 +190,8 @@ export async function renderThemeTemplate(
     settings: { ...settings, ...(context.settings || {}) },
   };
 
-  const renderedHtml = await engine.renderFile(templateName, fullContext);
+  const rawHtml = await engine.renderFile(templateName, fullContext);
+  const cleanHtml = cleanThemeHtml(rawHtml);
 
   // Check if theme has an assets/css/theme.css or stylesheet that should be linked
   let cssHref: string | null = null;
@@ -172,10 +204,10 @@ export async function renderThemeTemplate(
 
   return (
     <div className="vibress-liquid-theme-root" data-theme={themeId}>
-      {cssHref && !renderedHtml.includes(cssHref) && (
+      {cssHref && (
         <link rel="stylesheet" href={cssHref} />
       )}
-      <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+      <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
     </div>
   );
 }

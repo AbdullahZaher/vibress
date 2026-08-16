@@ -428,3 +428,35 @@ export function validateAndDetectFile(
     height,
   };
 }
+
+export function validateMediaMetadata(
+  filename: string,
+  declaredMime?: string,
+  expectedSize?: number,
+  limits: MediaLimitsConfig = DEFAULT_MEDIA_LIMITS,
+): void {
+  const { extension } = sanitizeFilename(filename);
+
+  if (DANGEROUS_EXTENSIONS.has(extension)) {
+    throw new MediaTypeNotAllowedError(
+      `File extension '.${extension}' is not allowed`,
+    );
+  }
+
+  const mime = declaredMime ? declaredMime.toLowerCase() : "";
+  if (DANGEROUS_MIMES.has(mime)) {
+    throw new MediaTypeNotAllowedError(
+      `MIME type '${mime}' is dangerous and blocked`,
+    );
+  }
+
+  if (expectedSize !== undefined) {
+    if (expectedSize <= 0) {
+      throw new MediaInvalidFileError("Expected size must be greater than zero");
+    }
+    if (expectedSize > limits.maxFileSize) {
+      throw new MediaTooLargeError(limits.maxFileSize, expectedSize);
+    }
+  }
+}
+

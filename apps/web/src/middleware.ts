@@ -42,17 +42,44 @@ function buildCsp(nonce: string): string {
   ].join("; ");
 }
 
-function applyCsp(request: NextRequest, response: NextResponse): NextResponse {
+function createCspResponse(
+  request: NextRequest,
+  options?: {
+    rewriteUrl?: URL;
+    redirectUrl?: URL;
+    extraHeaders?: Record<string, string>;
+  },
+): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString(
     "base64",
   );
   const cspHeader = buildCsp(nonce);
-  // Forward the CSP (with nonce) as a request header so Next.js applies the
-  // nonce to its inline scripts/styles; also set it on the response for the
-  // browser.
+
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspHeader);
+
+  if (options?.extraHeaders) {
+    for (const [k, v] of Object.entries(options.extraHeaders)) {
+      requestHeaders.set(k, v);
+    }
+  }
+
+  let response: NextResponse;
+  if (options?.redirectUrl) {
+    response = NextResponse.redirect(options.redirectUrl);
+  } else if (options?.rewriteUrl) {
+    response = NextResponse.rewrite(options.rewriteUrl, {
+      request: { headers: requestHeaders },
+    });
+  } else {
+    response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+  }
+
   response.headers.set("Content-Security-Policy", cspHeader);
+  response.headers.set("x-nonce", nonce);
   return response;
 }
 
@@ -133,7 +160,7 @@ export async function middleware(request: NextRequest) {
           if (siteData.security?.isPrivate) {
             const privateUrl = new URL("/private", request.url);
             privateUrl.searchParams.set("r", pathname);
-            return applyCsp(request, NextResponse.redirect(privateUrl));
+            return createCspResponse(request, { redirectUrl: privateUrl });
           }
         }
       } catch {
@@ -148,10 +175,9 @@ export async function middleware(request: NextRequest) {
     const segments = pathname.split("/").filter(Boolean); // ['preview', 'TOKEN', 'posts', 'slug']
     const token = segments[1] || "";
     if (!token) {
-      return applyCsp(
-        request,
-        NextResponse.redirect(new URL("/", request.url)),
-      );
+      return createCspResponse(request, {
+        redirectUrl: new URL("/", request.url),
+      });
     }
 
     try {
@@ -162,10 +188,9 @@ export async function middleware(request: NextRequest) {
         },
       );
       if (!res.ok) {
-        return applyCsp(
-          request,
-          NextResponse.redirect(new URL("/", request.url)),
-        );
+        return createCspResponse(request, {
+          redirectUrl: new URL("/", request.url),
+        });
       }
       const data = await res.json();
       const themeId: string = data.themeId;
@@ -173,30 +198,21 @@ export async function middleware(request: NextRequest) {
       // Strip the /preview/:token prefix and serve the underlying public path with the theme header.
       const rest = "/" + segments.slice(2).join("/");
       const url = new URL(rest === "/" ? "/" : rest, request.url);
-      const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString(
-        "base64",
-      );
-      const cspHeader = buildCsp(nonce);
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set("Content-Security-Policy", cspHeader);
-      requestHeaders.set("x-vibress-theme", themeId);
-      const response = NextResponse.rewrite(url, {
-        request: { headers: requestHeaders },
+      return createCspResponse(request, {
+        rewriteUrl: url,
+        extraHeaders: {
+          "x-vibress-theme": themeId,
+          "x-vibress-preview": "true",
+        },
       });
-      response.headers.set("Content-Security-Policy", cspHeader);
-      return response;
     } catch {
-      return applyCsp(
-        request,
-        NextResponse.redirect(new URL("/", request.url)),
-      );
+      return createCspResponse(request, {
+        redirectUrl: new URL("/", request.url),
+      });
     }
   }
 
-  return applyCsp(
-    request,
-    NextResponse.next({ request: { headers: request.headers } }),
-  );
+  return createCspResponse(request);
 }
 
 export const config = {

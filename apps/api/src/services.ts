@@ -38,7 +38,7 @@ import {
   ThemeInstaller,
   ThemeService,
 } from "@vibress/themes";
-import { listThemeMetadata, getThemeMetadata } from "@vibress/themes-registry";
+import { listThemeMetadata } from "@vibress/themes-registry";
 import {
   validateThemeManifest,
   validateThemeCompatibility,
@@ -186,6 +186,9 @@ const billingPlanMappingRepo = new DrizzleBillingPlanMappingRepository();
 const billingWebhookEventRepo = new DrizzleBillingWebhookEventRepository();
 export const billingEventRepo = new DrizzleBillingEventRepository();
 
+import { getRedisClient } from "@vibress/cache";
+import { RedisPreviewTokenStore } from "@vibress/themes";
+
 export const themeStorageAdapter = new FileSystemThemeStorageAdapter();
 export const installedThemeRepo = new DrizzleInstalledThemeRepository();
 export const themeInstaller = new ThemeInstaller(
@@ -193,11 +196,14 @@ export const themeInstaller = new ThemeInstaller(
   installedThemeRepo,
 );
 
+export const themePreviewTokenStore = new RedisPreviewTokenStore(getRedisClient);
+
 export const themeService = new ThemeService(
   themeConfigRepo,
   themeDefinitionRegistry,
   installedThemeRepo,
   themeStorageAdapter,
+  themePreviewTokenStore,
 );
 export const membersService = new MembersService(memberRepo, memberSessionRepo);
 export const memberAuthService = new MemberAuthService(

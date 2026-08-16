@@ -6,6 +6,7 @@ import {
   jsonb,
   boolean,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
@@ -39,11 +40,33 @@ export const themeConfigurations = pgTable(
 export type ThemeConfigurationRow = typeof themeConfigurations.$inferSelect;
 export type NewThemeConfigurationRow = typeof themeConfigurations.$inferInsert;
 
+export const themeSettings = pgTable(
+  "theme_settings",
+  {
+    id: text("id").primaryKey(),
+    themeId: text("theme_id").notNull().unique(),
+    settingsJson: jsonb("settings_json").notNull().default({}),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => {
+    return {
+      themeSettingsThemeIdIdx: index("theme_settings_theme_id_idx").on(
+        table.themeId,
+      ),
+    };
+  },
+);
+
+export type ThemeSettingsRow = typeof themeSettings.$inferSelect;
+export type NewThemeSettingsRow = typeof themeSettings.$inferInsert;
+
 export const installedThemes = pgTable(
   "installed_themes",
   {
     id: text("id").primaryKey(),
-    themeId: text("theme_id").notNull().unique(),
+    themeId: text("theme_id").notNull(),
     name: text("name").notNull(),
     version: text("version").notNull(),
     themeApiVersion: integer("theme_api_version").notNull().default(1),
@@ -70,6 +93,9 @@ export const installedThemes = pgTable(
       installedThemesStatusIdx: index("installed_themes_status_idx").on(
         table.status,
       ),
+      installedThemesThemeIdVersionIdx: uniqueIndex(
+        "installed_themes_theme_id_version_unique_idx",
+      ).on(table.themeId, table.version),
     };
   },
 );

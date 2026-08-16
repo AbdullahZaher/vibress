@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { getDb } from "@vibress/database";
+import { sql } from "drizzle-orm";
 
 /**
  * Analytics v1 E2E — public web traffic reaches the Admin dashboard.
@@ -28,20 +30,15 @@ test.describe.serial("Analytics v1 — public traffic to dashboard", () => {
   let ownerCookie = "";
 
   test.beforeAll(async ({ request }) => {
-    // Clean slate for traffic events (only this suite writes analytics_events).
-    await request.post(`${BASE}/api/admin/v1/auth/login`, {
-      headers: { "Content-Type": "application/json", Origin: ORIGIN },
-      data: { email: "owner@example.com", password: "OwnerPass123!" },
-    });
-    // Use the API directly to clear traffic events deterministically.
-    const admin = await request.post(`${BASE}/api/admin/v1/auth/login`, {
-      headers: { "Content-Type": "application/json", Origin: ORIGIN },
-      data: { email: "owner@example.com", password: "OwnerPass123!" },
-    });
-    const adminCookie =
-      ((admin.headers()["set-cookie"] as unknown as string) || "").split(
-        ";",
-      )[0] ?? "";
+    process.env.DATABASE_URL =
+      process.env.DATABASE_URL ||
+      "postgresql://vibress:vibress@127.0.0.1:5433/vibress";
+    try {
+      const db = getDb();
+      await db.execute(sql`TRUNCATE TABLE "analytics_events", "analytics_daily_metrics" CASCADE`);
+    } catch (e) {
+      console.error("Failed to truncate analytics tables:", e);
+    }
 
     // Login as the seeded owner
     const loginRes = await request.post(`${BASE}/api/admin/v1/auth/login`, {
@@ -108,7 +105,10 @@ test.describe.serial("Analytics v1 — public traffic to dashboard", () => {
       );
       if (overviewRes.status() !== 200) continue;
       overview = await overviewRes.json();
-      if ((overview.summary?.views ?? 0) >= 1) break;
+      const hasCurrent = (overview.topContent ?? []).some(
+        (c: { path: string }) => c.path === `/posts/${postSlug}`,
+      );
+      if (hasCurrent) break;
     }
     expect(overview?.summary?.views ?? 0).toBeGreaterThanOrEqual(1);
 

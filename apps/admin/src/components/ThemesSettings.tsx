@@ -486,7 +486,7 @@ export const ThemesSettings: React.FC = () => {
                               className="h-4 w-4 rounded-sm border-border text-primary focus:ring-primary"
                             />
                             <span className="text-xs text-muted-foreground">
-                              {Boolean(currentVal) ? "Enabled" : "Disabled"}
+                              {currentVal ? "Enabled" : "Disabled"}
                             </span>
                           </div>
                         ) : fieldType === "color" ? (

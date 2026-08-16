@@ -1,6 +1,6 @@
 import "./tracing-init.js";
 import { getRedisClient, closeRedisClient } from "@vibress/cache";
-import { closeDbPool } from "@vibress/database";
+import { closeDbPool, getDbPool } from "@vibress/database";
 import { ContentSchedulerWorker } from "./scheduler";
 import { EmailDeliveryWorker } from "./processors/email-delivery-worker";
 import { WebhookDeliveryWorker } from "./processors/webhook-delivery-worker";
@@ -83,18 +83,31 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ status: "ok" }));
   } else if (req.url === "/health/ready") {
-    if (connection.status === "ready") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
-    } else {
-      res.writeHead(503, { "Content-Type": "application/json" });
+    (async () => {
+      let dbStatus = "ok";
+      try {
+        await getDbPool().query("SELECT 1");
+      } catch {
+        dbStatus = "error";
+      }
+
+      const redisStatus = connection.status === "ready" ? "ok" : "not_ready";
+      const isReady = dbStatus === "ok" && redisStatus === "ok";
+
+      res.writeHead(isReady ? 200 : 503, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
-          status: "not_ready",
-          checks: { redis: connection.status },
+          status: isReady ? "ok" : "not_ready",
+          checks: {
+            redis: redisStatus,
+            database: dbStatus,
+          },
         }),
       );
-    }
+    })().catch(() => {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "not_ready" }));
+    });
   } else if (req.url === "/metrics" && config.observability.metricsEnabled) {
     res.writeHead(200, {
       "Content-Type": "text/plain; version=0.0.4; charset=utf-8",

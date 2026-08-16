@@ -1370,6 +1370,9 @@ importers:
       '@vibress/database':
         specifier: workspace:*
         version: link:../../database
+      '@vibress/storage-core':
+        specifier: workspace:*
+        version: link:../../storage-core
       '@vibress/theme-core':
         specifier: workspace:*
         version: link:../../theme-core

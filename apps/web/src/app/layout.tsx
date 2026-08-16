@@ -60,14 +60,16 @@ export default async function RootLayout({
   }
 
   const site = await getThemeSiteSettings();
-  const themeCss =
-    hostState?.theme.cssPath ||
-    "/theme-assets/vibress-default/1.0.0/default.css";
+  const isBuiltIn = hostState?.isBuiltIn !== false;
+  const themeCss = isBuiltIn
+    ? hostState?.theme.cssPath ||
+      "/theme-assets/vibress-default/1.0.0/default.css"
+    : hostState?.theme.cssPath || null;
 
   return (
     <html lang={site.locale} suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href={themeCss} />
+        {themeCss && <link rel="stylesheet" href={themeCss} />}
         {site.code?.headerCode && (
           <HeadCodeInjection code={site.code.headerCode} />
         )}

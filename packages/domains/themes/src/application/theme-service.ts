@@ -5,10 +5,7 @@ import {
   ThemeNotFoundError,
   ThemeSettingsInvalidError,
 } from "../domain/theme-configuration";
-import {
-  InstalledThemeRepository,
-  InstalledTheme,
-} from "../domain/installed-theme";
+import { InstalledThemeRepository } from "../domain/installed-theme";
 import { ThemeStorageAdapter } from "../domain/theme-storage";
 import {
   validateThemeManifest,
@@ -38,18 +35,23 @@ export interface ActiveThemeResult {
 
 const PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
+import {
+  PreviewTokenStore,
+  MemoryPreviewTokenStore,
+} from "../domain/preview-token-store";
+
 export class ThemeService {
-  private previewTokens = new Map<
-    string,
-    { themeId: string; expiresAt: number }
-  >();
+  private previewStore: PreviewTokenStore;
 
   constructor(
     private repo: ThemeConfigurationRepository,
     private registry: ThemeDefinitionRegistry,
     private installedRepo?: InstalledThemeRepository | undefined,
     private storageAdapter?: ThemeStorageAdapter | undefined,
-  ) {}
+    previewStore?: PreviewTokenStore | undefined,
+  ) {
+    this.previewStore = previewStore || new MemoryPreviewTokenStore();
+  }
 
   async listThemes(): Promise<UnifiedThemeSummary[]> {
     const active = await this.repo.getActive();
@@ -62,14 +64,16 @@ export class ThemeService {
     if (this.installedRepo) {
       const installed = await this.installedRepo.listAll();
       for (const t of installed) {
-        seenIds.add(t.themeId);
-        results.push({
-          manifest: t.manifest,
-          settingsSchema: t.settingsSchema,
-          isActive: t.themeId === activeThemeId,
-          isBuiltIn: false,
-          previewImage: t.previewImage,
-        });
+        if (!seenIds.has(t.themeId)) {
+          seenIds.add(t.themeId);
+          results.push({
+            manifest: t.manifest,
+            settingsSchema: t.settingsSchema,
+            isActive: t.themeId === activeThemeId,
+            isBuiltIn: false,
+            previewImage: t.previewImage,
+          });
+        }
       }
     }
 
@@ -91,14 +95,19 @@ export class ThemeService {
     return results;
   }
 
-  async getTheme(themeId: string): Promise<{
+  async getTheme(
+    themeId: string,
+    version?: string,
+  ): Promise<{
     manifest: ThemeManifest;
     settingsSchema: ThemeSettingsSchema;
     isBuiltIn: boolean;
     previewImage?: string | null | undefined;
   } | null> {
     if (this.installedRepo) {
-      const installed = await this.installedRepo.findByThemeId(themeId);
+      const installed = version
+        ? await this.installedRepo.findByThemeIdAndVersion(themeId, version)
+        : await this.installedRepo.findByThemeId(themeId);
       if (installed) {
         return {
           manifest: installed.manifest,
@@ -130,7 +139,7 @@ export class ThemeService {
     const config = await this.repo.getActive();
     const activeThemeId = config?.themeId || "vibress-default";
 
-    const definition = await this.getTheme(activeThemeId);
+    const definition = await this.getTheme(activeThemeId, config?.themeVersion);
     if (!definition) return null;
 
     const settings = mergeThemeSettings(
@@ -149,8 +158,9 @@ export class ThemeService {
   async activateTheme(
     themeId: string,
     actorId: string | null,
+    version?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId);
+    const definition = await this.getTheme(themeId, version);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -158,9 +168,15 @@ export class ThemeService {
     const manifest = validateThemeManifest(definition.manifest);
     validateThemeCompatibility(manifest);
 
+    // Retrieve any previously saved settings for this theme identity
+    let savedSettings: Record<string, unknown> | null = null;
+    if (this.installedRepo) {
+      savedSettings = await this.installedRepo.getThemeSettings(themeId);
+    }
+
     let settings: Record<string, unknown>;
     try {
-      settings = validateThemeSettings(definition.settingsSchema, {});
+      settings = mergeThemeSettings(definition.settingsSchema, savedSettings);
     } catch (err) {
       throw new ThemeSettingsInvalidError((err as Error).message);
     }
@@ -178,14 +194,17 @@ export class ThemeService {
 
     const saved = await this.repo.setActive(config);
 
-    // If external theme, update status in installed repo
-    if (this.installedRepo && !definition.isBuiltIn) {
-      const installed = await this.installedRepo.findByThemeId(themeId);
-      if (installed) {
-        await this.installedRepo.update({
-          ...installed,
-          status: "active",
-        });
+    // Update statuses in installed repo
+    if (this.installedRepo) {
+      const allInstalled = await this.installedRepo.listAll();
+      for (const inst of allInstalled) {
+        const shouldBeActive =
+          inst.themeId === themeId && inst.version === manifest.version;
+        if (shouldBeActive && inst.status !== "active") {
+          await this.installedRepo.update({ ...inst, status: "active" });
+        } else if (!shouldBeActive && inst.status === "active") {
+          await this.installedRepo.update({ ...inst, status: "installed" });
+        }
       }
     }
 
@@ -197,11 +216,6 @@ export class ThemeService {
     input: Record<string, unknown>,
     _actorId: string | null,
   ): Promise<ThemeConfiguration> {
-    const config = await this.repo.getActive();
-    if (!config || config.themeId !== themeId) {
-      throw new ThemeNotFoundError(themeId);
-    }
-
     const definition = await this.getTheme(themeId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
@@ -214,19 +228,39 @@ export class ThemeService {
       throw new ThemeSettingsInvalidError((err as Error).message);
     }
 
-    return this.repo.setActive({
-      ...config,
+    // Persist settings per theme identity
+    if (this.installedRepo) {
+      await this.installedRepo.saveThemeSettings(themeId, settings);
+    }
+
+    const config = await this.repo.getActive();
+    if (config && config.themeId === themeId) {
+      return this.repo.setActive({
+        ...config,
+        settings,
+        updatedAt: new Date(),
+      });
+    }
+
+    return {
+      id: "active",
+      themeId,
+      themeVersion: definition.manifest.version,
       settings,
+      settingsSchemaVersion: definition.manifest.settingsSchemaVersion || 1,
+      activatedBy: _actorId,
+      activatedAt: new Date(),
       updatedAt: new Date(),
-    });
+    };
   }
 
   async uninstallTheme(
     themeId: string,
     _actorId: string | null,
-  ): Promise<{ success: boolean; themeId: string }> {
+    version?: string,
+  ): Promise<{ success: boolean; themeId: string; version?: string }> {
     const active = await this.repo.getActive();
-    if (active?.themeId === themeId) {
+    if (active?.themeId === themeId && (!version || active.themeVersion === version)) {
       throw new ThemeError(
         "THEME_ACTIVE_CANNOT_BE_DELETED",
         "Cannot delete currently active theme. Please activate another theme first.",
@@ -245,30 +279,45 @@ export class ThemeService {
       throw new ThemeNotFoundError(themeId);
     }
 
-    const installed = await this.installedRepo.findByThemeId(themeId);
+    const installed = version
+      ? await this.installedRepo.findByThemeIdAndVersion(themeId, version)
+      : await this.installedRepo.findByThemeId(themeId);
+
     if (!installed) {
       throw new ThemeNotFoundError(themeId);
     }
 
     // Delete files from storage
     if (this.storageAdapter) {
-      await this.storageAdapter.deleteThemeFiles(installed.themeId, installed.version);
+      await this.storageAdapter.deleteThemeFiles(
+        installed.themeId,
+        installed.version,
+      );
     }
 
     // Delete from DB
-    await this.installedRepo.delete(themeId);
+    if (version) {
+      await this.installedRepo.deleteVersion(themeId, version);
+    } else {
+      await this.installedRepo.delete(themeId);
+    }
 
-    return { success: true, themeId };
+    return {
+      success: true,
+      themeId,
+      ...(version !== undefined ? { version } : {}),
+    };
   }
 
-  createPreviewToken(themeId: string): {
+  async createPreviewToken(themeId: string): Promise<{
     previewToken: string;
     expiresAt: string;
     themeId: string;
-  } {
+  }> {
     const token = crypto.randomBytes(32).toString("hex");
+    const ttlSeconds = Math.floor(PREVIEW_TOKEN_TTL_MS / 1000);
     const expiresAt = Date.now() + PREVIEW_TOKEN_TTL_MS;
-    this.previewTokens.set(token, { themeId, expiresAt });
+    await this.previewStore.set(token, themeId, ttlSeconds);
     return {
       previewToken: token,
       expiresAt: new Date(expiresAt).toISOString(),
@@ -276,13 +325,7 @@ export class ThemeService {
     };
   }
 
-  resolvePreviewToken(token: string): string | null {
-    const entry = this.previewTokens.get(token);
-    if (!entry) return null;
-    if (entry.expiresAt < Date.now()) {
-      this.previewTokens.delete(token);
-      return null;
-    }
-    return entry.themeId;
+  async resolvePreviewToken(token: string): Promise<string | null> {
+    return (await this.previewStore.get(token)) ?? null;
   }
 }

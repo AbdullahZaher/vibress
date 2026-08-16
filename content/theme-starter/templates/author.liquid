@@ -1,13 +1,4 @@
-<!DOCTYPE html>
-<html lang="{{ site.locale }}">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Articles by {{ author.name }} — {{ site.title }}</title>
-  <meta name="description" content="{{ author.bio | default: site.description }}" />
-  <link rel="stylesheet" href="{% asset 'assets/css/theme.css' %}" />
-</head>
-<body class="theme-body font-{{ settings.typographyFamily | default: 'sans' }}">
+<div class="theme-wrapper font-{{ settings.typographyFamily | default: 'sans' }}">
   {% include 'header' %}
 
   <main class="theme-main theme-container">
@@ -53,6 +44,4 @@
   </main>
 
   {% include 'footer' %}
-  <script src="{% asset 'assets/js/theme.js' %}"></script>
-</body>
-</html>
+</div>

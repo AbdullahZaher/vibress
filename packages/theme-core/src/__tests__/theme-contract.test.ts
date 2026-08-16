@@ -21,17 +21,17 @@ describe("Theme Ecosystem & Contract Verification", () => {
 
   it("validates theme template contract requiring index, post, and page", () => {
     const valid = validateThemeTemplateContract([
-      "index.hbs",
-      "post.hbs",
-      "page.hbs",
-      "tag.hbs",
+      "index.liquid",
+      "post.liquid",
+      "page.liquid",
+      "tag.liquid",
     ]);
     expect(valid.valid).toBe(true);
     expect(valid.missing).toHaveLength(0);
 
     const invalid = validateThemeTemplateContract([
-      "index.hbs",
-      "tag.hbs",
+      "index.liquid",
+      "tag.liquid",
     ]);
     expect(invalid.valid).toBe(false);
     expect(invalid.missing).toContain("post");

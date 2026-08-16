@@ -24,7 +24,18 @@ export interface InstalledThemeRepository {
   listAll(): Promise<InstalledTheme[]>;
   findById(id: string): Promise<InstalledTheme | null>;
   findByThemeId(themeId: string): Promise<InstalledTheme | null>;
+  findByThemeIdAndVersion(
+    themeId: string,
+    version: string,
+  ): Promise<InstalledTheme | null>;
+  listVersions(themeId: string): Promise<InstalledTheme[]>;
   create(theme: InstalledTheme): Promise<InstalledTheme>;
   update(theme: InstalledTheme): Promise<InstalledTheme>;
   delete(themeId: string): Promise<void>;
+  deleteVersion(themeId: string, version: string): Promise<void>;
+  getThemeSettings(themeId: string): Promise<Record<string, unknown> | null>;
+  saveThemeSettings(
+    themeId: string,
+    settings: Record<string, unknown>,
+  ): Promise<void>;
 }

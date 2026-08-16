@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb } from "@vibress/database";
+import { getDb, installedThemes, themeSettings } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
@@ -85,6 +85,14 @@ describe("API — External Theme System Integration", () => {
     await app.ready();
     await ensureOwner();
     staffCookie = await loginStaff(app);
+
+    const db = getDb();
+    await db
+      .delete(installedThemes)
+      .where(eq(installedThemes.themeId, "vibress-news-express"));
+    await db
+      .delete(themeSettings)
+      .where(eq(themeSettings.themeId, "vibress-news-express"));
   });
 
   afterAll(async () => {
@@ -202,7 +210,7 @@ describe("API — External Theme System Integration", () => {
 
     expect(res.statusCode).toBe(400);
     const body = res.json();
-    expect(body.errors[0]?.message).toMatch(/forbidden executable or server code file/i);
+    expect(body.errors[0]?.message).toMatch(/prohibited executable or script file/i);
   });
 
   it("activates an installed external theme instantly", async () => {

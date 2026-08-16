@@ -1,8 +1,4 @@
-import {
-  validateAndExtractThemeZip,
-  ThemeManifest,
-  ThemeSettingsSchema,
-} from "@vibress/theme-core";
+import { validateAndExtractThemeZip } from "@vibress/theme-core";
 import { ThemeStorageAdapter } from "../domain/theme-storage";
 import {
   InstalledTheme,
@@ -51,10 +47,16 @@ export class ThemeInstaller {
       previewImage = `/theme-assets/${manifest.id}/${manifest.version}/preview.jpg`;
     }
 
-    const existing = await this.repository.findByThemeId(manifest.id);
-    if (existing) {
+    // Check if this specific version is already installed
+    const existingVersion =
+      await this.repository.findByThemeIdAndVersion(
+        manifest.id,
+        manifest.version,
+      );
+
+    if (existingVersion) {
       const updated: InstalledTheme = {
-        ...existing,
+        ...existingVersion,
         name: manifest.name,
         version: manifest.version,
         themeApiVersion: manifest.themeApi,
@@ -64,7 +66,6 @@ export class ThemeInstaller {
         manifest,
         settingsSchema,
         storagePath,
-        status: "installed",
         updatedAt: new Date(),
       };
       return this.repository.update(updated);

@@ -1,4 +1,4 @@
-# Vibress Theme Developer Guide
+# Vibress Theme Developer Guide (Theme API v1)
 
 This guide walks you through creating, testing, packaging, and installing custom themes for Vibress.
 
@@ -21,7 +21,7 @@ cd my-new-theme
 
 ## 2. Core Template Files
 
-Create the required templates inside `templates/`:
+Create the required templates inside `templates/` providing semantic body markup:
 
 ### `templates/home.liquid`
 The main landing page displaying the hero banner, category filters, and article feed.
@@ -73,29 +73,33 @@ The static page template used for pages like "About", "Contact", or "Privacy Pol
 
 ## 3. Adding Assets
 
-Place CSS stylesheets, client scripts, images, and web fonts in the `assets/` directory:
+Place CSS stylesheets, images, and web fonts in the `assets/` directory:
 
 - `assets/css/theme.css`
-- `assets/js/theme.js`
+- `assets/images/`
+- `assets/fonts/`
 
-Reference them inside templates using the `{% asset %}` tag:
+Reference them inside templates using the `{% asset %}` tag or `asset_url` filter:
 
 ```liquid
 <link rel="stylesheet" href="{% asset 'assets/css/theme.css' %}" />
-<script src="{% asset 'assets/js/theme.js' %}" defer></script>
 ```
+
+> [!NOTE]
+> Theme API v1 enforces a strict No-JS policy for external theme packages to guarantee performance, SEO excellence, and CSP security compliance. Next.js natively manages client interactions, portal modals, and analytics scripts.
 
 ---
 
 ## 4. Packaging Your Theme
 
-Zip the root contents of your theme folder:
+Zip the contents of your theme folder:
 
 ```bash
-zip -r my-theme.zip theme.json settings.json preview.webp templates/ partials/ assets/
+cd my-new-theme
+zip -r ../my-theme.zip theme.json settings.json preview.webp templates/ partials/ assets/
 ```
 
-> **Note**: Make sure `theme.json` is at the root of the ZIP file (or in a single top-level folder).
+> **Note**: Make sure `theme.json` is at the root of the ZIP file (or inside a single top-level directory).
 
 ---
 
@@ -104,6 +108,6 @@ zip -r my-theme.zip theme.json settings.json preview.webp templates/ partials/ a
 1. Open your Vibress Admin Panel.
 2. Navigate to **Settings &rarr; Themes**.
 3. Click **Upload Theme (.zip)**.
-4. Drag and drop `my-theme.zip` and click **Install Theme**.
+4. Select `my-theme.zip` and click **Install Theme**.
 5. Click **Preview** to view your theme live with real content.
 6. Click **Activate Theme** to immediately publish it to your live website.

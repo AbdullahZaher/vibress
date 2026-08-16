@@ -1,4 +1,4 @@
-# Vibress Theme Package Specification
+# Vibress Theme Package Specification (Theme API v1)
 
 The Vibress Theme System allows publishers and developers to install, preview, customize, and activate themes directly through the Admin Panel from a `.zip` archive without requiring source code modifications, registry alterations, server rebuilds, or downtime.
 
@@ -13,7 +13,7 @@ my-theme.zip/
 ├── theme.json               # Required manifest file
 ├── settings.json            # Optional theme variables and schema definition
 ├── preview.webp             # Theme preview banner (or .png / .jpg)
-├── templates/               # Liquid template definitions
+├── templates/               # Liquid template definitions (semantic body markup)
 │   ├── home.liquid          # Required: Homepage & article feed
 │   ├── post.liquid          # Required: Single article view
 │   ├── page.liquid          # Required: Static page view
@@ -24,13 +24,15 @@ my-theme.zip/
 │   ├── header.liquid
 │   ├── footer.liquid
 │   └── pagination.liquid
-└── assets/                  # Public web assets (CSS, JS, images, fonts)
+└── assets/                  # Public web styling and static media
     ├── css/
     │   └── theme.css
-    ├── js/
-    │   └── theme.js
+    ├── images/
     └── fonts/
 ```
+
+> [!IMPORTANT]
+> **Theme API v1 Strict No-JS Policy**: External theme packages are prohibited from including arbitrary client-side JavaScript (`.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`) or server scripts. Next.js owns the document shell, hydration, analytics tracking, portal functionality, and strict Content-Security-Policy (CSP) headers.
 
 ---
 
@@ -68,7 +70,7 @@ The `theme.json` file is required in every theme package and must adhere to the 
 | `themeApi` | `number` | **Yes** | Target theme API compatibility version. Currently must be `1`. |
 | `description` | `string` | No | Short overview of the theme design and intended use case. |
 | `author` | `string` \| `object` | No | Author name or object with `name`, `email`, and `url`. |
-| `previewImage` | `string` | No | Relative path to thumbnail image (e.g., `preview.webp`). |
+| `previewImage` | `string` | No | Relative path to thumbnail image (e.g., `preview.webp`). Must exist in ZIP if declared. |
 | `capabilities` | `string[]` | No | List of supported view types: `["post", "page", "tag", "author"]`. |
 | `settingsSchemaVersion` | `number` | No | Settings specification version (defaults to `1`). |
 
@@ -76,7 +78,7 @@ The `theme.json` file is required in every theme package and must adhere to the 
 
 ## 3. Settings Schema (`settings.json`)
 
-Themes can expose user-customizable visual options and variables in the Admin Panel by providing a `settings.json` file.
+Themes can expose user-customizable visual options and variables in the Admin Panel by providing a `settings.json` file. All fields require a valid `default` value validated at install time.
 
 ```json
 {
@@ -99,34 +101,27 @@ Themes can expose user-customizable visual options and variables in the Admin Pa
       "default": "sans"
     },
     {
-      "key": "showPublicationDate",
-      "type": "boolean",
-      "label": "Show Publication Dates",
-      "default": true
-    },
-    {
       "key": "postsPerPage",
       "type": "number",
       "label": "Posts Per Page",
-      "default": 10,
       "min": 1,
-      "max": 50
+      "max": 50,
+      "default": 10
     },
     {
-      "key": "heroHeadline",
-      "type": "string",
-      "label": "Hero Headline",
-      "default": "Welcome to our publication",
-      "maxLength": 100
+      "key": "showAuthorBio",
+      "type": "boolean",
+      "label": "Show Author Bio",
+      "default": true
     }
   ]
 }
 ```
 
-### Supported Field Types
+---
 
-- **`color`**: Renders a color picker input. Default must be a hex color (`#rrggbb`).
-- **`boolean`**: Renders a switch/checkbox toggle. Default must be `true` or `false`.
-- **`select`**: Renders a dropdown select list with options.
-- **`number`**: Renders a numeric stepper input with optional `min` and `max`.
-- **`string`**: Renders a single-line text input with optional `maxLength`.
+## 4. Multi-Version Lifecycle & Settings Persistence
+
+1. **Parallel Version Storage**: Multiple versions of the same theme identity (e.g. `editorial-pro@1.0.0` and `editorial-pro@2.0.0`) can be installed side-by-side in storage and database.
+2. **Atomic Version Switch**: Uploading or installing a new version does not alter the active pointer until the admin explicitly clicks **Activate**.
+3. **Settings Persistence**: Custom theme settings configured in Admin survive theme deactivation and reactivation, preventing accidental data loss when switching themes.

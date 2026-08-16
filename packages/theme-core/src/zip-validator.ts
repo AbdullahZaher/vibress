@@ -5,20 +5,21 @@ import {
   ThemeSettingsSchema,
   validateThemeManifest,
   validateThemeCompatibility,
+  validateThemeSettingsSchema,
 } from "./theme-core";
 
-export const MAX_ZIP_BYTES = 20 * 1024 * 1024; // 20 MB
-export const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024; // 100 MB
+export const MAX_ZIP_BYTES = 20 * 1024 * 1024; // 20 MB archive upload limit
+export const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024; // 100 MB total uncompressed limit
+export const MAX_SINGLE_FILE_BYTES = 10 * 1024 * 1024; // 10 MB max per single file
 export const MAX_FILE_COUNT = 500;
 export const MAX_PATH_LENGTH = 255;
 export const MAX_COMPRESSION_RATIO = 20;
 
+// Theme API v1 Allowlist — Presentation assets only (No arbitrary server/client JavaScript)
 export const ALLOWED_EXTENSIONS = new Set([
   ".liquid",
-  ".hbs",
   ".html",
   ".css",
-  ".js",
   ".json",
   ".svg",
   ".png",
@@ -36,8 +37,13 @@ export const ALLOWED_EXTENSIONS = new Set([
 ]);
 
 export const FORBIDDEN_EXTENSIONS = new Set([
+  ".js",
+  ".mjs",
+  ".cjs",
   ".ts",
   ".tsx",
+  ".jsx",
+  ".hbs",
   ".exe",
   ".sh",
   ".bat",
@@ -53,8 +59,6 @@ export const FORBIDDEN_EXTENSIONS = new Set([
   ".env",
   ".yml",
   ".yaml",
-  ".mjs",
-  ".cjs",
   ".node",
 ]);
 
@@ -79,6 +83,7 @@ export function validateThemePath(relativePath: string): void {
     relativePath.includes("..") ||
     relativePath.startsWith("/") ||
     relativePath.startsWith("\\") ||
+    relativePath.includes(":") ||
     relativePath.length > MAX_PATH_LENGTH
   ) {
     throw new ThemeZipError(
@@ -118,98 +123,148 @@ export async function validateAndExtractThemeZip(
 
   let zip: JSZip;
   try {
-    zip = await JSZip.loadAsync(buffer);
-  } catch (err: unknown) {
+    zip = await JSZip.loadAsync(buffer, { checkCRC32: true });
+  } catch (err) {
     throw new ThemeZipError(
       "THEME_ZIP_CORRUPT",
-      `Failed to parse ZIP archive: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to parse ZIP archive: ${(err as Error).message}`,
     );
   }
 
-  const entries = Object.values(zip.files);
+  const entries = Object.keys(zip.files);
   if (entries.length === 0) {
-    throw new ThemeZipError("THEME_ZIP_EMPTY", "Theme archive contains no files");
+    throw new ThemeZipError("THEME_ZIP_EMPTY", "ZIP archive contains no files");
   }
 
   if (entries.length > MAX_FILE_COUNT) {
     throw new ThemeZipError(
       "THEME_ZIP_TOO_MANY_FILES",
-      `Theme archive contains ${entries.length} files, exceeding limit of ${MAX_FILE_COUNT}`,
+      `ZIP contains ${entries.length} files, exceeding limit of ${MAX_FILE_COUNT}`,
     );
   }
 
-  let totalUncompressedBytes = 0;
+  // Check if archive has a single top-level folder wrapper
+  const nonDirectoryEntries = entries.filter((e) => !zip.files[e]?.dir);
+  let prefixToStrip = "";
+
+  const rootFiles = nonDirectoryEntries.filter((e) => !e.includes("/"));
+  if (rootFiles.length === 0) {
+    const topLevels = new Set(entries.map((e) => e.split("/")[0]));
+    if (topLevels.size === 1) {
+      prefixToStrip = Array.from(topLevels)[0] + "/";
+    }
+  }
+
   const files = new Map<string, Buffer>();
+  let totalUncompressedBytes = 0;
 
-  // Determine if there is a common root folder in the zip (e.g. theme-name/theme.json)
-  const nonDirEntries = entries.filter((e) => !e.dir);
-  let rootPrefix = "";
-  const firstManifest = nonDirEntries.find((e) =>
-    e.name.endsWith("theme.json") || e.name === "theme.json",
-  );
+  for (const entryName of entries) {
+    const entry = zip.files[entryName];
+    if (!entry || entry.dir) continue;
 
-  if (firstManifest && firstManifest.name.includes("/")) {
-    rootPrefix = firstManifest.name.substring(
-      0,
-      firstManifest.name.indexOf("theme.json"),
-    );
-  }
-
-  for (const entry of entries) {
-    if (entry.dir) continue;
-
-    // Check raw entry name first for path traversal
-    validateThemePath(entry.name);
-
-    let relativePath = entry.name;
-    if (rootPrefix && relativePath.startsWith(rootPrefix)) {
-      relativePath = relativePath.substring(rootPrefix.length);
+    // Check for symlinks in zip metadata
+    const unixPermissions = (entry as any).unixPermissions;
+    if (unixPermissions && (unixPermissions & 0o170000) === 0o120000) {
+      throw new ThemeZipError(
+        "THEME_ZIP_SYMLINK_FORBIDDEN",
+        `Symlinks are forbidden in theme archive: ${entryName}`,
+      );
     }
 
-    // Sanitize path
-    relativePath = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    let relativePath = entryName;
+    if (prefixToStrip && relativePath.startsWith(prefixToStrip)) {
+      relativePath = relativePath.slice(prefixToStrip.length);
+    }
 
-    // Path checks: Zip Slip detection
-    validateThemePath(relativePath);
-
-    // Ignore OS metadata files
+    // Skip OS junk files (__MACOSX, .DS_Store, Thumbs.db)
     if (
       relativePath.startsWith("__MACOSX/") ||
+      relativePath.includes("/__MACOSX/") ||
       relativePath.endsWith(".DS_Store") ||
       relativePath.endsWith("Thumbs.db")
     ) {
       continue;
     }
 
-    // Extension check
-    const dotIndex = relativePath.lastIndexOf(".");
-    const ext = dotIndex !== -1 ? relativePath.substring(dotIndex).toLowerCase() : "";
+    validateThemePath(relativePath);
+
+    // Extension security check
+    const lastDot = relativePath.lastIndexOf(".");
+    const ext = lastDot !== -1 ? relativePath.slice(lastDot).toLowerCase() : "";
 
     if (FORBIDDEN_EXTENSIONS.has(ext)) {
       throw new ThemeZipError(
-        "THEME_SECURITY_VIOLATION",
-        `Theme contains forbidden executable or server code file: ${relativePath}`,
+        "THEME_FORBIDDEN_FILE_TYPE",
+        `Theme archive contains prohibited executable or script file: ${relativePath}`,
       );
     }
 
-    if (!ALLOWED_EXTENSIONS.has(ext)) {
+    if (!ALLOWED_EXTENSIONS.has(ext) && ext !== "") {
       throw new ThemeZipError(
-        "THEME_FILE_TYPE_NOT_ALLOWED",
-        `Theme file type not allowed: ${relativePath} (${ext})`,
+        "THEME_INVALID_FILE_EXTENSION",
+        `File extension "${ext}" is not permitted in Theme API v1 packages: ${relativePath}`,
       );
     }
 
-    // Read file buffer
-    const fileBuffer = await entry.async("nodebuffer");
+    // Check entry header uncompressed size if available
+    const uncompressedSizeHeader = (entry as any)._data?.uncompressedSize;
+    if (
+      typeof uncompressedSizeHeader === "number" &&
+      uncompressedSizeHeader > MAX_SINGLE_FILE_BYTES
+    ) {
+      throw new ThemeZipError(
+        "THEME_FILE_TOO_LARGE",
+        `File ${relativePath} size (${uncompressedSizeHeader} bytes) exceeds single file limit of ${MAX_SINGLE_FILE_BYTES / (1024 * 1024)}MB`,
+      );
+    }
+
+    // Read with bounded chunks to prevent unbounded in-memory decompression
+    const chunks: Buffer[] = [];
+    let fileBytesRead = 0;
+    await new Promise<void>((resolve, reject) => {
+      const stream = entry.nodeStream();
+      stream.on("data", (chunk: Buffer) => {
+        fileBytesRead += chunk.length;
+        if (fileBytesRead > MAX_SINGLE_FILE_BYTES) {
+          (stream as any).destroy?.(
+            new ThemeZipError(
+              "THEME_FILE_TOO_LARGE",
+              `File ${relativePath} size (${fileBytesRead} bytes) exceeds single file limit of ${MAX_SINGLE_FILE_BYTES / (1024 * 1024)}MB`,
+            ),
+          );
+          return;
+        }
+        if (totalUncompressedBytes + fileBytesRead > MAX_EXTRACTED_BYTES) {
+          (stream as any).destroy?.(
+            new ThemeZipError(
+              "THEME_ZIP_BOMB_DETECTED",
+              `Extracted size exceeds max limit of ${MAX_EXTRACTED_BYTES / (1024 * 1024)}MB`,
+            ),
+          );
+          return;
+        }
+        if (
+          byteLength > 0 &&
+          (totalUncompressedBytes + fileBytesRead) / byteLength >
+            MAX_COMPRESSION_RATIO
+        ) {
+          (stream as any).destroy?.(
+            new ThemeZipError(
+              "THEME_ZIP_BOMB_DETECTED",
+              `Archive compression ratio exceeds allowed threshold of ${MAX_COMPRESSION_RATIO}:1`,
+            ),
+          );
+          return;
+        }
+        chunks.push(chunk);
+      });
+      stream.on("end", () => resolve());
+      stream.on("error", (err) => reject(err));
+    });
+
+    const fileBuffer = Buffer.concat(chunks);
     const fileSize = fileBuffer.length;
-
     totalUncompressedBytes += fileSize;
-    if (totalUncompressedBytes > MAX_EXTRACTED_BYTES) {
-      throw new ThemeZipError(
-        "THEME_ZIP_BOMB_DETECTED",
-        `Extracted size exceeds max limit of ${MAX_EXTRACTED_BYTES / (1024 * 1024)}MB`,
-      );
-    }
 
     files.set(relativePath, fileBuffer);
   }
@@ -236,59 +291,67 @@ export async function validateAndExtractThemeZip(
   const manifest = validateThemeManifest(rawManifest);
   validateThemeCompatibility(manifest);
 
-  // 2. Validate settings schema
+  // Validate declared previewImage exists if specified
+  if (manifest.previewImage) {
+    const cleanPreview = manifest.previewImage.replace(/^\/+/, "");
+    if (!files.has(cleanPreview)) {
+      throw new ThemeZipError(
+        "THEME_PREVIEW_IMAGE_MISSING",
+        `Declared previewImage "${manifest.previewImage}" does not exist in theme package`,
+      );
+    }
+  }
+
+  // 2. Validate settings schema with strict runtime validator
   let settingsSchema: ThemeSettingsSchema = {};
   const settingsBuffer = files.get("settings.json");
   if (settingsBuffer) {
+    let rawSettings: unknown;
     try {
-      const rawSettings = JSON.parse(settingsBuffer.toString("utf-8"));
-      if (rawSettings && typeof rawSettings === "object") {
-        if (rawSettings.fields && Array.isArray(rawSettings.fields)) {
-          // Convert array format to schema map
-          for (const field of rawSettings.fields) {
-            if (field.key && field.type) {
-              settingsSchema[field.key] = field;
-            }
-          }
-        } else if (rawSettings.fields && typeof rawSettings.fields === "object") {
-          settingsSchema = rawSettings.fields;
-        } else {
-          settingsSchema = rawSettings as ThemeSettingsSchema;
-        }
-      }
+      rawSettings = JSON.parse(settingsBuffer.toString("utf-8"));
     } catch {
       throw new ThemeZipError(
         "THEME_SETTINGS_INVALID_JSON",
         "settings.json is not valid JSON",
       );
     }
-  } else if ((rawManifest as any).settingsSchema) {
-    settingsSchema = (rawManifest as any).settingsSchema;
-  }
 
-  // Ensure all setting definitions have default values
-  for (const [key, def] of Object.entries(settingsSchema)) {
-    if (def.default === undefined) {
+    try {
+      const fieldsInput =
+        rawSettings && typeof rawSettings === "object" && "fields" in (rawSettings as any)
+          ? (rawSettings as any).fields
+          : rawSettings;
+      settingsSchema = validateThemeSettingsSchema(fieldsInput);
+    } catch (schemaErr) {
       throw new ThemeZipError(
-        "THEME_SETTINGS_DEFAULT_MISSING",
-        `Theme setting "${key}" is missing mandatory default value`,
+        "THEME_SETTINGS_SCHEMA_INVALID",
+        `Invalid settings.json schema: ${(schemaErr as Error).message}`,
+      );
+    }
+  } else if ((rawManifest as any).settingsSchema) {
+    try {
+      settingsSchema = validateThemeSettingsSchema((rawManifest as any).settingsSchema);
+    } catch (schemaErr) {
+      throw new ThemeZipError(
+        "THEME_SETTINGS_SCHEMA_INVALID",
+        `Invalid manifest settingsSchema: ${(schemaErr as Error).message}`,
       );
     }
   }
 
-  // 3. Validate required templates
+  // 3. Validate required templates (Liquid templates only)
   const templateFiles = Array.from(files.keys()).filter((f) =>
     f.startsWith("templates/"),
   );
 
   const hasHome = templateFiles.some((f) =>
-    /^templates\/(home|index)\.(liquid|hbs|html)$/i.test(f),
+    /^templates\/(home|index)\.(liquid|html)$/i.test(f),
   );
   const hasPost = templateFiles.some((f) =>
-    /^templates\/post\.(liquid|hbs|html)$/i.test(f),
+    /^templates\/post\.(liquid|html)$/i.test(f),
   );
   const hasPage = templateFiles.some((f) =>
-    /^templates\/page\.(liquid|hbs|html)$/i.test(f),
+    /^templates\/page\.(liquid|html)$/i.test(f),
   );
 
   const missingTemplates: string[] = [];

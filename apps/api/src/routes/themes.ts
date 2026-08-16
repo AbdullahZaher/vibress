@@ -15,7 +15,6 @@ import {
 } from "@vibress/themes";
 import {
   validateThemeId,
-  ThemeError,
   ThemeSecurityError,
   ThemeZipError,
 } from "@vibress/theme-core";
@@ -138,7 +137,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
       let zipBuffer: Buffer;
       try {
         zipBuffer = await fileData.toBuffer();
-      } catch (err) {
+      } catch {
         return reply.status(400).send({
           errors: [
             {
@@ -210,7 +209,8 @@ export async function themeRoutes(fastify: FastifyInstance) {
       const { id } = req.params as { id: string };
       try {
         validateThemeId(id);
-        const config = await themeService.activateTheme(id, req.user!.id);
+        const version = typeof (req.body as any)?.version === "string" ? (req.body as any).version : undefined;
+        const config = await themeService.activateTheme(id, req.user!.id, version);
 
         await auditService.record({
           action: "theme.activated",
@@ -302,9 +302,16 @@ export async function themeRoutes(fastify: FastifyInstance) {
 
       try {
         validateThemeId(id);
+        const settingsInput =
+          typeof parseResult.data.settings === "object" &&
+          parseResult.data.settings !== null &&
+          !Array.isArray(parseResult.data.settings)
+            ? (parseResult.data.settings as Record<string, unknown>)
+            : parseResult.data;
+
         const config = await themeService.updateThemeSettings(
           id,
-          parseResult.data,
+          settingsInput,
           req.user!.id,
         );
 
@@ -437,7 +444,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const previewInfo = themeService.createPreviewToken(id);
+      const previewInfo = await themeService.createPreviewToken(id);
       return reply.status(200).send(previewInfo);
     },
   });
@@ -446,7 +453,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
   fastify.get("/themes/preview/:token", {
     handler: async (req, reply) => {
       const { token } = req.params as { token: string };
-      const themeId = themeService.resolvePreviewToken(token);
+      const themeId = await themeService.resolvePreviewToken(token);
       if (!themeId) {
         return reply.status(404).send({
           errors: [

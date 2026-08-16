@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { StorageProvider } from "@vibress/storage-core";
+import { StorageProviderThemeStorageAdapter } from "./storage-provider-theme-storage-adapter";
 
 export interface ThemeStorageAdapter {
   saveThemeFiles(
@@ -23,7 +25,7 @@ export interface ThemeStorageAdapter {
 }
 
 export interface FileSystemThemeStorageOptions {
-  storageRoot?: string;
+  storageRoot?: string | undefined;
 }
 
 export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
@@ -150,3 +152,52 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     return fs.existsSync(themeDir);
   }
 }
+
+export const LocalThemeStorageAdapter = FileSystemThemeStorageAdapter;
+
+export class ThemeStorageConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ThemeStorageConfigurationError";
+  }
+}
+
+export interface CreateThemeStorageOptions {
+  storageProvider?: StorageProvider | undefined;
+  localPath?: string | undefined;
+  requireDurableStorage?: boolean | undefined;
+}
+
+export function createThemeStorageAdapter(
+  options: CreateThemeStorageOptions = {},
+): ThemeStorageAdapter {
+  const isProd = process.env.NODE_ENV === "production";
+  const mustBeDurable =
+    options.requireDurableStorage ??
+    (isProd && process.env.VIBRESS_ALLOW_EPHEMERAL_THEME_STORAGE !== "true");
+
+  if (options.storageProvider) {
+    if (
+      mustBeDurable &&
+      options.storageProvider.name === "local" &&
+      process.env.VIBRESS_ALLOW_EPHEMERAL_THEME_STORAGE !== "true"
+    ) {
+      throw new ThemeStorageConfigurationError(
+        "Production environment requires durable cloud storage (S3/GCS/Azure) for theme storage, but local filesystem storage was provided.",
+      );
+    }
+    return new StorageProviderThemeStorageAdapter(options.storageProvider);
+  }
+
+  if (mustBeDurable) {
+    throw new ThemeStorageConfigurationError(
+      "Durable theme storage is required in production, but no durable storage provider was configured.",
+    );
+  }
+
+  return new FileSystemThemeStorageAdapter(
+    options.localPath ? { storageRoot: options.localPath } : {},
+  );
+}
+
+export { StorageProviderThemeStorageAdapter };
