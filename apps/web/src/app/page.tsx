@@ -4,6 +4,13 @@ import {
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
 } from "../lib/theme-host";
+import { renderThemeTemplate } from "../lib/theme-renderer";
+import {
+  mapPostToViewModel,
+  mapTagToViewModel,
+  mapPaginationToViewModel,
+  mapSiteToViewModel,
+} from "@vibress/theme-core";
 
 export const revalidate = 0;
 
@@ -37,11 +44,23 @@ export default async function HomePage({
 
   const site = await getThemeSiteSettings();
 
-  return hostState.theme.components.Home({
-    posts,
-    tags,
-    pagination,
-    site,
-    settings: hostState.settings,
-  });
+  return renderThemeTemplate(
+    "home",
+    {
+      posts: posts.map((p) => mapPostToViewModel(p as any)),
+      tags: tags
+        .map((t) => mapTagToViewModel(t as any))
+        .filter((t): t is NonNullable<typeof t> => t !== null),
+      pagination: mapPaginationToViewModel(pagination),
+      site: mapSiteToViewModel(site),
+      settings: hostState.settings,
+    },
+    {
+      themeId: hostState.themeId,
+      themeVersion: hostState.themeVersion,
+      isBuiltIn: hostState.isBuiltIn,
+      settings: hostState.settings,
+      site,
+    },
+  );
 }

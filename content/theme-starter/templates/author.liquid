@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="{{ site.locale }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Articles by {{ author.name }} — {{ site.title }}</title>
+  <meta name="description" content="{{ author.bio | default: site.description }}" />
+  <link rel="stylesheet" href="{% asset 'assets/css/theme.css' %}" />
+</head>
+<body class="theme-body font-{{ settings.typographyFamily | default: 'sans' }}">
+  {% include 'header' %}
+
+  <main class="theme-main theme-container">
+    <header class="archive-header author-profile-header">
+      {% if author.avatar %}
+        <img src="{{ author.avatar }}" alt="{{ author.name }}" class="author-profile-avatar" />
+      {% endif %}
+      <h1 class="archive-title">{{ author.name }}</h1>
+      {% if author.bio %}
+        <p class="archive-description">{{ author.bio }}</p>
+      {% endif %}
+    </header>
+
+    <section class="posts-grid">
+      {% for post in posts %}
+        <article class="post-card">
+          {% if post.featureImage.url %}
+            <a href="{{ post.url }}" class="post-card-image-link">
+              <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="post-card-image" loading="lazy" />
+            </a>
+          {% endif %}
+
+          <div class="post-card-content">
+            <h2 class="post-card-title">
+              <a href="{{ post.url }}">{{ post.title }}</a>
+            </h2>
+            <p class="post-card-excerpt">
+              {{ post.excerpt | excerpt: 160 }}
+            </p>
+            <div class="post-card-meta">
+              {% if settings.showPublicationDate and post.publishedAt %}
+                <time datetime="{{ post.publishedAt }}" class="post-card-date">
+                  {{ post.publishedAt | format_date }}
+                </time>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+
+    {% include 'pagination' %}
+  </main>
+
+  {% include 'footer' %}
+  <script src="{% asset 'assets/js/theme.js' %}"></script>
+</body>
+</html>

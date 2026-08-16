@@ -1,0 +1,22 @@
+<footer class="theme-footer">
+  <div class="theme-container footer-inner">
+    <div class="footer-info">
+      <p class="footer-copyright">
+        &copy; {{ 'now' | format_date: 'year' }} {{ site.title }}. All rights reserved.
+      </p>
+      {% if site.description %}
+        <p class="footer-description">{{ site.description }}</p>
+      {% endif %}
+    </div>
+
+    {% if site.secondaryNav.size > 0 %}
+      <nav class="footer-nav">
+        <ul class="footer-nav-list">
+          {% for item in site.secondaryNav %}
+            <li><a href="{{ item.url }}" class="footer-link">{{ item.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
+</footer>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="{{ site.locale }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ post.seo.title | default: post.title }} — {{ site.title }}</title>
+  <meta name="description" content="{{ post.seo.description | default: post.excerpt }}" />
+  <link rel="stylesheet" href="{% asset 'assets/css/theme.css' %}" />
+</head>
+<body class="theme-body font-{{ settings.typographyFamily | default: 'sans' }}">
+  {% include 'header' %}
+
+  <main class="theme-main theme-container post-article-layout">
+    <article class="article-single">
+      <header class="article-header">
+        {% if post.primaryTag %}
+          <div class="article-tag-wrap">
+            <a href="{{ post.primaryTag.url }}" class="post-card-tag">#{{ post.primaryTag.name }}</a>
+          </div>
+        {% endif %}
+
+        <h1 class="article-title">{{ post.title }}</h1>
+
+        {% if post.excerpt %}
+          <p class="article-lead">{{ post.excerpt }}</p>
+        {% endif %}
+
+        <div class="article-meta">
+          {% if post.primaryAuthor and settings.showAuthorAvatars %}
+            <div class="article-author">
+              {% if post.primaryAuthor.avatar %}
+                <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="author-avatar" />
+              {% endif %}
+              <div class="author-details">
+                <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name }}</a>
+                {% if post.primaryAuthor.bio %}
+                  <span class="author-bio-snippet">{{ post.primaryAuthor.bio }}</span>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="article-submeta">
+            {% if settings.showPublicationDate and post.publishedAt %}
+              <time datetime="{{ post.publishedAt }}" class="article-date">
+                {{ post.publishedAt | format_date }}
+              </time>
+            {% endif %}
+            {% if post.readingTimeMinutes %}
+              <span class="meta-dot">&bull;</span>
+              <span class="article-reading-time">{{ post.readingTimeMinutes }} min read</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if post.featureImage.url %}
+          <figure class="article-featured-image-wrap">
+            <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="article-featured-image" />
+            {% if post.featureImage.caption %}
+              <figcaption class="article-image-caption">{{ post.featureImage.caption }}</figcaption>
+            {% endif %}
+          </figure>
+        {% endif %}
+      </header>
+
+      <div class="article-content studio-html-content">
+        {{ post.html }}
+      </div>
+
+      {% if post.tags.size > 0 %}
+        <footer class="article-footer">
+          <div class="article-tags-list">
+            <span class="tags-title">Tags:</span>
+            {% for tag in post.tags %}
+              <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
+            {% endfor %}
+          </div>
+        </footer>
+      {% endif %}
+    </article>
+  </main>
+
+  {% include 'footer' %}
+  <script src="{% asset 'assets/js/theme.js' %}"></script>
+</body>
+</html>

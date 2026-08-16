@@ -8,6 +8,9 @@ import type { VibressThemeDefinition } from "../themes/types";
 import { getPublicSiteUrl } from "./seo-helpers";
 
 export interface ThemeHostState {
+  themeId: string;
+  themeVersion: string;
+  isBuiltIn: boolean;
   theme: VibressThemeDefinition;
   settings: Record<string, unknown>;
   isPreview: boolean;
@@ -15,7 +18,10 @@ export interface ThemeHostState {
 
 export interface ActiveThemeInfo {
   themeId: string;
+  themeVersion?: string;
+  isBuiltIn?: boolean;
   settings: Record<string, unknown>;
+  manifest?: Record<string, unknown>;
 }
 
 export async function fetchActiveThemeInfo(): Promise<ActiveThemeInfo | null> {
@@ -37,37 +43,42 @@ export async function resolveThemeHostState(
   isPreview = false,
   previewThemeId?: string | null,
 ): Promise<ThemeHostState> {
-  let activeThemeId: string | null = null;
+  let activeThemeId = "vibress-default";
+  let activeThemeVersion = "1.0.0";
+  let isBuiltIn = true;
   let settings: Record<string, unknown> = {};
 
   const info = await fetchActiveThemeInfo();
   if (info && typeof info.themeId === "string") {
     activeThemeId = info.themeId;
+    activeThemeVersion = info.themeVersion || "1.0.0";
+    isBuiltIn = info.isBuiltIn ?? (getTheme(info.themeId) !== null);
     settings = info.settings || {};
   }
 
-  if (isPreview && previewThemeId && getTheme(previewThemeId)) {
+  if (isPreview && previewThemeId) {
     activeThemeId = previewThemeId;
+    isBuiltIn = getTheme(previewThemeId) !== null;
   }
 
-  const theme =
-    activeThemeId && getTheme(activeThemeId)
-      ? getTheme(activeThemeId)!
-      : getFallbackTheme();
+  const builtinTheme = getTheme(activeThemeId) || getFallbackTheme();
 
-  // Merge theme defaults over persisted settings (persisted values win)
+  // Merge theme defaults over persisted settings
   const merged: Record<string, unknown> = {};
-  for (const [key, def] of Object.entries(theme.settingsSchema)) {
-    merged[key] = def.default;
+  if (builtinTheme) {
+    for (const [key, def] of Object.entries(builtinTheme.settingsSchema)) {
+      merged[key] = def.default;
+    }
   }
   for (const [key, value] of Object.entries(settings)) {
-    if (key in theme.settingsSchema) {
-      merged[key] = value;
-    }
+    merged[key] = value;
   }
 
   return {
-    theme,
+    themeId: activeThemeId,
+    themeVersion: activeThemeVersion,
+    isBuiltIn,
+    theme: builtinTheme,
     settings: merged,
     isPreview,
   };

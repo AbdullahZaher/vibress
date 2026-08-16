@@ -1,17 +1,31 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   ApiThemeSummary,
   ApiActiveTheme,
   listThemesApi,
   getActiveThemeApi,
   activateThemeApi,
+  createThemePreviewApi,
+  uploadThemeApi,
+  deleteThemeApi,
 } from "../../../lib/api";
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { Palette, CheckCircle2, Eye, RefreshCw, X } from "lucide-react";
+import {
+  Palette,
+  CheckCircle2,
+  Eye,
+  RefreshCw,
+  X,
+  UploadCloud,
+  Trash2,
+  FileArchive,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 
 interface ThemesManagerCardProps {
   isHighlighted?: boolean | undefined;
@@ -25,6 +39,17 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [active, setActive] = useState<ApiActiveTheme | null>(null);
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Upload modal state inside drawer
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<
+    "idle" | "validating" | "installing" | "success" | "error"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,6 +90,78 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(`Are you sure you want to uninstall theme "${id}"?`)) {
+      return;
+    }
+    setDeleting(id);
+    try {
+      await deleteThemeApi(id);
+      await load();
+    } catch {
+      // Error handled
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handlePreview = async (themeId: string) => {
+    try {
+      const res = await createThemePreviewApi(themeId);
+      window.open(`/?preview=${res.previewToken}`, "_blank");
+    } catch {
+      window.open(`/?preview=${themeId}`, "_blank");
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith(".zip")) {
+        setUploadFile(file);
+        setUploadError(null);
+      } else {
+        setUploadError("Please select a valid .zip archive file.");
+      }
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.name.endsWith(".zip")) {
+        setUploadFile(file);
+        setUploadError(null);
+      } else {
+        setUploadError("Please select a valid .zip archive file.");
+      }
+    }
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!uploadFile) return;
+    setUploadProgress("validating");
+    setUploadError(null);
+
+    try {
+      setUploadProgress("installing");
+      await uploadThemeApi(uploadFile);
+      setUploadProgress("success");
+      await load();
+      setTimeout(() => {
+        setIsUploadOpen(false);
+        setUploadFile(null);
+        setUploadProgress("idle");
+      }, 1200);
+    } catch (err: unknown) {
+      setUploadProgress("error");
+      const e = err as { message?: string };
+      setUploadError(e.message || "Failed to install theme package.");
+    }
+  };
+
   return (
     <>
       <SettingsCard id="site-themes" isHighlighted={isHighlighted}>
@@ -102,9 +199,22 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => {
+                    setIsUploadOpen(true);
+                    setUploadFile(null);
+                    setUploadProgress("idle");
+                    setUploadError(null);
+                  }}
+                  className="gap-1.5 text-xs h-8"
+                >
+                  <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={load}
                   disabled={loading}
-                  className="gap-1.5 text-xs cursor-pointer h-8"
+                  className="gap-1.5 text-xs h-8"
                   title="Reload registry themes from backend"
                 >
                   <RefreshCw
@@ -131,17 +241,11 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     variant="outline"
                     className="text-[10px] font-mono border-primary/30 text-primary"
                   >
-                    Official Theme Registry
+                    Zero-Rebuild Theme System
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  All official Vibress publication templates are installed and
-                  managed via the core theme registry. Custom themes can be
-                  added to your installation by registering them in the{" "}
-                  <code className="font-mono text-primary text-[11px]">
-                    @vibress/themes-registry
-                  </code>{" "}
-                  workspace package.
+                  Upload external Liquid theme ZIPs or switch between built-in themes. All changes take effect immediately without recompilation or server restart.
                 </p>
               </div>
 
@@ -152,7 +256,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </div>
               ) : themes.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground text-xs">
-                  No themes discovered in registry.
+                  No themes discovered.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -172,12 +276,22 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             <h4 className="text-xs font-bold text-foreground">
                               {theme.manifest.name}
                             </h4>
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] font-mono"
-                            >
-                              v{theme.manifest.version}
-                            </Badge>
+                            <div className="flex items-center gap-1">
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] font-mono"
+                              >
+                                v{theme.manifest.version}
+                              </Badge>
+                              {!theme.isBuiltIn && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] font-mono text-purple-500 border-purple-500/30"
+                                >
+                                  ZIP
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
                             {theme.manifest.description ||
@@ -211,17 +325,25 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() =>
-                              window.open(
-                                `/?preview=${theme.manifest.id}`,
-                                "_blank",
-                              )
-                            }
+                            onClick={() => handlePreview(theme.manifest.id)}
                             className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
                             title="Preview theme in new tab"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
+
+                          {!theme.isBuiltIn && !isCurrent && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={deleting === theme.manifest.id}
+                              onClick={() => handleDelete(theme.manifest.id)}
+                              className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer"
+                              title="Uninstall theme"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -242,6 +364,107 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Inner Upload Modal */}
+        {isUploadOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
+            <div className="w-full max-w-md bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <UploadCloud className="h-4 w-4 text-primary" />
+                  <h4 className="text-sm font-bold text-foreground">
+                    Upload Theme Package
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(false)}
+                  className="text-muted-foreground hover:text-foreground p-1 rounded-md"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-3">
+                {uploadError && (
+                  <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
+
+                {uploadProgress === "success" ? (
+                  <div className="py-6 flex flex-col items-center justify-center gap-2 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                    <p className="text-xs font-bold text-foreground">
+                      Theme Installed Successfully!
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleFileDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer ${
+                      dragOver
+                        ? "border-primary bg-primary/5"
+                        : uploadFile
+                          ? "border-emerald-500/50 bg-emerald-500/5"
+                          : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".zip"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                    {uploadFile ? (
+                      <div className="flex flex-col items-center gap-1.5">
+                        <FileArchive className="h-8 w-8 text-emerald-500" />
+                        <span className="text-xs font-semibold">{uploadFile.name}</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5">
+                        <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
+                        <span className="text-xs font-semibold">Drop theme.zip here</span>
+                        <span className="text-[10px] text-muted-foreground">or click to browse</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsUploadOpen(false)}
+                  className="text-xs h-7"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
+                  onClick={handleUploadSubmit}
+                  className="text-xs h-7 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {uploadProgress === "validating" || uploadProgress === "installing" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Install"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </SettingsModalPortal>
     </>
   );

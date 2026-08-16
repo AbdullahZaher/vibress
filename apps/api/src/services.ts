@@ -33,9 +33,12 @@ import {
 } from "@vibress/storage-domain";
 import {
   DrizzleThemeConfigurationRepository,
+  DrizzleInstalledThemeRepository,
+  FileSystemThemeStorageAdapter,
+  ThemeInstaller,
   ThemeService,
 } from "@vibress/themes";
-import { listThemeMetadata } from "@vibress/themes-registry";
+import { listThemeMetadata, getThemeMetadata } from "@vibress/themes-registry";
 import {
   validateThemeManifest,
   validateThemeCompatibility,
@@ -183,9 +186,18 @@ const billingPlanMappingRepo = new DrizzleBillingPlanMappingRepository();
 const billingWebhookEventRepo = new DrizzleBillingWebhookEventRepository();
 export const billingEventRepo = new DrizzleBillingEventRepository();
 
+export const themeStorageAdapter = new FileSystemThemeStorageAdapter();
+export const installedThemeRepo = new DrizzleInstalledThemeRepository();
+export const themeInstaller = new ThemeInstaller(
+  themeStorageAdapter,
+  installedThemeRepo,
+);
+
 export const themeService = new ThemeService(
   themeConfigRepo,
   themeDefinitionRegistry,
+  installedThemeRepo,
+  themeStorageAdapter,
 );
 export const membersService = new MembersService(memberRepo, memberSessionRepo);
 export const memberAuthService = new MemberAuthService(

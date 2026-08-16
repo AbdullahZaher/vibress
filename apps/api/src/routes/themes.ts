@@ -1,12 +1,10 @@
 import { FastifyInstance } from "fastify";
-import crypto from "node:crypto";
 import {
   requireStaffSession,
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { themeService } from "../services";
-import { listThemeMetadata, getThemeMetadata } from "@vibress/themes-registry";
+import { themeService, themeInstaller, auditService } from "../services";
 import { ThemeSettingsUpdateSchema } from "@vibress/api-contracts";
 import {
   ThemeNotFoundError,
@@ -15,26 +13,20 @@ import {
   ThemeSettingsInvalidError,
   ThemeActivationFailedError,
 } from "@vibress/themes";
-import { validateThemeId } from "@vibress/theme-core";
-import { asCodedError } from "../helpers/errors";
-
-const PREVIEW_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const PREVIEW_TOKENS = new Map<
-  string,
-  { themeId: string; expiresAt: number }
->();
+import {
+  validateThemeId,
+  ThemeError,
+  ThemeSecurityError,
+  ThemeZipError,
+} from "@vibress/theme-core";
+import { asCodedError, errorMessage } from "../helpers/errors";
 
 export async function themeRoutes(fastify: FastifyInstance) {
-  // List themes
+  // List all themes (built-in + installed external)
   fastify.get("/themes", {
     preHandler: [requireStaffSession, requirePermission("themes.read")],
     handler: async (_req, reply) => {
-      const active = await themeService.getActiveThemeConfiguration();
-      const themes = listThemeMetadata().map((t) => ({
-        manifest: t.manifest,
-        settingsSchema: t.settingsSchema,
-        isActive: active?.themeId === t.manifest.id,
-      }));
+      const themes = await themeService.listThemes();
       return reply.status(200).send({ themes });
     },
   });
@@ -58,22 +50,26 @@ export async function themeRoutes(fastify: FastifyInstance) {
           ],
         });
       }
-      const theme = getThemeMetadata(id);
+
+      const theme = await themeService.getTheme(id);
       if (!theme) {
         return reply.status(404).send({
           errors: [
             {
               code: "THEME_NOT_FOUND",
-              message: "Theme not found",
+              message: `Theme not found: ${id}`,
               requestId: req.id,
             },
           ],
         });
       }
+
       const active = await themeService.getActiveThemeConfiguration();
       return reply.status(200).send({
         manifest: theme.manifest,
         settingsSchema: theme.settingsSchema,
+        isBuiltIn: theme.isBuiltIn,
+        previewImage: theme.previewImage,
         isActive: active?.themeId === theme.manifest.id,
       });
     },
@@ -90,6 +86,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
           themeVersion: "1.0.0",
           settings: {},
           settingsSchemaVersion: 1,
+          isBuiltIn: true,
         });
       }
       return reply.status(200).send({
@@ -97,7 +94,108 @@ export async function themeRoutes(fastify: FastifyInstance) {
         themeVersion: active.manifest.version,
         settings: active.settings,
         settingsSchemaVersion: active.manifest.settingsSchemaVersion || 1,
+        isBuiltIn: active.isBuiltIn,
+        previewImage: active.previewImage,
       });
+    },
+  });
+
+  // Upload external theme ZIP package
+  fastify.post("/themes/upload", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("themes.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      let fileData;
+      try {
+        fileData = await req.file();
+      } catch (err) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "THEME_UPLOAD_FAILED",
+              message: errorMessage(err) || "Failed to parse multipart theme upload",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (!fileData) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: "No theme ZIP file uploaded",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      let zipBuffer: Buffer;
+      try {
+        zipBuffer = await fileData.toBuffer();
+      } catch (err) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "THEME_UPLOAD_FAILED",
+              message: "Failed to read uploaded theme archive buffer",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      try {
+        const installed = await themeInstaller.installFromZip(
+          zipBuffer,
+          req.user!.id,
+        );
+
+        await auditService.record({
+          action: "theme.installed",
+          actorUserId: req.user!.id,
+          targetType: "theme",
+          targetId: installed.themeId,
+          metadata: {
+            themeId: installed.themeId,
+            version: installed.version,
+            name: installed.name,
+          },
+        });
+
+        return reply.status(201).send({
+          theme: {
+            id: installed.id,
+            themeId: installed.themeId,
+            name: installed.name,
+            version: installed.version,
+            themeApiVersion: installed.themeApiVersion,
+            description: installed.description,
+            author: installed.author,
+            previewImage: installed.previewImage,
+            manifest: installed.manifest,
+            settingsSchema: installed.settingsSchema,
+            status: installed.status,
+            isBuiltIn: installed.isBuiltIn,
+          },
+        });
+      } catch (err) {
+        const e = asCodedError(err);
+        return reply.status(400).send({
+          errors: [
+            {
+              code: e.code || "THEME_INSTALL_FAILED",
+              message: e.message,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
     },
   });
 
@@ -113,6 +211,18 @@ export async function themeRoutes(fastify: FastifyInstance) {
       try {
         validateThemeId(id);
         const config = await themeService.activateTheme(id, req.user!.id);
+
+        await auditService.record({
+          action: "theme.activated",
+          actorUserId: req.user!.id,
+          targetType: "theme",
+          targetId: config.themeId,
+          metadata: {
+            themeId: config.themeId,
+            version: config.themeVersion,
+          },
+        });
+
         return reply.status(200).send({
           theme: {
             themeId: config.themeId,
@@ -133,7 +243,9 @@ export async function themeRoutes(fastify: FastifyInstance) {
           err instanceof ThemeInvalidError ||
           err instanceof ThemeIncompatibleError ||
           err instanceof ThemeSettingsInvalidError ||
-          err instanceof ThemeActivationFailedError
+          err instanceof ThemeActivationFailedError ||
+          err instanceof ThemeSecurityError ||
+          err instanceof ThemeZipError
         ) {
           return reply.status(400).send({
             errors: [
@@ -153,7 +265,15 @@ export async function themeRoutes(fastify: FastifyInstance) {
             ],
           });
         }
-        throw err;
+        return reply.status(400).send({
+          errors: [
+            {
+              code: e.code || "THEME_ACTIVATION_FAILED",
+              message: e.message,
+              requestId: req.id,
+            },
+          ],
+        });
       }
     },
   });
@@ -187,6 +307,18 @@ export async function themeRoutes(fastify: FastifyInstance) {
           parseResult.data,
           req.user!.id,
         );
+
+        await auditService.record({
+          action: "theme.settings_updated",
+          actorUserId: req.user!.id,
+          targetType: "theme",
+          targetId: config.themeId,
+          metadata: {
+            themeId: config.themeId,
+            settings: config.settings,
+          },
+        });
+
         return reply.status(200).send({
           theme: {
             themeId: config.themeId,
@@ -224,6 +356,50 @@ export async function themeRoutes(fastify: FastifyInstance) {
     },
   });
 
+  // Uninstall / Delete an external theme
+  fastify.delete("/themes/:id", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("themes.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const { id } = req.params as { id: string };
+      try {
+        validateThemeId(id);
+        const result = await themeService.uninstallTheme(id, req.user!.id);
+
+        await auditService.record({
+          action: "theme.uninstalled",
+          actorUserId: req.user!.id,
+          targetType: "theme",
+          targetId: id,
+          metadata: { themeId: id },
+        });
+
+        return reply.status(200).send(result);
+      } catch (err) {
+        if (err instanceof ThemeNotFoundError) {
+          return reply.status(404).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        const e = asCodedError(err);
+        return reply.status(400).send({
+          errors: [
+            {
+              code: e.code || "THEME_UNINSTALL_FAILED",
+              message: e.message,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+    },
+  });
+
   // Create theme preview token
   fastify.post("/themes/:id/preview", {
     preHandler: [
@@ -247,28 +423,22 @@ export async function themeRoutes(fastify: FastifyInstance) {
           ],
         });
       }
-      const theme = getThemeMetadata(id);
+
+      const theme = await themeService.getTheme(id);
       if (!theme) {
         return reply.status(404).send({
           errors: [
             {
               code: "THEME_NOT_FOUND",
-              message: "Theme not found",
+              message: `Theme not found: ${id}`,
               requestId: req.id,
             },
           ],
         });
       }
 
-      const token = crypto.randomBytes(32).toString("hex");
-      const expiresAt = Date.now() + PREVIEW_TOKEN_TTL_MS;
-      PREVIEW_TOKENS.set(token, { themeId: id, expiresAt });
-
-      return reply.status(200).send({
-        previewToken: token,
-        expiresAt: new Date(expiresAt).toISOString(),
-        themeId: id,
-      });
+      const previewInfo = themeService.createPreviewToken(id);
+      return reply.status(200).send(previewInfo);
     },
   });
 
@@ -276,9 +446,8 @@ export async function themeRoutes(fastify: FastifyInstance) {
   fastify.get("/themes/preview/:token", {
     handler: async (req, reply) => {
       const { token } = req.params as { token: string };
-      const entry = PREVIEW_TOKENS.get(token);
-      if (!entry || entry.expiresAt < Date.now()) {
-        PREVIEW_TOKENS.delete(token);
+      const themeId = themeService.resolvePreviewToken(token);
+      if (!themeId) {
         return reply.status(404).send({
           errors: [
             {
@@ -289,7 +458,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
           ],
         });
       }
-      return reply.status(200).send({ themeId: entry.themeId });
+      return reply.status(200).send({ themeId });
     },
   });
 }

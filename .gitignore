@@ -12,6 +12,9 @@ coverage/
 .env.production.local
 content/*
 !content/.gitkeep
+!content/theme-starter/
+!content/theme-starter/**
+!content/vibress-theme-starter.zip
 apps/api/content/*
 !apps/api/content/.gitkeep
 tmp/

@@ -7,6 +7,8 @@ import {
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
 } from "../../../lib/theme-host";
+import { renderThemeTemplate } from "../../../lib/theme-renderer";
+import { mapPostToViewModel, mapSiteToViewModel } from "@vibress/theme-core";
 
 export const revalidate = 0;
 
@@ -51,9 +53,19 @@ export default async function PostPage({
   );
   const site = await getThemeSiteSettings();
 
-  return hostState.theme.components.Post({
-    post,
-    site,
-    settings: hostState.settings,
-  });
+  return renderThemeTemplate(
+    "post",
+    {
+      post: mapPostToViewModel(post as any),
+      site: mapSiteToViewModel(site),
+      settings: hostState.settings,
+    },
+    {
+      themeId: hostState.themeId,
+      themeVersion: hostState.themeVersion,
+      isBuiltIn: hostState.isBuiltIn,
+      settings: hostState.settings,
+      site,
+    },
+  );
 }

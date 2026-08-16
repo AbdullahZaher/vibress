@@ -2,6 +2,15 @@ import { z } from "zod";
 
 export const THEME_API_VERSION = 1;
 
+export const ThemeAuthorSchema = z.union([
+  z.string().trim().max(100),
+  z.object({
+    name: z.string().trim().min(1).max(100),
+    email: z.string().trim().email().optional(),
+    url: z.string().trim().url().optional(),
+  }),
+]);
+
 export const ThemeManifestSchema = z.object({
   id: z
     .string()
@@ -18,8 +27,9 @@ export const ThemeManifestSchema = z.object({
     .trim()
     .regex(/^\d+\.\d+\.\d+$/, "Theme version must be valid semver"),
   description: z.string().trim().max(500).optional(),
-  author: z.string().trim().max(100).optional(),
+  author: ThemeAuthorSchema.optional(),
   homepage: z.string().trim().url().optional(),
+  license: z.string().trim().max(50).optional(),
   previewImage: z.string().trim().max(500).optional(),
   themeApi: z.number().int().positive().default(THEME_API_VERSION),
   capabilities: z.array(z.string()).default([]),
@@ -34,26 +44,36 @@ export type ThemeSettingDefinition =
   | {
       type: "string";
       default: string;
+      label?: string;
+      description?: string;
       maxLength?: number;
       minLength?: number;
     }
   | {
       type: "boolean";
       default: boolean;
+      label?: string;
+      description?: string;
     }
   | {
       type: "number";
       default: number;
+      label?: string;
+      description?: string;
       min?: number;
       max?: number;
     }
   | {
       type: "color";
       default: string;
+      label?: string;
+      description?: string;
     }
   | {
       type: "select";
       default: string;
+      label?: string;
+      description?: string;
       options: string[];
     };
 
@@ -95,17 +115,61 @@ export class ThemeError extends Error {
   }
 }
 
+export class ThemeNotFoundError extends ThemeError {
+  constructor(themeId: string) {
+    super("THEME_NOT_FOUND", `Theme not found: ${themeId}`);
+    this.name = "ThemeNotFoundError";
+  }
+}
+
+export class ThemeInvalidError extends ThemeError {
+  constructor(message: string) {
+    super("THEME_INVALID", message);
+    this.name = "ThemeInvalidError";
+  }
+}
+
+export class ThemeIncompatibleError extends ThemeError {
+  constructor(themeId: string, actualApi: number) {
+    super(
+      "THEME_INCOMPATIBLE",
+      `Theme ${themeId} uses API version ${actualApi}, required ${THEME_API_VERSION}`,
+    );
+    this.name = "ThemeIncompatibleError";
+  }
+}
+
+export class ThemeSettingsInvalidError extends ThemeError {
+  constructor(message: string) {
+    super("THEME_SETTINGS_INVALID", message);
+    this.name = "ThemeSettingsInvalidError";
+  }
+}
+
+export class ThemeActivationFailedError extends ThemeError {
+  constructor(message: string) {
+    super("THEME_ACTIVATION_FAILED", message);
+    this.name = "ThemeActivationFailedError";
+  }
+}
+
+export class ThemeSecurityError extends ThemeError {
+  constructor(message: string) {
+    super("THEME_SECURITY_VIOLATION", message);
+    this.name = "ThemeSecurityError";
+  }
+}
+
 export function validateThemeId(themeId: string): void {
   if (!ThemeIdSchema.safeParse(themeId).success) {
-    throw new ThemeError("THEME_NOT_FOUND", `Invalid theme ID: ${themeId}`);
+    throw new ThemeNotFoundError(themeId);
   }
 }
 
 export function validateThemeManifest(manifest: unknown): ThemeManifest {
   const parsed = ThemeManifestSchema.safeParse(manifest);
   if (!parsed.success) {
-    throw new ThemeError(
-      "THEME_INVALID",
+    throw new ThemeInvalidError(
       `Invalid theme manifest: ${parsed.error.message}`,
     );
   }
@@ -114,10 +178,7 @@ export function validateThemeManifest(manifest: unknown): ThemeManifest {
 
 export function validateThemeCompatibility(manifest: ThemeManifest): void {
   if (manifest.themeApi !== THEME_API_VERSION) {
-    throw new ThemeError(
-      "THEME_INCOMPATIBLE",
-      `Theme API version ${manifest.themeApi} is incompatible with required version ${THEME_API_VERSION}`,
-    );
+    throw new ThemeIncompatibleError(manifest.id, manifest.themeApi);
   }
 }
 
@@ -151,7 +212,7 @@ export function validateThemeSettings(
   }
 
   if (errors.length > 0) {
-    throw new ThemeError("THEME_SETTINGS_INVALID", errors.join("; "));
+    throw new ThemeSettingsInvalidError(errors.join("; "));
   }
 
   return output;
@@ -233,10 +294,10 @@ export function validateThemeTemplateContract(
   availableTemplates: string[],
 ): { valid: boolean; missing: string[] } {
   const normalized = availableTemplates.map((t) =>
-    t.replace(/\.(hbs|html|jsx|tsx)$/, "").toLowerCase(),
+    t.replace(/\.(liquid|hbs|html|jsx|tsx)$/, "").toLowerCase(),
   );
   const missing = REQUIRED_THEME_TEMPLATES.filter(
-    (req) => !normalized.includes(req),
+    (req) => !normalized.includes(req) && !(req === "index" && normalized.includes("home")),
   );
   return {
     valid: missing.length === 0,

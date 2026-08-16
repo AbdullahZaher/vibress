@@ -7,6 +7,13 @@ import {
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
 } from "../../../lib/theme-host";
+import { renderThemeTemplate } from "../../../lib/theme-renderer";
+import {
+  mapAuthorToViewModel,
+  mapPostToViewModel,
+  mapPaginationToViewModel,
+  mapSiteToViewModel,
+} from "@vibress/theme-core";
 
 export const revalidate = 0;
 
@@ -38,8 +45,7 @@ export default async function AuthorArchivePage({
   searchParams?: Promise<{ page?: string }>;
 }) {
   const { slug } = await params;
-  const sp = await (searchParams ??
-    Promise.resolve<Record<string, string | undefined>>({}));
+  const sp = (await searchParams) ?? {};
   const pageNum = sp?.page ? parseInt(sp.page, 10) : 1;
   const validPage = isNaN(pageNum) || pageNum < 1 ? 1 : pageNum;
 
@@ -59,11 +65,21 @@ export default async function AuthorArchivePage({
   );
   const site = await getThemeSiteSettings();
 
-  return hostState.theme.components.AuthorArchive({
-    author: result.author,
-    posts: result.posts,
-    pagination: result.pagination,
-    site,
-    settings: hostState.settings,
-  });
+  return renderThemeTemplate(
+    "author",
+    {
+      author: mapAuthorToViewModel(result.author as any),
+      posts: (result.posts || []).map((p) => mapPostToViewModel(p as any)),
+      pagination: mapPaginationToViewModel(result.pagination),
+      site: mapSiteToViewModel(site),
+      settings: hostState.settings,
+    },
+    {
+      themeId: hostState.themeId,
+      themeVersion: hostState.themeVersion,
+      isBuiltIn: hostState.isBuiltIn,
+      settings: hostState.settings,
+      site,
+    },
+  );
 }

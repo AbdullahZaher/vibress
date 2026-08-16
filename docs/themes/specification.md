@@ -1,0 +1,132 @@
+# Vibress Theme Package Specification
+
+The Vibress Theme System allows publishers and developers to install, preview, customize, and activate themes directly through the Admin Panel from a `.zip` archive without requiring source code modifications, registry alterations, server rebuilds, or downtime.
+
+---
+
+## 1. Directory Structure
+
+A valid Vibress external theme package is a standard `.zip` archive structured as follows:
+
+```text
+my-theme.zip/
+├── theme.json               # Required manifest file
+├── settings.json            # Optional theme variables and schema definition
+├── preview.webp             # Theme preview banner (or .png / .jpg)
+├── templates/               # Liquid template definitions
+│   ├── home.liquid          # Required: Homepage & article feed
+│   ├── post.liquid          # Required: Single article view
+│   ├── page.liquid          # Required: Static page view
+│   ├── tag.liquid           # Optional: Tag topic archive
+│   ├── author.liquid        # Optional: Author profile archive
+│   └── archive.liquid       # Optional: Generic chronological archive
+├── partials/                # Reusable template components
+│   ├── header.liquid
+│   ├── footer.liquid
+│   └── pagination.liquid
+└── assets/                  # Public web assets (CSS, JS, images, fonts)
+    ├── css/
+    │   └── theme.css
+    ├── js/
+    │   └── theme.js
+    └── fonts/
+```
+
+---
+
+## 2. Theme Manifest (`theme.json`)
+
+The `theme.json` file is required in every theme package and must adhere to the `themeApi: 1` contract.
+
+```json
+{
+  "id": "my-custom-theme",
+  "name": "My Custom Theme",
+  "version": "1.0.0",
+  "description": "An elegant editorial publishing theme for Vibress.",
+  "author": {
+    "name": "Jane Developer",
+    "email": "jane@example.com",
+    "url": "https://example.com"
+  },
+  "homepage": "https://example.com/theme",
+  "license": "MIT",
+  "previewImage": "preview.webp",
+  "themeApi": 1,
+  "capabilities": ["post", "page", "tag", "author", "archive"],
+  "settingsSchemaVersion": 1
+}
+```
+
+### Manifest Fields
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **Yes** | Lowercase alphanumeric kebab-case identifier (e.g., `minimal-pro`). |
+| `name` | `string` | **Yes** | Human-readable name displayed in Admin UI. |
+| `version` | `string` | **Yes** | Semantic versioning format `MAJOR.MINOR.PATCH` (e.g. `1.2.0`). |
+| `themeApi` | `number` | **Yes** | Target theme API compatibility version. Currently must be `1`. |
+| `description` | `string` | No | Short overview of the theme design and intended use case. |
+| `author` | `string` \| `object` | No | Author name or object with `name`, `email`, and `url`. |
+| `previewImage` | `string` | No | Relative path to thumbnail image (e.g., `preview.webp`). |
+| `capabilities` | `string[]` | No | List of supported view types: `["post", "page", "tag", "author"]`. |
+| `settingsSchemaVersion` | `number` | No | Settings specification version (defaults to `1`). |
+
+---
+
+## 3. Settings Schema (`settings.json`)
+
+Themes can expose user-customizable visual options and variables in the Admin Panel by providing a `settings.json` file.
+
+```json
+{
+  "fields": [
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Accent Color",
+      "description": "Primary accent brand color for buttons and links.",
+      "default": "#6366f1"
+    },
+    {
+      "key": "typographyFamily",
+      "type": "select",
+      "label": "Typography Style",
+      "options": [
+        { "label": "Modern Sans", "value": "sans" },
+        { "label": "Editorial Serif", "value": "serif" }
+      ],
+      "default": "sans"
+    },
+    {
+      "key": "showPublicationDate",
+      "type": "boolean",
+      "label": "Show Publication Dates",
+      "default": true
+    },
+    {
+      "key": "postsPerPage",
+      "type": "number",
+      "label": "Posts Per Page",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "key": "heroHeadline",
+      "type": "string",
+      "label": "Hero Headline",
+      "default": "Welcome to our publication",
+      "maxLength": 100
+    }
+  ]
+}
+```
+
+### Supported Field Types
+
+- **`color`**: Renders a color picker input. Default must be a hex color (`#rrggbb`).
+- **`boolean`**: Renders a switch/checkbox toggle. Default must be `true` or `false`.
+- **`select`**: Renders a dropdown select list with options.
+- **`number`**: Renders a numeric stepper input with optional `min` and `max`.
+- **`string`**: Renders a single-line text input with optional `maxLength`.

@@ -5,8 +5,9 @@ export const ThemeManifestDtoSchema = z.object({
   name: z.string(),
   version: z.string(),
   description: z.string().optional(),
-  author: z.string().optional(),
+  author: z.union([z.string(), z.record(z.unknown())]).optional(),
   homepage: z.string().optional(),
+  license: z.string().optional(),
   previewImage: z.string().optional(),
   themeApi: z.number(),
   capabilities: z.array(z.string()),
@@ -18,6 +19,8 @@ export const ThemeSummaryDtoSchema = z.object({
   manifest: ThemeManifestDtoSchema,
   settingsSchema: z.record(z.unknown()),
   isActive: z.boolean(),
+  isBuiltIn: z.boolean().optional(),
+  previewImage: z.string().optional(),
 });
 export type ThemeSummaryDto = z.infer<typeof ThemeSummaryDtoSchema>;
 
@@ -26,6 +29,8 @@ export const ActiveThemeDtoSchema = z.object({
   themeVersion: z.string(),
   settings: z.record(z.unknown()),
   settingsSchemaVersion: z.number(),
+  isBuiltIn: z.boolean().optional(),
+  previewImage: z.string().optional(),
 });
 export type ActiveThemeDto = z.infer<typeof ActiveThemeDtoSchema>;
 
@@ -40,6 +45,24 @@ export const ThemeActivationResponseSchema = z.object({
 export type ThemeActivationResponse = z.infer<
   typeof ThemeActivationResponseSchema
 >;
+
+export const ThemeUploadResponseSchema = z.object({
+  theme: z.object({
+    id: z.string(),
+    themeId: z.string(),
+    name: z.string(),
+    version: z.string(),
+    themeApiVersion: z.number(),
+    description: z.string().nullable().optional(),
+    author: z.string().nullable().optional(),
+    previewImage: z.string().nullable().optional(),
+    manifest: ThemeManifestDtoSchema,
+    settingsSchema: z.record(z.unknown()),
+    status: z.string(),
+    isBuiltIn: z.boolean(),
+  }),
+});
+export type ThemeUploadResponse = z.infer<typeof ThemeUploadResponseSchema>;
 
 export const ThemePreviewResponseSchema = z.object({
   previewToken: z.string(),

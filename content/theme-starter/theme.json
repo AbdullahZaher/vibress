@@ -1,0 +1,17 @@
+{
+  "id": "vibress-starter-theme",
+  "name": "Vibress Starter Theme",
+  "version": "1.0.0",
+  "description": "Clean, elegant starter theme for Vibress with full Liquid templating support, dark mode, and responsive layout.",
+  "author": {
+    "name": "Vibress Team",
+    "email": "support@vibress.org",
+    "url": "https://vibress.org"
+  },
+  "homepage": "https://vibress.org",
+  "license": "MIT",
+  "previewImage": "preview.webp",
+  "themeApi": 1,
+  "capabilities": ["post", "page", "tag", "author", "archive"],
+  "settingsSchemaVersion": 1
+}

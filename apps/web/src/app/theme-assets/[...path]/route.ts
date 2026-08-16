@@ -13,6 +13,7 @@ function getMimeType(fileName: string): string {
   if (fileName.endsWith(".png")) return "image/png";
   if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"))
     return "image/jpeg";
+  if (fileName.endsWith(".webp")) return "image/webp";
   if (fileName.endsWith(".svg")) return "image/svg+xml";
   return "application/octet-stream";
 }
@@ -20,30 +21,47 @@ function getMimeType(fileName: string): string {
 function resolveThemeAssetPath(
   themeId: string,
   version: string,
-  fileName: string,
+  relativePath: string,
 ): string | null {
-  const themeFolder = themeId.replace(/^vibress-/, "");
+  const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
+  const cleanVersion = version.replace(/[^0-9.]/g, "");
+  const fileName = path.basename(relativePath);
 
-  // Normalize filenames for legacy/alternate alias paths
+  // 1. External theme storage paths (e.g. content/themes/{themeId}/{version}/assets/...)
+  const externalCandidates = [
+    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion, relativePath),
+    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion, "assets", relativePath),
+    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion, relativePath),
+    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion, "assets", relativePath),
+  ];
+
+  for (const p of externalCandidates) {
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+      return p;
+    }
+  }
+
+  // 2. Built-in legacy theme paths
+  const themeFolder = cleanId.replace(/^vibress-/, "");
   let resolvedFile = fileName;
   if (
-    themeId === "vibress-default" &&
+    cleanId === "vibress-default" &&
     (fileName === "default.css" || fileName === "casper.css")
   ) {
     resolvedFile = "casper.css";
   } else if (
-    themeId === "vibress-minimal" &&
+    cleanId === "vibress-minimal" &&
     (fileName === "minimal.css" || fileName === "source.css")
   ) {
     resolvedFile = "source.css";
   } else if (
-    themeId === "vibress-molten" &&
+    cleanId === "vibress-molten" &&
     (fileName === "molten.css" || fileName === "screen.css")
   ) {
     resolvedFile = "screen.css";
   }
 
-  const possiblePaths = [
+  const builtinPaths = [
     path.join(process.cwd(), "src", "themes", themeFolder, resolvedFile),
     path.join(
       process.cwd(),
@@ -58,8 +76,8 @@ function resolveThemeAssetPath(
       process.cwd(),
       "public",
       "theme-assets",
-      themeId,
-      version,
+      cleanId,
+      cleanVersion,
       resolvedFile,
     ),
     path.join(
@@ -68,23 +86,23 @@ function resolveThemeAssetPath(
       "web",
       "public",
       "theme-assets",
-      themeId,
-      version,
+      cleanId,
+      cleanVersion,
       resolvedFile,
     ),
-    path.join(process.cwd(), "public", "theme-assets", themeId, resolvedFile),
+    path.join(process.cwd(), "public", "theme-assets", cleanId, resolvedFile),
     path.join(
       process.cwd(),
       "apps",
       "web",
       "public",
       "theme-assets",
-      themeId,
+      cleanId,
       resolvedFile,
     ),
   ];
 
-  for (const p of possiblePaths) {
+  for (const p of builtinPaths) {
     if (fs.existsSync(p) && fs.statSync(p).isFile()) {
       return p;
     }
@@ -104,19 +122,21 @@ export async function GET(
 
   const themeId = segments[0] || "";
   const version = segments[1] || "";
+  const relativePath = segments.slice(2).join("/") || segments[segments.length - 1] || "";
   const fileName = segments[segments.length - 1] || "";
 
   // Trusted allowlist — no path traversal
   if (
     !/^[a-z0-9-]+$/.test(themeId) ||
     !/^\d+\.\d+\.\d+$/.test(version) ||
-    fileName.includes("..")
+    relativePath.includes("..") ||
+    relativePath.includes("\0")
   ) {
     return new NextResponse("Not found", { status: 404 });
   }
 
   try {
-    const assetPath = resolveThemeAssetPath(themeId, version, fileName);
+    const assetPath = resolveThemeAssetPath(themeId, version, relativePath);
     if (!assetPath) {
       return new NextResponse("Asset Not Found", { status: 404 });
     }

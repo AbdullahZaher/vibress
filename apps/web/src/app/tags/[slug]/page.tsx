@@ -7,6 +7,13 @@ import {
   getThemeSiteSettings,
   getPreviewThemeIdFromHeaders,
 } from "../../../lib/theme-host";
+import { renderThemeTemplate } from "../../../lib/theme-renderer";
+import {
+  mapTagToViewModel,
+  mapPostToViewModel,
+  mapPaginationToViewModel,
+  mapSiteToViewModel,
+} from "@vibress/theme-core";
 
 export const revalidate = 0;
 
@@ -58,11 +65,21 @@ export default async function TagArchivePage({
   );
   const site = await getThemeSiteSettings();
 
-  return hostState.theme.components.TagArchive({
-    tag: result.tag,
-    posts: result.posts,
-    pagination: result.pagination,
-    site,
-    settings: hostState.settings,
-  });
+  return renderThemeTemplate(
+    "tag",
+    {
+      tag: mapTagToViewModel(result.tag as any),
+      posts: (result.posts || []).map((p) => mapPostToViewModel(p as any)),
+      pagination: mapPaginationToViewModel(result.pagination),
+      site: mapSiteToViewModel(site),
+      settings: hostState.settings,
+    },
+    {
+      themeId: hostState.themeId,
+      themeVersion: hostState.themeVersion,
+      isBuiltIn: hostState.isBuiltIn,
+      settings: hostState.settings,
+      site,
+    },
+  );
 }

@@ -113,7 +113,10 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         comments: site.comments,
         theme: {
           themeId: active?.manifest.id || "vibress-default",
+          themeVersion: active?.manifest.version || "1.0.0",
+          isBuiltIn: active?.isBuiltIn ?? true,
           settings: active?.settings || {},
+          manifest: active?.manifest,
         },
       });
     },
