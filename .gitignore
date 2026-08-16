@@ -61,3 +61,5 @@ packages/storage-s3/src/__tests__/*.d.ts
 
 # Local plan/scratch documents (never commit)
 VIBRESS_POST_V1_HARDENING_MASTER_PLAN.md
+backups/
+
