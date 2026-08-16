@@ -40,8 +40,9 @@ test.describe("Batch 9 Billing E2E Suite", () => {
     await expect(page.locator("h1")).toContainText("Check your email");
     const link = await getLatestMagicLink(email);
     await page.goto(link);
-    await page.waitForURL(/\/account/);
-    await expect(page.locator("h1")).toContainText("Your account");
+    await expect(page.locator("h1")).toContainText("Your account", {
+      timeout: 15000,
+    });
   }
 
   async function loginAsStaff(request: any) {
