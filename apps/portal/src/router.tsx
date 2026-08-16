@@ -30,9 +30,9 @@ export function Router() {
 
   if (path.startsWith("/auth/verify")) {
     const token =
-      new URLSearchParams(window.location.search.split("?")[1] || "").get(
-        "token",
-      ) || "";
+      new URLSearchParams(window.location.search).get("token") ||
+      new URLSearchParams(window.location.hash.split("?")[1] || "").get("token") ||
+      "";
     return <VerifyPage token={token} />;
   }
   if (path.startsWith("/check-email")) {

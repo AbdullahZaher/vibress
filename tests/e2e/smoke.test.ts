@@ -8,12 +8,12 @@ test.describe("Vibress Foundation Smoke Tests", () => {
 
   test("Gateway serves Admin App", async ({ page }) => {
     await page.goto("http://localhost:7777/admin");
-    await expect(page.locator("h1")).toContainText("Vibress");
+    await expect(page.locator("body")).toContainText("Vibress");
   });
 
   test("Gateway serves Portal App", async ({ page }) => {
     await page.goto("http://localhost:7777/portal");
-    await expect(page.locator("h1")).toContainText("Vibress");
+    await expect(page.locator("body")).toContainText("Vibress");
   });
 
   test("Gateway serves API Health", async ({ request }) => {

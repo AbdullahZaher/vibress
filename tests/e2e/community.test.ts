@@ -15,8 +15,14 @@ test.describe("Batch 11 Community E2E Suite", () => {
           const detail = await (
             await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
           ).json();
-          const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
-          if (link) return link;
+          const html = detail.HTML || "";
+          const text = detail.Text || "";
+          const raw =
+            html.match(/href="([^"]*token=[^"]*)"/i)?.[1] ||
+            html.match(/href="([^"]+)"/)?.[1] ||
+            text.match(/(https?:\/\/[^\s]+token=[^\s]+)/i)?.[1] ||
+            text.match(/(https?:\/\/[^\s]+)/)?.[1];
+          if (raw) return raw.replace(/&amp;/g, "&").replace(/[">]+$/, "");
         }
       } catch {}
       await new Promise((r) => setTimeout(r, 250));
