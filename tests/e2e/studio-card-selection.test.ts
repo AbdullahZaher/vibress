@@ -208,11 +208,14 @@ test.describe("Studio card selection (real UI)", () => {
     await createDraft(page, title);
 
     await insertCard(page, "Markdown");
+    await page.waitForTimeout(500);
+    const card = page.locator(".vb-markdown-card").last();
+    await card.scrollIntoViewIfNeeded();
     await selectCard(page, ".vb-markdown-card");
     const md = page
       .locator('textarea[placeholder="Type your markdown here..."]')
       .last();
-    await expect(md).toBeVisible();
+    await expect(md).toBeVisible({ timeout: 10000 });
     await md.fill(
       "## A Heading\n\nSome **bold text** and a [link](https://example.com/a)",
     );

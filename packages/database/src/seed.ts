@@ -5,6 +5,9 @@ import {
   rolePermissions,
   users,
   userRoles,
+  products,
+  plans,
+  newsletters,
 } from "./schema";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -366,6 +369,49 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
         }
       }
     }
+  }
+
+  // 4. Seed baseline default product and plan if empty
+  const existingProducts = await db.select().from(products).limit(1);
+  if (existingProducts.length === 0) {
+    const prodId = crypto.randomUUID();
+    await db.insert(products).values({
+      id: prodId,
+      key: "default-membership",
+      name: "Default Membership",
+      visibility: "public",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(plans).values({
+      id: crypto.randomUUID(),
+      productId: prodId,
+      key: "default-monthly",
+      name: "Monthly Plan",
+      amountMinor: 500,
+      currency: "USD",
+      billingInterval: "month",
+      billingType: "recurring",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  // 5. Seed baseline default newsletter if empty
+  const existingNewsletters = await db.select().from(newsletters).limit(1);
+  if (existingNewsletters.length === 0) {
+    await db.insert(newsletters).values({
+      id: crypto.randomUUID(),
+      key: "default-newsletter",
+      name: "Default Newsletter",
+      senderName: "Vibress",
+      senderEmail: "news@vibress.local",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 
   console.log("Database seeding complete.");
