@@ -61,6 +61,7 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
   }
 
   async function signupMember(page: any, email: string): Promise<void> {
+    await page.context().clearCookies();
     await page.goto(`${API}/portal/`);
     await page.fill("#email", email);
     await page.click('button[type="submit"]');
