@@ -23,6 +23,12 @@ test.describe.serial("First-Run Setup Wizard (fresh instance)", () => {
       const res = await fetch(`${BASE}/api/setup/v1/status`);
       if (!res.ok) {
         test.skip(true, "Setup E2E instance (port 8899) not running; skipping isolated setup suite");
+        return;
+      }
+      const data = await res.json();
+      if (data.installed) {
+        test.skip(true, "Setup E2E instance (port 8899) already completed installation; skipping");
+        return;
       }
     } catch {
       test.skip(true, "Setup E2E instance (port 8899) not reachable; skipping isolated setup suite");

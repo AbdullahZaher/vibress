@@ -37,12 +37,24 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     }).catch(() => {});
   });
 
-  async function getLatestMagicLink(email: string): Promise<string> {
-    for (let i = 0; i < 25; i++) {
+  async function getLatestMagicLink(
+    email: string,
+    afterTimestamp = 0,
+  ): Promise<string> {
+    for (let i = 0; i < 30; i++) {
       const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
       const data = await res.json();
       const matches = (data.messages || [])
-        .filter((m: any) => m.To?.[0]?.Address === email)
+        .filter((m: any) => {
+          const matchEmail =
+            m.To?.some(
+              (t: any) => t.Address?.toLowerCase() === email.toLowerCase(),
+            ) || m.To?.[0]?.Address?.toLowerCase() === email.toLowerCase();
+          const matchTime = afterTimestamp
+            ? new Date(m.Created).getTime() >= afterTimestamp - 1000
+            : true;
+          return matchEmail && matchTime;
+        })
         .sort(
           (a: any, b: any) =>
             new Date(b.Created).getTime() - new Date(a.Created).getTime(),
@@ -68,11 +80,12 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
 
   async function signupMember(page: any, email: string): Promise<void> {
     await page.context().clearCookies();
+    const startTime = Date.now();
     await page.goto(`${API}/portal/`);
     await page.fill("#email", email);
     await page.click('button[type="submit"]');
     await expect(page.locator("h1")).toContainText("Check your email");
-    const link = await getLatestMagicLink(email);
+    const link = await getLatestMagicLink(email, startTime);
     await page.goto(link);
     await expect(page.locator("h1")).toContainText("Your account");
   }
