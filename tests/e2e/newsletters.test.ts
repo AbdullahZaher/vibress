@@ -25,11 +25,7 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     };
   }
 
-  test.beforeEach(async () => {
-    await fetch("http://127.0.0.1:8025/api/v1/messages", {
-      method: "DELETE",
-    }).catch(() => {});
-  });
+
 
   async function getLatestMagicLink(email: string): Promise<string> {
     for (let i = 0; i < 30; i++) {
