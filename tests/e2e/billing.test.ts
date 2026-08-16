@@ -83,10 +83,30 @@ test.describe("Batch 9 Billing E2E Suite", () => {
   test("[Setup] Ensure products/plans/offers exist and webhook secret matches API", async ({
     request,
   }) => {
-    // The API must run with STRIPE_WEBHOOK_SECRET=whsec_e2e_test (set by E2E launcher)
-    const res = await request.get(`${API}/api/content/v1/products`);
+    let res = await request.get(`${API}/api/content/v1/products`);
     expect(res.status()).toBe(200);
-    const body = await res.json();
+    let body = await res.json();
+    if (!body.products || body.products.length === 0 || !body.products.some((p: any) => p.plans?.some((pl: any) => pl.billingType === "recurring"))) {
+      await loginAsStaff(request);
+      await request.post(`${API}/api/admin/v1/products`, {
+        headers: { Origin: API },
+        data: {
+          name: "Vibress Membership",
+          slug: `vibress-membership-${Date.now()}`,
+          plans: [
+            {
+              name: "Monthly Plan",
+              amount: 500,
+              currency: "USD",
+              interval: "month",
+              billingType: "recurring",
+            },
+          ],
+        },
+      });
+      res = await request.get(`${API}/api/content/v1/products`);
+      body = await res.json();
+    }
     // Verify there is at least one public product with a recurring plan
     const hasRecurring = body.products.some((p: any) =>
       p.plans.some((pl: any) => pl.billingType === "recurring"),

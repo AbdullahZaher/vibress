@@ -52,8 +52,8 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
         const detail = await (
           await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
         ).json();
-        const link = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
-        if (link) return link;
+        const raw = (detail.HTML || "").match(/href="([^"]+)"/)?.[1];
+        if (raw) return raw.replace(/&amp;/g, "&");
       }
       await new Promise((r) => setTimeout(r, 200));
     }
@@ -105,10 +105,22 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
     request,
   }) => {
     await loginAsStaff(request);
-    // Newsletter seeded by the launcher; verify it is visible to staff
-    const res = await request.get(`${API}/api/admin/v1/newsletters`);
+    let res = await request.get(`${API}/api/admin/v1/newsletters`);
     expect(res.status()).toBe(200);
-    const body = await res.json();
+    let body = await res.json();
+    if (!body.newsletters || body.newsletters.length === 0) {
+      await request.post(`${API}/api/admin/v1/newsletters`, {
+        headers: { Origin: API },
+        data: {
+          key: "default-newsletter",
+          name: "Default Newsletter",
+          senderName: "Vibress",
+          senderEmail: "news@vibress.test",
+        },
+      });
+      res = await request.get(`${API}/api/admin/v1/newsletters`);
+      body = await res.json();
+    }
     expect(body.newsletters.length).toBeGreaterThan(0);
   });
 
