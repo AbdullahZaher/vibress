@@ -1,0 +1,81 @@
+<div class="theme-wrapper font-{{ settings.typographyFamily | default: 'sans' }}">
+  {% include 'header' %}
+
+  <main class="theme-main theme-container">
+    <section class="hero-section">
+      <h1 class="hero-title">{{ settings.heroHeadline | default: site.title }}</h1>
+      {% if site.description %}
+        <p class="hero-subtitle">{{ site.description }}</p>
+      {% endif %}
+    </section>
+
+    {% if tags.size > 0 %}
+      <div class="tags-filter-bar">
+        <span class="tags-filter-label">Explore topics:</span>
+        <div class="tags-chips">
+          {% for tag in tags %}
+            <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <section class="posts-grid">
+      {% if posts.size == 0 %}
+        <div class="empty-state">
+          <h3>No articles published yet.</h3>
+          <p>Check back soon for new stories.</p>
+        </div>
+      {% else %}
+        {% for post in posts %}
+          <article class="post-card {% if post.featured %}post-card-featured{% endif %}">
+            {% if post.featureImage.url %}
+              <a href="{{ post.url }}" class="post-card-image-link">
+                <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="post-card-image" loading="lazy" />
+              </a>
+            {% endif %}
+
+            <div class="post-card-content">
+              {% if post.primaryTag %}
+                <a href="{{ post.primaryTag.url }}" class="post-card-tag">#{{ post.primaryTag.name }}</a>
+              {% endif %}
+
+              <h2 class="post-card-title">
+                <a href="{{ post.url }}">{{ post.title }}</a>
+              </h2>
+
+              <p class="post-card-excerpt">
+                {{ post.excerpt | excerpt: 160 }}
+              </p>
+
+              <div class="post-card-meta">
+                {% if post.primaryAuthor and settings.showAuthorAvatars %}
+                  <div class="post-card-author">
+                    {% if post.primaryAuthor.avatar %}
+                      <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="author-avatar" />
+                    {% endif %}
+                    <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name }}</a>
+                  </div>
+                {% endif %}
+
+                {% if settings.showPublicationDate and post.publishedAt %}
+                  <time datetime="{{ post.publishedAt }}" class="post-card-date">
+                    {{ post.publishedAt | format_date }}
+                  </time>
+                {% endif %}
+
+                {% if post.readingTimeMinutes %}
+                  <span class="post-reading-time">{{ post.readingTimeMinutes }} min read</span>
+                {% endif %}
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      {% endif %}
+    </section>
+
+    {% include 'pagination' %}
+  </main>
+
+  {% include 'footer' %}
+</div>

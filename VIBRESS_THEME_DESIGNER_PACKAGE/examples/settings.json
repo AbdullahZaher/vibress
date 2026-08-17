@@ -1,0 +1,54 @@
+{
+  "fields": [
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Brand Accent Color",
+      "description": "Primary accent color used for buttons, interactive links, and highlights.",
+      "default": "#6366f1"
+    },
+    {
+      "key": "heroHeadline",
+      "type": "string",
+      "label": "Homepage Hero Headline",
+      "description": "Custom title displayed on the homepage hero banner.",
+      "default": "Ideas, Stories & Publications",
+      "maxLength": 100
+    },
+    {
+      "key": "showReadingTime",
+      "type": "boolean",
+      "label": "Show Reading Time",
+      "description": "Display calculated reading time (e.g. '4 min read') on article cards.",
+      "default": true
+    },
+    {
+      "key": "showAuthorAvatars",
+      "type": "boolean",
+      "label": "Show Author Avatars",
+      "description": "Display author profile photos on article headers and bylines.",
+      "default": true
+    },
+    {
+      "key": "postsPerPage",
+      "type": "number",
+      "label": "Articles Per Page",
+      "description": "Number of articles displayed per pagination page.",
+      "default": 10,
+      "min": 2,
+      "max": 50
+    },
+    {
+      "key": "typographyStyle",
+      "type": "select",
+      "label": "Typography Style",
+      "description": "Base font family styling for headings and body content.",
+      "options": [
+        { "label": "Modern Sans (Inter)", "value": "sans" },
+        { "label": "Editorial Serif (Georgia)", "value": "serif" },
+        { "label": "Technical Mono (JetBrains Mono)", "value": "mono" }
+      ],
+      "default": "sans"
+    }
+  ]
+}

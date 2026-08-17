@@ -1,0 +1,23 @@
+{
+  "id": "my-custom-theme",
+  "name": "My Custom Vibress Theme",
+  "version": "1.0.0",
+  "description": "An example custom theme manifest demonstrating all available Theme API v1 fields.",
+  "author": {
+    "name": "Creative Agency",
+    "email": "hello@agency.example",
+    "url": "https://agency.example"
+  },
+  "homepage": "https://agency.example/themes/my-custom-theme",
+  "license": "MIT",
+  "previewImage": "preview.webp",
+  "themeApi": 1,
+  "capabilities": [
+    "post",
+    "page",
+    "tag",
+    "author",
+    "archive"
+  ],
+  "settingsSchemaVersion": 1
+}

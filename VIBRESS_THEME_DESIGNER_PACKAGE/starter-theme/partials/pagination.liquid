@@ -1,0 +1,19 @@
+{% if pagination.pages > 1 %}
+  <nav class="theme-pagination" aria-label="Pagination">
+    <div class="pagination-inner">
+      {% if pagination.prev %}
+        <a href="{{ pagination.prev | pagination_url }}" class="pagination-btn pagination-prev">&larr; Newer Articles</a>
+      {% else %}
+        <span class="pagination-btn pagination-disabled">&larr; Newer Articles</span>
+      {% endif %}
+
+      <span class="pagination-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+
+      {% if pagination.next %}
+        <a href="{{ pagination.next | pagination_url }}" class="pagination-btn pagination-next">Older Articles &rarr;</a>
+      {% else %}
+        <span class="pagination-btn pagination-disabled">Older Articles &rarr;</span>
+      {% endif %}
+    </div>
+  </nav>
+{% endif %}

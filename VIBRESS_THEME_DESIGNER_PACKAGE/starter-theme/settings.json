@@ -1,0 +1,54 @@
+{
+  "fields": [
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Accent Color",
+      "description": "Primary accent brand color for buttons, links, and highlights.",
+      "default": "#6366f1"
+    },
+    {
+      "key": "typographyFamily",
+      "type": "select",
+      "label": "Typography Style",
+      "description": "Base font styling for headings and body content.",
+      "options": [
+        { "label": "Modern Sans (Inter)", "value": "sans" },
+        { "label": "Editorial Serif (Georgia)", "value": "serif" },
+        { "label": "Technical Mono (JetBrains Mono)", "value": "mono" }
+      ],
+      "default": "sans"
+    },
+    {
+      "key": "showPublicationDate",
+      "type": "boolean",
+      "label": "Show Publication Dates",
+      "description": "Display post publication dates on home and post pages.",
+      "default": true
+    },
+    {
+      "key": "showAuthorAvatars",
+      "type": "boolean",
+      "label": "Show Author Avatars",
+      "description": "Display author avatars and bios in article headers.",
+      "default": true
+    },
+    {
+      "key": "postsPerPage",
+      "type": "number",
+      "label": "Posts Per Page",
+      "description": "Maximum number of articles displayed per pagination page.",
+      "default": 10,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "key": "heroHeadline",
+      "type": "string",
+      "label": "Custom Hero Headline",
+      "description": "Optional custom headline shown on the homepage hero banner.",
+      "default": "Ideas, Stories & Publications",
+      "maxLength": 120
+    }
+  ]
+}
