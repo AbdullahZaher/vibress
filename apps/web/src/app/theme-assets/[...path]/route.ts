@@ -129,7 +129,10 @@ export async function GET(
 ) {
   const { path: segments } = await params;
   if (!segments || segments.length < 2) {
-    return new NextResponse("Not found", { status: 404 });
+    return new NextResponse("Not found", { 
+      status: 404,
+      headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
+    });
   }
 
   const themeId = segments[0] || "";
@@ -144,13 +147,19 @@ export async function GET(
     relativePath.includes("..") ||
     relativePath.includes("\0")
   ) {
-    return new NextResponse("Not found", { status: 404 });
+    return new NextResponse("Not found", { 
+      status: 404,
+      headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
+    });
   }
 
   try {
     const assetPath = resolveThemeAssetPath(themeId, version, relativePath);
     if (!assetPath) {
-      return new NextResponse("Asset Not Found", { status: 404 });
+      return new NextResponse("Asset Not Found", { 
+        status: 404,
+        headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
+      });
     }
 
     const mimeType = getMimeType(fileName);

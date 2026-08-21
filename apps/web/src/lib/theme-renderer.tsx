@@ -217,7 +217,8 @@ export async function renderThemeTemplate(
   ];
   for (const candidate of cssCandidates) {
     if (fileMap.has(candidate)) {
-      cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}`;
+      const cacheBuster = process.env.GIT_SHA || Date.now().toString();
+      cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}?v=${cacheBuster}`;
       break;
     }
   }
