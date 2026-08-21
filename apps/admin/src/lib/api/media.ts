@@ -46,9 +46,23 @@ export async function uploadMediaApi(
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const errorDetail = data.errors?.[0] || {};
+    const fallbackMessage =
+      response.status === 413
+        ? "File exceeds the maximum upload size limit"
+        : response.status === 422
+          ? "File type or format is not supported"
+          : response.status === 403
+            ? "Permission denied to upload media"
+            : response.status === 401
+              ? "Please log in to upload media"
+              : "Media upload failed";
+
+    const message =
+      errorDetail.message || data.message || data.error || fallbackMessage;
+
     throw new ApiError(
-      errorDetail.code || "UPLOAD_FAILED",
-      errorDetail.message || "Media upload failed",
+      errorDetail.code || data.code || "UPLOAD_FAILED",
+      message,
       response.status,
     );
   }

@@ -92,8 +92,8 @@ export const buildApp = () => {
   fastify.register(multipart, {
     limits: {
       fileSize: 524288000, // 500MB max limit at multipart route layer
-      files: 1,
-      fields: 10,
+      files: 10,
+      fields: 50,
     },
   });
 

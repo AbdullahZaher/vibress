@@ -36,14 +36,14 @@ This is a real-world example of a design specification for building a high-conve
 ## 📐 Layout Architecture
 
 ### 1. Hero Section (`templates/home.liquid`)
-* **Dynamic Headline**: `{{ settings.heroTitle | default: site.title }}` styled with a gradient text clip:
+* **Dynamic Headline**: `{{ settings.heroTitle | default: site.title | escape }}` styled with a gradient text clip:
   ```css
   background: var(--theme-accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   ```
 * **Tagline & CTA**: Direct CTA button linking to membership portal (`/portal/signup`).
-* **Member Count Badge**: `Join 10,000+ founders and engineers`.
+* **Member Count Badge**: `Join 10,000+ founders and engineers` *(static marketing copy unless Core exposes a dynamic metric)*.
 
 ### 2. Feature Highlights (Bento Grid)
 * Modern glassmorphic cards (`backdrop-filter: blur(12px)`).

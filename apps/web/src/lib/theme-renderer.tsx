@@ -13,11 +13,22 @@ const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute in-memory cache
 
 function findThemeDirectory(themeId: string, version: string): string | null {
+  const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
+  const cleanVersion = version.replace(/[^0-9.]/g, "");
+
+  const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
+
   const candidates = [
-    path.join(process.cwd(), "content", "themes", themeId, version),
-    path.join(process.cwd(), "..", "..", "content", "themes", themeId, version),
+    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion)] : []),
+    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "content", "theme-starter"),
     path.join(process.cwd(), "..", "..", "content", "theme-starter"),
+    path.join(process.cwd(), "..", "api", "content", "theme-starter"),
+    path.join(process.cwd(), "apps", "api", "content", "theme-starter"),
   ];
 
   for (const p of candidates) {
@@ -193,13 +204,22 @@ export async function renderThemeTemplate(
   const rawHtml = await engine.renderFile(templateName, fullContext);
   const cleanHtml = cleanThemeHtml(rawHtml);
 
-  // Check if theme has an assets/css/theme.css or stylesheet that should be linked
+  // Check if theme has a primary stylesheet that should be linked
   let cssHref: string | null = null;
-  if (fileMap.has("assets/css/theme.css") || fileMap.has("assets/theme.css")) {
-    const cssFile = fileMap.has("assets/css/theme.css")
-      ? "assets/css/theme.css"
-      : "assets/theme.css";
-    cssHref = `/theme-assets/${themeId}/${themeVersion}/${cssFile}`;
+  const cssCandidates = [
+    "assets/css/theme.css",
+    "assets/theme.css",
+    "assets/css/style.css",
+    "assets/css/screen.css",
+    "assets/css/main.css",
+    "theme.css",
+    "style.css",
+  ];
+  for (const candidate of cssCandidates) {
+    if (fileMap.has(candidate)) {
+      cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}`;
+      break;
+    }
   }
 
   return (

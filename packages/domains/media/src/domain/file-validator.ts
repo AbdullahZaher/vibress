@@ -40,8 +40,6 @@ const DANGEROUS_EXTENSIONS = new Set([
   "html",
   "htm",
   "xhtml",
-  "svg",
-  "xml",
   "app",
   "vbs",
   "ps1",
@@ -57,7 +55,6 @@ const DANGEROUS_MIMES = new Set([
   "application/x-msdos-program",
   "text/html",
   "application/xhtml+xml",
-  "image/svg+xml",
   "application/javascript",
   "text/javascript",
   "application/x-php",
@@ -66,9 +63,16 @@ const DANGEROUS_MIMES = new Set([
 const ALLOWED_IMAGE_MIMES = new Map<string, string>([
   ["image/jpeg", "jpg"],
   ["image/jpg", "jpg"],
+  ["image/pjpeg", "jpg"],
   ["image/png", "png"],
+  ["image/x-png", "png"],
   ["image/webp", "webp"],
   ["image/gif", "gif"],
+  ["image/svg+xml", "svg"],
+  ["image/x-icon", "ico"],
+  ["image/vnd.microsoft.icon", "ico"],
+  ["image/ico", "ico"],
+  ["image/avif", "avif"],
 ]);
 
 const ALLOWED_VIDEO_MIMES = new Map<string, string>([
@@ -84,6 +88,42 @@ const ALLOWED_AUDIO_MIMES = new Map<string, string>([
   ["audio/wav", "wav"],
   ["audio/x-wav", "wav"],
 ]);
+
+export function isSvgBuffer(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  const snippet = buffer
+    .subarray(0, Math.min(buffer.length, 4096))
+    .toString("utf8")
+    .trim()
+    .toLowerCase();
+  return (
+    snippet.startsWith("<svg") ||
+    snippet.startsWith("<?xml") ||
+    snippet.includes("<svg")
+  );
+}
+
+export function validateSvgSafety(buffer: Buffer): void {
+  const content = buffer.toString("utf8").toLowerCase();
+  const dangerousPatterns = [
+    /<script\b/i,
+    /<iframe\b/i,
+    /<object\b/i,
+    /<embed\b/i,
+    /<form\b/i,
+    /javascript:/i,
+    /data:text\/html/i,
+    /\bon[a-z]+\s*=/i, // inline event handlers (onload=, onerror=, etc.)
+  ];
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(content)) {
+      throw new MediaInvalidFileError(
+        "SVG file contains unsafe scripts or executable elements",
+      );
+    }
+  }
+}
 
 export function computeSha256(buffer: Buffer): string {
   return crypto.createHash("sha256").update(buffer).digest("hex");
@@ -164,6 +204,49 @@ export function detectFileSignature(
     return { mime: "image/webp", ext: "webp", assetType: "image" };
   }
 
+  // ICO: 00 00 01 00
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x00 &&
+    buffer[1] === 0x00 &&
+    buffer[2] === 0x01 &&
+    buffer[3] === 0x00
+  ) {
+    return { mime: "image/x-icon", ext: "ico", assetType: "image" };
+  }
+
+  // AVIF / ftypavif or ftypavis: offset 4: 66 74 79 70 ('ftyp') and offset 8: 'avif' / 'avis'
+  if (
+    buffer.length >= 12 &&
+    buffer[4] === 0x66 &&
+    buffer[5] === 0x74 &&
+    buffer[6] === 0x79 &&
+    buffer[7] === 0x70 &&
+    buffer[8] === 0x61 &&
+    buffer[9] === 0x76 &&
+    buffer[10] === 0x69 &&
+    (buffer[11] === 0x66 || buffer[11] === 0x73)
+  ) {
+    return { mime: "image/avif", ext: "avif", assetType: "image" };
+  }
+
+  // SVG (image/svg+xml)
+  if (isSvgBuffer(buffer)) {
+    validateSvgSafety(buffer);
+    return { mime: "image/svg+xml", ext: "svg", assetType: "image" };
+  }
+
+  // PDF: %PDF (25 50 44 46)
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x25 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x44 &&
+    buffer[3] === 0x46
+  ) {
+    return { mime: "application/pdf", ext: "pdf", assetType: "file" };
+  }
+
   // MP4 / ftyp: offset 4: 66 74 79 70 ('ftyp')
   if (
     buffer.length >= 8 &&
@@ -239,6 +322,43 @@ export function extractImageDimensions(
       const width = buffer.readUInt16LE(6);
       const height = buffer.readUInt16LE(8);
       if (width > 0 && height > 0) return { width, height };
+    }
+
+    if (
+      mime === "image/x-icon" ||
+      mime === "image/vnd.microsoft.icon" ||
+      mime === "image/ico"
+    ) {
+      if (buffer.length >= 8) {
+        const width = buffer[6] === 0 ? 256 : buffer[6]!;
+        const height = buffer[7] === 0 ? 256 : buffer[7]!;
+        if (width > 0 && height > 0) return { width, height };
+      }
+    }
+
+    if (mime === "image/svg+xml") {
+      const text = buffer
+        .subarray(0, Math.min(buffer.length, 4096))
+        .toString("utf8");
+      const widthMatch = text.match(
+        /\bwidth=["'](\d+(?:\.\d+)?)(?:px)?["']/i,
+      );
+      const heightMatch = text.match(
+        /\bheight=["'](\d+(?:\.\d+)?)(?:px)?["']/i,
+      );
+      if (widthMatch?.[1] && heightMatch?.[1]) {
+        const width = Math.round(parseFloat(widthMatch[1]));
+        const height = Math.round(parseFloat(heightMatch[1]));
+        if (width > 0 && height > 0) return { width, height };
+      }
+      const viewBoxMatch = text.match(
+        /\bviewBox=["'][\d.-]+\s+[\d.-]+\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/i,
+      );
+      if (viewBoxMatch?.[1] && viewBoxMatch?.[2]) {
+        const width = Math.round(parseFloat(viewBoxMatch[1]));
+        const height = Math.round(parseFloat(viewBoxMatch[2]));
+        if (width > 0 && height > 0) return { width, height };
+      }
     }
 
     if (mime === "image/jpeg") {
@@ -358,7 +478,12 @@ export function validateAndDetectFile(
     if (
       declaredMime &&
       !declaredMime.startsWith(detected.assetType) &&
-      declaredMime !== "application/octet-stream"
+      declaredMime !== "application/octet-stream" &&
+      !(
+        detected.assetType === "file" &&
+        (declaredMime.startsWith("application/") ||
+          declaredMime.startsWith("text/"))
+      )
     ) {
       throw new MediaMimeMismatchError(declaredMime, detected.mime);
     }

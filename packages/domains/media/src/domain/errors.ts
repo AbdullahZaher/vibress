@@ -20,10 +20,11 @@ export class MediaTooLargeError extends MediaError {
 
 export class MediaTypeNotAllowedError extends MediaError {
   constructor(typeOrMime: string) {
-    super(
-      `Media type or MIME type '${typeOrMime}' is not allowed`,
-      "MEDIA_TYPE_NOT_ALLOWED",
-    );
+    const formatted =
+      typeOrMime.includes("not allowed") || typeOrMime.includes("blocked")
+        ? typeOrMime
+        : `Media type or MIME type '${typeOrMime}' is not allowed`;
+    super(formatted, "MEDIA_TYPE_NOT_ALLOWED");
     this.name = "MediaTypeNotAllowedError";
   }
 }

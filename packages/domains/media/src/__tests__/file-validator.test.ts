@@ -67,22 +67,71 @@ describe("File Validator & Image Metadata", () => {
     ).toThrow(MediaTypeNotAllowedError);
   });
 
-  it("should reject SVG and HTML active content uploads", () => {
+  it("should accept valid and safe SVG uploads", () => {
+    const validSvg = validateAndDetectFile({
+      filename: "logo.svg",
+      mimeType: "image/svg+xml",
+      buffer: Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="40" fill="blue"/></svg>`,
+      ),
+    });
+    expect(validSvg.mimeType).toBe("image/svg+xml");
+    expect(validSvg.assetType).toBe("image");
+    expect(validSvg.extension).toBe("svg");
+    expect(validSvg.width).toBe(100);
+    expect(validSvg.height).toBe(100);
+  });
+
+  it("should reject malicious SVG with embedded scripts or event handlers", () => {
     expect(() =>
       validateAndDetectFile({
-        filename: "logo.svg",
+        filename: "malicious.svg",
         mimeType: "image/svg+xml",
-        buffer: Buffer.from("<svg></svg>"),
+        buffer: Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg"><script>alert('xss')</script></svg>`,
+        ),
       }),
-    ).toThrow(MediaTypeNotAllowedError);
+    ).toThrow(MediaInvalidFileError);
 
+    expect(() =>
+      validateAndDetectFile({
+        filename: "evil-handler.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><circle cx="50" cy="50" r="40"/></svg>`,
+        ),
+      }),
+    ).toThrow(MediaInvalidFileError);
+  });
+
+  it("should reject HTML active content uploads", () => {
     expect(() =>
       validateAndDetectFile({
         filename: "index.html",
         mimeType: "text/html",
-        buffer: Buffer.from("<html></html>"),
+        buffer: Buffer.from("<html><body>Malicious HTML</body></html>"),
       }),
     ).toThrow(MediaTypeNotAllowedError);
+  });
+
+  it("should accept valid ICO and PDF files", () => {
+    const icoBuffer = Buffer.from([0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10]);
+    const icoResult = validateAndDetectFile({
+      filename: "favicon.ico",
+      mimeType: "image/x-icon",
+      buffer: icoBuffer,
+    });
+    expect(icoResult.mimeType).toBe("image/x-icon");
+    expect(icoResult.assetType).toBe("image");
+
+    const pdfBuffer = Buffer.from("%PDF-1.4\n%...\n%%EOF");
+    const pdfResult = validateAndDetectFile({
+      filename: "document.pdf",
+      mimeType: "application/pdf",
+      buffer: pdfBuffer,
+    });
+    expect(pdfResult.mimeType).toBe("application/pdf");
+    expect(pdfResult.assetType).toBe("file");
   });
 
   it("should reject MIME mismatch when declared MIME differs from detected signature", () => {

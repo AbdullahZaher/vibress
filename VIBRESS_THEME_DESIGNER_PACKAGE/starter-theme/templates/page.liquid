@@ -4,13 +4,13 @@
   <main class="theme-main theme-container page-article-layout">
     <article class="article-single page-single">
       <header class="article-header">
-        <h1 class="article-title">{{ page.title }}</h1>
+        <h1 class="article-title">{{ page.title | escape }}</h1>
         {% if page.excerpt %}
-          <p class="article-lead">{{ page.excerpt }}</p>
+          <p class="article-lead">{{ page.excerpt | escape }}</p>
         {% endif %}
         {% if page.featureImage.url %}
           <figure class="article-featured-image-wrap">
-            <img src="{{ page.featureImage.url }}" alt="{{ page.featureImage.alt | default: page.title }}" class="article-featured-image" />
+            <img src="{{ page.featureImage.url }}" alt="{{ page.featureImage.alt | default: page.title | escape }}" class="article-featured-image" />
           </figure>
         {% endif %}
       </header>

@@ -34,15 +34,6 @@
       "default": true
     },
     {
-      "key": "postsPerPage",
-      "type": "number",
-      "label": "Posts Per Page",
-      "description": "Maximum number of articles displayed per pagination page.",
-      "default": 10,
-      "min": 1,
-      "max": 50
-    },
-    {
       "key": "heroHeadline",
       "type": "string",
       "label": "Custom Hero Headline",

@@ -11,8 +11,8 @@ Liquid uses two types of delimiters:
 * **`{% ... %}` (Tags / Control Flow)**: Executes logic, loops, conditionals, or renders partials.
 
 ```liquid
-<h1>{{ site.title }}</h1>
-<p>{{ site.description }}</p>
+<h1>{{ site.title | escape }}</h1>
+<p>{{ site.description | escape }}</p>
 ```
 
 ---
@@ -24,7 +24,7 @@ Liquid uses two types of delimiters:
 {% if post.featured %}
   <span class="badge badge-featured">Featured Story</span>
 {% elsif post.tags.size > 0 %}
-  <span class="badge">{{ post.tags[0].name }}</span>
+  <span class="badge">{{ post.tags[0].name | escape }}</span>
 {% else %}
   <span class="badge">General</span>
 {% endif %}
@@ -33,14 +33,14 @@ Liquid uses two types of delimiters:
 ### Checking Boolean & Optional Values
 ```liquid
 {% if settings.showAuthorAvatars and post.primaryAuthor.avatar %}
-  <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="avatar" />
+  <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name | escape }}" class="avatar" />
 {% endif %}
 
-{% if post.featureImage %}
+{% if post.featureImage.url %}
   <figure class="post-cover">
-    <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" />
+    <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" />
     {% if post.featureImage.caption %}
-      <figcaption>{{ post.featureImage.caption }}</figcaption>
+      <figcaption>{{ post.featureImage.caption | escape }}</figcaption>
     {% endif %}
   </figure>
 {% endif %}
@@ -55,23 +55,32 @@ Liquid uses two types of delimiters:
 <div class="posts-grid">
   {% for item in posts %}
     <article class="post-card {% if item.featured %}featured{% endif %}">
-      {% if item.featureImage %}
+      {% if item.featureImage.url %}
         <a href="{{ item.url }}" class="post-card-thumb">
-          <img src="{{ item.url | default: item.featureImage.url }}" alt="{{ item.title }}" loading="lazy" />
+          <img src="{{ item.featureImage.url }}" alt="{{ item.featureImage.alt | default: item.title | escape }}" loading="lazy" />
         </a>
       {% endif %}
 
       <div class="post-card-body">
+        {% if item.tags.size > 0 %}
+          {% assign primaryTag = item.tags[0] %}
+          <a href="{{ primaryTag.url }}" class="post-tag">#{{ primaryTag.name | escape }}</a>
+        {% endif %}
+
         <h2 class="post-card-title">
-          <a href="{{ item.url }}">{{ item.title }}</a>
+          <a href="{{ item.url }}">{{ item.title | escape }}</a>
         </h2>
         <p class="post-card-excerpt">
-          {{ item.excerpt | default: item.html | excerpt: 140 }}
+          {{ item.excerpt | excerpt: 140 | escape }}
         </p>
         <div class="post-card-meta">
-          <time datetime="{{ item.publishedAt }}">{{ item.publishedAt | format_date }}</time>
-          <span>•</span>
-          <span>{{ item.readingTimeMinutes }} min read</span>
+          {% if item.publishedAt %}
+            <time datetime="{{ item.publishedAt }}">{{ item.publishedAt | format_date }}</time>
+          {% endif %}
+          {% if item.readingTimeMinutes %}
+            <span>•</span>
+            <span>{{ item.readingTimeMinutes }} min read</span>
+          {% endif %}
         </div>
       </div>
     </article>
@@ -103,7 +112,7 @@ Split your theme into reusable components located in `partials/`:
 {% render 'partials/footer.liquid', site: site %}
 ```
 
-### Legacy Inclusion: `{% include %}`
+### Direct Inclusion: `{% include %}`
 `{% include 'header' %}` inherits variables from the parent template scope:
 
 ```liquid
@@ -124,7 +133,7 @@ Vibress provides custom filters specifically designed for publishing:
 | `tag_url` | `{{ tag.slug \| tag_url }}` | `/tags/technology` |
 | `author_url` | `{{ author.slug \| author_url }}` | `/authors/jane-doe` |
 | `format_date` | `{{ post.publishedAt \| format_date }}`<br>`{{ post.publishedAt \| format_date: 'iso' }}`<br>`{{ post.publishedAt \| format_date: 'year' }}` | `Aug 17, 2026`<br>`2026-08-17`<br>`2026` |
-| `excerpt` | `{{ post.html \| excerpt: 120 }}` | Truncates text to 120 characters and strips HTML tags cleanly |
+| `excerpt` | `{{ post.excerpt \| excerpt: 120 }}` | Truncates text to 120 characters and strips HTML tags cleanly |
 | `pagination_url` | `{{ pagination.next \| pagination_url }}` | `/?page=2` (or `/` if page $\le 1$) |
 
 ---
@@ -136,7 +145,7 @@ Vibress also provides shortcut tags:
 ### 1. `{% asset %}` Tag
 Resolves theme assets without manual URL concatenation:
 ```liquid
-<img src="{% asset 'assets/images/logo.svg' %}" alt="Site Logo" />
+<img src="{% asset 'assets/images/logo.svg' %}" alt="{{ site.title | escape }}" />
 ```
 
 ### 2. `{% route %}` Tag
@@ -149,17 +158,21 @@ Generates platform URLs for resources:
 
 ---
 
-## 🛡️ HTML Rendering & Escaping
+## 🛡️ HTML Rendering vs Text Escaping Contract
 
-* **Post Content HTML (`{{ post.html }}` / `{{ page.html }}`)**: Vibress sanitizes article content on the backend before injecting it into the template. Render post body HTML directly:
+* **Pre-Sanitized Article Content (`{{ post.html }}` / `{{ page.html }}`)**:
+  Vibress sanitizes all post and page body HTML on the backend before injecting it into the Liquid context (blocking `<script>`, malicious attributes, and unapproved embeds). Output post body HTML directly:
   ```liquid
-  <div class="prose">
+  <div class="prose studio-html-content">
     {{ post.html }}
   </div>
   ```
-* **User Input Strings**: Escaping is applied by default in Liquid for untrusted text if you use `| escape`:
+* **Plain Text Properties (Explicit Escaping Required)**:
+  Plain text strings from ViewModels (`post.title`, `post.excerpt`, `author.name`, `tag.name`, `site.title`, `site.description`, custom text settings) must always be escaped with `| escape`:
   ```liquid
-  <title>{{ post.title | escape }} — {{ site.title | escape }}</title>
+  <h1>{{ post.title | escape }}</h1>
+  <p>{{ site.description | escape }}</p>
+  <span>{{ author.name | escape }}</span>
   ```
 
 ---

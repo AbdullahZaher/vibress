@@ -1,6 +1,6 @@
 # 07 — Theme Settings Guide (`settings.json`)
 
-Vibress allows theme authors to expose customizable configuration options to the site administrator without modifying code.
+Vibress allows theme authors to expose customizable configuration options to the site administrator without modifying template code.
 
 ---
 
@@ -12,6 +12,10 @@ When an admin customizes these values:
 1. The values are validated against your schema.
 2. The values are saved persistently in the database (`theme_settings`).
 3. The values are injected into the Liquid context under the `settings` object (e.g. `{{ settings.accentColor }}`).
+
+> [!IMPORTANT]
+> **Theme Settings Scope (Presentation Only)**:
+> Theme settings strictly control **styling, visual options, and presentation flags** (colors, typography choices, layout columns, hero banners, feature toggles). Data querying logic, member access control, and pagination limits are managed exclusively by **Vibress Core**.
 
 ---
 
@@ -45,19 +49,10 @@ You can define your settings using the standard `{ "fields": [ ... ] }` format:
       "default": true
     },
     {
-      "key": "postsPerPage",
-      "type": "number",
-      "label": "Posts Per Page",
-      "description": "Number of articles shown per page.",
-      "default": 10,
-      "min": 1,
-      "max": 50
-    },
-    {
       "key": "layoutStyle",
       "type": "select",
       "label": "Grid Layout",
-      "description": "Choose between 2-column or 3-column article cards.",
+      "description": "Choose between 2-column editorial or 3-column magazine cards.",
       "options": [
         { "label": "2 Columns (Editorial)", "value": "cols-2" },
         { "label": "3 Columns (Magazine)", "value": "cols-3" }
@@ -81,11 +76,11 @@ You can define your settings using the standard `{ "fields": [ ... ] }` format:
 
 ```json
 {
-  "key": "newsletterHeading",
+  "key": "heroHeadline",
   "type": "string",
-  "label": "Newsletter Callout Heading",
-  "default": "Stay updated with our weekly dispatch",
-  "maxLength": 80
+  "label": "Hero Headline",
+  "default": "Ideas, Stories & Publications",
+  "maxLength": 120
 }
 ```
 
@@ -98,10 +93,9 @@ You can define your settings using the standard `{ "fields": [ ... ] }` format:
 
 ```json
 {
-  "key": "showReadingTime",
+  "key": "showPublicationDate",
   "type": "boolean",
-  "label": "Show Reading Time",
-  "description": "Display estimated minutes to read on post cards.",
+  "label": "Show Publication Dates",
   "default": true
 }
 ```
@@ -109,93 +103,73 @@ You can define your settings using the standard `{ "fields": [ ... ] }` format:
 ---
 
 ### 3. `number` (Numeric Input)
-* **`default`** (number, **mandatory**): Valid number.
-* **`min`** (number): Minimum allowable value.
-* **`max`** (number): Maximum allowable value.
+* **`default`** (number, **mandatory**): Default numeric value.
 * **`label`** (string): Field title.
+* **`min`** (number): Minimum allowed value.
+* **`max`** (number): Maximum allowed value.
 
 ```json
 {
-  "key": "postsPerPage",
+  "key": "cardBorderRadius",
   "type": "number",
-  "label": "Articles Per Page",
+  "label": "Card Border Radius (px)",
   "default": 12,
-  "min": 3,
-  "max": 48
+  "min": 0,
+  "max": 32
 }
 ```
 
 ---
 
-### 4. `color` (Hex Color Picker)
-* **`default`** (string, **mandatory**): Valid hex code (e.g. `"#6366f1"` or `"#000000"`).
+### 4. `color` (Color Picker)
+* **`default`** (string, **mandatory**): Valid Hex color code (`#RGB`, `#RRGGBB`, `#RRGGBBAA`).
 * **`label`** (string): Field title.
 
 ```json
 {
-  "key": "primaryBrandColor",
+  "key": "accentColor",
   "type": "color",
-  "label": "Brand Primary Color",
-  "default": "#2563eb"
+  "label": "Brand Accent Color",
+  "default": "#6366f1"
 }
 ```
 
 ---
 
-### 5. `select` (Dropdown Selection)
-* **`default`** (string, **mandatory**): Must match one of the option values.
-* **`options`** (array, **mandatory**): Non-empty array of strings or `{ label, value }` objects.
-* **`label`** (string): Field title.
+### 5. `select` (Dropdown Menu)
+* **`default`** (string, **mandatory**): Default option value.
+* **`options`** (array, **mandatory**): List of options (`{ label, value }` or plain strings).
 
 ```json
 {
-  "key": "headerStyle",
+  "key": "typographyFamily",
   "type": "select",
-  "label": "Header Style",
-  "description": "Choose the visual style for the site navigation header.",
+  "label": "Typography Style",
   "options": [
-    { "label": "Minimal Clean", "value": "minimal" },
-    { "label": "Centered Classic", "value": "centered" },
-    { "label": "Sticky Navigation Bar", "value": "sticky" }
+    { "label": "Modern Sans (Inter)", "value": "sans" },
+    { "label": "Editorial Serif (Georgia)", "value": "serif" },
+    { "label": "Technical Mono (JetBrains Mono)", "value": "mono" }
   ],
-  "default": "minimal"
+  "default": "sans"
 }
 ```
 
 ---
 
-## ⚡ Using Settings in Liquid & CSS
+## 💻 Using Settings in Liquid
 
-### In Liquid Templates:
+Access customized settings anywhere in Liquid templates:
+
 ```liquid
-{% if settings.showReadingTime %}
-  <span class="read-time">{{ post.readingTimeMinutes }} min read</span>
-{% endif %}
+<div class="theme-container font-{{ settings.typographyFamily | default: 'sans' }}">
+  <h1 class="hero-title">{{ settings.heroHeadline | default: site.title | escape }}</h1>
 
-<div class="posts-grid layout-{{ settings.layoutStyle | default: 'cols-3' }}">
-  <!-- Articles loop -->
+  {% if settings.showPublicationDate and post.publishedAt %}
+    <time>{{ post.publishedAt | format_date }}</time>
+  {% endif %}
 </div>
 ```
 
-### In Dynamic CSS Styling:
-You can use Liquid to inject customized theme settings directly as CSS custom properties in your templates or partials:
-
-```liquid
-<style>
-  :root {
-    --theme-accent: {{ settings.accentColor | default: '#6366f1' }};
-  }
-</style>
-```
-
 ---
 
-## ⚠️ Important Rules
-
-1. **Every setting MUST have a default value**: The theme validator will reject packages where any setting lacks a valid `default`.
-2. **Select defaults must exist in options**: If `default` is `"dark"`, `"dark"` must be listed in the `options` array.
-3. **No unknown keys allowed**: If a setting is removed from `settings.json`, it will be cleaned up safely upon the next activation.
-
----
-
-Next: Read **[`08-ASSETS-AND-STYLING.md`](./08-ASSETS-AND-STYLING.md)** to master styling, typography, and dark mode.
+Next: Read **[`08-ASSETS-AND-STYLING.md`](./08-ASSETS-AND-STYLING.md)** for styling best practices.

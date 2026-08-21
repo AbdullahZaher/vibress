@@ -11,12 +11,15 @@ import {
   validateOrigin,
 } from "../middleware/auth";
 import {
+  MediaError,
   MediaInUseError,
   MediaInvalidFileError,
   MediaMimeMismatchError,
   MediaNotFoundError,
+  MediaStorageError,
   MediaTooLargeError,
   MediaTypeNotAllowedError,
+  MediaUploadFailedError,
 } from "@vibress/media";
 import { errorMessage } from "../helpers/errors";
 
@@ -112,7 +115,36 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             ],
           });
         }
-        throw err;
+        if (err instanceof MediaStorageError) {
+          return reply.status(500).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        if (err instanceof MediaUploadFailedError) {
+          return reply.status(400).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        if (err instanceof MediaError) {
+          return reply.status(400).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        return reply.status(500).send({
+          errors: [
+            {
+              code: "MEDIA_UPLOAD_FAILED",
+              message: errorMessage(err) || "Media upload failed",
+              requestId: req.id,
+            },
+          ],
+        });
       }
     },
   });

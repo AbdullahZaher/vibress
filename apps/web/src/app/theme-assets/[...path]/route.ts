@@ -27,17 +27,29 @@ function resolveThemeAssetPath(
   const cleanVersion = version.replace(/[^0-9.]/g, "");
   const fileName = path.basename(relativePath);
 
-  // 1. External theme storage paths (e.g. content/themes/{themeId}/{version}/assets/...)
-  const externalCandidates = [
-    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion, relativePath),
-    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion, "assets", relativePath),
-    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion, relativePath),
-    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion, "assets", relativePath),
+  const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
+
+  // 1. External theme storage paths (e.g. content/themes/{themeId}/{version}/...)
+  const externalThemeRoots = [
+    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion)] : []),
+    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
   ];
 
-  for (const p of externalCandidates) {
-    if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-      return p;
+  for (const themeRoot of externalThemeRoots) {
+    const candidates = [
+      path.join(themeRoot, cleanRel),
+      path.join(themeRoot, "assets", cleanRel),
+      path.join(themeRoot, fileName),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        return p;
+      }
     }
   }
 

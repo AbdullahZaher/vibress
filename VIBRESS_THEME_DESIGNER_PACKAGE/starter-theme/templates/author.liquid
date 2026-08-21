@@ -4,11 +4,11 @@
   <main class="theme-main theme-container">
     <header class="archive-header author-profile-header">
       {% if author.avatar %}
-        <img src="{{ author.avatar }}" alt="{{ author.name }}" class="author-profile-avatar" />
+        <img src="{{ author.avatar }}" alt="{{ author.name | escape }}" class="author-profile-avatar" />
       {% endif %}
-      <h1 class="archive-title">{{ author.name }}</h1>
+      <h1 class="archive-title">{{ author.name | escape }}</h1>
       {% if author.bio %}
-        <p class="archive-description">{{ author.bio }}</p>
+        <p class="archive-description">{{ author.bio | escape }}</p>
       {% endif %}
     </header>
 
@@ -17,16 +17,16 @@
         <article class="post-card">
           {% if post.featureImage.url %}
             <a href="{{ post.url }}" class="post-card-image-link">
-              <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="post-card-image" loading="lazy" />
+              <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" class="post-card-image" loading="lazy" />
             </a>
           {% endif %}
 
           <div class="post-card-content">
             <h2 class="post-card-title">
-              <a href="{{ post.url }}">{{ post.title }}</a>
+              <a href="{{ post.url }}">{{ post.title | escape }}</a>
             </h2>
             <p class="post-card-excerpt">
-              {{ post.excerpt | excerpt: 160 }}
+              {{ post.excerpt | excerpt: 160 | escape }}
             </p>
             <div class="post-card-meta">
               {% if settings.showPublicationDate and post.publishedAt %}

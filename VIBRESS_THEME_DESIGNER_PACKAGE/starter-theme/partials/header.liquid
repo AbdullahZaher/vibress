@@ -3,23 +3,23 @@
     <div class="site-branding">
       {% if site.logo %}
         <a href="{% route 'home' %}" class="site-logo-link">
-          <img src="{{ site.logo }}" alt="{{ site.title }}" class="site-logo" />
+          <img src="{{ site.logo }}" alt="{{ site.title | escape }}" class="site-logo" />
         </a>
       {% else %}
         <a href="{% route 'home' %}" class="site-title-link">
-          <span class="site-title">{{ site.title }}</span>
+          <span class="site-title">{{ site.title | escape }}</span>
         </a>
       {% endif %}
       {% if site.tagline %}
-        <p class="site-tagline">{{ site.tagline }}</p>
+        <p class="site-tagline">{{ site.tagline | escape }}</p>
       {% endif %}
     </div>
 
     <nav class="site-nav">
       <ul class="nav-list">
         <li><a href="{% route 'home' %}" class="nav-link">Home</a></li>
-        {% for item in site.primaryNav %}
-          <li><a href="{{ item.url }}" class="nav-link">{{ item.label }}</a></li>
+        {% for item in site.navigation.primary %}
+          <li><a href="{{ item.url }}" class="nav-link">{{ item.label | escape }}</a></li>
         {% endfor %}
       </ul>
     </nav>

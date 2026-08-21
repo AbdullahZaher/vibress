@@ -43,34 +43,37 @@ test.describe("Batch 10 Newsletter & Email E2E Suite", () => {
 
   async function getLatestMagicLink(email: string): Promise<string> {
     for (let i = 0; i < 30; i++) {
-      const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
-      const data = await res.json();
-      const matches = (data.messages || [])
-        .filter((m: any) => {
-          return (
-            m.To?.some(
-              (t: any) => t.Address?.toLowerCase() === email.toLowerCase(),
-            ) || m.To?.[0]?.Address?.toLowerCase() === email.toLowerCase()
+      try {
+        const res = await fetch("http://127.0.0.1:8025/api/v1/messages");
+        const data = await res.json();
+        const matches = (data.messages || [])
+          .filter((m: any) => {
+            return (
+              m.To?.some(
+                (t: any) => t.Address?.toLowerCase() === email.toLowerCase(),
+              ) || m.To?.[0]?.Address?.toLowerCase() === email.toLowerCase()
+            );
+          })
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.Created).getTime() - new Date(a.Created).getTime(),
           );
-        })
-        .sort(
-          (a: any, b: any) =>
-            new Date(b.Created).getTime() - new Date(a.Created).getTime(),
-        );
-      if (matches.length > 0) {
-        const msg = matches[0];
-        const detail = await (
-          await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
-        ).json();
-        const html = detail.HTML || "";
-        const text = detail.Text || "";
-        const raw =
-          html.match(/href="([^"]*token=[^"]*)"/i)?.[1] ||
-          html.match(/href="([^"]+)"/)?.[1] ||
-          text.match(/(https?:\/\/[^\s]+token=[^\s]+)/i)?.[1] ||
-          text.match(/(https?:\/\/[^\s]+)/)?.[1];
-        if (raw) return raw.replace(/&amp;/g, "&").replace(/[">]+$/, "");
-      }
+        for (const msg of matches) {
+          const detail = await (
+            await fetch(`http://127.0.0.1:8025/api/v1/message/${msg.ID}`)
+          ).json();
+          const html = detail.HTML || "";
+          const text = detail.Text || "";
+          const raw =
+            html.match(/href="([^"]*token=[^"]*)"/i)?.[1] ||
+            text.match(/(https?:\/\/[^\s]+token=[^\s]+)/i)?.[1] ||
+            html.match(/href="([^"]+)"/)?.[1] ||
+            text.match(/(https?:\/\/[^\s]+)/)?.[1];
+          if (raw && raw.includes("token=")) {
+            return raw.replace(/&amp;/g, "&").replace(/[">]+$/, "");
+          }
+        }
+      } catch {}
       await new Promise((r) => setTimeout(r, 200));
     }
     throw new Error(`expected a mail to ${email}`);

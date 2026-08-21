@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Vibress Theme Validation CLI Tool (Theme API v1)
+ * Vibress Official Theme Validation CLI Tool (Theme API v1)
+ *
+ * This validator enforces the exact same security, quota, manifest,
+ * template, settings, and compression invariants as the Vibress core production engine.
  *
  * Usage:
  *   node validate-theme.mjs <path-to-theme-directory-or-zip>
@@ -10,16 +13,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import * as zlib from "node:zlib";
 
-// Theme API v1 Constraints
+// Theme API v1 Canonical Constants & Limits
 const THEME_API_VERSION = 1;
-const MAX_ZIP_BYTES = 20 * 1024 * 1024; // 20 MB
-const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024; // 100 MB
-const MAX_SINGLE_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_ZIP_BYTES = 20 * 1024 * 1024; // 20 MB archive limit
+const MAX_EXTRACTED_BYTES = 100 * 1024 * 1024; // 100 MB uncompressed total
+const MAX_SINGLE_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const MAX_FILE_COUNT = 500;
 const MAX_PATH_LENGTH = 255;
-const MAX_COMPRESSION_RATIO = 20;
+const MAX_COMPRESSION_RATIO = 20; // 20:1 max ratio to prevent zip bombs
 
+// Allowed file extensions (Presentation assets only - Zero executable code)
 const ALLOWED_EXTENSIONS = new Set([
   ".liquid",
   ".html",
@@ -40,6 +45,7 @@ const ALLOWED_EXTENSIONS = new Set([
   ".md",
 ]);
 
+// Explicitly forbidden dangerous / executable extensions
 const FORBIDDEN_EXTENSIONS = new Set([
   ".js",
   ".mjs",
@@ -65,8 +71,6 @@ const FORBIDDEN_EXTENSIONS = new Set([
   ".yaml",
   ".node",
 ]);
-
-const REQUIRED_TEMPLATES = ["post", "page"];
 
 // ANSI Color Helpers
 const colors = {
@@ -95,18 +99,32 @@ function logHeader(msg) {
   console.log(`\n${colors.bold}${colors.cyan}=== ${msg} ===${colors.reset}\n`);
 }
 
+function validateThemePath(relativePath) {
+  if (
+    !relativePath ||
+    relativePath.includes("\0") ||
+    relativePath.includes("..") ||
+    relativePath.startsWith("/") ||
+    relativePath.startsWith("\\") ||
+    relativePath.includes(":") ||
+    relativePath.length > MAX_PATH_LENGTH
+  ) {
+    throw new Error(`Dangerous or invalid path detected in archive: "${relativePath}"`);
+  }
+}
+
 async function main() {
   const targetPath = process.argv[2];
 
   if (!targetPath) {
     console.log(`
-${colors.bold}Vibress Theme Validator (Theme API v1)${colors.reset}
+${colors.bold}Vibress Official Theme Validator (Theme API v1)${colors.reset}
 
 ${colors.yellow}Usage:${colors.reset}
   node validate-theme.mjs <path/to/theme-directory>
   node validate-theme.mjs <path/to/theme.zip>
 
-${colors.cyan}Example:${colors.reset}
+${colors.cyan}Examples:${colors.reset}
   node validate-theme.mjs ./starter-theme
   node validate-theme.mjs ./vibress-theme-starter.zip
 `);
@@ -122,22 +140,36 @@ ${colors.cyan}Example:${colors.reset}
 
   const stat = fs.statSync(fullPath);
   let fileMap = new Map(); // relativePath -> Buffer
+  let isZip = false;
 
   logHeader(`Validating Vibress Theme: ${path.basename(fullPath)}`);
 
+  let hasErrors = false;
+
   if (stat.isFile()) {
-    // Validate ZIP file
-    fileMap = await extractZipFile(fullPath);
+    isZip = true;
+    try {
+      fileMap = await extractAndValidateZip(fullPath);
+    } catch (err) {
+      logError(`ZIP extraction failure: ${err.message}`);
+      hasErrors = true;
+    }
   } else if (stat.isDirectory()) {
-    // Validate Directory
-    fileMap = readDirectory(fullPath);
+    try {
+      fileMap = readAndValidateDirectory(fullPath);
+    } catch (err) {
+      logError(`Directory scan failure: ${err.message}`);
+      hasErrors = true;
+    }
   } else {
     console.error(`${colors.red}Error: Target is neither a regular file nor a directory.${colors.reset}`);
     process.exit(1);
   }
 
-  // Run Theme API v1 Invariant Checks
-  let hasErrors = false;
+  if (fileMap.size === 0 && !hasErrors) {
+    logError("Theme package contains no files");
+    hasErrors = true;
+  }
 
   // 1. Quota & Limits Checks
   console.log(`${colors.bold}1. Archive & Quota Checks${colors.reset}`);
@@ -152,7 +184,7 @@ ${colors.cyan}Example:${colors.reset}
   for (const [relPath, buffer] of fileMap.entries()) {
     totalSize += buffer.length;
     if (buffer.length > MAX_SINGLE_FILE_BYTES) {
-      logError(`File "${relPath}" (${(buffer.length / (1024 * 1024)).toFixed(2)}MB) exceeds 10MB limit`);
+      logError(`File "${relPath}" (${(buffer.length / (1024 * 1024)).toFixed(2)}MB) exceeds single file limit of 10MB`);
       hasErrors = true;
     }
   }
@@ -164,7 +196,7 @@ ${colors.cyan}Example:${colors.reset}
     logSuccess(`Total uncompressed size: ${(totalSize / 1024).toFixed(1)} KB (within 100MB limit)`);
   }
 
-  // 2. File Type & No-JS Security Check
+  // 2. Security & File Type Checks (No-JS Policy)
   console.log(`\n${colors.bold}2. Security & No-JS Enforcement${colors.reset}`);
   let forbiddenFound = 0;
   let invalidExtFound = 0;
@@ -178,14 +210,14 @@ ${colors.cyan}Example:${colors.reset}
       forbiddenFound++;
       hasErrors = true;
     } else if (ext !== "" && !ALLOWED_EXTENSIONS.has(ext)) {
-      logError(`Unrecognized file extension "${ext}": "${relPath}"`);
+      logError(`Unrecognized file extension "${ext}": "${relPath}" (Theme API v1 allowlist violation)`);
       invalidExtFound++;
       hasErrors = true;
     }
   }
 
   if (forbiddenFound === 0 && invalidExtFound === 0) {
-    logSuccess(`Strict No-JS Policy passed (0 prohibited script files found)`);
+    logSuccess(`Strict No-JS Policy passed (0 prohibited scripts or server files found)`);
     logSuccess(`All file extensions comply with Theme API v1 allowlist`);
   }
 
@@ -234,19 +266,30 @@ ${colors.cyan}Example:${colors.reset}
         logSuccess(`Theme API: ${manifest.themeApi}`);
       }
 
-      // Validate Preview Image Declaration
+      // Validate Preview Image Declaration & Existence
+      let previewFound = false;
       if (manifest.previewImage) {
         const cleanPreview = manifest.previewImage.replace(/^\/+/, "");
         if (!fileMap.has(cleanPreview)) {
-          logError(`Declared previewImage "${manifest.previewImage}" not found in theme package`);
+          logError(`Declared previewImage "${manifest.previewImage}" does not exist in theme package`);
           hasErrors = true;
         } else {
           logSuccess(`Preview image found: "${manifest.previewImage}"`);
+          previewFound = true;
         }
-      } else if (fileMap.has("preview.webp") || fileMap.has("preview.png") || fileMap.has("preview.jpg")) {
-        logSuccess(`Preview image found (default preview.*)`);
       } else {
-        logWarn(`No preview image found (recommended to include preview.webp)`);
+        if (fileMap.has("preview.webp") || fileMap.has("preview.png") || fileMap.has("preview.jpg")) {
+          const defaultPreview = fileMap.has("preview.webp")
+            ? "preview.webp"
+            : fileMap.has("preview.png")
+              ? "preview.png"
+              : "preview.jpg";
+          logSuccess(`Default preview image found: "${defaultPreview}"`);
+          previewFound = true;
+        } else {
+          logError(`Theme package is missing required preview image (preview.webp, preview.png, or declared via previewImage in theme.json)`);
+          hasErrors = true;
+        }
       }
     } catch (err) {
       logError(`Failed to parse "theme.json": ${err.message}`);
@@ -293,8 +336,36 @@ ${colors.cyan}Example:${colors.reset}
   if (hasAuthor) logSuccess(`Author template: found ("templates/author.liquid")`);
   else logWarn(`Author template not found (recommended: "templates/author.liquid")`);
 
-  // 5. Settings Schema Verification (`settings.json`)
-  console.log(`\n${colors.bold}5. Theme Settings Schema (settings.json)${colors.reset}`);
+  // 5. Liquid Syntax Verification
+  console.log(`\n${colors.bold}5. Liquid Template Syntax Parsing${colors.reset}`);
+  let liquidParseErrors = 0;
+  try {
+    const liquidModule = await import("liquidjs");
+    const Liquid = liquidModule.Liquid || liquidModule.default?.Liquid;
+    if (Liquid) {
+      const engine = new Liquid();
+      for (const [relPath, buffer] of fileMap.entries()) {
+        if (relPath.endsWith(".liquid") || relPath.endsWith(".html")) {
+          try {
+            engine.parse(buffer.toString("utf-8"));
+          } catch (syntaxErr) {
+            logError(`Syntax error in "${relPath}": ${syntaxErr.message}`);
+            liquidParseErrors++;
+            hasErrors = true;
+          }
+        }
+      }
+      if (liquidParseErrors === 0) {
+        logSuccess(`All Liquid templates and partials parsed successfully with zero syntax errors`);
+      }
+    }
+  } catch {
+    // LiquidJS not installed in environment, skip AST check
+    logWarn(`LiquidJS not found in node_modules; template syntax check skipped`);
+  }
+
+  // 6. Settings Schema Verification (`settings.json`)
+  console.log(`\n${colors.bold}6. Theme Settings Schema (settings.json)${colors.reset}`);
   const settingsBuffer = fileMap.get("settings.json");
   if (settingsBuffer) {
     try {
@@ -402,22 +473,33 @@ ${colors.cyan}Example:${colors.reset}
   }
 }
 
-function readDirectory(dir) {
+/**
+ * Reads and validates a theme directory, with strict symlink detection.
+ */
+function readAndValidateDirectory(dir) {
   const fileMap = new Map();
 
   function walk(currentDir, rel = "") {
-    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-    for (const e of entries) {
-      const relPath = rel ? `${rel}/${e.name}` : e.name;
-      const fullPath = path.join(currentDir, e.name);
+    const entries = fs.readdirSync(currentDir, { withFileTypes: false });
+    for (const name of entries) {
+      const relPath = rel ? `${rel}/${name}` : name;
+      const fullPath = path.join(currentDir, name);
 
-      if (e.name === ".DS_Store" || e.name === "Thumbs.db" || e.name.startsWith(".")) {
+      // Check for symlinks via lstat
+      const lstat = fs.lstatSync(fullPath);
+      if (lstat.isSymbolicLink()) {
+        throw new Error(`Symlinks are strictly forbidden in theme packages: "${relPath}"`);
+      }
+
+      if (name === ".DS_Store" || name === "Thumbs.db" || name.startsWith(".")) {
         continue;
       }
 
-      if (e.isDirectory()) {
+      validateThemePath(relPath);
+
+      if (lstat.isDirectory()) {
         walk(fullPath, relPath);
-      } else if (e.isFile()) {
+      } else if (lstat.isFile()) {
         const buffer = fs.readFileSync(fullPath);
         fileMap.set(relPath, buffer);
       }
@@ -428,26 +510,34 @@ function readDirectory(dir) {
   return fileMap;
 }
 
-async function extractZipFile(zipPath) {
+/**
+ * Extracts and validates a ZIP archive with strict symlink and compression ratio checks.
+ */
+async function extractAndValidateZip(zipPath) {
   const buffer = fs.readFileSync(zipPath);
-  if (buffer.length > MAX_ZIP_BYTES) {
-    console.error(`${colors.red}Error: ZIP file exceeds maximum size of 20MB.${colors.reset}`);
-    process.exit(1);
+  const byteLength = buffer.length;
+
+  if (byteLength === 0) {
+    throw new Error("Theme archive is empty");
   }
 
-  // Magic bytes check
+  if (byteLength > MAX_ZIP_BYTES) {
+    throw new Error(`ZIP file exceeds maximum size of 20MB (${(byteLength / (1024 * 1024)).toFixed(2)}MB)`);
+  }
+
+  // Magic bytes check: PK\x03\x04
   if (buffer[0] !== 0x50 || buffer[1] !== 0x4b || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
-    console.error(`${colors.red}Error: File is not a valid ZIP archive (magic bytes mismatch).${colors.reset}`);
-    process.exit(1);
+    throw new Error("File is not a valid ZIP archive (magic bytes mismatch)");
   }
 
-  // Try JSZip first if available
+  // Use JSZip if available
   try {
     const jszipModule = await import("jszip");
     const JSZip = jszipModule.default || jszipModule;
-    const zip = await JSZip.loadAsync(buffer);
+    const zip = await JSZip.loadAsync(buffer, { checkCRC32: true });
     const entries = Object.keys(zip.files);
     const fileMap = new Map();
+    let totalUncompressedBytes = 0;
 
     const nonDir = entries.filter((e) => !zip.files[e].dir);
     let prefixToStrip = "";
@@ -463,6 +553,12 @@ async function extractZipFile(zipPath) {
       const entry = zip.files[entryName];
       if (entry.dir) continue;
 
+      // Symlink check
+      const unixPermissions = entry.unixPermissions;
+      if (unixPermissions && (unixPermissions & 0o170000) === 0o120000) {
+        throw new Error(`Symlinks are strictly forbidden in theme packages: "${entryName}"`);
+      }
+
       let relPath = entryName;
       if (prefixToStrip && relPath.startsWith(prefixToStrip)) {
         relPath = relPath.slice(prefixToStrip.length);
@@ -472,33 +568,34 @@ async function extractZipFile(zipPath) {
         continue;
       }
 
-      if (
-        relPath.includes("..") ||
-        relPath.includes("\0") ||
-        relPath.startsWith("/") ||
-        relPath.startsWith("\\") ||
-        relPath.includes(":") ||
-        relPath.length > MAX_PATH_LENGTH
-      ) {
-        console.error(`${colors.red}Security Error: Dangerous path detected in archive: ${relPath}${colors.reset}`);
-        process.exit(1);
-      }
+      validateThemePath(relPath);
 
       const fileBuffer = await entry.async("nodebuffer");
+      totalUncompressedBytes += fileBuffer.length;
+
+      // Compression ratio check
+      if (byteLength > 0 && totalUncompressedBytes / byteLength > MAX_COMPRESSION_RATIO) {
+        throw new Error(`Theme ZIP bomb detected: archive compression ratio exceeds allowed threshold of ${MAX_COMPRESSION_RATIO}:1`);
+      }
+
       fileMap.set(relPath, fileBuffer);
     }
     return fileMap;
-  } catch {
+  } catch (err) {
+    if (err.message && (err.message.includes("Symlinks") || err.message.includes("ZIP bomb") || err.message.includes("Dangerous"))) {
+      throw err;
+    }
     // Fallback: Built-in pure Node.js ZIP parser using node:zlib
     return parseZipWithBuiltinZlib(buffer);
   }
 }
 
 function parseZipWithBuiltinZlib(buffer) {
-  const zlib = (awaitImportZlibSync());
   const fileMap = new Map();
   let offset = 0;
   const rawEntries = [];
+  const byteLength = buffer.length;
+  let totalUncompressedBytes = 0;
 
   while (offset < buffer.length - 30) {
     const signature = buffer.readUInt32LE(offset);
@@ -519,6 +616,7 @@ function parseZipWithBuiltinZlib(buffer) {
           name: fileName,
           compression,
           compressedData: buffer.subarray(dataOffset, dataEnd),
+          compressedSize,
           uncompressedSize,
         });
       }
@@ -555,17 +653,7 @@ function parseZipWithBuiltinZlib(buffer) {
       continue;
     }
 
-    if (
-      relPath.includes("..") ||
-      relPath.includes("\0") ||
-      relPath.startsWith("/") ||
-      relPath.startsWith("\\") ||
-      relPath.includes(":") ||
-      relPath.length > MAX_PATH_LENGTH
-    ) {
-      console.error(`${colors.red}Security Error: Dangerous path detected in archive: ${relPath}${colors.reset}`);
-      process.exit(1);
-    }
+    validateThemePath(relPath);
 
     let uncompressed;
     if (entry.compression === 0) {
@@ -573,23 +661,25 @@ function parseZipWithBuiltinZlib(buffer) {
     } else if (entry.compression === 8) {
       uncompressed = zlib.inflateRawSync(entry.compressedData);
     } else {
-      console.error(`${colors.red}Error: Unsupported compression method ${entry.compression} in ${relPath}${colors.reset}`);
-      process.exit(1);
+      throw new Error(`Unsupported compression method ${entry.compression} in "${relPath}"`);
+    }
+
+    totalUncompressedBytes += uncompressed.length;
+
+    // Single-entry ratio check
+    if (entry.compressedSize > 0 && uncompressed.length / entry.compressedSize > MAX_COMPRESSION_RATIO) {
+      throw new Error(`Theme ZIP bomb detected: file "${relPath}" compression ratio exceeds allowed threshold of ${MAX_COMPRESSION_RATIO}:1`);
+    }
+
+    // Overall ratio check
+    if (byteLength > 0 && totalUncompressedBytes / byteLength > MAX_COMPRESSION_RATIO) {
+      throw new Error(`Theme ZIP bomb detected: archive compression ratio exceeds allowed threshold of ${MAX_COMPRESSION_RATIO}:1`);
     }
 
     fileMap.set(relPath, Buffer.from(uncompressed));
   }
 
   return fileMap;
-}
-
-function awaitImportZlibSync() {
-  return fs.readFileSync ? importSyncZlib() : null;
-}
-
-import * as zlibSync from "node:zlib";
-function importSyncZlib() {
-  return zlibSync;
 }
 
 main().catch((err) => {

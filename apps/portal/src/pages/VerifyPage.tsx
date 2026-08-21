@@ -1,26 +1,86 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
 
 type VerifyState = "verifying" | "success" | "error";
 
+// In-flight and verified token caches to protect against React StrictMode double-mounts
+// or rapid re-renders from double-consuming single-use magic tokens.
+const inFlightVerifications = new Map<string, Promise<unknown>>();
+const verifiedTokens = new Set<string>();
+
 export function VerifyPage({ token }: { token: string }) {
-  const [state, setState] = useState<VerifyState>("verifying");
+  const [state, setState] = useState<VerifyState>(() =>
+    token && verifiedTokens.has(token) ? "success" : "verifying",
+  );
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const started = useRef(false);
 
   useEffect(() => {
-    if (started.current) return; // StrictMode double-invoke guard
-    started.current = true;
+    if (!token) {
+      // Check if user is already signed in before showing invalid token
+      (async () => {
+        try {
+          const res = await memberApi.me();
+          if (res?.member) {
+            setState("success");
+            navigate("/account");
+            window.history.replaceState(null, "", "/portal/#/account");
+            return;
+          }
+        } catch {
+          // not logged in
+        }
+        setState("error");
+        setErrorCode("AUTH_TOKEN_INVALID");
+      })();
+      return;
+    }
+
+    if (verifiedTokens.has(token)) {
+      setState("success");
+      navigate("/account");
+      window.history.replaceState(null, "", "/portal/#/account");
+      return;
+    }
+
+    let isMounted = true;
 
     (async () => {
       try {
-        await memberApi.verifyToken(token);
+        let promise = inFlightVerifications.get(token);
+        if (!promise) {
+          promise = memberApi.verifyToken(token);
+          inFlightVerifications.set(token, promise);
+        }
+        await promise;
+        verifiedTokens.add(token);
+        inFlightVerifications.delete(token);
+
+        if (!isMounted) return;
         setState("success");
-        // Navigate first (fires hashchange → router re-renders), then strip the token query.
         navigate("/account");
-        window.history.replaceState(null, "", "#/account");
+        window.history.replaceState(null, "", "/portal/#/account");
       } catch (err) {
+        inFlightVerifications.delete(token);
+
+        // If the token was already consumed, check if this browser is already authenticated
+        if (err instanceof MemberApiError && err.code === "AUTH_TOKEN_USED") {
+          try {
+            const meRes = await memberApi.me();
+            if (meRes?.member) {
+              verifiedTokens.add(token);
+              if (!isMounted) return;
+              setState("success");
+              navigate("/account");
+              window.history.replaceState(null, "", "/portal/#/account");
+              return;
+            }
+          } catch {
+            // not authenticated
+          }
+        }
+
+        if (!isMounted) return;
         setState("error");
         if (err instanceof MemberApiError) {
           setErrorCode(err.code || null);
@@ -29,6 +89,10 @@ export function VerifyPage({ token }: { token: string }) {
         }
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
   if (state === "verifying") {

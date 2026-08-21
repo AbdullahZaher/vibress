@@ -4,28 +4,29 @@
   <main class="theme-main theme-container post-article-layout">
     <article class="article-single">
       <header class="article-header">
-        {% if post.primaryTag %}
+        {% if post.tags.size > 0 %}
+          {% assign primaryTag = post.tags[0] %}
           <div class="article-tag-wrap">
-            <a href="{{ post.primaryTag.url }}" class="post-card-tag">#{{ post.primaryTag.name }}</a>
+            <a href="{{ primaryTag.url }}" class="post-card-tag">#{{ primaryTag.name | escape }}</a>
           </div>
         {% endif %}
 
-        <h1 class="article-title">{{ post.title }}</h1>
+        <h1 class="article-title">{{ post.title | escape }}</h1>
 
         {% if post.excerpt %}
-          <p class="article-lead">{{ post.excerpt }}</p>
+          <p class="article-lead">{{ post.excerpt | escape }}</p>
         {% endif %}
 
         <div class="article-meta">
           {% if post.primaryAuthor and settings.showAuthorAvatars %}
             <div class="article-author">
               {% if post.primaryAuthor.avatar %}
-                <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="author-avatar" />
+                <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name | escape }}" class="author-avatar" />
               {% endif %}
               <div class="author-details">
-                <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name }}</a>
+                <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name | escape }}</a>
                 {% if post.primaryAuthor.bio %}
-                  <span class="author-bio-snippet">{{ post.primaryAuthor.bio }}</span>
+                  <span class="author-bio-snippet">{{ post.primaryAuthor.bio | escape }}</span>
                 {% endif %}
               </div>
             </div>
@@ -46,9 +47,9 @@
 
         {% if post.featureImage.url %}
           <figure class="article-featured-image-wrap">
-            <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="article-featured-image" />
+            <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" class="article-featured-image" />
             {% if post.featureImage.caption %}
-              <figcaption class="article-image-caption">{{ post.featureImage.caption }}</figcaption>
+              <figcaption class="article-image-caption">{{ post.featureImage.caption | escape }}</figcaption>
             {% endif %}
           </figure>
         {% endif %}
@@ -63,7 +64,7 @@
           <div class="article-tags-list">
             <span class="tags-title">Tags:</span>
             {% for tag in post.tags %}
-              <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
+              <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name | escape }}</a>
             {% endfor %}
           </div>
         </footer>

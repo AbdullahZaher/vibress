@@ -35,9 +35,9 @@ This is a real-world example of a design specification for building a high-densi
 ## 📐 Layout Architecture
 
 ### 1. Header & Breaking Banner (`partials/header.liquid`)
-* Centered vintage publication masthead (`<h1 class="masthead">{{ site.title }}</h1>`).
-* Date and edition stamp: `{{ post.publishedAt | format_date: 'iso' }}`.
-* Primary navigation bar with full-width black borders top and bottom.
+* Centered vintage publication masthead (`<h1 class="masthead">{{ site.title | escape }}</h1>`).
+* Date and edition stamp: `{{ 'now' | format_date }}` — `{{ settings.newspaperEdition | default: 'Global Digital Edition' | escape }}`.
+* Primary navigation bar with full-width black borders top and bottom (`{% for item in site.navigation.primary %}`).
 
 ### 2. Homepage Editorial Grid (`templates/home.liquid`)
 * **Hero Lead Story (1 large column)**:
@@ -50,8 +50,8 @@ This is a real-world example of a design specification for building a high-densi
   * Numbered ranking list (1 to 5) for quick reading.
 
 ### 3. Article View (`templates/post.liquid`)
-* Bold kicker tag at the top: `{{ post.tags[0].name | upcase }}`.
-* Multi-author byline with portraits: `{% for author in post.authors %}`.
+* Bold kicker tag at the top: `{% if post.tags.size > 0 %}{{ post.tags[0].name | upcase | escape }}{% endif %}`.
+* Multi-author byline with portraits: `{% for author in post.authors %}{{ author.name | escape }}{% endfor %}`.
 * Two-column editorial article layout with pull-quotes and image captions.
 
 ---
