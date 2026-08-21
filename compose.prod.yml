@@ -23,6 +23,7 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  vibress_content:
 
 services:
   postgres:
@@ -98,6 +99,8 @@ services:
       VIBRESS_SETUP_TOKEN: ${VIBRESS_SETUP_TOKEN:-}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       EVENT_DELIVERY_MODE: ${EVENT_DELIVERY_MODE:-outbox}
+    volumes:
+      - vibress_content:/repo/apps/api/content
     networks: [frontend, backend]
     depends_on:
       postgres:
@@ -119,6 +122,8 @@ services:
       dockerfile: docker/worker.Dockerfile
     restart: unless-stopped
     environment: *app-environment
+    volumes:
+      - vibress_content:/repo/apps/api/content
     networks: [frontend, backend]
     depends_on:
       postgres:
@@ -157,6 +162,9 @@ services:
       PORT: "7778"
       HOSTNAME: 0.0.0.0
       API_URL: "http://api:7780"
+      THEME_STORAGE_ROOT: "/repo/apps/api/content/themes"
+    volumes:
+      - vibress_content:/repo/apps/api/content
     networks: [frontend]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7778/"]
