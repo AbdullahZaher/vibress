@@ -45,13 +45,10 @@
     "vitest": "^4.1.10"
   },
   "resolutions": {
-    "typescript": "~5.5.3"
+    "typescript": "~5.5.3",
+    "tar": ">=7.5.21"
   },
-  "dependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
-  },
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.22.0",
   "engines": {
     "node": ">=24.0.0 <25",
     "pnpm": ">=11.17.0"

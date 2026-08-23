@@ -233,7 +233,7 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     expect(disableRes.status()).toBe(200);
 
     // Member session invalid → account shows sign-in
-    await page.goto("http://localhost:7777/portal/#/account");
+    await page.reload();
     await expect(page.locator("h1")).toContainText(
       "Your session is no longer valid",
     );
@@ -247,7 +247,7 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     );
 
     // Old session still invalid
-    await page.goto("http://localhost:7777/portal/#/account");
+    await page.reload();
     await expect(page.locator("h1")).toContainText(
       "Your session is no longer valid",
     );
@@ -310,8 +310,10 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     await expect(page.locator("h1")).toContainText("Your account");
 
     // Second use (new browser context = no cookie)
-    const page2 = await page.context().newPage();
+    const context2 = await page.context().browser()!.newContext();
+    const page2 = await context2.newPage();
     await page2.goto(link);
     await expect(page2.locator("body")).toContainText("invalid or expired");
+    await context2.close();
   });
 });

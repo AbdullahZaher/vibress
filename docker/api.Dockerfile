@@ -3,7 +3,7 @@
 
 # ---- Base: pnpm toolchain on Node 24 (matches root engines) ----
 FROM node:24-alpine AS base
-RUN npm install -g pnpm@11.17.0
+RUN npm install -g pnpm@11.22.0
 WORKDIR /repo
 
 # ---- Dependencies + build ----
@@ -33,7 +33,7 @@ ENV NODE_ENV=production
 ENV VIBRESS_VERSION=${VIBRESS_VERSION}
 ENV GIT_SHA=${GIT_SHA}
 
-RUN npm install -g pnpm@11.17.0 && \
+RUN npm install -g pnpm@11.22.0 && \
     # Remove the bundled npm CLI (not needed at runtime; carries unpatched bundled deps)
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
