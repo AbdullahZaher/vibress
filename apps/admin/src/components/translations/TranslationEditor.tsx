@@ -205,11 +205,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
 
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
-      await saveMutation.mutateAsync("needs_review");
-      if (currentTranslationId) {
-        const res = await submitTranslationForReview(currentTranslationId);
-        return res.translation;
-      }
+      setErrorMsg(null);
+      const saved = await saveMutation.mutateAsync("needs_review");
+      const targetId = saved?.id || currentTranslationId;
+      if (!targetId) throw new Error("Could not determine translation identifier");
+      const res = await submitTranslationForReview(targetId);
+      return res.translation;
     },
     onSuccess: (res) => {
       if (res) setStatus(res.status);
@@ -217,12 +218,18 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.translations.all });
       setTimeout(() => setSuccessMsg(null), 4000);
     },
+    onError: (err: any) => {
+      setErrorMsg(`Failed to submit for review: ${err.message || "Unknown error"}`);
+    },
   });
 
   const approveMutation = useMutation({
     mutationFn: async () => {
-      if (!currentTranslationId) return;
-      const res = await approveTranslationApi(currentTranslationId);
+      setErrorMsg(null);
+      const saved = await saveMutation.mutateAsync("approved");
+      const targetId = saved?.id || currentTranslationId;
+      if (!targetId) throw new Error("Could not determine translation identifier");
+      const res = await approveTranslationApi(targetId);
       return res.translation;
     },
     onSuccess: (res) => {
@@ -231,12 +238,18 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.translations.all });
       setTimeout(() => setSuccessMsg(null), 4000);
     },
+    onError: (err: any) => {
+      setErrorMsg(`Failed to approve translation: ${err.message || "Unknown error"}`);
+    },
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!currentTranslationId) return;
-      const res = await publishTranslationApi(currentTranslationId);
+      setErrorMsg(null);
+      const saved = await saveMutation.mutateAsync("published");
+      const targetId = saved?.id || currentTranslationId;
+      if (!targetId) throw new Error("Could not determine translation identifier");
+      const res = await publishTranslationApi(targetId);
       return res.translation;
     },
     onSuccess: (res) => {
@@ -244,6 +257,9 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
       setSuccessMsg("Translation published successfully!");
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.translations.all });
       setTimeout(() => setSuccessMsg(null), 4000);
+    },
+    onError: (err: any) => {
+      setErrorMsg(`Failed to publish translation: ${err.message || "Unknown error"}`);
     },
   });
 
