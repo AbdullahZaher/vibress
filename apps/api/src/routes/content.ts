@@ -212,6 +212,10 @@ function extractRequestedLocale(req: any): string | null {
       const page = filter.page;
       const offset = (page - 1) * limit;
       const requestedLocale = extractRequestedLocale(req);
+      
+      const site = await buildPublicSiteIdentity();
+      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
+      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
@@ -227,7 +231,7 @@ function extractRequestedLocale(req: any): string | null {
       const summaries = await Promise.all(
         posts.map(async (post) => {
           let mergedPost: any = post;
-          if (requestedLocale && !requestedLocale.startsWith("en")) {
+          if (isTranslationRequest) {
             const tr = await translationService.getTranslation("post", post.id, requestedLocale);
             if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
               mergedPost = {
@@ -265,7 +269,7 @@ function extractRequestedLocale(req: any): string | null {
       );
 
       const validSummaries = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
-      const totalCount = requestedLocale && !requestedLocale.startsWith("en") ? validSummaries.length : total;
+      const totalCount = isTranslationRequest ? validSummaries.length : total;
       const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
@@ -286,6 +290,10 @@ function extractRequestedLocale(req: any): string | null {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const requestedLocale = extractRequestedLocale(req);
+      
+      const site = await buildPublicSiteIdentity();
+      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
+      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       let post = await postsService.findPublishedBySlug(slug);
       let translationItem = null;
@@ -307,7 +315,7 @@ function extractRequestedLocale(req: any): string | null {
             post = null;
           }
         }
-      } else if (requestedLocale && !requestedLocale.startsWith("en")) {
+      } else if (isTranslationRequest) {
         // Source post found, check for translated representation
         translationItem = await translationService.getTranslation(
           "post",
@@ -391,6 +399,10 @@ function extractRequestedLocale(req: any): string | null {
       const page = filter.page;
       const offset = (page - 1) * limit;
       const requestedLocale = extractRequestedLocale(req);
+      
+      const site = await buildPublicSiteIdentity();
+      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
+      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       const { pages, total } = await pagesService.listPages({
         publishedOnly: true,
@@ -402,7 +414,7 @@ function extractRequestedLocale(req: any): string | null {
       const details = await Promise.all(
         pages.map(async (pageObj) => {
           let mergedPage: any = pageObj;
-          if (requestedLocale && !requestedLocale.startsWith("en")) {
+          if (isTranslationRequest) {
             const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale);
             if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
               mergedPage = {
@@ -424,7 +436,7 @@ function extractRequestedLocale(req: any): string | null {
       );
 
       const validDetails = details.filter((d): d is NonNullable<typeof d> => d !== null);
-      const totalCount = requestedLocale && !requestedLocale.startsWith("en") ? validDetails.length : total;
+      const totalCount = isTranslationRequest ? validDetails.length : total;
       const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
@@ -445,6 +457,10 @@ function extractRequestedLocale(req: any): string | null {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const requestedLocale = extractRequestedLocale(req);
+      
+      const site = await buildPublicSiteIdentity();
+      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
+      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       let pageObj = await pagesService.findPublishedBySlug(slug);
       let translationItem = null;
@@ -465,7 +481,7 @@ function extractRequestedLocale(req: any): string | null {
             pageObj = null;
           }
         }
-      } else if (requestedLocale && !requestedLocale.startsWith("en")) {
+      } else if (isTranslationRequest) {
         translationItem = await translationService.getTranslation(
           "page",
           pageObj.id,
