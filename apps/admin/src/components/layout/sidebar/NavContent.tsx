@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Database,
   Zap,
+  Globe,
 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 
@@ -144,6 +145,20 @@ export const NavContent: React.FC<NavContentProps> = ({
       >
         <File className="h-4 w-4 shrink-0" />
         <span>Pages</span>
+      </button>
+
+      {/* Translations & Localization */}
+      <button
+        type="button"
+        onClick={() => onNavigate("/admin/translations")}
+        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+          currentPath.startsWith("/admin/translations")
+            ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+        }`}
+      >
+        <Globe className="h-4 w-4 shrink-0" />
+        <span>Translations</span>
       </button>
 
       {/* Tags */}

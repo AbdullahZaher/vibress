@@ -3,6 +3,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { X, Sparkles } from "lucide-react";
 import { generateAiCompletion } from "../../lib/api";
+import { TranslationSidebarSection } from "../translations/TranslationSidebarSection";
 
 interface PageSettingsSidebarProps {
   isOpen: boolean;
@@ -19,6 +20,8 @@ interface PageSettingsSidebarProps {
   setMetaDescription: (val: string) => void;
   canonicalUrl: string;
   setCanonicalUrl: (val: string) => void;
+  pageId?: string | undefined;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
@@ -36,6 +39,8 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
   setMetaDescription,
   canonicalUrl,
   setCanonicalUrl,
+  pageId,
+  onNavigate,
 }) => {
   const [generatingSeo, setGeneratingSeo] = useState(false);
 
@@ -163,6 +168,17 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
                 Leave blank to use the default canonical URL.
               </p>
             </div>
+
+            {/* Multilingual Translation Management */}
+            {pageId && (
+              <div className="space-y-4 border-t pt-4">
+                <TranslationSidebarSection
+                  contentType="page"
+                  contentId={pageId}
+                  onNavigate={onNavigate || (() => {})}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

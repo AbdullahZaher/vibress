@@ -83,8 +83,16 @@ export default function NotFound() {
           transition: transform 0.15s ease;
         }
 
+        [dir="rtl"] .vb-not-found-arrow {
+          transform: rotate(180deg);
+        }
+
         .vb-not-found-link:hover .vb-not-found-arrow {
           transform: translateX(3px);
+        }
+
+        [dir="rtl"] .vb-not-found-link:hover .vb-not-found-arrow {
+          transform: rotate(180deg) translateX(3px);
         }
       `}</style>
     </div>

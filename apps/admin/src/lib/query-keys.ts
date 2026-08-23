@@ -54,6 +54,17 @@ export const adminQueryKeys = {
     overview: (period?: string) =>
       [...adminQueryKeys.analytics.all, "overview", period ?? "30d"] as const,
   },
+  translations: {
+    all: ["translations"] as const,
+    matrix: (filters?: Record<string, unknown>) =>
+      [...adminQueryKeys.translations.all, "matrix", filters ?? {}] as const,
+    queue: () => [...adminQueryKeys.translations.all, "queue"] as const,
+    health: () => [...adminQueryKeys.translations.all, "health"] as const,
+    detail: (id: string) =>
+      [...adminQueryKeys.translations.all, "detail", id] as const,
+    content: (type: string, id: string) =>
+      [...adminQueryKeys.translations.all, "content", type, id] as const,
+  },
 };
 
 /**

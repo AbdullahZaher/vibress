@@ -1,4 +1,5 @@
 import { routes } from "./route-contract";
+import type { ThemeLocaleContext, AvailableLocaleItem } from "./theme-core";
 
 export interface AuthorViewModel {
   id: string;
@@ -38,6 +39,8 @@ export interface PostViewModel {
   slug: string;
   excerpt?: string | null | undefined;
   html: string;
+  locale?: string | undefined;
+  direction?: "ltr" | "rtl" | undefined;
   publishedAt?: string | null | undefined;
   updatedAt?: string | null | undefined;
   readingTimeMinutes?: number | undefined;
@@ -56,6 +59,8 @@ export interface PageViewModel {
   slug: string;
   excerpt?: string | null | undefined;
   html: string;
+  locale?: string | undefined;
+  direction?: "ltr" | "rtl" | undefined;
   publishedAt?: string | null | undefined;
   updatedAt?: string | null | undefined;
   featureImage?: ImageViewModel | null | undefined;
@@ -351,6 +356,8 @@ export function mapPostToViewModel(
 
   const title = post.title || "";
   const postUrl = routes.post(slug);
+  const postLocale = (post as any).locale || undefined;
+  const postDirection = (post as any).direction || (postLocale?.toLowerCase().startsWith("ar") ? "rtl" : undefined);
 
   return {
     id: post.id || slug,
@@ -358,6 +365,8 @@ export function mapPostToViewModel(
     slug,
     excerpt: post.excerpt ?? null,
     html: post.html || post.contentHtml || "",
+    locale: postLocale,
+    direction: postDirection,
     publishedAt: publishedAtStr,
     updatedAt: updatedAtStr,
     readingTimeMinutes: post.readingTimeMinutes ?? 1,
@@ -385,6 +394,8 @@ export function mapPageToViewModel(
     excerpt?: string | null | undefined;
     html?: string | undefined;
     contentHtml?: string | undefined;
+    locale?: string | undefined;
+    direction?: "ltr" | "rtl" | undefined;
     publishedAt?: string | Date | null | undefined;
     updatedAt?: string | Date | null | undefined;
     featureImage?: { url?: string | undefined; alt?: string | null | undefined; caption?: string | null | undefined } | string | null | undefined;
@@ -427,6 +438,8 @@ export function mapPageToViewModel(
 
   const title = page.title || "";
   const pageUrl = routes.page(slug);
+  const pageLocale = page.locale || undefined;
+  const pageDirection = page.direction || (pageLocale?.toLowerCase().startsWith("ar") ? "rtl" : undefined);
 
   return {
     id: page.id || slug,
@@ -434,6 +447,8 @@ export function mapPageToViewModel(
     slug,
     excerpt: page.excerpt ?? null,
     html: page.html || page.contentHtml || "",
+    locale: pageLocale,
+    direction: pageDirection,
     publishedAt: publishedAtStr,
     updatedAt: updatedAtStr,
     featureImage: featureImageObj,
@@ -463,5 +478,8 @@ export interface ThemeViewModelContext {
     id: string;
     version: string;
   } | null | undefined;
+  localeContext?: ThemeLocaleContext | undefined;
+  locale?: string | ThemeLocaleContext | undefined;
+  availableLocales?: AvailableLocaleItem[] | undefined;
   [key: string]: unknown;
 }

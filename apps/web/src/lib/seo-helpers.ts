@@ -3,6 +3,7 @@ import {
   PublicPostDetailDto,
   PublicPageDetailDto,
 } from "@vibress/api-contracts";
+import { canonicalizeLocale } from "@vibress/i18n";
 
 export function getPublicSiteUrl(): string {
   const envUrl =
@@ -20,6 +21,10 @@ export function getPublicSiteUrl(): string {
   }
 }
 
+export interface AlternateLanguageMap {
+  [locale: string]: string;
+}
+
 export function buildPageMetadata(options: {
   title: string;
   description: string;
@@ -27,6 +32,8 @@ export function buildPageMetadata(options: {
   canonicalOverride?: string | null | undefined;
   ogImage?: string | null | undefined;
   ogType?: "website" | "article" | undefined;
+  locale?: string | undefined;
+  alternateLocales?: AlternateLanguageMap | undefined;
 }): Metadata {
   const siteUrl = getPublicSiteUrl();
   const siteName = process.env.SITE_NAME || "Vibress";
@@ -39,11 +46,26 @@ export function buildPageMetadata(options: {
     }
   }
 
+  const locale = options.locale ? canonicalizeLocale(options.locale) : "en";
+  const ogLocale = locale.replace(/-/g, "_");
+  const currentLang = locale.split("-")[0] || "en";
+  const rawPath = (options.canonicalPath || "").replace(/^\/(?:ar|fr|fa|de|tr|ur|he)/, "");
+
+  const alternateLanguages = options.alternateLocales || {
+    en: `${siteUrl}${rawPath}`,
+    ar: `${siteUrl}/ar${rawPath}`,
+    ...(currentLang !== "en" && currentLang !== "ar"
+      ? { [currentLang]: `${siteUrl}/${currentLang}${rawPath}` }
+      : {}),
+    "x-default": `${siteUrl}${rawPath}`,
+  };
+
   const meta: Metadata = {
     title: options.title,
     description: options.description,
     alternates: {
       canonical: canonicalUrl,
+      languages: alternateLanguages,
     },
     openGraph: {
       title: options.title,
@@ -51,6 +73,7 @@ export function buildPageMetadata(options: {
       url: canonicalUrl,
       type: options.ogType || "website",
       siteName,
+      locale: ogLocale,
       ...(options.ogImage ? { images: [{ url: options.ogImage }] } : {}),
     },
     twitter: {
@@ -66,6 +89,7 @@ export function buildPageMetadata(options: {
 
 export function buildPostJsonLd(
   post: PublicPostDetailDto,
+  locale = "en",
 ): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
   const canonicalUrl =
@@ -78,6 +102,7 @@ export function buildPostJsonLd(
     description: post.excerpt || post.seo.description,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt,
+    inLanguage: canonicalizeLocale(locale),
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": canonicalUrl,
@@ -92,6 +117,7 @@ export function buildPostJsonLd(
 
 export function buildPageJsonLd(
   page: PublicPageDetailDto,
+  locale = "en",
 ): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
   const canonicalUrl =
@@ -103,6 +129,7 @@ export function buildPageJsonLd(
     name: page.title,
     description: page.excerpt || page.seo.description,
     url: canonicalUrl,
+    inLanguage: canonicalizeLocale(locale),
     datePublished: page.publishedAt,
     dateModified: page.updatedAt,
   };

@@ -744,6 +744,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         postId={postId || ""}
         revisions={revisions}
         handleRestoreRevision={handleRestoreRevision}
+        onNavigate={onNavigate}
       />
 
       {postId && (

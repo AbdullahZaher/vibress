@@ -1,28 +1,44 @@
 export interface RouteContract {
-  home(): string;
-  post(slug: string): string;
-  page(slug: string): string;
-  tag(slug: string): string;
-  author(slug: string): string;
+  home(locale?: string): string;
+  post(slug: string, locale?: string): string;
+  page(slug: string, locale?: string): string;
+  tag(slug: string, locale?: string): string;
+  author(slug: string, locale?: string): string;
   portal: {
-    signIn(): string;
-    signUp(): string;
-    account(): string;
+    signIn(locale?: string): string;
+    signUp(locale?: string): string;
+    account(locale?: string): string;
   };
   themeAsset(themeId: string, version: string, assetPath: string): string;
   themePreview(token: string, subpath?: string): string;
 }
 
+function prefixRoute(path: string, locale?: string): string {
+  if (!locale || locale === "en" || locale === "en-US") {
+    return path;
+  }
+  const cleanPrefix = locale.toLowerCase();
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  if (cleanPath === "/") {
+    return `/${cleanPrefix}`;
+  }
+  return `/${cleanPrefix}${cleanPath}`;
+}
+
 export const routes: RouteContract = {
-  home: () => "/",
-  post: (slug: string) => `/posts/${encodeURIComponent(slug)}`,
-  page: (slug: string) => `/pages/${encodeURIComponent(slug)}`,
-  tag: (slug: string) => `/tags/${encodeURIComponent(slug)}`,
-  author: (slug: string) => `/authors/${encodeURIComponent(slug)}`,
+  home: (locale?: string) => prefixRoute("/", locale),
+  post: (slug: string, locale?: string) =>
+    prefixRoute(`/posts/${encodeURIComponent(slug)}`, locale),
+  page: (slug: string, locale?: string) =>
+    prefixRoute(`/pages/${encodeURIComponent(slug)}`, locale),
+  tag: (slug: string, locale?: string) =>
+    prefixRoute(`/tags/${encodeURIComponent(slug)}`, locale),
+  author: (slug: string, locale?: string) =>
+    prefixRoute(`/authors/${encodeURIComponent(slug)}`, locale),
   portal: {
-    signIn: () => "/portal/signin",
-    signUp: () => "/portal/signup",
-    account: () => "/portal/account",
+    signIn: (locale?: string) => prefixRoute("/portal/signin", locale),
+    signUp: (locale?: string) => prefixRoute("/portal/signup", locale),
+    account: (locale?: string) => prefixRoute("/portal/account", locale),
   },
   themeAsset: (themeId: string, version: string, assetPath: string) => {
     const cleanPath = assetPath.replace(/^\/+/, "");

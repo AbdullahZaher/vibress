@@ -6,6 +6,7 @@ import {
   mapSiteToViewModel,
   ThemeViewModelContext,
 } from "@vibress/theme-core";
+import { getDirection, isRtl, defaultLocaleRegistry, type Direction } from "@vibress/i18n";
 import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 
@@ -195,10 +196,57 @@ export async function renderThemeTemplate(
     themeVersion,
   });
 
+  const activeLocale = site.locale || "en";
+  const post = (context as any).post;
+  const page = (context as any).page;
+  const rawPath = post ? `/posts/${post.slug}` : (page ? `/pages/${page.slug}` : "/");
+  const enUrl = rawPath;
+  const arUrl = rawPath === "/" ? "/ar" : `/ar${rawPath}`;
+
+  const currentLang = activeLocale.split("-")[0] || "en";
+  const isEn = activeLocale === "en" || activeLocale === "en-US";
+  const isAr = activeLocale.startsWith("ar");
+
+  const defaultLocales: {
+    code: string;
+    name: string;
+    nativeName: string;
+    direction: Direction;
+    url: string;
+    isCurrent: boolean;
+  }[] = [
+    { code: "en", name: "English", nativeName: "English", direction: "ltr", url: enUrl, isCurrent: isEn },
+    { code: "ar-SA", name: "Arabic", nativeName: "العربية", direction: "rtl", url: arUrl, isCurrent: isAr },
+  ];
+
+  if (!isEn && !isAr) {
+    const locDef = defaultLocaleRegistry.get(activeLocale);
+    const locUrl = rawPath === "/" ? `/${currentLang}` : `/${currentLang}${rawPath}`;
+    defaultLocales.push({
+      code: activeLocale,
+      name: locDef?.englishName || activeLocale,
+      nativeName: locDef?.nativeName || activeLocale,
+      direction: getDirection(activeLocale),
+      url: locUrl,
+      isCurrent: true,
+    });
+  }
+
+  const currentUrl = isEn ? enUrl : (isAr ? arUrl : (rawPath === "/" ? `/${currentLang}` : `/${currentLang}${rawPath}`));
+
   const fullContext: ThemeViewModelContext = {
     ...context,
     site: context.site || mapSiteToViewModel(site),
     settings: { ...settings, ...(context.settings || {}) },
+    locale: activeLocale,
+    localeContext: context.localeContext || {
+      locale: activeLocale,
+      language: currentLang,
+      direction: getDirection(activeLocale),
+      isRTL: isRtl(activeLocale),
+      availableLocales: defaultLocales,
+      currentUrl,
+    },
   };
 
   const rawHtml = await engine.renderFile(templateName, fullContext);

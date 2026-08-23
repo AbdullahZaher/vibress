@@ -1,11 +1,14 @@
 import {
   createTranslator,
   Translator,
+  arDictionary,
+  enDictionary,
   type TranslationDictionary,
 } from "@vibress/i18n";
 
 export const webDictionary: TranslationDictionary = {
   en: {
+    ...enDictionary,
     "nav.home": "Home",
     "nav.about": "About",
     "nav.signin": "Sign in",
@@ -48,13 +51,54 @@ export const webDictionary: TranslationDictionary = {
     "social.twitter": "Twitter",
     "social.facebook": "Facebook",
   },
+  ar: {
+    ...arDictionary,
+    "nav.home": "الرئيسية",
+    "nav.about": "عن الموقع",
+    "nav.signin": "تسجيل الدخول",
+    "nav.subscribe": "اشتراك",
+    "search.label": "بحث",
+    "search.thisSite": "البحث في هذا الموقع",
+    "menu.toggle": "تبديل القائمة",
+    "modal.close": "إغلاق",
+    "modal.nameLabel": "الاسم",
+    "modal.emailLabel": "البريد الإلكتروني",
+    "modal.namePlaceholder": "عبدالله محمد",
+    "modal.emailPlaceholder": "abdullah@example.com",
+    "modal.submit": "اشتراك",
+    "modal.successTitle": "شكراً لاشتراكك!",
+    "modal.successBody": "يرجى التحقق من بريدك الإلكتروني لتأكيد الاشتراك.",
+    "modal.alreadyMember": "هل أنت عضو بالفعل؟",
+    "subscribe.button": "اشتراك",
+    "subscribe.buttonSuccess": "تم الاشتراك!",
+    "subscribe.emailLabel": "عنوان البريد الإلكتروني",
+    "home.heroFallback": "أفكار وقصص ورؤى ملهمة.",
+    "home.latest": "أحدث المقالات",
+    "home.empty": "لا توجد مقالات منشورة بعد.",
+    "home.by": "بواسطة",
+    "home.newer": "مقالات أحدث",
+    "home.older": "مقالات أقدم",
+    "home.pageInfo": "صفحة {page} من {pages}",
+    "home.latestWriting": "أحدث ما كُتب",
+    "home.emptyShort": "لا توجد مقالات منشورة حتى الآن.",
+    "home.olderArticles": "مقالات سابقة",
+    "home.newerArticles": "مقالات أحدث",
+    "home.tagEmpty": "لا توجد منشورات تحت هذا الوسم.",
+    "home.authorEmpty": "لا توجد منشورات لهذا الكاتب.",
+    "archive.by": "بواسطة",
+    "archive.previous": "السابق",
+    "archive.next": "التالي",
+    "post.readMore": "اقرأ المزيد",
+    "post.readTime": "{minutes} دقيقة قراءة",
+    "post.share": "مشاركة",
+    "post.in": "في",
+    "social.twitter": "تويتر",
+    "social.facebook": "فيسبوك",
+  },
 };
 
-const translator = createTranslator({
-  locale: process.env.SITE_LOCALE || "en",
-  fallbackLocale: "en",
-  dictionary: webDictionary,
-});
+webDictionary["ar-SA"] = webDictionary.ar || {};
+webDictionary["en-US"] = webDictionary.en || {};
 
 export function createWebTranslator(locale?: string): Translator {
   return createTranslator({
@@ -64,9 +108,15 @@ export function createWebTranslator(locale?: string): Translator {
   });
 }
 
+const defaultTranslator = createWebTranslator("en");
+
 export function t(
   key: string,
   params?: Record<string, string | number>,
+  locale?: string,
 ): string {
-  return translator.t(key, params);
+  if (locale) {
+    return createWebTranslator(locale).t(key, params);
+  }
+  return defaultTranslator.t(key, params);
 }

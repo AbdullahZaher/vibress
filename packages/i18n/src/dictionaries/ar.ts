@@ -13,6 +13,77 @@ export const arDictionary: Record<string, string> = {
   "nav.plugins": "الإضافات",
   "nav.settings": "الإعدادات",
   "nav.logout": "تسجيل الخروج",
+  "nav.home": "الرئيسية",
+  "nav.about": "عن الموقع",
+  "nav.signin": "تسجيل الدخول",
+  "nav.signup": "إنشاء حساب",
+  "nav.subscribe": "اشتراك",
+  "nav.account": "حسابي",
+
+  // Search
+  "search.label": "بحث",
+  "search.thisSite": "البحث في هذا الموقع",
+  "search.placeholder": "ابحث في المقالات والصفحات والوسوم...",
+  "search.no_results": "لم يتم العثور على نتائج",
+  "search.results_count": "تم العثور على {count} نتيجة",
+
+  // Modals & Menu
+  "menu.toggle": "تبديل القائمة",
+  "modal.close": "إغلاق",
+  "modal.nameLabel": "الاسم",
+  "modal.emailLabel": "البريد الإلكتروني",
+  "modal.namePlaceholder": "عبدالله محمد",
+  "modal.emailPlaceholder": "abdullah@example.com",
+  "modal.submit": "تسجيل الاشتراك",
+  "modal.successTitle": "شكراً لاشتراكك!",
+  "modal.successBody": "يرجى مراجعة بريدك الإلكتروني لتأكيد الاشتراك.",
+  "modal.alreadyMember": "هل أنت عضو بالفعل؟",
+
+  // Subscribe & Membership
+  "subscribe.button": "اشتراك",
+  "subscribe.buttonSuccess": "تم الاشتراك بنجاح!",
+  "subscribe.emailLabel": "عنوان البريد الإلكتروني",
+  "subscribe.title": "اشترك في منشوراتنا",
+  "subscribe.subtitle": "احصل على أحدث المقالات والأفكار مباشرة في صندوق بريدك.",
+
+  // Public Home & Feeds
+  "home.heroFallback": "أفكار وقصص ورؤى ملهمة.",
+  "home.latest": "أحدث المنشورات",
+  "home.empty": "لا توجد مقالات منشورة حتى الآن.",
+  "home.by": "بواسطة",
+  "home.newer": "المقالات الأحدث",
+  "home.older": "المقالات الأقدم",
+  "home.pageInfo": "صفحة {page} من {pages}",
+  "home.latestWriting": "أحدث ما كُتب",
+  "home.emptyShort": "لا توجد مقالات منشورة بعد.",
+  "home.olderArticles": "مقالات سابقة",
+  "home.newerArticles": "مقالات أحدث",
+  "home.tagEmpty": "لا توجد منشورات تحت هذا الوسم.",
+  "home.authorEmpty": "لا توجد منشورات لهذا الكاتب.",
+
+  // Post & Page
+  "post.readMore": "اقرأ المزيد",
+  "post.readTime": "{minutes} دقيقة قراءة",
+  "post.share": "مشاركة",
+  "post.in": "في",
+  "post.publishedOn": "نُشر بتاريخ {date}",
+  "post.updatedOn": "تم التحديث في {date}",
+  "post.writtenBy": "كتبه {author}",
+  "archive.by": "بواسطة",
+  "archive.previous": "السابق",
+  "archive.next": "التالي",
+  "social.twitter": "تويتر",
+  "social.facebook": "فيسبوك",
+
+  // Locales & Translations
+  "locale.switch": "تغيير اللغة",
+  "locale.current": "اللغة الحالية: {name}",
+  "locale.available": "اللغات المتاحة",
+  "translation.missing": "هذا المحتوى غير متوفر باللغة المحددة.",
+  "translation.stale": "قد تكون هذه الترجمة غير محدثة بالنسبة للأصل.",
+  "translation.needs_review": "الترجمة بانتظار المراجعة.",
+  "translation.draft": "مسودة ترجمة",
+  "translation.approved": "ترجمة معتمدة",
 
   // Editorial Workflow & Statuses
   "status.draft": "مسودة",
@@ -22,6 +93,9 @@ export const arDictionary: Record<string, string> = {
   "status.scheduled": "مجدول",
   "status.published": "منشور",
   "status.archived": "مؤرشف",
+  "status.stale": "قديمة وغير مطابقة",
+  "status.translated": "مترجم",
+  "status.untranslated": "غير مترجم",
 
   // Studio & Editor Actions
   "editor.title_placeholder": "عنوان المقال...",
@@ -34,6 +108,8 @@ export const arDictionary: Record<string, string> = {
   "editor.reload_latest": "إعادة تحميل الأحدث",
   "editor.diff": "مقارنة النسخ",
   "editor.collaborate": "التعاون",
+  "editor.translate": "ترجمة",
+  "editor.switch_locale": "تغيير لغة التحرير",
 
   // Collaboration Panel
   "collab.title": "التعاون التحريري",
@@ -55,6 +131,8 @@ export const arDictionary: Record<string, string> = {
   "ai.insert_below": "إدراج بالأسفل",
   "ai.discard": "تجاهل",
   "ai.generate_seo": "توليد بيانات SEO بالذكاء الاصطناعي",
+  "ai.translate_to": "ترجمة إلى {locale}",
+  "ai.translating": "جارٍ توليد الترجمة الذكية...",
 
   // Common UI
   "common.save": "حفظ",
@@ -66,4 +144,7 @@ export const arDictionary: Record<string, string> = {
   "common.loading": "جارٍ التحميل...",
   "common.error": "حدث خطأ ما",
   "common.success": "تمت العملية بنجاح",
+  "common.retry": "إعادة المحاولة",
+  "common.back": "رجوع",
+  "common.next": "التالي",
 };

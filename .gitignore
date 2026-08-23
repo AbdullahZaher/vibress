@@ -28,6 +28,9 @@ tmp/
 postgres.dump
 playwright-report/
 test-results/
+tests/e2e/screenshots/
+tests/e2e/visual/
+tests/e2e/baselines/
 .vite/
 logs/
 infrastructure/data/

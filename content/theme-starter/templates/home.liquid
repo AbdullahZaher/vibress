@@ -11,7 +11,7 @@
 
     {% if tags.size > 0 %}
       <div class="tags-filter-bar">
-        <span class="tags-filter-label">Explore topics:</span>
+        <span class="tags-filter-label">{{ "theme.tagFilter" | t }}:</span>
         <div class="tags-chips">
           {% for tag in tags %}
             <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
@@ -23,8 +23,7 @@
     <section class="posts-grid">
       {% if posts.size == 0 %}
         <div class="empty-state">
-          <h3>No articles published yet.</h3>
-          <p>Check back soon for new stories.</p>
+          <h3>{{ "theme.noPosts" | t }}</h3>
         </div>
       {% else %}
         {% for post in posts %}
@@ -65,7 +64,7 @@
                 {% endif %}
 
                 {% if post.readingTimeMinutes %}
-                  <span class="post-reading-time">{{ post.readingTimeMinutes }} min read</span>
+                  <span class="post-reading-time">{{ post.readingTimeMinutes }} {{ "theme.minRead" | t }}</span>
                 {% endif %}
               </div>
             </div>

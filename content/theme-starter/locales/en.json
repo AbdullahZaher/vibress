@@ -1,0 +1,14 @@
+{
+  "theme.tagFilter": "Filter by Topic",
+  "theme.readMore": "Read more",
+  "theme.minRead": "min read",
+  "theme.featured": "Featured",
+  "theme.writtenBy": "Written by",
+  "theme.publishedOn": "Published on",
+  "theme.updatedOn": "Updated on",
+  "theme.latestArticles": "Latest Articles",
+  "theme.allArticles": "All Articles",
+  "theme.noPosts": "No articles published yet.",
+  "theme.noTagPosts": "No articles found under this tag.",
+  "theme.noAuthorPosts": "No articles found for this author."
+}

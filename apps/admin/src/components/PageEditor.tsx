@@ -463,6 +463,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         setMetaDescription={setMetaDescription}
         canonicalUrl={canonicalUrl}
         setCanonicalUrl={setCanonicalUrl}
+        pageId={pageId}
+        onNavigate={onNavigate}
       />
 
       {/* Media Modal */}

@@ -1,5 +1,16 @@
 import { Liquid, FS } from "liquidjs";
 import { routes } from "./route-contract";
+import {
+  createTranslator,
+  formatDate as i18nFormatDate,
+  formatHijriDate as i18nFormatHijriDate,
+  formatNumber as i18nFormatNumber,
+  formatRelativeTime as i18nFormatRelativeTime,
+  isRtl as i18nIsRtl,
+  getDirection as i18nGetDirection,
+  canonicalizeLocale,
+  type TranslationDictionary,
+} from "@vibress/i18n";
 
 export interface ThemeTemplateFileMap {
   [path: string]: string;
@@ -101,8 +112,46 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Extracts and parses theme-level locale JSON files (e.g. locales/en.json, locales/ar.json).
+ */
+function extractThemeDictionaries(files: Map<string, string> | Record<string, string>): TranslationDictionary {
+  const dict: TranslationDictionary = {};
+  const entries = files instanceof Map ? Array.from(files.entries()) : Object.entries(files);
+
+  for (const [filepath, content] of entries) {
+    const norm = filepath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (norm.startsWith("locales/") && norm.endsWith(".json")) {
+      const localeCode = norm.replace(/^locales\//, "").replace(/\.json$/, "");
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed && typeof parsed === "object") {
+          const canonical = canonicalizeLocale(localeCode);
+          dict[canonical] = parsed as Record<string, string>;
+          const lang = canonical.split("-")[0];
+          if (lang && !dict[lang]) {
+            dict[lang] = parsed as Record<string, string>;
+          }
+        }
+      } catch {
+        // Ignore invalid locale JSON
+      }
+    }
+  }
+
+  return dict;
+}
+
 export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liquid {
-  const memFs = new MemoryFileSystem(options.files || {});
+  const fileEntries = options.files || {};
+  const memFs = new MemoryFileSystem(fileEntries);
+  const themeDict = extractThemeDictionaries(fileEntries);
+  const translator = createTranslator();
+
+  // Load theme-specific translations into translator
+  for (const [loc, dict] of Object.entries(themeDict)) {
+    translator.mergeDictionary(loc, dict);
+  }
 
   const liquid = new Liquid({
     fs: memFs,
@@ -118,6 +167,60 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     dynamicPartials: true,
   });
 
+  // Helper to extract active locale from liquid execution context
+  function getContextLocale(ctx: any): string {
+    if (ctx && typeof ctx.get === "function") {
+      const loc = ctx.get(["locale"]) || ctx.get(["localeContext", "locale"]) || ctx.get(["site", "locale"]);
+      if (typeof loc === "string" && loc.trim()) return loc;
+    }
+    if (ctx?.context && typeof ctx.context.get === "function") {
+      const loc = ctx.context.get(["locale"]) || ctx.context.get(["localeContext", "locale"]) || ctx.context.get(["site", "locale"]);
+      if (typeof loc === "string" && loc.trim()) return loc;
+    }
+    const env = ctx?.context?.environments || ctx?.environments || {};
+    if (typeof env.locale === "string") return env.locale;
+    if (env.localeContext?.locale) return env.localeContext.locale;
+    if (env.site?.locale) return env.site.locale;
+    return "en";
+  }
+
+  // Custom filter: t / translate
+  liquid.registerFilter("t", function (this: any, key: unknown, params?: any) {
+    if (!key || typeof key !== "string") return "";
+    const activeLocale = getContextLocale(this);
+    let parsedParams: Record<string, string | number> | undefined = undefined;
+    if (params && typeof params === "object") {
+      parsedParams = params as Record<string, string | number>;
+    }
+    return translator.translate(key, parsedParams, activeLocale);
+  });
+
+  liquid.registerFilter("translate", function (this: any, key: unknown, params?: any) {
+    if (!key || typeof key !== "string") return "";
+    const activeLocale = getContextLocale(this);
+    let parsedParams: Record<string, string | number> | undefined = undefined;
+    if (params && typeof params === "object") {
+      parsedParams = params as Record<string, string | number>;
+    }
+    return translator.translate(key, parsedParams, activeLocale);
+  });
+
+  // Custom filter: is_rtl
+  liquid.registerFilter("is_rtl", function (this: any, locale?: unknown) {
+    const targetLocale = typeof locale === "string" && locale.trim() !== ""
+      ? locale
+      : getContextLocale(this);
+    return i18nIsRtl(targetLocale);
+  });
+
+  // Custom filter: direction
+  liquid.registerFilter("direction", function (this: any, locale?: unknown) {
+    const targetLocale = typeof locale === "string" && locale.trim() !== ""
+      ? locale
+      : getContextLocale(this);
+    return i18nGetDirection(targetLocale);
+  });
+
   // Custom filter: asset_url
   liquid.registerFilter("asset_url", function (this: any, input: unknown) {
     if (!input || typeof input !== "string") return "";
@@ -128,27 +231,54 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
   });
 
   // Custom filter: post_url
-  liquid.registerFilter("post_url", function (input: unknown) {
+  liquid.registerFilter("post_url", function (this: any, input: unknown, explicitLocale?: unknown) {
     if (!input || typeof input !== "string") return "/";
-    return routes.post(input);
+    const activeLocale = typeof explicitLocale === "string" ? explicitLocale : getContextLocale(this);
+    return routes.post(input, activeLocale);
   });
 
   // Custom filter: tag_url
-  liquid.registerFilter("tag_url", function (input: unknown) {
+  liquid.registerFilter("tag_url", function (this: any, input: unknown, explicitLocale?: unknown) {
     if (!input || typeof input !== "string") return "/";
-    return routes.tag(input);
+    const activeLocale = typeof explicitLocale === "string" ? explicitLocale : getContextLocale(this);
+    return routes.tag(input, activeLocale);
   });
 
   // Custom filter: author_url
-  liquid.registerFilter("author_url", function (input: unknown) {
+  liquid.registerFilter("author_url", function (this: any, input: unknown, explicitLocale?: unknown) {
     if (!input || typeof input !== "string") return "/";
-    return routes.author(input);
+    const activeLocale = typeof explicitLocale === "string" ? explicitLocale : getContextLocale(this);
+    return routes.author(input, activeLocale);
   });
 
   // Custom filter: page_url
-  liquid.registerFilter("page_url", function (input: unknown) {
+  liquid.registerFilter("page_url", function (this: any, input: unknown, explicitLocale?: unknown) {
     if (!input || typeof input !== "string") return "/";
-    return routes.page(input);
+    const activeLocale = typeof explicitLocale === "string" ? explicitLocale : getContextLocale(this);
+    return routes.page(input, activeLocale);
+  });
+
+  // Custom filter: locale_url
+  liquid.registerFilter("locale_url", function (this: any, path: unknown, targetLocale: unknown) {
+    const loc = typeof targetLocale === "string" ? targetLocale : getContextLocale(this);
+    const p = typeof path === "string" ? path : "/";
+    if (p === "/" || p === "") {
+      return routes.home(loc);
+    }
+    const clean = p.replace(/^\/+/, "");
+    if (clean.startsWith("posts/")) {
+      return routes.post(clean.replace(/^posts\//, ""), loc);
+    }
+    if (clean.startsWith("pages/")) {
+      return routes.page(clean.replace(/^pages\//, ""), loc);
+    }
+    if (clean.startsWith("tags/")) {
+      return routes.tag(clean.replace(/^tags\//, ""), loc);
+    }
+    if (clean.startsWith("authors/")) {
+      return routes.author(clean.replace(/^authors\//, ""), loc);
+    }
+    return loc === "en" || loc === "en-US" ? `/${clean}` : `/${loc.toLowerCase()}/${clean}`;
   });
 
   // Custom filter: excerpt
@@ -160,8 +290,8 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     return `${clean.substring(0, max).trim()}...`;
   });
 
-  // Custom filter: format_date
-  liquid.registerFilter("format_date", function (input: unknown, format?: string) {
+  // Custom filter: format_date (locale-aware)
+  liquid.registerFilter("format_date", function (this: any, input: unknown, formatOrLocale?: string) {
     if (!input) return "";
     let d: Date;
     if (input instanceof Date) {
@@ -173,27 +303,46 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     }
     if (isNaN(d.getTime())) return "";
 
-    const fmt = typeof format === "string" ? format.toLowerCase() : "medium";
+    const activeLocale = getContextLocale(this);
+    const fmt = typeof formatOrLocale === "string" ? formatOrLocale.toLowerCase() : "medium";
+
     if (fmt === "iso" || fmt === "%y-%m-%d") {
       return d.toISOString().split("T")[0]!;
     }
     if (fmt === "year" || fmt === "%y") {
       return String(d.getFullYear());
     }
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    if (fmt === "hijri") {
+      return i18nFormatHijriDate(d, activeLocale);
+    }
+
+    return i18nFormatDate(d, activeLocale);
+  });
+
+  // Custom filter: format_number
+  liquid.registerFilter("format_number", function (this: any, input: unknown) {
+    const num = Number(input);
+    if (isNaN(num)) return "";
+    const activeLocale = getContextLocale(this);
+    return i18nFormatNumber(num, activeLocale);
+  });
+
+  // Custom filter: format_relative_time
+  liquid.registerFilter("format_relative_time", function (this: any, input: unknown) {
+    if (!input) return "";
+    const activeLocale = getContextLocale(this);
+    return i18nFormatRelativeTime(input as any, activeLocale);
   });
 
   // Custom filter: pagination_url
-  liquid.registerFilter("pagination_url", function (pageNumber: unknown) {
+  liquid.registerFilter("pagination_url", function (this: any, pageNumber: unknown) {
     const num = Number(pageNumber);
+    const activeLocale = getContextLocale(this);
     if (!num || isNaN(num) || num <= 1) {
-      return routes.home();
+      return routes.home(activeLocale);
     }
-    return `/?page=${num}`;
+    const home = routes.home(activeLocale);
+    return home === "/" ? `/?page=${num}` : `${home}?page=${num}`;
   });
 
   // Custom tag: asset
@@ -216,20 +365,54 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
       this.param = parts[1] || "";
     },
     render(ctx) {
+      const env = ctx.environments || {};
+      const activeLocale = env.localeContext?.locale || env.site?.locale || "en";
       const paramVal = this.param ? (ctx.get([this.param]) as string) || this.param : "";
       switch (this.routeName) {
         case "post":
-          return routes.post(paramVal);
+          return routes.post(paramVal, activeLocale);
         case "page":
-          return routes.page(paramVal);
+          return routes.page(paramVal, activeLocale);
         case "tag":
-          return routes.tag(paramVal);
+          return routes.tag(paramVal, activeLocale);
         case "author":
-          return routes.author(paramVal);
+          return routes.author(paramVal, activeLocale);
         case "home":
         default:
-          return routes.home();
+          return routes.home(activeLocale);
       }
+    },
+  });
+
+  // Custom tag: t / translate
+  liquid.registerTag("t", {
+    parse(tagToken) {
+      this.key = tagToken.args.trim().replace(/^['"]|['"]$/g, "");
+    },
+    render(ctx) {
+      const env = ctx.environments || {};
+      const activeLocale = env.localeContext?.locale || env.site?.locale || "en";
+      return translator.translate(this.key, undefined, activeLocale);
+    },
+  });
+
+  // Custom tag: locale_switcher
+  liquid.registerTag("locale_switcher", {
+    parse(_tagToken) {},
+    render(ctx) {
+      const env = ctx.environments || {};
+      const availableLocales = env.availableLocales || env.localeContext?.availableLocales || [
+        { code: "en", name: "English", nativeName: "English", direction: "ltr", url: "/", isCurrent: true },
+        { code: "ar-SA", name: "Arabic", nativeName: "العربية", direction: "rtl", url: "/ar", isCurrent: false },
+      ];
+
+      const links = availableLocales.map((loc: any) => {
+        const activeClass = loc.isCurrent ? ' class="is-active"' : "";
+        const dirAttr = loc.direction ? ` dir="${loc.direction}"` : "";
+        return `<a href="${loc.url}"${dirAttr}${activeClass} data-locale="${loc.code}">${loc.nativeName || loc.name}</a>`;
+      }).join("\n  ");
+
+      return `<nav class="vb-locale-switcher" aria-label="Language selection">\n  ${links}\n</nav>`;
     },
   });
 

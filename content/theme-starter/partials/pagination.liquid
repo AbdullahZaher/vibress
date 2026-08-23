@@ -1,18 +1,18 @@
 {% if pagination.pages > 1 %}
   <nav class="theme-pagination" aria-label="Pagination">
     <div class="pagination-inner">
-      {% if pagination.prev %}
-        <a href="{{ pagination.prev | pagination_url }}" class="pagination-btn pagination-prev">&larr; Newer Articles</a>
+      {% if pagination.previous or pagination.prev %}
+        <a href="{{ pagination.previous | default: pagination.prev | pagination_url }}" class="pagination-btn pagination-prev"><span class="pagination-arrow">&larr;</span> {{ "home.newerArticles" | t }}</a>
       {% else %}
-        <span class="pagination-btn pagination-disabled">&larr; Newer Articles</span>
+        <span class="pagination-btn pagination-disabled"><span class="pagination-arrow">&larr;</span> {{ "home.newerArticles" | t }}</span>
       {% endif %}
 
-      <span class="pagination-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+      <span class="pagination-info">{{ "home.pageInfo" | t: page: pagination.page, pages: pagination.pages }}</span>
 
       {% if pagination.next %}
-        <a href="{{ pagination.next | pagination_url }}" class="pagination-btn pagination-next">Older Articles &rarr;</a>
+        <a href="{{ pagination.next | pagination_url }}" class="pagination-btn pagination-next">{{ "home.olderArticles" | t }} <span class="pagination-arrow">&rarr;</span></a>
       {% else %}
-        <span class="pagination-btn pagination-disabled">Older Articles &rarr;</span>
+        <span class="pagination-btn pagination-disabled">{{ "home.olderArticles" | t }} <span class="pagination-arrow">&rarr;</span></span>
       {% endif %}
     </div>
   </nav>

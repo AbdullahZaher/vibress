@@ -1,3 +1,4 @@
+import { getLocalePrefix } from "@vibress/i18n";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { ContentApiClient } from "../../../lib/content-api-client";
@@ -18,20 +19,24 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = await ContentApiClient.getPostBySlug(slug);
+  const site = await getThemeSiteSettings();
+  const post = await ContentApiClient.getPostBySlug(slug, { locale: site.locale });
   if (!post) {
     return {
       title: "Post Not Found",
     };
   }
 
+  const localePrefix = getLocalePrefix(site.locale);
+
   return buildPageMetadata({
     title: post.seo?.title || post.title,
     description: post.seo?.description || post.excerpt || "",
-    canonicalPath: `/posts/${post.slug}`,
+    canonicalPath: `${localePrefix}/posts/${post.slug}`,
     canonicalOverride: post.seo?.canonicalUrl || null,
     ogImage: post.featureImage?.url || post.seo?.ogImage || null,
     ogType: "article",
+    locale: site.locale,
   });
 }
 
@@ -41,7 +46,8 @@ export default async function PostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = await ContentApiClient.getPostBySlug(slug);
+  const site = await getThemeSiteSettings();
+  const post = await ContentApiClient.getPostBySlug(slug, { locale: site.locale });
   if (!post) {
     notFound();
   }
@@ -51,7 +57,6 @@ export default async function PostPage({
     !!previewThemeId,
     previewThemeId,
   );
-  const site = await getThemeSiteSettings();
 
   return renderThemeTemplate(
     "post",

@@ -212,6 +212,74 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Locale detection & routing
+  const segments = pathname.split("/").filter(Boolean);
+  const firstSegment = segments[0]?.toLowerCase();
+  const isExcludedPrefix =
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/theme-assets") ||
+    pathname.startsWith("/preview") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml";
+
+  if (!isExcludedPrefix && firstSegment) {
+    const isEn = firstSegment === "en" || firstSegment === "en-us" || firstSegment === "en-gb";
+
+    // 1. Default locale prefix (/en or /en-us) -> 301 redirect to strip prefix (URL canonicalization)
+    if (isEn) {
+      const rest = segments.slice(1).join("/");
+      const redirectUrl = new URL(rest ? `/${rest}` : "/", request.url);
+      redirectUrl.search = request.nextUrl.search;
+      return NextResponse.redirect(redirectUrl, { status: 301 });
+    }
+
+    // Known locale lookup (ar, fr, de, fa, ur, tr, etc.)
+    const localeLookup: Record<string, { code: string; direction: "ltr" | "rtl" }> = {
+      ar: { code: "ar-SA", direction: "rtl" },
+      "ar-sa": { code: "ar-SA", direction: "rtl" },
+      "ar-eg": { code: "ar-EG", direction: "rtl" },
+      fr: { code: "fr-FR", direction: "ltr" },
+      "fr-fr": { code: "fr-FR", direction: "ltr" },
+      de: { code: "de-DE", direction: "ltr" },
+      "de-de": { code: "de-DE", direction: "ltr" },
+      tr: { code: "tr-TR", direction: "ltr" },
+      "tr-tr": { code: "tr-TR", direction: "ltr" },
+      fa: { code: "fa-IR", direction: "rtl" },
+      "fa-ir": { code: "fa-IR", direction: "rtl" },
+      ur: { code: "ur-PK", direction: "rtl" },
+      "ur-pk": { code: "ur-PK", direction: "rtl" },
+      he: { code: "he-IL", direction: "rtl" },
+      "he-il": { code: "he-IL", direction: "rtl" },
+    };
+
+    const localeInfo = localeLookup[firstSegment];
+
+    // 2. Case-normalization for non-default locales (e.g. /AR -> /ar, /FR -> /fr, /FA -> /fa)
+    if (localeInfo && segments[0] !== firstSegment) {
+      const rest = segments.slice(1).join("/");
+      const redirectUrl = new URL(rest ? `/${firstSegment}/${rest}` : `/${firstSegment}`, request.url);
+      redirectUrl.search = request.nextUrl.search;
+      return NextResponse.redirect(redirectUrl, { status: 301 });
+    }
+
+    // 3. Recognized non-default locale prefix (/ar, /fr, /fa, /de, etc.)
+    if (localeInfo) {
+      const rest = segments.slice(1).join("/");
+      const internalUrl = new URL(rest ? `/${rest}` : "/", request.url);
+      internalUrl.search = request.nextUrl.search;
+
+      return createCspResponse(request, {
+        rewriteUrl: internalUrl,
+        extraHeaders: {
+          "x-vibress-locale": localeInfo.code,
+          "x-vibress-direction": localeInfo.direction,
+        },
+      });
+    }
+  }
+
   return createCspResponse(request);
 }
 

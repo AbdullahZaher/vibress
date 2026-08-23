@@ -127,6 +127,8 @@ export const PublicPostSummarySchema = z.object({
   title: z.string(),
   slug: z.string(),
   excerpt: z.string().nullable(),
+  locale: z.string().optional(),
+  direction: z.enum(["ltr", "rtl"]).optional(),
   publishedAt: z.string(),
   updatedAt: z.string(),
   primaryAuthor: PublicAuthorSchema,
@@ -157,6 +159,8 @@ export const PublicPageDetailSchema = z.object({
   title: z.string(),
   slug: z.string(),
   excerpt: z.string().nullable(),
+  locale: z.string().optional(),
+  direction: z.enum(["ltr", "rtl"]).optional(),
   content: z.record(z.unknown()),
   html: z.string(),
   featureImage: PublicMediaSchema.nullable().optional(),
@@ -172,5 +176,6 @@ export const PublicListFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   tag: z.string().optional(),
   author: z.string().optional(),
+  locale: z.string().optional(),
 });
 export type PublicListFilterInput = z.infer<typeof PublicListFilterSchema>;

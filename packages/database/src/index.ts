@@ -7,3 +7,5 @@ export { runMigrations } from "./migrate";
 export { seedDatabase, SYSTEM_ROLES, SYSTEM_PERMISSIONS } from "./seed";
 export * from "./transaction";
 export { checkDatabaseSchemaReady, assertDatabaseSchemaReady } from "./schema-safety";
+export { eq, and, or, inArray, desc, asc, isNull, isNotNull, ilike, sql } from "drizzle-orm";
+

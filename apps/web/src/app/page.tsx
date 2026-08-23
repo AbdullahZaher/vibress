@@ -28,9 +28,10 @@ export default async function HomePage({
     !!previewThemeId,
     previewThemeId,
   );
+  const site = await getThemeSiteSettings();
 
   const [postsData, tags] = await Promise.all([
-    ContentApiClient.getPosts({ page: validPage, limit: 10 }),
+    ContentApiClient.getPosts({ page: validPage, limit: 10, locale: site.locale }),
     ContentApiClient.getTags(),
   ]);
 
@@ -41,8 +42,6 @@ export default async function HomePage({
     total: 0,
     pages: 1,
   };
-
-  const site = await getThemeSiteSettings();
 
   return renderThemeTemplate(
     "home",

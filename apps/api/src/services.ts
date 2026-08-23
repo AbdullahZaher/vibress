@@ -532,3 +532,8 @@ export async function getAiGatewayService(): Promise<AiGatewayService> {
   return new AiGatewayService(config);
 }
 
+// ---------------- Translation Subsystem ----------------
+import { TranslationService } from "@vibress/i18n/server";
+export const translationService = new TranslationService();
+
+

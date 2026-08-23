@@ -19,6 +19,7 @@ import {
   PublicPageDetailDto,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
+import { getDirection, getLocalePrefix } from "@vibress/i18n";
 
 export function getSiteUrl(): string {
   const envUrl = getConfig().site.url;
@@ -202,7 +203,7 @@ export function formatPublicTag(tag: Tag): PublicTagDto {
     id: tag.id,
     name: tag.name,
     slug: tag.slug,
-    description: tag.description || null,
+    description: tag.description,
   };
 }
 
@@ -216,7 +217,7 @@ export async function buildPublicPostSummaryDto(
   const featureImage = extractFeatureImage(resolvedDoc);
   const siteUrl = getSiteUrl();
 
-  const formattedAuthors = authors.map(formatPublicAuthor);
+  const formattedAuthors = (authors || []).map(formatPublicAuthor);
   const primaryAuthor = formattedAuthors.find(
     (a) => a.id === post.primaryAuthorId,
   ) ||
@@ -227,10 +228,13 @@ export async function buildPublicPostSummaryDto(
       bio: null,
     };
 
-  const formattedTags = tags.map(formatPublicTag);
+  const formattedTags = (tags || []).map(formatPublicTag);
 
   const excerpt = deriveExcerpt(post.excerpt, post.content);
-  const canonicalUrl = post.canonicalUrl || `${siteUrl}/posts/${post.slug}`;
+  const postLocale = (post as any).locale || "en-US";
+  const postDirection = (post as any).direction || getDirection(postLocale);
+  const localePrefix = getLocalePrefix(postLocale);
+  const canonicalUrl = post.canonicalUrl || `${siteUrl}${localePrefix}/posts/${post.slug}`;
   const seoTitle = post.metaTitle || post.title;
   const seoDescription = post.metaDescription || excerpt;
 
@@ -239,6 +243,8 @@ export async function buildPublicPostSummaryDto(
     title: post.title,
     slug: post.slug,
     excerpt,
+    locale: postLocale,
+    direction: postDirection,
     publishedAt: (post.publishedAt || post.createdAt).toISOString(),
     updatedAt: post.updatedAt.toISOString(),
     primaryAuthor,
@@ -307,7 +313,10 @@ export async function buildPublicPageDetailDto(
   const siteUrl = getSiteUrl();
 
   const excerpt = deriveExcerpt(page.excerpt, page.content);
-  const canonicalUrl = page.canonicalUrl || `${siteUrl}/pages/${page.slug}`;
+  const pageLocale = (page as any).locale || "en-US";
+  const pageDirection = (page as any).direction || getDirection(pageLocale);
+  const localePrefix = getLocalePrefix(pageLocale);
+  const canonicalUrl = page.canonicalUrl || `${siteUrl}${localePrefix}/pages/${page.slug}`;
   const seoTitle = page.metaTitle || page.title;
   const seoDescription = page.metaDescription || excerpt;
 
@@ -325,6 +334,8 @@ export async function buildPublicPageDetailDto(
     title: page.title,
     slug: page.slug,
     excerpt,
+    locale: pageLocale,
+    direction: pageDirection,
     content: resolvedDoc,
     html,
     featureImage,

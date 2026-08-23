@@ -3,6 +3,7 @@ import {
   text,
   timestamp,
   jsonb,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -40,6 +41,41 @@ export const publications = pgTable(
 
 export type PublicationRow = typeof publications.$inferSelect;
 export type NewPublicationRow = typeof publications.$inferInsert;
+
+export const publicationLocales = pgTable(
+  "publication_locales",
+  {
+    id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    locale: text("locale").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    isDefault: boolean("is_default").notNull().default(false),
+    urlPrefix: text("url_prefix"),
+    isPublic: boolean("is_public").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    pubLocaleIdx: uniqueIndex("publication_locales_pub_locale_idx").on(
+      table.publicationId,
+      table.locale,
+    ),
+    pubEnabledIdx: index("publication_locales_pub_enabled_idx").on(
+      table.publicationId,
+      table.enabled,
+    ),
+  }),
+);
+
+export type PublicationLocaleRow = typeof publicationLocales.$inferSelect;
+export type NewPublicationLocaleRow = typeof publicationLocales.$inferInsert;
 
 export const publicationMemberships = pgTable(
   "publication_memberships",

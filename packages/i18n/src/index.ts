@@ -1,5 +1,45 @@
 import { arDictionary } from "./dictionaries/ar";
 import { enDictionary } from "./dictionaries/en";
+import {
+  defaultLocaleRegistry,
+  getDirection,
+  isRtl,
+  getFallbackChain,
+  canonicalizeLocale,
+  getLanguage,
+  getRegion,
+  getScript,
+  isValidLocale,
+  getLocaleDefinition,
+  getLocalePrefix,
+  LocaleRegistry,
+  type LocaleDefinition,
+  type Direction,
+} from "./registry";
+import {
+  formatDate,
+  formatHijriDate,
+  formatNumber,
+  formatCurrency,
+  formatRelativeTime,
+  formatList,
+  formatPlural,
+  type PluralForms,
+} from "./formatters";
+import { normalizeArabicText, isArabicText } from "./text-normalizer";
+import {
+  validateTranslationGovernance,
+  extractInterpolationVariables,
+  flattenDictionary,
+  type GovernanceIssue,
+  type GovernanceResult,
+} from "./translation-governance";
+import {
+  generateTranslationCoverageReport,
+  formatCoverageReportAsMarkdown,
+  type LocaleCoverageSummary,
+  type FullCoverageReport,
+} from "./coverage-reporter";
 
 export type TranslationDictionary = Record<string, Record<string, string>>;
 
@@ -7,31 +47,31 @@ export interface TranslatorOptions {
   locale?: string | undefined;
   fallbackLocale?: string | undefined;
   dictionary?: TranslationDictionary | undefined;
+  registry?: LocaleRegistry | undefined;
 }
 
-export const RTL_LOCALES = new Set(["ar", "he", "fa", "ur"]);
-
-export function isRtl(locale: string): boolean {
-  if (!locale) return false;
-  const lang = locale.split("-")[0]?.toLowerCase() || "";
-  return RTL_LOCALES.has(lang);
-}
-
-export function getDirection(locale: string): "rtl" | "ltr" {
-  return isRtl(locale) ? "rtl" : "ltr";
-}
+export const RTL_LOCALES = new Set(["ar", "he", "fa", "ur", "ps", "sd", "ug", "yi"]);
 
 export class Translator {
   private locale: string;
   private fallbackLocale: string;
   private dictionary: TranslationDictionary;
+  private registry: LocaleRegistry;
 
-  constructor(options: TranslatorOptions = {}) {
-    this.locale = options.locale || options.fallbackLocale || "en";
-    this.fallbackLocale = options.fallbackLocale || "en";
-    this.dictionary = options.dictionary || {
+  constructor(options: TranslatorOptions | string = {}) {
+    const opts: TranslatorOptions =
+      typeof options === "string" ? { locale: options } : options;
+    this.registry = opts.registry || defaultLocaleRegistry;
+    const initialLocale = opts.locale || opts.fallbackLocale || "en";
+    this.locale = this.registry.canonicalize(initialLocale);
+    this.fallbackLocale = this.registry.canonicalize(
+      opts.fallbackLocale || "en",
+    );
+    this.dictionary = opts.dictionary || {
       ar: arDictionary,
+      "ar-SA": arDictionary,
       en: enDictionary,
+      "en-US": enDictionary,
     };
   }
 
@@ -39,30 +79,61 @@ export class Translator {
     this.dictionary = dictionary;
   }
 
+  mergeDictionary(locale: string, translations: Record<string, string>): void {
+    const cLocale = this.registry.canonicalize(locale);
+    this.dictionary[cLocale] = {
+      ...(this.dictionary[cLocale] || {}),
+      ...translations,
+    };
+    const lang = this.registry.getLanguage(cLocale);
+    if (lang && lang !== cLocale && !this.dictionary[lang]) {
+      this.dictionary[lang] = this.dictionary[cLocale];
+    }
+  }
+
   setLocale(locale: string): void {
-    this.locale = locale;
+    this.locale = this.registry.canonicalize(locale);
   }
 
   getLocale(): string {
     return this.locale;
   }
 
-  isRtl(): boolean {
-    return isRtl(this.locale);
+  getFallbackLocale(): string {
+    return this.fallbackLocale;
   }
 
-  getDirection(): "rtl" | "ltr" {
-    return getDirection(this.locale);
+  isRtl(): boolean {
+    return this.registry.isRtl(this.locale);
+  }
+
+  getDirection(): Direction {
+    return this.registry.getDirection(this.locale);
   }
 
   translate(
     key: string,
     params?: Record<string, string | number>,
-    locale: string = this.locale,
+    requestedLocale?: string,
   ): string {
-    const localeDict =
-      this.dictionary[locale] || this.dictionary[this.fallbackLocale] || {};
-    let template = localeDict[key] || key;
+    const target = requestedLocale
+      ? this.registry.canonicalize(requestedLocale)
+      : this.locale;
+
+    const fallbackChain = this.registry.getFallbackChain(target, [this.fallbackLocale, "en"]);
+
+    let template: string | undefined = undefined;
+    for (const loc of fallbackChain) {
+      const dict = this.dictionary[loc];
+      if (dict && dict[key] !== undefined) {
+        template = dict[key];
+        break;
+      }
+    }
+
+    if (template === undefined) {
+      template = key;
+    }
 
     if (params) {
       for (const [pKey, pVal] of Object.entries(params)) {
@@ -83,35 +154,100 @@ export class Translator {
   ): string {
     return this.translate(key, params, locale);
   }
+
+  plural(
+    count: number,
+    forms: PluralForms,
+    locale?: string,
+  ): string {
+    return formatPlural(count, forms, locale || this.locale);
+  }
+
+  formatDate(
+    date: Date | string | number,
+    options?: Intl.DateTimeFormatOptions,
+    locale?: string,
+  ): string {
+    return formatDate(date, locale || this.locale, options);
+  }
+
+  formatNumber(
+    value: number,
+    options?: Intl.NumberFormatOptions,
+    locale?: string,
+  ): string {
+    return formatNumber(value, locale || this.locale, options);
+  }
+
+  formatCurrency(
+    amount: number,
+    currency = "USD",
+    options?: Omit<Intl.NumberFormatOptions, "style" | "currency">,
+    locale?: string,
+  ): string {
+    return formatCurrency(amount, currency, locale || this.locale, options);
+  }
+
+  formatRelativeTime(
+    date: Date | string | number,
+    baseDate?: Date,
+    locale?: string,
+  ): string {
+    return formatRelativeTime(date, locale || this.locale, baseDate);
+  }
 }
 
 export function createTranslator(options?: TranslatorOptions): Translator {
   return new Translator(options);
 }
 
-export function formatDate(
-  date: Date | string | number,
-  locale = "en",
-  options?: Intl.DateTimeFormatOptions,
-): string {
-  const d = typeof date === "object" ? date : new Date(date);
-  return new Intl.DateTimeFormat(locale, options || {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(d);
-}
+export {
+  // Registry & Helpers
+  defaultLocaleRegistry,
+  LocaleRegistry,
+  canonicalizeLocale,
+  getLanguage,
+  getRegion,
+  getScript,
+  getDirection,
+  isRtl,
+  getFallbackChain,
+  isValidLocale,
+  getLocaleDefinition,
+  getLocalePrefix,
+  type LocaleDefinition,
+  type Direction,
 
-export function formatHijriDate(
-  date: Date | string | number,
-  locale = "ar-SA",
-): string {
-  const d = typeof date === "object" ? date : new Date(date);
-  return new Intl.DateTimeFormat(`${locale}-u-ca-islamic-umalqura`, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(d);
-}
+  // Formatters
+  formatDate,
+  formatHijriDate,
+  formatNumber,
+  formatCurrency,
+  formatRelativeTime,
+  formatList,
+  formatPlural,
+  type PluralForms,
 
-export { arDictionary, enDictionary };
+  // Text Normalization
+  normalizeArabicText,
+  isArabicText,
+
+  // Dictionaries
+  arDictionary,
+  enDictionary,
+
+  // Governance & Coverage
+  validateTranslationGovernance,
+  extractInterpolationVariables,
+  flattenDictionary,
+  type GovernanceIssue,
+  type GovernanceResult,
+  generateTranslationCoverageReport,
+  formatCoverageReportAsMarkdown,
+  type LocaleCoverageSummary,
+  type FullCoverageReport,
+};
+export * from "./translation-governance";
+export * from "./coverage-reporter";
+export * from "./translation-types";
+export * from "./glossary";

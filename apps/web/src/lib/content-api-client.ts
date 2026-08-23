@@ -89,20 +89,29 @@ export const ContentApiClient = {
     limit?: number;
     tag?: string;
     author?: string;
+    locale?: string;
   }): Promise<PaginatedPostsResult | null> {
     return fetchContentApi<PaginatedPostsResult>("/posts", options);
   },
 
-  async getPostBySlug(slug: string): Promise<PublicPostDetailDto | null> {
+  async getPostBySlug(
+    slug: string,
+    options?: { locale?: string },
+  ): Promise<PublicPostDetailDto | null> {
     const data = await fetchContentApi<{ post: PublicPostDetailDto }>(
       `/posts/${encodeURIComponent(slug)}`,
+      options,
     );
     return data?.post || null;
   },
 
-  async getPageBySlug(slug: string): Promise<PublicPageDetailDto | null> {
+  async getPageBySlug(
+    slug: string,
+    options?: { locale?: string },
+  ): Promise<PublicPageDetailDto | null> {
     const data = await fetchContentApi<{ page: PublicPageDetailDto }>(
       `/pages/${encodeURIComponent(slug)}`,
+      options,
     );
     return data?.page || null;
   },
@@ -110,6 +119,7 @@ export const ContentApiClient = {
   async getPages(options?: {
     page?: number;
     limit?: number;
+    locale?: string;
   }): Promise<{
     pages: PublicPageDetailDto[];
     pagination: PaginationInfo;

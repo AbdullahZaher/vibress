@@ -11,6 +11,16 @@ export const ThemeAuthorSchema = z.union([
   }),
 ]);
 
+export const ThemeLocalizationSchema = z.object({
+  supportsLocales: z.array(z.string()).default(["*"]),
+  rtl: z.boolean().default(false),
+  dynamicLocale: z.boolean().default(true),
+  localizedNavigation: z.boolean().default(true),
+  localizedDates: z.boolean().default(true),
+});
+
+export type ThemeLocalizationConfig = z.infer<typeof ThemeLocalizationSchema>;
+
 export const ThemeManifestSchema = z.object({
   id: z
     .string()
@@ -33,6 +43,7 @@ export const ThemeManifestSchema = z.object({
   previewImage: z.string().trim().max(500).optional(),
   themeApi: z.number().int().positive().default(THEME_API_VERSION),
   capabilities: z.array(z.string()).default([]),
+  localization: ThemeLocalizationSchema.optional(),
   settingsSchemaVersion: z.number().int().positive().default(1),
 });
 
@@ -101,12 +112,34 @@ export interface ThemeSiteSettings {
   description: string;
   url: string;
   locale: string;
+  direction?: "ltr" | "rtl" | undefined;
+}
+
+export interface AvailableLocaleItem {
+  code: string;
+  name: string;
+  nativeName: string;
+  direction: "ltr" | "rtl";
+  url: string;
+  isCurrent: boolean;
+}
+
+export interface ThemeLocaleContext {
+  locale: string;
+  language: string;
+  region?: string | undefined;
+  direction: "ltr" | "rtl";
+  isRTL: boolean;
+  availableLocales: AvailableLocaleItem[];
+  currentUrl: string;
+  translations?: Record<string, string> | undefined;
 }
 
 export interface ThemeContext {
   site: ThemeSiteSettings;
   themeSettings: Record<string, unknown>;
   isPreview: boolean;
+  localeContext?: ThemeLocaleContext | undefined;
 }
 
 export const ThemeIdSchema = z

@@ -63,6 +63,21 @@ const VisualAutomationBuilder = lazy(() =>
     default: m.VisualAutomationBuilder,
   })),
 );
+const TranslationMatrix = lazy(() =>
+  import("../components/translations/TranslationMatrix").then((m) => ({
+    default: m.TranslationMatrix,
+  })),
+);
+const TranslationEditor = lazy(() =>
+  import("../components/translations/TranslationEditor").then((m) => ({
+    default: m.TranslationEditor,
+  })),
+);
+const TranslationReviewQueue = lazy(() =>
+  import("../components/translations/TranslationReviewQueue").then((m) => ({
+    default: m.TranslationReviewQueue,
+  })),
+);
 
 export interface RouteMatch {
   params: Record<string, string>;
@@ -240,7 +255,51 @@ export const adminRoutes: AdminRouteDefinition[] = [
       />
     ),
   },
-  // 4. Content Modeler & Custom Collections
+  // 4. Translations & Multilingual Editorial Management
+  {
+    pattern: "/admin/translations",
+    exact: true,
+    requiredPermission: "translations.read",
+    render: ({ onNavigate }) => <TranslationMatrix onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/translations/queue",
+    exact: true,
+    requiredPermission: "translations.review",
+    render: ({ onNavigate, can }) => (
+      <TranslationReviewQueue
+        onNavigate={onNavigate}
+        canPublish={can("translations.publish")}
+      />
+    ),
+  },
+  {
+    pattern: "/admin/translations/:translationId",
+    exact: true,
+    requiredPermission: "translations.edit",
+    render: ({ match, onNavigate, can }) => (
+      <TranslationEditor
+        translationId={match.params.translationId}
+        onNavigate={onNavigate}
+        canPublish={can("translations.publish")}
+      />
+    ),
+  },
+  {
+    pattern: "/admin/content/:contentType/:contentId/translate/:targetLocale",
+    exact: true,
+    requiredPermission: "translations.create",
+    render: ({ match, onNavigate, can }) => (
+      <TranslationEditor
+        contentType={match.params.contentType as any}
+        contentId={match.params.contentId}
+        targetLocale={match.params.targetLocale}
+        onNavigate={onNavigate}
+        canPublish={can("translations.publish")}
+      />
+    ),
+  },
+  // 5. Content Modeler & Custom Collections
   {
     pattern: "/admin/models",
     exact: true,

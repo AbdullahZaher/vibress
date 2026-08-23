@@ -1,3 +1,4 @@
+import { getLocalePrefix } from "@vibress/i18n";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { ContentApiClient } from "../../../lib/content-api-client";
@@ -18,20 +19,24 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const pageObj = await ContentApiClient.getPageBySlug(slug);
+  const site = await getThemeSiteSettings();
+  const pageObj = await ContentApiClient.getPageBySlug(slug, { locale: site.locale });
   if (!pageObj) {
     return {
       title: "Page Not Found",
     };
   }
 
+  const localePrefix = getLocalePrefix(site.locale);
+
   return buildPageMetadata({
     title: pageObj.seo?.title || pageObj.title,
     description: pageObj.seo?.description || pageObj.excerpt || "",
-    canonicalPath: `/pages/${pageObj.slug}`,
+    canonicalPath: `${localePrefix}/pages/${pageObj.slug}`,
     canonicalOverride: pageObj.seo?.canonicalUrl || null,
     ogImage: pageObj.seo?.ogImage || null,
     ogType: "website",
+    locale: site.locale,
   });
 }
 
@@ -41,7 +46,8 @@ export default async function StaticPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const pageObj = await ContentApiClient.getPageBySlug(slug);
+  const site = await getThemeSiteSettings();
+  const pageObj = await ContentApiClient.getPageBySlug(slug, { locale: site.locale });
   if (!pageObj) {
     notFound();
   }
@@ -51,7 +57,6 @@ export default async function StaticPage({
     !!previewThemeId,
     previewThemeId,
   );
-  const site = await getThemeSiteSettings();
 
   return renderThemeTemplate(
     "page",

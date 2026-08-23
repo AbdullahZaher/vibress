@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Metadata } from "next";
+import { getDirection } from "@vibress/i18n";
 import { getPublicSiteUrl } from "../lib/seo-helpers";
 import {
   resolveThemeHostState,
@@ -67,7 +68,7 @@ export default async function RootLayout({
     : hostState?.theme.cssPath || null;
 
   return (
-    <html lang={site.locale} suppressHydrationWarning>
+    <html lang={site.locale} dir={getDirection(site.locale)} suppressHydrationWarning>
       <head>
         {themeCss && <link rel="stylesheet" href={themeCss} />}
         {site.code?.headerCode && (

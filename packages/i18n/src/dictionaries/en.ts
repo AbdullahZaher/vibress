@@ -13,6 +13,77 @@ export const enDictionary: Record<string, string> = {
   "nav.plugins": "Plugins",
   "nav.settings": "Settings",
   "nav.logout": "Log Out",
+  "nav.home": "Home",
+  "nav.about": "About",
+  "nav.signin": "Sign in",
+  "nav.signup": "Sign up",
+  "nav.subscribe": "Subscribe",
+  "nav.account": "Account",
+
+  // Search
+  "search.label": "Search",
+  "search.thisSite": "Search this site",
+  "search.placeholder": "Search articles, pages and tags...",
+  "search.no_results": "No results found",
+  "search.results_count": "Found {count} results",
+
+  // Modals & Menu
+  "menu.toggle": "Toggle menu",
+  "modal.close": "Close",
+  "modal.nameLabel": "Name",
+  "modal.emailLabel": "Email",
+  "modal.namePlaceholder": "Jamie Larson",
+  "modal.emailPlaceholder": "jamie@example.com",
+  "modal.submit": "Sign up",
+  "modal.successTitle": "Thank you for subscribing!",
+  "modal.successBody": "Check your email inbox to confirm your subscription.",
+  "modal.alreadyMember": "Already a member?",
+
+  // Subscribe & Membership
+  "subscribe.button": "Subscribe",
+  "subscribe.buttonSuccess": "Subscribed!",
+  "subscribe.emailLabel": "Email address",
+  "subscribe.title": "Subscribe to our publication",
+  "subscribe.subtitle": "Get the latest stories delivered directly to your inbox.",
+
+  // Public Home & Feeds
+  "home.heroFallback": "Thoughts, stories and ideas.",
+  "home.latest": "Latest",
+  "home.empty": "No published posts available yet.",
+  "home.by": "By",
+  "home.newer": "Newer Posts",
+  "home.older": "Older Posts",
+  "home.pageInfo": "Page {page} of {pages}",
+  "home.latestWriting": "Latest Writing",
+  "home.emptyShort": "No published posts yet.",
+  "home.olderArticles": "Older Articles",
+  "home.newerArticles": "Newer Articles",
+  "home.tagEmpty": "No published posts under this tag.",
+  "home.authorEmpty": "No published posts by this author.",
+
+  // Post & Page
+  "post.readMore": "Read more",
+  "post.readTime": "{minutes} min read",
+  "post.share": "Share",
+  "post.in": "in",
+  "post.publishedOn": "Published on {date}",
+  "post.updatedOn": "Updated on {date}",
+  "post.writtenBy": "Written by {author}",
+  "archive.by": "by",
+  "archive.previous": "Previous",
+  "archive.next": "Next",
+  "social.twitter": "Twitter",
+  "social.facebook": "Facebook",
+
+  // Locales & Translations
+  "locale.switch": "Change Language",
+  "locale.current": "Current Language: {name}",
+  "locale.available": "Available Languages",
+  "translation.missing": "This content is not available in the selected language.",
+  "translation.stale": "This translation may be outdated.",
+  "translation.needs_review": "Translation pending review.",
+  "translation.draft": "Translation Draft",
+  "translation.approved": "Approved Translation",
 
   // Editorial Workflow & Statuses
   "status.draft": "Draft",
@@ -22,6 +93,9 @@ export const enDictionary: Record<string, string> = {
   "status.scheduled": "Scheduled",
   "status.published": "Published",
   "status.archived": "Archived",
+  "status.stale": "Outdated",
+  "status.translated": "Translated",
+  "status.untranslated": "Untranslated",
 
   // Studio & Editor Actions
   "editor.title_placeholder": "Post title...",
@@ -34,6 +108,8 @@ export const enDictionary: Record<string, string> = {
   "editor.reload_latest": "Reload latest",
   "editor.diff": "Diff",
   "editor.collaborate": "Collaborate",
+  "editor.translate": "Translate",
+  "editor.switch_locale": "Switch Language",
 
   // Collaboration Panel
   "collab.title": "Editorial Collaboration",
@@ -55,6 +131,8 @@ export const enDictionary: Record<string, string> = {
   "ai.insert_below": "Insert Below",
   "ai.discard": "Discard",
   "ai.generate_seo": "Generate AI SEO Metadata",
+  "ai.translate_to": "Translate to {locale}",
+  "ai.translating": "Generating AI translation...",
 
   // Common UI
   "common.save": "Save",
@@ -66,4 +144,7 @@ export const enDictionary: Record<string, string> = {
   "common.loading": "Loading...",
   "common.error": "An error occurred",
   "common.success": "Success",
+  "common.retry": "Retry",
+  "common.back": "Back",
+  "common.next": "Next",
 };

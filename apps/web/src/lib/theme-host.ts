@@ -158,11 +158,14 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     };
     const site = data?.site;
     if (!site || typeof site.title !== "string") return fallback;
+    const requestLocale = await getRequestLocaleFromHeaders();
+    const activeLocale = requestLocale || (site.locale as string) || fallback.locale;
+
     return {
       title: site.title as string,
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,
-      locale: (site.locale as string) || fallback.locale,
+      locale: activeLocale,
       timezone: (site.timezone as string) || "UTC",
       accentColor: (site.accentColor as string) || fallback.accentColor,
       iconUrl: (site.iconUrl as string) || undefined,
@@ -188,6 +191,15 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     };
   } catch {
     return fallback;
+  }
+}
+
+export async function getRequestLocaleFromHeaders(): Promise<string | null> {
+  try {
+    const hs = await headers();
+    return hs.get("x-vibress-locale") || null;
+  } catch {
+    return null;
   }
 }
 

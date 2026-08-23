@@ -23,6 +23,10 @@ import {
   signSiteAuthToken,
   SITE_AUTH_COOKIE_NAME,
 } from "@vibress/security";
+import { getDirection, canonicalizeLocale } from "@vibress/i18n";
+import { TranslationService } from "@vibress/i18n/server";
+
+const translationService = new TranslationService();
 
 /**
  * Wizard-managed site identity, precedence: DB setting → environment →
@@ -35,6 +39,7 @@ async function buildPublicSiteIdentity(): Promise<{
   description: string;
   url: string;
   locale: string;
+  direction: string;
   tagline: string;
   timezone: string;
   accentColor: string;
@@ -57,13 +62,15 @@ async function buildPublicSiteIdentity(): Promise<{
 
   const str = (v: unknown, fallback: string): string =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;
+  const resolvedLocale = str(site.locale, config.site.locale);
 
   return {
     title: str(site.title, config.site.name),
     description: str(site.description, config.site.description),
     tagline: str(site.tagline, ""),
     url: config.site.url,
-    locale: str(site.locale, config.site.locale),
+    locale: resolvedLocale,
+    direction: getDirection(resolvedLocale),
     timezone: str(site.timezone, "UTC"),
     accentColor: str(site.accentColor, "#6366f1"),
     iconUrl: str(site.iconUrl, ""),
@@ -82,6 +89,7 @@ async function buildPublicSiteIdentity(): Promise<{
     comments: (stored.comments ?? {}) as Record<string, unknown>,
   };
 }
+
 export async function publicContentRoutes(fastify: FastifyInstance) {
   // Public Site Metadata + Active Theme
   fastify.get("/site", {
@@ -95,6 +103,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
           description: site.description,
           url: site.url,
           locale: site.locale,
+          direction: site.direction,
           tagline: site.tagline,
           timezone: site.timezone,
           accentColor: site.accentColor,
@@ -176,6 +185,21 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
     },
   });
 
+function extractRequestedLocale(req: any): string | null {
+  const query = req.query as { locale?: string } | undefined;
+  if (query?.locale && typeof query.locale === "string" && query.locale.trim()) {
+    return canonicalizeLocale(query.locale.trim());
+  }
+  const acceptLang = req.headers["accept-language"];
+  if (acceptLang && typeof acceptLang === "string") {
+    const primary = acceptLang.split(",")[0]?.split(";")[0]?.trim();
+    if (primary && primary !== "*") {
+      return canonicalizeLocale(primary);
+    }
+  }
+  return null;
+}
+
   // Public Posts List
   fastify.get("/posts", {
     handler: async (req, reply) => {
@@ -187,6 +211,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       const limit = filter.limit;
       const page = filter.page;
       const offset = (page - 1) * limit;
+      const requestedLocale = extractRequestedLocale(req);
 
       const { posts, total } = await postsService.listPosts({
         publishedOnly: true,
@@ -201,18 +226,37 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
-          const authorIds = await postsService.getPostTagIds(post.id); // get tag ids
-          const tagIds = authorIds;
+          let mergedPost: any = post;
+          if (requestedLocale && !requestedLocale.startsWith("en")) {
+            const tr = await translationService.getTranslation("post", post.id, requestedLocale);
+            if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
+              mergedPost = {
+                ...post,
+                title: tr.title,
+                slug: tr.slug,
+                excerpt: tr.excerpt ?? post.excerpt,
+                content: Object.keys(tr.content || {}).length > 0 ? tr.content : post.content,
+                metaTitle: tr.metaTitle ?? post.metaTitle,
+                metaDescription: tr.metaDescription ?? post.metaDescription,
+                locale: tr.targetLocale,
+              };
+            } else {
+              // Missing translation: omit under non-default locale (no silent fallback)
+              return null;
+            }
+          }
+
+          const authorIds = await postsService.getPostTagIds(post.id);
           const [authors, tagsList] = await Promise.all([
             authorsService.getPostAuthors(post.id),
-            Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
+            Promise.all(authorIds.map((tId) => tagsService.findById(tId))),
           ]);
           const validTags = tagsList.filter(
             (t): t is NonNullable<typeof t> => !!t,
           );
 
           return buildPublicPostSummaryDto(
-            post,
+            mergedPost,
             authors,
             validTags,
             mediaService,
@@ -220,14 +264,17 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         }),
       );
 
-      const totalPages = Math.ceil(total / limit) || 1;
+      const validSummaries = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
+      const totalCount = requestedLocale && !requestedLocale.startsWith("en") ? validSummaries.length : total;
+      const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
-        posts: summaries,
+        posts: validSummaries,
+        locale: requestedLocale || "en",
         pagination: {
           page,
           limit,
-          total,
+          total: totalCount,
           pages: totalPages,
         },
       });
@@ -238,7 +285,53 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get("/posts/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const post = await postsService.findPublishedBySlug(slug);
+      const requestedLocale = extractRequestedLocale(req);
+
+      let post = await postsService.findPublishedBySlug(slug);
+      let translationItem = null;
+
+      if (!post) {
+        // Try finding by localized slug
+        if (requestedLocale) {
+          translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug);
+        }
+        if (!translationItem) {
+          translationItem =
+            (await translationService.findTranslationBySlug("post", "ar-SA", slug)) ||
+            (await translationService.findTranslationBySlugAny("post", slug));
+        }
+
+        if (translationItem) {
+          post = await postsService.findById(translationItem.contentId);
+          if (!post || post.status !== "published") {
+            post = null;
+          }
+        }
+      } else if (requestedLocale && !requestedLocale.startsWith("en")) {
+        // Source post found, check for translated representation
+        translationItem = await translationService.getTranslation(
+          "post",
+          post.id,
+          requestedLocale,
+        );
+
+        if (
+          !translationItem ||
+          (translationItem.status !== "published" &&
+            translationItem.status !== "approved" &&
+            translationItem.status !== "translated")
+        ) {
+          return reply.status(404).send({
+            errors: [
+              {
+                code: "TRANSLATION_NOT_FOUND",
+                message: `Translation for locale '${requestedLocale}' not found`,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+      }
 
       if (!post) {
         return reply.status(404).send({
@@ -252,6 +345,23 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const mergedPost: any = translationItem
+        ? {
+            ...post,
+            title: translationItem.title,
+            slug: translationItem.slug,
+            excerpt: translationItem.excerpt ?? post.excerpt,
+            content:
+              Object.keys(translationItem.content || {}).length > 0
+                ? translationItem.content
+                : post.content,
+            metaTitle: translationItem.metaTitle ?? post.metaTitle,
+            metaDescription:
+              translationItem.metaDescription ?? post.metaDescription,
+            locale: translationItem.targetLocale,
+          }
+        : post;
+
       const tagIds = await postsService.getPostTagIds(post.id);
       const [authors, tagsList] = await Promise.all([
         authorsService.getPostAuthors(post.id),
@@ -260,12 +370,12 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
 
       const postDetail = await buildPublicPostDetailDto(
-        post,
+        mergedPost,
         authors,
         validTags,
         mediaService,
       );
-      return reply.status(200).send({ post: postDetail });
+      return reply.status(200).send({ post: postDetail, locale: mergedPost.locale || "en" });
     },
   });
 
@@ -280,6 +390,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       const limit = filter.limit;
       const page = filter.page;
       const offset = (page - 1) * limit;
+      const requestedLocale = extractRequestedLocale(req);
 
       const { pages, total } = await pagesService.listPages({
         publishedOnly: true,
@@ -290,18 +401,39 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
 
       const details = await Promise.all(
         pages.map(async (pageObj) => {
-          return buildPublicPageDetailDto(pageObj, mediaService);
+          let mergedPage: any = pageObj;
+          if (requestedLocale && !requestedLocale.startsWith("en")) {
+            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale);
+            if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
+              mergedPage = {
+                ...pageObj,
+                title: tr.title,
+                slug: tr.slug,
+                excerpt: tr.excerpt ?? pageObj.excerpt,
+                content: Object.keys(tr.content || {}).length > 0 ? tr.content : pageObj.content,
+                metaTitle: tr.metaTitle ?? pageObj.metaTitle,
+                metaDescription: tr.metaDescription ?? pageObj.metaDescription,
+                locale: tr.targetLocale,
+              };
+            } else {
+              return null;
+            }
+          }
+          return buildPublicPageDetailDto(mergedPage, mediaService);
         }),
       );
 
-      const totalPages = Math.ceil(total / limit) || 1;
+      const validDetails = details.filter((d): d is NonNullable<typeof d> => d !== null);
+      const totalCount = requestedLocale && !requestedLocale.startsWith("en") ? validDetails.length : total;
+      const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
-        pages: details,
+        pages: validDetails,
+        locale: requestedLocale || "en",
         pagination: {
           page,
           limit,
-          total,
+          total: totalCount,
           pages: totalPages,
         },
       });
@@ -312,7 +444,51 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get("/pages/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const pageObj = await pagesService.findPublishedBySlug(slug);
+      const requestedLocale = extractRequestedLocale(req);
+
+      let pageObj = await pagesService.findPublishedBySlug(slug);
+      let translationItem = null;
+
+      if (!pageObj) {
+        if (requestedLocale) {
+          translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug);
+        }
+        if (!translationItem) {
+          translationItem =
+            (await translationService.findTranslationBySlug("page", "ar-SA", slug)) ||
+            (await translationService.findTranslationBySlugAny("page", slug));
+        }
+
+        if (translationItem) {
+          pageObj = await pagesService.findById(translationItem.contentId);
+          if (!pageObj || pageObj.status !== "published") {
+            pageObj = null;
+          }
+        }
+      } else if (requestedLocale && !requestedLocale.startsWith("en")) {
+        translationItem = await translationService.getTranslation(
+          "page",
+          pageObj.id,
+          requestedLocale,
+        );
+
+        if (
+          !translationItem ||
+          (translationItem.status !== "published" &&
+            translationItem.status !== "approved" &&
+            translationItem.status !== "translated")
+        ) {
+          return reply.status(404).send({
+            errors: [
+              {
+                code: "TRANSLATION_NOT_FOUND",
+                message: `Translation for locale '${requestedLocale}' not found`,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+      }
 
       if (!pageObj) {
         return reply.status(404).send({
@@ -326,8 +502,25 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const pageDetail = await buildPublicPageDetailDto(pageObj, mediaService);
-      return reply.status(200).send({ page: pageDetail });
+      const mergedPage: any = translationItem
+        ? {
+            ...pageObj,
+            title: translationItem.title,
+            slug: translationItem.slug,
+            excerpt: translationItem.excerpt ?? pageObj.excerpt,
+            content:
+              Object.keys(translationItem.content || {}).length > 0
+                ? translationItem.content
+                : pageObj.content,
+            metaTitle: translationItem.metaTitle ?? pageObj.metaTitle,
+            metaDescription:
+              translationItem.metaDescription ?? pageObj.metaDescription,
+            locale: translationItem.targetLocale,
+          }
+        : pageObj;
+
+      const pageDetail = await buildPublicPageDetailDto(mergedPage, mediaService);
+      return reply.status(200).send({ page: pageDetail, locale: mergedPage.locale || "en" });
     },
   });
 

@@ -42,5 +42,33 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/media");
     expect(patterns).toContain("/admin/members");
     expect(patterns).toContain("/admin/settings");
+    expect(patterns).toContain("/admin/translations");
+    expect(patterns).toContain("/admin/translations/queue");
+    expect(patterns).toContain("/admin/translations/:translationId");
+    expect(patterns).toContain(
+      "/admin/content/:contentType/:contentId/translate/:targetLocale",
+    );
+  });
+
+  it("matches translation dynamic parameterized routes", () => {
+    const trMatch = matchRoutePattern(
+      "/admin/translations/:translationId",
+      "/admin/translations/tr-uuid-9999",
+      true,
+    );
+    expect(trMatch.matches).toBe(true);
+    expect(trMatch.params).toEqual({ translationId: "tr-uuid-9999" });
+
+    const createTrMatch = matchRoutePattern(
+      "/admin/content/:contentType/:contentId/translate/:targetLocale",
+      "/admin/content/post/post-123/translate/ar-SA",
+      true,
+    );
+    expect(createTrMatch.matches).toBe(true);
+    expect(createTrMatch.params).toEqual({
+      contentType: "post",
+      contentId: "post-123",
+      targetLocale: "ar-SA",
+    });
   });
 });

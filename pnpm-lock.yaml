@@ -79,6 +79,9 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.45.10
         version: 1.170.20(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@vibress/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@vibress/studio-cards':
         specifier: workspace:*
         version: link:../../packages/studio-cards
@@ -212,6 +215,9 @@ importers:
       '@vibress/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@vibress/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@vibress/import-export':
         specifier: workspace:*
         version: link:../../packages/domains/import-export
@@ -1986,6 +1992,9 @@ importers:
 
   packages/theme-core:
     dependencies:
+      '@vibress/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       jszip:
         specifier: ^3.10.1
         version: 3.10.1

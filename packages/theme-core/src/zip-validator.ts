@@ -377,6 +377,17 @@ export async function validateAndExtractThemeZip(
     previewImageBuffer = files.get("preview.jpg");
   }
 
+  // 4. Validate RTL CSS logical properties if RTL support is declared
+  if (manifest.localization?.rtl) {
+    const rtlValidation = validateThemeRtlCss(files);
+    if (!rtlValidation.valid && rtlValidation.errors.length > 0) {
+      throw new ThemeZipError(
+        "THEME_RTL_CSS_VIOLATION",
+        `Theme declares RTL support but contains non-logical physical CSS properties:\n${rtlValidation.errors.join("\n")}`,
+      );
+    }
+  }
+
   return {
     manifest,
     settingsSchema,
@@ -384,3 +395,155 @@ export async function validateAndExtractThemeZip(
     previewImageBuffer,
   };
 }
+
+export interface RtlCssValidationResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+}
+
+const PHYSICAL_CSS_RULES: Array<{
+  pattern: RegExp;
+  property: string;
+  recommendation: string;
+}> = [
+  {
+    pattern: /(?:^|[\s;{])margin-left\s*:/i,
+    property: "margin-left",
+    recommendation: "margin-inline-start",
+  },
+  {
+    pattern: /(?:^|[\s;{])margin-right\s*:/i,
+    property: "margin-right",
+    recommendation: "margin-inline-end",
+  },
+  {
+    pattern: /(?:^|[\s;{])padding-left\s*:/i,
+    property: "padding-left",
+    recommendation: "padding-inline-start",
+  },
+  {
+    pattern: /(?:^|[\s;{])padding-right\s*:/i,
+    property: "padding-right",
+    recommendation: "padding-inline-end",
+  },
+  {
+    pattern: /(?:^|[\s;{])border-left(?:-[a-z]+)?\s*:/i,
+    property: "border-left",
+    recommendation: "border-inline-start",
+  },
+  {
+    pattern: /(?:^|[\s;{])border-right(?:-[a-z]+)?\s*:/i,
+    property: "border-right",
+    recommendation: "border-inline-end",
+  },
+  {
+    pattern: /(?:^|[\s;{])left\s*:\s*[^;]+/i,
+    property: "left",
+    recommendation: "inset-inline-start",
+  },
+  {
+    pattern: /(?:^|[\s;{])right\s*:\s*[^;]+/i,
+    property: "right",
+    recommendation: "inset-inline-end",
+  },
+  {
+    pattern: /(?:^|[\s;{])text-align\s*:\s*left/i,
+    property: "text-align: left",
+    recommendation: "text-align: start",
+  },
+  {
+    pattern: /(?:^|[\s;{])text-align\s*:\s*right/i,
+    property: "text-align: right",
+    recommendation: "text-align: end",
+  },
+  {
+    pattern: /(?:^|[\s;{])float\s*:\s*(?:left|right)/i,
+    property: "float: left|right",
+    recommendation: "float: inline-start|inline-end",
+  },
+  {
+    pattern: /(?:^|[\s;{])clear\s*:\s*(?:left|right)/i,
+    property: "clear: left|right",
+    recommendation: "clear: inline-start|inline-end",
+  },
+];
+
+export interface RtlCssIssue {
+  file: string;
+  line: number;
+  property: string;
+  recommendation: string;
+  message: string;
+}
+
+export interface RtlCssValidationResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+  issues: RtlCssIssue[];
+}
+
+export function validateThemeRtlCss(
+  files: Map<string, Buffer | string> | Record<string, string> | string,
+  options: { strict?: boolean } = {},
+): RtlCssValidationResult {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  const issues: RtlCssIssue[] = [];
+
+  let entries: Array<[string, Buffer | string]>;
+  if (typeof files === "string") {
+    entries = [["theme.css", files]];
+  } else if (files instanceof Map) {
+    entries = Array.from(files.entries());
+  } else {
+    entries = Object.entries(files);
+  }
+
+  for (const [filepath, content] of entries) {
+    if (!filepath.endsWith(".css")) continue;
+
+    const cssText =
+      typeof content === "string" ? content : content.toString("utf-8");
+    const lines = cssText.split(/\r?\n/);
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex] || "";
+
+      // Check for suppression comments
+      if (
+        line.includes("/* rtl-ignore */") ||
+        line.includes("/* vibress-rtl-safe */") ||
+        line.includes("/* rtl-safe */")
+      ) {
+        continue;
+      }
+
+      for (const rule of PHYSICAL_CSS_RULES) {
+        if (rule.pattern.test(line)) {
+          const msg = `${filepath}:${lineIndex + 1} uses physical property "${rule.property}". Use logical property "${rule.recommendation}" for proper RTL support.`;
+          warnings.push(msg);
+          issues.push({
+            file: filepath,
+            line: lineIndex + 1,
+            property: (rule.property.split(":")[0] ?? rule.property).trim(),
+            recommendation: rule.recommendation,
+            message: msg,
+          });
+          if (options.strict) {
+            errors.push(msg);
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    valid: issues.length === 0,
+    warnings,
+    errors,
+    issues,
+  };
+}
+

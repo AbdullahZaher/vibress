@@ -13,3 +13,4 @@ export * from "./platform";
 export * from "./intelligence";
 export * from "./operations";
 export * from "./ai";
+export * from "./translations";

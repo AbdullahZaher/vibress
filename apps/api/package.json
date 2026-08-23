@@ -32,6 +32,7 @@
     "@vibress/database": "workspace:*",
     "@vibress/email": "workspace:*",
     "@vibress/events": "workspace:*",
+    "@vibress/i18n": "workspace:*",
     "@vibress/import-export": "workspace:*",
     "@vibress/integrations": "workspace:*",
     "@vibress/media": "workspace:*",

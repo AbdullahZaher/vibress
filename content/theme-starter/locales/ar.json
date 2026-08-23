@@ -1,0 +1,14 @@
+{
+  "theme.tagFilter": "تصفية حسب الموضوع",
+  "theme.readMore": "اقرأ المزيد",
+  "theme.minRead": "دقيقة قراءة",
+  "theme.featured": "مميز",
+  "theme.writtenBy": "كتبه",
+  "theme.publishedOn": "نشر بتاريخ",
+  "theme.updatedOn": "تم التحديث في",
+  "theme.latestArticles": "أحدث المقالات",
+  "theme.allArticles": "جميع المقالات",
+  "theme.noPosts": "لا توجد مقالات منشورة بعد.",
+  "theme.noTagPosts": "لا توجد مقالات تحت هذا الوسم.",
+  "theme.noAuthorPosts": "لا توجد مقالات لهذا الكاتب."
+}

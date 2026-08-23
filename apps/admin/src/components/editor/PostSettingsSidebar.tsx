@@ -11,6 +11,7 @@ import {
   History,
   RotateCcw,
 } from "lucide-react";
+import { TranslationSidebarSection } from "../translations/TranslationSidebarSection";
 
 interface Tag {
   id: string;
@@ -49,6 +50,7 @@ interface PostSettingsSidebarProps {
   postId?: string | undefined;
   revisions: Revision[];
   handleRestoreRevision: (id: string) => void;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
@@ -76,6 +78,7 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
   postId,
   revisions,
   handleRestoreRevision,
+  onNavigate,
 }) => {
   const [generatingSeo, setGeneratingSeo] = useState(false);
 
@@ -256,6 +259,17 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                   Schedule
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Multilingual Translation Management */}
+          {postId && (
+            <div className="space-y-4 border-t pt-6">
+              <TranslationSidebarSection
+                contentType="post"
+                contentId={postId}
+                onNavigate={onNavigate || (() => {})}
+              />
             </div>
           )}
 

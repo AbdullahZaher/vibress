@@ -122,6 +122,13 @@ export const SYSTEM_PERMISSIONS = [
   { key: "system.read", description: "Read system diagnostics" },
   { key: "analytics.read", description: "Read analytics dashboards" },
   { key: "system.manage", description: "Run maintenance operations" },
+  { key: "translations.read", description: "Read translation status, matrix, and items" },
+  { key: "translations.create", description: "Create translation drafts" },
+  { key: "translations.edit", description: "Edit translation drafts and metadata" },
+  { key: "translations.review", description: "Submit translations for review" },
+  { key: "translations.approve", description: "Approve reviewed translations" },
+  { key: "translations.publish", description: "Publish approved translations" },
+  { key: "translations.manage", description: "Manage publication locales, AI translation, and bulk operations" },
 ];
 
 export interface SeedOptions {
@@ -238,7 +245,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
   ].filter(Boolean) as string[];
 
   // Permissions reserved for owner + administrator only.
-  const ADMIN_ONLY_PERMISSIONS = new Set(["analytics.read"]);
+  const ADMIN_ONLY_PERMISSIONS = new Set(["analytics.read", "translations.manage"]);
   const isEditor = (roleId: string) => roleId === editorRoleRows[0]?.id;
 
   for (const roleId of targetRoleIds) {
@@ -247,17 +254,22 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
         roleId === authorRoleRows[0]?.id ||
         roleId === contributorRoleRows[0]?.id
       ) {
-        if (
-          !permKey.startsWith("media.read") &&
-          !permKey.startsWith("media.upload") &&
-          !permKey.startsWith("posts.") &&
-          !permKey.startsWith("pages.") &&
-          !permKey.startsWith("tags.read")
-        ) {
+        const isAuthorPerm =
+          permKey.startsWith("media.read") ||
+          permKey.startsWith("media.upload") ||
+          permKey.startsWith("posts.") ||
+          permKey.startsWith("pages.") ||
+          permKey.startsWith("tags.read") ||
+          permKey === "translations.read" ||
+          permKey === "translations.create" ||
+          permKey === "translations.edit" ||
+          (roleId === authorRoleRows[0]?.id && permKey === "translations.review");
+
+        if (!isAuthorPerm) {
           continue;
         }
       }
-      // analytics.read is owner/administrator-only
+      // analytics.read and translations.manage are owner/administrator-only
       if (
         ADMIN_ONLY_PERMISSIONS.has(permKey) &&
         (isEditor(roleId) ||
