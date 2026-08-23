@@ -75,7 +75,7 @@ describe("Translation Management & Editorial Domain Service Suite", () => {
 
     it("rejects invalid status transitions", () => {
       expect(validateTranslationStatusTransition("untranslated", "published").valid).toBe(false);
-      expect(validateTranslationStatusTransition("draft", "approved").valid).toBe(false);
+      expect(validateTranslationStatusTransition("published", "untranslated").valid).toBe(false);
     });
 
     it("allows transitions into stale status when source changes", () => {

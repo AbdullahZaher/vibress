@@ -10,8 +10,8 @@ export type TranslationStatus =
 
 export const ALLOWED_STATUS_TRANSITIONS: Record<TranslationStatus, TranslationStatus[]> = {
   untranslated: ["draft", "in_progress", "needs_review", "translated"],
-  draft: ["in_progress", "needs_review", "translated", "stale", "published"],
-  in_progress: ["draft", "needs_review", "translated", "stale", "published"],
+  draft: ["in_progress", "needs_review", "translated", "stale", "approved", "published"],
+  in_progress: ["draft", "needs_review", "translated", "stale", "approved", "published"],
   translated: ["needs_review", "approved", "published", "stale", "draft"],
   needs_review: ["approved", "in_progress", "draft", "stale", "published"],
   approved: ["published", "needs_review", "draft", "stale"],
