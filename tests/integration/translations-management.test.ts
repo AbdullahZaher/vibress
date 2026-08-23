@@ -1,7 +1,43 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
-import { getDb, posts, contentTranslations, users, settings, eq, and } from "@vibress/database";
+import { getDb, posts, contentTranslations, users, settings, roles, userRoles, eq, and } from "@vibress/database";
+import { hashPassword } from "@vibress/security";
+import { DrizzleUserRepository, UsersService } from "@vibress/users";
 import { randomUUID } from "crypto";
+
+async function ensureUserWithRole(email: string, roleName: string, passwordPlain: string): Promise<string> {
+  const db = getDb();
+  const userRepo = new DrizzleUserRepository();
+  const usersService = new UsersService(userRepo);
+  const hash = await hashPassword(passwordPlain);
+
+  let user = await usersService.findByEmail(email);
+  if (!user) {
+    user = await usersService.createUser({
+      email,
+      name: `Test ${roleName}`,
+      passwordHash: hash,
+      status: "active",
+    });
+  } else {
+    await db.update(users).set({ passwordHash: hash }).where(eq(users.id, user.id));
+  }
+
+  const [role] = await db.select().from(roles).where(eq(roles.name, roleName));
+  if (role) {
+    const existing = await db
+      .select()
+      .from(userRoles)
+      .where(and(eq(userRoles.userId, user.id), eq(userRoles.roleId, role.id)));
+    if (!existing[0]) {
+      await db.insert(userRoles).values({
+        userId: user.id,
+        roleId: role.id,
+      });
+    }
+  }
+  return user.id;
+}
 
 describe("Translation Management & Editorial UX API Integration Suite", () => {
   let app: ReturnType<typeof buildApp>;
@@ -23,6 +59,9 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     await db
       .delete(settings)
       .where(and(eq(settings.namespace, "site"), eq(settings.key, "locale")));
+
+    // Ensure test owner exists
+    await ensureUserWithRole("owner@example.com", "owner", "OwnerPass123!");
 
     // Login as default seeded owner
     const loginRes = await app.inject({
@@ -296,6 +335,9 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     let editorCookie: string;
 
     beforeAll(async () => {
+      // Ensure Author exists
+      await ensureUserWithRole("author@vibress.local", "author", "DevPassword123!");
+
       // Login as Author
       const authorLogin = await app.inject({
         method: "POST",
@@ -305,6 +347,9 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(authorLogin.statusCode).toBe(200);
       const authorRaw = (authorLogin.headers["set-cookie"] as unknown as string) || "";
       authorCookie = authorRaw.split(";")[0] ?? "";
+
+      // Ensure Editor exists
+      await ensureUserWithRole("editor@vibress.local", "editor", "DevPassword123!");
 
       // Login as Editor
       const editorLogin = await app.inject({
