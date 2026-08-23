@@ -440,6 +440,42 @@ export const adminRoutes: AdminRouteDefinition[] = [
     exact: false,
     render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
   },
+  {
+    pattern: "/admin/settings/localization",
+    exact: false,
+    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+  },
+  {
+    pattern: "/admin/settings/language",
+    exact: false,
+    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+  },
+  {
+    pattern: "/admin/settings/locales",
+    exact: false,
+    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+  },
+  {
+    pattern: "/admin/settings/i18n",
+    exact: false,
+    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+  },
+  {
+    pattern: "/admin/settings/:section",
+    exact: false,
+    render: ({ match, can }) => (
+      <SettingsHub
+        initialSection={
+          ["general", "site", "membership", "growth", "advanced"].includes(
+            match.params.section || "",
+          )
+            ? match.params.section
+            : "general"
+        }
+        can={can}
+      />
+    ),
+  },
 ];
 
 /**

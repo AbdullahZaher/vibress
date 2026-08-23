@@ -102,7 +102,16 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
   // Jump to initial anchor on load or route change
   useEffect(() => {
-    if (initialSection && SECTION_IDS.includes(initialSection as any)) {
+    if (typeof window !== "undefined" && window.location.pathname.includes("localization")) {
+      setTimeout(() => {
+        const el = document.getElementById("general-localization");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else if (initialSection && SECTION_IDS.includes(initialSection as any)) {
+          scrollToSection(initialSection, false);
+        }
+      }, 100);
+    } else if (initialSection && SECTION_IDS.includes(initialSection as any)) {
       setTimeout(() => scrollToSection(initialSection, false), 50);
     }
   }, [initialSection, scrollToSection]);

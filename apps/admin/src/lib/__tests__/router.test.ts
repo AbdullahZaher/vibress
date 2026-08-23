@@ -42,12 +42,30 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/media");
     expect(patterns).toContain("/admin/members");
     expect(patterns).toContain("/admin/settings");
+    expect(patterns).toContain("/admin/settings/localization");
     expect(patterns).toContain("/admin/translations");
     expect(patterns).toContain("/admin/translations/queue");
     expect(patterns).toContain("/admin/translations/:translationId");
     expect(patterns).toContain(
       "/admin/content/:contentType/:contentId/translate/:targetLocale",
     );
+  });
+
+  it("matches settings localization and language routes", () => {
+    const locMatch = matchRoutePattern(
+      "/admin/settings/localization",
+      "/admin/settings/localization",
+      false,
+    );
+    expect(locMatch.matches).toBe(true);
+
+    const dynamicSectionMatch = matchRoutePattern(
+      "/admin/settings/:section",
+      "/admin/settings/localization",
+      false,
+    );
+    expect(dynamicSectionMatch.matches).toBe(true);
+    expect(dynamicSectionMatch.params).toEqual({ section: "localization" });
   });
 
   it("matches translation dynamic parameterized routes", () => {
