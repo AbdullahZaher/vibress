@@ -531,7 +531,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       // Translate using AI Gateway
       let translatedTitle = sourceTitle;
       let translatedExcerpt = sourceExcerpt || "";
-      let translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase().slice(0, 2)}`;
+      const translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase().slice(0, 2)}`;
 
       try {
         const aiGateway = await getAiGatewayService();
@@ -565,7 +565,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
             translatedExcerpt = lines.slice(1).join("\n").replace(/^(Excerpt:|الملخص:)/i, "").trim();
           }
         }
-      } catch (aiErr: any) {
+      } catch {
         // Fallback translation stub for offline/test environments
         translatedTitle =
           body.targetLocale.startsWith("ar")

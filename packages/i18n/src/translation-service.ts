@@ -9,7 +9,6 @@ import { eq, and, desc, inArray, or, ilike, isNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   TranslationStatus,
-  ALLOWED_STATUS_TRANSITIONS,
   validateTranslationStatusTransition,
   UpsertTranslationInput,
   ContentTranslationItem,
