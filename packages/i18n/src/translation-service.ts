@@ -115,7 +115,7 @@ export class TranslationService {
     currentSourceUpdatedAt?: Date,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
-    const rows = await db
+    let rows = await db
       .select()
       .from(contentTranslations)
       .where(
@@ -126,6 +126,28 @@ export class TranslationService {
         ),
       )
       .limit(1);
+
+    // Fallback: match by base language if regional variant was requested/stored (e.g. ar <-> ar-SA)
+    if (!rows[0]) {
+      const baseLang = targetLocale.split("-")[0] || targetLocale;
+      const allRows = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, contentType),
+            eq(contentTranslations.contentId, contentId),
+          ),
+        );
+      const match = allRows.find(
+        (r) =>
+          r.targetLocale === targetLocale ||
+          r.targetLocale.split("-")[0] === baseLang,
+      );
+      if (match) {
+        rows = [match];
+      }
+    }
 
     if (!rows[0]) return null;
     const r = rows[0];
@@ -169,7 +191,7 @@ export class TranslationService {
     slug: string,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
-    const rows = await db
+    let rows = await db
       .select()
       .from(contentTranslations)
       .where(
@@ -180,6 +202,28 @@ export class TranslationService {
         ),
       )
       .limit(1);
+
+    // Fallback: match by base language if regional variant was requested/stored
+    if (!rows[0]) {
+      const baseLang = targetLocale.split("-")[0] || targetLocale;
+      const allRows = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, contentType),
+            eq(contentTranslations.slug, slug),
+          ),
+        );
+      const match = allRows.find(
+        (r) =>
+          r.targetLocale === targetLocale ||
+          r.targetLocale.split("-")[0] === baseLang,
+      );
+      if (match) {
+        rows = [match];
+      }
+    }
 
     if (!rows[0]) return null;
     const r = rows[0];
