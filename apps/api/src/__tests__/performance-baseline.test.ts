@@ -21,7 +21,7 @@ function calculatePercentiles(latencies: number[]): LatencyStats {
 }
 
 import { getDb, users, userRoles, roles, eq } from "@vibress/database";
-import { hashPassword } from "@vibress/auth";
+import { hashPassword } from "@vibress/security";
 import crypto from "node:crypto";
 
 async function ensureOwner(): Promise<void> {
