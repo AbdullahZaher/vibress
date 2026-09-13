@@ -84,9 +84,9 @@ Backups produce compressed SQL archives with SHA-256 integrity checksums:
 ./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz
 ```
 
-### Recovery Objectives
-* **Recovery Point Objective (RPO):** < 15 minutes (with continuous WAL archiving).
-* **Recovery Time Objective (RTO):** < 10 minutes (full physical restoration tested).
+### Recovery Targets
+* **Recovery Point Objective (RPO Target):** < 15 minutes (with continuous WAL archiving).
+* **Recovery Time Objective (RTO Target):** < 10 minutes.
 
 ---
 

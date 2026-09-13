@@ -18,7 +18,7 @@ This guide provides step-by-step instructions for self-hosting **Vibress** on yo
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/vibress/vibress.git /opt/vibress
+git clone https://github.com/AbdullahZaher/vibress.git /opt/vibress
 cd /opt/vibress
 ```
 
@@ -57,29 +57,17 @@ SMTP_PASS=your-smtp-password
 SMTP_FROM=Vibress <no-reply@yourdomain.com>
 ```
 
-### Step 3: Run Database Migrations
-Initialize the database schema:
+### Step 3: Run Canonical Production Deployment
+Execute the canonical deployment script which handles preflight, backups, migrations, container startup, and health verification:
 ```bash
-docker compose -f compose.prod.yml run --rm migrate
-```
-
-### Step 4: Start Vibress Containers
-Launch all services in background:
-```bash
-docker compose -f compose.prod.yml up -d --build
-```
-
-### Step 5: Verify Health
-```bash
-curl -f http://localhost:7777/nginx-health
-curl -f http://localhost:7777/health/ready
+./scripts/deploy-production.sh
 ```
 
 ---
 
 ## 3. Reverse Proxy & TLS Termination
 
-Vibress gateway runs on port `7777` by default. Place a reverse proxy (Caddy, NGINX, or Cloudflare Tunnel) in front of port 7777 to provide automatic HTTPS / TLS termination.
+The Vibress gateway listens on port `7777` by default. Place a reverse proxy (Caddy, NGINX, or Cloudflare Tunnel) in front of port 7777 to provide HTTPS / TLS termination.
 
 ### Option A: Caddyfile Example (Recommended for Automatic SSL)
 ```caddy
@@ -129,12 +117,13 @@ server {
 1. Open your browser and navigate to `https://yourdomain.com/admin/`.
 2. Follow the setup wizard to create your primary **Owner** account.
 3. Configure your publication name, default locale (e.g. English `en` or Arabic `ar`), and design theme.
+4. Once completed, the setup endpoint locks permanently (`OWNER_ALREADY_EXISTS`).
 
 ---
 
-## 5. Maintenance & Backups
+## 5. Maintenance, Backups & Upgrades
 
-### Automated Backups
+### Database Backups
 Run a database backup at any time:
 ```bash
 ./scripts/backup.sh /opt/vibress/backups
@@ -154,7 +143,8 @@ crontab -e
 
 ### Upgrading to New Releases
 ```bash
-git pull origin main
-docker compose -f compose.prod.yml run --rm migrate
-docker compose -f compose.prod.yml up -d --build
+./scripts/backup.sh /opt/vibress/backups
+git pull origin main --tags
+git checkout v1.0.0
+./scripts/deploy-production.sh
 ```

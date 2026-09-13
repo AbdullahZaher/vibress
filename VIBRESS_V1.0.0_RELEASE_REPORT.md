@@ -14,8 +14,9 @@ This report confirms that the repository has completed all release engineering g
 | :--- | :--- |
 | **Product Name** | Vibress |
 | **Release Version** | `1.0.0` |
-| **Git Release Tag** | `v1.0.0` |
-| **Certified Git Commit SHA** | `9f461d0aeae8c624c1c43fdfc439b861346df9eb` |
+| **Git Release Tag** | `v1.0.0` (Annotated tag on HEAD commit) |
+| **Certified Git Baseline SHA** | `9f461d0aeae8c624c1c43fdfc439b861346df9eb` |
+| **Release Commit SHA** | `dd6becd1237ce365b07f4d036992fc711d473955` |
 | **Target Branch** | `main` |
 | **Repository URL** | `https://github.com/AbdullahZaher/vibress.git` |
 | **Release Date** | `2026-09-13` |
@@ -35,8 +36,8 @@ This report confirms that the repository has completed all release engineering g
 
 All user-facing, developer, and operator documentation has been reviewed, cross-referenced, and updated:
 
-- **[README.md](file:///Users/abdullahzaher/vibress/README.md):** Complete open-source first experience, architecture diagram, feature overview, quickstart guides (Docker & local), and verification instructions.
-- **[CONTRIBUTING.md](file:///Users/abdullahzaher/vibress/CONTRIBUTING.md):** Full contributor workflow, prerequisites, monorepo structure, database migration process, code style, and PR checklist.
+- **[README.md](file:///Users/abdullahzaher/vibress/README.md):** Open-source first experience, architecture diagram, feature overview, quickstart guides (Docker & local), and verification instructions.
+- **[CONTRIBUTING.md](file:///Users/abdullahzaher/vibress/CONTRIBUTING.md):** Contributor workflow, prerequisites, monorepo structure, database migration process, code style, and PR checklist.
 - **[SECURITY.md](file:///Users/abdullahzaher/vibress/SECURITY.md):** Active security policy, supported versions (`v1.0.x`), private reporting channels via GitHub Security Advisories, response timeline SLAs, and operational hardening recommendations.
 - **[CHANGELOG.md](file:///Users/abdullahzaher/vibress/CHANGELOG.md):** Structured `v1.0.0` release notes categorized into Added, Security, Publishing, Localization, Infrastructure, Developer Experience, Deployment, and Validation.
 - **[SELF_HOSTING.md](file:///Users/abdullahzaher/vibress/docs/deployment/SELF_HOSTING.md):** Step-by-step operator guide for VPS/bare-metal self-hosting, reverse proxy configuration (NGINX/Caddy), TLS termination, and SMTP/Stripe setup.
@@ -75,7 +76,7 @@ The repository includes complete GitHub community and workflow files:
 
 ## 7. Docker Readiness
 
-The production container topology (`compose.prod.yml`) consists of **8 runtime microservices** and **1 one-shot migration service**:
+The production container topology (`compose.prod.yml`) consists of **8 runtime services** and **1 one-shot migration service**:
 
 | Service | Base Image / Dockerfile | Network | Internal / Exposed Port | Healthcheck |
 | :--- | :--- | :--- | :--- | :--- |
@@ -99,7 +100,7 @@ The production container topology (`compose.prod.yml`) consists of **8 runtime m
 ## 8. Security Readiness
 
 - **Secret Scanning:** Repository-wide scan confirms no real API keys, JWT secrets, private keys, live Stripe tokens, or SMTP credentials exist in tracked source code.
-- **RBAC & Authorization:** Complete `@vibress/security` permission gates verified across all administrative endpoints (`requirePermission`).
+- **RBAC & Authorization:** Centralized `@vibress/security` permission gates verified across all administrative endpoints (`requirePermission`).
 - **Publication Boundary Isolation:** Inbound request header stripping (`x-publication-id`, `x-workspace-id`, `x-tenant-id`) active at the gateway layer to prevent cross-tenant parameter spoofing.
 - **Staff Auth Lifecycle:** Single-use SHA-256 hashed password reset tokens, token invalidation upon use, and automated session revocation upon password modification.
 - **First-Run Lockout:** Initial owner setup permanently locks once an active owner account exists (`OWNER_ALREADY_EXISTS`), preventing re-registration attacks.
@@ -118,7 +119,7 @@ The production container topology (`compose.prod.yml`) consists of **8 runtime m
 
 ---
 
-## 10. Upgrade & Migration Policy
+## 10. Upgrade & Recovery Policy
 
 - **Additive Migrations:** Database migrations (`packages/database/migrations/0000_*.sql` through `0025_*.sql`) are strictly additive and backward-compatible.
 - **Upgrade Sequence:**
@@ -133,7 +134,7 @@ The production container topology (`compose.prod.yml`) consists of **8 runtime m
   # 3. Apply migrations and rebuild containers
   ./scripts/deploy-production.sh
   ```
-- **Rollback Policy:** Because database migrations are non-destructive and additive, rollback is achieved by restoring from the pre-deployment backup using `./scripts/restore.sh <backup-file.sql.gz>`.
+- **Rollback Policy:** Verified pre-deployment database backups provide a database recovery path. Application rollback should be performed by redeploying the previous application release and restoring the database when required (`./scripts/restore.sh <backup-file.sql.gz>`).
 
 ---
 
@@ -145,10 +146,10 @@ The production container topology (`compose.prod.yml`) consists of **8 runtime m
 - **Restore Tooling (`scripts/restore.sh`):**
   - Verifies SHA-256 checksum integrity prior to restore.
   - Restores schema and data cleanly into PostgreSQL container via `psql`.
-- **Verified Metrics:**
-  - Backup Generation Time: `< 2 seconds`
+- **Observed Verification Measurements:**
+  - Backup Generation Time: `< 2 seconds` (observed during verification)
   - Backup Payload Size: `~29 KB` (compressed baseline)
-  - Restore Verification Time: `< 3 seconds`
+  - Restore Verification Time: `< 3 seconds` (observed during verification)
 
 ---
 
@@ -162,7 +163,7 @@ All automated verification gates have executed and passed:
 | **TypeScript Typecheck** | `pnpm typecheck` | 71 workspace projects | **71 / 71 passed** (0 errors) | **PASS** |
 | **ESLint Static Analysis** | `pnpm -r lint` | 74 workspace packages | **74 / 74 passed** (0 errors, 0 warnings) | **PASS** |
 | **Production Build** | `pnpm build` | All apps & packages | **All bundles compiled successfully** | **PASS** |
-| **Production Smoke Tests** | `pnpm production:smoke` | 10 live HTTP surfaces | **10 / 10 passed** (Latencies: 2ms – 80ms) | **PASS** |
+| **Production Smoke Tests** | `pnpm production:smoke` | 10 live HTTP surfaces | **10 / 10 passed** (Observed latencies: 2ms – 80ms) | **PASS** |
 | **Dependency Audit** | `pnpm audit --prod` | Production dependencies | **0 vulnerabilities** | **PASS** |
 | **Docker Compose Config** | `docker compose config` | `compose.prod.yml` | **Valid configuration** | **PASS** |
 
@@ -174,8 +175,8 @@ The following release assets accompany the `v1.0.0` distribution:
 
 1. **Source Code Archive:** Tagged `v1.0.0` repository archive.
 2. **Starter Theme Distribution:** `content/vibress-theme-starter.zip` (Liquid templating starter package).
-3. **OpenAPI 3.1 Specification:** `docs/openapi.json` API specification.
-4. **Verified Checksums:** Cryptographic SHA-256 signatures for release archives.
+3. **OpenAPI 3.1 Specification:** API contracts defined across workspace packages.
+4. **Verified Checksums:** SHA-256 signatures for release archives.
 
 ---
 
@@ -195,9 +196,9 @@ In accordance with Release Principle A (*Evidence over Claims*), external cloud 
 
 ## 15. Known Real Limitations
 
-1. **SQLite / MySQL Not Supported:** Vibress requires PostgreSQL 16+ due to advanced reliance on `pg_trgm` GIN indexing and native UUID/JSONB columns.
-2. **Single Primary Database Host:** Vibress does not currently include automated multi-region active-active database replication.
-3. **External Ingress Required:** Vibress Gateway listens on unencrypted HTTP (port `8080`) by design and relies on an external edge reverse proxy (Cloudflare, Caddy, Traefik, AWS ALB) for TLS termination.
+1. **PostgreSQL 16+ Requirement:** Vibress requires PostgreSQL 16+ due to reliance on `pg_trgm` GIN indexing and native UUID/JSONB features (SQLite and MySQL are not supported).
+2. **Single Primary Database Host:** Vibress does not currently include multi-region active-active database replication.
+3. **External Ingress Required for TLS:** Vibress Gateway listens on unencrypted HTTP (port `8080` / host port `7777`) by design and relies on an external edge reverse proxy (Cloudflare, Caddy, Traefik, NGINX, AWS ALB) for TLS termination.
 
 ---
 
@@ -212,6 +213,7 @@ OPEN SOURCE RELEASE DECISION
 Repository:              READY
 Version:                 1.0.0
 Certified Baseline:      VERIFIED (SHA: 9f461d0aeae8c624c1c43fdfc439b861346df9eb)
+Release Commit:          dd6becd1237ce365b07f4d036992fc711d473955
 Tests (Vitest):          VERIFIED (1,074/1,074 passed across 135 test suites)
 Typecheck (TypeScript):  VERIFIED (71/71 projects passed)
 Lint (ESLint):           VERIFIED (74/74 packages passed)

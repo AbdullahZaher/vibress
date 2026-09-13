@@ -6,27 +6,29 @@
 [![Node: >=24.0.0](https://img.shields.io/badge/Node-%3E%3D24.0.0-brightgreen.svg)](package.json)
 [![pnpm: >=11.17.0](https://img.shields.io/badge/pnpm-%3E%3D11.17.0-orange.svg)](package.json)
 
-**Vibress** is a modern, high-performance, open-source Content Management System (CMS) and publication platform designed as a self-hosted, full-stack alternative to existing CMS engines.
+**Vibress** is a modern, high-performance, open-source Content Management System (CMS) and publication platform designed as a self-hostable, full-stack alternative to existing CMS engines.
 
 The name **Vibress** represents:
-- **Vibe**: Fast, modern, AI-assisted development and elegant creator workflows.
-- **Press**: Robust publishing, content management, and audience monetization.
+- **Vibe**: Modern, AI-assisted development and creator workflows.
+- **Press**: Publishing, content management, and audience monetization.
 
 ---
 
 ## Key Capabilities
 
-* **API-First Modular Architecture**: Decoupled Fastify REST API backend, Next.js Server-Side Rendered (SSR) public web, and Vite + React Admin & Portal SPAs.
-* **Studio Block Editor**: High-fidelity collaborative block editor supporting all 13 canonical Studio cards (`Callout`, `Button`, `Bookmark`, `Gallery`, `Video`, `Audio`, `File`, `Divider`, `Product`, `Embed`, `Header`, `Markdown`, `HTML`).
-* **Arabic-First Multilingual & RTL**: Built-in RTL layout detection, Umm al-Qura Hijri calendar formatting, and multilingual translation management.
+* **Containerized Full-Stack Architecture**: Decoupled Fastify REST API backend, Next.js Server-Side Rendered (SSR) public web, and Vite + React Admin & Member Portal SPAs.
+* **Studio Block Editor**: Collaborative block editor supporting all 13 canonical Studio cards (`Callout`, `Button`, `Bookmark`, `Gallery`, `Video`, `Audio`, `File`, `Divider`, `Product`, `Embed`, `Header`, `Markdown`, `HTML`).
+* **Arabic-First Multilingual & RTL**: Native RTL layout detection, Umm al-Qura Hijri calendar formatting, and multilingual translation management.
 * **Subscriptions & Monetization**: Tiered subscription plans, member access gating, Stripe billing integration, and paid newsletters.
-* **Search 2.0**: High-speed full-text and trigram fuzzy search powered by PostgreSQL `pg_trgm` GIN indexes with sub-millisecond query latencies.
-* **Secure Sandbox & Extensibility**: Sandboxed plugin architecture, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
-* **Enterprise Reliability**: Real-time collaborative CRDT document editing (Yjs), transactional outbox event delivery, Prometheus metrics, and OpenTelemetry tracing.
+* **Search**: Full-text and fuzzy search powered by PostgreSQL `pg_trgm` GIN indexes.
+* **Extensibility**: Sandboxed plugin architecture, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
+* **Reliability & Observability**: Real-time collaborative CRDT document editing (Yjs), transactional outbox event delivery, Prometheus metrics, and OpenTelemetry tracing.
 
 ---
 
 ## Architecture Overview
+
+Vibress is built as a modular full-stack application with independently containerized runtime components:
 
 ```
                           ┌──────────────────────────┐
@@ -59,7 +61,7 @@ The name **Vibress** represents:
            └───────────────────┘                 └───────────────────┘
 ```
 
-The production topology separates internal databases and caches into a dedicated, unexposed internal network (`internal: true`).
+The production container topology isolates internal databases and caches on a dedicated, unexposed internal network (`internal: true`).
 
 ---
 
@@ -132,7 +134,7 @@ pnpm typecheck
 # Lint all code
 pnpm lint
 
-# Run all unit and integration tests (1,074+ tests)
+# Run all unit and integration tests (1,074 tests across 135 files)
 pnpm vitest run
 
 # Build all production bundles
@@ -146,14 +148,14 @@ pnpm production:smoke
 
 ## Documentation & Operations
 
-Comprehensive documentation is available in the [`docs/`](docs/) directory:
+Documentation is available in the [`docs/`](docs/) directory:
 
 - [**Self-Hosting Guide**](docs/deployment/SELF_HOSTING.md) — Step-by-step production deployment on VPS/bare-metal.
-- [**Production Runbook**](docs/deployment/PRODUCTION.md) — Security hardening, environment configuration, and scaling.
+- [**Production Runbook**](docs/deployment/PRODUCTION.md) — Security hardening, environment configuration, and operational guidance.
 - [**Docker Deployment**](docs/deployment/DOCKER.md) — Container topology, volumes, and health checks.
-- [**Backup & Disaster Recovery**](docs/deployment/SELF_HOSTING.md#10-backup--disaster-recovery) — Automated transactional backup and restore procedures.
-- [**Troubleshooting & Runbooks**](docs/deployment/TROUBLESHOOTING.md) — Diagnostic guides and incident remediation.
-- [**Changelog & Release Notes**](CHANGELOG.md) — Full release history and migration notes.
+- [**Backup & Disaster Recovery**](docs/deployment/SELF_HOSTING.md#10-backup--disaster-recovery) — Transactional backup and restore procedures.
+- [**Troubleshooting Runbooks**](docs/deployment/TROUBLESHOOTING.md) — Diagnostic guides and common remediation playbooks.
+- [**Changelog & Release Notes**](CHANGELOG.md) — Release history and notes.
 
 ---
 
