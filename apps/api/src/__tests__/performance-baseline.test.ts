@@ -20,6 +20,44 @@ function calculatePercentiles(latencies: number[]): LatencyStats {
   };
 }
 
+import { getDb, users, userRoles, roles, eq } from "@vibress/database";
+import { hashPassword } from "@vibress/auth";
+import crypto from "node:crypto";
+
+async function ensureOwner(): Promise<void> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, "owner@example.com"))
+    .limit(1);
+  if (rows.length > 0) return;
+  const hash = await hashPassword("OwnerPass123!");
+  const ownerId = crypto.randomUUID();
+  await db
+    .insert(users)
+    .values({
+      id: ownerId,
+      email: "owner@example.com",
+      name: "Owner",
+      slug: "perf-owner",
+      passwordHash: hash,
+      status: "active",
+    })
+    .onConflictDoNothing();
+  const ownerRole = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.name, "owner"))
+    .limit(1);
+  if (ownerRole[0]) {
+    await db
+      .insert(userRoles)
+      .values({ userId: ownerId, roleId: ownerRole[0].id })
+      .onConflictDoNothing();
+  }
+}
+
 describe("PHASE 11: Production Performance Baseline Suite (p50/p95/p99)", () => {
   let app: FastifyInstance;
   let staffCookie: string;
@@ -28,6 +66,7 @@ describe("PHASE 11: Production Performance Baseline Suite (p50/p95/p99)", () => 
   beforeAll(async () => {
     app = buildApp();
     await app.ready();
+    await ensureOwner();
 
     // Authenticate
     const loginRes = await app.inject({
