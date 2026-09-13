@@ -1,0 +1,22 @@
+# Phase 0 Baseline Evidence Capture
+
+- **Timestamp**: 2026-09-13T09:19:30Z
+- **Node Version**: 24.x
+- **pnpm Version**: 11.22.0
+- **Nx Version**: 23.1.1
+- **Working Tree**: Clean (all workspace packages tracked cleanly)
+- **Vitest Baseline**: 127 test files, 1,028 passing unit/integration tests
+- **TypeScript Typecheck**: 71 Nx projects passing cleanly
+- **ESLint Linting**: 73 workspace projects passing with 0 warnings/errors
+- **Migration Journal Latest Index**: `idx: 24`, tag `0024_multilingual_publications_translations`
+- **Docker Compose Health**:
+  - `gateway`: 7777 (healthy)
+  - `web`: 7778 (healthy)
+  - `admin`: 7779 (healthy)
+  - `api`: 7780 (healthy)
+  - `portal`: 7781 (healthy)
+  - `worker-health`: 7782 (healthy)
+  - `mailpit`: 8025/1025 (healthy)
+  - `minio`: 9000/9001 (healthy)
+  - `postgres`: 5433 (healthy)
+  - `redis`: 6380 (healthy)

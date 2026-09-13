@@ -244,38 +244,74 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     contributorRoleRows[0]?.id,
   ].filter(Boolean) as string[];
 
+  // Explicit capability sets for system roles (SEC-01 Hardening)
+  const AUTHOR_PERMISSIONS = new Set([
+    "posts.read",
+    "posts.create",
+    "posts.edit",
+    "posts.delete",
+    "tags.read",
+    "media.read",
+    "media.upload",
+    "comments.read",
+    "translations.read",
+    "translations.create",
+    "translations.edit",
+    "translations.review",
+  ]);
+
+  const CONTRIBUTOR_PERMISSIONS = new Set([
+    "posts.read",
+    "posts.create",
+    "posts.edit",
+    "tags.read",
+    "media.read",
+    "media.upload",
+    "comments.read",
+    "translations.read",
+    "translations.create",
+    "translations.edit",
+  ]);
+
   // Permissions reserved for owner + administrator only.
-  const ADMIN_ONLY_PERMISSIONS = new Set(["analytics.read", "translations.manage"]);
-  const isEditor = (roleId: string) => roleId === editorRoleRows[0]?.id;
+  const ADMIN_ONLY_PERMISSIONS = new Set([
+    "analytics.read",
+    "translations.manage",
+    "users.create",
+    "users.edit",
+    "users.delete",
+    "roles.create",
+    "roles.edit",
+    "roles.delete",
+    "settings.manage",
+    "billing.manage",
+    "subscriptions.manage",
+    "integrations.manage",
+    "api_keys.manage",
+    "webhooks.manage",
+    "plugins.manage",
+    "themes.manage",
+    "system.manage",
+    "imports.manage",
+    "exports.manage",
+    "offers.manage",
+    "automations.manage",
+    "automations.run",
+  ]);
 
   for (const roleId of targetRoleIds) {
-    for (const [permKey, permId] of Array.from(permMap.entries())) {
-      if (
-        roleId === authorRoleRows[0]?.id ||
-        roleId === contributorRoleRows[0]?.id
-      ) {
-        const isAuthorPerm =
-          permKey.startsWith("media.read") ||
-          permKey.startsWith("media.upload") ||
-          permKey.startsWith("posts.") ||
-          permKey.startsWith("pages.") ||
-          permKey.startsWith("tags.read") ||
-          permKey === "translations.read" ||
-          permKey === "translations.create" ||
-          permKey === "translations.edit" ||
-          (roleId === authorRoleRows[0]?.id && permKey === "translations.review");
+    const isEditor = roleId === editorRoleRows[0]?.id;
+    const isAuthor = roleId === authorRoleRows[0]?.id;
+    const isContributor = roleId === contributorRoleRows[0]?.id;
 
-        if (!isAuthorPerm) {
-          continue;
-        }
+    for (const [permKey, permId] of Array.from(permMap.entries())) {
+      if (isContributor && !CONTRIBUTOR_PERMISSIONS.has(permKey)) {
+        continue;
       }
-      // analytics.read and translations.manage are owner/administrator-only
-      if (
-        ADMIN_ONLY_PERMISSIONS.has(permKey) &&
-        (isEditor(roleId) ||
-          roleId === authorRoleRows[0]?.id ||
-          roleId === contributorRoleRows[0]?.id)
-      ) {
+      if (isAuthor && !AUTHOR_PERMISSIONS.has(permKey)) {
+        continue;
+      }
+      if (isEditor && ADMIN_ONLY_PERMISSIONS.has(permKey)) {
         continue;
       }
 

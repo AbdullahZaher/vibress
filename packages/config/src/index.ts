@@ -129,7 +129,7 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   LOG_LEVEL: nonEmptyString.default("info"),
-  VIBRESS_VERSION: nonEmptyString.default("0.0.0"),
+  VIBRESS_VERSION: nonEmptyString.default("1.0.0"),
 
   API_PORT: intString.default(7780),
   WEB_PORT: intString.default(7778),

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import Fastify, { FastifyInstance } from "fastify";
 import { storageRoutes } from "../routes/storage";
 import { DrizzleStorageRepository } from "@vibress/storage-domain";
@@ -11,6 +11,26 @@ describe("API Security — Media Uploads & Direct Upload Hardening", () => {
   const currentUserId = "test-user-1";
 
   beforeAll(async () => {
+    app = Fastify();
+    app.decorateRequest("user", undefined);
+    app.decorateRequest("roles", undefined);
+    app.decorateRequest("permissions", undefined);
+    app.addHook("preHandler", async (req) => {
+      (req as any).user = {
+        id: currentUserId,
+        email: "admin@vibress.local",
+        roleId: "role-admin",
+        role: "admin",
+      };
+      (req as any).roles = ["admin"];
+      (req as any).permissions = ["media.upload", "storage.manage"];
+    });
+
+    await app.register(storageRoutes);
+    await app.ready();
+  });
+
+  beforeEach(async () => {
     const db = getDb();
     await db
       .insert(users)
@@ -33,24 +53,6 @@ describe("API Security — Media Uploads & Direct Upload Hardening", () => {
         },
       ])
       .onConflictDoNothing();
-
-    app = Fastify();
-    app.decorateRequest("user", undefined);
-    app.decorateRequest("roles", undefined);
-    app.decorateRequest("permissions", undefined);
-    app.addHook("preHandler", async (req) => {
-      (req as any).user = {
-        id: currentUserId,
-        email: "admin@vibress.local",
-        roleId: "role-admin",
-        role: "admin",
-      };
-      (req as any).roles = ["admin"];
-      (req as any).permissions = ["media.upload", "storage.manage"];
-    });
-
-    await app.register(storageRoutes);
-    await app.ready();
   });
 
   afterAll(async () => {

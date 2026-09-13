@@ -26,6 +26,10 @@
     "prod:up": "docker compose -f compose.prod.yml up -d --build",
     "prod:down": "docker compose -f compose.prod.yml down",
     "prod:migrate": "docker compose -f compose.prod.yml run --rm migrate",
+    "db:backup": "bash scripts/backup.sh",
+    "db:restore": "bash scripts/restore.sh",
+    "production:smoke": "tsx scripts/production-smoke-tests.ts",
+    "production:verify": "tsx scripts/health-check.ts && tsx scripts/production-smoke-tests.ts",
     "verify:explicit-any": "node scripts/count-explicit-any.mjs --max 120"
   },
   "devDependencies": {
@@ -52,5 +56,6 @@
   "engines": {
     "node": ">=24.0.0 <25",
     "pnpm": ">=11.17.0"
-  }
+  },
+  "version": "1.0.0"
 }

@@ -176,6 +176,13 @@
       "when": 1786605000000,
       "tag": "0024_multilingual_publications_translations",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786606000000,
+      "tag": "0025_staff_invitations_and_password_resets",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { LoginRequestSchema } from "@vibress/api-contracts";
-import { authService } from "../services";
+import { authService, usersService } from "../services";
 import {
   requireStaffSession,
   validateOrigin,
@@ -8,6 +8,12 @@ import {
 } from "../middleware/auth";
 import { getConfig } from "@vibress/config";
 import { AuthDomainError } from "@vibress/auth";
+import { getDb, userInvitations, passwordResetTokens, users } from "@vibress/database";
+import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
+import { hashToken, hashPassword, dummyVerifyPassword } from "@vibress/security";
+import { normalizeEmail } from "@vibress/users";
+import { staffAuthMailer } from "../mailer/staff-auth-mailer";
 
 export async function authRoutes(fastify: FastifyInstance) {
   // Login
@@ -118,6 +124,307 @@ export async function authRoutes(fastify: FastifyInstance) {
           roles: req.roles || [],
           permissions: req.permissions || [],
         },
+      });
+    },
+  });
+
+  // Accept Staff Invitation (AUTH-01)
+  fastify.post("/invitation/accept", {
+    preHandler: [validateOrigin],
+    handler: async (req, reply) => {
+      const body = req.body as
+        | { token?: string; password?: string; name?: string }
+        | undefined;
+      if (!body || !body.token || !body.password) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: "Token and password are required",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (body.password.length < 8) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "WEAK_PASSWORD",
+              message: "Password must be at least 8 characters long",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const tokenHash = hashToken(body.token);
+      const db = getDb();
+
+      const invitations = await db
+        .select()
+        .from(userInvitations)
+        .where(eq(userInvitations.tokenHash, tokenHash))
+        .limit(1);
+
+      if (invitations.length === 0) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "INVALID_OR_EXPIRED_TOKEN",
+              message: "Invitation token is invalid or does not exist",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const invitation = invitations[0]!;
+
+      if (invitation.status === "accepted" || invitation.acceptedAt !== null) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "TOKEN_ALREADY_USED",
+              message: "This invitation token has already been accepted",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (invitation.status === "revoked") {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "INVITATION_REVOKED",
+              message: "This invitation has been revoked by an administrator",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (new Date(invitation.expiresAt).getTime() < Date.now()) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "TOKEN_EXPIRED",
+              message: "This invitation token has expired",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // Hash new password using Argon2id
+      const newPasswordHash = await hashPassword(body.password);
+      const now = new Date();
+
+      // Update user password and activate status
+      await db
+        .update(users)
+        .set({
+          passwordHash: newPasswordHash,
+          status: "active",
+          ...(body.name ? { name: body.name.trim() } : {}),
+          updatedAt: now,
+        })
+        .where(eq(users.id, invitation.userId));
+
+      // Mark invitation accepted
+      await db
+        .update(userInvitations)
+        .set({
+          status: "accepted",
+          acceptedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(userInvitations.id, invitation.id));
+
+      return reply.status(200).send({
+        success: true,
+        message: "Invitation accepted successfully. You can now log in.",
+      });
+    },
+  });
+
+  // Forgot Password Request (AUTH-02)
+  fastify.post("/forgot-password", {
+    config: {
+      rateLimit: {
+        max: getConfig().isProduction ? 5 : 1000,
+        timeWindow: "1 minute",
+      },
+    },
+    preHandler: [validateOrigin],
+    handler: async (req, reply) => {
+      const body = req.body as { email?: string } | undefined;
+      if (!body || !body.email) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: "Email is required",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const email = normalizeEmail(body.email);
+      const user = await usersService.findByEmail(email);
+
+      // Enumeration resistance: if user doesn't exist or is disabled, execute dummy timing and return generic success
+      if (!user || user.status === "disabled" || user.deletedAt) {
+        await dummyVerifyPassword();
+        return reply.status(200).send({
+          success: true,
+          message: "If that email address is registered, password reset instructions have been sent.",
+        });
+      }
+
+      const db = getDb();
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashToken(rawToken);
+      const tokenId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15m TTL
+
+      await db.insert(passwordResetTokens).values({
+        id: tokenId,
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        createdAt: new Date(),
+      });
+
+      const config = getConfig();
+      const adminOrigin =
+        config.cors.staffAllowedOrigins?.[0] ||
+        `http://localhost:${config.ports.admin}`;
+      const resetUrl = `${adminOrigin}/reset-password?token=${rawToken}`;
+
+      await staffAuthMailer.sendPasswordReset({
+        to: email,
+        name: user.name,
+        resetUrl,
+        expiresInMinutes: 15,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: "If that email address is registered, password reset instructions have been sent.",
+        ...(config.isProduction ? {} : { token: rawToken, resetUrl }),
+      });
+    },
+  });
+
+  // Reset Password Execution (AUTH-02)
+  fastify.post("/reset-password", {
+    preHandler: [validateOrigin],
+    handler: async (req, reply) => {
+      const body = req.body as
+        | { token?: string; password?: string }
+        | undefined;
+      if (!body || !body.token || !body.password) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: "Token and new password are required",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (body.password.length < 8) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "WEAK_PASSWORD",
+              message: "Password must be at least 8 characters long",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const tokenHash = hashToken(body.token);
+      const db = getDb();
+
+      const tokens = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(eq(passwordResetTokens.tokenHash, tokenHash))
+        .limit(1);
+
+      if (tokens.length === 0) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "INVALID_OR_EXPIRED_TOKEN",
+              message: "Password reset token is invalid or does not exist",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      const tokenRow = tokens[0]!;
+
+      if (tokenRow.usedAt !== null) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "TOKEN_ALREADY_USED",
+              message: "This password reset token has already been used",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (new Date(tokenRow.expiresAt).getTime() < Date.now()) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "TOKEN_EXPIRED",
+              message: "This password reset token has expired",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // Hash new password using Argon2id
+      const newPasswordHash = await hashPassword(body.password);
+      const now = new Date();
+
+      // Update password
+      await db
+        .update(users)
+        .set({
+          passwordHash: newPasswordHash,
+          updatedAt: now,
+        })
+        .where(eq(users.id, tokenRow.userId));
+
+      // Mark token used
+      await db
+        .update(passwordResetTokens)
+        .set({
+          usedAt: now,
+        })
+        .where(eq(passwordResetTokens.id, tokenRow.id));
+
+      // Invalidate all active sessions for this user across DB
+      await authService.revokeAllUserSessions(tokenRow.userId);
+
+      return reply.status(200).send({
+        success: true,
+        message: "Password has been reset successfully. All active sessions have been invalidated.",
       });
     },
   });

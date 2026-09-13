@@ -142,7 +142,7 @@ async function run() {
   );
 
   // Bench 5: Webhook Intake
-  console.log("[5/5] Benchmarking Webhook HMAC Intake (POST /api/webhooks/v1/stripe)...");
+  console.log("[5/7] Benchmarking Webhook HMAC Intake (POST /api/webhooks/v1/stripe)...");
   results.push(
     await benchmarkEndpoint(
       "Webhook HMAC Intake",
@@ -156,6 +156,26 @@ async function run() {
         },
         body: webhookBody,
       },
+    ),
+  );
+
+  // Bench 6: Public SSR (Next.js Homepage)
+  console.log("[6/7] Benchmarking Public SSR Homepage (GET /)...");
+  results.push(
+    await benchmarkEndpoint(
+      "Public SSR Homepage",
+      "http://localhost:7777/",
+      { headers: { Origin: "http://localhost:7777" } },
+    ),
+  );
+
+  // Bench 7: Arabic SSR (Next.js RTL Homepage)
+  console.log("[7/7] Benchmarking Arabic SSR Homepage (GET /ar)...");
+  results.push(
+    await benchmarkEndpoint(
+      "Arabic SSR Homepage (/ar)",
+      "http://localhost:7777/ar",
+      { headers: { Origin: "http://localhost:7777" } },
     ),
   );
 

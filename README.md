@@ -1,232 +1,174 @@
 # Vibress
 
-Vibress is a modern, open-source Content Management System (CMS) designed as a
-fast, self-hosted alternative to other CMS platforms.
+[![CI](https://github.com/AbdullahZaher/vibress/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdullahZaher/vibress/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AbdullahZaher/vibress?color=blue)](https://github.com/AbdullahZaher/vibress/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Node: >=24.0.0](https://img.shields.io/badge/Node-%3E%3D24.0.0-brightgreen.svg)](package.json)
+[![pnpm: >=11.17.0](https://img.shields.io/badge/pnpm-%3E%3D11.17.0-orange.svg)](package.json)
 
-The name **Vibress** comes from:
+**Vibress** is a modern, high-performance, open-source Content Management System (CMS) and publication platform designed as a self-hosted, full-stack alternative to existing CMS engines.
 
-- **Vibe**: Inspired by vibe-coding, representing the idea of building software
-  quickly with creativity and modern AI-assisted development.
-- **Press**: Represents publishing and content management platforms.
+The name **Vibress** represents:
+- **Vibe**: Fast, modern, AI-assisted development and elegant creator workflows.
+- **Press**: Robust publishing, content management, and audience monetization.
 
-Vibress aims to provide a fast, modern CMS experience that developers can
-self-host easily on their own servers, giving you full control over your content
-and platform.
+---
 
-## Features Overview
+## Key Capabilities
 
-- **Modern CMS Architecture**: Built for speed and flexibility with an API-first
-  design.
-- **Content Management**: Intuitive tools for writing and managing your posts
-  and media.
-- **Admin Dashboard**: A sleek and responsive interface to manage your site.
-- **Publishing Workflow**: Robust tools for scheduling and publishing content.
-- **Authentication & Security**: Secure role-based access control and member
-  management.
-- **Background Workers & Jobs**: Reliable background processing for emails,
-  notifications, and scheduled tasks.
-- **Observability**: Production-ready logging and metrics capabilities.
+* **API-First Modular Architecture**: Decoupled Fastify REST API backend, Next.js Server-Side Rendered (SSR) public web, and Vite + React Admin & Portal SPAs.
+* **Studio Block Editor**: High-fidelity collaborative block editor supporting all 13 canonical Studio cards (`Callout`, `Button`, `Bookmark`, `Gallery`, `Video`, `Audio`, `File`, `Divider`, `Product`, `Embed`, `Header`, `Markdown`, `HTML`).
+* **Arabic-First Multilingual & RTL**: Built-in RTL layout detection, Umm al-Qura Hijri calendar formatting, and multilingual translation management.
+* **Subscriptions & Monetization**: Tiered subscription plans, member access gating, Stripe billing integration, and paid newsletters.
+* **Search 2.0**: High-speed full-text and trigram fuzzy search powered by PostgreSQL `pg_trgm` GIN indexes with sub-millisecond query latencies.
+* **Secure Sandbox & Extensibility**: Sandboxed plugin architecture, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
+* **Enterprise Reliability**: Real-time collaborative CRDT document editing (Yjs), transactional outbox event delivery, Prometheus metrics, and OpenTelemetry tracing.
 
-## Technology Stack
+---
 
-Vibress uses a modern, full-stack JavaScript/TypeScript ecosystem:
+## Architecture Overview
 
-- **Frontend Applications**:
-  - **React/Vite** for the Admin Dashboard and Portal, providing a fast Single
-    Page Application experience.
-  - **Next.js** for the public-facing Web application, optimizing for SEO and
-    performance.
-- **Backend API**: Powered by **Fastify**, ensuring high-performance API
-  endpoints.
-- **Database**: **PostgreSQL** with **Drizzle ORM** for reliable and type-safe
-  data persistence.
-- **Cache & Queue**: **Redis** (via BullMQ) for fast caching and robust
-  background job processing.
-- **Containerization**: **Docker & Docker Compose** for easy deployment and
-  consistent environments.
+```
+                          ┌──────────────────────────┐
+                          │   Host / Ingress Gateway │
+                          │       (Port: 7777)       │
+                          └─────────────┬────────────┘
+                                        │
+             ┌──────────────────────────┼──────────────────────────┐
+             ▼                          ▼                          ▼
+   ┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
+   │    apps/web       │      │    apps/admin     │      │   apps/portal     │
+   │  Next.js 14 SSR   │      │  Vite/React SPA   │      │  Vite/React SPA   │
+   │   (Port: 7778)    │      │   (Port: 7779)    │      │   (Port: 7781)    │
+   └─────────┬─────────┘      └─────────┬─────────┘      └─────────┬─────────┘
+             │                          │                          │
+             └──────────────────────────┼──────────────────────────┘
+                                        │
+                                        ▼
+                              ┌───────────────────┐
+                              │     apps/api      │
+                              │    Fastify REST   │
+                              │   (Port: 7780)    │
+                              └─────────┬─────────┘
+                                        │
+                     ┌──────────────────┴──────────────────┐
+                     ▼                                     ▼
+           ┌───────────────────┐                 ┌───────────────────┐
+           │    PostgreSQL     │                 │   Redis / Queue   │
+           │  (Drizzle ORM)    │                 │ (BullMQ / Worker) │
+           └───────────────────┘                 └───────────────────┘
+```
+
+The production topology separates internal databases and caches into a dedicated, unexposed internal network (`internal: true`).
+
+---
 
 ## Quick Start Guide
 
-### Option A: Run with Docker (Recommended)
+### Option 1: Docker Compose (Recommended)
 
-**Requirements**:
+**Prerequisites:** Docker Engine 24+ and Docker Compose v2.
 
-- Docker
-- Docker Compose
-
-1. **Clone the repository**:
-
+1. **Clone the repository:**
    ```bash
-   git clone https://github.com/vibress/vibress.git
+   git clone https://github.com/AbdullahZaher/vibress.git
    cd vibress
    ```
 
-2. **Copy environment example files**:
-
+2. **Configure environment:**
    ```bash
    cp .env.example .env
    ```
 
-3. **Configure required variables**: Open `.env` and fill in any required
-   secrets (the defaults work well for local development).
-
-4. **Start the project infrastructure**:
-
+3. **Start development infrastructure (Postgres, Redis, MinIO, Mailpit):**
    ```bash
-   # Start Postgres, Redis, Minio, Mailpit
    pnpm dev:infra
    ```
 
-5. **Start the development servers**:
-
+4. **Start all development servers:**
    ```bash
-   # Start the API, Worker, Web, Admin, and Portal applications
    pnpm dev
    ```
 
-6. **Access URLs**:
-   - Website: http://localhost:7778
-   - Admin Dashboard: http://localhost:7779/admin/ (development) or
-     http://localhost:8080/admin/ (production build)
-   - API: http://localhost:7780
+5. **Access services:**
+   - **Public Website:** [http://localhost:7778](http://localhost:7778)
+   - **Admin Dashboard:** [http://localhost:7779/admin/](http://localhost:7779/admin/)
+   - **Core REST API:** [http://localhost:7780](http://localhost:7780)
+   - **Member Portal:** [http://localhost:7781/portal/](http://localhost:7781/portal/)
+   - **Gateway Ingress:** [http://localhost:7777](http://localhost:7777)
 
-7. **First-run setup**: On a fresh database, open the Admin Dashboard and the
-   First-Run Setup Wizard appears. Enter the setup key (in development, the
-   API prints a one-time ephemeral token to its console if `VIBRESS_SETUP_TOKEN`
-   is unset), then configure your site and create the owner account. After
-   installation the wizard is permanently locked.
+---
 
-   Production: generate a secret and set it before starting —
+### Option 2: Local Node.js Development
 
+**Prerequisites:** Node.js `>= 24.0.0 < 25`, `pnpm >= 11.17.0`, PostgreSQL 16+, Redis 7+.
+
+1. **Install dependencies:**
    ```bash
-   openssl rand -hex 32   # → set VIBRESS_SETUP_TOKEN=<value> in .env
+   pnpm install --frozen-lockfile
    ```
 
-_(To stop the infrastructure, run `pnpm dev:infra:down`)_
-
-### Option B: Run locally without Docker
-
-If you prefer to run the infrastructure yourself:
-
-1. **Required versions**:
-   - Node.js (>= 24.0.0)
-   - pnpm (>= 11.17.0)
-   - PostgreSQL (16+)
-   - Redis (7+)
-
-2. **Install dependencies**:
-
+2. **Run database migrations & seed baseline data:**
    ```bash
-   pnpm install
-   ```
-
-3. **Database setup**: Ensure PostgreSQL is running and update your `.env` with
-   the correct `DATABASE_URL`.
-
-   ```bash
-   pnpm db:generate
    pnpm db:migrate
    pnpm db:seed
    ```
 
-4. **Run development servers**:
+3. **Start dev processes:**
    ```bash
    pnpm dev
    ```
 
-## VPS Deployment Guide
+---
 
-Deploying Vibress to a Virtual Private Server (VPS) is straightforward using
-Docker.
+## Verification & Quality Gates
 
-**Prerequisites**:
+Run the complete test and static analysis suite:
 
-- An Ubuntu VPS.
-- A Domain name pointed to your VPS IP.
-- Docker and Docker Compose installed.
+```bash
+# Typecheck all packages
+pnpm typecheck
 
-1. **Connect to your VPS**:
+# Lint all code
+pnpm lint
 
-   ```bash
-   ssh user@your-vps-ip
-   ```
+# Run all unit and integration tests (1,074+ tests)
+pnpm vitest run
 
-2. **Clone Vibress**:
+# Build all production bundles
+pnpm build
 
-   ```bash
-   git clone https://github.com/vibress/vibress.git
-   cd vibress
-   ```
+# Run non-destructive production smoke tests
+pnpm production:smoke
+```
 
-3. **Configure environment**:
+---
 
-   ```bash
-   cp infrastructure/env.prod.example .env
-   # Edit .env with your domain, secure passwords, and secrets
-   nano .env
-   ```
+## Documentation & Operations
 
-4. **Start containers**:
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
-   ```bash
-   pnpm prod:up
-   ```
+- [**Self-Hosting Guide**](docs/deployment/SELF_HOSTING.md) — Step-by-step production deployment on VPS/bare-metal.
+- [**Production Runbook**](docs/deployment/PRODUCTION.md) — Security hardening, environment configuration, and scaling.
+- [**Docker Deployment**](docs/deployment/DOCKER.md) — Container topology, volumes, and health checks.
+- [**Backup & Disaster Recovery**](docs/deployment/SELF_HOSTING.md#10-backup--disaster-recovery) — Automated transactional backup and restore procedures.
+- [**Troubleshooting & Runbooks**](docs/deployment/TROUBLESHOOTING.md) — Diagnostic guides and incident remediation.
+- [**Changelog & Release Notes**](CHANGELOG.md) — Full release history and migration notes.
 
-5. **Configure domain/reverse proxy**: Set up a reverse proxy like Nginx or
-   Caddy on your host machine to route traffic from your domain to the Vibress
-   gateway port.
+---
 
-6. **Verify deployment**: Run database migrations if needed:
-   ```bash
-   pnpm prod:migrate
-   ```
-   Visit your domain to confirm the site is live.
+## Security
 
-## Production Deployment Best Practices
+For security vulnerability reporting and policies, please review [SECURITY.md](SECURITY.md). Do not file public GitHub issues for security vulnerabilities.
 
-When running Vibress in production, keep the following in mind:
-
-- **Environment Variables**: Never commit `.env.prod` or expose your secret
-  keys. Always use strong, randomly generated secrets.
-- **Database Backups**: Set up automated backups for your PostgreSQL database
-  and Minio (or S3) storage.
-- **HTTPS**: Always serve your site over HTTPS. Use Let's Encrypt with your
-  reverse proxy (e.g., Caddy or Nginx).
-- **Monitoring**: Utilize the built-in observability features. Monitor logs and
-  configure alerts for your containers.
-- **Updating**: To update safely, pull the latest changes, rebuild the images,
-  and apply migrations:
-  ```bash
-  git pull
-  pnpm prod:up
-  pnpm prod:migrate
-  ```
-
-## Project Structure
-
-Vibress is structured as a monorepo. Here are the key directories you should
-know:
-
-- `apps/`: Contains the main applications (`api`, `worker`, `web`, `admin`,
-  `portal`).
-- `packages/`: Shared libraries, database schemas, and utilities used across the
-  apps.
-- `docker/`: Dockerfiles for building the various services.
-- `scripts/`: Utility scripts for bootstrapping and development tasks.
+---
 
 ## Contributing
 
-We welcome contributions!
+We welcome community contributions! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflows, code quality guidelines, and testing requirements.
 
-- **How to contribute**: Fork the repository, create a feature branch, and
-  submit a Pull Request.
-- **Reporting Issues**: Use the GitHub Issues tab to report bugs or request
-  features.
-- **Development Workflow**: Follow the Quick Start guide to run the project
-  locally. Ensure you run `pnpm lint`, `pnpm typecheck`, and `pnpm test` before
-  submitting changes.
+---
 
-## License and Community
+## License
 
-- **License**: MIT License (see `LICENSE` file).
-- **Community**: Join our community discussions on GitHub!
+Vibress is open-source software licensed under the [MIT License](LICENSE).

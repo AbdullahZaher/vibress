@@ -1023,6 +1023,9 @@ importers:
       '@vibress/revisions':
         specifier: workspace:*
         version: link:../revisions
+      '@vibress/security':
+        specifier: workspace:*
+        version: link:../../security
       '@vibress/utils':
         specifier: workspace:*
         version: link:../../utils
@@ -1117,6 +1120,9 @@ importers:
       '@vibress/revisions':
         specifier: workspace:*
         version: link:../revisions
+      '@vibress/security':
+        specifier: workspace:*
+        version: link:../../security
       '@vibress/tags':
         specifier: workspace:*
         version: link:../tags

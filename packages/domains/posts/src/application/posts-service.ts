@@ -14,12 +14,19 @@ import {
   MediaService,
 } from "@vibress/media";
 import { generateUniqueSlug } from "@vibress/utils";
+import { hasResourcePermission } from "@vibress/security";
 import {
   domainEvents,
   OutboxEventWriter,
   defaultOutboxEventWriter,
 } from "@vibress/events";
 import { runInTransaction } from "@vibress/database";
+
+export interface PostActorContext {
+  userId: string;
+  roles?: string[] | undefined;
+  permissions?: string[] | undefined;
+}
 
 export class PostsService {
   constructor(
@@ -119,19 +126,38 @@ export class PostsService {
   async updatePost(
     id: string,
     data: UpdatePostData,
-    actorId: string,
+    actor: string | PostActorContext,
   ): Promise<Post> {
-    return runInTransaction(() => this.updatePostTx(id, data, actorId));
+    return runInTransaction(() => this.updatePostTx(id, data, actor));
   }
 
   private async updatePostTx(
     id: string,
     data: UpdatePostData,
-    actorId: string,
+    actor: string | PostActorContext,
   ): Promise<Post> {
+    const actorId = typeof actor === "string" ? actor : actor.userId;
+    const actorRoles = typeof actor === "object" ? actor.roles : undefined;
+    const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+
     const current = await this.postRepo.findById(id);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
+    }
+
+    const postAuthors = await this.authorRepo.getPostAuthors(id);
+    const postAuthorIds = (postAuthors || []).map((a: any) => a?.id || a?.authorId).filter(Boolean);
+
+    const isAuthorized = hasResourcePermission("posts.edit", {
+      actorId,
+      resourceOwnerId: current.primaryAuthorId,
+      resourceAuthorIds: postAuthorIds,
+      userRoles: actorRoles,
+      userPermissions: actorPermissions,
+    });
+
+    if (!isAuthorized) {
+      throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to modify another author's post");
     }
 
     const expectedVersion =
@@ -387,21 +413,40 @@ export class PostsService {
   async restoreRevision(
     postId: string,
     revisionId: string,
-    actorId: string,
+    actor: string | PostActorContext,
   ): Promise<Post> {
     return runInTransaction(() =>
-      this.restoreRevisionTx(postId, revisionId, actorId),
+      this.restoreRevisionTx(postId, revisionId, actor),
     );
   }
 
   private async restoreRevisionTx(
     postId: string,
     revisionId: string,
-    actorId: string,
+    actor: string | PostActorContext,
   ): Promise<Post> {
+    const actorId = typeof actor === "string" ? actor : actor.userId;
+    const actorRoles = typeof actor === "object" ? actor.roles : undefined;
+    const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+
     const post = await this.postRepo.findById(postId);
     if (!post) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
+    }
+
+    const postAuthors = await this.authorRepo.getPostAuthors(postId);
+    const postAuthorIds = (postAuthors || []).map((a: any) => a?.id || a?.authorId).filter(Boolean);
+
+    const isAuthorized = hasResourcePermission("posts.edit", {
+      actorId,
+      resourceOwnerId: post.primaryAuthorId,
+      resourceAuthorIds: postAuthorIds,
+      userRoles: actorRoles,
+      userPermissions: actorPermissions,
+    });
+
+    if (!isAuthorized) {
+      throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to restore revisions on another author's post");
     }
 
     const rev = await this.revisionService.getRevisionById(revisionId);
@@ -455,14 +500,33 @@ export class PostsService {
     return restored;
   }
 
-  async deletePost(id: string, actorId: string): Promise<void> {
-    return runInTransaction(() => this.deletePostTx(id, actorId));
+  async deletePost(id: string, actor: string | PostActorContext): Promise<void> {
+    return runInTransaction(() => this.deletePostTx(id, actor));
   }
 
-  private async deletePostTx(id: string, actorId: string): Promise<void> {
+  private async deletePostTx(id: string, actor: string | PostActorContext): Promise<void> {
+    const actorId = typeof actor === "string" ? actor : actor.userId;
+    const actorRoles = typeof actor === "object" ? actor.roles : undefined;
+    const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+
     const current = await this.postRepo.findById(id);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
+    }
+
+    const postAuthors = await this.authorRepo.getPostAuthors(id);
+    const postAuthorIds = (postAuthors || []).map((a: any) => a?.id || a?.authorId).filter(Boolean);
+
+    const isAuthorized = hasResourcePermission("posts.delete", {
+      actorId,
+      resourceOwnerId: current.primaryAuthorId,
+      resourceAuthorIds: postAuthorIds,
+      userRoles: actorRoles,
+      userPermissions: actorPermissions,
+    });
+
+    if (!isAuthorized) {
+      throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to delete another author's post");
     }
 
     await this.postRepo.delete(id);

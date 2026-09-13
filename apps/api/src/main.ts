@@ -137,6 +137,19 @@ export const buildApp = () => {
     credentials: true,
   });
 
+  // ARCH-01: Enforce single-publication runtime boundary by stripping client-controlled tenant override headers
+  fastify.addHook("onRequest", async (request) => {
+    if (request.headers["x-publication-id"]) {
+      delete request.headers["x-publication-id"];
+    }
+    if (request.headers["x-workspace-id"]) {
+      delete request.headers["x-workspace-id"];
+    }
+    if (request.headers["x-tenant-id"]) {
+      delete request.headers["x-tenant-id"];
+    }
+  });
+
   // Central error handler
   fastify.setErrorHandler(function (error, request, reply) {
     const errObj = error instanceof Error ? error : undefined;

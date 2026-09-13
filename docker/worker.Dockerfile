@@ -7,7 +7,7 @@ WORKDIR /repo
 
 # ---- Dependencies + build ----
 FROM base AS builder
-ARG VIBRESS_VERSION=0.1.0
+ARG VIBRESS_VERSION=1.0.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
 
@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm run build
 
 FROM node:24-alpine AS runtime
-ARG VIBRESS_VERSION=0.1.0
+ARG VIBRESS_VERSION=1.0.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
 

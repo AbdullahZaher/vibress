@@ -8,7 +8,7 @@ export class UserDomainError extends Error {
   }
 }
 
-export type UserStatus = "active" | "disabled";
+export type UserStatus = "active" | "disabled" | "invited";
 
 export interface User {
   id: string;

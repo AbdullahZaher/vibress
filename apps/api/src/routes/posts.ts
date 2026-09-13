@@ -146,7 +146,11 @@ export async function postRoutes(fastify: FastifyInstance) {
         const post = await postsService.updatePost(
           id,
           parseResult.data,
-          req.user!.id,
+          {
+            userId: req.user!.id,
+            roles: req.roles,
+            permissions: req.permissions,
+          },
         );
         const authors = await authorsService.getPostAuthors(post.id);
         const tagIds = await postsService.getPostTagIds(post.id);
@@ -156,6 +160,17 @@ export async function postRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
+          if (err.code === "FORBIDDEN") {
+            return reply.status(403).send({
+              errors: [
+                {
+                  code: "FORBIDDEN",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
           if (err.code === "CONTENT_CONFLICT") {
             return reply.status(409).send({
               errors: [
@@ -194,19 +209,36 @@ export async function postRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        await postsService.deletePost(id, req.user!.id);
+        await postsService.deletePost(id, {
+          userId: req.user!.id,
+          roles: req.roles,
+          permissions: req.permissions,
+        });
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
-        if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
-          return reply.status(404).send({
-            errors: [
-              {
-                code: "POST_NOT_FOUND",
-                message: "Post not found",
-                requestId: req.id,
-              },
-            ],
-          });
+        if (err instanceof PostDomainError) {
+          if (err.code === "FORBIDDEN") {
+            return reply.status(403).send({
+              errors: [
+                {
+                  code: "FORBIDDEN",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          if (err.code === "POST_NOT_FOUND") {
+            return reply.status(404).send({
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
         }
         throw err;
       }
@@ -414,11 +446,26 @@ export async function postRoutes(fastify: FastifyInstance) {
         const post = await postsService.restoreRevision(
           id,
           revisionId,
-          req.user!.id,
+          {
+            userId: req.user!.id,
+            roles: req.roles,
+            permissions: req.permissions,
+          },
         );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
+          if (err.code === "FORBIDDEN") {
+            return reply.status(403).send({
+              errors: [
+                {
+                  code: "FORBIDDEN",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
           if (err.code === "POST_NOT_FOUND") {
             return reply.status(404).send({
               errors: [

@@ -24,7 +24,7 @@ import {
   Quote,
   Code,
 } from "lucide-react";
-import { turnSelectedBlockInto, TurnIntoType } from "./TurnIntoHelper";
+import { turnNodeInto, TurnIntoType } from "./TurnIntoHelper";
 
 const NOTION_COLORS = [
   { name: "Default", color: "inherit", bg: "transparent" },
@@ -60,7 +60,7 @@ export function BlockHandleGutterPlugin({
       if (showMenu) return; // keep handle stable when menu is open
 
       const rootElement = editor.getRootElement();
-      if (!rootElement) return;
+      if (!rootElement || !document.body.contains(rootElement)) return;
 
       const target = event.target as HTMLElement | null;
       if (!target || !rootElement.contains(target)) {
@@ -174,17 +174,9 @@ export function BlockHandleGutterPlugin({
   };
 
   const handleTurnInto = (type: TurnIntoType) => {
-    editor.update(() => {
-      const node = $getNodeByKey(hoveredNodeKey);
-      if (
-        node &&
-        "select" in node &&
-        typeof (node as { select?: () => void }).select === "function"
-      ) {
-        (node as { select: () => void }).select();
-      }
-    });
-    turnSelectedBlockInto(editor, type);
+    if (hoveredNodeKey) {
+      turnNodeInto(editor, hoveredNodeKey, type);
+    }
     setShowMenu(false);
     setActiveSubMenu(null);
   };

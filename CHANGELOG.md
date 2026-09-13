@@ -7,35 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0] - 2026-09-13
+
+### Milestone Summary
+Official General Availability (v1.0.0) open-source release of the Vibress publication platform. Complete production hardening across security, authorization, disaster recovery, multilingual RTL publishing, trigram search scalability, containerized deployment architecture, and open-source release automation.
+
+### Added
+- **High-Performance Architecture**: Decoupled Fastify REST API backend, Next.js Server-Side Rendered (SSR) public web, and Vite + React Admin & Portal SPAs.
+- **Collaborative Block Editor**: Complete Studio block editor with real-time CRDT synchronization (Yjs), 7-stage editorial lifecycle, and all 13 canonical Studio cards (`Callout`, `Button`, `Bookmark`, `Gallery`, `Video`, `Audio`, `File`, `Divider`, `Product`, `Embed`, `Header`, `Markdown`, `HTML`).
+- **Memberships & Subscriptions**: Member tiers, Stripe payment integration, gated premium posts, and transactional email newsletters.
+- **Visual Automations Engine**: Event-driven automation workflows with visual builder in Admin, conditional execution branches, and execution inspector.
+- **Content Modeler**: Visual Schema Builder supporting 18 canonical field types, dynamic collections, schema validation, and REST delivery.
+
+### Security
+- **Strict Role-Based Access Control**: Centralized `@vibress/security` authorization guards enforcing strict role permissions across Owner, Admin, Editor, Author, and Contributor roles.
+- **Ownership & Content Isolation**: Strict ownership checks ensuring Authors and Contributors can only edit and view their own unpublished posts and pages.
+- **Tenant & Boundary Defense**: Gateway-level stripping of spoofable tenant headers (`x-publication-id`, `x-workspace-id`, `x-tenant-id`), isolating multi-publication data.
+- **Staff Lifecycle Hardening**: Secure single-use hashed password reset tokens, token invalidation on use, and automatic session revocation across all active devices.
+- **First-Run Setup Lock**: Fail-closed one-time setup wizard locked permanently once the primary Owner account is created (`OWNER_ALREADY_EXISTS`).
+- **Webhook HMAC Verification**: Cryptographic timing-safe signature verification for Stripe and email webhook endpoints.
+
+### Publishing
+- **Dynamic Routing & Liquid Themes**: Sandboxed Liquid template rendering engine supporting customizable themes, live previews, and SHA-256 package verification.
+- **Syndication & Distribution**: Automatic generation of RSS 2.0, JSON Feed 1.1, `/sitemap.xml`, `/robots.txt`, `/llms.txt`, and ActivityPub federation endpoints.
+- **Responsive Media Platform**: Automated multi-variant image generation (`300w`, `600w`, `1200w`, `1920w`) in WebP/AVIF formats with focal point cropping.
+
+### Localization
+- **Arabic-First Multilingual & RTL**: Built-in RTL layout detection, Umm al-Qura Hijri calendar formatting, Arabic text search normalizer, and multi-lingual translation matrix with stale revision tracking.
+
+### Infrastructure
+- **Network Isolation**: Production Docker Compose topology (`compose.prod.yml`) isolating PostgreSQL 16 and Redis 7 on an internal network (`internal: true`) with zero public exposure.
+- **Non-Root Containers**: Unprivileged execution across all microservices (`node` user, unprivileged NGINX uid 101, postgres/redis non-root).
+- **Transactional Outbox Dispatcher**: Asynchronous event delivery decoupled via BullMQ queue worker with failure retries and dead-letter handling.
+- **Full-Text & Trigram Search**: Sub-millisecond text search powered by PostgreSQL `pg_trgm` GIN indexes over indexed document contents.
+
+### Developer Experience
+- **Monorepo Tooling**: pnpm workspace tooling with Nx coordination, frozen lockfile validation, and zero-error TypeScript/ESLint gates.
+- **OpenAPI 3.1 Specification**: Comprehensive REST API schema definitions generated for all core public and administrative endpoints.
+- **Community Templates**: Standardized GitHub issue templates (`bug_report.md`, `feature_request.md`), pull request template, and security disclosure policy (`SECURITY.md`).
+
+### Deployment
+- **Canonical Deployment Script**: Deterministic 6-phase deployment pipeline (`scripts/deploy-production.sh`) executing preflight, backup, migration, build, health checks, and smoke tests.
+- **Automated Backup & Restore**: Transactional PostgreSQL dump tooling (`scripts/backup.sh`, `scripts/restore.sh`) generating gzip-compressed SQL with SHA-256 checksums.
+- **Operational Runbooks**: Comprehensive self-hosting (`docs/deployment/SELF_HOSTING.md`), production guide (`docs/deployment/PRODUCTION.md`), Docker topology (`docs/deployment/DOCKER.md`), and troubleshooting guides (`docs/deployment/TROUBLESHOOTING.md`).
+
+### Validation
+- **Vitest Unit & Integration Suite**: 135/135 test files passed (1,074/1,074 tests, 100% pass rate).
+- **TypeScript Static Verification**: 71/71 workspace projects passed (`pnpm typecheck`, 0 errors).
+- **ESLint Code Quality**: 74/74 packages passed (`pnpm -r lint`, 0 warnings, 0 errors).
+- **Production Smoke Tests**: 10/10 endpoints verified on live gateway with sub-100ms latencies.
+- **Security Vulnerabilities**: 0 vulnerabilities (`pnpm audit --prod`).
+
+---
+
 ## [1.0.0-rc.1] - 2026-08-16
 
 ### Milestone Summary
 First official Release Candidate of the Vibress publication platform. Complete implementation, integration, and verification across all 18 phases of the Vibress Master Execution Plan.
-
-### Added
-- **Trust & Hardened Foundation (Phase 1)**: Real multi-provider AI gateway, fail-fast database schema startup checks, unprivileged production Docker runtimes, absolute SSR canonical URL resolution.
-- **Admin Platform & Studio Cards (Phase 2)**: Navigation route guards, versioned optimistic locking (409 Conflict rejection), all 13 canonical Studio cards (`Button`, `Markdown`, `HTML`, `Callout`, `Bookmark`, `Gallery`, `Video`, `Audio`, `File`, `Divider`, `Product`, `Embed`, `Header`), and background scheduler worker.
-- **AI Gateway & Capabilities (Phase 3)**: Multi-model provider routing (OpenAI, Anthropic, Gemini, DeepSeek, Local/Ollama, Deterministic Test), 13 task prompts, user rate-limiting, publication monthly token budgets, circuit breaker, and audit logging.
-- **Studio Collaboration & Editorial Workflows (Phase 4)**: Yjs CRDT real-time document synchronization over WebSockets with presence awareness, 7-stage editorial lifecycle (`draft` → `in_review` → `changes_requested` → `approved` → `scheduled` → `published` → `archived`), and side-by-side visual revision diff modal.
-- **Content Modeler (Phase 5)**: Visual Schema Builder supporting 18 canonical field types, validation engine, schema evolution backward compatibility, dynamic collections, and public REST delivery.
-- **Secure Plugin & Theme Ecosystem (Phase 6 & 16)**: Extension host child process sandbox with capability gates, SHA-256 cryptographic package checksums, deterministic theme template hierarchy, public SDK starter theme, and sample plugin examples.
-- **Arabic-First Internationalization (Phase 7)**: Built-in `arDictionary`, automatic RTL layout direction detection, Umm al-Qura Hijri calendar formatting, and multi-lingual translation management with stale version indicators.
-- **Search 2.0 (Phase 8)**: Arabic text normalizer, pg_trgm similarity + Full-Text PostgreSQL ranking, worker reindexing pipeline, and zero-result search telemetry.
-- **Media Platform 2.0 (Phase 9)**: Multi-variant responsive image scaling (`300w`, `600w`, `1200w`, `1920w`) across WebP/AVIF/JPEG, automatic srcset generation, and non-destructive focal point boundaries.
-- **Visual Automations & Run Inspector (Phase 10)**: Event-driven automation engine with conditional branching, recursion guards, versioned execution snapshots, step status tracking, and Visual Automation Builder in Admin.
-- **Distribution, GEO & Social Web (Phase 11)**: AI crawler index endpoints (`/llms.txt`, `/llms-full.txt`), RSS 2.0 XML, JSON Feed 1.1, and ActivityPub federation (Inbox, Outbox, Delete with Tombstone objects).
-- **Multi-Publication Workspaces & Isolation (Phase 12)**: Multi-tenant database schema, async context propagation, workspace/publication switching, and 13-point cross-tenant isolation enforcement.
-- **Enterprise Identity & Governance (Phase 13)**: WebAuthn Passkeys, SCIM 2.0 user provisioning/deprovisioning, active device session tracking and bulk revocation, and role-based MFA policies.
-- **Operations, Observability & Reliability (Phases 14, 15, 17)**: SHA-256 verified database backup and restore scripts, disaster recovery drill, OpenTelemetry distributed tracing, Prometheus `/metrics`, OpenAPI 3.1 schema specification, and zero-downtime database migrations.
-
-### Migration Notes
-- Database migrations `0000_baseline.sql` through `0021_master_plan_extensions.sql` must be applied in sequence (`pnpm run db:migrate`) prior to starting API and Worker containers.
-- Fail-fast schema inspection (`assertDatabaseSchemaReady`) ensures containers will refuse to start if any migration is missing.
-
-### Verification Matrix
-- **Vitest Unit & Integration**: 854/854 tests passed (106 test files).
-- **Playwright Full E2E**: 94/94 passed, 0 failed, 0 skipped.
-- **TypeScript Typecheck**: 71/71 projects passed (0 errors).
-- **ESLint**: 58/58 projects passed (0 errors, 0 warnings).
-- **Security Audit**: 0 known vulnerabilities (`pnpm audit --prod`).
-- **HTTP Load**: 5/5 endpoints 0% error rate under concurrency.
