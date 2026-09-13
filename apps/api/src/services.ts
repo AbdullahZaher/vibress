@@ -536,4 +536,9 @@ export async function getAiGatewayService(): Promise<AiGatewayService> {
 import { TranslationService } from "@vibress/i18n/server";
 export const translationService = new TranslationService();
 
+// ---------------- What's New Remote Notification Subsystem ----------------
+import { WhatsNewService } from "./whats-new-service";
+export const settingRepo = new DrizzleSettingRepository();
+export const whatsNewService = new WhatsNewService(settingRepo);
+
 

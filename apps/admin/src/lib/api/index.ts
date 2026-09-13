@@ -14,3 +14,4 @@ export * from "./intelligence";
 export * from "./operations";
 export * from "./ai";
 export * from "./translations";
+export * from "./whats-new";

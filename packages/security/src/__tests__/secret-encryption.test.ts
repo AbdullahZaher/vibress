@@ -42,8 +42,11 @@ describe("Secret Encryption (AES-256-GCM)", () => {
     const secret = "my-secret";
     const encrypted = encryptSecret(secret, TEST_KEY);
     const parsed = JSON.parse(encrypted);
-    parsed.data = "ff" + parsed.data.substring(2);
+    parsed.data =
+      (parsed.data[0] === "0" ? "1" : "0") + parsed.data.substring(1);
 
-    expect(() => decryptSecret(JSON.stringify(parsed), TEST_KEY)).toThrow();
+    expect(() => decryptSecret(JSON.stringify(parsed), TEST_KEY)).toThrow(
+      SecretEncryptionError,
+    );
   });
 });

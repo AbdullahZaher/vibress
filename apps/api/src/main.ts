@@ -64,6 +64,7 @@ import {
   publicContentModelRoutes,
 } from "./routes/content-models";
 import { translationRoutes } from "./routes/translations";
+import { whatsNewRoutes } from "./routes/whats-new";
 import { distributionRoutes } from "./routes/distribution";
 import { openApiDocsRoutes } from "./routes/docs";
 import { storageService, themeService } from "./services";
@@ -212,6 +213,7 @@ export const buildApp = () => {
   fastify.register(collaborationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(contentModelerRoutes, { prefix: "/api/admin/v1" });
   fastify.register(translationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(whatsNewRoutes, { prefix: "/api/admin/v1" });
 
   // Register Member Routes
   fastify.register(memberRoutes, { prefix: "/api/members/v1" });

@@ -8,3 +8,4 @@ export * from "./billing";
 export * from "./newsletters";
 export * from "./community";
 export * from "./setup";
+export * from "./whats-new";
