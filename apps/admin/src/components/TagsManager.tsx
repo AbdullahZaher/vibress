@@ -113,7 +113,7 @@ export const TagsManager: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Create/Edit Form Card */}
-        <Card className="lg:col-span-1 h-fit bg-transparent border-border shadow-2xs">
+        <Card className="lg:col-span-1 h-fit border-border/70 shadow-2xs">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
               <TagIcon className="h-4 w-4 text-primary" />
@@ -181,7 +181,7 @@ export const TagsManager: React.FC = () => {
         </Card>
 
         {/* Tags List Card */}
-        <Card className="lg:col-span-2 bg-transparent border-border shadow-2xs p-0 overflow-hidden">
+        <Card className="lg:col-span-2 border-border/70 shadow-2xs p-0 overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="border-border">

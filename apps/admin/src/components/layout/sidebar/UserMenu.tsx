@@ -12,13 +12,17 @@ import { Avatar } from "../../ui/avatar";
 interface UserMenuProps {
   user: ApiUser;
   onLogout: () => void;
-  onNavigate?: (path: string) => void;
+  onNavigate?: ((path: string) => void) | undefined;
+  locale?: 'en' | 'ar' | undefined;
+  onToggleLocale?: (() => void) | undefined;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({
   user,
   onLogout,
   onNavigate,
+  locale = 'en',
+  onToggleLocale,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,9 +66,9 @@ export const UserMenu: React.FC<UserMenuProps> = ({
               size="sm"
               className="bg-muted text-foreground border border-border font-bold"
             />
-            <span className="absolute bottom-0 right-0 size-2 rounded-full bg-[#3eb083] ring-2 ring-card" />
+            <span className="absolute bottom-0 end-0 size-2 rounded-full bg-[#3eb083] ring-2 ring-card" />
           </div>
-          <div className="flex flex-col overflow-hidden text-left">
+          <div className="flex flex-col overflow-hidden text-start">
             <span className="text-xs font-semibold text-foreground truncate leading-none">
               {user.name}
             </span>
@@ -120,7 +124,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     setIsOpen(false);
                     onNavigate("/admin/settings/general");
                   }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
                 >
                   <div className="flex items-center gap-2">
                     <Settings className="h-3.5 w-3.5" />
@@ -134,7 +138,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     setIsOpen(false);
                     onNavigate("/admin/settings/advanced");
                   }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-left"
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
                 >
                   <div className="flex items-center gap-2">
                     <Shield className="h-3.5 w-3.5" />
@@ -145,6 +149,23 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             )}
           </div>
 
+            {onToggleLocale && (
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleLocale();
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
+                title="Switch interface language"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">🌐 Language</span>
+                </div>
+                <span className="text-[11px] font-semibold text-primary">
+                  {locale === "ar" ? "English" : "العربية"}
+                </span>
+              </button>
+            )}
           {/* Separator & Logout */}
           <div className="border-t border-border/60 my-1 pt-1">
             <button
@@ -154,7 +175,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 setIsOpen(false);
                 onLogout();
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-xs font-semibold text-left"
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-xs font-semibold text-start"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span>Sign Out</span>

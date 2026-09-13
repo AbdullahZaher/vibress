@@ -1,6 +1,4 @@
 import {
-  StudioDocument,
-  validateStudioDocument,
   migrateDocument,
 } from "@vibress/studio-core";
 import { STUDIO_CARD_DEFINITIONS } from "@vibress/studio-cards";

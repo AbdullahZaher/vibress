@@ -65,23 +65,16 @@ export function FloatingCardActionToolbarPlugin({
 
   return createPortal(
     <div
-      className="floating-card-action-popup studio-glassy-menu animate-in fade-in zoom-in-95 duration-150"
+      className="floating-card-action-popup studio-glassy-menu select-none animate-in fade-in zoom-in-95 duration-150"
       style={{
         position: "absolute",
         top: `${Math.max(10, topPos)}px`,
         left: `${Math.max(10, leftPos)}px`,
-        backgroundColor: "rgba(21, 23, 26, 0.85)",
-        backdropFilter: "blur(20px) saturate(180%)",
-        WebkitBackdropFilter: "blur(20px) saturate(180%)",
-        color: "#f8fafc",
-        border: "1px solid rgba(255, 255, 255, 0.12)",
         borderRadius: "10px",
         padding: "4px 8px",
         display: "flex",
         alignItems: "center",
         gap: "4px",
-        boxShadow:
-          "0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)",
         zIndex: 160,
         fontSize: "12px",
       }}
@@ -103,7 +96,7 @@ export function FloatingCardActionToolbarPlugin({
         style={{
           width: "1px",
           height: "14px",
-          backgroundColor: "rgba(255, 255, 255, 0.12)",
+          backgroundColor: "var(--border)",
           margin: "0 2px",
         }}
       />
@@ -137,7 +130,7 @@ export function FloatingCardActionToolbarPlugin({
         style={{
           width: "1px",
           height: "14px",
-          backgroundColor: "rgba(255, 255, 255, 0.12)",
+          backgroundColor: "var(--border)",
           margin: "0 2px",
         }}
       />
@@ -169,10 +162,10 @@ export function FloatingCardActionToolbarPlugin({
 
 function getBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? "rgba(255, 255, 255, 0.12)" : "transparent",
-    color: active ? "#60a5fa" : "#e2e8f0",
+    background: active ? "var(--muted)" : "transparent",
+    color: active ? "var(--primary)" : "inherit",
     border: "none",
-    padding: "4px 7px",
+    padding: "4px 8px",
     borderRadius: "6px",
     cursor: "pointer",
     fontSize: "11px",
@@ -180,6 +173,6 @@ function getBtnStyle(active: boolean): React.CSSProperties {
     display: "flex",
     alignItems: "center",
     gap: "4px",
-    transition: "all 0.15s ease",
+    transition: "all 0.12s ease",
   };
 }

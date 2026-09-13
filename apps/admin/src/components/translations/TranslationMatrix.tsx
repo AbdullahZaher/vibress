@@ -131,7 +131,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
               <Globe className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
                 Translation Matrix
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -182,7 +182,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             <span>Source Content</span>
             <Layers className="h-4 w-4 text-primary" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData?.totalSourceItems ?? "—"}
           </div>
           <p className="text-[11px] text-muted-foreground">
@@ -195,7 +195,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             <span>Overall Coverage</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData ? `${healthData.overallCoveragePercentage}%` : "—"}
           </div>
           <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
@@ -211,7 +211,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             <span>Stale (Outdated)</span>
             <AlertTriangle className="h-4 w-4 text-rose-500" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData?.staleCount ?? 0}
           </div>
           <p className="text-[11px] text-muted-foreground">
@@ -224,7 +224,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             <span>Awaiting Review</span>
             <Clock className="h-4 w-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData?.needsReviewCount ?? 0}
           </div>
           <p className="text-[11px] text-muted-foreground">
@@ -237,7 +237,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-card border border-border/60 rounded-xl shadow-xs">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => {
@@ -245,7 +245,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                 setPage(0);
               }}
               placeholder="Search content title or slug..."
-              className="pl-9 text-sm"
+              className="ps-9 text-xs sm:text-sm"
             />
           </div>
 

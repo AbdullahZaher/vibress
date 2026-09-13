@@ -10,6 +10,8 @@ interface MobileHeaderProps {
   onToggleDarkMode: () => void;
   onNavigate: (path: string) => void;
   canPublishPosts: boolean;
+  locale?: 'en' | 'ar';
+  onToggleLocale?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({
@@ -20,6 +22,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onToggleDarkMode,
   onNavigate,
   canPublishPosts,
+  locale = 'en',
+  onToggleLocale,
 }) => {
   // Derive a human-friendly title for the top header based on the current path
   const getPageTitle = () => {
@@ -102,6 +106,18 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         >
           <Search className="h-4 w-4" />
         </button>
+
+        {onToggleLocale && (
+          <button
+            type="button"
+            onClick={onToggleLocale}
+            className="flex h-8 px-2 items-center justify-center rounded-lg border border-border/60 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+            title="Toggle Arabic / English"
+            aria-label="Toggle language"
+          >
+            {locale === "ar" ? "EN" : "عربي"}
+          </button>
+        )}
 
         <button
           type="button"

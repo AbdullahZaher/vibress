@@ -205,33 +205,37 @@ export function VibressStudio({
         <div className={`vibress-studio-editor ${className}`}>
           <LexicalComposer initialConfig={initialConfig}>
             <div
+              className="vibress-studio-canvas"
               style={{
                 position: "relative",
-                minHeight: "30vh",
-                paddingLeft: "32px",
+                minHeight: "40vh",
               }}
             >
               <RichTextPlugin
                 contentEditable={
                   <ContentEditable
+                    className="vibress-studio-content focus:outline-none"
                     style={{
                       outline: "none",
-                      minHeight: "30vh",
-                      fontSize: "1.0625rem",
-                      lineHeight: "1.75",
+                      minHeight: "40vh",
                       color: "inherit",
                     }}
                   />
                 }
                 placeholder={
                   <div
+                    className="vibress-studio-placeholder select-none"
                     style={{
                       position: "absolute",
                       top: "0",
-                      left: "32px",
-                      color: "#94a3b8",
+                      insetInline: "0",
+                      maxWidth: "740px",
+                      marginInline: "auto",
+                      color: "var(--muted-foreground)",
+                      opacity: 0.55,
                       pointerEvents: "none",
-                      fontSize: "1.0625rem",
+                      fontSize: "1.125rem",
+                      lineHeight: "1.8",
                     }}
                   >
                     {placeholder}

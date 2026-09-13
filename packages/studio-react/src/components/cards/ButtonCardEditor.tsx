@@ -64,12 +64,30 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
     };
   }, [isOpen]);
 
+  const isRtl =
+    typeof document !== "undefined" &&
+    (document.documentElement.dir === "rtl" || document.body.dir === "rtl");
+
   const alignClass =
     alignment === "left"
-      ? "justify-start"
+      ? (isRtl ? "justify-end" : "justify-start")
       : alignment === "right"
-        ? "justify-end"
+        ? (isRtl ? "justify-start" : "justify-end")
         : "justify-center";
+
+  const popoverAlign =
+    alignment === "left"
+      ? (isRtl ? "right-0" : "left-0")
+      : alignment === "right"
+        ? (isRtl ? "left-0" : "right-0")
+        : "left-1/2 -translate-x-1/2";
+
+  const arrowAlign =
+    alignment === "left"
+      ? (isRtl ? "right-6" : "left-6")
+      : alignment === "right"
+        ? (isRtl ? "left-6" : "right-6")
+        : "left-1/2 -translate-x-1/2";
 
   return (
     <div ref={containerRef} className={`vb-button-card relative w-full my-3`}>
@@ -83,7 +101,7 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
             onClick={handleToggle}
             className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg cursor-pointer hover:opacity-90 select-none text-sm leading-snug shadow-sm transition"
             style={{
-              outline: isOpen || isSelected ? "2px solid #6366f1" : "none",
+              outline: isOpen || isSelected ? "2px solid var(--primary)" : "none",
               outlineOffset: "3px",
             }}
           >
@@ -92,24 +110,12 @@ export function ButtonCardEditor({ nodeKey, cardData }: Props) {
 
           {isOpen && (
             <div
-              className={`absolute top-full mt-2.5 studio-glassy-menu bg-card/95 dark:bg-[#1a1c20]/95 backdrop-blur-2xl p-4 rounded-xl shadow-2xl border border-border/80 dark:border-white/10 z-50 w-80 flex flex-col gap-3 text-foreground animate-in fade-in zoom-in-95 duration-150 ${
-                alignment === "left"
-                  ? "left-0"
-                  : alignment === "right"
-                    ? "right-0"
-                    : "left-1/2 -translate-x-1/2"
-              }`}
+              className={`absolute top-full mt-2.5 studio-glassy-menu bg-card/95 dark:bg-[#1a1c20]/95 backdrop-blur-2xl p-4 rounded-xl shadow-2xl border border-border/80 dark:border-white/10 z-50 w-80 flex flex-col gap-3 text-foreground animate-in fade-in zoom-in-95 duration-150 ${popoverAlign}`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Arrow pointer */}
               <div
-                className={`absolute -top-1.5 w-3 h-3 rotate-45 bg-card/95 dark:bg-[#1a1c20]/95 border-l border-t border-border/80 dark:border-white/10 ${
-                  alignment === "left"
-                    ? "left-6"
-                    : alignment === "right"
-                      ? "right-6"
-                      : "left-1/2 -translate-x-1/2"
-                }`}
+                className={`absolute -top-1.5 w-3 h-3 rotate-45 bg-card/95 dark:bg-[#1a1c20]/95 border-l border-t border-border/80 dark:border-white/10 ${arrowAlign}`}
               />
 
               <div className="flex flex-col gap-1">

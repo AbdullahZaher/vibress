@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   apiRequest,
   ApiMediaAsset,
@@ -7,6 +7,8 @@ import {
   generateAiCompletion,
 } from "../lib/api";
 import { VibressStudio } from "@vibress/studio-react";
+import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
+import { FileText } from "lucide-react";
 import {
   StudioDocument,
   migrateDocument,
@@ -68,6 +70,17 @@ export const PageEditor: React.FC<PageEditorProps> = ({
     },
     [title],
   );
+
+  const docStats = useMemo(() => {
+    try {
+      const text = `${title} ${renderStudioDocumentToPlainText(studioDoc)}`.trim();
+      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+      const readingTime = Math.max(1, Math.ceil(words / 200));
+      return { words, readingTime };
+    } catch {
+      return { words: 0, readingTime: 1 };
+    }
+  }, [title, studioDoc]);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -342,17 +355,21 @@ export const PageEditor: React.FC<PageEditorProps> = ({
     <div className="relative flex flex-col h-[calc(100vh-theme(spacing.16))] w-full bg-background -mt-4">
       {/* Editor Header Bar */}
       <header className="flex items-center justify-between gap-4 px-6 py-4 shrink-0 bg-background/95 backdrop-blur z-10">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onNavigate("/admin/pages")}
             className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to Pages
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            <span className="hidden sm:inline">Back to Pages</span>
           </Button>
-          <div className="h-4 w-[1px] bg-border" />
-          <Badge variant={status === "published" ? "success" : "secondary"}>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
+            PAGE
+          </span>
+          <div className="h-4 w-[1px] bg-border hidden sm:block" />
+          <Badge variant={status === "published" ? "published" : "draft"}>
             {status.toUpperCase()}
           </Badge>
           {autosaveState === "saving" && (
@@ -361,10 +378,14 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             </span>
           )}
           {autosaveState === "saved" && (
-            <span className="inline-flex items-center gap-1 text-xs text-foreground font-mono font-medium">
-              <CheckCircle2 className="h-3 w-3" /> Saved
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Saved
             </span>
           )}
+          <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums ms-2">
+            <FileText className="h-3.5 w-3.5" />
+            {docStats.words} words ({docStats.readingTime} min read)
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -400,10 +421,10 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       </header>
 
       {/* Main Canvas */}
-      <main className="flex-1 overflow-y-auto px-6 py-12 pb-32">
-        <div className="max-w-[740px] mx-auto space-y-8">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 pb-32">
+        <div className="w-full max-w-[1140px] mx-auto space-y-8">
           {autosaveState === "conflict" && (
-            <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
+            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
               <div>
                 <strong>Version Conflict Detected:</strong> This page was updated in another session.
               </div>
@@ -411,7 +432,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => window.location.reload()}
-                className="h-8 text-xs font-semibold ml-4 shrink-0"
+                className="h-8 text-xs font-semibold ms-4 shrink-0"
               >
                 Reload Latest
               </Button>
@@ -419,23 +440,25 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           )}
 
           {errorMsg && (
-            <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
             </div>
           )}
 
-          <textarea
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Page Title"
-            aria-label="Page Title"
-            className="w-full text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0"
-            rows={1}
-            onInput={(e) => {
-              e.currentTarget.style.height = "auto";
-              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-            }}
-          />
+          <div className="max-w-[740px] mx-auto">
+            <textarea
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Page Title"
+              aria-label="Page Title"
+              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground"
+              rows={1}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+            />
+          </div>
 
           <VibressStudio
             value={studioDoc}

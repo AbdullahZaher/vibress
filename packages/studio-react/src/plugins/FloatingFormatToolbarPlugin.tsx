@@ -186,21 +186,17 @@ export function FloatingFormatToolbarPlugin({
   return createPortal(
     <div
       ref={toolbarRef}
-      className="notion-floating-format-popup"
+      className="notion-floating-format-popup studio-glassy-menu select-none"
       style={{
         position: "absolute",
         top: 0,
         left: 0,
         opacity: 0,
-        backgroundColor: "#1e293b",
-        color: "#f8fafc",
-        borderRadius: "8px",
+        borderRadius: "10px",
         padding: "4px 6px",
         display: "flex",
         alignItems: "center",
         gap: "3px",
-        boxShadow:
-          "0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)",
         transition: "opacity 0.15s ease-in-out",
         zIndex: 150,
         pointerEvents: "auto",
@@ -238,7 +234,7 @@ export function FloatingFormatToolbarPlugin({
         style={{
           width: "1px",
           height: "18px",
-          backgroundColor: "#334155",
+          backgroundColor: "var(--border)",
           margin: "0 2px",
         }}
       />
@@ -269,20 +265,18 @@ export function FloatingFormatToolbarPlugin({
 
         {openDropdown === "turnInto" && (
           <div
+            className="studio-glassy-menu"
             style={{
               position: "absolute",
-              top: "28px",
-              left: 0,
-              backgroundColor: "#1e293b",
-              border: "1px solid #334155",
-              borderRadius: "6px",
-              padding: "4px",
-              width: "160px",
+              top: "32px",
+              insetInlineStart: 0,
+              borderRadius: "8px",
+              padding: "5px",
+              width: "170px",
               display: "flex",
               flexDirection: "column",
               gap: "2px",
               zIndex: 200,
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
             }}
           >
             <button
@@ -347,7 +341,7 @@ export function FloatingFormatToolbarPlugin({
         style={{
           width: "1px",
           height: "18px",
-          backgroundColor: "#334155",
+          backgroundColor: "var(--border)",
           margin: "0 2px",
         }}
       />
@@ -408,7 +402,7 @@ export function FloatingFormatToolbarPlugin({
         style={{
           width: "1px",
           height: "18px",
-          backgroundColor: "#334155",
+          backgroundColor: "var(--border)",
           margin: "0 2px",
         }}
       />
@@ -438,20 +432,18 @@ export function FloatingFormatToolbarPlugin({
 
         {openDropdown === "color" && (
           <div
+            className="studio-glassy-menu"
             style={{
               position: "absolute",
-              top: "28px",
-              right: 0,
-              backgroundColor: "#1e293b",
-              border: "1px solid #334155",
-              borderRadius: "6px",
+              top: "32px",
+              insetInlineEnd: 0,
+              borderRadius: "8px",
               padding: "6px",
               width: "180px",
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
               gap: "4px",
               zIndex: 200,
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
             }}
           >
             {NOTION_COLORS.map((c) => (
@@ -487,15 +479,16 @@ export function FloatingFormatToolbarPlugin({
 
 function getFormatBtnStyle(active: boolean): React.CSSProperties {
   return {
-    background: active ? "#334155" : "transparent",
-    color: active ? "#38bdf8" : "#f8fafc",
+    background: active ? "var(--muted)" : "transparent",
+    color: active ? "var(--primary)" : "inherit",
     border: "none",
-    padding: "4px 6px",
-    borderRadius: "4px",
+    padding: "5px 7px",
+    borderRadius: "6px",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    transition: "all 0.12s ease",
   };
 }
 
@@ -503,13 +496,14 @@ const dropdownItemStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "6px",
-  padding: "4px 8px",
-  borderRadius: "4px",
+  padding: "5px 8px",
+  borderRadius: "6px",
   border: "none",
   backgroundColor: "transparent",
-  textAlign: "left",
+  textAlign: "start",
   cursor: "pointer",
   fontSize: "12px",
-  color: "#f8fafc",
+  color: "inherit",
   width: "100%",
+  transition: "background-color 0.12s ease",
 };

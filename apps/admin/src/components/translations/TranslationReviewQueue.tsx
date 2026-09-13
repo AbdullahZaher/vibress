@@ -119,7 +119,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab("stale")}
-          className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+          className={`p-4 rounded-xl border text-start transition-all cursor-pointer ${
             activeTab === "stale"
               ? "bg-rose-500/10 border-rose-500/40 text-foreground shadow-xs"
               : "bg-card border-border/60 hover:bg-muted/30 text-muted-foreground"
@@ -142,7 +142,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab("needsReview")}
-          className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+          className={`p-4 rounded-xl border text-start transition-all cursor-pointer ${
             activeTab === "needsReview"
               ? "bg-amber-500/10 border-amber-500/40 text-foreground shadow-xs"
               : "bg-card border-border/60 hover:bg-muted/30 text-muted-foreground"
@@ -165,7 +165,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab("missing")}
-          className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+          className={`p-4 rounded-xl border text-start transition-all cursor-pointer ${
             activeTab === "missing"
               ? "bg-primary/10 border-primary/40 text-foreground shadow-xs"
               : "bg-card border-border/60 hover:bg-muted/30 text-muted-foreground"
@@ -265,7 +265,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
                       className="h-8 text-xs cursor-pointer gap-1.5 bg-primary text-primary-foreground font-semibold"
                     >
                       <span>{item.translationId ? "Open Workspace" : "Translate Now"}</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
                     </Button>
                   </div>
                 </div>

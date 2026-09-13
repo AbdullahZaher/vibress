@@ -54,11 +54,11 @@ export function ContentModelList({
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Database className="w-6 h-6 text-primary" />
             Content Modeler
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Design custom structured content models, validation schemas, and collection APIs.
           </p>
         </div>
@@ -78,17 +78,17 @@ export function ContentModelList({
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-slate-500">
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
           Loading content models...
         </div>
       ) : models.length === 0 ? (
-        <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-8">
-          <Database className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+        <div className="text-center py-12 border-2 border-dashed border-border/70 rounded-lg p-8">
+          <Database className="w-12 h-12 text-muted-foreground/60 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-foreground">
             No Content Models Found
           </h3>
-          <p className="text-sm text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
             Get started by creating your first structured content type for products, portfolios, courses, or events.
           </p>
           <button
@@ -104,30 +104,30 @@ export function ContentModelList({
           {models.map((model) => (
             <div
               key={model.id}
-              className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+              className="border border-border/70 rounded-lg p-5 bg-card shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  <h3 className="text-lg font-semibold text-foreground">
                     {model.name}
                   </h3>
-                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-xs font-mono text-slate-600 dark:text-slate-400 rounded">
+                  <span className="px-2 py-0.5 bg-muted text-xs font-mono text-slate-600 dark:text-muted-foreground/60 rounded">
                     {model.slug}
                   </span>
                 </div>
                 {model.description && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 line-clamp-2">
+                  <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                     {model.description}
                   </p>
                 )}
                 <div className="mt-4 flex items-center gap-2">
-                  <span className="text-xs text-slate-500 font-medium">
+                  <span className="text-xs text-muted-foreground font-medium">
                     {model.fields?.length || 0} fields configured
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="mt-6 pt-4 border-t border-border/50 flex items-center justify-between">
                 <button
                   onClick={() => onNavigate(`/admin/collections/${model.slug}`)}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
@@ -138,7 +138,7 @@ export function ContentModelList({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => onNavigate(`/admin/models/${model.id}`)}
-                    className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
                     title="Edit Model Schema"
                   >
                     <Edit className="w-4 h-4" />

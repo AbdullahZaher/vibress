@@ -104,13 +104,13 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 
       {/* Expanded Settings Menu */}
       {settingsOpen && (
-        <div className="relative ml-4 pl-3.5 border-l border-sidebar-border/70 space-y-0.5 text-[12px] my-1">
+        <div className="relative ms-4 ps-3.5 border-s border-sidebar-border/70 space-y-0.5 text-[12px] my-1">
           {settingsItems.map((item) => (
             <button
               key={item.path}
               type="button"
               onClick={() => onNavigate(item.path)}
-              className={`w-full flex items-center gap-2.5 text-left py-1.5 px-2 rounded-md transition-colors cursor-pointer font-medium ${
+              className={`w-full flex items-center gap-2.5 text-start py-1.5 px-2 rounded-md transition-colors cursor-pointer font-medium ${
                 item.active
                   ? "text-foreground font-semibold bg-sidebar-accent/80 shadow-2xs"
                   : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"

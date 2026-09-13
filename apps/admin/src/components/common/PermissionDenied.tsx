@@ -30,7 +30,7 @@ export const PermissionDenied: React.FC<PermissionDeniedProps> = ({
           variant="outline"
           className="gap-2"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+          <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> Back to Dashboard
         </Button>
       )}
     </div>

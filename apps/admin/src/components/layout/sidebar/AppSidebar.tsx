@@ -18,6 +18,8 @@ interface AppSidebarProps {
   isOpen?: boolean | undefined;
   onClose?: (() => void) | undefined;
   onOpenCommandPalette?: (() => void) | undefined;
+  locale?: 'en' | 'ar';
+  onToggleLocale?: () => void;
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -31,6 +33,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   isOpen = false,
   onClose,
   onOpenCommandPalette,
+  locale = 'en',
+  onToggleLocale,
 }) => {
   // Navigation wrapper that auto-closes mobile sidebar
   const handleNavigate = (path: string) => {
@@ -62,7 +66,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }, [isOpen]);
 
   const sidebarContent = (
-    <aside className="w-64 h-full max-h-screen bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 select-none overflow-hidden shadow-2xl md:shadow-none">
+    <aside className="w-64 h-full max-h-screen bg-sidebar border-e border-sidebar-border flex flex-col shrink-0 select-none overflow-hidden shadow-2xl md:shadow-none">
       {/* Top Header */}
       <div className="shrink-0">
         <AppSidebarHeader
@@ -88,7 +92,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <div className="shrink-0 px-4 py-3 space-y-3 bg-sidebar z-20 border-t border-sidebar-border/30">
         <NavSettings currentPath={currentPath} onNavigate={handleNavigate} />
         <AppSidebarBanner onNavigate={handleNavigate} />
-        <UserMenu user={user} onLogout={onLogout} onNavigate={handleNavigate} />
+        <UserMenu user={user} onLogout={onLogout} onNavigate={handleNavigate} locale={locale} onToggleLocale={onToggleLocale} />
       </div>
     </aside>
   );
@@ -111,7 +115,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           />
 
           {/* Slide-in Sidebar Panel */}
-          <div className="relative z-50 flex h-full max-w-[80vw] animate-in slide-in-from-left duration-250 ease-out">
+          <div className="relative z-50 flex h-full max-w-[80vw] animate-in ltr:slide-in-from-left rtl:slide-in-from-right duration-200 ease-out">
             {sidebarContent}
           </div>
         </div>

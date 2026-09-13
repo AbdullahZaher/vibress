@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import {
@@ -21,6 +20,10 @@ import {
   Globe,
   EyeOff,
   Calendar,
+  AlertCircle,
+  RefreshCw,
+  Clock,
+  User,
 } from "lucide-react";
 
 interface PostSummary {
@@ -108,29 +111,23 @@ export const PostsList: React.FC<PostsListProps> = ({
     switch (status) {
       case "published":
         return (
-          <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1"
-          >
-            <Globe className="h-3 w-3" /> Published
+          <Badge variant="published" className="text-[11px] font-mono">
+            <Globe className="h-3 w-3" />
+            <span>Published</span>
           </Badge>
         );
       case "scheduled":
         return (
-          <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1"
-          >
-            <Calendar className="h-3 w-3" /> Scheduled
+          <Badge variant="scheduled" className="text-[11px] font-mono">
+            <Calendar className="h-3 w-3" />
+            <span>Scheduled</span>
           </Badge>
         );
       default:
         return (
-          <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border gap-1"
-          >
-            <EyeOff className="h-3 w-3" /> Draft
+          <Badge variant="draft" className="text-[11px] font-mono">
+            <EyeOff className="h-3 w-3" />
+            <span>Draft</span>
           </Badge>
         );
     }
@@ -138,103 +135,127 @@ export const PostsList: React.FC<PostsListProps> = ({
 
   if (loading) {
     return (
-      <div className="w-full max-w-7xl mx-auto flex items-center justify-center p-12 text-muted-foreground gap-2">
-        <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs">Loading publication posts...</span>
+      <div className="space-y-6 w-full max-w-7xl mx-auto animate-pulse">
+        <div className="flex justify-between items-center">
+          <div className="h-7 w-24 bg-muted rounded-md" />
+          <div className="h-9 w-28 bg-muted rounded-md" />
+        </div>
+        <div className="flex justify-between items-center gap-4">
+          <div className="h-8 w-64 bg-muted rounded-md" />
+          <div className="h-8 w-48 bg-muted rounded-md" />
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-12 w-full bg-muted/40 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="w-full max-w-7xl mx-auto p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
-        {error}
+      <div className="w-full max-w-7xl mx-auto p-6 rounded-xl bg-card border border-rose-500/20 text-foreground space-y-3">
+        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4" />
+          <span>Unable to load publication posts</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+        <Button variant="outline" size="sm" onClick={fetchPosts} className="gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>Try again</span>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Posts
-        </h1>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            Posts
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage editorial articles, revisions, and publication schedules.
+          </p>
+        </div>
         <Button
           onClick={() => onNavigate("/admin/posts/new")}
-          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer"
+          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" /> Create Post
         </Button>
       </div>
 
-      {/* Filter Tabs Bar */}
+      {/* Filter Tabs Bar & Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
           <button
             onClick={() => setStatusFilter("all")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "all"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            All ({posts.length})
+            All <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("published")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "published"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Published ({posts.filter((p) => p.status === "published").length})
+            Published <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "published").length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("draft")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "draft"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Drafts ({posts.filter((p) => p.status === "draft").length})
+            Drafts <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "draft").length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("scheduled")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "scheduled"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Scheduled ({posts.filter((p) => p.status === "scheduled").length})
+            Scheduled <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "scheduled").length})</span>
           </button>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Filter posts by title..."
+            placeholder="Filter posts by title or slug..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-8 text-xs bg-card border-border"
+            className="ps-8 h-8 text-xs bg-card border-border/70"
           />
         </div>
       </div>
 
-      {/* Table Container Card */}
-      <Card className="bg-transparent border-border shadow-2xs p-0 overflow-hidden">
+      {/* 1. Desktop & Tablet Table View */}
+      <div className="hidden sm:block rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Title</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-xs">Author</TableHead>
-              <TableHead className="text-xs">Updated</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+            <TableRow>
+              <TableHead className="ps-6">Title</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Author</TableHead>
+              <TableHead>Updated</TableHead>
+              <TableHead className="text-end pe-6">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -242,13 +263,27 @@ export const PostsList: React.FC<PostsListProps> = ({
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="h-36 text-center text-muted-foreground"
+                  className="h-40 text-center text-muted-foreground"
                 >
-                  <div className="flex flex-col items-center justify-center space-y-1">
-                    <FileText className="h-8 w-8 text-muted-foreground/40" />
-                    <p className="text-xs font-medium">
-                      No posts found matching filter criteria.
+                  <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                    <FileText className="h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-xs font-medium text-foreground">
+                      No posts found
                     </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {searchQuery
+                        ? "Try adjusting your search query or clear the filter."
+                        : "Start creating your first editorial article."}
+                    </p>
+                    {!searchQuery && (
+                      <Button
+                        size="sm"
+                        onClick={() => onNavigate("/admin/posts/new")}
+                        className="mt-2 text-xs gap-1"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> New Post
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -256,13 +291,13 @@ export const PostsList: React.FC<PostsListProps> = ({
               filteredPosts.map((post) => (
                 <TableRow
                   key={post.id}
-                  className="hover:bg-muted/40 border-border"
+                  className="hover:bg-muted/40 transition-colors"
                 >
-                  <TableCell className="pl-6 font-medium">
-                    <div className="flex flex-col">
+                  <TableCell className="ps-6 font-medium">
+                    <div className="flex flex-col text-start">
                       <button
                         onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                        className="text-left font-semibold text-foreground hover:text-primary transition-colors cursor-pointer text-xs"
+                        className="text-start font-semibold text-foreground hover:text-primary transition-colors cursor-pointer text-xs sm:text-sm"
                       >
                         {post.title}
                       </button>
@@ -278,7 +313,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                     {post.authors?.[0]?.name || "Admin"}
                   </TableCell>
 
-                  <TableCell className="text-xs text-muted-foreground font-mono">
+                  <TableCell className="text-xs text-muted-foreground font-mono tabular-nums">
                     {new Date(post.updatedAt).toLocaleDateString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -286,13 +321,13 @@ export const PostsList: React.FC<PostsListProps> = ({
                     })}
                   </TableCell>
 
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <div className="flex items-center justify-end gap-1.5">
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="xs"
                         onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                        className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                        className="gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         <Edit className="h-3.5 w-3.5" /> Edit
                       </Button>
@@ -300,9 +335,9 @@ export const PostsList: React.FC<PostsListProps> = ({
                       {canPublish && (
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="xs"
                           onClick={() => handlePublishToggle(post)}
-                          className="h-7 px-2.5 text-xs border-border bg-card hover:bg-accent text-foreground cursor-pointer"
+                          className="cursor-pointer"
                         >
                           {post.status === "published"
                             ? "Unpublish"
@@ -312,9 +347,10 @@ export const PostsList: React.FC<PostsListProps> = ({
 
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => handleDelete(post.id)}
-                        className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer"
+                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                        title="Delete post"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -325,7 +361,87 @@ export const PostsList: React.FC<PostsListProps> = ({
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
+
+      {/* 2. Mobile Responsive Stacked Card View (<640px) */}
+      <div className="sm:hidden space-y-3">
+        {filteredPosts.length === 0 ? (
+          <div className="rounded-xl border border-border/70 bg-card p-6 text-center text-muted-foreground space-y-2">
+            <FileText className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+            <p className="text-xs font-medium text-foreground">No posts found</p>
+            <p className="text-[11px] text-muted-foreground">
+              {searchQuery
+                ? "Try adjusting your search query."
+                : "Start creating your first article."}
+            </p>
+          </div>
+        ) : (
+          filteredPosts.map((post) => (
+            <div
+              key={post.id}
+              className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1 min-w-0 text-start">
+                  <button
+                    onClick={() => onNavigate(`/admin/posts/${post.id}`)}
+                    className="font-semibold text-xs text-foreground hover:text-primary transition-colors cursor-pointer text-start line-clamp-2"
+                  >
+                    {post.title}
+                  </button>
+                  <span className="text-[11px] text-muted-foreground font-mono block truncate">
+                    /{post.slug}
+                  </span>
+                </div>
+                <div className="shrink-0">{getStatusBadge(post.status)}</div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                <span className="flex items-center gap-1 font-medium">
+                  <User className="h-3 w-3" />
+                  {post.authors?.[0]?.name || "Admin"}
+                </span>
+                <span className="font-mono tabular-nums flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(post.updatedAt).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-1.5 pt-1">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => onNavigate(`/admin/posts/${post.id}`)}
+                  className="gap-1 text-xs"
+                >
+                  <Edit className="h-3 w-3" /> Edit
+                </Button>
+                {canPublish && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => handlePublishToggle(post)}
+                    className="text-xs"
+                  >
+                    {post.status === "published" ? "Unpublish" : "Publish"}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleDelete(post.id)}
+                  className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 };

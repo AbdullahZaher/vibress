@@ -29,6 +29,22 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-status-published-bg: var(--status-published-bg);
+  --color-status-published-fg: var(--status-published-fg);
+  --color-status-published-border: var(--status-published-border);
+  --color-status-draft-bg: var(--status-draft-bg);
+  --color-status-draft-fg: var(--status-draft-fg);
+  --color-status-draft-border: var(--status-draft-border);
+  --color-status-scheduled-bg: var(--status-scheduled-bg);
+  --color-status-scheduled-fg: var(--status-scheduled-fg);
+  --color-status-scheduled-border: var(--status-scheduled-border);
+  --color-status-review-bg: var(--status-review-bg);
+  --color-status-review-fg: var(--status-review-fg);
+  --color-status-review-border: var(--status-review-border);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-fg: var(--status-danger-fg);
+  --color-status-danger-border: var(--status-danger-border);
 }
 
 @layer base {
@@ -63,6 +79,22 @@
     --sidebar-accent-foreground: #0f172a;
     --sidebar-border: #e2e8f0;
     --sidebar-ring: #0f172a;
+    --surface-elevated: #ffffff;
+    --status-published-bg: #ecfdf5;
+    --status-published-fg: #047857;
+    --status-published-border: #a7f3d0;
+    --status-draft-bg: #f1f5f9;
+    --status-draft-fg: #475569;
+    --status-draft-border: #e2e8f0;
+    --status-scheduled-bg: #eff6ff;
+    --status-scheduled-fg: #1d4ed8;
+    --status-scheduled-border: #bfdbfe;
+    --status-review-bg: #fffbeb;
+    --status-review-fg: #b45309;
+    --status-review-border: #fde68a;
+    --status-danger-bg: #fef2f2;
+    --status-danger-fg: #b91c1c;
+    --status-danger-border: #fecaca;
   }
 
   .dark {
@@ -95,6 +127,22 @@
     --sidebar-accent-foreground: #f8fafc;
     --sidebar-border: #22252a;
     --sidebar-ring: #3eb083;
+    --surface-elevated: #24272c;
+    --status-published-bg: rgba(16, 185, 129, 0.12);
+    --status-published-fg: #34d399;
+    --status-published-border: rgba(16, 185, 129, 0.25);
+    --status-draft-bg: rgba(255, 255, 255, 0.06);
+    --status-draft-fg: #94a3b8;
+    --status-draft-border: rgba(255, 255, 255, 0.12);
+    --status-scheduled-bg: rgba(59, 130, 246, 0.12);
+    --status-scheduled-fg: #60a5fa;
+    --status-scheduled-border: rgba(59, 130, 246, 0.25);
+    --status-review-bg: rgba(245, 158, 11, 0.12);
+    --status-review-fg: #fbbf24;
+    --status-review-border: rgba(245, 158, 11, 0.25);
+    --status-danger-bg: rgba(239, 68, 68, 0.12);
+    --status-danger-fg: #f87171;
+    --status-danger-border: rgba(239, 68, 68, 0.25);
   }
 }
 
@@ -136,57 +184,100 @@
 }
 
 /* ==========================================================================
-   Vibress Studio - Notion-grade Block & Component Styles
+   Vibress Studio - Editorial Workspace & Block System
    ========================================================================== */
 
 .vibress-studio-editor {
   position: relative;
   font-family: inherit;
+  color: var(--foreground);
+  width: 100%;
 }
 
+/* Default reading measure (740px) for standard editorial prose */
+.vibress-studio-editor [contenteditable] > p,
+.vibress-studio-editor [contenteditable] > h1,
+.vibress-studio-editor [contenteditable] > h2,
+.vibress-studio-editor [contenteditable] > h3,
+.vibress-studio-editor [contenteditable] > ul,
+.vibress-studio-editor [contenteditable] > ol,
+.vibress-studio-editor [contenteditable] > blockquote,
+.vibress-studio-editor [contenteditable] > hr {
+  max-width: 740px;
+  margin-inline: auto;
+}
+
+/* Editorial Typography Hierarchy */
 .studio-paragraph {
-  margin-bottom: 0.65rem;
-  line-height: 1.75;
+  margin-bottom: 1.15rem;
+  line-height: 1.8;
+  font-size: 1.125rem;
+  color: var(--foreground);
+}
+
+[dir="rtl"] .studio-paragraph,
+html[dir="rtl"] .studio-paragraph {
+  line-height: 1.95;
+  letter-spacing: normal;
 }
 
 .studio-h1 {
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 700;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
+  line-height: 1.25;
+  margin-top: 2.25rem;
+  margin-bottom: 0.85rem;
   letter-spacing: -0.025em;
   color: var(--foreground);
 }
 
+[dir="rtl"] .studio-h1,
+html[dir="rtl"] .studio-h1 {
+  letter-spacing: normal;
+  line-height: 1.4;
+}
+
 .studio-h2 {
-  font-size: 1.5rem;
+  font-size: 1.625rem;
   font-weight: 600;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  line-height: 1.35;
+  margin-top: 1.85rem;
+  margin-bottom: 0.65rem;
   letter-spacing: -0.02em;
   color: var(--foreground);
+}
+
+[dir="rtl"] .studio-h2,
+html[dir="rtl"] .studio-h2 {
+  letter-spacing: normal;
+  line-height: 1.5;
 }
 
 .studio-h3 {
   font-size: 1.25rem;
   font-weight: 600;
-  margin-top: 1rem;
-  margin-bottom: 0.4rem;
+  line-height: 1.4;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
   color: var(--foreground);
 }
 
 .studio-quote {
-  border-left: 3px solid #6366f1;
-  padding-left: 1rem;
-  margin: 1rem 0;
+  border-inline-start: 3px solid var(--primary);
+  padding-inline-start: 1.25rem;
+  margin: 1.5rem auto;
   font-style: italic;
   color: var(--muted-foreground);
+  font-size: 1.125rem;
+  line-height: 1.75;
 }
 
 .studio-ul,
 .studio-ol {
-  padding-left: 1.5rem;
-  margin-bottom: 0.75rem;
+  padding-inline-start: 1.5rem;
+  margin-bottom: 1.15rem;
+  font-size: 1.125rem;
+  line-height: 1.8;
 }
 
 .studio-ul {
@@ -197,14 +288,15 @@
 }
 
 .studio-listitem {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 /* Checklists */
 .studio-checklist {
   list-style: none !important;
-  padding-left: 0 !important;
-  margin: 0.5rem 0;
+  padding-inline-start: 0 !important;
+  margin: 0.75rem auto;
+  max-width: 740px;
 }
 
 .studio-checklist-item,
@@ -212,8 +304,10 @@
 .studio-checklist-unchecked {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  gap: 0.65rem;
+  margin-bottom: 0.45rem;
+  font-size: 1.125rem;
+  line-height: 1.75;
 }
 
 .studio-checklist-checked span,
@@ -223,16 +317,17 @@
 }
 
 .studio-checklist-item input[type="checkbox"] {
-  margin-top: 0.3rem;
-  accent-color: #6366f1;
+  margin-top: 0.35rem;
+  accent-color: var(--primary);
   cursor: pointer;
 }
 
 /* Tables */
 .studio-table-container {
   overflow-x: auto;
-  margin: 1.25rem 0;
-  border-radius: 8px;
+  margin: 1.5rem auto;
+  max-width: 740px;
+  border-radius: 10px;
   border: 1px solid var(--border);
 }
 
@@ -240,6 +335,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9375rem;
+  text-align: start;
 }
 
 .studio-table th,
@@ -247,39 +343,78 @@
 .studio-table-cell,
 .studio-table-cell-header {
   border: 1px solid var(--border);
-  padding: 8px 12px;
-  text-align: left;
+  padding: 10px 14px;
+  text-align: start;
 }
 
 .studio-table th,
 .studio-table-cell-header {
-  background-color: var(--secondary);
+  background-color: var(--muted);
   font-weight: 600;
+  color: var(--foreground);
 }
 
 /* Code Blocks */
 .studio-code-block {
   background-color: #0f172a;
   color: #f8fafc;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 1.25rem;
+  border-radius: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.875rem;
+  line-height: 1.65;
   overflow-x: auto;
-  margin: 1rem 0;
+  margin: 1.5rem auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dark .studio-code-block {
+  background-color: #0b0c10;
+  border: 1px solid var(--border);
 }
 
 .studio-code {
-  background-color: var(--secondary);
-  color: #6366f1;
-  padding: 2px 5px;
-  border-radius: 4px;
+  background-color: var(--muted);
+  color: var(--foreground);
+  padding: 2px 6px;
+  border-radius: 5px;
   font-size: 0.875em;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  border: 1px solid var(--border);
 }
 
 /* ==========================================================================
-   Vibress Studio - Popups & Menus
+   Studio Block Presentation Width System
+   ========================================================================== */
+
+/* Regular blocks: default to 740px reading measure */
+.vibress-studio-editor [data-studio-card] {
+  max-width: 740px;
+  margin-inline: auto;
+  margin-top: 1.25rem !important;
+  margin-bottom: 1.25rem !important;
+  display: block;
+  transition: max-width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Wide breakout presentation (960px) */
+.vibress-studio-editor [data-studio-card] .vb-width-wide,
+.vibress-studio-editor [data-studio-card]:has(.vb-width-wide) {
+  max-width: 960px;
+}
+
+/* Full breakout presentation (1140px or full container) */
+.vibress-studio-editor [data-studio-card] .vb-width-full,
+.vibress-studio-editor [data-studio-card]:has(.vb-width-full) {
+  max-width: 100%;
+}
+
+.dark [data-studio-card] {
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   Studio Popups, Floating Toolbars & Menus
    ========================================================================== */
 
 .studio-glassy-menu,
@@ -287,13 +422,13 @@
 .notion-block-menu,
 .notion-ai-popup,
 .floating-card-action-popup {
-  background: #ffffff !important;
-  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 12px !important;
   box-shadow:
-    0 15px 35px -5px rgba(0, 0, 0, 0.18),
-    0 0 0 1px rgba(0, 0, 0, 0.05) !important;
-  color: #0f172a;
+    0 12px 32px -4px rgba(0, 0, 0, 0.12),
+    0 0 0 1px var(--border) !important;
+  color: var(--popover-foreground) !important;
 }
 
 .dark .studio-glassy-menu,
@@ -301,75 +436,68 @@
 .dark .notion-block-menu,
 .dark .notion-ai-popup,
 .dark .floating-card-action-popup {
-  background: #18191d !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #13151a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow:
-    0 25px 50px -10px rgba(0, 0, 0, 0.85),
+    0 20px 48px -8px rgba(0, 0, 0, 0.75),
     0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
-  color: #f8fafc;
+  color: #f8fafc !important;
 }
 
 /* Slash Menu Elements */
 .studio-slash-header {
-  padding: 6px 10px;
+  padding: 8px 12px 4px 12px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--muted-foreground);
 }
 
-.dark .studio-slash-header {
-  color: #64748b;
+[dir="rtl"] .studio-slash-header,
+html[dir="rtl"] .studio-slash-header {
+  letter-spacing: normal;
 }
 
 .studio-slash-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
   background: transparent;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease;
 }
 
 .studio-slash-item:hover,
 .studio-slash-item.is-selected {
-  background: rgba(15, 23, 42, 0.06);
-  transform: translateX(2px);
+  background: var(--muted) !important;
 }
 
 .dark .studio-slash-item:hover,
 .dark .studio-slash-item.is-selected {
-  background: rgba(255, 255, 255, 0.09) !important;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  background: rgba(255, 255, 255, 0.08) !important;
 }
 
 .studio-slash-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--card);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: transform 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  color: var(--foreground);
 }
 
 .dark .studio-slash-icon {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f8fafc;
-}
-
-.studio-slash-item:hover .studio-slash-icon,
-.studio-slash-item.is-selected .studio-slash-icon {
-  transform: scale(1.06);
 }
 
 .studio-slash-content {
@@ -377,12 +505,13 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  text-align: start;
 }
 
 .studio-slash-title {
   font-size: 13px;
   font-weight: 500;
-  color: #0f172a;
+  color: var(--foreground);
 }
 
 .dark .studio-slash-title {
@@ -391,32 +520,19 @@
 
 .studio-slash-desc {
   font-size: 11px;
-  color: #64748b;
+  color: var(--muted-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.dark .studio-slash-desc {
-  color: #94a3b8;
-}
-
 /* Notion Block Context Menu */
 .notion-block-menu button {
-  color: #334155;
-}
-
-.dark .notion-block-menu button {
-  color: #cbd5e1;
+  color: var(--foreground);
 }
 
 .notion-block-menu button:hover {
-  background-color: rgba(15, 23, 42, 0.06);
-}
-
-.dark .notion-block-menu button:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background-color: var(--muted);
 }
 
 /* AI Popup in Dark Mode */
@@ -433,11 +549,11 @@
   color: #e2e8f0;
 }
 
-/* Glassy Modals (Media Picker & Dialogs) */
+/* Modals & Dialogs */
 .studio-glassy-modal {
   box-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 255, 255, 0.4) inset !important;
+    0 0 0 1px var(--border) !important;
 }
 
 .dark .studio-glassy-modal {
@@ -446,13 +562,24 @@
     0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
 }
 
-/* Studio Interactive Cards */
-[data-studio-card] {
-  margin-top: 1rem !important;
-  margin-bottom: 1rem !important;
-  display: block;
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-.dark [data-studio-card] {
-  color-scheme: dark;
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

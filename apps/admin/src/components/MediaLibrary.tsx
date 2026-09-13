@@ -172,13 +172,13 @@ export const MediaLibrary: React.FC = () => {
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Filter assets by filename..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs bg-card border-border"
+            className="ps-8 h-8 text-xs bg-card border-border/70"
           />
         </div>
       </div>
@@ -194,7 +194,7 @@ export const MediaLibrary: React.FC = () => {
           Failed to load assets: {(error as Error)?.message}
         </div>
       ) : assets.length === 0 ? (
-        <Card className="p-12 text-center text-muted-foreground space-y-2 bg-transparent border-border shadow-2xs">
+        <Card className="p-12 text-center text-muted-foreground space-y-2 border-border/70 shadow-2xs">
           <p className="text-xs font-medium text-foreground">
             No media assets found
           </p>

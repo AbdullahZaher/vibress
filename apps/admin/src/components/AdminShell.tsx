@@ -21,7 +21,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   can,
 }) => {
   const [darkMode, setDarkMode] = useState(true);
-  const [locale] = useState<"en" | "ar">(() => {
+  const [locale, setLocale] = useState<"en" | "ar">(() => {
     return (typeof document !== "undefined" && (document.documentElement.lang as "en" | "ar")) || "en";
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -53,6 +53,10 @@ export const AdminShell: React.FC<AdminShellProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const handleToggleLocale = () => {
+    setLocale((prev) => (prev === "ar" ? "en" : "ar"));
+  };
+
   const canPublishPosts = can("posts.publish");
 
   return (
@@ -66,6 +70,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         onNavigate={onNavigate}
         canPublishPosts={canPublishPosts}
+        locale={locale}
+        onToggleLocale={handleToggleLocale}
       />
 
       {/* Vibress Modular Sidebar */}
@@ -80,6 +86,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        locale={locale}
+        onToggleLocale={handleToggleLocale}
       />
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}

@@ -13,7 +13,6 @@ import {
   Zap,
   Globe,
 } from "lucide-react";
-import { Badge } from "../../ui/badge";
 
 interface NavContentProps {
   currentPath: string;
@@ -72,7 +71,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts")}
-            className="font-medium text-left truncate cursor-pointer flex-1"
+            className="font-medium text-start truncate cursor-pointer flex-1"
           >
             Posts
           </button>
@@ -96,11 +95,11 @@ export const NavContent: React.FC<NavContentProps> = ({
 
       {/* Sub-items Tree Structure under Posts */}
       {postsExpanded && (
-        <div className="relative ml-4 pl-3.5 border-l border-sidebar-border/70 space-y-0 text-[12px] my-0.5">
+        <div className="relative ms-4 ps-3.5 border-s border-sidebar-border/70 space-y-0 text-[12px] my-0.5">
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/drafts")}
-            className={`w-full text-left py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isDraftsActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -111,7 +110,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/scheduled")}
-            className={`w-full text-left py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isScheduledActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -122,7 +121,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/published")}
-            className={`w-full text-left py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isPublishedActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -207,22 +206,14 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/members")}
-        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/members")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >
-        <div className="flex items-center gap-2.5">
-          <Users className="h-4 w-4 shrink-0" />
-          <span>Members</span>
-        </div>
-        <Badge
-          variant="secondary"
-          className="text-[10px] font-mono py-0 px-1.5 bg-muted text-muted-foreground border-border"
-        >
-          0
-        </Badge>
+        <Users className="h-4 w-4 shrink-0" />
+        <span>Members</span>
       </button>
 
       {/* Automations */}

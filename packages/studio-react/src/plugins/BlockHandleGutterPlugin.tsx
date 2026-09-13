@@ -196,13 +196,19 @@ export function BlockHandleGutterPlugin({
     setActiveSubMenu(null);
   };
 
+  const isRtl =
+    typeof document !== "undefined" &&
+    (document.documentElement.dir === "rtl" || document.body.dir === "rtl");
+
   const topPos = targetRect.top + window.scrollY;
-  const leftPos = Math.max(10, targetRect.left - 48);
+  const leftPos = isRtl
+    ? targetRect.right + window.scrollX + 8
+    : Math.max(8, targetRect.left + window.scrollX - 48);
 
   return createPortal(
     <div
       ref={handleRef}
-      className="notion-block-handle-gutter"
+      className="notion-block-handle-gutter select-none"
       style={{
         position: "absolute",
         top: `${topPos + 2}px`,
@@ -211,7 +217,7 @@ export function BlockHandleGutterPlugin({
         alignItems: "center",
         gap: "2px",
         zIndex: 50,
-        opacity: 0.9,
+        opacity: 0.95,
       }}
     >
       <button

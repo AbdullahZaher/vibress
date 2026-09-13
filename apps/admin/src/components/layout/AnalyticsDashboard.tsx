@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Globe,
   Eye,
-  Loader2,
 } from "lucide-react";
 import { ApiUser } from "../../lib/api";
 import { Card } from "../ui/card";
@@ -118,12 +117,12 @@ function AreaChart({
             preserveAspectRatio="none"
           >
             <defs>
-              <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={`grad-${metric}-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={color} stopOpacity="0.3" />
                 <stop offset="100%" stopColor={color} stopOpacity="0.0" />
               </linearGradient>
             </defs>
-            <path d={area} fill={`url(#grad-${color})`} />
+            <path d={area} fill={`url(#grad-${metric}-${color.replace("#", "")})`} />
             <path
               d={path}
               fill="none"
@@ -146,8 +145,33 @@ function AreaChart({
 
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
-      <Loader2 className="h-4 w-4 animate-spin" /> Loading analytics…
+    <div className="space-y-6 w-full animate-pulse">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
+          <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="h-3 w-20 bg-muted rounded" />
+              <div className="h-7 w-24 bg-muted rounded" />
+            </div>
+            <div className="h-6 w-16 bg-muted rounded" />
+          </div>
+          <div className="h-28 w-full bg-muted/40 rounded-lg" />
+        </div>
+        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
+          <div className="flex justify-between">
+            <div className="space-y-2">
+              <div className="h-3 w-24 bg-muted rounded" />
+              <div className="h-7 w-28 bg-muted rounded" />
+            </div>
+            <div className="h-6 w-16 bg-muted rounded" />
+          </div>
+          <div className="h-28 w-full bg-muted/40 rounded-lg" />
+        </div>
+      </div>
+      <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-3">
+        <div className="h-3 w-40 bg-muted rounded" />
+        <div className="h-20 w-full bg-muted/40 rounded-lg" />
+      </div>
     </div>
   );
 }
@@ -240,7 +264,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           </Button>
 
           {isDateOpen && (
-            <div className="absolute right-0 mt-1 w-44 rounded-lg bg-card border border-border shadow-lg py-1 z-30 space-y-0.5">
+            <div className="absolute end-0 mt-1 w-44 rounded-lg bg-card border border-border shadow-lg py-1 z-30 space-y-0.5">
               {DATE_OPTIONS.map((opt) => (
                 <button
                   key={opt.range}
@@ -248,7 +272,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     setDateLabel(opt.label);
                     setIsDateOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                  className={`w-full text-start px-3 py-1.5 text-xs transition-colors cursor-pointer ${
                     dateLabel === opt.label
                       ? "bg-sidebar-accent text-foreground font-semibold"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -274,14 +298,14 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Members KPI Card */}
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-4">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium mb-1">
                         <Users className="h-3.5 w-3.5" /> Members
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground">
+                        <span className="text-2xl font-bold text-foreground tabular-nums">
                           {data.summary.members.toLocaleString()}
                         </span>
                         <ChangeBadge change={data.comparison.members} />
@@ -304,14 +328,14 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </Card>
 
                 {/* Unique Visitors KPI Card */}
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-4">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium mb-1">
                         <Globe className="h-3.5 w-3.5" /> Unique Visitors
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground">
+                        <span className="text-2xl font-bold text-foreground tabular-nums">
                           {totalVisitors.toLocaleString()}
                         </span>
                         <ChangeBadge change={data.comparison.visitors} />
@@ -340,7 +364,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   LATEST POST PERFORMANCE
                 </h3>
                 {data.latestPost ? (
-                  <Card className="p-5 bg-transparent border-border shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <Card className="p-5 border-border/70 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="flex items-center gap-4 min-w-0">
                       <div className="h-28 w-44 rounded-lg bg-neutral-950 border border-border overflow-hidden shrink-0 flex items-center justify-center relative group shadow-sm">
                         <span className="text-2xl font-serif italic font-bold tracking-tight text-neutral-300 group-hover:scale-105 transition-transform duration-300">
@@ -371,14 +395,14 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       <div className="flex items-center gap-2">
                         <Eye className="h-4 w-4 text-emerald-500" />
                         <span>Views</span>
-                        <span className="font-bold text-foreground text-sm ml-auto">
+                        <span className="font-bold text-foreground text-sm ms-auto tabular-nums">
                           {data.latestPost.views.toLocaleString()}
                         </span>
                       </div>
                     </div>
                   </Card>
                 ) : (
-                  <Card className="p-5 bg-transparent border-border shadow-2xs text-xs text-muted-foreground">
+                  <Card className="p-5 border-border/70 shadow-2xs text-xs text-muted-foreground">
                     No published posts yet.
                   </Card>
                 )}
@@ -390,7 +414,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   TOP POSTS IN THE LAST 30 DAYS
                 </h3>
                 {data.topPosts.length === 0 ? (
-                  <Card className="p-5 bg-transparent border-border shadow-2xs text-xs text-muted-foreground">
+                  <Card className="p-5 border-border/70 shadow-2xs text-xs text-muted-foreground">
                     No traffic yet.
                   </Card>
                 ) : (
@@ -398,7 +422,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     {data.topPosts.map((post, idx) => (
                       <Card
                         key={post.path}
-                        className="p-4 bg-transparent border-border shadow-2xs flex items-center justify-between hover:border-sidebar-border transition-colors"
+                        className="p-4 border-border/70 shadow-2xs flex items-center justify-between hover:border-sidebar-border transition-colors"
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
                           <span className="text-xs font-mono font-bold text-muted-foreground w-4">
@@ -435,7 +459,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           {/* TAB 2: WEB TRAFFIC */}
           {analyticsTab === "web" && (
             <div className="space-y-6">
-              <Card className="p-6 bg-transparent border-border shadow-2xs space-y-6">
+              <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setTrafficMetric("views")}
@@ -468,7 +492,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Top Content */}
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-4">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground">
                       Top Content
@@ -521,7 +545,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </Card>
 
                 {/* Top Sources */}
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-4">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground">
                       Top Sources
@@ -562,27 +586,27 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           {analyticsTab === "newsletters" && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-4 bg-transparent border-border shadow-2xs space-y-1">
+                <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
                     Average Open Rate
                   </span>
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.newsletter.openRate.toFixed(1)}%
                   </div>
                 </Card>
-                <Card className="p-4 bg-transparent border-border shadow-2xs space-y-1">
+                <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
                     Average Click Rate
                   </span>
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.newsletter.clickRate.toFixed(1)}%
                   </div>
                 </Card>
-                <Card className="p-4 bg-transparent border-border shadow-2xs space-y-1">
+                <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
                     Total Emails Sent
                   </span>
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.newsletter.sent.toLocaleString()}
                   </div>
                 </Card>
@@ -594,19 +618,19 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           {analyticsTab === "growth" && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-2">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
                     Total Free Members
                   </span>
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.growth.freeMembers.toLocaleString()}
                   </div>
                 </Card>
-                <Card className="p-5 bg-transparent border-border shadow-2xs space-y-2">
+                <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
                     Total Paid Members
                   </span>
-                  <div className="text-2xl font-bold text-foreground">
+                  <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.growth.paidMembers.toLocaleString()}
                   </div>
                 </Card>

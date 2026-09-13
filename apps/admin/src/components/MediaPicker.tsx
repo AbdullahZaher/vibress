@@ -162,13 +162,13 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         <div className="flex justify-between items-center px-6 py-3 bg-muted/40 dark:bg-white/[0.02] border-b border-border/60 dark:border-white/10 gap-3 flex-wrap">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search filename..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                className="w-full ps-9 pe-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
                 aria-label="Search media"
               />
             </div>

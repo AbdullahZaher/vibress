@@ -115,7 +115,7 @@ export const EditorialCollaborationPanel: React.FC<
   if (!isOpen) return null;
 
   return (
-    <aside className="w-80 border-l bg-background flex flex-col h-full shadow-lg z-30">
+    <aside className="w-80 border-s border-border bg-card flex flex-col h-full shadow-lg z-30 animate-in ltr:slide-in-from-right rtl:slide-in-from-left duration-200">
       {/* Top Header */}
       <div className="flex items-center justify-between p-3.5 border-b">
         <div className="flex items-center gap-2">

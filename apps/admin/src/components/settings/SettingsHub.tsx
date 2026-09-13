@@ -46,7 +46,6 @@ import {
   CreditCard,
   Sparkles,
   Cpu,
-  RefreshCw,
   Search,
   X,
 } from "lucide-react";
@@ -126,10 +125,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[450px]">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
-          <span className="text-xs font-medium">Loading settings...</span>
+      <div className="space-y-6 animate-pulse">
+        <div className="h-12 w-full bg-card/60 rounded-xl border border-border/60" />
+        <div className="space-y-4">
+          <div className="h-6 w-40 bg-muted rounded" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="h-44 bg-card/60 rounded-xl border border-border/60" />
+            <div className="h-44 bg-card/60 rounded-xl border border-border/60" />
+          </div>
         </div>
       </div>
     );
@@ -163,19 +166,19 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
         {/* Search Input */}
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter settings..."
-            className="pl-8 text-xs h-8.5 bg-card border-border/80"
+            className="ps-8 text-xs h-8.5 bg-card border-border/70"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+              className="absolute end-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>

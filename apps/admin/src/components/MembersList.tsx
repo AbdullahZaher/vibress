@@ -136,26 +136,26 @@ export const MembersList: React.FC = () => {
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search by email or name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs bg-card border-border"
+            className="ps-8 h-8 text-xs bg-card border-border/70"
           />
         </div>
       </div>
 
       {/* Content Table Card */}
-      <Card className="bg-transparent border-border shadow-2xs p-0 overflow-hidden">
+      <Card className="border-border/70 shadow-2xs p-0 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Member</TableHead>
+              <TableHead className="ps-6 text-xs">Member</TableHead>
               <TableHead className="text-xs">Status</TableHead>
               <TableHead className="text-xs">Joined</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -195,7 +195,7 @@ export const MembersList: React.FC = () => {
                   key={member.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-medium">
+                  <TableCell className="ps-6 font-medium">
                     <div className="flex items-center gap-3">
                       <Avatar
                         fallback={member.name || member.email}
@@ -238,7 +238,7 @@ export const MembersList: React.FC = () => {
                     })}
                   </TableCell>
 
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="outline"
                       size="sm"

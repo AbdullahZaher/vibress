@@ -69,12 +69,15 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
   return (
     <>
       <div
-        className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40 transition-opacity"
+        className="fixed inset-0 bg-background/60 backdrop-blur-xs z-40 transition-opacity animate-in fade-in duration-150"
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 right-0 w-80 bg-background border-l shadow-2xl z-50 flex flex-col overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background/95 backdrop-blur z-10">
-          <h2 className="font-semibold text-sm">Page Settings</h2>
+      <div className="fixed inset-y-0 end-0 w-88 max-w-[90vw] bg-card border-s border-border shadow-2xl z-50 flex flex-col overflow-y-auto animate-in ltr:slide-in-from-right rtl:slide-in-from-left duration-200">
+        <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-card/95 backdrop-blur z-10">
+          <div>
+            <h2 className="font-semibold text-sm text-foreground">Page Settings</h2>
+            <p className="text-[11px] text-muted-foreground">Manage static page configuration and SEO</p>
+          </div>
           <Button
             variant="ghost"
             size="icon"

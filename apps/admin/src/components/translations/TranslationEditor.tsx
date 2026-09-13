@@ -303,7 +303,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             onClick={() => onNavigate("/admin/translations")}
             className="gap-2 cursor-pointer"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             <span>Matrix</span>
           </Button>
           <div className="h-4 w-[1px] bg-border" />

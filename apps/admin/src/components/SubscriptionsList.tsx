@@ -156,15 +156,15 @@ export function SubscriptionsList() {
       </div>
 
       {/* Content Table Card */}
-      <Card className="bg-transparent border-border shadow-2xs p-0 overflow-hidden">
+      <Card className="border-border/70 shadow-2xs p-0 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Member ID</TableHead>
+              <TableHead className="ps-6 text-xs">Member ID</TableHead>
               <TableHead className="text-xs">Plan ID</TableHead>
               <TableHead className="text-xs">Interval</TableHead>
               <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -188,7 +188,7 @@ export function SubscriptionsList() {
                   key={sub.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-mono text-xs text-foreground truncate max-w-xs">
+                  <TableCell className="ps-6 font-mono text-xs text-foreground truncate max-w-xs">
                     {sub.memberId}
                   </TableCell>
                   <TableCell className="text-xs font-semibold text-foreground">
@@ -198,7 +198,7 @@ export function SubscriptionsList() {
                     {sub.billingInterval}
                   </TableCell>
                   <TableCell>{getStatusBadge(sub.status)}</TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="outline"
                       size="sm"

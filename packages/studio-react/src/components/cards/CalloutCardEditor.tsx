@@ -107,7 +107,7 @@ export function CalloutCardEditor({ nodeKey, cardData }: Props) {
 
       {isSelected && (
         <div
-          className="absolute top-full right-0 mt-2 studio-glassy-menu bg-card/95 dark:bg-[#1a1c20]/95 backdrop-blur-xl p-2 rounded-xl shadow-2xl border border-border/80 dark:border-white/10 z-20 flex gap-1.5 animate-in fade-in zoom-in-95 duration-150"
+          className="absolute top-full end-0 mt-2 studio-glassy-menu bg-card/95 dark:bg-[#1a1c20]/95 backdrop-blur-xl p-2 rounded-xl shadow-2xl border border-border/80 dark:border-white/10 z-20 flex gap-1.5 animate-in fade-in zoom-in-95 duration-150"
           onClick={(e) => e.stopPropagation()}
         >
           {Object.keys(BG_COLORS).map((color) => (

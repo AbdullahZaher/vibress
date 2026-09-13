@@ -55,11 +55,11 @@ export function VisualAutomationBuilder() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Zap className="w-6 h-6 text-amber-500" />
             Visual Automations
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Build event-driven publishing and audience growth workflows visually.
           </p>
         </div>
@@ -84,15 +84,15 @@ export function VisualAutomationBuilder() {
       </div>
 
       {/* Workflow Metadata */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5">
-        <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+      <div className="bg-card border border-border/70 rounded-lg p-5">
+        <label className="block text-xs font-medium text-foreground mb-1">
           Workflow Name
         </label>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm font-medium"
+          className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm font-medium"
         />
       </div>
 
@@ -100,7 +100,7 @@ export function VisualAutomationBuilder() {
       <div className="space-y-4 py-4">
         {steps.map((step, idx) => (
           <div key={step.id} className="flex flex-col items-center">
-            <div className="w-full max-w-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm flex items-center justify-between">
+            <div className="w-full max-w-lg p-4 bg-card border border-border/70 rounded-lg shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div
                   className={`p-2 rounded-md ${
@@ -120,10 +120,10 @@ export function VisualAutomationBuilder() {
                   )}
                 </div>
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                     {step.type}
                   </span>
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <h4 className="text-sm font-semibold text-foreground">
                     {step.name}
                   </h4>
                 </div>
@@ -133,7 +133,7 @@ export function VisualAutomationBuilder() {
                 <button
                   type="button"
                   onClick={() => removeStep(step.id)}
-                  className="p-1.5 text-slate-400 hover:text-destructive rounded"
+                  className="p-1.5 text-muted-foreground hover:text-destructive rounded"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -141,10 +141,10 @@ export function VisualAutomationBuilder() {
             </div>
 
             {idx < steps.length - 1 && (
-              <div className="my-2 text-slate-400 flex flex-col items-center">
-                <div className="w-0.5 h-4 bg-slate-300 dark:bg-slate-700" />
+              <div className="my-2 text-muted-foreground flex flex-col items-center">
+                <div className="w-0.5 h-4 bg-border" />
                 <ArrowDown className="w-4 h-4 my-0.5" />
-                <div className="w-0.5 h-4 bg-slate-300 dark:bg-slate-700" />
+                <div className="w-0.5 h-4 bg-border" />
               </div>
             )}
           </div>

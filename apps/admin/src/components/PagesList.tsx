@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import {
@@ -20,6 +19,9 @@ import {
   Trash2,
   Globe,
   EyeOff,
+  AlertCircle,
+  RefreshCw,
+  Clock,
 } from "lucide-react";
 
 interface PageSummary {
@@ -27,6 +29,7 @@ interface PageSummary {
   title: string;
   slug: string;
   status: string;
+  publishedAt: string | null;
   updatedAt: string;
 }
 
@@ -42,10 +45,8 @@ export const PagesList: React.FC<PagesListProps> = ({
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "published" | "draft"
-  >("all");
 
   const fetchPages = async () => {
     setLoading(true);
@@ -81,7 +82,7 @@ export const PagesList: React.FC<PagesListProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete page?")) return;
+    if (!confirm("Are you sure you want to delete this page?")) return;
     try {
       await apiRequest(`/pages/${id}`, { method: "DELETE" });
       fetchPages();
@@ -91,41 +92,66 @@ export const PagesList: React.FC<PagesListProps> = ({
     }
   };
 
-  const filteredPages = pages.filter((p) => {
+  const filteredPages = pages.filter((page) => {
+    const matchesStatus =
+      statusFilter === "all" || page.status === statusFilter;
     const matchesSearch =
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.slug.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+      page.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      page.slug.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
   });
 
   if (loading) {
     return (
-      <div className="w-full max-w-7xl mx-auto flex items-center justify-center p-12 text-muted-foreground gap-2">
-        <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs">Loading site pages...</span>
+      <div className="space-y-6 w-full max-w-7xl mx-auto animate-pulse">
+        <div className="flex justify-between items-center">
+          <div className="h-7 w-32 bg-muted rounded-md" />
+          <div className="h-9 w-28 bg-muted rounded-md" />
+        </div>
+        <div className="flex justify-between items-center gap-4">
+          <div className="h-8 w-56 bg-muted rounded-md" />
+          <div className="h-8 w-48 bg-muted rounded-md" />
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-12 w-full bg-muted/40 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="w-full max-w-7xl mx-auto p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
-        {error}
+      <div className="w-full max-w-7xl mx-auto p-6 rounded-xl bg-card border border-rose-500/20 text-foreground space-y-3">
+        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-sm">
+          <AlertCircle className="h-4 w-4" />
+          <span>Unable to load static pages</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{error}</p>
+        <Button variant="outline" size="sm" onClick={fetchPages} className="gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" />
+          <span>Try again</span>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Static Pages
-        </h1>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            Static Pages
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage standalone site pages, legal policies, and landing documents.
+          </p>
+        </div>
         <Button
           onClick={() => onNavigate("/admin/pages/new")}
-          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer"
+          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" /> Create Page
         </Button>
@@ -133,60 +159,60 @@ export const PagesList: React.FC<PagesListProps> = ({
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
           <button
             onClick={() => setStatusFilter("all")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "all"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            All ({pages.length})
+            All <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("published")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "published"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Published ({pages.filter((p) => p.status === "published").length})
+            Published <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.filter((p) => p.status === "published").length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("draft")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               statusFilter === "draft"
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Drafts ({pages.filter((p) => p.status === "draft").length})
+            Drafts <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.filter((p) => p.status === "draft").length})</span>
           </button>
         </div>
 
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search pages by title..."
+            placeholder="Search pages by title or slug..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-8 text-xs bg-card border-border"
+            className="ps-8 h-8 text-xs bg-card border-border/70"
           />
         </div>
       </div>
 
-      {/* Table Container Card */}
-      <Card className="bg-transparent border-border shadow-2xs p-0 overflow-hidden">
+      {/* 1. Desktop & Tablet Table View */}
+      <div className="hidden sm:block rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Title</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-xs">Updated</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+            <TableRow>
+              <TableHead className="ps-6">Title</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Updated</TableHead>
+              <TableHead className="text-end pe-6">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -194,13 +220,27 @@ export const PagesList: React.FC<PagesListProps> = ({
               <TableRow>
                 <TableCell
                   colSpan={4}
-                  className="h-36 text-center text-muted-foreground"
+                  className="h-40 text-center text-muted-foreground"
                 >
-                  <div className="flex flex-col items-center justify-center space-y-1">
-                    <FileCode className="h-8 w-8 text-muted-foreground/40" />
-                    <p className="text-xs font-medium">
-                      No pages found matching filter.
+                  <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                    <FileCode className="h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-xs font-medium text-foreground">
+                      No pages found
                     </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {searchQuery
+                        ? "Try adjusting your search criteria."
+                        : "Start creating your first static page."}
+                    </p>
+                    {!searchQuery && (
+                      <Button
+                        size="sm"
+                        onClick={() => onNavigate("/admin/pages/new")}
+                        className="mt-2 text-xs gap-1"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> New Page
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -208,13 +248,16 @@ export const PagesList: React.FC<PagesListProps> = ({
               filteredPages.map((page) => (
                 <TableRow
                   key={page.id}
-                  className="hover:bg-muted/40 border-border"
+                  className="hover:bg-muted/40 transition-colors"
                 >
-                  <TableCell className="pl-6 font-medium">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-medium">
+                    <div className="flex flex-col text-start">
+                      <button
+                        onClick={() => onNavigate(`/admin/pages/${page.id}`)}
+                        className="text-start font-semibold text-xs sm:text-sm text-foreground hover:text-primary transition-colors cursor-pointer"
+                      >
                         {page.title}
-                      </span>
+                      </button>
                       <span className="text-[11px] text-muted-foreground font-mono">
                         /{page.slug}
                       </span>
@@ -223,23 +266,19 @@ export const PagesList: React.FC<PagesListProps> = ({
 
                   <TableCell>
                     {page.status === "published" ? (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                      >
-                        Published
+                      <Badge variant="published" className="text-[11px] font-mono">
+                        <Globe className="h-3 w-3" />
+                        <span>Published</span>
                       </Badge>
                     ) : (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                      >
-                        Draft
+                      <Badge variant="draft" className="text-[11px] font-mono">
+                        <EyeOff className="h-3 w-3" />
+                        <span>Draft</span>
                       </Badge>
                     )}
                   </TableCell>
 
-                  <TableCell className="text-xs text-muted-foreground font-mono">
+                  <TableCell className="text-xs text-muted-foreground font-mono tabular-nums">
                     {new Date(page.updatedAt).toLocaleDateString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -247,14 +286,14 @@ export const PagesList: React.FC<PagesListProps> = ({
                     })}
                   </TableCell>
 
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <div className="flex items-center justify-end gap-1.5">
                       {canPublish && (
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="xs"
                           onClick={() => handlePublishToggle(page)}
-                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                          className="text-muted-foreground hover:text-foreground cursor-pointer"
                           title={
                             page.status === "published"
                               ? "Unpublish"
@@ -262,27 +301,27 @@ export const PagesList: React.FC<PagesListProps> = ({
                           }
                         >
                           {page.status === "published" ? (
-                            <EyeOff className="h-3.5 w-3.5" />
+                            <span className="flex items-center gap-1"><EyeOff className="h-3.5 w-3.5" /> Unpublish</span>
                           ) : (
-                            <Globe className="h-3.5 w-3.5" />
+                            <span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" /> Publish</span>
                           )}
                         </Button>
                       )}
 
                       <Button
                         variant="outline"
-                        size="sm"
+                        size="xs"
                         onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                        className="h-7 px-2.5 text-xs border-border bg-card hover:bg-accent text-foreground cursor-pointer"
+                        className="cursor-pointer gap-1"
                       >
-                        <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                        <Edit className="h-3.5 w-3.5" /> Edit
                       </Button>
 
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => handleDelete(page.id)}
-                        className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer"
+                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
                         title="Delete page"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -294,7 +333,93 @@ export const PagesList: React.FC<PagesListProps> = ({
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
+
+      {/* 2. Mobile Responsive Stacked Card View (<640px) */}
+      <div className="sm:hidden space-y-3">
+        {filteredPages.length === 0 ? (
+          <div className="rounded-xl border border-border/70 bg-card p-6 text-center text-muted-foreground space-y-2">
+            <FileCode className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+            <p className="text-xs font-medium text-foreground">No pages found</p>
+            <p className="text-[11px] text-muted-foreground">
+              {searchQuery
+                ? "Try adjusting your search query."
+                : "Start creating your first page."}
+            </p>
+          </div>
+        ) : (
+          filteredPages.map((page) => (
+            <div
+              key={page.id}
+              className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1 min-w-0 text-start">
+                  <button
+                    onClick={() => onNavigate(`/admin/pages/${page.id}`)}
+                    className="font-semibold text-xs text-foreground hover:text-primary transition-colors cursor-pointer text-start line-clamp-2"
+                  >
+                    {page.title}
+                  </button>
+                  <span className="text-[11px] text-muted-foreground font-mono block truncate">
+                    /{page.slug}
+                  </span>
+                </div>
+                <div className="shrink-0">
+                  {page.status === "published" ? (
+                    <Badge variant="published" className="text-[11px] font-mono">
+                      Published
+                    </Badge>
+                  ) : (
+                    <Badge variant="draft" className="text-[11px] font-mono">
+                      Draft
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                <span className="font-mono tabular-nums flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(page.updatedAt).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onNavigate(`/admin/pages/${page.id}`)}
+                    className="gap-1 text-xs"
+                  >
+                    <Edit className="h-3 w-3" /> Edit
+                  </Button>
+                  {canPublish && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => handlePublishToggle(page)}
+                      className="text-xs"
+                    >
+                      {page.status === "published" ? "Unpublish" : "Publish"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleDelete(page.id)}
+                    className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 };
