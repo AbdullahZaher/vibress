@@ -23,6 +23,7 @@ const TABLES = [
 export interface PreMigrationSnapshot {
   timestamp: string;
   counts: Record<string, number>;
+  mediaStorageKeys: string[];
 }
 
 const SNAPSHOT_PATH = path.join(__dirname, "pre_migration_counts.json");
@@ -39,9 +40,19 @@ export async function capturePreMigrationCounts(): Promise<PreMigrationSnapshot>
     console.log(`  - ${table}: ${count}`);
   }
 
+  // Capture existing media storage keys to verify media compatibility
+  const mediaRes = await db.execute(
+    sql.raw(`SELECT storage_key FROM "media_assets" ORDER BY id`),
+  );
+  const mediaStorageKeys = (mediaRes.rows as Array<{ storage_key: string }>).map(
+    (r) => r.storage_key,
+  );
+  console.log(`Captured ${mediaStorageKeys.length} media storage keys for preservation check.`);
+
   const snapshot: PreMigrationSnapshot = {
     timestamp: new Date().toISOString(),
     counts,
+    mediaStorageKeys,
   };
 
   fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2), "utf8");
@@ -54,14 +65,18 @@ export async function verifyPostMigrationInvariants(
 ): Promise<boolean> {
   const db = getDb();
   let preCounts = expectedCounts;
+  let preMediaKeys: string[] = [];
 
   if (!preCounts) {
     if (fs.existsSync(SNAPSHOT_PATH)) {
       const data = JSON.parse(fs.readFileSync(SNAPSHOT_PATH, "utf8")) as PreMigrationSnapshot;
       preCounts = data.counts;
+      preMediaKeys = data.mediaStorageKeys || [];
       console.log(`Loaded pre-migration snapshot from ${SNAPSHOT_PATH} (${data.timestamp})`);
     } else {
-      console.warn("WARNING: No pre-migration snapshot found. Dynamic pre/post delta check skipped, falling back to schema validation.");
+      console.warn(
+        "WARNING: No pre-migration snapshot found. Dynamic pre/post delta check skipped, falling back to schema validation.",
+      );
     }
   }
 
@@ -71,7 +86,7 @@ export async function verifyPostMigrationInvariants(
 
   let passed = true;
 
-  // 1. Dynamic Row Count Invariant Check
+  // 1. Dynamic Row Count Invariant Check (Zero deletions, including search_documents)
   console.log("\n1. Checking row counts per table (Pre vs Post)...");
   for (const table of TABLES) {
     const res = await db.execute(sql.raw(`SELECT count(*)::int as c FROM "${table}"`));
@@ -79,7 +94,9 @@ export async function verifyPostMigrationInvariants(
     if (preCounts) {
       const preCount = preCounts[table] ?? 0;
       if (postCount !== preCount) {
-        console.error(`❌ FAIL: Row count mismatch in "${table}": pre=${preCount}, post=${postCount}`);
+        console.error(
+          `❌ FAIL: Row count mismatch in "${table}": pre=${preCount}, post=${postCount}`,
+        );
         passed = false;
       } else {
         console.log(`✅ PASS: "${table}" row count preserved: ${postCount}`);
@@ -89,23 +106,52 @@ export async function verifyPostMigrationInvariants(
     }
   }
 
-  // 2. publication_id NOT NULL check
-  console.log("\n2. Checking publication_id NOT NULL integrity across all 14 tables...");
+  // 2. Media Storage Key Compatibility Invariant
+  console.log("\n2. Checking media storage_key preservation...");
+  if (preMediaKeys.length > 0) {
+    const currentMediaRes = await db.execute(
+      sql.raw(`SELECT storage_key FROM "media_assets" ORDER BY id`),
+    );
+    const currentMediaKeys = (
+      currentMediaRes.rows as Array<{ storage_key: string }>
+    ).map((r) => r.storage_key);
+
+    const missingKeys = preMediaKeys.filter((k) => !currentMediaKeys.includes(k));
+    if (missingKeys.length > 0) {
+      console.error(
+        `❌ FAIL: ${missingKeys.length} media storage_key values were modified or deleted! Example: ${missingKeys[0]}`,
+      );
+      passed = false;
+    } else {
+      console.log(
+        `✅ PASS: All ${currentMediaKeys.length} media storage_key values preserved without mutation`,
+      );
+    }
+  } else {
+    console.log("ℹ️  No pre-migration media keys to compare against.");
+  }
+
+  // 3. publication_id NOT NULL check
+  console.log("\n3. Checking publication_id NOT NULL integrity across all 14 tables...");
   for (const table of TABLES) {
     const res = await db.execute(
-      sql.raw(`SELECT count(*)::int as null_count FROM "${table}" WHERE publication_id IS NULL`),
+      sql.raw(
+        `SELECT count(*)::int as null_count FROM "${table}" WHERE publication_id IS NULL`,
+      ),
     );
     const nullCount = Number(res.rows[0]?.null_count ?? 0);
     if (nullCount > 0) {
-      console.error(`❌ FAIL: "${table}" contains ${nullCount} rows with NULL publication_id!`);
+      console.error(
+        `❌ FAIL: "${table}" contains ${nullCount} rows with NULL publication_id!`,
+      );
       passed = false;
     } else {
       console.log(`✅ PASS: "${table}" has zero NULL publication_id records`);
     }
   }
 
-  // 3. Foreign Key Checks
-  console.log("\n3. Checking Foreign Key constraints to publications(id)...");
+  // 4. Foreign Key Checks to publications(id)
+  console.log("\n4. Checking Foreign Key constraints to publications(id)...");
   const fkQuery = `
     SELECT
       tc.table_name,
@@ -143,9 +189,13 @@ export async function verifyPostMigrationInvariants(
       passed = false;
     } else {
       const fk = fkRows.find((r) => r.table_name === table);
-      const expectedRule = ["members", "products", "plans"].includes(table) ? "RESTRICT" : "CASCADE";
+      const expectedRule = ["members", "products", "plans"].includes(table)
+        ? "RESTRICT"
+        : "CASCADE";
       if (fk?.delete_rule !== expectedRule) {
-        console.error(`❌ FAIL: "${table}" delete rule is "${fk?.delete_rule}", expected "${expectedRule}"!`);
+        console.error(
+          `❌ FAIL: "${table}" delete rule is "${fk?.delete_rule}", expected "${expectedRule}"!`,
+        );
         passed = false;
       } else {
         console.log(`✅ PASS: "${table}" FK valid with ON DELETE ${expectedRule}`);
@@ -153,8 +203,10 @@ export async function verifyPostMigrationInvariants(
     }
   }
 
-  // 4. Composite Foreign Key on plans (product_id, publication_id)
-  console.log("\n4. Checking Database-Enforced Composite FK for Products & Plans...");
+  // 5. Database-Enforced Derived Ownership: Composite FK on plans (product_id, publication_id)
+  console.log(
+    "\n5. Checking Database-Enforced Composite FK for Products & Plans...",
+  );
   const compFkQuery = `
     SELECT
       tc.constraint_name,
@@ -168,24 +220,42 @@ export async function verifyPostMigrationInvariants(
   `;
   const compFkRes = await db.execute(sql.raw(compFkQuery));
   if (compFkRes.rows.length === 0) {
-    console.error("❌ FAIL: Composite FK 'plans_product_publication_fk' MISSING on plans!");
+    console.error(
+      "❌ FAIL: Composite FK 'plans_product_publication_fk' MISSING on plans!",
+    );
     passed = false;
   } else {
-    console.log("✅ PASS: Composite FK 'plans_product_publication_fk' is active on plans (product_id, publication_id)");
+    console.log(
+      "✅ PASS: Composite FK 'plans_product_publication_fk' is active on plans (product_id, publication_id) -> products(id, publication_id)",
+    );
   }
 
-  // 5. Publication-Scoped Unique Indexes
-  console.log("\n5. Checking Publication-Scoped Unique Indexes...");
+  // 6. Publication-Scoped Unique Indexes
+  console.log("\n6. Checking Publication-Scoped Unique Indexes & Partial Predicates...");
   const expectedIndexes = [
-    { table: "posts", name: "posts_publication_slug_active_idx" },
-    { table: "pages", name: "pages_publication_slug_active_idx" },
+    {
+      table: "posts",
+      name: "posts_publication_slug_active_idx",
+      predicateRequired: "deleted_at IS NULL",
+    },
+    {
+      table: "pages",
+      name: "pages_publication_slug_active_idx",
+      predicateRequired: "deleted_at IS NULL",
+    },
     { table: "tags", name: "tags_publication_slug_unique" },
     { table: "members", name: "members_publication_email_idx" },
     { table: "products", name: "products_publication_key_unique" },
     { table: "newsletters", name: "newsletters_publication_key_unique" },
     { table: "automations", name: "automations_publication_key_unique" },
-    { table: "content_translations", name: "content_translations_pub_locale_slug_idx" },
-    { table: "installed_themes", name: "installed_themes_pub_version_unique_idx" },
+    {
+      table: "content_translations",
+      name: "content_translations_pub_locale_slug_idx",
+    },
+    {
+      table: "installed_themes",
+      name: "installed_themes_pub_version_unique_idx",
+    },
     { table: "search_documents", name: "search_documents_pub_entity_idx" },
   ];
 
@@ -195,19 +265,43 @@ export async function verifyPostMigrationInvariants(
     WHERE schemaname = 'public';
   `;
   const idxRes = await db.execute(sql.raw(indexQuery));
-  const idxRows = idxRes.rows as Array<{ tablename: string; indexname: string; indexdef: string }>;
+  const idxRows = idxRes.rows as Array<{
+    tablename: string;
+    indexname: string;
+    indexdef: string;
+  }>;
 
   for (const exp of expectedIndexes) {
-    const found = idxRows.find((r) => r.tablename === exp.table && r.indexname === exp.name);
+    const found = idxRows.find(
+      (r) => r.tablename === exp.table && r.indexname === exp.name,
+    );
     if (!found) {
-      console.error(`❌ FAIL: Unique index "${exp.name}" MISSING on "${exp.table}"!`);
+      console.error(
+        `❌ FAIL: Unique index "${exp.name}" MISSING on "${exp.table}"!`,
+      );
       passed = false;
     } else {
-      console.log(`✅ PASS: Unique index "${exp.name}" is present on "${exp.table}"`);
+      if (exp.predicateRequired) {
+        if (!found.indexdef.toLowerCase().includes("deleted_at is null")) {
+          console.error(
+            `❌ FAIL: Unique index "${exp.name}" does NOT contain required partial predicate: ${exp.predicateRequired}`,
+          );
+          passed = false;
+        } else {
+          console.log(
+            `✅ PASS: Unique index "${exp.name}" is active with partial predicate (WHERE deleted_at IS NULL)`,
+          );
+        }
+      } else {
+        console.log(
+          `✅ PASS: Unique index "${exp.name}" is active on "${exp.table}"`,
+        );
+      }
     }
   }
 
-  // Verify that obsolete global unique indexes were dropped
+  // 7. Verify obsolete global unique indexes were dropped
+  console.log("\n7. Checking that obsolete global unique indexes were dropped...");
   const obsoleteIndexes = [
     { table: "posts", name: "posts_slug_unique" },
     { table: "pages", name: "pages_slug_unique" },
@@ -216,18 +310,30 @@ export async function verifyPostMigrationInvariants(
     { table: "products", name: "products_key_unique" },
     { table: "newsletters", name: "newsletters_key_unique" },
     { table: "automations", name: "automations_key_unique" },
-    { table: "content_translations", name: "content_translations_locale_slug_idx" },
-    { table: "installed_themes", name: "installed_themes_theme_id_version_unique_idx" },
+    {
+      table: "content_translations",
+      name: "content_translations_locale_slug_idx",
+    },
+    {
+      table: "installed_themes",
+      name: "installed_themes_theme_id_version_unique_idx",
+    },
     { table: "search_documents", name: "search_documents_entity_idx" },
   ];
 
   for (const obs of obsoleteIndexes) {
-    const found = idxRows.find((r) => r.tablename === obs.table && r.indexname === obs.name);
+    const found = idxRows.find(
+      (r) => r.tablename === obs.table && r.indexname === obs.name,
+    );
     if (found) {
-      console.error(`❌ FAIL: Obsolete global unique index "${obs.name}" was NOT dropped on "${obs.table}"!`);
+      console.error(
+        `❌ FAIL: Obsolete global unique index "${obs.name}" was NOT dropped on "${obs.table}"!`,
+      );
       passed = false;
     } else {
-      console.log(`✅ PASS: Obsolete global unique index "${obs.name}" has been removed from "${obs.table}"`);
+      console.log(
+        `✅ PASS: Obsolete global unique index "${obs.name}" has been removed from "${obs.table}"`,
+      );
     }
   }
 

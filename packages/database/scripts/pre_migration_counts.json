@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-14T06:58:29.145Z",
+  "timestamp": "2026-09-14T07:02:06.703Z",
   "counts": {
     "posts": 15,
     "pages": 5,
@@ -15,5 +15,18 @@
     "installed_themes": 2,
     "webhook_endpoints": 68,
     "analytics_events": 0
-  }
+  },
+  "mediaStorageKeys": [
+    "media/039d89ca-8a69-4551-b4b1-9945e6418ff1/test-photo.jpg",
+    "media/0c9efc49-3f4c-46db-a845-caf03ea4a682/test-graphic.webp",
+    "media/11df6850-2d69-452c-b61b-a0fcd6ed5dee/test-anim.gif",
+    "media/2af949a3-0424-431f-8097-670f9849d723/Screenshot 2026-08-17 at 12.34.56 PM.png",
+    "media/35a6f4e2-5589-4229-a688-6bcb2030352e/favicon.ico",
+    "media/51c3d028-53b9-4967-b707-1d74198d82ff/test-image.png",
+    "media/5573c1dc-526c-4925-ba62-c53013f963b8/report.pdf",
+    "media/5b672f97-714e-47cd-96d0-4b18f7d562ef/صورة الشعار الجديد (1).png",
+    "media/742f5e06-a999-4dbf-adff-3aac6e4cf22e/minio-asset.png",
+    "media/968ccec8-e10d-4e0c-ac93-0cfb9597d6ff/logo.svg",
+    "media/cdbaa04f-173e-4aa9-bc79-0cd9ee38ec34/local-asset.png"
+  ]
 }
