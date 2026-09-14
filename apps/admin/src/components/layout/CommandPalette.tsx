@@ -221,7 +221,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           "feedback",
           "discussions",
         ],
-        action: () => onNavigate("/admin/community"),
+        action: () => onNavigate("/admin/comments"),
       },
 
       // Settings (5 Core Pillars)

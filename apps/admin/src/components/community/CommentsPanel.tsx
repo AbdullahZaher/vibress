@@ -59,10 +59,10 @@ export function CommentsPanel({
       <Table>
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="pl-6 text-xs">Member ID</TableHead>
+            <TableHead className="ps-6 text-xs">Member ID</TableHead>
             <TableHead className="text-xs">Comment Content</TableHead>
             <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+            <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -78,7 +78,7 @@ export function CommentsPanel({
           ) : (
             comments.map((c) => (
               <TableRow key={c.id} className="hover:bg-muted/40 border-border">
-                <TableCell className="pl-6 font-mono text-xs text-foreground">
+                <TableCell className="ps-6 font-mono text-xs text-foreground">
                   <div className="flex flex-col">
                     <span>{c.memberId}</span>
                     <span className="text-[10px] text-muted-foreground font-mono">
@@ -109,7 +109,7 @@ export function CommentsPanel({
                   )}
                 </TableCell>
 
-                <TableCell className="text-right pr-6">
+                <TableCell className="text-end pe-6">
                   <div className="flex items-center justify-end gap-1.5">
                     {c.status === "hidden" ? (
                       <Button

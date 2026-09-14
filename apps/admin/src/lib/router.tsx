@@ -78,6 +78,11 @@ const TranslationReviewQueue = lazy(() =>
     default: m.TranslationReviewQueue,
   })),
 );
+const CommentsModeration = lazy(() =>
+  import("../components/CommunitySettings").then((m) => ({
+    default: m.CommunitySettings,
+  })),
+);
 
 export interface RouteMatch {
   params: Record<string, string>;
@@ -420,10 +425,18 @@ export const adminRoutes: AdminRouteDefinition[] = [
     exact: false,
     render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
   },
+  // 7. Comments & Community Moderation Queue
+  {
+    pattern: "/admin/comments",
+    exact: true,
+    requiredPermission: "comments.manage",
+    render: () => <CommentsModeration />,
+  },
   {
     pattern: "/admin/community",
-    exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    exact: true,
+    requiredPermission: "comments.manage",
+    render: () => <CommentsModeration />,
   },
   {
     pattern: "/admin/settings/advanced",

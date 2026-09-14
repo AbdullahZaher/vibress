@@ -1,5 +1,5 @@
 import React from "react";
-import { TrendingUp, Share2, AppWindow, ExternalLink } from "lucide-react";
+import { TrendingUp, AppWindow, ExternalLink } from "lucide-react";
 
 interface NavMainProps {
   currentPath: string;
@@ -30,14 +30,6 @@ export const NavMain: React.FC<NavMainProps> = ({
         <span>Analytics</span>
       </button>
 
-      {/* Network */}
-      <button
-        onClick={() => onNavigate("/admin/community")}
-        className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer"
-      >
-        <Share2 className="h-4 w-4 shrink-0" />
-        <span>Network</span>
-      </button>
 
       {/* View Site */}
       <div className="group/viewsite relative flex items-center">

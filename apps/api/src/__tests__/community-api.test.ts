@@ -422,6 +422,50 @@ describe("Batch 11 — Community Integration & Security", () => {
     expect(res.json().reports.length).toBeGreaterThan(0);
   });
 
+  it("admin resolves a report", async () => {
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/comment-reports",
+      headers: { cookie: staffCookie },
+    });
+    const reportId = listRes.json().reports[0].id;
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/comment-reports/${reportId}/resolve`,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { action: "resolved" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().success).toBe(true);
+  });
+
+  it("author lacks comments.moderate permission and receives 403 on hide", async () => {
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      payload: { email: "author@vibress.local", password: "DevPassword123!" },
+    });
+    expect(loginRes.statusCode).toBe(200);
+    const authorCookie = (loginRes.headers["set-cookie"] as unknown as string) || "";
+
+    // Author CAN read comments (comments.read)
+    const readRes = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/comments",
+      headers: { cookie: authorCookie.split(";")[0] },
+    });
+    expect(readRes.statusCode).toBe(200);
+
+    // Author CANNOT hide comment (lacks comments.moderate -> 403)
+    const hideRes = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/comments/${commentA}/hide`,
+      headers: { cookie: authorCookie.split(";")[0], origin: "http://localhost:7777" },
+    });
+    expect(hideRes.statusCode).toBe(403);
+    expect(hideRes.json().errors[0].code).toBe("PERMISSION_DENIED");
+  });
+
   it("member cookie cannot access admin moderation (401)", async () => {
     const res = await app.inject({
       method: "GET",

@@ -36,10 +36,10 @@ export function ReportsPanel({
       <Table>
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="pl-6 text-xs">Reason</TableHead>
+            <TableHead className="ps-6 text-xs">Reason</TableHead>
             <TableHead className="text-xs">Comment ID</TableHead>
             <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+            <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -55,7 +55,7 @@ export function ReportsPanel({
           ) : (
             reports.map((r) => (
               <TableRow key={r.id} className="hover:bg-muted/40 border-border">
-                <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                <TableCell className="ps-6 font-semibold text-xs text-foreground">
                   {r.reason}
                 </TableCell>
                 <TableCell className="text-xs font-mono text-muted-foreground">
@@ -69,7 +69,7 @@ export function ReportsPanel({
                     {r.status}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right pr-6">
+                <TableCell className="text-end pe-6">
                   {r.status === "open" && (
                     <Button
                       variant="outline"
