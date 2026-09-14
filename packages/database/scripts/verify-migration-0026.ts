@@ -189,9 +189,9 @@ export async function verifyPostMigrationInvariants(
     SELECT
       c.conname AS constraint_name,
       src.relname AS source_table,
-      ARRAY_AGG(src_att.attname ORDER BY u.pos) AS source_columns,
+      ARRAY_TO_JSON(ARRAY_AGG(src_att.attname ORDER BY u.pos)) AS source_columns,
       tgt.relname AS target_table,
-      ARRAY_AGG(tgt_att.attname ORDER BY u.pos) AS target_columns,
+      ARRAY_TO_JSON(ARRAY_AGG(tgt_att.attname ORDER BY u.pos)) AS target_columns,
       c.confdeltype AS delete_rule
     FROM pg_constraint c
     JOIN pg_class src ON src.oid = c.conrelid
@@ -347,7 +347,7 @@ export async function verifyPostMigrationInvariants(
     SELECT
       c.relname AS table_name,
       i.relname AS index_name,
-      ARRAY_AGG(a.attname ORDER BY u.pos) AS column_names,
+      ARRAY_TO_JSON(ARRAY_AGG(a.attname ORDER BY u.pos)) AS column_names,
       pg_get_expr(ix.indpred, ix.indrelid) AS predicate,
       con.conname AS constraint_name,
       con.contype AS constraint_type
