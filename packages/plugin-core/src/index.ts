@@ -64,5 +64,6 @@ export function validatePluginManifest(manifest: unknown): PluginManifest {
 
 export * from "./sandbox";
 export * from "./extension-host";
+export * from "./bundled-registry";
 
 

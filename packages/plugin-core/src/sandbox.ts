@@ -12,11 +12,36 @@ export class PluginSecurityViolationError extends Error {
   }
 }
 
+/**
+ * @deprecated Dynamic code execution via `node:vm` is not a secure sandbox boundary and
+ * is strictly disallowed for untrusted external plugins. Use `BundledPluginRegistry` instead.
+ * In Vibress v1.x, arbitrary dynamic plugin execution fails closed to prevent prototype escape and RCE.
+ */
 export function executeSandboxedPluginCode<T>(
   code: string,
   context: PluginContext,
   options: SandboxExecutionOptions = {},
 ): T {
+  // Enforce AST/token-level safety gate to reject prototype pollution and sandbox escape patterns
+  const forbiddenPatterns = [
+    /\bconstructor\b/,
+    /__proto__/,
+    /\bprototype\b/,
+    /\bglobalThis\b/,
+    /\bglobal\b/,
+    /\beval\s*\(/,
+    /\bFunction\s*\(/,
+    /\bimport\s*\(/,
+  ];
+
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(code)) {
+      throw new PluginSecurityViolationError(
+        `Security violation: access to forbidden identifier/pattern '${pattern.source}' detected. Untrusted dynamic execution is rejected.`,
+      );
+    }
+  }
+
   const timeout = options.timeoutMs || 2000;
 
   // Build isolated sandbox global context
@@ -40,6 +65,8 @@ export function executeSandboxedPluginCode<T>(
     require: undefined,
     child_process: undefined,
     fs: undefined,
+    global: undefined,
+    globalThis: undefined,
   };
 
   const vmContext = vm.createContext(sandboxContext);
