@@ -39,7 +39,25 @@ No worker may process records or dispatch events without verifiable tenant isola
      throw new UnrecoverableWorkerError("Missing mandatory publicationId in worker payload");
    }
    ```
-3. **Repository Injection with Tenant Scope**:
-   Workers must not instantiate un-scoped repositories. Repositories must either accept `publicationId` as an explicit parameter on every method or be instantiated with a scoped context.
-4. **Outbox Envelope Propagation**:
+3. **Anti-Forgery Entity Ownership Verification (MANDATORY)**:
+   A mandatory `publicationId` field is necessary but insufficient.
+   Every worker must verify:
+   ```ts
+   if (entity.publicationId !== job.data.publicationId) {
+     throw new ForgedTenantContextError(
+       `Tenant mismatch: entity ${entity.id} belongs to publication ${entity.publicationId}, but job specified ${job.data.publicationId}`
+     );
+   }
+   ```
+   A forged or cross-wired payload such as:
+   ```json
+   {
+     "publicationId": "publication-A",
+     "entityId": "entity-owned-by-publication-B"
+   }
+   ```
+   **MUST fail closed immediately** without executing any downstream actions, indexing, email dispatch, or webhook invocation.
+4. **Repository Scoping in Workers**:
+   Workers must not instantiate un-scoped repositories. Repositories must query with `WHERE publication_id = :publicationId AND id = :entityId`. If the entity belongs to another publication, the query returns `null` (not found), safely preventing cross-tenant operations.
+5. **Outbox Envelope Propagation**:
    The `OutboxDispatcherWorker` must extract `publicationId` from the domain event and inject it into the BullMQ job payload. Jobs without a valid `publicationId` must be routed to a dead-letter queue and flagged for administrative inspection.

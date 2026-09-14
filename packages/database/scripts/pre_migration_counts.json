@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-09-14T06:58:29.145Z",
+  "counts": {
+    "posts": 15,
+    "pages": 5,
+    "tags": 2,
+    "media_assets": 11,
+    "members": 13,
+    "products": 3,
+    "plans": 4,
+    "newsletters": 2,
+    "search_documents": 104,
+    "content_translations": 8,
+    "automations": 0,
+    "installed_themes": 2,
+    "webhook_endpoints": 68,
+    "analytics_events": 0
+  }
+}

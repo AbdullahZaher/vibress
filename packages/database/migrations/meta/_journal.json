@@ -183,6 +183,13 @@
       "when": 1786606000000,
       "tag": "0025_staff_invitations_and_password_resets",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786607000000,
+      "tag": "0026_multi_publication_tenant_isolation",
+      "breakpoints": true
     }
   ]
 }

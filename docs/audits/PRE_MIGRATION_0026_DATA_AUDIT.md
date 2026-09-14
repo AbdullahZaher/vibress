@@ -24,7 +24,8 @@ The objective of this gate is to mathematically prove that Migration `0026` will
 The audit inspected all 14 proposed publication-owned tables in the active PostgreSQL database.
 
 ### Summary Metrics Across 14 Tables
-* **Total Rows Across 14 Tables**: 227 rows
+* **Total Rows Across 14 Tables (Audit Snapshot)**: 237 rows (15 posts + 5 pages + 2 tags + 11 media + 13 members + 3 products + 4 plans + 2 newsletters + 104 search_documents + 8 translations + 0 automations + 2 themes + 68 webhooks + 0 analytics)
+* **Dynamic Verification Invariant**: The 237 row count represents a baseline snapshot at audit time. Migration 0026 does NOT hardcode 237 as an invariant. The migration verification script dynamically captures per-table row counts immediately prior to migration execution and asserts that every table has an identical row count immediately after migration. Any per-table delta fails the migration gate.
 * **Active Slug Collisions**: 0
 * **Active Member Email Collisions**: 0
 * **Orphaned Parent-Child References (Domain Tables)**: 0
@@ -441,13 +442,13 @@ Every row in the database was evaluated for publication assignment:
 | `products` | 3 | 3 | 0 (Direct) | 0 | **Clean** |
 | `plans` | 4 | 4 | 4 (via `products.id`) | 0 | **Clean** (All 4 `product_id`s match) |
 | `newsletters` | 2 | 2 | 0 (Direct) | 0 | **Clean** |
-| `search_documents` | 104 | 104 | 2 (via `posts.id`) | 0 (102 test stubs pruned/backfilled) | **Clean** |
+| `search_documents` | 104 | 104 | 2 (via `posts.id`) | 0 (102 test stubs backfilled; no deletions) | **Clean** |
 | `content_translations` | 8 | 8 | 8 (6 posts, 2 pages) | 0 | **Clean** (All 8 parent IDs match) |
 | `automations` | 0 | 0 | 0 | 0 | **Clean** |
 | `installed_themes` | 2 | 2 | 0 (Direct) | 0 | **Clean** |
 | `webhook_endpoints` | 68 | 68 | 0 (Direct) | 0 | **Clean** |
 | `analytics_events` | 0 | 0 | 0 | 0 | **Clean** |
-| **TOTAL** | **227** | **227** | **14** | **0** | **SAFE TO MIGRATE** |
+| **TOTAL (SNAPSHOT)** | **237** | **237** | **14** | **0** | **SAFE TO MIGRATE** |
 
 ### Parent Relationship Verification
 1. **`content_translations` → `posts` / `pages`**:
@@ -457,9 +458,10 @@ Every row in the database was evaluated for publication assignment:
 2. **`plans` → `products`**:
    * All 4 plans reference valid product IDs (`LEFT JOIN` returned **0 orphaned rows**).
    * Setting `plans.publication_id = 'pub_default'` exactly mirrors parent product ownership.
-3. **`search_documents` Stale Artifact Analysis**:
-   * 2 search documents reference existing posts (`06028813...` and `7a376328...`).
-   * 102 search documents reference legacy benchmark stubs (`entity-0` to `entity-99`). Because `search_documents` is a derived read-model projection and not a source of truth, migration `0026` safely assigns `pub_default` (or prunes orphaned test documents), and the search worker re-indexes published posts.
+3. **`search_documents` Zero-Deletion Invariant**:
+   * The audit is strictly read-only; **no search documents were deleted or pruned during the audit**.
+   * Migration 0026 **must not delete any `search_documents` rows**. All 104 rows in `search_documents` are deterministically backfilled to `publication_id = 'pub_default'`.
+   * The 102 legacy benchmark stubs remain in the table during Migration 0026. Any index cleanup, projection pruning, or full rebuild must happen post-migration as a separate search-repair operation.
 4. **Ambiguous Ownership Count**: **0 rows**. No rows have unknown or conflicting publication lineage.
 
 ---
@@ -526,15 +528,25 @@ webhook_endpoint ──────► webhook_delivery
 ```
 
 ### Consistency Guarantees
-1. **`plans`**: Contains `publication_id` and `product_id`. PostgreSQL constraint guarantee:
-   * In addition to FK `product_id REFERENCES products(id)`, the application layer verifies:
-     ```ts
-     const product = await productRepo.findById(data.productId);
-     if (product.publicationId !== publicationId) {
-       throw new TenantMismatchError("Product belongs to a different publication");
-     }
+1. **`plans` Composite Foreign Key (Database-Enforced Invariant)**:
+   * Do NOT rely exclusively on application-level checks. PostgreSQL must enforce `child.publication_id === parent.publication_id` at the storage layer.
+   * `products` table defines a composite unique constraint:
+     ```sql
+     ALTER TABLE products ADD CONSTRAINT products_id_publication_unique UNIQUE (id, publication_id);
      ```
-2. **`content_translations`**: Carries `publication_id`, `content_type`, and `content_id`. When creating or updating translations, the domain service verifies that `parent.publication_id === translation.publication_id`.
+   * `plans` table defines a composite foreign key:
+     ```sql
+     ALTER TABLE plans ADD CONSTRAINT plans_product_publication_fk
+       FOREIGN KEY (product_id, publication_id)
+       REFERENCES products (id, publication_id)
+       ON DELETE RESTRICT;
+     ```
+   * This guarantees that a plan can NEVER be linked to a product from a different publication. Database writes attempting cross-publication linkage are rejected by PostgreSQL itself.
+2. **`content_translations` (Polymorphic Ownership Validation)**:
+   * Because `content_translations` is polymorphic across `posts` and `pages` (stored via `content_type` and `content_id`), PostgreSQL does not support a single composite foreign key across multiple distinct tables.
+   * Therefore, derived ownership is enforced through:
+     a. Domain service ownership assertion: before creating/updating a translation, the parent entity's `publication_id` is fetched and asserted to match `translation.publication_id`.
+     b. Integration tests for both `content_type = 'post'` and `content_type = 'page'` parents verifying that cross-publication translation attachments fail closed.
 3. **`webhook_deliveries`**: References `endpoint_id`. The delivery inherits `publication_id` from `webhook_endpoints`.
 4. **`automation_runs`**: References `automation_id`. The run inherits `publication_id` from `automations`.
 
@@ -731,9 +743,9 @@ Pre-migration checklist validation:
 
 - [x] **pub_default is verified**: Status confirmed (does not exist; Step A bootstrap planned).
 - [x] **workspace/publication relationship verified**: Schemas and foreign keys mapped.
-- [x] **zero ambiguous ownership records**: Verified across all 227 database records.
+- [x] **zero ambiguous ownership records**: Verified across all 237 database records.
 - [x] **member identity model verified**: Model B (Publication-Scoped) formally proved.
-- [x] **derived ownership relationships verified**: `content_translations` (8/8) and `plans` (4/4) verified with 0 orphans.
+- [x] **derived ownership relationships verified**: `content_translations` (8/8) and `plans` (4/4) verified with 0 orphans; composite FK for `plans` planned.
 - [x] **delete semantics verified**: `CASCADE` for content, `RESTRICT` for financial/member data.
 - [x] **unique constraints audited**: All 10 global unique constraints cataloged for scoping.
 - [x] **zero projected active slug conflicts**: Verified against live PostgreSQL data.
@@ -742,8 +754,8 @@ Pre-migration checklist validation:
 - [x] **worker ownership verified**: Documented in `WORKER_TENANT_CONTEXT_MATRIX.md`.
 - [x] **API tenant resolution design verified**: Membership verification gate designed.
 - [x] **repository migration contracts defined**: Explicit scoped contracts established.
-- [x] **expected row counts documented**: 227 total rows cataloged.
-- [x] **rollback strategy documented**: Reversibility verified below.
+- [x] **expected row counts documented**: 237 baseline rows cataloged with dynamic pre/post verification invariant.
+- [x] **rollback strategy documented**: Controlled reversibility documented below.
 
 ### Final Safety Verdict
 ```text
@@ -758,9 +770,11 @@ Pre-migration checklist validation:
 
 ## 16. Migration Rollback Strategy
 
-1. **Reversibility of Column Additions**:
-   * Rolling back `publication_id` drops the foreign key and column (`ALTER TABLE ... DROP COLUMN publication_id`).
-   * Because existing records originally had no `publication_id`, dropping the column restores the pre-migration state without data loss.
-2. **Reversibility of Unique Indexes**:
-   * Dropping the publication-scoped index (`DROP INDEX ...`) and re-creating the global unique index (`CREATE UNIQUE INDEX ...`) is 100% reversible because there are currently zero duplicate slugs or emails in the database.
-3. **Data Loss Risk**: **Zero**. No tables or columns are deleted during Migration `0026`. All transformations are purely additive (adding `publication_id`, replacing global indexes with scoped indexes).
+1. **Pre-Application Write Reversibility**:
+   * Prior to new multi-publication application writes (while all records belong exclusively to `pub_default`), rolling back `publication_id` drops the foreign keys, columns (`ALTER TABLE ... DROP COLUMN publication_id`), and restores global unique constraints without data loss.
+2. **Post-Application Write Reversibility (Controlled Migration / Reconciliation)**:
+   * Once multiple publications exist and have created publication-scoped data (e.g., identical slugs across Publication A and B, or readers with the same email across Publication A and B), rollback cannot be treated as a guaranteed lossless 100% reversal.
+   * Attempting to restore global `UNIQUE (slug)` or `UNIQUE (email_normalized)` against a multi-publication database will trigger immediate constraint violations.
+   * Therefore, once multi-publication writes exist, rollback requires a forward data reconciliation operation (e.g. archiving or renaming conflicting slugs/emails) rather than an automated down migration.
+3. **Transactional Safety of Migration 0026**:
+   * Migration 0026 itself is executed in a single atomic transaction (`BEGIN; ... COMMIT;`). If any DDL, backfill, or constraint addition fails during execution, PostgreSQL will roll back the entire transaction, leaving the schema in its clean pre-migration state.
