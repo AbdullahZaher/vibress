@@ -197,35 +197,34 @@ ALTER TABLE "analytics_events"
   ON DELETE CASCADE;
 
 -- 8. Replace global unique constraints
--- Posts
-DROP INDEX IF EXISTS "posts_slug_unique";
+-- Posts (Constraint-backed unique index)
+ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_slug_unique";
 
--- Pages
-DROP INDEX IF EXISTS "pages_slug_unique";
+-- Pages (Constraint-backed unique index)
+ALTER TABLE "pages" DROP CONSTRAINT IF EXISTS "pages_slug_unique";
 
--- Tags
-DROP INDEX IF EXISTS "tags_slug_unique";
+-- Tags (Constraint-backed unique index)
+ALTER TABLE "tags" DROP CONSTRAINT IF EXISTS "tags_slug_unique";
 
--- Members (Model B: Publication-Scoped Member Identity)
+-- Members (Constraint-backed unique index; Model B: Publication-Scoped Member Identity)
 ALTER TABLE "members" DROP CONSTRAINT IF EXISTS "members_email_normalized_unique";
-DROP INDEX IF EXISTS "members_email_normalized_unique";
 
--- Products
-DROP INDEX IF EXISTS "products_key_unique";
+-- Products (Constraint-backed unique index)
+ALTER TABLE "products" DROP CONSTRAINT IF EXISTS "products_key_unique";
 
--- Newsletters
-DROP INDEX IF EXISTS "newsletters_key_unique";
+-- Newsletters (Constraint-backed unique index)
+ALTER TABLE "newsletters" DROP CONSTRAINT IF EXISTS "newsletters_key_unique";
 
--- Automations
-DROP INDEX IF EXISTS "automations_key_unique";
+-- Automations (Constraint-backed unique index)
+ALTER TABLE "automations" DROP CONSTRAINT IF EXISTS "automations_key_unique";
 
--- Content Translations
+-- Content Translations (Standalone unique index)
 DROP INDEX IF EXISTS "content_translations_locale_slug_idx";
 
--- Installed Themes
+-- Installed Themes (Standalone unique index)
 DROP INDEX IF EXISTS "installed_themes_theme_id_version_unique_idx";
 
--- Search Documents
+-- Search Documents (Standalone unique index)
 DROP INDEX IF EXISTS "search_documents_entity_idx";
 
 -- 9. Create publication-scoped indexes

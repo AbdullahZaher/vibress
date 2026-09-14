@@ -86,6 +86,39 @@ export async function verifyPostMigrationInvariants(
 
   let passed = true;
 
+  // 0. Bootstrap Verification (ws_default and pub_default)
+  console.log("\n0. Checking Bootstrap Invariants (ws_default and pub_default)...");
+  const wsRes = await db.execute(sql.raw(`SELECT id, slug FROM "workspaces" WHERE id = 'ws_default'`));
+  if (wsRes.rows.length !== 1 || (wsRes.rows[0] as { slug: string }).slug !== "default") {
+    console.error("❌ FAIL: ws_default invariant failed or missing!");
+    passed = false;
+  } else {
+    console.log("✅ PASS: ws_default exists with slug='default'");
+  }
+
+  const pubRes = await db.execute(
+    sql.raw(
+      `SELECT id, workspace_id, slug, primary_locale FROM "publications" WHERE id = 'pub_default'`,
+    ),
+  );
+  const pubRow = pubRes.rows[0] as
+    | { workspace_id: string; slug: string; primary_locale: string }
+    | undefined;
+  if (
+    pubRes.rows.length !== 1 ||
+    !pubRow ||
+    pubRow.workspace_id !== "ws_default" ||
+    pubRow.slug !== "default" ||
+    pubRow.primary_locale !== "en"
+  ) {
+    console.error("❌ FAIL: pub_default invariant failed or missing!");
+    passed = false;
+  } else {
+    console.log(
+      "✅ PASS: pub_default exists with workspace_id='ws_default', slug='default', primary_locale='en'",
+    );
+  }
+
   // 1. Dynamic Row Count Invariant Check (Zero deletions, including search_documents)
   console.log("\n1. Checking row counts per table (Pre vs Post)...");
   for (const table of TABLES) {
@@ -306,22 +339,27 @@ export async function verifyPostMigrationInvariants(
     }
   }
 
-  // 7. Schema-Level Global Uniqueness Invariant Check
-  console.log("\n7. Verifying Schema-Level Absence of Obsolete Global Uniqueness...");
+  // 7. Schema-Level Global Uniqueness Invariant Check (Distinguishing Constraints vs Standalone Indexes)
+  console.log(
+    "\n7. Verifying Schema-Level Absence of Obsolete Global Uniqueness (Constraints & Standalone Indexes)...",
+  );
   const uniqueCatalogQuery = `
     SELECT
       c.relname AS table_name,
       i.relname AS index_name,
       ARRAY_AGG(a.attname ORDER BY u.pos) AS column_names,
-      pg_get_expr(ix.indpred, ix.indrelid) AS predicate
+      pg_get_expr(ix.indpred, ix.indrelid) AS predicate,
+      con.conname AS constraint_name,
+      con.contype AS constraint_type
     FROM pg_index ix
     JOIN pg_class c ON c.oid = ix.indrelid
     JOIN pg_class i ON i.oid = ix.indexrelid
     CROSS JOIN LATERAL UNNEST(ix.indkey) WITH ORDINALITY AS u(attnum, pos)
     JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = u.attnum
+    LEFT JOIN pg_constraint con ON con.conindid = i.oid
     WHERE ix.indisunique = true
       AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
-    GROUP BY c.relname, i.relname, ix.indpred, ix.indrelid;
+    GROUP BY c.relname, i.relname, ix.indpred, ix.indrelid, con.conname, con.contype;
   `;
   const uniqueRes = await db.execute(sql.raw(uniqueCatalogQuery));
   const uniqueCatalogRows = uniqueRes.rows as Array<{
@@ -329,6 +367,8 @@ export async function verifyPostMigrationInvariants(
     index_name: string;
     column_names: string[];
     predicate: string | null;
+    constraint_name: string | null;
+    constraint_type: string | null;
   }>;
 
   const targetColumnsByTable: Record<string, string[]> = {
@@ -345,18 +385,22 @@ export async function verifyPostMigrationInvariants(
   };
 
   for (const [table, targetCols] of Object.entries(targetColumnsByTable)) {
-    // Find any unique index on this table that covers the target columns WITHOUT publication_id
-    const badGlobalIndexes = uniqueCatalogRows.filter(
+    // Find any unique index or constraint on this table that covers the target columns WITHOUT publication_id
+    const badGlobalEntries = uniqueCatalogRows.filter(
       (idx) =>
         idx.table_name === table &&
         targetCols.every((col) => idx.column_names.includes(col)) &&
         !idx.column_names.includes("publication_id"),
     );
 
-    if (badGlobalIndexes.length > 0) {
-      for (const badIdx of badGlobalIndexes) {
+    if (badGlobalEntries.length > 0) {
+      for (const bad of badGlobalEntries) {
+        const typeStr =
+          bad.constraint_type === "u"
+            ? `table constraint "${bad.constraint_name}"`
+            : `standalone unique index "${bad.index_name}"`;
         console.error(
-          `❌ FAIL: Obsolete global uniqueness remains on "${table}" via index "${badIdx.index_name}" on columns (${badIdx.column_names.join(", ")})!`,
+          `❌ FAIL: Obsolete global uniqueness remains on "${table}" via ${typeStr} on columns (${bad.column_names.join(", ")})!`,
         );
       }
       passed = false;
@@ -365,6 +409,45 @@ export async function verifyPostMigrationInvariants(
         `✅ PASS: Zero obsolete global uniqueness on "${table}" (${targetCols.join(", ")}) — all uniqueness is publication-scoped`,
       );
     }
+  }
+
+  // 8. Verify Non-Target Unrelated Constraints and Indexes Were NOT Removed
+  console.log("\n8. Verifying Preserved Unrelated Unique Constraints and Indexes...");
+  const preservedContentTargetIdx = uniqueCatalogRows.find(
+    (r) =>
+      r.table_name === "content_translations" &&
+      r.index_name === "content_translations_content_target_idx" &&
+      r.column_names.includes("content_type") &&
+      r.column_names.includes("content_id") &&
+      r.column_names.includes("target_locale"),
+  );
+  if (!preservedContentTargetIdx) {
+    console.error(
+      "❌ FAIL: Unrelated index 'content_translations_content_target_idx' was unexpectedly removed!",
+    );
+    passed = false;
+  } else {
+    console.log(
+      "✅ PASS: Unrelated index 'content_translations_content_target_idx' is preserved",
+    );
+  }
+
+  const parentProductUnique = uniqueCatalogRows.find(
+    (r) =>
+      r.table_name === "products" &&
+      r.constraint_type === "u" &&
+      r.column_names.includes("id") &&
+      r.column_names.includes("publication_id"),
+  );
+  if (!parentProductUnique) {
+    console.error(
+      "❌ FAIL: Parent unique constraint 'products(id, publication_id)' is missing!",
+    );
+    passed = false;
+  } else {
+    console.log(
+      "✅ PASS: Parent unique constraint 'products(id, publication_id)' is active",
+    );
   }
 
   console.log("\n========================================================");
