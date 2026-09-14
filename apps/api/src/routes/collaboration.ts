@@ -275,6 +275,27 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   });
 
   // 6. Durable CRDT Document State Exchange
+  const MAX_CRDT_UPDATE_BYTES = 64 * 1024; // 64 KB cap
+  const MAX_BASE64_LENGTH = Math.ceil((MAX_CRDT_UPDATE_BYTES * 4) / 3) + 4; // ~87,384 characters
+  const crdtRateLimitMap = new Map<string, number[]>();
+  const CRDT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+  const CRDT_MAX_UPDATES_PER_WINDOW = 60;
+
+  function checkCrdtRateLimit(key: string): boolean {
+    const now = Date.now();
+    const windowStart = now - CRDT_RATE_LIMIT_WINDOW_MS;
+    const timestamps = (crdtRateLimitMap.get(key) || []).filter((t) => t > windowStart);
+
+    if (timestamps.length >= CRDT_MAX_UPDATES_PER_WINDOW) {
+      crdtRateLimitMap.set(key, timestamps);
+      return false;
+    }
+
+    timestamps.push(now);
+    crdtRateLimitMap.set(key, timestamps);
+    return true;
+  }
+
   fastify.get<{ Params: { postId: string } }>(
     "/posts/:postId/collaboration/crdt",
     {
@@ -296,16 +317,68 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("posts.edit")],
     handler: async (req, reply) => {
       const { update } = req.body || {};
-      if (!update) {
+      if (!update || typeof update !== "string") {
         return sendError(
           reply,
           "VALIDATION_ERROR",
-          "update payload is required",
+          "update payload is required and must be a valid base64 string",
           req.id,
         );
       }
 
-      const updateBuffer = Buffer.from(update, "base64");
+      const trimmed = update.trim();
+      if (trimmed.length > MAX_BASE64_LENGTH) {
+        return sendError(
+          reply,
+          "PAYLOAD_TOO_LARGE",
+          "CRDT update payload exceeds maximum permitted size (64 KB)",
+          req.id,
+          413,
+        );
+      }
+
+      if (!/^[A-Za-z0-9+/=]+$/.test(trimmed)) {
+        return sendError(
+          reply,
+          "VALIDATION_ERROR",
+          "update payload must be valid base64",
+          req.id,
+        );
+      }
+
+      const rateLimitKey = `${req.user!.id}:${req.params.postId}`;
+      if (!checkCrdtRateLimit(rateLimitKey)) {
+        return sendError(
+          reply,
+          "RATE_LIMIT_EXCEEDED",
+          "Rate limit exceeded: maximum 60 CRDT updates per minute per document.",
+          req.id,
+          429,
+        );
+      }
+
+      let updateBuffer: Buffer;
+      try {
+        updateBuffer = Buffer.from(trimmed, "base64");
+      } catch {
+        return sendError(
+          reply,
+          "VALIDATION_ERROR",
+          "Failed to decode base64 CRDT update payload",
+          req.id,
+        );
+      }
+
+      if (updateBuffer.length > MAX_CRDT_UPDATE_BYTES) {
+        return sendError(
+          reply,
+          "PAYLOAD_TOO_LARGE",
+          "CRDT update buffer exceeds maximum permitted size (64 KB)",
+          req.id,
+          413,
+        );
+      }
+
       editorialCollaborationService.applyYjsDocUpdate(
         req.params.postId,
         new Uint8Array(updateBuffer),

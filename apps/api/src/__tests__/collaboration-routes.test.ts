@@ -237,7 +237,7 @@ describe("Studio Collaboration API Routes", () => {
     });
   });
 
-  describe("Durable CRDT Document State Exchange", () => {
+  describe("Durable CRDT Document State Exchange & Safety Hardening", () => {
     it("POST and GET /posts/:postId/collaboration/crdt syncs incremental updates", async () => {
       const dummyUpdateBase64 = Buffer.from(new Uint8Array([1, 2, 3, 4])).toString("base64");
 
@@ -259,6 +259,57 @@ describe("Studio Collaboration API Routes", () => {
 
       expect(getRes.statusCode).toBe(200);
       expect(getRes.json().data.updates).toContain(dummyUpdateBase64);
+    });
+
+    it("rejects CRDT update exceeding 64 KB with 413 PAYLOAD_TOO_LARGE", async () => {
+      // 65 KB buffer
+      const oversizedBytes = new Uint8Array(65 * 1024);
+      const oversizedBase64 = Buffer.from(oversizedBytes).toString("base64");
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
+        headers: { cookie: cookieHeader },
+        payload: { update: oversizedBase64 },
+      });
+
+      expect(res.statusCode).toBe(413);
+      expect(res.json().errors[0].code).toBe("PAYLOAD_TOO_LARGE");
+    });
+
+    it("rejects invalid base64 payloads with 400 VALIDATION_ERROR", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
+        headers: { cookie: cookieHeader },
+        payload: { update: "not-valid-base64!@#$%" },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0].code).toBe("VALIDATION_ERROR");
+    });
+
+    it("enforces rate limits on high-frequency CRDT flooding with 429", async () => {
+      const validPayload = Buffer.from(new Uint8Array([9, 9, 9])).toString("base64");
+      const floodPostId = crypto.randomUUID();
+
+      let lastStatus = 200;
+      // Burst 65 requests on a separate document ID
+      for (let i = 0; i < 65; i++) {
+        const res = await app.inject({
+          method: "POST",
+          url: `/api/admin/v1/posts/${floodPostId}/collaboration/crdt`,
+          headers: { cookie: cookieHeader },
+          payload: { update: validPayload },
+        });
+        lastStatus = res.statusCode;
+        if (res.statusCode === 429) {
+          expect(res.json().errors[0].code).toBe("RATE_LIMIT_EXCEEDED");
+          break;
+        }
+      }
+
+      expect(lastStatus).toBe(429);
     });
   });
 });
