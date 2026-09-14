@@ -1,296 +1,230 @@
-Migration: 0026_multi_publication_tenant_isolation
-Execution: YES
-Database Gate: FAIL
-Runtime Multi-Publication: NOT VERIFIED IN THIS STEP
-
-# Migration 0026 — Post-Execution Safety Gate
+# Migration 0026 — Final Post-Execution Database Gate
 
 **Date:** 2026-09-14  
-**Status:** FAIL — MIGRATION 0026 EXECUTION/POST-GATE FAILURE  
+**Status:** PASS — MIGRATION 0026 EXECUTED AND DATABASE GATE PASSED  
 **Target Migration:** `packages/database/migrations/0026_multi_publication_tenant_isolation.sql`  
 **Target Verifier:** `packages/database/scripts/verify-migration-0026.ts`  
 **Baseline Snapshot:** `packages/database/scripts/pre_migration_counts.json`  
-**Git SHA:** `f1ddae28c139f205fdfb7a462915e0e114f8dec7`  
-**PostgreSQL Version:** `PostgreSQL 16.15 on aarch64-unknown-linux-musl`  
 
 ---
 
 ## 1. Execution Summary
 
-Sequence Step C was executed using the repository's canonical migration mechanism:
+Sequence Step C retry was executed using the repository's canonical migration mechanism:
 ```bash
 pnpm --filter @vibress/database run db:migrate
 ```
 which runs `tsx src/migrate.ts` calling Drizzle's `migrate(db, { migrationsFolder })`.
 
-The migration execution **failed with exit code 1** due to a PostgreSQL dependency constraint error when attempting to drop global unique indexes.
+The migration executed to completion and committed cleanly with **exit status 0**.
 
-Because Migration 0026 was wrapped in a transactional block and executed inside Drizzle's session transaction, **the entire transaction rolled back cleanly and atomically**.
-
-**In accordance with strict safety rules:**
-* **No ad-hoc repair was attempted.**
-* **No automatic re-run was performed.**
-* **No baseline numbers were altered.**
-* **The live database was inspected and verified to be in the exact, pristine pre-migration state.**
+* **Migration executed:** YES
+* **Migration committed:** YES (Transaction committed atomically in PostgreSQL)
+* **Exit code:** 0
+* **Git SHA at execution:** `1a32b3f749bcbe99f232a6bdae5dbf2436745188`
+* **Execution Timestamp:** `2026-09-14 08:45:06 UTC`
 
 ---
 
-## 2. Immediate Execution Result
+## 2. Bootstrap Verification
 
-* **Migration command executed:** YES
-* **Command exit status:** 1 (Failed)
-* **Migration recorded in ledger (`drizzle.__drizzle_migrations`):** NO (Ledger remains at 26 applied migrations)
-* **Did transaction COMMIT:** NO (Rolled back completely)
-* **Execution Timestamp:** 2026-09-14 07:24:29 UTC
+Both root tenant entities were inserted and asserted in-transaction via PL/pgSQL:
 
-### 2.1 Exact Error Captured
-```text
-error: cannot drop index posts_slug_unique because constraint posts_slug_unique on table posts requires it
-  length: 235,
-  severity: 'ERROR',
-  code: '2BP01',
-  hint: 'You can drop constraint posts_slug_unique on table posts instead.',
-  file: 'dependency.c',
-  line: '843',
-  routine: 'findDependentObjects'
-```
-
-### 2.2 Root Cause Analysis
-In PostgreSQL, when a unique constraint is created via `UNIQUE` or Drizzle's `.unique()`, PostgreSQL creates a row in `pg_constraint` (constraint type `'u'`) and creates an underlying index in `pg_index` to enforce the constraint.
-
-PostgreSQL enforces that an index required by a constraint cannot be dropped with `DROP INDEX <index_name>`. Instead, PostgreSQL requires dropping the constraint:
-```sql
-ALTER TABLE <table> DROP CONSTRAINT IF EXISTS <constraint_name>;
-```
-
-In `packages/database/migrations/0026_multi_publication_tenant_isolation.sql` Phase 8:
-* `members` correctly included:
-  ```sql
-  ALTER TABLE "members" DROP CONSTRAINT IF EXISTS "members_email_normalized_unique";
-  DROP INDEX IF EXISTS "members_email_normalized_unique";
-  ```
-* However, `posts`, `pages`, `tags`, `products`, `newsletters`, and `automations` used only:
-  ```sql
-  DROP INDEX IF EXISTS "posts_slug_unique";
-  DROP INDEX IF EXISTS "pages_slug_unique";
-  DROP INDEX IF EXISTS "tags_slug_unique";
-  DROP INDEX IF EXISTS "products_key_unique";
-  DROP INDEX IF EXISTS "newsletters_key_unique";
-  DROP INDEX IF EXISTS "automations_key_unique";
-  ```
-Because `posts_slug_unique` exists as a table constraint in `pg_constraint`, PostgreSQL threw error code `2BP01` (`dependent_objects_still_exist`), immediately halting execution and triggering an automatic transaction rollback.
+* **`workspaces` (Root Workspace):**
+  * `id`: `ws_default`
+  * `name`: `Default Workspace`
+  * `slug`: `default`
+  * `count`: Exactly 1 row. Zero duplicate defaults.
+* **`publications` (Root Publication):**
+  * `id`: `pub_default`
+  * `workspace_id`: `ws_default`
+  * `name`: `Default Publication`
+  * `slug`: `default`
+  * `primary_locale`: `en`
+  * `count`: Exactly 1 row. Zero duplicate defaults.
 
 ---
 
-## 3. Transaction Rollback Verification
+## 3. Schema & Constraint Verification
 
-Live read-only catalog and table queries were executed immediately following the failed command to determine the exact database state:
+### 3.1 `publication_id` Columns & NOT NULL Enforcement
+All 14 publication-owned tables were verified via `information_schema.columns` and PostgreSQL catalog metadata:
 
-### 3.1 Bootstrap Entities
-```sql
-SELECT count(*)::int as c FROM workspaces WHERE id = 'ws_default';
--- Result: 0
+| Table Name | Column Name | Data Type | Is Nullable | Status |
+| :--- | :--- | :--- | :---: | :---: |
+| `posts` | `publication_id` | `text` | **NO** | **PASS** |
+| `pages` | `publication_id` | `text` | **NO** | **PASS** |
+| `tags` | `publication_id` | `text` | **NO** | **PASS** |
+| `media_assets` | `publication_id` | `text` | **NO** | **PASS** |
+| `members` | `publication_id` | `text` | **NO** | **PASS** |
+| `products` | `publication_id` | `text` | **NO** | **PASS** |
+| `plans` | `publication_id` | `text` | **NO** | **PASS** |
+| `newsletters` | `publication_id` | `text` | **NO** | **PASS** |
+| `search_documents` | `publication_id` | `text` | **NO** | **PASS** |
+| `content_translations` | `publication_id` | `text` | **NO** | **PASS** |
+| `automations` | `publication_id` | `text` | **NO** | **PASS** |
+| `installed_themes` | `publication_id` | `text` | **NO** | **PASS** |
+| `webhook_endpoints` | `publication_id` | `text` | **NO** | **PASS** |
+| `analytics_events` | `publication_id` | `text` | **NO** | **PASS** |
 
-SELECT count(*)::int as c FROM publications WHERE id = 'pub_default';
--- Result: 0
-```
-Neither `ws_default` nor `pub_default` was committed.
+### 3.2 Foreign Keys to `publications.id`
+All 14 direct publication-owned foreign keys were verified via `pg_constraint` catalog queries unnesting `conkey`/`confkey`:
+* Financial & Identity tables enforce `ON DELETE RESTRICT` (`confdeltype = 'r'`):
+  * `members_publication_id_fk`: `members.publication_id -> publications.id` [RESTRICT]
+  * `products_publication_id_fk`: `products.publication_id -> publications.id` [RESTRICT]
+  * `plans_publication_id_fk`: `plans.publication_id -> publications.id` [RESTRICT]
+* Operational & Content tables enforce `ON DELETE CASCADE` (`confdeltype = 'c'`):
+  * `posts_publication_id_fk`, `pages_publication_id_fk`, `tags_publication_id_fk`, `media_assets_publication_id_fk`, `newsletters_publication_id_fk`, `search_documents_publication_id_fk`, `content_translations_publication_id_fk`, `automations_publication_id_fk`, `installed_themes_publication_id_fk`, `webhook_endpoints_publication_id_fk`, `analytics_events_publication_id_fk`.
 
-### 3.2 Schema Columns
-```sql
-SELECT table_name, column_name
-FROM information_schema.columns
-WHERE column_name = 'publication_id'
-  AND table_name IN ('posts', 'pages', 'tags', 'media_assets', 'members', 'products', 'plans', 'newsletters', 'search_documents', 'content_translations', 'automations', 'installed_themes', 'webhook_endpoints', 'analytics_events');
--- Result: [] (0 rows)
-```
-Zero `publication_id` columns were committed to any of the 14 tables.
-
-### 3.3 Migration Ledger
-```sql
-SELECT count(*)::int as c FROM drizzle.__drizzle_migrations;
--- Result: 26
-```
-Migration 0026 was **not** recorded as applied in `drizzle.__drizzle_migrations`.
-
----
-
-## 4. Post-Rollback Data & Schema Integrity Audit
-
-A comprehensive comparison was performed between the live database and the pre-migration baseline (`packages/database/scripts/pre_migration_counts.json`):
-
-### 4.1 Row Count Preservation (Live vs Baseline)
-
-| Table Name | Pre-Migration Baseline | Live Count Post-Rollback | Delta | Status |
-| :--- | :---: | :---: | :---: | :---: |
-| `posts` | 15 | 15 | 0 | **MATCH** |
-| `pages` | 5 | 5 | 0 | **MATCH** |
-| `tags` | 2 | 2 | 0 | **MATCH** |
-| `media_assets` | 11 | 11 | 0 | **MATCH** |
-| `members` | 13 | 13 | 0 | **MATCH** |
-| `products` | 3 | 3 | 0 | **MATCH** |
-| `plans` | 4 | 4 | 0 | **MATCH** |
-| `newsletters` | 2 | 2 | 0 | **MATCH** |
-| `search_documents` | 104 | 104 | 0 | **MATCH** |
-| `content_translations` | 8 | 8 | 0 | **MATCH** |
-| `automations` | 0 | 0 | 0 | **MATCH** |
-| `installed_themes` | 2 | 2 | 0 | **MATCH** |
-| `webhook_endpoints` | 68 | 68 | 0 | **MATCH** |
-| `analytics_events` | 0 | 0 | 0 | **MATCH** |
-| **Total Rows** | **237** | **237** | **0** | **100% PRESERVED** |
-
-### 4.2 Media Storage Keys Preservation
-All 11 media storage keys were queried and compared against the baseline:
-* Pre-migration keys: 11
-* Post-rollback live keys: 11
-* Key parity check: **100% IDENTICAL MATCH**
-* Object storage / MinIO: Completely untouched.
-
-### 4.3 Unique Constraints & Indexes
-All 21 unique constraints/indexes on the 10 target tables remain active in their pre-migration state:
-```text
-  automations.automations_key_unique
-  automations.automations_pkey
-  content_translations.content_translations_content_target_idx
-  content_translations.content_translations_locale_slug_idx
-  content_translations.content_translations_pkey
-  installed_themes.installed_themes_pkey
-  installed_themes.installed_themes_theme_id_version_unique_idx
-  members.members_email_normalized_unique
-  members.members_pkey
-  newsletters.newsletters_key_unique
-  newsletters.newsletters_pkey
-  pages.pages_pkey
-  pages.pages_slug_unique
-  posts.posts_pkey
-  posts.posts_slug_unique
-  products.products_key_unique
-  products.products_pkey
-  search_documents.search_documents_entity_idx
-  search_documents.search_documents_pkey
-  tags.tags_pkey
-  tags.tags_slug_unique
-```
+### 3.3 Products & Plans Composite Foreign Key
+* **Parent Uniqueness:** `products_id_publication_unique` unique constraint is active on `products(id, publication_id)`.
+* **Composite Foreign Key:** `plans_product_publication_fk` is active on:
+  $$\text{plans}(\text{product\_id}, \text{publication\_id}) \longrightarrow \text{products}(\text{id}, \text{publication\_id}) \quad [\text{ON DELETE RESTRICT}]$$
+  This guarantees at storage engine level that a plan cannot cross publication boundaries to reference a product owned by another tenant.
 
 ---
 
-## 5. Safety Recovery Point (Pre-Migration Backup)
+## 4. Data Preservation Gate
 
-Prior to executing the migration, a full physical database backup was created and verified:
-* **Filename:** `backups/vibress_pre_migration_0026_20260914_0724.sql`
+Every table was compared against the pre-migration baseline in `packages/database/scripts/pre_migration_counts.json`:
+
+| Table Name | Baseline Count | Post-Migration Live Count | Delta | NULL `publication_id` | Orphans / Non-Default | Status |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `posts` | 15 | 15 | 0 | 0 | 0 | **PASS** |
+| `pages` | 5 | 5 | 0 | 0 | 0 | **PASS** |
+| `tags` | 2 | 2 | 0 | 0 | 0 | **PASS** |
+| `media_assets` | 11 | 11 | 0 | 0 | 0 | **PASS** |
+| `members` | 13 | 13 | 0 | 0 | 0 | **PASS** |
+| `products` | 3 | 3 | 0 | 0 | 0 | **PASS** |
+| `plans` | 4 | 4 | 0 | 0 | 0 | **PASS** |
+| `newsletters` | 2 | 2 | 0 | 0 | 0 | **PASS** |
+| `search_documents` | 104 | 104 | 0 | 0 | 0 | **PASS** |
+| `content_translations` | 8 | 8 | 0 | 0 | 0 | **PASS** |
+| `automations` | 0 | 0 | 0 | 0 | 0 | **PASS** |
+| `installed_themes` | 2 | 2 | 0 | 0 | 0 | **PASS** |
+| `webhook_endpoints` | 68 | 68 | 0 | 0 | 0 | **PASS** |
+| `analytics_events` | 0 | 0 | 0 | 0 | 0 | **PASS** |
+| **Total Rows** | **237** | **237** | **0** | **0** | **0** | **100% PRESERVED** |
+
+* **Total rows preserved:** 237 / 237 (zero data loss).
+* **NULL `publication_id` count:** Exactly 0.
+* **Orphan publication references:** Exactly 0. All 237 rows mapped cleanly to `pub_default`.
+
+---
+
+## 5. Uniqueness Transition Gate
+
+### 5.1 Removal of Obsolete Global Uniqueness
+Catalog queries against `pg_constraint` and `pg_index` verified that all 10 obsolete global uniqueness rules were completely removed:
+* **7 Table Constraints Removed:**
+  * `posts_slug_unique`
+  * `pages_slug_unique`
+  * `tags_slug_unique`
+  * `members_email_normalized_unique`
+  * `products_key_unique`
+  * `newsletters_key_unique`
+  * `automations_key_unique`
+* **3 Standalone Unique Indexes Removed:**
+  * `content_translations_locale_slug_idx`
+  * `installed_themes_theme_id_version_unique_idx`
+  * `search_documents_entity_idx`
+
+### 5.2 Creation of Publication-Scoped Unique Indexes
+All 10 replacement publication-scoped unique indexes are active in `pg_index`:
+
+| Index Name | Table | Columns | Predicate / Filter | Status |
+| :--- | :--- | :--- | :--- | :---: |
+| `posts_publication_slug_active_idx` | `posts` | `("publication_id", "slug")` | `WHERE ("deleted_at" IS NULL)` | **PASS** |
+| `pages_publication_slug_active_idx` | `pages` | `("publication_id", "slug")` | `WHERE ("deleted_at" IS NULL)` | **PASS** |
+| `tags_publication_slug_unique` | `tags` | `("publication_id", "slug")` | None | **PASS** |
+| `members_publication_email_idx` | `members` | `("publication_id", "email_normalized")` | None | **PASS** |
+| `products_publication_key_unique` | `products` | `("publication_id", "key")` | None | **PASS** |
+| `newsletters_publication_key_unique` | `newsletters` | `("publication_id", "key")` | None | **PASS** |
+| `automations_publication_key_unique` | `automations` | `("publication_id", "key")` | None | **PASS** |
+| `content_translations_pub_locale_slug_idx` | `content_translations` | `("publication_id", "target_locale", "slug")` | None | **PASS** |
+| `installed_themes_pub_version_unique_idx` | `installed_themes` | `("publication_id", "theme_id", "version")` | None | **PASS** |
+| `search_documents_pub_entity_idx` | `search_documents` | `("publication_id", "entity_type", "entity_id")` | None | **PASS** |
+
+### 5.3 Non-Target Constraint Preservation
+* `content_translations_content_target_idx` on `(content_type, content_id, target_locale)`: **PRESERVED**
+* All 14 Primary Key constraints: **PRESERVED**
+* Unrelated foreign keys: **PRESERVED**
+
+---
+
+## 6. Search & Media Preservation
+
+* **Search Documents:**
+  * Exactly 104 / 104 search documents preserved.
+  * All 104 rows mapped to `publication_id = 'pub_default'`.
+  * Zero deletion or pruning was performed during Migration 0026.
+* **Media Assets:**
+  * All 11 pre-migration `storage_key` values remain 100% identical.
+  * MinIO / S3 object storage was untouched. No files re-uploaded or modified on disk.
+
+---
+
+## 7. Migration Ledger Status
+
+* **Before Execution:** 26 applied migrations.
+* **After Execution:** 27 applied migrations.
+* **Migration 0026 Entry:**
+  * `id`: 27
+  * `hash`: `9ca048a15b9f5458da560c1716c045eee77a528ddf89b4adea861e1fa9357ce4`
+  * `created_at`: `1786607000000` (matches `meta/_journal.json` index 26)
+* **Duplicate ledger entries:** Zero. Recorded exactly once.
+
+---
+
+## 8. Safety Recovery Points (Database Backups)
+
+### Pre-Retry Backup
+* **Filename:** `backups/vibress_pre_migration_0026_retry_20260914_0844.sql`
 * **Format:** Plain SQL text (`--clean --if-exists`)
-* **Size:** 1,166,468 bytes (1.1 MB)
-* **SHA-256:** `ea6f8b0ec4f810137c152f9ae8ab7400b4dbb89758b9a5073b1724dccdebf46e`
-* **PostgreSQL version:** `PostgreSQL 16.15 on aarch64-unknown-linux-musl`
-* **Timestamp:** `2026-09-14T07:24:22Z`
-* **Status:** Verified valid. (Because transactional rollback succeeded completely, restoring from this recovery point was not necessary; the database is already identical to the backup).
+* **Byte Size:** 1,199,996 bytes
+* **SHA-256:** `09fa7439a5f189810e18fca65a0677159e79dea42f44e2cabb7c6378661c697e`
+* **PostgreSQL Version:** `PostgreSQL 16.15 on aarch64-unknown-linux-musl`
+* **Timestamp:** `2026-09-14T08:44:55Z`
+
+### Post-Migration Backup
+* **Filename:** `backups/vibress_post_migration_0026_20260914_0846.sql`
+* **Format:** Plain SQL text (`--clean --if-exists`)
+* **Byte Size:** 1,212,665 bytes
+* **SHA-256:** `f628330b783c44b7cd9131d26d3bbc3463478068711a71a89ebcd3bb13b6bc0e`
+* **PostgreSQL Version:** `PostgreSQL 16.15 on aarch64-unknown-linux-musl`
+* **Timestamp:** `2026-09-14T08:46:34Z`
 
 ---
 
-## 6. Post-Execution Gate Scorecard
+## 9. Verifier Script Results
 
-### Execution
-* Migration executed: **YES**
-* Migration committed: **NO (Transaction rolled back)**
-* Migration ledger recorded: **NO**
-* Git SHA: `f1ddae28c139f205fdfb7a462915e0e114f8dec7`
-* Timestamp: `2026-09-14 07:24:29 UTC`
-
-### Bootstrap
-* `ws_default`: **FAIL (Rolled back)**
-* `pub_default`: **FAIL (Rolled back)**
-
-### Schema
-* 14 `publication_id` columns: **FAIL (Rolled back)**
-* 14 `NOT NULL` constraints: **FAIL (Rolled back)**
-* 14 publication FKs: **FAIL (Rolled back)**
-* Composite plans/products FK: **FAIL (Rolled back)**
-
-### Data
-* Baseline rows: **237**
-* Post-migration rows: **237**
-* Row preservation: **PASS (100% preserved)**
-* NULL `publication_id`: **0 (Column does not exist)**
-* Orphans: **0**
-
-### Uniqueness
-* Global indexes removed: **FAIL (Blocked by PostgreSQL constraint dependency)**
-* Publication-scoped indexes: **FAIL (Rolled back)**
-* Deleted-row predicates: **FAIL (Rolled back)**
-
-### Search
-* 104 rows preserved: **PASS**
-* No cleanup performed: **PASS**
-
-### Media
-* 11 `storage_keys` preserved: **PASS**
-* Object storage untouched: **PASS**
-
-### Verification
-* `verify-migration-0026.ts`: **FAIL (Schema not migrated)**
-* Independent catalog verification: **PASS (Confirmed clean pre-migration rollback state)**
-
-### Recovery
-* Pre-migration backup: **PASS**
-* Checksums verified: **PASS**
-
-### Scope
-* Runtime tenant isolation implemented: **NO**
-* Runtime tenant isolation verified: **NO**
-* Reason: outside Sequence Step C
+Execution of `pnpm --filter @vibress/database exec tsx scripts/verify-migration-0026.ts`:
+* Exit code: **0**
+* Output: `🎉 ALL POST-MIGRATION INVARIANTS VERIFIED SUCCESSFULLY!`
+* Independent catalog queries verified all 8 post-migration safety gates.
 
 ---
 
-## 7. Required Correction for Next Sequence
+## 10. Runtime Scope & Boundary Disclaimer
 
-To allow Migration 0026 to complete successfully, Phase 8 of `packages/database/migrations/0026_multi_publication_tenant_isolation.sql` must drop the table constraints before (or in addition to) dropping the indexes:
-
-```sql
--- 8. Replace global unique constraints
--- Posts
-ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_slug_unique";
-DROP INDEX IF EXISTS "posts_slug_unique";
-
--- Pages
-ALTER TABLE "pages" DROP CONSTRAINT IF EXISTS "pages_slug_unique";
-DROP INDEX IF EXISTS "pages_slug_unique";
-
--- Tags
-ALTER TABLE "tags" DROP CONSTRAINT IF EXISTS "tags_slug_unique";
-DROP INDEX IF EXISTS "tags_slug_unique";
-
--- Members (Model B: Publication-Scoped Member Identity)
-ALTER TABLE "members" DROP CONSTRAINT IF EXISTS "members_email_normalized_unique";
-DROP INDEX IF EXISTS "members_email_normalized_unique";
-
--- Products
-ALTER TABLE "products" DROP CONSTRAINT IF EXISTS "products_key_unique";
-DROP INDEX IF EXISTS "products_key_unique";
-
--- Newsletters
-ALTER TABLE "newsletters" DROP CONSTRAINT IF EXISTS "newsletters_key_unique";
-DROP INDEX IF EXISTS "newsletters_key_unique";
-
--- Automations
-ALTER TABLE "automations" DROP CONSTRAINT IF EXISTS "automations_key_unique";
-DROP INDEX IF EXISTS "automations_key_unique";
-
--- Content Translations
-DROP INDEX IF EXISTS "content_translations_locale_slug_idx";
-
--- Installed Themes
-DROP INDEX IF EXISTS "installed_themes_theme_id_version_unique_idx";
-
--- Search Documents
-DROP INDEX IF EXISTS "search_documents_entity_idx";
-```
-
-No code or SQL modifications were made during this step, adhering strictly to the STOP condition.
+> [!IMPORTANT]
+> **DATABASE TENANT OWNERSHIP PERIMETER: ESTABLISHED**  
+> Migration 0026 establishes the structural data and relational ownership foundation for multi-publication tenancy at the PostgreSQL schema and storage engine level.  
+>  
+> It does **NOT** by itself implement or prove:
+> * Repository tenant filtering
+> * Service-level authorization
+> * API tenant scoping
+> * Worker tenant execution context
+> * Search runtime isolation
+> * Cache key scoping
+> * Billing tenant isolation
+> * Admin tenant switching
+>  
+> Those capabilities belong strictly to the subsequent runtime tenant isolation remediation sequences.
 
 ---
 
-### Final Status
+# PASS — MIGRATION 0026 EXECUTED AND DATABASE GATE PASSED
 
-### FAIL — MIGRATION 0026 EXECUTION/POST-GATE FAILURE
-
-Sequence Step C complete. Awaiting authorization for the next sequence.
+Sequence Step C retry complete. Database tenant ownership perimeter established. Awaiting authorization for the next sequence.
