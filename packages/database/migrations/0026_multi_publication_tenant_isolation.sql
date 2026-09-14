@@ -27,6 +27,38 @@ INSERT INTO "publications" ("id", "workspace_id", "name", "slug", "primary_local
 VALUES ('pub_default', 'ws_default', 'Default Publication', 'default', 'en', NOW(), NOW())
 ON CONFLICT ("id") DO NOTHING;
 
+-- 2b. Assert bootstrap invariants (fail-closed if ws_default or pub_default is missing or invalid)
+DO $$
+DECLARE
+  v_ws_slug text;
+  v_pub_ws text;
+  v_pub_slug text;
+  v_pub_locale text;
+BEGIN
+  SELECT slug INTO v_ws_slug FROM "workspaces" WHERE id = 'ws_default';
+  IF v_ws_slug IS NULL THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: ws_default does not exist';
+  END IF;
+  IF v_ws_slug <> 'default' THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: ws_default.slug is "%", expected "default"', v_ws_slug;
+  END IF;
+
+  SELECT workspace_id, slug, primary_locale INTO v_pub_ws, v_pub_slug, v_pub_locale
+  FROM "publications" WHERE id = 'pub_default';
+  IF v_pub_ws IS NULL THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: pub_default does not exist';
+  END IF;
+  IF v_pub_ws <> 'ws_default' THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: pub_default.workspace_id is "%", expected "ws_default"', v_pub_ws;
+  END IF;
+  IF v_pub_slug <> 'default' THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: pub_default.slug is "%", expected "default"', v_pub_slug;
+  END IF;
+  IF v_pub_locale <> 'en' THEN
+    RAISE EXCEPTION 'Bootstrap invariant failed: pub_default.primary_locale is "%", expected "en"', v_pub_locale;
+  END IF;
+END $$;
+
 -- 3. Add publication_id as nullable to all 14 publication-owned tables
 ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "publication_id" text;
 ALTER TABLE "pages" ADD COLUMN IF NOT EXISTS "publication_id" text;

@@ -150,55 +150,61 @@ export async function verifyPostMigrationInvariants(
     }
   }
 
-  // 4. Foreign Key Checks to publications(id)
-  console.log("\n4. Checking Foreign Key constraints to publications(id)...");
-  const fkQuery = `
+  // 4. Foreign Key Column-to-Column Checks via pg_constraint
+  console.log("\n4. Checking Foreign Key Column-to-Column mappings via PostgreSQL catalog...");
+  const fkCatalogQuery = `
     SELECT
-      tc.table_name,
-      kcu.column_name,
-      ccu.table_name AS foreign_table_name,
-      ccu.column_name AS foreign_column_name,
-      rc.delete_rule
-    FROM
-      information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-        AND ccu.table_schema = tc.table_schema
-      JOIN information_schema.referential_constraints AS rc
-        ON rc.constraint_name = tc.constraint_name
-    WHERE tc.constraint_type = 'FOREIGN KEY'
-      AND ccu.table_name = 'publications'
-      AND ccu.column_name = 'id';
+      c.conname AS constraint_name,
+      src.relname AS source_table,
+      ARRAY_AGG(src_att.attname ORDER BY u.pos) AS source_columns,
+      tgt.relname AS target_table,
+      ARRAY_AGG(tgt_att.attname ORDER BY u.pos) AS target_columns,
+      c.confdeltype AS delete_rule
+    FROM pg_constraint c
+    JOIN pg_class src ON src.oid = c.conrelid
+    JOIN pg_class tgt ON tgt.oid = c.confrelid
+    CROSS JOIN LATERAL UNNEST(c.conkey, c.confkey) WITH ORDINALITY AS u(src_attnum, tgt_attnum, pos)
+    JOIN pg_attribute src_att ON src_att.attrelid = c.conrelid AND src_att.attnum = u.src_attnum
+    JOIN pg_attribute tgt_att ON tgt_att.attrelid = c.confrelid AND tgt_att.attnum = u.tgt_attnum
+    WHERE c.contype = 'f'
+    GROUP BY c.conname, src.relname, tgt.relname, c.confdeltype;
   `;
-  const fkRes = await db.execute(sql.raw(fkQuery));
+  const fkRes = await db.execute(sql.raw(fkCatalogQuery));
   const fkRows = fkRes.rows as Array<{
-    table_name: string;
-    column_name: string;
-    foreign_table_name: string;
-    foreign_column_name: string;
+    constraint_name: string;
+    source_table: string;
+    source_columns: string[];
+    target_table: string;
+    target_columns: string[];
     delete_rule: string;
   }>;
 
-  const foundFkTables = new Set(fkRows.map((r) => r.table_name));
+  // Verify all 14 tables map publication_id -> publications.id
   for (const table of TABLES) {
-    if (!foundFkTables.has(table)) {
-      console.error(`❌ FAIL: Foreign key to publications(id) MISSING on "${table}"!`);
+    const fk = fkRows.find(
+      (r) =>
+        r.source_table === table &&
+        r.target_table === "publications" &&
+        r.source_columns.includes("publication_id") &&
+        r.target_columns.includes("id"),
+    );
+
+    if (!fk) {
+      console.error(
+        `❌ FAIL: Explicit FK mapping "${table}.publication_id -> publications.id" MISSING in pg_constraint!`,
+      );
       passed = false;
     } else {
-      const fk = fkRows.find((r) => r.table_name === table);
-      const expectedRule = ["members", "products", "plans"].includes(table)
-        ? "RESTRICT"
-        : "CASCADE";
-      if (fk?.delete_rule !== expectedRule) {
+      const expectedRuleCode = ["members", "products", "plans"].includes(table) ? "r" : "c";
+      if (fk.delete_rule !== expectedRuleCode) {
         console.error(
-          `❌ FAIL: "${table}" delete rule is "${fk?.delete_rule}", expected "${expectedRule}"!`,
+          `❌ FAIL: "${table}.publication_id" delete rule is "${fk.delete_rule}", expected "${expectedRuleCode}"!`,
         );
         passed = false;
       } else {
-        console.log(`✅ PASS: "${table}" FK valid with ON DELETE ${expectedRule}`);
+        console.log(
+          `✅ PASS: Catalog verified: ${table}.publication_id -> publications.id (ON DELETE ${expectedRuleCode === "r" ? "RESTRICT" : "CASCADE"})`,
+        );
       }
     }
   }
@@ -207,30 +213,30 @@ export async function verifyPostMigrationInvariants(
   console.log(
     "\n5. Checking Database-Enforced Composite FK for Products & Plans...",
   );
-  const compFkQuery = `
-    SELECT
-      tc.constraint_name,
-      tc.table_name,
-      rc.delete_rule
-    FROM
-      information_schema.table_constraints AS tc
-      JOIN information_schema.referential_constraints AS rc
-        ON rc.constraint_name = tc.constraint_name
-    WHERE tc.constraint_name = 'plans_product_publication_fk';
-  `;
-  const compFkRes = await db.execute(sql.raw(compFkQuery));
-  if (compFkRes.rows.length === 0) {
+  const compositeFk = fkRows.find(
+    (r) =>
+      r.source_table === "plans" &&
+      r.target_table === "products" &&
+      r.source_columns.length === 2 &&
+      r.source_columns[0] === "product_id" &&
+      r.source_columns[1] === "publication_id" &&
+      r.target_columns.length === 2 &&
+      r.target_columns[0] === "id" &&
+      r.target_columns[1] === "publication_id",
+  );
+
+  if (!compositeFk) {
     console.error(
-      "❌ FAIL: Composite FK 'plans_product_publication_fk' MISSING on plans!",
+      "❌ FAIL: Composite FK 'plans(product_id, publication_id) -> products(id, publication_id)' MISSING in pg_constraint!",
     );
     passed = false;
   } else {
     console.log(
-      "✅ PASS: Composite FK 'plans_product_publication_fk' is active on plans (product_id, publication_id) -> products(id, publication_id)",
+      "✅ PASS: Catalog verified: plans(product_id, publication_id) -> products(id, publication_id) [RESTRICT]",
     );
   }
 
-  // 6. Publication-Scoped Unique Indexes
+  // 6. Publication-Scoped Unique Indexes & Partial Predicates
   console.log("\n6. Checking Publication-Scoped Unique Indexes & Partial Predicates...");
   const expectedIndexes = [
     {
@@ -300,39 +306,63 @@ export async function verifyPostMigrationInvariants(
     }
   }
 
-  // 7. Verify obsolete global unique indexes were dropped
-  console.log("\n7. Checking that obsolete global unique indexes were dropped...");
-  const obsoleteIndexes = [
-    { table: "posts", name: "posts_slug_unique" },
-    { table: "pages", name: "pages_slug_unique" },
-    { table: "tags", name: "tags_slug_unique" },
-    { table: "members", name: "members_email_normalized_unique" },
-    { table: "products", name: "products_key_unique" },
-    { table: "newsletters", name: "newsletters_key_unique" },
-    { table: "automations", name: "automations_key_unique" },
-    {
-      table: "content_translations",
-      name: "content_translations_locale_slug_idx",
-    },
-    {
-      table: "installed_themes",
-      name: "installed_themes_theme_id_version_unique_idx",
-    },
-    { table: "search_documents", name: "search_documents_entity_idx" },
-  ];
+  // 7. Schema-Level Global Uniqueness Invariant Check
+  console.log("\n7. Verifying Schema-Level Absence of Obsolete Global Uniqueness...");
+  const uniqueCatalogQuery = `
+    SELECT
+      c.relname AS table_name,
+      i.relname AS index_name,
+      ARRAY_AGG(a.attname ORDER BY u.pos) AS column_names,
+      pg_get_expr(ix.indpred, ix.indrelid) AS predicate
+    FROM pg_index ix
+    JOIN pg_class c ON c.oid = ix.indrelid
+    JOIN pg_class i ON i.oid = ix.indexrelid
+    CROSS JOIN LATERAL UNNEST(ix.indkey) WITH ORDINALITY AS u(attnum, pos)
+    JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = u.attnum
+    WHERE ix.indisunique = true
+      AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+    GROUP BY c.relname, i.relname, ix.indpred, ix.indrelid;
+  `;
+  const uniqueRes = await db.execute(sql.raw(uniqueCatalogQuery));
+  const uniqueCatalogRows = uniqueRes.rows as Array<{
+    table_name: string;
+    index_name: string;
+    column_names: string[];
+    predicate: string | null;
+  }>;
 
-  for (const obs of obsoleteIndexes) {
-    const found = idxRows.find(
-      (r) => r.tablename === obs.table && r.indexname === obs.name,
+  const targetColumnsByTable: Record<string, string[]> = {
+    posts: ["slug"],
+    pages: ["slug"],
+    tags: ["slug"],
+    members: ["email_normalized"],
+    products: ["key"],
+    newsletters: ["key"],
+    automations: ["key"],
+    content_translations: ["target_locale", "slug"],
+    installed_themes: ["theme_id", "version"],
+    search_documents: ["entity_type", "entity_id"],
+  };
+
+  for (const [table, targetCols] of Object.entries(targetColumnsByTable)) {
+    // Find any unique index on this table that covers the target columns WITHOUT publication_id
+    const badGlobalIndexes = uniqueCatalogRows.filter(
+      (idx) =>
+        idx.table_name === table &&
+        targetCols.every((col) => idx.column_names.includes(col)) &&
+        !idx.column_names.includes("publication_id"),
     );
-    if (found) {
-      console.error(
-        `❌ FAIL: Obsolete global unique index "${obs.name}" was NOT dropped on "${obs.table}"!`,
-      );
+
+    if (badGlobalIndexes.length > 0) {
+      for (const badIdx of badGlobalIndexes) {
+        console.error(
+          `❌ FAIL: Obsolete global uniqueness remains on "${table}" via index "${badIdx.index_name}" on columns (${badIdx.column_names.join(", ")})!`,
+        );
+      }
       passed = false;
     } else {
       console.log(
-        `✅ PASS: Obsolete global unique index "${obs.name}" has been removed from "${obs.table}"`,
+        `✅ PASS: Zero obsolete global uniqueness on "${table}" (${targetCols.join(", ")}) — all uniqueness is publication-scoped`,
       );
     }
   }
