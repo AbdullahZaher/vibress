@@ -3,6 +3,7 @@ import {
   Job,
   QUEUE_NAMES,
   getBullMqRedisConnection,
+  assertJobScope,
 } from "@vibress/queue";
 import { tracedProcessor } from "./trace-helper";
 import { metrics } from "@vibress/observability";
@@ -14,6 +15,8 @@ import {
 } from "@vibress/analytics";
 
 export interface AnalyticsJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   event: IngestEventData;
   traceparent?: string;
 }
@@ -47,8 +50,17 @@ export class AnalyticsWorker {
 
   private async process(job: Job<AnalyticsJob>): Promise<void> {
     try {
-      validateAnalyticsEvent(job.data.event);
-      await this.analyticsService.ingest(job.data.event);
+      const scope = assertJobScope(job.data);
+      const pubId =
+        scope.scope === "publication"
+          ? scope.publicationId
+          : job.data.event.publicationId;
+      const eventToIngest = {
+        ...job.data.event,
+        ...(pubId ? { publicationId: pubId } : {}),
+      };
+      validateAnalyticsEvent(eventToIngest);
+      await this.analyticsService.ingest(eventToIngest);
       metrics.counter("analytics.worker.processed", 1, {
         event: job.data.event.eventName,
       });

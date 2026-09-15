@@ -26,6 +26,7 @@ export interface PostActorContext {
   userId: string;
   roles?: string[] | undefined;
   permissions?: string[] | undefined;
+  publicationId?: string | undefined;
 }
 
 export class PostsService {
@@ -38,29 +39,35 @@ export class PostsService {
     private eventWriter: OutboxEventWriter = defaultOutboxEventWriter,
   ) {}
 
-  async findById(id: string): Promise<Post | null> {
-    return this.postRepo.findById(id);
+  async findById(id: string, publicationId?: string): Promise<Post | null> {
+    return this.postRepo.findById(id, publicationId);
   }
 
-  async findBySlug(slug: string): Promise<Post | null> {
-    return this.postRepo.findBySlug(slug);
+  async findBySlug(slug: string, publicationId?: string): Promise<Post | null> {
+    return this.postRepo.findBySlug(slug, publicationId);
   }
 
-  async findPublishedBySlug(slug: string): Promise<Post | null> {
-    return this.postRepo.findPublishedBySlug(slug);
+  async findPublishedBySlug(slug: string, publicationId?: string): Promise<Post | null> {
+    return this.postRepo.findPublishedBySlug(slug, publicationId);
   }
 
-  async createPost(data: CreatePostData, actorId: string): Promise<Post> {
-    return runInTransaction(() => this.createPostTx(data, actorId));
+  async createPost(
+    data: CreatePostData,
+    actorId: string,
+    publicationId?: string,
+  ): Promise<Post> {
+    return runInTransaction(() => this.createPostTx(data, actorId, publicationId));
   }
 
   private async createPostTx(
     data: CreatePostData,
     actorId: string,
+    publicationId?: string,
   ): Promise<Post> {
+    const targetPublicationId = data.publicationId || publicationId || "pub_default";
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
-      const existing = await this.postRepo.findBySlug(candidate);
+      const existing = await this.postRepo.findBySlug(candidate, targetPublicationId);
       return !!existing;
     });
 
@@ -68,6 +75,7 @@ export class PostsService {
 
     const post = await this.postRepo.create({
       ...data,
+      publicationId: targetPublicationId,
       slug: finalSlug,
       content,
       createdBy: data.createdBy || actorId,
@@ -139,8 +147,9 @@ export class PostsService {
     const actorId = typeof actor === "string" ? actor : actor.userId;
     const actorRoles = typeof actor === "object" ? actor.roles : undefined;
     const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+    const actorPublicationId = typeof actor === "object" ? actor.publicationId : undefined;
 
-    const current = await this.postRepo.findById(id);
+    const current = await this.postRepo.findById(id, actorPublicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -154,6 +163,8 @@ export class PostsService {
       resourceAuthorIds: postAuthorIds,
       userRoles: actorRoles,
       userPermissions: actorPermissions,
+      publicationId: actorPublicationId,
+      resourcePublicationId: current.publicationId,
     });
 
     if (!isAuthorized) {
@@ -167,7 +178,7 @@ export class PostsService {
     let finalSlug = current.slug;
     if (data.slug && data.slug !== current.slug) {
       finalSlug = await generateUniqueSlug(data.slug, async (candidate) => {
-        const found = await this.postRepo.findBySlug(candidate);
+        const found = await this.postRepo.findBySlug(candidate, current.publicationId);
         return !!found && found.id !== id;
       });
     }
@@ -189,7 +200,7 @@ export class PostsService {
     const updated = await this.postRepo.update(id, {
       ...updatePayload,
       version: expectedVersion,
-    });
+    }, current.publicationId);
 
     if (data.primaryAuthorId || data.authorIds) {
       const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
@@ -233,12 +244,12 @@ export class PostsService {
     return updated;
   }
 
-  async publishPost(id: string, actorId: string): Promise<Post> {
-    return runInTransaction(() => this.publishPostTx(id, actorId));
+  async publishPost(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    return runInTransaction(() => this.publishPostTx(id, actorId, publicationId));
   }
 
-  private async publishPostTx(id: string, actorId: string): Promise<Post> {
-    const current = await this.postRepo.findById(id);
+  private async publishPostTx(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    const current = await this.postRepo.findById(id, publicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -260,7 +271,7 @@ export class PostsService {
       scheduledAt: null,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, current.publicationId);
 
     await this.revisionService.createRevision({
       resourceType: "post",
@@ -296,12 +307,12 @@ export class PostsService {
     return published;
   }
 
-  async unpublishPost(id: string, actorId: string): Promise<Post> {
-    return runInTransaction(() => this.unpublishPostTx(id, actorId));
+  async unpublishPost(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    return runInTransaction(() => this.unpublishPostTx(id, actorId, publicationId));
   }
 
-  private async unpublishPostTx(id: string, actorId: string): Promise<Post> {
-    const current = await this.postRepo.findById(id);
+  private async unpublishPostTx(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    const current = await this.postRepo.findById(id, publicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -310,7 +321,7 @@ export class PostsService {
       status: "draft",
       updatedBy: actorId,
       version: current.version,
-    });
+    }, current.publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
@@ -335,9 +346,10 @@ export class PostsService {
     id: string,
     scheduledAt: Date,
     actorId: string,
+    publicationId?: string,
   ): Promise<Post> {
     return runInTransaction(() =>
-      this.schedulePostTx(id, scheduledAt, actorId),
+      this.schedulePostTx(id, scheduledAt, actorId, publicationId),
     );
   }
 
@@ -345,8 +357,9 @@ export class PostsService {
     id: string,
     scheduledAt: Date,
     actorId: string,
+    publicationId?: string,
   ): Promise<Post> {
-    const current = await this.postRepo.findById(id);
+    const current = await this.postRepo.findById(id, publicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -370,7 +383,7 @@ export class PostsService {
       scheduledAt,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, current.publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
@@ -383,12 +396,12 @@ export class PostsService {
     return scheduled;
   }
 
-  async cancelSchedule(id: string, actorId: string): Promise<Post> {
-    return runInTransaction(() => this.cancelScheduleTx(id, actorId));
+  async cancelSchedule(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    return runInTransaction(() => this.cancelScheduleTx(id, actorId, publicationId));
   }
 
-  private async cancelScheduleTx(id: string, actorId: string): Promise<Post> {
-    const current = await this.postRepo.findById(id);
+  private async cancelScheduleTx(id: string, actorId: string, publicationId?: string): Promise<Post> {
+    const current = await this.postRepo.findById(id, publicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -398,7 +411,7 @@ export class PostsService {
       scheduledAt: null,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, current.publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
@@ -428,8 +441,9 @@ export class PostsService {
     const actorId = typeof actor === "string" ? actor : actor.userId;
     const actorRoles = typeof actor === "object" ? actor.roles : undefined;
     const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+    const actorPublicationId = typeof actor === "object" ? actor.publicationId : undefined;
 
-    const post = await this.postRepo.findById(postId);
+    const post = await this.postRepo.findById(postId, actorPublicationId);
     if (!post) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -443,6 +457,8 @@ export class PostsService {
       resourceAuthorIds: postAuthorIds,
       userRoles: actorRoles,
       userPermissions: actorPermissions,
+      publicationId: actorPublicationId,
+      resourcePublicationId: post.publicationId,
     });
 
     if (!isAuthorized) {
@@ -465,7 +481,7 @@ export class PostsService {
       contentVersion: rev.contentVersion,
       updatedBy: actorId,
       version: post.version,
-    });
+    }, post.publicationId);
 
     if (this.mediaService) {
       const mediaRefs = extractMediaReferencesFromDocument(restored.content);
@@ -508,8 +524,9 @@ export class PostsService {
     const actorId = typeof actor === "string" ? actor : actor.userId;
     const actorRoles = typeof actor === "object" ? actor.roles : undefined;
     const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+    const actorPublicationId = typeof actor === "object" ? actor.publicationId : undefined;
 
-    const current = await this.postRepo.findById(id);
+    const current = await this.postRepo.findById(id, actorPublicationId);
     if (!current) {
       throw new PostDomainError("POST_NOT_FOUND", "Post not found");
     }
@@ -523,13 +540,15 @@ export class PostsService {
       resourceAuthorIds: postAuthorIds,
       userRoles: actorRoles,
       userPermissions: actorPermissions,
+      publicationId: actorPublicationId,
+      resourcePublicationId: current.publicationId,
     });
 
     if (!isAuthorized) {
       throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to delete another author's post");
     }
 
-    await this.postRepo.delete(id);
+    await this.postRepo.delete(id, current.publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,

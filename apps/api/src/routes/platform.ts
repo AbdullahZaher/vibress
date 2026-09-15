@@ -248,7 +248,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.get("/webhook-endpoints", {
     preHandler: [requireStaffSession, requirePermission("webhooks.read")],
     handler: async (req, reply) => {
-      const endpoints = await webhooksService.listEndpoints();
+      const endpoints = await webhooksService.listEndpoints(
+        req.publicationContext?.publicationId,
+      );
       return reply
         .status(200)
         .send({
@@ -287,6 +289,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
             eventTypes: body.eventTypes,
           },
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply
           .status(201)
@@ -319,6 +322,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           id,
           update,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply
           .status(200)
@@ -346,7 +350,11 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await webhooksService.deleteEndpoint(id, req.user!.id);
+      await webhooksService.deleteEndpoint(
+        id,
+        req.user!.id,
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ success: true });
     },
   });
@@ -358,6 +366,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       const params: {
         endpointId?: string;
         status?: string;
+        publicationId?: string;
         limit: number;
         offset: number;
       } = {
@@ -366,6 +375,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       };
       if (query.endpointId) params.endpointId = query.endpointId;
       if (query.status) params.status = query.status;
+      if (req.publicationContext?.publicationId)
+        params.publicationId = req.publicationContext.publicationId;
       const result = await webhooksService.listDeliveries(params);
       return reply.status(200).send({
         deliveries: result.deliveries.map((d) => ({

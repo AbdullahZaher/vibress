@@ -8,11 +8,15 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export const mediaAssets = pgTable(
   "media_assets",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     storageProvider: text("storage_provider").notNull().default("local"),
     storageKey: text("storage_key").notNull().unique(),
     originalFilename: text("original_filename").notNull(),
@@ -39,6 +43,9 @@ export const mediaAssets = pgTable(
   },
   (table) => {
     return {
+      publicationIdIdx: index("media_assets_publication_id_idx").on(
+        table.publicationId,
+      ),
       storageKeyIdx: index("media_assets_storage_key_idx").on(table.storageKey),
       createdAtIdx: index("media_assets_created_at_idx").on(table.createdAt),
       assetTypeIdx: index("media_assets_asset_type_idx").on(table.assetType),

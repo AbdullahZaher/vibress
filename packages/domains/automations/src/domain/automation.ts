@@ -40,6 +40,7 @@ export interface AutomationAction {
 
 export interface Automation {
   id: string;
+  publicationId: string;
   key: string;
   name: string;
   description: string | null;
@@ -100,6 +101,7 @@ export interface AutomationDefinition {
 
 export interface CreateAutomationData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   key: string;
   name: string;
   description?: string | null | undefined;

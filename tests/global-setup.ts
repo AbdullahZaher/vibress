@@ -1,4 +1,4 @@
-import { runMigrations, seedDatabase } from "@vibress/database";
+import { runMigrations, seedDatabase, closeDbPool } from "@vibress/database";
 
 export async function setup() {
   console.log("Global setup: Running database migrations...");
@@ -9,3 +9,8 @@ export async function setup() {
   await seedDatabase();
   console.log("Global setup: Database setup completed.");
 }
+
+export async function teardown() {
+  await closeDbPool();
+}
+

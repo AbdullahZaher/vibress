@@ -76,6 +76,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
           onlyStale: onlyStale === "true" || onlyStale === "1",
           limit: limit ? parseInt(limit, 10) : 20,
           offset: offset ? parseInt(offset, 10) : 0,
+          publicationId: req.publicationContext?.publicationId,
         },
         enabledLocales,
         defaultLocale,
@@ -98,6 +99,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const queue = await translationService.getTranslationQueue(
         enabledLocales,
         defaultLocale,
+        req.publicationContext?.publicationId,
       );
       return reply.status(200).send(queue);
     },
@@ -111,6 +113,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const health = await translationService.getLocalizationHealth(
         enabledLocales,
         defaultLocale,
+        req.publicationContext?.publicationId,
       );
       return reply.status(200).send(health);
     },
@@ -121,7 +124,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("translations.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const tr = await translationService.getTranslationById(id);
+      const tr = await translationService.getTranslationById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!tr) {
         return reply.status(404).send({
           statusCode: 404,
@@ -140,7 +146,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
       } | null = null;
 
       if (tr.contentType === "post") {
-        const p = await postsService.findById(tr.contentId).catch(() => null);
+        const p = await postsService
+          .findById(tr.contentId, req.publicationContext?.publicationId)
+          .catch(() => null);
         if (p) {
           sourceItem = {
             title: p.title,
@@ -151,7 +159,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
           };
         }
       } else if (tr.contentType === "page") {
-        const pg = await pagesService.findById(tr.contentId).catch(() => null);
+        const pg = await pagesService
+          .findById(tr.contentId, req.publicationContext?.publicationId)
+          .catch(() => null);
         if (pg) {
           sourceItem = {
             title: pg.title,
@@ -188,6 +198,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const translations = await translationService.listTranslationsForContent(
         type,
         id,
+        req.publicationContext?.publicationId,
       );
       return reply.status(200).send({ translations });
     },
@@ -228,7 +239,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
       // Check if source exists
       let sourceUpdatedAt = new Date();
       if (type === "post") {
-        const post = await postsService.findById(id);
+        const post = await postsService.findById(
+          id,
+          req.publicationContext?.publicationId,
+        );
         if (!post) {
           return reply.status(404).send({
             statusCode: 404,
@@ -238,7 +252,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
         }
         sourceUpdatedAt = post.updatedAt;
       } else if (type === "page") {
-        const page = await pagesService.findById(id);
+        const page = await pagesService.findById(
+          id,
+          req.publicationContext?.publicationId,
+        );
         if (!page) {
           return reply.status(404).send({
             statusCode: 404,
@@ -263,6 +280,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         status: body.status || "draft",
         translationProvider: body.translationProvider || "human",
         sourceUpdatedAt,
+        publicationId: req.publicationContext?.publicationId,
       });
 
       await auditService.record({
@@ -303,7 +321,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
         translationProvider?: string;
       };
 
-      const existing = await translationService.getTranslationById(id);
+      const existing = await translationService.getTranslationById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!existing) {
         return reply.status(404).send({
           statusCode: 404,
@@ -331,6 +352,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         status: body.status !== undefined ? body.status : existing.status,
         translationProvider:
           body.translationProvider ?? existing.translationProvider ?? "human",
+        publicationId: req.publicationContext?.publicationId,
       });
 
       await auditService.record({
@@ -359,7 +381,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const user = req.user!;
       const { id } = req.params as { id: string };
       try {
-        const updated = await translationService.submitForReview(id);
+        const updated = await translationService.submitForReview(
+          id,
+          req.publicationContext?.publicationId,
+        );
         if (!updated) {
           return reply.status(404).send({
             statusCode: 404,
@@ -398,7 +423,11 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const user = req.user!;
       const { id } = req.params as { id: string };
       try {
-        const updated = await translationService.approveTranslation(id, user.id);
+        const updated = await translationService.approveTranslation(
+          id,
+          user.id,
+          req.publicationContext?.publicationId,
+        );
         if (!updated) {
           return reply.status(404).send({
             statusCode: 404,
@@ -437,7 +466,10 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const user = req.user!;
       const { id } = req.params as { id: string };
       try {
-        const updated = await translationService.publishTranslation(id);
+        const updated = await translationService.publishTranslation(
+          id,
+          req.publicationContext?.publicationId,
+        );
         if (!updated) {
           return reply.status(404).send({
             statusCode: 404,
@@ -499,7 +531,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       let sourceUpdatedAt = new Date();
 
       if (type === "post") {
-        const post = await postsService.findById(id);
+        const post = await postsService.findById(id, req.publicationContext?.publicationId);
         if (!post) {
           return reply.status(404).send({
             statusCode: 404,
@@ -513,7 +545,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         sourceContent = (post.content as Record<string, unknown>) || {};
         sourceUpdatedAt = post.updatedAt;
       } else if (type === "page") {
-        const page = await pagesService.findById(id);
+        const page = await pagesService.findById(id, req.publicationContext?.publicationId);
         if (!page) {
           return reply.status(404).send({
             statusCode: 404,
@@ -575,6 +607,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
       // Save as reviewable draft with 'needs_review' status (NEVER published directly)
       const translation = await translationService.upsertTranslation({
+        publicationId: req.publicationContext?.publicationId,
         contentType: type,
         contentId: id,
         sourceLocale: defaultLocale,
@@ -661,6 +694,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         translationIds: body.translationIds,
         action: body.action,
         reviewerId: user.id,
+        publicationId: req.publicationContext?.publicationId,
       });
 
       await auditService.record({

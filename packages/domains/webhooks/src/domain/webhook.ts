@@ -3,6 +3,7 @@ export type WebhookDeliveryStatus =
 
 export interface WebhookEndpoint {
   id: string;
+  publicationId: string;
   name: string;
   url: string;
   secretEncrypted: string | null;
@@ -14,6 +15,7 @@ export interface WebhookEndpoint {
 
 export interface CreateWebhookEndpointData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   name: string;
   url: string;
   secret?: string | null | undefined;
@@ -38,20 +40,22 @@ export interface WebhookDelivery {
 export interface ListDeliveriesFilter {
   endpointId?: string | undefined;
   status?: string | undefined;
+  publicationId?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
 }
 
 export interface WebhookRepository {
-  createEndpoint(data: CreateWebhookEndpointData): Promise<WebhookEndpoint>;
-  findEndpointById(id: string): Promise<WebhookEndpoint | null>;
-  listEndpoints(): Promise<WebhookEndpoint[]>;
+  createEndpoint(data: CreateWebhookEndpointData, publicationId?: string): Promise<WebhookEndpoint>;
+  findEndpointById(id: string, publicationId?: string): Promise<WebhookEndpoint | null>;
+  listEndpoints(publicationId?: string): Promise<WebhookEndpoint[]>;
   updateEndpoint(
     id: string,
     data: Partial<CreateWebhookEndpointData>,
+    publicationId?: string,
   ): Promise<WebhookEndpoint>;
-  deleteEndpoint(id: string): Promise<void>;
-  findActiveEndpointsForEvent(eventType: string): Promise<WebhookEndpoint[]>;
+  deleteEndpoint(id: string, publicationId?: string): Promise<void>;
+  findActiveEndpointsForEvent(eventType: string, publicationId?: string): Promise<WebhookEndpoint[]>;
 
   createDelivery(data: {
     endpointId: string;

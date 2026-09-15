@@ -24,12 +24,14 @@ import {
 export * from "./translation-types";
 
 export class TranslationService {
-  async getTranslationById(id: string): Promise<ContentTranslationItem | null> {
+  async getTranslationById(id: string, publicationId?: string): Promise<ContentTranslationItem | null> {
     const db = getDb();
+    const conditions = [eq(contentTranslations.id, id)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
     const rows = await db
       .select()
       .from(contentTranslations)
-      .where(eq(contentTranslations.id, id))
+      .where(and(...conditions))
       .limit(1);
 
     if (!rows[0]) return null;
@@ -80,6 +82,7 @@ export class TranslationService {
 
     return {
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -112,32 +115,34 @@ export class TranslationService {
     contentId: string,
     targetLocale: string,
     currentSourceUpdatedAt?: Date,
+    publicationId?: string,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
+    const conditions = [
+      eq(contentTranslations.contentType, contentType),
+      eq(contentTranslations.contentId, contentId),
+      eq(contentTranslations.targetLocale, targetLocale),
+    ];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     let rows = await db
       .select()
       .from(contentTranslations)
-      .where(
-        and(
-          eq(contentTranslations.contentType, contentType),
-          eq(contentTranslations.contentId, contentId),
-          eq(contentTranslations.targetLocale, targetLocale),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     // Fallback: match by base language if regional variant was requested/stored (e.g. ar <-> ar-SA)
     if (!rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
+      const fallbackConditions = [
+        eq(contentTranslations.contentType, contentType),
+        eq(contentTranslations.contentId, contentId),
+      ];
+      if (publicationId) fallbackConditions.push(eq(contentTranslations.publicationId, publicationId));
       const allRows = await db
         .select()
         .from(contentTranslations)
-        .where(
-          and(
-            eq(contentTranslations.contentType, contentType),
-            eq(contentTranslations.contentId, contentId),
-          ),
-        );
+        .where(and(...fallbackConditions));
       const match = allRows.find(
         (r) =>
           r.targetLocale === targetLocale ||
@@ -158,6 +163,7 @@ export class TranslationService {
 
     return {
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -188,32 +194,35 @@ export class TranslationService {
     contentType: string,
     targetLocale: string,
     slug: string,
+    publicationId?: string,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
+    const conditions = [
+      eq(contentTranslations.contentType, contentType),
+      eq(contentTranslations.targetLocale, targetLocale),
+      eq(contentTranslations.slug, slug),
+    ];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     let rows = await db
       .select()
       .from(contentTranslations)
-      .where(
-        and(
-          eq(contentTranslations.contentType, contentType),
-          eq(contentTranslations.targetLocale, targetLocale),
-          eq(contentTranslations.slug, slug),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     // Fallback: match by base language if regional variant was requested/stored
     if (!rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
+      const fallbackConditions = [
+        eq(contentTranslations.contentType, contentType),
+        eq(contentTranslations.slug, slug),
+      ];
+      if (publicationId) fallbackConditions.push(eq(contentTranslations.publicationId, publicationId));
+
       const allRows = await db
         .select()
         .from(contentTranslations)
-        .where(
-          and(
-            eq(contentTranslations.contentType, contentType),
-            eq(contentTranslations.slug, slug),
-          ),
-        );
+        .where(and(...fallbackConditions));
       const match = allRows.find(
         (r) =>
           r.targetLocale === targetLocale ||
@@ -228,6 +237,7 @@ export class TranslationService {
     const r = rows[0];
     return {
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -257,23 +267,26 @@ export class TranslationService {
   async findTranslationBySlugAny(
     contentType: string,
     slug: string,
+    publicationId?: string,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
+    const conditions = [
+      eq(contentTranslations.contentType, contentType),
+      eq(contentTranslations.slug, slug),
+    ];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(contentTranslations)
-      .where(
-        and(
-          eq(contentTranslations.contentType, contentType),
-          eq(contentTranslations.slug, slug),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     if (!rows[0]) return null;
     const r = rows[0];
     return {
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -300,7 +313,10 @@ export class TranslationService {
     };
   }
 
-  async getContentTranslationStats(contentType = "post"): Promise<{
+  async getContentTranslationStats(
+    contentType = "post",
+    publicationId?: string,
+  ): Promise<{
     totalTranslated: number;
     published: number;
     stale: number;
@@ -309,10 +325,13 @@ export class TranslationService {
     byLocale: Record<string, { count: number; stale: number; published: number }>;
   }> {
     const db = getDb();
+    const conditions = [eq(contentTranslations.contentType, contentType)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(contentTranslations)
-      .where(eq(contentTranslations.contentType, contentType));
+      .where(and(...conditions));
 
     let published = 0;
     let stale = 0;
@@ -347,21 +366,24 @@ export class TranslationService {
   async listTranslationsForContent(
     contentType: string,
     contentId: string,
+    publicationId?: string,
   ): Promise<ContentTranslationItem[]> {
     const db = getDb();
+    const conditions = [
+      eq(contentTranslations.contentType, contentType),
+      eq(contentTranslations.contentId, contentId),
+    ];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(contentTranslations)
-      .where(
-        and(
-          eq(contentTranslations.contentType, contentType),
-          eq(contentTranslations.contentId, contentId),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(desc(contentTranslations.updatedAt));
 
     return rows.map((r: ContentTranslationRow) => ({
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -390,16 +412,21 @@ export class TranslationService {
 
   async listTranslationsByGroup(
     translationGroupId: string,
+    publicationId?: string,
   ): Promise<ContentTranslationItem[]> {
     const db = getDb();
+    const conditions = [eq(contentTranslations.translationGroupId, translationGroupId)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(contentTranslations)
-      .where(eq(contentTranslations.translationGroupId, translationGroupId))
+      .where(and(...conditions))
       .orderBy(desc(contentTranslations.updatedAt));
 
     return rows.map((r: ContentTranslationRow) => ({
       id: r.id,
+      publicationId: r.publicationId,
       translationGroupId: r.translationGroupId,
       contentType: r.contentType,
       contentId: r.contentId,
@@ -428,12 +455,16 @@ export class TranslationService {
 
   async upsertTranslation(
     input: UpsertTranslationInput,
+    publicationId?: string,
   ): Promise<ContentTranslationItem> {
     const db = getDb();
+    const pubId = publicationId || input.publicationId || "pub_default";
     const existing = await this.getTranslation(
       input.contentType,
       input.contentId,
       input.targetLocale,
+      undefined,
+      pubId,
     );
 
     const now = new Date();
@@ -462,12 +493,19 @@ export class TranslationService {
               : existing.translatedAt,
           updatedAt: now,
         })
-        .where(eq(contentTranslations.id, existing.id));
+        .where(
+          and(
+            eq(contentTranslations.id, existing.id),
+            eq(contentTranslations.publicationId, pubId),
+          ),
+        );
 
       const updated = await this.getTranslation(
         input.contentType,
         input.contentId,
         input.targetLocale,
+        undefined,
+        pubId,
       );
       return updated!;
     }
@@ -475,6 +513,7 @@ export class TranslationService {
     const id = randomUUID();
     await db.insert(contentTranslations).values({
       id,
+      publicationId: pubId,
       translationGroupId: input.translationGroupId ?? null,
       contentType: input.contentType,
       contentId: input.contentId,
@@ -506,13 +545,15 @@ export class TranslationService {
       input.contentType,
       input.contentId,
       input.targetLocale,
+      undefined,
+      pubId,
     );
     return created!;
   }
 
-  async submitForReview(id: string): Promise<ContentTranslationItem | null> {
+  async submitForReview(id: string, publicationId?: string): Promise<ContentTranslationItem | null> {
     const db = getDb();
-    const existing = await this.getTranslationById(id);
+    const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
     const transition = validateTranslationStatusTransition(existing.status, "needs_review");
@@ -521,6 +562,9 @@ export class TranslationService {
     }
 
     const now = new Date();
+    const conditions = [eq(contentTranslations.id, id)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     await db
       .update(contentTranslations)
       .set({
@@ -528,17 +572,18 @@ export class TranslationService {
         translatedAt: existing.translatedAt || now,
         updatedAt: now,
       })
-      .where(eq(contentTranslations.id, id));
+      .where(and(...conditions));
 
-    return await this.getTranslationById(id);
+    return await this.getTranslationById(id, publicationId);
   }
 
   async approveTranslation(
     id: string,
     reviewerId: string,
+    publicationId?: string,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
-    const existing = await this.getTranslationById(id);
+    const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
     const transition = validateTranslationStatusTransition(existing.status, "approved");
@@ -547,6 +592,9 @@ export class TranslationService {
     }
 
     const now = new Date();
+    const conditions = [eq(contentTranslations.id, id)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     await db
       .update(contentTranslations)
       .set({
@@ -556,14 +604,14 @@ export class TranslationService {
         reviewedBy: reviewerId,
         updatedAt: now,
       })
-      .where(eq(contentTranslations.id, id));
+      .where(and(...conditions));
 
-    return await this.getTranslationById(id);
+    return await this.getTranslationById(id, publicationId);
   }
 
-  async publishTranslation(id: string): Promise<ContentTranslationItem | null> {
+  async publishTranslation(id: string, publicationId?: string): Promise<ContentTranslationItem | null> {
     const db = getDb();
-    const existing = await this.getTranslationById(id);
+    const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
     const transition = validateTranslationStatusTransition(existing.status, "published");
@@ -572,6 +620,9 @@ export class TranslationService {
     }
 
     const now = new Date();
+    const conditions = [eq(contentTranslations.id, id)];
+    if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
+
     await db
       .update(contentTranslations)
       .set({
@@ -579,25 +630,28 @@ export class TranslationService {
         translatedAt: existing.translatedAt || now,
         updatedAt: now,
       })
-      .where(eq(contentTranslations.id, id));
+      .where(and(...conditions));
 
-    return await this.getTranslationById(id);
+    return await this.getTranslationById(id, publicationId);
   }
 
   async markStaleIfSourceUpdated(
     contentType: string,
     contentId: string,
     sourceUpdatedAt: Date,
+    publicationId?: string,
   ): Promise<void> {
-    const translations = await this.listTranslationsForContent(contentType, contentId);
+    const translations = await this.listTranslationsForContent(contentType, contentId, publicationId);
     const db = getDb();
     for (const tr of translations) {
       const translationReferenceTime = tr.translatedAt || tr.updatedAt || tr.createdAt;
       if (translationReferenceTime && sourceUpdatedAt.getTime() > translationReferenceTime.getTime()) {
+        const conditions = [eq(contentTranslations.id, tr.id)];
+        if (publicationId) conditions.push(eq(contentTranslations.publicationId, publicationId));
         await db
           .update(contentTranslations)
           .set({ status: "stale", updatedAt: new Date() })
-          .where(eq(contentTranslations.id, tr.id));
+          .where(and(...conditions));
       }
     }
   }
@@ -628,6 +682,9 @@ export class TranslationService {
     // Query posts if applicable
     if (!filter.contentType || filter.contentType === "all" || filter.contentType === "post") {
       const postConditions = [isNull(posts.deletedAt)];
+      if (filter.publicationId) {
+        postConditions.push(eq(posts.publicationId, filter.publicationId));
+      }
       if (filter.search) {
         const searchCond = or(
           ilike(posts.title, `%${filter.search}%`),
@@ -664,6 +721,9 @@ export class TranslationService {
     // Query pages if applicable
     if (!filter.contentType || filter.contentType === "all" || filter.contentType === "page") {
       const pageConditions = [];
+      if (filter.publicationId) {
+        pageConditions.push(eq(pages.publicationId, filter.publicationId));
+      }
       if (filter.search) {
         const searchCond = or(
           ilike(pages.title, `%${filter.search}%`),
@@ -704,10 +764,14 @@ export class TranslationService {
     }
 
     const contentIds = contentItems.map((c) => c.id);
+    const trConditions = [inArray(contentTranslations.contentId, contentIds)];
+    if (filter.publicationId) {
+      trConditions.push(eq(contentTranslations.publicationId, filter.publicationId));
+    }
     const trRows = await db
       .select()
       .from(contentTranslations)
-      .where(inArray(contentTranslations.contentId, contentIds));
+      .where(and(...trConditions));
 
     const trMap = new Map<string, Map<string, ContentTranslationRow>>();
     for (const tr of trRows) {
@@ -813,6 +877,7 @@ export class TranslationService {
   async getTranslationQueue(
     enabledLocales: string[] = ["en", "ar-SA"],
     defaultLocale = "en",
+    publicationId?: string,
   ): Promise<{
     stale: TranslationQueueItem[];
     needsReview: TranslationQueueItem[];
@@ -820,7 +885,7 @@ export class TranslationService {
     totalCount: number;
   }> {
     const { items } = await this.getTranslationMatrix(
-      { limit: 500 },
+      { limit: 500, publicationId },
       enabledLocales,
       defaultLocale,
     );
@@ -904,9 +969,10 @@ export class TranslationService {
   async getLocalizationHealth(
     enabledLocales: string[] = ["en", "ar-SA"],
     defaultLocale = "en",
+    publicationId?: string,
   ): Promise<LocalizationHealthMetrics> {
     const { items, total } = await this.getTranslationMatrix(
-      { limit: 1000 },
+      { limit: 1000, publicationId },
       enabledLocales,
       defaultLocale,
     );
@@ -1034,6 +1100,7 @@ export class TranslationService {
     translationIds: string[];
     action: "submit_review" | "approve" | "publish" | "mark_stale" | "delete";
     reviewerId?: string | undefined;
+    publicationId?: string | undefined;
   }): Promise<BulkTranslationResult> {
     const db = getDb();
     const errors: string[] = [];
@@ -1043,10 +1110,14 @@ export class TranslationService {
 
     for (const id of input.translationIds) {
       try {
+        const findConditions = [eq(contentTranslations.id, id)];
+        if (input.publicationId) {
+          findConditions.push(eq(contentTranslations.publicationId, input.publicationId));
+        }
         const rows = await db
           .select()
           .from(contentTranslations)
-          .where(eq(contentTranslations.id, id))
+          .where(and(...findConditions))
           .limit(1);
 
         if (!rows[0]) {
@@ -1064,7 +1135,7 @@ export class TranslationService {
             errors.push(`Translation ${id}: ${check.reason}`);
             continue;
           }
-          await this.submitForReview(id);
+          await this.submitForReview(id, input.publicationId);
           succeededIds.push(id);
         } else if (input.action === "approve") {
           const check = validateTranslationStatusTransition(currentStatus, "approved");
@@ -1073,7 +1144,7 @@ export class TranslationService {
             errors.push(`Translation ${id}: ${check.reason}`);
             continue;
           }
-          await this.approveTranslation(id, input.reviewerId || "system");
+          await this.approveTranslation(id, input.reviewerId || "system", input.publicationId);
           succeededIds.push(id);
         } else if (input.action === "publish") {
           const check = validateTranslationStatusTransition(currentStatus, "published");
@@ -1082,7 +1153,7 @@ export class TranslationService {
             errors.push(`Translation ${id}: ${check.reason}`);
             continue;
           }
-          await this.publishTranslation(id);
+          await this.publishTranslation(id, input.publicationId);
           succeededIds.push(id);
         } else if (input.action === "mark_stale") {
           const check = validateTranslationStatusTransition(currentStatus, "stale");
@@ -1091,13 +1162,21 @@ export class TranslationService {
             errors.push(`Translation ${id}: ${check.reason}`);
             continue;
           }
+          const updateConditions = [eq(contentTranslations.id, id)];
+          if (input.publicationId) {
+            updateConditions.push(eq(contentTranslations.publicationId, input.publicationId));
+          }
           await db
             .update(contentTranslations)
             .set({ status: "stale", updatedAt: now })
-            .where(eq(contentTranslations.id, id));
+            .where(and(...updateConditions));
           succeededIds.push(id);
         } else if (input.action === "delete") {
-          await db.delete(contentTranslations).where(eq(contentTranslations.id, id));
+          const deleteConditions = [eq(contentTranslations.id, id)];
+          if (input.publicationId) {
+            deleteConditions.push(eq(contentTranslations.publicationId, input.publicationId));
+          }
+          await db.delete(contentTranslations).where(and(...deleteConditions));
           succeededIds.push(id);
         }
       } catch (err: any) {

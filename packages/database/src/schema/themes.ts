@@ -9,6 +9,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export const themeConfigurations = pgTable(
   "theme_configurations",
@@ -66,6 +67,9 @@ export const installedThemes = pgTable(
   "installed_themes",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     themeId: text("theme_id").notNull(),
     name: text("name").notNull(),
     version: text("version").notNull(),
@@ -87,15 +91,15 @@ export const installedThemes = pgTable(
   },
   (table) => {
     return {
+      pubVersionUniqueIdx: uniqueIndex(
+        "installed_themes_pub_version_unique_idx",
+      ).on(table.publicationId, table.themeId, table.version),
       installedThemesThemeIdIdx: index("installed_themes_theme_id_idx").on(
         table.themeId,
       ),
       installedThemesStatusIdx: index("installed_themes_status_idx").on(
         table.status,
       ),
-      installedThemesThemeIdVersionIdx: uniqueIndex(
-        "installed_themes_theme_id_version_unique_idx",
-      ).on(table.themeId, table.version),
     };
   },
 );

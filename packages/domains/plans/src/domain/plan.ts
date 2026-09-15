@@ -4,6 +4,7 @@ export type PlanVisibility = "public" | "private";
 
 export interface Plan {
   id: string;
+  publicationId: string;
   productId: string;
   key: string;
   name: string;
@@ -23,6 +24,7 @@ export interface Plan {
 
 export interface CreatePlanData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   productId: string;
   key: string;
   name: string;

@@ -27,7 +27,9 @@ export async function postRoutes(fastify: FastifyInstance) {
           sortBy?: string;
           sortOrder?: string;
         };
-      const params: ListPostsFilter = {};
+      const params: ListPostsFilter = {
+        publicationId: req.publicationContext?.publicationId,
+      };
       if (status) params.status = status as ListPostsFilter["status"];
       if (authorId) params.authorId = authorId;
       if (search) params.search = search;
@@ -58,7 +60,10 @@ export async function postRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const post = await postsService.findById(id);
+      const post = await postsService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!post) {
         return reply.status(404).send({
           errors: [
@@ -104,6 +109,7 @@ export async function postRoutes(fastify: FastifyInstance) {
       const post = await postsService.createPost(
         {
           ...parseResult.data,
+          publicationId: req.publicationContext?.publicationId,
           scheduledAt: parseResult.data.scheduledAt
             ? new Date(parseResult.data.scheduledAt)
             : null,
@@ -150,6 +156,7 @@ export async function postRoutes(fastify: FastifyInstance) {
             userId: req.user!.id,
             roles: req.roles,
             permissions: req.permissions,
+            publicationId: req.publicationContext?.publicationId,
           },
         );
         const authors = await authorsService.getPostAuthors(post.id);
@@ -213,6 +220,7 @@ export async function postRoutes(fastify: FastifyInstance) {
           userId: req.user!.id,
           roles: req.roles,
           permissions: req.permissions,
+          publicationId: req.publicationContext?.publicationId,
         });
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
@@ -255,7 +263,11 @@ export async function postRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const post = await postsService.publishPost(id, req.user!.id);
+        const post = await postsService.publishPost(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
@@ -297,7 +309,11 @@ export async function postRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const post = await postsService.unpublishPost(id, req.user!.id);
+        const post = await postsService.unpublishPost(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
@@ -346,6 +362,7 @@ export async function postRoutes(fastify: FastifyInstance) {
           id,
           scheduledAt,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
@@ -388,7 +405,11 @@ export async function postRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const post = await postsService.cancelSchedule(id, req.user!.id);
+        const post = await postsService.cancelSchedule(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ post });
       } catch (err: unknown) {
         if (err instanceof PostDomainError && err.code === "POST_NOT_FOUND") {
@@ -412,7 +433,10 @@ export async function postRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const post = await postsService.findById(id);
+      const post = await postsService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!post) {
         return reply.status(404).send({
           errors: [
@@ -450,6 +474,7 @@ export async function postRoutes(fastify: FastifyInstance) {
             userId: req.user!.id,
             roles: req.roles,
             permissions: req.permissions,
+            publicationId: req.publicationContext?.publicationId,
           },
         );
         return reply.status(200).send({ post });

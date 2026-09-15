@@ -74,7 +74,7 @@ Vibress is organized as a pnpm monorepo managed with Nx tooling:
   - `theme-core/` — Theme engine, Liquid template renderer, and asset pipeline.
   - `studio-*` — Block editor, serializers, renderers, and custom card extensions.
   - `domains/*` — Modular business domains (posts, pages, users, members, billing, etc.).
-- `docker/` — Production Dockerfiles for all microservices.
+- `docker/` — Production Dockerfiles for all containerized application services.
 - `scripts/` — Operational, deployment, backup, and health check scripts.
 
 ---

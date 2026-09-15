@@ -4,6 +4,7 @@ import {
   QUEUE_NAMES,
   EmailDeliveryJob,
   getBullMqRedisConnection,
+  assertJobScope,
 } from "@vibress/queue";
 import { tracedProcessor } from "./trace-helper";
 import {
@@ -87,6 +88,7 @@ export class EmailDeliveryWorker {
   }
 
   private async processJob(job: Job<EmailDeliveryJob>): Promise<void> {
+    assertJobScope(job.data);
     const { sendId, recipientIds } = job.data;
     if (!sendId || !Array.isArray(recipientIds) || recipientIds.length === 0) {
       return;

@@ -4,6 +4,7 @@ import { PluginSecurityViolationError, verifyPluginCapabilityPermission } from "
 export interface BundledPlugin {
   id: string;
   manifest: PluginManifest;
+  status?: string | undefined;
   executeHook<T = unknown>(
     hookName: string,
     payload: unknown,
@@ -25,6 +26,10 @@ export class BundledPluginRegistry {
     this.plugins.set(plugin.id, plugin);
   }
 
+  unregister(pluginId: string): boolean {
+    return this.plugins.delete(pluginId);
+  }
+
   has(pluginId: string): boolean {
     return this.plugins.has(pluginId);
   }
@@ -34,7 +39,8 @@ export class BundledPluginRegistry {
   }
 
   /**
-   * Executes a hook on a verified bundled plugin with capability verification.
+   * Executes a hook on a verified bundled plugin with capability verification
+   * and multi-tenant publication isolation.
    * Untrusted/unregistered plugins fail closed with PluginSecurityViolationError.
    */
   async executeHook<T = unknown>(
@@ -50,11 +56,51 @@ export class BundledPluginRegistry {
       );
     }
 
+    if (plugin.status && plugin.status !== "active") {
+      throw new PluginSecurityViolationError(
+        `Plugin '${pluginId}' is currently ${plugin.status}. Inactive or disabled plugins cannot execute hooks.`,
+      );
+    }
+
+    // Enforce publication isolation boundary
+    if (context.publicationId && payload && typeof payload === "object") {
+      const payloadPubId = (payload as { publicationId?: string }).publicationId;
+      if (payloadPubId && payloadPubId !== context.publicationId) {
+        throw new PluginSecurityViolationError(
+          `Cross-publication violation: plugin '${pluginId}' running in publication '${context.publicationId}' attempted to access data for publication '${payloadPubId}'.`,
+        );
+      }
+    }
+
     // Enforce capability permission based on hook type
     if (hookName === "onEvent") {
-      verifyPluginCapabilityPermission(plugin.manifest, "events.read");
+      const hasEvents =
+        plugin.manifest.capabilities.includes("events.read") ||
+        plugin.manifest.capabilities.includes("events.subscribe");
+      if (!hasEvents) {
+        throw new PluginSecurityViolationError(
+          `Plugin '${plugin.manifest.id}' does not declare required capability 'events.read' or 'events.subscribe'.`,
+        );
+      }
     } else if (hookName === "transformPost" || hookName === "calculateMetrics") {
-      verifyPluginCapabilityPermission(plugin.manifest, "posts.read");
+      const hasPostRead =
+        plugin.manifest.capabilities.includes("posts.read") ||
+        plugin.manifest.capabilities.includes("content.read");
+      if (!hasPostRead) {
+        throw new PluginSecurityViolationError(
+          `Plugin '${plugin.manifest.id}' does not declare required capability 'posts.read' or 'content.read'.`,
+        );
+      }
+    } else if (hookName === "writeContent" || hookName === "updatePost") {
+      verifyPluginCapabilityPermission(plugin.manifest, "content.write");
+    } else if (hookName === "sendEmail") {
+      verifyPluginCapabilityPermission(plugin.manifest, "email.send");
+    } else if (hookName === "emitWebhook") {
+      verifyPluginCapabilityPermission(plugin.manifest, "webhook.emit");
+    } else if (hookName === "readAnalytics") {
+      verifyPluginCapabilityPermission(plugin.manifest, "analytics.read");
+    } else if (hookName === "uploadMedia") {
+      verifyPluginCapabilityPermission(plugin.manifest, "media.write");
     }
 
     return plugin.executeHook<T>(hookName, payload, context);

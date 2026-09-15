@@ -15,7 +15,9 @@ export class ThemeInstaller {
   async installFromZip(
     zipBuffer: Buffer,
     _actorId?: string | null,
+    publicationId?: string,
   ): Promise<InstalledTheme> {
+    const pubId = publicationId || "pub_default";
     // 1. Validate archive, manifest, settings, and templates
     const extracted = await validateAndExtractThemeZip(zipBuffer);
     const { manifest, settingsSchema, files } = extracted;
@@ -52,11 +54,13 @@ export class ThemeInstaller {
       await this.repository.findByThemeIdAndVersion(
         manifest.id,
         manifest.version,
+        pubId,
       );
 
     if (existingVersion) {
       const updated: InstalledTheme = {
         ...existingVersion,
+        publicationId: pubId,
         name: manifest.name,
         version: manifest.version,
         themeApiVersion: manifest.themeApi,
@@ -68,11 +72,12 @@ export class ThemeInstaller {
         storagePath,
         updatedAt: new Date(),
       };
-      return this.repository.update(updated);
+      return this.repository.update(updated, pubId);
     }
 
     const newTheme: InstalledTheme = {
       id: crypto.randomUUID(),
+      publicationId: pubId,
       themeId: manifest.id,
       name: manifest.name,
       version: manifest.version,
@@ -89,6 +94,6 @@ export class ThemeInstaller {
       updatedAt: new Date(),
     };
 
-    return this.repository.create(newTheme);
+    return this.repository.create(newTheme, pubId);
   }
 }

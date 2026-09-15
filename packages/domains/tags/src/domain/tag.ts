@@ -10,6 +10,7 @@ export class TagDomainError extends Error {
 
 export interface Tag {
   id: string;
+  publicationId: string;
   name: string;
   slug: string;
   description: string | null;
@@ -19,6 +20,7 @@ export interface Tag {
 
 export interface CreateTagData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   name: string;
   slug?: string | undefined;
   description?: string | null | undefined;

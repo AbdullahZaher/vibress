@@ -1,71 +1,106 @@
+# ============================================================
+# Dependencies
+# ============================================================
 node_modules/
+.pnpm-store/
+
+# ============================================================
+# Build Outputs
+# ============================================================
 dist/
 build/
-.next/
 out/
-.nx/
-coverage/
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-content/*
-!content/.gitkeep
-!content/theme-starter/
-!content/theme-starter/**
-!content/vibress-theme-starter.zip
-apps/api/content/*
-!apps/api/content/.gitkeep
-tmp/
-
-# Local third-party source references
-/references/
-
-# Runtime, logs, and backups
-*.backup
-*.dump
-postgres.dump
-playwright-report/
-test-results/
-tests/e2e/screenshots/
-tests/e2e/visual/
-tests/e2e/baselines/
+.next/
 .vite/
-logs/
-infrastructure/data/
-/tmp/vibress-*
-
-# IDE files
-.vscode/
-.idea/
-
-# OS generated files
-.DS_Store
-
-# Temporary logs
-*.log
-
-# Cache folders
-.eslintcache
-
-# Generated artifacts (build output, type info, dev logs)
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 *.js.map
 vite.config.js
 vite.config.d.ts
 
-# storage-s3 build emits alongside sources (no outDir)
+# Storage-S3 build emits alongside sources (no outDir)
 packages/storage-s3/src/*.js
 packages/storage-s3/src/*.d.ts
 packages/storage-s3/src/__tests__/*.js
 packages/storage-s3/src/__tests__/*.d.ts
 
-# Local production env (never commit)
-.env.prod
+# ============================================================
+# Framework & Tool Caches
+# ============================================================
+.nx/
+.turbo/
+.cache/
+.eslintcache
 
-# Local plan/scratch documents (never commit)
+# ============================================================
+# Test & Coverage Artifacts
+# ============================================================
+coverage/
+test-results/
+playwright-report/
+tests/e2e/screenshots/
+tests/e2e/visual/
+tests/e2e/baselines/
+
+# ============================================================
+# Environment & Secrets (Never Commit)
+# ============================================================
+.env
+.env.*
+!.env.example
+!.env.prod.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials.*
+secrets.*
+secret.*
+service-account*.json
+*-credentials.json
+
+# ============================================================
+# Logs
+# ============================================================
+logs/
+*.log
+/tmp/vibress-*
+
+# ============================================================
+# Local Databases & Backups (Never Commit)
+# ============================================================
+/backups/
+*.backup
+*.dump
+postgres.dump
+
+# ============================================================
+# OS & Editor Artifacts
+# ============================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ============================================================
+# Temporary & Local Development State
+# ============================================================
+tmp/
+temp/
+/references/
+/plans/
 VIBRESS_POST_V1_HARDENING_MASTER_PLAN.md
-backups/
 
+# ============================================================
+# Content Uploads & Local Themes (Preserve Starter Theme)
+# ============================================================
+/content/*
+!/content/.gitkeep
+!/content/theme-starter/
+!/content/theme-starter/**
+!/content/vibress-theme-starter.zip
+apps/api/content/*
+!apps/api/content/.gitkeep
+infrastructure/data/

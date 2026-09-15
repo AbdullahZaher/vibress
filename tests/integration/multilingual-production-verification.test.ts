@@ -62,6 +62,7 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     // 1. Seed a test source post in English
     await db.insert(posts).values({
       id: testPostId,
+      publicationId: "pub_default",
       title: "Welcome to Vibress",
       slug: testPostSlug,
       excerpt: "The modern publishing platform built for scale.",
@@ -87,6 +88,7 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     // 2. Seed an Arabic translation for the test post
     await db.insert(contentTranslations).values({
       id: randomUUID(),
+      publicationId: "pub_default",
       translationGroupId: testTranslationGroupId,
       contentType: "post",
       contentId: testPostId,
@@ -116,6 +118,7 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     // 3. Seed a test page in English without Arabic translation (to test non-fallback 404 behavior)
     await db.insert(pages).values({
       id: testPageId,
+      publicationId: "pub_default",
       title: "English Only Page",
       slug: testPageSlug,
       excerpt: "This page is strictly English.",

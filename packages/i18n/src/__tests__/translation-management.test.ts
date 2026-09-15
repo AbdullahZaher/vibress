@@ -33,6 +33,7 @@ describe("Translation Management & Editorial Domain Service Suite", () => {
     // Create a published test post
     await db.insert(posts).values({
       id: testPostId,
+      publicationId: "pub_default",
       title: `Domain Test Post ${runSuffix}`,
       slug: postSlug,
       excerpt: "Source excerpt",
@@ -50,6 +51,7 @@ describe("Translation Management & Editorial Domain Service Suite", () => {
     // Create a published test page
     await db.insert(pages).values({
       id: testPageId,
+      publicationId: "pub_default",
       title: `Domain Test Page ${runSuffix}`,
       slug: pageSlug,
       excerpt: "Source page excerpt",

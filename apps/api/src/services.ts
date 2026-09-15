@@ -314,11 +314,17 @@ const webhookQueue = new Queue(webhookQueueName, {
 export const webhooksService = new WebhooksService(
   new DrizzleWebhookRepository(),
   {
-    enqueue: async (deliveryId: string, endpointId: string) => {
+    enqueue: async (deliveryId: string, endpointId: string, publicationId?: string) => {
+      const pubId = publicationId || "pub_default";
       await enqueueTraced(
         webhookQueue,
         "deliver",
-        { deliveryId, endpointId },
+        {
+          scope: "publication",
+          publicationId: pubId,
+          deliveryId,
+          endpointId,
+        },
         {
           jobId: `delivery-${deliveryId}`,
           removeOnComplete: true,
@@ -368,11 +374,16 @@ const automationDelayedQueue = new Queue(automationDelayedQueueName, {
 export const automationsService = new AutomationsService(
   new DrizzleAutomationRepository(),
   {
-    enqueueRun: async (runId: string) => {
+    enqueueRun: async (runId: string, publicationId?: string) => {
+      const pubId = publicationId || "pub_default";
       await enqueueTraced(
         automationRunQueue,
         "run",
-        { runId },
+        {
+          scope: "publication",
+          publicationId: pubId,
+          runId,
+        },
         { jobId: `run-${runId}` },
       );
     },
@@ -380,11 +391,19 @@ export const automationsService = new AutomationsService(
       runId: string,
       stepIndex: number,
       delayMs: number,
+      publicationId?: string,
     ) => {
+      const pubId = publicationId || "pub_default";
       await enqueueTraced(
         automationDelayedQueue,
         "resume",
-        { runId, stepIndex, resumeAt: Date.now() + delayMs },
+        {
+          scope: "publication",
+          publicationId: pubId,
+          runId,
+          stepIndex,
+          resumeAt: Date.now() + delayMs,
+        },
         {
           delay: delayMs,
           jobId: `resume-${runId}-${stepIndex}`,
@@ -540,5 +559,17 @@ export const translationService = new TranslationService();
 import { WhatsNewService } from "./whats-new-service";
 export const settingRepo = new DrizzleSettingRepository();
 export const whatsNewService = new WhatsNewService(settingRepo);
+
+// ---------------- Workspace & Publication Isolation Subsystem ----------------
+import {
+  DrizzleWorkspaceRepository,
+  DrizzlePublicationRepository,
+  WorkspaceService,
+} from "@vibress/workspaces";
+
+export const workspaceRepo = new DrizzleWorkspaceRepository();
+export const publicationRepo = new DrizzlePublicationRepository();
+export const workspaceService = new WorkspaceService(workspaceRepo, publicationRepo);
+
 
 

@@ -9,6 +9,7 @@ export interface AudienceDefinition {
 
 export interface NewsletterSend {
   id: string;
+  publicationId?: string;
   newsletterId: string;
   subject: string;
   contentVersion: number;
@@ -32,6 +33,7 @@ export interface NewsletterSend {
 
 export interface CreateSendData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   newsletterId: string;
   subject: string;
   contentVersion?: number | undefined;

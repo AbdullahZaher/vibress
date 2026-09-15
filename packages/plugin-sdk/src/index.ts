@@ -22,9 +22,11 @@ export interface PluginContext {
   manifestId: string;
   name: string;
   version: string;
+  publicationId?: string | undefined;
   settings: Record<string, unknown>;
   getSecret(key: string): Promise<string | null>;
   log(message: string, level?: "info" | "warn" | "error"): void;
+  hasCapability?(capability: string): boolean;
 }
 
 export interface PluginModule {
@@ -35,17 +37,203 @@ export interface PluginModule {
 
 export const SDK_VERSION = "1.0.0";
 
-export const SUPPORTED_CAPABILITIES = [
-  "events.subscribe",
-  "webhooks.register",
-  "storage.provider",
-  "content.read",
-  "admin.navigation",
-  "settings.read-own",
-  "settings.write-own",
-] as const;
+export interface PluginCapabilityDefinition {
+  id: string;
+  name: string;
+  description: string;
+  scope: "publication" | "platform";
+  requiredRole: string;
+  publicationBehavior: "isolated" | "global";
+  risk: "low" | "medium" | "high" | "critical";
+  auditRequired: boolean;
+}
 
-export type SupportedCapability = (typeof SUPPORTED_CAPABILITIES)[number];
+export const CAPABILITY_REGISTRY: Record<string, PluginCapabilityDefinition> = {
+  "content.read": {
+    id: "content.read",
+    name: "Read Content",
+    description: "Allows reading published and draft posts, pages, and tags within publication scope",
+    scope: "publication",
+    requiredRole: "editor",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "content.write": {
+    id: "content.write",
+    name: "Write Content",
+    description: "Allows creating or updating posts and pages within publication scope",
+    scope: "publication",
+    requiredRole: "editor",
+    publicationBehavior: "isolated",
+    risk: "medium",
+    auditRequired: true,
+  },
+  "posts.read": {
+    id: "posts.read",
+    name: "Read Posts",
+    description: "Allows reading posts for metrics, SEO, or transformation within publication scope",
+    scope: "publication",
+    requiredRole: "editor",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "media.read": {
+    id: "media.read",
+    name: "Read Media",
+    description: "Allows reading media assets metadata and URLs within publication scope",
+    scope: "publication",
+    requiredRole: "author",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "media.write": {
+    id: "media.write",
+    name: "Write Media",
+    description: "Allows uploading and processing media assets within publication scope",
+    scope: "publication",
+    requiredRole: "editor",
+    publicationBehavior: "isolated",
+    risk: "medium",
+    auditRequired: true,
+  },
+  "publication.read": {
+    id: "publication.read",
+    name: "Read Publication Settings",
+    description: "Allows reading publication profile and metadata",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "publication.write": {
+    id: "publication.write",
+    name: "Modify Publication Settings",
+    description: "Allows modifying publication configuration",
+    scope: "publication",
+    requiredRole: "owner",
+    publicationBehavior: "isolated",
+    risk: "high",
+    auditRequired: true,
+  },
+  "settings.read": {
+    id: "settings.read",
+    name: "Read Settings",
+    description: "Allows reading general publication settings",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "settings.read-own": {
+    id: "settings.read-own",
+    name: "Read Own Settings",
+    description: "Allows plugin to read its own configured settings",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "settings.write-own": {
+    id: "settings.write-own",
+    name: "Write Own Settings",
+    description: "Allows plugin to update its own configuration",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: true,
+  },
+  "email.send": {
+    id: "email.send",
+    name: "Send Email",
+    description: "Allows sending transactional or newsletter emails to publication members",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "high",
+    auditRequired: true,
+  },
+  "webhook.emit": {
+    id: "webhook.emit",
+    name: "Emit Webhooks",
+    description: "Allows triggering outbound webhooks for publication events",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "medium",
+    auditRequired: true,
+  },
+  "webhooks.register": {
+    id: "webhooks.register",
+    name: "Register Webhooks",
+    description: "Allows subscribing external endpoints to publication webhooks",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "medium",
+    auditRequired: true,
+  },
+  "analytics.read": {
+    id: "analytics.read",
+    name: "Read Analytics",
+    description: "Allows reading aggregated traffic and post metrics for publication",
+    scope: "publication",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "events.subscribe": {
+    id: "events.subscribe",
+    name: "Subscribe to Events",
+    description: "Allows listening to platform and publication lifecycle events",
+    scope: "platform",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "events.read": {
+    id: "events.read",
+    name: "Read Event Payloads",
+    description: "Allows receiving event payloads for analytics and monitoring",
+    scope: "platform",
+    requiredRole: "admin",
+    publicationBehavior: "isolated",
+    risk: "low",
+    auditRequired: false,
+  },
+  "storage.provider": {
+    id: "storage.provider",
+    name: "Custom Storage Provider",
+    description: "Registers custom media/asset storage backend",
+    scope: "platform",
+    requiredRole: "superadmin",
+    publicationBehavior: "global",
+    risk: "critical",
+    auditRequired: true,
+  },
+  "admin.navigation": {
+    id: "admin.navigation",
+    name: "Admin Navigation Links",
+    description: "Contributes custom navigation items in admin dashboard",
+    scope: "platform",
+    requiredRole: "admin",
+    publicationBehavior: "global",
+    risk: "low",
+    auditRequired: false,
+  },
+};
+
+export const SUPPORTED_CAPABILITIES = Object.keys(CAPABILITY_REGISTRY) as readonly string[];
+
+export type SupportedCapability = keyof typeof CAPABILITY_REGISTRY;
 
 /**
  * Validates a plugin manifest. Rejects incompatible API versions and

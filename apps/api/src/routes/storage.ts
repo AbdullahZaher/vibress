@@ -558,6 +558,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
+        publicationId: req.publicationContext?.publicationId || "pub_default",
         storageProvider: activeProvider.name,
         storageKey: session.storageKey,
         originalFilename: session.originalFilename,
@@ -868,6 +869,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
       const mediaAsset = await mediaRepoOf(mediaService).create({
         id: assetId,
+        publicationId: req.publicationContext?.publicationId || "pub_default",
         storageProvider: activeProvider.name,
         storageKey: session.storageKey,
         originalFilename: session.originalFilename,

@@ -41,12 +41,22 @@ async function fetchContentApi<T>(
     });
   }
 
+  let hostHeader: string | undefined;
+  try {
+    const { headers } = await import("next/headers");
+    const h = await headers();
+    hostHeader = h.get("x-forwarded-host") || h.get("host") || undefined;
+  } catch {
+    // Outside server component request context
+  }
+
   let res: Response;
   try {
     res = await fetch(url.toString(), {
       cache: "no-store",
       headers: {
         Accept: "application/json",
+        ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
       },
     });
   } catch (error) {

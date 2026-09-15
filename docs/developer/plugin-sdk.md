@@ -1,7 +1,10 @@
 # Vibress Plugin SDK Guide
 
 ## Overview
-The `@vibress/plugin-sdk` package defines the exclusive, stable API surface available to third-party extensions. Plugins run inside isolated child process sandboxes and are restricted to explicitly declared capabilities.
+The `@vibress/plugin-sdk` package defines the exclusive, stable API surface available to Vibress plugins. In Vibress v1.0, plugins execute within a **Trusted Host In-Process Runtime** (`BundledPluginHost`), restricted strictly to explicitly declared capabilities, multi-tenant `PublicationContext` boundaries, and isolated secret management.
+
+> [!NOTE]
+> **Trust Boundary Notice:** Dynamic untrusted third-party code uploads are disabled in v1.0. Arbitrary untrusted code execution via Node `vm.createContext()` is deprecated. Third-party isolated sandboxing via WebAssembly is slated for Phase 2.
 
 ---
 
@@ -40,17 +43,28 @@ Every plugin must define a `plugin.json` manifest:
 
 ---
 
-## 2. Supported Capabilities
+## 2. Supported Capabilities & Registry
 
-| Capability | Description |
-| :--- | :--- |
-| `events.subscribe` | Listen to asynchronous platform domain events |
-| `webhooks.register` | Programmatically register outbound webhooks |
-| `storage.provider` | Implement a custom binary asset storage driver |
-| `content.read` | Read-only access to published public posts, pages, and collections |
-| `admin.navigation` | Inject custom menu items into the Admin sidebar |
-| `settings.read-own` | Access plugin-scoped configuration parameters |
-| `settings.write-own` | Update plugin-scoped configuration parameters |
+| Capability | Scope | Risk | Description |
+| :--- | :--- | :--- | :--- |
+| `content.read` | Publication | Low | Read published and draft posts, pages, and tags within publication |
+| `content.write` | Publication | Medium | Create or update posts and pages within publication |
+| `posts.read` | Publication | Low | Read posts for metrics, SEO, or transformation within publication |
+| `media.read` | Publication | Low | Read media asset metadata and URLs within publication |
+| `media.write` | Publication | Medium | Upload and process media assets within publication |
+| `publication.read` | Publication | Low | Read publication settings and profile |
+| `publication.write` | Publication | High | Modify publication configuration |
+| `settings.read` | Publication | Low | Read general publication settings |
+| `settings.read-own` | Publication | Low | Access plugin-scoped configuration parameters |
+| `settings.write-own` | Publication | Low | Update plugin-scoped configuration parameters |
+| `email.send` | Publication | High | Send transactional or newsletter emails |
+| `webhook.emit` | Publication | Medium | Trigger outbound webhooks for publication events |
+| `webhooks.register` | Publication | Medium | Programmatically register outbound webhooks |
+| `analytics.read` | Publication | Low | Read aggregated traffic and post metrics |
+| `events.subscribe` | Platform | Low | Listen to asynchronous platform domain events |
+| `events.read` | Platform | Low | Receive event payloads for analytics and monitoring |
+| `storage.provider` | Platform | Critical | Implement custom binary asset storage driver |
+| `admin.navigation` | Platform | Low | Inject custom menu items into the Admin sidebar |
 
 ---
 

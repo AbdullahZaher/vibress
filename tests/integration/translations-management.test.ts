@@ -79,6 +79,7 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     const now = new Date();
     await db.insert(posts).values({
       id: testPostId,
+      publicationId: "pub_default",
       title: `Integration Source Post ${runSuffix}`,
       slug: postSlug,
       excerpt: "English source excerpt for translation testing",

@@ -270,8 +270,8 @@ describe("Studio public content (Posts + Pages)", () => {
     ] as const;
     for (const [id, key, name, display, mime, ext, size, type] of assetRows) {
       await pool.query(
-        `INSERT INTO media_assets (id, storage_provider, storage_key, original_filename, display_name, mime_type, extension, size_bytes, checksum, asset_type, created_at, updated_at)
-         VALUES ($1, 'local', $2, $3, $4, $5, $6, $7, 'deadbeef', $8, $9, $9)`,
+        `INSERT INTO media_assets (id, publication_id, storage_provider, storage_key, original_filename, display_name, mime_type, extension, size_bytes, checksum, asset_type, created_at, updated_at)
+         VALUES ($1, 'pub_default', 'local', $2, $3, $4, $5, $6, $7, 'deadbeef', $8, $9, $9)`,
         [id, key, name, display, mime, ext, size, type, now],
       );
     }

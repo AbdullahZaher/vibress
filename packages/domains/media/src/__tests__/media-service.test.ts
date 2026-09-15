@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   MediaService,
   MediaInUseError,
+  MediaNotFoundError,
   MediaUploadFailedError,
   extractMediaReferencesFromDocument,
   MediaRepository,
@@ -17,6 +18,7 @@ describe("MediaService Application Use Cases", () => {
 
   const sampleAsset: MediaAsset = {
     id: "asset-123",
+    publicationId: "pub_default",
     storageProvider: "local",
     storageKey: "media/asset-123/sample.png",
     originalFilename: "sample.png",
@@ -127,8 +129,19 @@ describe("MediaService Application Use Cases", () => {
     vi.mocked(mockRepo.findById).mockResolvedValue(sampleAsset);
     vi.mocked(mockRepo.countReferences).mockResolvedValue(0);
 
-    await mediaService.deleteMedia("asset-123");
-    expect(mockRepo.delete).toHaveBeenCalledWith("asset-123");
+    await mediaService.deleteMedia("asset-123", undefined, "pub_default");
+    expect(mockRepo.delete).toHaveBeenCalledWith("asset-123", "pub_default");
+  });
+
+  it("REJECTS cross-publication access to media assets (404 Non-disclosing)", async () => {
+    vi.mocked(mockRepo.findById).mockImplementation(async (id: string, pubId?: string) => {
+      if (pubId && pubId !== sampleAsset.publicationId) return null;
+      return sampleAsset;
+    });
+
+    await expect(mediaService.getMediaById("asset-123", "pub_other")).rejects.toThrow(
+      MediaNotFoundError,
+    );
   });
 
   it("should extract media references correctly from Studio documents", () => {

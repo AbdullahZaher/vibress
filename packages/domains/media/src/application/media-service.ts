@@ -42,6 +42,7 @@ export class MediaService {
   async uploadMedia(
     input: UploadMediaInput,
     actorId?: string,
+    publicationId?: string,
   ): Promise<MediaAsset> {
     const validated = validateAndDetectFile(input, this.limitsConfig);
 
@@ -64,6 +65,7 @@ export class MediaService {
     try {
       asset = await this.mediaRepo.create({
         id: assetId,
+        publicationId: input.publicationId || publicationId || "pub_default",
         storageProvider: storageProvider.name,
         storageKey: storedObject.key,
         originalFilename: validated.originalFilename,
@@ -108,8 +110,8 @@ export class MediaService {
     return asset;
   }
 
-  async getMediaById(id: string): Promise<MediaAsset> {
-    const asset = await this.mediaRepo.findById(id);
+  async getMediaById(id: string, publicationId?: string): Promise<MediaAsset> {
+    const asset = await this.mediaRepo.findById(id, publicationId);
     if (!asset) {
       throw new MediaNotFoundError(id);
     }
@@ -129,8 +131,9 @@ export class MediaService {
       metadata?: Record<string, unknown> | undefined;
     },
     actorId?: string,
+    publicationId?: string,
   ): Promise<MediaAsset> {
-    await this.getMediaById(id);
+    await this.getMediaById(id, publicationId);
 
     const repoUpdate: {
       displayName?: string;
@@ -140,7 +143,7 @@ export class MediaService {
       repoUpdate.displayName = updates.displayName;
     if (updates.metadata !== undefined) repoUpdate.metadata = updates.metadata;
 
-    const updated = await this.mediaRepo.update(id, repoUpdate);
+    const updated = await this.mediaRepo.update(id, repoUpdate, publicationId);
 
     if (this.auditRepo && actorId) {
       await this.auditRepo.record({
@@ -161,8 +164,9 @@ export class MediaService {
     id: string,
     focalPoint: { x: number; y: number },
     actorId?: string,
+    publicationId?: string,
   ): Promise<MediaAsset> {
-    const asset = await this.getMediaById(id);
+    const asset = await this.getMediaById(id, publicationId);
     const existingMeta = (asset.metadata as Record<string, unknown>) || {};
     const clampedFocalPoint = {
       x: Math.max(0, Math.min(1, focalPoint.x)),
@@ -178,18 +182,19 @@ export class MediaService {
         },
       },
       actorId,
+      publicationId,
     );
   }
 
-  async deleteMedia(id: string, actorId?: string): Promise<void> {
-    const asset = await this.getMediaById(id);
+  async deleteMedia(id: string, actorId?: string, publicationId?: string): Promise<void> {
+    const asset = await this.getMediaById(id, publicationId);
 
     const refCount = await this.mediaRepo.countReferences(id);
     if (refCount > 0) {
       throw new MediaInUseError(id, refCount);
     }
 
-    await this.mediaRepo.delete(id);
+    await this.mediaRepo.delete(id, publicationId);
 
     // Invoke asset's owner storage provider to purge or soft-delete object if required
     const provider = this.resolveProviderForAsset(asset.storageProvider);
@@ -209,8 +214,8 @@ export class MediaService {
     }
   }
 
-  async getMediaReferences(id: string): Promise<MediaReferenceSummary> {
-    await this.getMediaById(id);
+  async getMediaReferences(id: string, publicationId?: string): Promise<MediaReferenceSummary> {
+    await this.getMediaById(id, publicationId);
     return this.mediaRepo.getReferences(id);
   }
 

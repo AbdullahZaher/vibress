@@ -5,6 +5,8 @@ import {
 } from "../middleware/auth";
 import { editorialCollaborationService } from "../services";
 import { PostStatus } from "@vibress/posts";
+import { crdtPersistence } from "../collaboration/crdt-persistence";
+import { roomManager } from "../collaboration/room-manager";
 
 const sendError = (
   reply: FastifyReply,
@@ -301,9 +303,19 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
-        const updates = editorialCollaborationService.getYjsDocUpdates(
+        const publicationId = req.publicationContext!.publicationId;
+        const persisted = await crdtPersistence.getUpdates(
+          publicationId,
           req.params.postId,
         );
+        let updates: Uint8Array[];
+        if (persisted.length > 0) {
+          updates = persisted;
+        } else {
+          updates = editorialCollaborationService.getYjsDocUpdates(
+            req.params.postId,
+          );
+        }
         const encodedUpdates = updates.map((u) => Buffer.from(u).toString("base64"));
         return reply.send({ data: { updates: encodedUpdates } });
       },
@@ -379,10 +391,23 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
         );
       }
 
+      const updateBytes = new Uint8Array(updateBuffer);
       editorialCollaborationService.applyYjsDocUpdate(
         req.params.postId,
-        new Uint8Array(updateBuffer),
+        updateBytes,
       );
+
+      const publicationId = req.publicationContext!.publicationId;
+      await crdtPersistence.saveUpdate(
+        publicationId,
+        req.params.postId,
+        updateBytes,
+      );
+
+      const room = roomManager.getRoom(publicationId, req.params.postId);
+      if (room) {
+        room.broadcastBinary(updateBytes);
+      }
 
       return reply.send({ data: { applied: true } });
     },

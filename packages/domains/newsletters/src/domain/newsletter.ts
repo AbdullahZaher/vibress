@@ -2,6 +2,7 @@ export type NewsletterStatus = "active" | "archived";
 
 export interface Newsletter {
   id: string;
+  publicationId: string;
   key: string;
   name: string;
   description: string | null;
@@ -16,6 +17,7 @@ export interface Newsletter {
 
 export interface CreateNewsletterData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   key: string;
   name: string;
   description?: string | null | undefined;

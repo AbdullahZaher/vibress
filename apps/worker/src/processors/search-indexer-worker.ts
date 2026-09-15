@@ -3,6 +3,7 @@ import {
   Job,
   QUEUE_NAMES,
   getBullMqRedisConnection,
+  assertJobScope,
 } from "@vibress/queue";
 import {
   SearchService,
@@ -15,6 +16,8 @@ import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { tracedProcessor } from "./trace-helper";
 
 export interface SearchIndexJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   op: "upsert" | "remove";
   doc?: SearchDocumentInput;
   entityType?: string;
@@ -23,12 +26,14 @@ export interface SearchIndexJob {
 }
 
 export interface SearchRebuildJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   op: "rebuild";
   traceparent?: string;
 }
 
 export interface IndexableContentProvider {
-  listIndexableContent(): Promise<SearchDocumentInput[]>;
+  listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]>;
 }
 
 const SEARCH_QUEUE_NAME = QUEUE_NAMES.SEARCH;
@@ -64,23 +69,31 @@ export class SearchIndexerWorker {
   private async process(
     job: Job<SearchIndexJob | SearchRebuildJob>,
   ): Promise<void> {
+    const scope = assertJobScope(job.data);
+    const pubId = scope.scope === "publication" ? scope.publicationId : undefined;
+
     if (job.data.op === "rebuild") {
-      const count = await this.searchService.rebuild(this.contentProvider);
+      const count = await this.searchService.rebuild(this.contentProvider, pubId);
       console.log(
-        `[SearchIndexer] Rebuild complete: ${count} documents indexed`,
+        `[SearchIndexer] Rebuild complete: ${count} documents indexed${pubId ? ` (pub: ${pubId})` : ""}`,
       );
       return;
     }
     if (job.data.op === "upsert" && job.data.doc) {
+      const docPubId = pubId || job.data.doc.publicationId || "pub_default";
       // Verify the entity is published + public before indexing
-      const verified = await this.resolveVerifiedDoc(job.data.doc);
+      const verified = await this.resolveVerifiedDoc({
+        ...job.data.doc,
+        publicationId: docPubId,
+      });
       if (verified) {
-        await this.searchService.indexDocument(verified);
+        await this.searchService.indexDocument(verified, docPubId);
       } else {
         // Not indexable — ensure any stale entry is removed
         await this.searchService.removeDocument(
           job.data.doc.entityType,
           job.data.doc.entityId,
+          docPubId,
         );
       }
       return;
@@ -89,6 +102,7 @@ export class SearchIndexerWorker {
       await this.searchService.removeDocument(
         job.data.entityType,
         job.data.entityId,
+        pubId,
       );
     }
   }
@@ -96,8 +110,9 @@ export class SearchIndexerWorker {
   private async resolveVerifiedDoc(
     doc: SearchDocumentInput,
   ): Promise<SearchDocumentInput | null> {
+    const pubId = doc.publicationId;
     if (doc.entityType === "post") {
-      const post = await this.postRepo.findById(doc.entityId);
+      const post = await this.postRepo.findById(doc.entityId, pubId);
       if (!post || post.status !== "published" || post.visibility !== "public")
         return null;
       return {
@@ -107,10 +122,11 @@ export class SearchIndexerWorker {
         bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
         slug: post.slug,
         url: doc.url || `/posts/${post.slug}`,
+        publicationId: post.publicationId,
       };
     }
     if (doc.entityType === "page") {
-      const page = await this.pageRepo.findById(doc.entityId);
+      const page = await this.pageRepo.findById(doc.entityId, pubId);
       if (!page || page.status !== "published" || page.visibility !== "public")
         return null;
       return {
@@ -120,6 +136,7 @@ export class SearchIndexerWorker {
         bodyText: renderStudioDocumentToPlainText(page.content).slice(0, 2000),
         slug: page.slug,
         url: doc.url || `/${page.slug}`,
+        publicationId: page.publicationId,
       };
     }
     // Tags and authors: trusted metadata, no restriction concept

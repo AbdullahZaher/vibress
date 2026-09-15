@@ -16,7 +16,6 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     id: "ws-alpha",
     name: "Alpha Workspace",
     slug: "alpha",
-    ownerId: "user-alpha-owner",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -25,7 +24,6 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     id: "ws-beta",
     name: "Beta Workspace",
     slug: "beta",
-    ownerId: "user-beta-owner",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -35,8 +33,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     workspaceId: "ws-alpha",
     name: "Alpha Main Magazine",
     slug: "alpha-main",
-    locale: "en",
-    isDefault: true,
+    primaryLocale: "en",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -46,8 +43,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     workspaceId: "ws-alpha",
     name: "Alpha Tech Dispatch",
     slug: "alpha-tech",
-    locale: "ar",
-    isDefault: false,
+    primaryLocale: "ar",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -57,8 +53,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     workspaceId: "ws-beta",
     name: "Beta Daily News",
     slug: "beta-news",
-    locale: "en",
-    isDefault: true,
+    primaryLocale: "en",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
@@ -94,6 +89,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
       if (workspaceId === "ws-beta" && slug === "beta-news") return pubBeta1;
       return null;
     }),
+    findByDomain: vi.fn(async () => null),
     listByWorkspace: vi.fn(async (wsId: string) => {
       if (wsId === "ws-alpha") return [pubAlpha1, pubAlpha2];
       if (wsId === "ws-beta") return [pubBeta1];
@@ -103,13 +99,13 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     addMember: vi.fn(),
     getMembership: vi.fn(async (pubId: string, userId: string) => {
       if (pubId === "pub-alpha-main" && userId === "user-alpha-editor") {
-        return { id: "pm-1", publicationId: pubId, userId, role: "editor" as const, createdAt: new Date() };
+        return { id: "pm-1", publicationId: pubId, userId, role: "editor" as const, createdAt: new Date(), updatedAt: new Date() };
       }
       if (pubId === "pub-alpha-tech" && userId === "user-alpha-editor") {
-        return { id: "pm-2", publicationId: pubId, userId, role: "editor" as const, createdAt: new Date() };
+        return { id: "pm-2", publicationId: pubId, userId, role: "editor" as const, createdAt: new Date(), updatedAt: new Date() };
       }
       if (pubId === "pub-beta-news" && userId === "user-beta-author") {
-        return { id: "pm-3", publicationId: pubId, userId, role: "author" as const, createdAt: new Date() };
+        return { id: "pm-3", publicationId: pubId, userId, role: "author" as const, createdAt: new Date(), updatedAt: new Date() };
       }
       return null;
     }),
@@ -159,15 +155,15 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
     const alphaContext: TenantContext = {
       workspaceId: "ws-alpha",
       publicationId: "pub-alpha-main",
-      actorId: "user-alpha-editor",
-      actorRole: "editor",
+      userId: "user-alpha-editor",
+      role: "editor",
     };
 
     const betaContext: TenantContext = {
       workspaceId: "ws-beta",
       publicationId: "pub-beta-news",
-      actorId: "user-beta-author",
-      actorRole: "author",
+      userId: "user-beta-author",
+      role: "author",
     };
 
     it("enforces Cache key namespace isolation across publications", () => {
@@ -252,7 +248,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
       const createAuditEntry = (ctx: TenantContext, action: string, targetId: string) => ({
         workspaceId: ctx.workspaceId,
         publicationId: ctx.publicationId,
-        actorId: ctx.actorId,
+        actorId: ctx.userId,
         action,
         targetId,
         timestamp: new Date(),
@@ -273,7 +269,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
       const alphaContext: TenantContext = {
         workspaceId: "ws-alpha",
         publicationId: "pub-alpha-main",
-        actorId: "user-alpha-editor",
+        userId: "user-alpha-editor",
       };
 
       const betaResource = {
@@ -288,7 +284,7 @@ describe("Phase 12: Comprehensive Multi-Tenant & Multi-Publication Isolation Mat
       const alphaContextPub1: TenantContext = {
         workspaceId: "ws-alpha",
         publicationId: "pub-alpha-main",
-        actorId: "user-alpha-limited",
+        userId: "user-alpha-limited",
       };
 
       const pub2Resource = {

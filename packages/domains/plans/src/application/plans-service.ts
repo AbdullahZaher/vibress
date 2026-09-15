@@ -24,14 +24,16 @@ const PLAN_KEY_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 export class PlansService {
   constructor(
     private repo: PlanRepository,
-    private productExists: (id: string) => Promise<boolean>,
+    private productExists: (id: string, publicationId?: string) => Promise<boolean>,
   ) {}
 
   async createPlan(
     data: CreatePlanData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Plan> {
-    if (!(await this.productExists(data.productId))) {
+    const pubId = publicationId || data.publicationId || "pub_default";
+    if (!(await this.productExists(data.productId, pubId))) {
       throw new PlanDomainError("PRODUCT_NOT_FOUND", "Product not found");
     }
     const key = data.key.trim().toLowerCase();
@@ -41,7 +43,7 @@ export class PlansService {
         "Plan key must be lowercase alphanumeric with hyphens",
       );
     }
-    const existing = await this.repo.findByKey(data.productId, key);
+    const existing = await this.repo.findByKey(data.productId, key, pubId);
     if (existing) {
       throw new PlanDomainError(
         "VALIDATION_ERROR",
@@ -99,11 +101,12 @@ export class PlansService {
 
     const plan = await this.repo.create({
       ...data,
+      publicationId: pubId,
       key,
       trialDays,
       intervalCount,
     });
-    domainEvents.emit("plan.created", { planId: plan.id, actorId });
+    domainEvents.emit("plan.created", { planId: plan.id, actorId, publicationId: pubId });
     return plan;
   }
 
@@ -111,33 +114,34 @@ export class PlansService {
     id: string,
     data: UpdatePlanData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Plan> {
-    const existing = await this.repo.findById(id);
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new PlanDomainError("PLAN_NOT_FOUND", "Plan not found");
-    const updated = await this.repo.update(id, data);
-    domainEvents.emit("plan.updated", { planId: id, actorId });
+    const updated = await this.repo.update(id, data, publicationId);
+    domainEvents.emit("plan.updated", { planId: id, actorId, publicationId: existing.publicationId });
     return updated;
   }
 
-  async archivePlan(id: string, actorId: string | null): Promise<Plan> {
-    const existing = await this.repo.findById(id);
+  async archivePlan(id: string, actorId: string | null, publicationId?: string): Promise<Plan> {
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new PlanDomainError("PLAN_NOT_FOUND", "Plan not found");
-    const archived = await this.repo.archive(id);
-    domainEvents.emit("plan.archived", { planId: id, actorId });
+    const archived = await this.repo.archive(id, publicationId);
+    domainEvents.emit("plan.archived", { planId: id, actorId, publicationId: existing.publicationId });
     return archived;
   }
 
-  async getPlan(id: string): Promise<Plan | null> {
-    return this.repo.findById(id);
+  async getPlan(id: string, publicationId?: string): Promise<Plan | null> {
+    return this.repo.findById(id, publicationId);
   }
 
-  async listPlansByProduct(productId: string): Promise<Plan[]> {
-    return this.repo.listByProduct(productId);
+  async listPlansByProduct(productId: string, publicationId?: string): Promise<Plan[]> {
+    return this.repo.listByProduct(productId, undefined, publicationId);
   }
 
-  async listActivePublicPlans(): Promise<Plan[]> {
-    return this.repo.listActivePublic();
+  async listActivePublicPlans(publicationId?: string): Promise<Plan[]> {
+    return this.repo.listActivePublic(publicationId);
   }
 }

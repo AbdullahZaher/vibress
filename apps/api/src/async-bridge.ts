@@ -4,6 +4,8 @@ import {
   QUEUE_NAMES,
   enqueueTraced,
   getBullMqRedisConnection,
+  AnalyticsQueueJob,
+  SearchQueueJob,
 } from "@vibress/queue";
 import { IngestEventData } from "@vibress/analytics";
 import { SearchDocumentInput } from "@vibress/search";
@@ -17,18 +19,6 @@ import { getConfig } from "@vibress/config";
 
 const ANALYTICS_QUEUE = QUEUE_NAMES.ANALYTICS;
 const SEARCH_QUEUE = QUEUE_NAMES.SEARCH;
-
-interface AnalyticsQueueJob {
-  event: IngestEventData;
-  traceparent?: string;
-}
-interface SearchQueueJob {
-  op: "upsert" | "remove" | "rebuild";
-  doc?: SearchDocumentInput;
-  entityType?: string;
-  entityId?: string;
-  traceparent?: string;
-}
 
 let analyticsQueue: Queue<AnalyticsQueueJob> | null = null;
 let searchQueue: Queue<SearchQueueJob> | null = null;
@@ -94,7 +84,11 @@ export function startAsyncBridge(): void {
               : null,
         properties: sanitizeForAnalytics(payload),
       };
+      const pubId = (payload.publicationId as string) || "pub_default";
+      analyticsData.publicationId = pubId;
       enqueueTraced(getAnalyticsQueue(), "ingest", {
+        scope: "publication",
+        publicationId: pubId,
         event: analyticsData,
       }).catch(() => undefined);
     });
@@ -110,18 +104,24 @@ export function startAsyncBridge(): void {
       const postId = payload.postId;
       const title = typeof payload.title === "string" ? payload.title : "";
       const slug = typeof payload.slug === "string" ? payload.slug : "";
+      const pubId = (payload.publicationId as string) || "pub_default";
       if (typeof postId === "string") {
         enqueueTraced(getSearchQueue(), "index", {
+          scope: "publication",
+          publicationId: pubId,
           op: "upsert",
-          doc: { entityType: "post", entityId: postId, title, slug },
+          doc: { entityType: "post", entityId: postId, title, slug, publicationId: pubId },
         }).catch(() => undefined);
       }
     });
     domainEvents.on("post.unpublished", (event: DomainEvent) => {
       const payload = (event.payload || {}) as Record<string, unknown>;
       const postId = payload.postId;
+      const pubId = (payload.publicationId as string) || "pub_default";
       if (typeof postId === "string") {
         enqueueTraced(getSearchQueue(), "remove", {
+          scope: "publication",
+          publicationId: pubId,
           op: "remove",
           entityType: "post",
           entityId: postId,
@@ -131,8 +131,11 @@ export function startAsyncBridge(): void {
     domainEvents.on("post.deleted", (event: DomainEvent) => {
       const payload = (event.payload || {}) as Record<string, unknown>;
       const postId = payload.postId;
+      const pubId = (payload.publicationId as string) || "pub_default";
       if (typeof postId === "string") {
         enqueueTraced(getSearchQueue(), "remove", {
+          scope: "publication",
+          publicationId: pubId,
           op: "remove",
           entityType: "post",
           entityId: postId,
@@ -162,14 +165,25 @@ export function startAsyncBridge(): void {
   }
 }
 
-export async function enqueueSearchRebuild(): Promise<void> {
-  await enqueueTraced(getSearchQueue(), "rebuild", { op: "rebuild" });
+export async function enqueueSearchRebuild(publicationId?: string): Promise<void> {
+  const pubId = publicationId || "pub_default";
+  await enqueueTraced(getSearchQueue(), "rebuild", {
+    scope: "publication",
+    publicationId: pubId,
+    op: "rebuild",
+  });
 }
 
 export async function enqueueSearchUpsert(
   doc: SearchDocumentInput,
 ): Promise<void> {
-  await enqueueTraced(getSearchQueue(), "index", { op: "upsert", doc });
+  const pubId = doc.publicationId || "pub_default";
+  await enqueueTraced(getSearchQueue(), "index", {
+    scope: "publication",
+    publicationId: pubId,
+    op: "upsert",
+    doc: { ...doc, publicationId: pubId },
+  });
 }
 
 function inferEntityType(eventName: string): string | null {

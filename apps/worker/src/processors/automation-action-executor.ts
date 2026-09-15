@@ -53,6 +53,7 @@ export class AutomationActionExecutor {
       stepIndex: number;
       memberId?: string | null;
       eventPayload: Record<string, unknown> | null;
+      publicationId?: string;
     },
   ): Promise<{ result: Record<string, unknown> }> {
     switch (action.type) {
@@ -93,13 +94,23 @@ export class AutomationActionExecutor {
             eventTypes: [eventType],
           },
           null,
+          context.publicationId,
         );
-        await this.webhooksService.dispatchEvent(eventType, {
-          ...context.eventPayload,
-          originAutomationId: context.runId,
-        });
+        await this.webhooksService.dispatchEvent(
+          eventType,
+          {
+            ...context.eventPayload,
+            originAutomationId: context.runId,
+            publicationId: context.publicationId,
+          },
+          context.publicationId,
+        );
         // Clean up the transient endpoint after dispatch
-        await this.webhooksService.deleteEndpoint(endpoint.id, null);
+        await this.webhooksService.deleteEndpoint(
+          endpoint.id,
+          null,
+          context.publicationId,
+        );
         return { result: { dispatched: true, eventType } };
       }
 

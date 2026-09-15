@@ -58,6 +58,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     // 2. Seed English source post
     await db.insert(posts).values({
       id: testPostId,
+      publicationId: "pub_default",
       translationGroupId: testGroupId,
       locale: "en",
       title: "Dry Run Source Post",
@@ -85,6 +86,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     // 3. Seed French translation (fr-FR LTR)
     await db.insert(contentTranslations).values({
       id: randomUUID(),
+      publicationId: "pub_default",
       translationGroupId: testGroupId,
       contentType: "post",
       contentId: testPostId,
@@ -114,6 +116,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     // 4. Seed Persian translation (fa-IR RTL)
     await db.insert(contentTranslations).values({
       id: randomUUID(),
+      publicationId: "pub_default",
       translationGroupId: testGroupId,
       contentType: "post",
       contentId: testPostId,

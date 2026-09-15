@@ -73,6 +73,7 @@ async function seedIndexedPost(): Promise<string> {
         id: postId,
         title: "Intelligence Search Post",
         slug: "intelligence-search-post",
+        publicationId: "pub_default",
         content: {
           schema: "vibress-studio",
           version: 1,
@@ -94,6 +95,7 @@ async function seedIndexedPost(): Promise<string> {
       id: `sd-${postId}`,
       entityType: "post",
       entityId: postId,
+      publicationId: "pub_default",
       title: "Intelligence Search Post",
       bodyText: "This post covers intelligence and discovery topics.",
       slug: "intelligence-search-post",
@@ -121,6 +123,7 @@ async function seedRestrictedPost(): Promise<string> {
       id: crypto.randomUUID(),
       title: "Members Only Secret Content",
       slug: `members-only-${Date.now()}`,
+      publicationId: "pub_default",
       content: {
         schema: "vibress-studio",
         version: 1,

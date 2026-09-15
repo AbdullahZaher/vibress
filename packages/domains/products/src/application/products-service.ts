@@ -23,7 +23,9 @@ export class ProductsService {
   async createProduct(
     data: CreateProductData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Product> {
+    const pubId = publicationId || data.publicationId || "pub_default";
     const key = data.key.trim().toLowerCase();
     if (!PRODUCT_KEY_REGEX.test(key)) {
       throw new ProductDomainError(
@@ -37,7 +39,7 @@ export class ProductsService {
         "Product name is too long",
       );
     }
-    const existing = await this.repo.findByKey(key);
+    const existing = await this.repo.findByKey(key, pubId);
     if (existing) {
       throw new ProductDomainError(
         "VALIDATION_ERROR",
@@ -45,8 +47,8 @@ export class ProductsService {
       );
     }
 
-    const product = await this.repo.create({ ...data, key });
-    domainEvents.emit("product.created", { productId: product.id, actorId });
+    const product = await this.repo.create({ ...data, key, publicationId: pubId });
+    domainEvents.emit("product.created", { productId: product.id, actorId, publicationId: pubId });
     return product;
   }
 
@@ -54,35 +56,37 @@ export class ProductsService {
     id: string,
     data: UpdateProductData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Product> {
-    const existing = await this.repo.findById(id);
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new ProductDomainError("PRODUCT_NOT_FOUND", "Product not found");
-    const updated = await this.repo.update(id, data);
-    domainEvents.emit("product.updated", { productId: id, actorId });
+    const updated = await this.repo.update(id, data, publicationId);
+    domainEvents.emit("product.updated", { productId: id, actorId, publicationId: existing.publicationId });
     return updated;
   }
 
-  async archiveProduct(id: string, actorId: string | null): Promise<Product> {
-    const existing = await this.repo.findById(id);
+  async archiveProduct(id: string, actorId: string | null, publicationId?: string): Promise<Product> {
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new ProductDomainError("PRODUCT_NOT_FOUND", "Product not found");
-    const archived = await this.repo.archive(id);
-    domainEvents.emit("product.archived", { productId: id, actorId });
+    const archived = await this.repo.archive(id, publicationId);
+    domainEvents.emit("product.archived", { productId: id, actorId, publicationId: existing.publicationId });
     return archived;
   }
 
-  async getProduct(id: string): Promise<Product | null> {
-    return this.repo.findById(id);
+  async getProduct(id: string, publicationId?: string): Promise<Product | null> {
+    return this.repo.findById(id, publicationId);
   }
 
-  async getProductByKey(key: string): Promise<Product | null> {
-    return this.repo.findByKey(key);
+  async getProductByKey(key: string, publicationId?: string): Promise<Product | null> {
+    return this.repo.findByKey(key, publicationId);
   }
 
   async listProducts(filter?: {
     status?: "active" | "archived";
     includeArchived?: boolean;
+    publicationId?: string;
   }): Promise<Product[]> {
     return this.repo.list(filter);
   }

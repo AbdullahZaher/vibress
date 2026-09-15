@@ -19,13 +19,16 @@ import { encryptSecret } from "@vibress/security";
 export class DrizzleWebhookRepository implements WebhookRepository {
   async createEndpoint(
     data: CreateWebhookEndpointData,
+    publicationId?: string,
   ): Promise<WebhookEndpoint> {
     const db = getDb();
     const now = new Date();
+    const pubId = publicationId || data.publicationId || "pub_default";
     const [row] = await db
       .insert(webhookEndpoints)
       .values({
         id: data.id || crypto.randomUUID(),
+        publicationId: pubId,
         name: data.name,
         url: data.url,
         secretEncrypted: data.secret ? encryptSecret(data.secret) : null,
@@ -39,30 +42,36 @@ export class DrizzleWebhookRepository implements WebhookRepository {
     return this.mapEndpointToDomain(row);
   }
 
-  async findEndpointById(id: string): Promise<WebhookEndpoint | null> {
+  async findEndpointById(id: string, publicationId?: string): Promise<WebhookEndpoint | null> {
     const db = getDb();
+    const conditions = [eq(webhookEndpoints.id, id)];
+    if (publicationId) conditions.push(eq(webhookEndpoints.publicationId, publicationId));
     const rows = await db
       .select()
       .from(webhookEndpoints)
-      .where(eq(webhookEndpoints.id, id))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapEndpointToDomain(row);
   }
 
-  async listEndpoints(): Promise<WebhookEndpoint[]> {
+  async listEndpoints(publicationId?: string): Promise<WebhookEndpoint[]> {
     const db = getDb();
-    const rows = await db
+    let query = db
       .select()
-      .from(webhookEndpoints)
-      .orderBy(webhookEndpoints.createdAt);
+      .from(webhookEndpoints);
+    if (publicationId) {
+      query = query.where(eq(webhookEndpoints.publicationId, publicationId)) as any;
+    }
+    const rows = await query.orderBy(webhookEndpoints.createdAt);
     return rows.map((r) => this.mapEndpointToDomain(r));
   }
 
   async updateEndpoint(
     id: string,
     data: Partial<CreateWebhookEndpointData>,
+    publicationId?: string,
   ): Promise<WebhookEndpoint> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
@@ -75,28 +84,37 @@ export class DrizzleWebhookRepository implements WebhookRepository {
       payload.secretEncrypted =
         data.secret === null ? null : encryptSecret(data.secret);
     }
+    const conditions = [eq(webhookEndpoints.id, id)];
+    if (publicationId) conditions.push(eq(webhookEndpoints.publicationId, publicationId));
+
     const [row] = await db
       .update(webhookEndpoints)
       .set(payload)
-      .where(eq(webhookEndpoints.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Webhook endpoint not found: ${id}`);
     return this.mapEndpointToDomain(row);
   }
 
-  async deleteEndpoint(id: string): Promise<void> {
+  async deleteEndpoint(id: string, publicationId?: string): Promise<void> {
     const db = getDb();
-    await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
+    const conditions = [eq(webhookEndpoints.id, id)];
+    if (publicationId) conditions.push(eq(webhookEndpoints.publicationId, publicationId));
+    await db.delete(webhookEndpoints).where(and(...conditions));
   }
 
   async findActiveEndpointsForEvent(
     eventType: string,
+    publicationId?: string,
   ): Promise<WebhookEndpoint[]> {
     const db = getDb();
+    const conditions = [eq(webhookEndpoints.enabled, true)];
+    if (publicationId) conditions.push(eq(webhookEndpoints.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(webhookEndpoints)
-      .where(eq(webhookEndpoints.enabled, true));
+      .where(and(...conditions));
     return rows
       .filter(
         (r) =>
@@ -175,6 +193,29 @@ export class DrizzleWebhookRepository implements WebhookRepository {
       conditions.push(eq(webhookDeliveries.endpointId, filter.endpointId));
     if (filter.status)
       conditions.push(eq(webhookDeliveries.status, filter.status));
+
+    if (filter.publicationId) {
+      conditions.push(eq(webhookEndpoints.publicationId, filter.publicationId));
+      const whereClause = conditions.length ? and(...conditions) : undefined;
+      const countRes = await db
+        .select({ total: count() })
+        .from(webhookDeliveries)
+        .innerJoin(webhookEndpoints, eq(webhookDeliveries.endpointId, webhookEndpoints.id))
+        .where(whereClause);
+      const rows = await db
+        .select({ delivery: webhookDeliveries })
+        .from(webhookDeliveries)
+        .innerJoin(webhookEndpoints, eq(webhookDeliveries.endpointId, webhookEndpoints.id))
+        .where(whereClause)
+        .orderBy(desc(webhookDeliveries.createdAt))
+        .limit(limit)
+        .offset(offset);
+      return {
+        deliveries: rows.map((r) => this.mapDeliveryToDomain(r.delivery)),
+        total: Number(countRes[0]?.total || 0),
+      };
+    }
+
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
     const countRes = await db
@@ -261,6 +302,7 @@ export class DrizzleWebhookRepository implements WebhookRepository {
   private mapEndpointToDomain(row: WebhookEndpointRow): WebhookEndpoint {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       name: row.name,
       url: row.url,
       secretEncrypted: row.secretEncrypted,

@@ -20,6 +20,7 @@ export type PostVisibility = "public" | "members" | "paid";
 
 export interface Post {
   id: string;
+  publicationId: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -44,6 +45,7 @@ export interface Post {
 
 export interface CreatePostData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   title: string;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
@@ -78,6 +80,7 @@ export interface UpdatePostData {
 }
 
 export interface ListPostsFilter {
+  publicationId?: string | undefined;
   status?: PostStatus | undefined;
   authorId?: string | undefined;
   authorSlug?: string | undefined;

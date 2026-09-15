@@ -11,7 +11,7 @@ import {
 import crypto from "node:crypto";
 
 export class DrizzleMemberRepository implements MemberRepository {
-  async create(data: CreateMemberData): Promise<Member> {
+  async create(data: CreateMemberData & { publicationId?: string }): Promise<Member> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
@@ -20,6 +20,7 @@ export class DrizzleMemberRepository implements MemberRepository {
       .insert(members)
       .values({
         id,
+        publicationId: data.publicationId || "pub_default",
         email: data.email,
         emailNormalized: data.emailNormalized,
         name: data.name || null,
@@ -34,31 +35,35 @@ export class DrizzleMemberRepository implements MemberRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string): Promise<Member | null> {
+  async findById(id: string, publicationId?: string): Promise<Member | null> {
     const db = getDb();
+    const conditions = [eq(members.id, id)];
+    if (publicationId) conditions.push(eq(members.publicationId, publicationId));
     const rows = await db
       .select()
       .from(members)
-      .where(eq(members.id, id))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findByEmailNormalized(emailNormalized: string): Promise<Member | null> {
+  async findByEmailNormalized(emailNormalized: string, publicationId?: string): Promise<Member | null> {
     const db = getDb();
+    const conditions = [eq(members.emailNormalized, emailNormalized)];
+    if (publicationId) conditions.push(eq(members.publicationId, publicationId));
     const rows = await db
       .select()
       .from(members)
-      .where(eq(members.emailNormalized, emailNormalized))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: UpdateMemberData): Promise<Member> {
+  async update(id: string, data: UpdateMemberData, publicationId?: string): Promise<Member> {
     const db = getDb();
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -71,10 +76,13 @@ export class DrizzleMemberRepository implements MemberRepository {
     if (data.disabledAt !== undefined)
       updatePayload.disabledAt = data.disabledAt;
 
+    const conditions = [eq(members.id, id)];
+    if (publicationId) conditions.push(eq(members.publicationId, publicationId));
+
     const [row] = await db
       .update(members)
       .set(updatePayload)
-      .where(eq(members.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Member not found for update: ${id}`);
     return this.mapToDomain(row);
@@ -88,6 +96,9 @@ export class DrizzleMemberRepository implements MemberRepository {
     const offset = filter.offset || 0;
 
     const conditions = [];
+    if (filter.publicationId) {
+      conditions.push(eq(members.publicationId, filter.publicationId));
+    }
     if (filter.status) {
       conditions.push(eq(members.status, filter.status));
     }
@@ -141,6 +152,7 @@ export class DrizzleMemberRepository implements MemberRepository {
   private mapToDomain(row: MemberRow): Member {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       email: row.email,
       emailNormalized: row.emailNormalized,
       name: row.name || null,

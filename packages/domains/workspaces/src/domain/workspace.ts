@@ -54,8 +54,20 @@ export interface WorkspaceContext extends TenantContext {
 }
 
 export class TenantAccessDeniedError extends Error {
+  code = "TENANT_ACCESS_DENIED";
   constructor(message = "Access denied: cross-tenant operation prohibited") {
     super(message);
     this.name = "TenantAccessDeniedError";
   }
 }
+
+export class PublicationNotFoundError extends Error {
+  code = "PUBLICATION_NOT_FOUND";
+  constructor(message = "Publication not found") {
+    super(message);
+    this.name = "PublicationNotFoundError";
+  }
+}
+
+export type { ActorType, PublicationContext } from "@vibress/security";
+

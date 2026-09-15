@@ -4,6 +4,7 @@ import {
   QUEUE_NAMES,
   enqueueTraced,
   getBullMqRedisConnection,
+  assertJobScope,
 } from "@vibress/queue";
 import {
   AutomationsService,
@@ -13,11 +14,15 @@ import {
 import { tracedProcessor } from "./trace-helper";
 
 export interface AutomationRunJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   runId: string;
   traceparent?: string;
 }
 
 export interface AutomationDelayedStepJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   runId: string;
   stepIndex: number;
   resumeAt: number;
@@ -46,6 +51,7 @@ export class AutomationRunnerWorker {
         stepIndex: number;
         memberId?: string | null;
         eventPayload: Record<string, unknown> | null;
+        publicationId?: string;
       },
     ): Promise<{ result: Record<string, unknown> }>;
   }) {
@@ -75,19 +81,24 @@ export class AutomationRunnerWorker {
     this.automationsService = new AutomationsService(
       repo,
       {
-        enqueueRun: (runId) => this.enqueueRun(runId),
-        enqueueDelayedStep: (runId, stepIndex, delayMs) =>
-          this.enqueueDelayed(runId, stepIndex, delayMs),
+        enqueueRun: (runId, publicationId) => this.enqueueRun(runId, publicationId),
+        enqueueDelayedStep: (runId, stepIndex, delayMs, publicationId) =>
+          this.enqueueDelayed(runId, stepIndex, delayMs, publicationId),
       },
       executor,
     );
   }
 
-  async enqueueRun(runId: string): Promise<void> {
+  async enqueueRun(runId: string, publicationId?: string): Promise<void> {
+    const pubId = publicationId || "pub_default";
     await enqueueTraced(
       this.runQueue!,
       "run",
-      { runId },
+      {
+        scope: "publication",
+        publicationId: pubId,
+        runId,
+      },
       { jobId: `run-${runId}` },
     );
   }
@@ -96,11 +107,19 @@ export class AutomationRunnerWorker {
     runId: string,
     stepIndex: number,
     delayMs: number,
+    publicationId?: string,
   ): Promise<void> {
+    const pubId = publicationId || "pub_default";
     await enqueueTraced(
       this.delayedQueue!,
       "resume",
-      { runId, stepIndex, resumeAt: Date.now() + delayMs },
+      {
+        scope: "publication",
+        publicationId: pubId,
+        runId,
+        stepIndex,
+        resumeAt: Date.now() + delayMs,
+      },
       {
         delay: delayMs,
         jobId: `resume-${runId}-${stepIndex}`,
@@ -113,6 +132,7 @@ export class AutomationRunnerWorker {
     this.worker = new Worker<AutomationRunJob>(
       AUTOMATIONS_QUEUE_NAME,
       tracedProcessor("worker.job.automation-run", async (job) => {
+        assertJobScope(job.data);
         await this.automationsService.executeRun(job.data.runId);
       }),
       { connection: getBullMqRedisConnection(), concurrency: 2 },
@@ -121,6 +141,7 @@ export class AutomationRunnerWorker {
     this.delayedWorker = new Worker<AutomationDelayedStepJob>(
       QUEUE_NAMES.AUTOMATIONS_DELAYED,
       tracedProcessor("worker.job.automation-resume", async (job) => {
+        assertJobScope(job.data);
         await this.automationsService.resumeRun(job.data.runId);
       }),
       { connection: getBullMqRedisConnection(), concurrency: 2 },

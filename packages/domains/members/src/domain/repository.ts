@@ -12,10 +12,10 @@ import {
 } from "./auth";
 
 export interface MemberRepository {
-  create(data: CreateMemberData): Promise<Member>;
-  findById(id: string): Promise<Member | null>;
-  findByEmailNormalized(emailNormalized: string): Promise<Member | null>;
-  update(id: string, data: UpdateMemberData): Promise<Member>;
+  create(data: CreateMemberData & { publicationId?: string }): Promise<Member>;
+  findById(id: string, publicationId?: string): Promise<Member | null>;
+  findByEmailNormalized(emailNormalized: string, publicationId?: string): Promise<Member | null>;
+  update(id: string, data: UpdateMemberData, publicationId?: string): Promise<Member>;
   list(
     filter?: ListMembersFilter,
   ): Promise<{ members: Member[]; total: number }>;

@@ -30,63 +30,121 @@ export const QUEUE_NAMES = {
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
+export type JobScope =
+  | { scope: "publication"; publicationId: string }
+  | { scope: "system"; publicationId?: undefined };
+
+export function assertJobScope(data: unknown): JobScope {
+  if (!data || typeof data !== "object") {
+    throw new Error("Job data must be an object");
+  }
+  const obj = data as Record<string, unknown>;
+  if (obj.scope === "publication") {
+    const pubId =
+      typeof obj.publicationId === "string" && obj.publicationId.trim()
+        ? obj.publicationId.trim()
+        : typeof (obj.doc as Record<string, unknown> | undefined)?.publicationId === "string"
+          ? ((obj.doc as Record<string, unknown>).publicationId as string).trim()
+          : typeof (obj.event as Record<string, unknown> | undefined)?.publicationId === "string"
+            ? ((obj.event as Record<string, unknown>).publicationId as string).trim()
+            : undefined;
+    if (!pubId) {
+      throw new Error("Publication-scoped job must include a non-empty publicationId");
+    }
+    return { scope: "publication", publicationId: pubId };
+  }
+  if (obj.scope === "system") {
+    return { scope: "system" };
+  }
+
+  // Explicit publicationId provided directly or in nested doc/event
+  const candidatePubId =
+    typeof obj.publicationId === "string" && obj.publicationId.trim()
+      ? obj.publicationId.trim()
+      : typeof (obj.doc as Record<string, unknown> | undefined)?.publicationId === "string"
+        ? ((obj.doc as Record<string, unknown>).publicationId as string).trim()
+        : typeof (obj.event as Record<string, unknown> | undefined)?.publicationId === "string"
+          ? ((obj.event as Record<string, unknown>).publicationId as string).trim()
+          : undefined;
+
+  if (candidatePubId) {
+    return { scope: "publication", publicationId: candidatePubId };
+  }
+
+  throw new Error("Job payload must specify scope: 'publication' (with publicationId) or scope: 'system'");
+}
+
 export interface EmailDeliveryJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   sendId: string;
   recipientIds: string[];
-  traceparent?: string;
+  traceparent?: string | undefined;
 }
 
 export interface WebhookDeliveryJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   deliveryId: string;
   endpointId: string;
-  traceparent?: string;
+  traceparent?: string | undefined;
 }
 
 export interface SearchQueueJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   op: "upsert" | "remove" | "rebuild";
   doc?: {
     entityType: string;
     entityId: string;
     title: string;
-    bodyText?: string;
-    slug?: string;
-    url?: string;
-  };
-  entityType?: string;
-  entityId?: string;
-  traceparent?: string;
+    bodyText?: string | undefined;
+    slug?: string | undefined;
+    url?: string | undefined;
+    publicationId?: string | undefined;
+  } | undefined;
+  entityType?: string | undefined;
+  entityId?: string | undefined;
+  traceparent?: string | undefined;
 }
 
 export interface AnalyticsQueueJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   event: {
     eventId: string;
+    publicationId?: string | undefined;
     eventName: string;
-    occurredAt: Date | string;
-    actorType?: string | null;
-    actorId?: string | null;
-    entityType?: string | null;
-    entityId?: string | null;
+    occurredAt?: Date | string | undefined;
+    actorType?: string | null | undefined;
+    actorId?: string | null | undefined;
+    entityType?: string | null | undefined;
+    entityId?: string | null | undefined;
     /** Public web traffic fields (privacy-safe). */
-    path?: string | null;
-    visitorHash?: string | null;
-    referrerDomain?: string | null;
-    isBot?: boolean | null;
-    context?: Record<string, unknown> | null;
-    properties?: Record<string, unknown> | null;
+    path?: string | null | undefined;
+    visitorHash?: string | null | undefined;
+    referrerDomain?: string | null | undefined;
+    isBot?: boolean | null | undefined;
+    context?: Record<string, unknown> | null | undefined;
+    properties?: Record<string, unknown> | null | undefined;
   };
-  traceparent?: string;
+  traceparent?: string | undefined;
 }
 
 export interface AutomationRunQueueJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   runId: string;
-  traceparent?: string;
+  traceparent?: string | undefined;
 }
 
 export interface AutomationDelayedQueueJob {
+  scope?: "publication" | "system" | undefined;
+  publicationId?: string | undefined;
   runId: string;
   stepIndex: number;
   resumeAt: number;
-  traceparent?: string;
+  traceparent?: string | undefined;
 }
 
 export const QUEUE_DEFAULTS = {
@@ -131,7 +189,7 @@ export function createWorker<T = unknown>(
  * process boundaries. When tracing is disabled this behaves exactly like
  * queue.add with no overhead.
  */
-export async function enqueueTraced<T extends { traceparent?: string }>(
+export async function enqueueTraced<T extends { traceparent?: string | undefined }>(
   queue: Queue<T>,
   jobName: string,
   payload: T,

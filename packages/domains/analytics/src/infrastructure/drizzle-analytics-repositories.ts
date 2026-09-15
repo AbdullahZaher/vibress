@@ -19,13 +19,15 @@ import { INTERNAL_REFERRER } from "../application/analytics-helpers";
 export const TRAFFIC_EVENT_NAMES = ["post.view", "page.view"] as const;
 
 export class DrizzleAnalyticsRepository implements AnalyticsRepository {
-  async ingest(data: IngestEventData): Promise<void> {
+  async ingest(data: IngestEventData, publicationId?: string): Promise<void> {
     const db = getDb();
     const occurredAt = data.occurredAt ? new Date(data.occurredAt) : new Date();
+    const pubId = publicationId || data.publicationId || "pub_default";
     await db
       .insert(analyticsEvents)
       .values({
         id: crypto.randomUUID(),
+        publicationId: pubId,
         eventId: data.eventId,
         eventName: data.eventName,
         occurredAt,
@@ -45,12 +47,14 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
       .onConflictDoNothing();
   }
 
-  async findEvent(eventId: string): Promise<boolean> {
+  async findEvent(eventId: string, publicationId?: string): Promise<boolean> {
     const db = getDb();
+    const conditions = [eq(analyticsEvents.eventId, eventId)];
+    if (publicationId) conditions.push(eq(analyticsEvents.publicationId, publicationId));
     const rows = await db
       .select({ id: analyticsEvents.id })
       .from(analyticsEvents)
-      .where(eq(analyticsEvents.eventId, eventId))
+      .where(and(...conditions))
       .limit(1);
     return rows.length > 0;
   }
@@ -108,17 +112,17 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
     return rows.map((r) => this.mapMetricToDomain(r));
   }
 
-  async listEventNames(from: string, to: string): Promise<string[]> {
+  async listEventNames(from: string, to: string, publicationId?: string): Promise<string[]> {
     const db = getDb();
+    const conditions = [
+      gte(analyticsEvents.occurredAt, new Date(`${from}T00:00:00Z`)),
+      lte(analyticsEvents.occurredAt, new Date(`${to}T23:59:59Z`)),
+    ];
+    if (publicationId) conditions.push(eq(analyticsEvents.publicationId, publicationId));
     const rows = await db
       .select({ eventName: analyticsEvents.eventName })
       .from(analyticsEvents)
-      .where(
-        and(
-          gte(analyticsEvents.occurredAt, new Date(`${from}T00:00:00Z`)),
-          lte(analyticsEvents.occurredAt, new Date(`${to}T23:59:59Z`)),
-        ),
-      )
+      .where(and(...conditions))
       .groupBy(analyticsEvents.eventName);
     return rows.map((r) => r.eventName);
   }
@@ -178,45 +182,46 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
     return rows.map((r) => ({ date: r.date, views: Number(r.views) || 0 }));
   }
 
-  async countDistinctVisitors(from: Date, to: Date): Promise<number> {
+  async countDistinctVisitors(from: Date, to: Date, publicationId?: string): Promise<number> {
     const db = getDb();
+    const conditions = [
+      inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
+      eq(analyticsEvents.isBot, false),
+      isNotNull(analyticsEvents.visitorHash),
+      gte(analyticsEvents.occurredAt, from),
+      lte(analyticsEvents.occurredAt, to),
+    ];
+    if (publicationId) conditions.push(eq(analyticsEvents.publicationId, publicationId));
     const rows = await db
       .select({
         count: sql<number>`count(distinct ${analyticsEvents.visitorHash})::int`,
       })
       .from(analyticsEvents)
-      .where(
-        and(
-          inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
-          eq(analyticsEvents.isBot, false),
-          isNotNull(analyticsEvents.visitorHash),
-          gte(analyticsEvents.occurredAt, from),
-          lte(analyticsEvents.occurredAt, to),
-        ),
-      );
+      .where(and(...conditions));
     return Number(rows[0]?.count || 0);
   }
 
   async countDistinctVisitorsByDay(
     from: Date,
     to: Date,
+    publicationId?: string,
   ): Promise<Array<{ date: string; visitors: number }>> {
     const db = getDb();
+    const conditions = [
+      inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
+      eq(analyticsEvents.isBot, false),
+      isNotNull(analyticsEvents.visitorHash),
+      gte(analyticsEvents.occurredAt, from),
+      lte(analyticsEvents.occurredAt, to),
+    ];
+    if (publicationId) conditions.push(eq(analyticsEvents.publicationId, publicationId));
     const rows = await db
       .select({
         date: sql<string>`to_char(${analyticsEvents.occurredAt} at time zone 'UTC', 'YYYY-MM-DD')`,
         visitors: sql<number>`count(distinct ${analyticsEvents.visitorHash})::int`,
       })
       .from(analyticsEvents)
-      .where(
-        and(
-          inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
-          eq(analyticsEvents.isBot, false),
-          isNotNull(analyticsEvents.visitorHash),
-          gte(analyticsEvents.occurredAt, from),
-          lte(analyticsEvents.occurredAt, to),
-        ),
-      )
+      .where(and(...conditions))
       .groupBy(
         sql`to_char(${analyticsEvents.occurredAt} at time zone 'UTC', 'YYYY-MM-DD')`,
       )
@@ -234,6 +239,7 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
     to: Date,
     entityType?: string | null,
     limit = 10,
+    publicationId?: string,
   ): Promise<TrafficTopRow[]> {
     const db = getDb();
     const conditions = [
@@ -245,6 +251,9 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
     ];
     if (entityType) {
       conditions.push(eq(analyticsEvents.entityType, entityType));
+    }
+    if (publicationId) {
+      conditions.push(eq(analyticsEvents.publicationId, publicationId));
     }
     const rows = await db
       .select({
@@ -263,25 +272,28 @@ export class DrizzleAnalyticsRepository implements AnalyticsRepository {
     from: Date,
     to: Date,
     limit = 10,
+    publicationId?: string,
   ): Promise<TrafficTopRow[]> {
     const db = getDb();
+    const conditions = [
+      inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
+      eq(analyticsEvents.isBot, false),
+      // Same-site referrers are stored as the internal sentinel and never
+      // become a source row nor inflate the Direct bucket.
+      sql`${analyticsEvents.referrerDomain} IS DISTINCT FROM ${INTERNAL_REFERRER}`,
+      gte(analyticsEvents.occurredAt, from),
+      lte(analyticsEvents.occurredAt, to),
+    ];
+    if (publicationId) {
+      conditions.push(eq(analyticsEvents.publicationId, publicationId));
+    }
     const rows = await db
       .select({
         key: sql<string>`coalesce(${analyticsEvents.referrerDomain}, 'direct')`,
         views: sql<number>`count(*)::int`,
       })
       .from(analyticsEvents)
-      .where(
-        and(
-          inArray(analyticsEvents.eventName, [...TRAFFIC_EVENT_NAMES]),
-          eq(analyticsEvents.isBot, false),
-          // Same-site referrers are stored as the internal sentinel and never
-          // become a source row nor inflate the Direct bucket.
-          sql`${analyticsEvents.referrerDomain} IS DISTINCT FROM ${INTERNAL_REFERRER}`,
-          gte(analyticsEvents.occurredAt, from),
-          lte(analyticsEvents.occurredAt, to),
-        ),
-      )
+      .where(and(...conditions))
       .groupBy(sql`coalesce(${analyticsEvents.referrerDomain}, 'direct')`)
       .orderBy(sql`count(*) desc`)
       .limit(limit);

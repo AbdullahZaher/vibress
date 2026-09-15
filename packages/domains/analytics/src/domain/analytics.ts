@@ -18,6 +18,7 @@ export type AllowedEventName = (typeof ALLOWED_EVENT_NAMES)[number];
 
 export interface AnalyticsEvent {
   id: string;
+  publicationId: string;
   eventId: string;
   eventName: string;
   occurredAt: Date;
@@ -33,6 +34,7 @@ export interface AnalyticsEvent {
 
 export interface IngestEventData {
   eventId: string;
+  publicationId?: string | undefined;
   eventName: string;
   occurredAt?: Date | undefined;
   actorType?: string | null | undefined;
@@ -63,8 +65,8 @@ export interface TrafficTopRow {
 }
 
 export interface AnalyticsRepository {
-  ingest(data: IngestEventData): Promise<void>;
-  findEvent(eventId: string): Promise<boolean>;
+  ingest(data: IngestEventData, publicationId?: string): Promise<void>;
+  findEvent(eventId: string, publicationId?: string): Promise<boolean>;
   upsertDailyMetric(metric: {
     metricDate: string;
     metricName: string;
@@ -77,7 +79,7 @@ export interface AnalyticsRepository {
     from: string,
     to: string,
   ): Promise<DailyMetric[]>;
-  listEventNames(from: string, to: string): Promise<string[]>;
+  listEventNames(from: string, to: string, publicationId?: string): Promise<string[]>;
   rebuildDay(metricDate: string, events: IngestEventData[]): Promise<void>;
 
   /** Total non-bot traffic view events in a range, grouped by day (from daily metrics). */
@@ -86,11 +88,12 @@ export interface AnalyticsRepository {
     to: string,
   ): Promise<Array<{ date: string; views: number }>>;
   /** COUNT(DISTINCT visitor_hash) over raw non-bot traffic events in a range. */
-  countDistinctVisitors(from: Date, to: Date): Promise<number>;
+  countDistinctVisitors(from: Date, to: Date, publicationId?: string): Promise<number>;
   /** COUNT(DISTINCT visitor_hash) grouped by UTC day over raw non-bot traffic events. */
   countDistinctVisitorsByDay(
     from: Date,
     to: Date,
+    publicationId?: string,
   ): Promise<Array<{ date: string; visitors: number }>>;
   /** Top content paths by non-bot views, optionally filtered to one entity type. */
   getTopTrafficPaths(
@@ -98,12 +101,14 @@ export interface AnalyticsRepository {
     to: Date,
     entityType?: string | null,
     limit?: number,
+    publicationId?: string,
   ): Promise<TrafficTopRow[]>;
   /** Top referrer domains by non-bot views ('direct' bucket for null referrer). */
   getTopTrafficReferrers(
     from: Date,
     to: Date,
     limit?: number,
+    publicationId?: string,
   ): Promise<TrafficTopRow[]>;
   /** Deletes traffic raw events older than `before` (retention). Returns deleted count. */
   deleteTrafficEventsBefore(before: Date): Promise<number>;

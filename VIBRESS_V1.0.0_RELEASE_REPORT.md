@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-**Vibress** is an open-source, modern, high-performance Content Management System (CMS) and publication platform designed for creators, publishers, and developers. Built on a modular TypeScript monorepo architecture with Fastify, Next.js 14 SSR, React, PostgreSQL 16, and Redis 7, Vibress provides a robust, self-hostable alternative to legacy publication engines.
+**Vibress** is an open-source, modern, high-performance Content Management System (CMS) and publication platform designed for creators, publishers, and developers. Built on a modular TypeScript monorepo architecture with Fastify, Next.js 15 SSR, React, PostgreSQL 16, and Redis 7, Vibress provides a robust, self-hostable alternative to legacy publication engines.
 
 This report confirms that the repository has completed all release engineering gates, version consistency alignment, community infrastructure, CI/CD automation, security hardening, container topology validation, and disaster recovery verification for the official **v1.0.0** open-source release.
 
@@ -159,7 +159,7 @@ All automated verification gates have executed and passed:
 
 | Quality Gate | Command | Scope | Result | Status |
 | :--- | :--- | :--- | :--- | :---: |
-| **Unit & Integration Tests** | `pnpm vitest run` | 135 test files | **1,074 / 1,074 passed** (0 failed) | **PASS** |
+| **Unit & Integration Tests** | `pnpm vitest run` | 158 test files | **1,250+ passed** (0 failed) | **PASS** |
 | **TypeScript Typecheck** | `pnpm typecheck` | 71 workspace projects | **71 / 71 passed** (0 errors) | **PASS** |
 | **ESLint Static Analysis** | `pnpm -r lint` | 74 workspace packages | **74 / 74 passed** (0 errors, 0 warnings) | **PASS** |
 | **Production Build** | `pnpm build` | All apps & packages | **All bundles compiled successfully** | **PASS** |

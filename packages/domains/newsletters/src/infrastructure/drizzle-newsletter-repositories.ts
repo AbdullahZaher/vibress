@@ -26,13 +26,14 @@ import {
 } from "../domain/send";
 
 export class DrizzleNewsletterRepository implements NewsletterRepository {
-  async create(data: CreateNewsletterData): Promise<Newsletter> {
+  async create(data: CreateNewsletterData & { publicationId?: string }): Promise<Newsletter> {
     const db = getDb();
     const now = new Date();
     const [row] = await db
       .insert(newsletters)
       .values({
         id: data.id || crypto.randomUUID(),
+        publicationId: data.publicationId || "pub_default",
         key: data.key,
         name: data.name,
         description: data.description || null,
@@ -48,31 +49,35 @@ export class DrizzleNewsletterRepository implements NewsletterRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string): Promise<Newsletter | null> {
+  async findById(id: string, publicationId?: string): Promise<Newsletter | null> {
     const db = getDb();
+    const conditions = [eq(newsletters.id, id)];
+    if (publicationId) conditions.push(eq(newsletters.publicationId, publicationId));
     const rows = await db
       .select()
       .from(newsletters)
-      .where(eq(newsletters.id, id))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findByKey(key: string): Promise<Newsletter | null> {
+  async findByKey(key: string, publicationId?: string): Promise<Newsletter | null> {
     const db = getDb();
+    const conditions = [eq(newsletters.key, key)];
+    if (publicationId) conditions.push(eq(newsletters.publicationId, publicationId));
     const rows = await db
       .select()
       .from(newsletters)
-      .where(eq(newsletters.key, key))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: UpdateNewsletterData): Promise<Newsletter> {
+  async update(id: string, data: UpdateNewsletterData, publicationId?: string): Promise<Newsletter> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
@@ -80,17 +85,24 @@ export class DrizzleNewsletterRepository implements NewsletterRepository {
     if (data.senderName !== undefined) payload.senderName = data.senderName;
     if (data.senderEmail !== undefined) payload.senderEmail = data.senderEmail;
     if (data.replyTo !== undefined) payload.replyTo = data.replyTo;
+
+    const conditions = [eq(newsletters.id, id)];
+    if (publicationId) conditions.push(eq(newsletters.publicationId, publicationId));
+
     const [row] = await db
       .update(newsletters)
       .set(payload)
-      .where(eq(newsletters.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Newsletter not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async archive(id: string): Promise<Newsletter> {
+  async archive(id: string, publicationId?: string): Promise<Newsletter> {
     const db = getDb();
+    const conditions = [eq(newsletters.id, id)];
+    if (publicationId) conditions.push(eq(newsletters.publicationId, publicationId));
+
     const [row] = await db
       .update(newsletters)
       .set({
@@ -98,20 +110,26 @@ export class DrizzleNewsletterRepository implements NewsletterRepository {
         archivedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(newsletters.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Newsletter not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async list(filter?: { includeArchived?: boolean }): Promise<Newsletter[]> {
+  async list(filter?: { includeArchived?: boolean; publicationId?: string }): Promise<Newsletter[]> {
     const db = getDb();
+    const conditions = [];
+    if (filter?.publicationId) {
+      conditions.push(eq(newsletters.publicationId, filter.publicationId));
+    }
+    if (!filter?.includeArchived) {
+      conditions.push(isNull(newsletters.archivedAt));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await db
       .select()
       .from(newsletters)
-      .where(
-        filter?.includeArchived ? undefined : isNull(newsletters.archivedAt),
-      )
+      .where(whereClause)
       .orderBy(newsletters.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -119,6 +137,7 @@ export class DrizzleNewsletterRepository implements NewsletterRepository {
   private mapToDomain(row: NewsletterRow): Newsletter {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       key: row.key,
       name: row.name,
       description: row.description || null,

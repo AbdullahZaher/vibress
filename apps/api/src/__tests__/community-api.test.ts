@@ -116,6 +116,7 @@ async function ensurePost(): Promise<string> {
       id: `post-community-${Date.now()}`,
       title: "Community Test Post",
       slug: "community-test-post",
+      publicationId: "pub_default",
       content: {
         schema: "vibress-studio",
         version: 1,

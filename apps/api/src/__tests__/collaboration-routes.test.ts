@@ -58,6 +58,7 @@ async function ensureOwnerAndTestPost(): Promise<void> {
       id: testPostId,
       title: "Collaboration Test Post",
       slug: `collab-test-${Date.now()}`,
+      publicationId: "pub_default",
       content: { root: { children: [] } },
       status: "draft",
       primaryAuthorId: ownerUserId,

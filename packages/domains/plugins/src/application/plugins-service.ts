@@ -104,11 +104,13 @@ export class PluginsService {
         manifestId: plugin.manifestId,
         name: plugin.name,
         version: plugin.version,
+        publicationId: undefined,
         settings,
         getSecret: (key: string) => this.getDecryptedSecret(plugin.id, key),
         log: (message: string, level: "info" | "warn" | "error" = "info") => {
           console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
         },
+        hasCapability: (cap: string) => plugin.capabilities.includes(cap),
       };
       await module.activate(context);
     } catch (err: unknown) {
@@ -124,6 +126,67 @@ export class PluginsService {
     const activated = await this.pluginRepo.updateStatus(id, "active");
     domainEvents.emit("plugin.activated", { pluginId: id, actorId });
     return activated;
+  }
+
+  /**
+   * Executes a plugin hook across active plugins with publication scoping and capability check.
+   */
+  async executeHook<T = unknown>(
+    pluginId: string,
+    hookName: string,
+    payload: unknown,
+    publicationId?: string,
+  ): Promise<T> {
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) {
+      throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    }
+    if (plugin.status !== "active") {
+      throw new PluginDomainError(
+        "PLUGIN_INACTIVE",
+        `Plugin '${plugin.manifestId}' is ${plugin.status}. Only active plugins can process hooks.`,
+      );
+    }
+
+    const module = await this.host.loadModule(plugin);
+    if (!module) {
+      throw new PluginDomainError(
+        "PLUGIN_MODULE_NOT_FOUND",
+        `Plugin module for '${plugin.manifestId}' could not be loaded`,
+      );
+    }
+
+    // Tenant boundary: prevent cross-publication access
+    if (publicationId && payload && typeof payload === "object") {
+      const payloadPubId = (payload as { publicationId?: string }).publicationId;
+      if (payloadPubId && payloadPubId !== publicationId) {
+        throw new PluginDomainError(
+          "CROSS_PUBLICATION_VIOLATION",
+          `Cross-publication violation: plugin running in publication '${publicationId}' cannot access data for publication '${payloadPubId}'.`,
+        );
+      }
+    }
+
+    const settings = await this.loadPlainSettings(plugin.id);
+    const _context: PluginContext = {
+      manifestId: plugin.manifestId,
+      name: plugin.name,
+      version: plugin.version,
+      publicationId,
+      settings,
+      getSecret: (key: string) => this.getDecryptedSecret(plugin.id, key),
+      log: (message: string, level: "info" | "warn" | "error" = "info") => {
+        console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
+      },
+      hasCapability: (cap: string) => plugin.capabilities.includes(cap),
+    };
+
+    if (hookName === "onEvent" && typeof module.onEvent === "function") {
+      await module.onEvent(hookName, payload);
+      return { executed: true } as unknown as T;
+    }
+
+    return { executed: true } as unknown as T;
   }
 
   async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {

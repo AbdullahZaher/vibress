@@ -23,13 +23,15 @@ import {
 } from "../domain/automation";
 
 export class DrizzleAutomationRepository implements AutomationRepository {
-  async create(data: CreateAutomationData): Promise<Automation> {
+  async create(data: CreateAutomationData, publicationId?: string): Promise<Automation> {
     const db = getDb();
     const now = new Date();
+    const pubId = publicationId || data.publicationId || "pub_default";
     const [row] = await db
       .insert(automations)
       .values({
         id: data.id || crypto.randomUUID(),
+        publicationId: pubId,
         key: data.key,
         name: data.name,
         description: data.description || null,
@@ -47,24 +49,28 @@ export class DrizzleAutomationRepository implements AutomationRepository {
     return this.mapAutomationToDomain(row);
   }
 
-  async findById(id: string): Promise<Automation | null> {
+  async findById(id: string, publicationId?: string): Promise<Automation | null> {
     const db = getDb();
+    const conditions = [eq(automations.id, id)];
+    if (publicationId) conditions.push(eq(automations.publicationId, publicationId));
     const rows = await db
       .select()
       .from(automations)
-      .where(eq(automations.id, id))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapAutomationToDomain(row);
   }
 
-  async findByKey(key: string): Promise<Automation | null> {
+  async findByKey(key: string, publicationId?: string): Promise<Automation | null> {
     const db = getDb();
+    const conditions = [eq(automations.key, key)];
+    if (publicationId) conditions.push(eq(automations.publicationId, publicationId));
     const rows = await db
       .select()
       .from(automations)
-      .where(eq(automations.key, key))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -74,6 +80,7 @@ export class DrizzleAutomationRepository implements AutomationRepository {
   async update(
     id: string,
     data: Partial<CreateAutomationData>,
+    publicationId?: string,
   ): Promise<Automation> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
@@ -84,10 +91,14 @@ export class DrizzleAutomationRepository implements AutomationRepository {
     if (data.conditions !== undefined) payload.conditions = data.conditions;
     if (data.actions !== undefined) payload.actions = data.actions;
     if (data.status !== undefined) payload.status = data.status;
+
+    const conditions = [eq(automations.id, id)];
+    if (publicationId) conditions.push(eq(automations.publicationId, publicationId));
+
     const [row] = await db
       .update(automations)
       .set(payload)
-      .where(eq(automations.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Automation not found: ${id}`);
     return this.mapAutomationToDomain(row);
@@ -96,37 +107,45 @@ export class DrizzleAutomationRepository implements AutomationRepository {
   async updateStatus(
     id: string,
     status: AutomationStatus,
+    publicationId?: string,
   ): Promise<Automation> {
     const db = getDb();
+    const conditions = [eq(automations.id, id)];
+    if (publicationId) conditions.push(eq(automations.publicationId, publicationId));
+
     const [row] = await db
       .update(automations)
       .set({ status, updatedAt: new Date() })
-      .where(eq(automations.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Automation not found: ${id}`);
     return this.mapAutomationToDomain(row);
   }
 
-  async list(): Promise<Automation[]> {
+  async list(publicationId?: string): Promise<Automation[]> {
     const db = getDb();
-    const rows = await db
+    let query = db
       .select()
-      .from(automations)
-      .orderBy(automations.createdAt);
+      .from(automations);
+    if (publicationId) {
+      query = query.where(eq(automations.publicationId, publicationId)) as any;
+    }
+    const rows = await query.orderBy(automations.createdAt);
     return rows.map((r) => this.mapAutomationToDomain(r));
   }
 
-  async listActiveByTrigger(triggerEvent: string): Promise<Automation[]> {
+  async listActiveByTrigger(triggerEvent: string, publicationId?: string): Promise<Automation[]> {
     const db = getDb();
+    const conditions = [
+      eq(automations.status, "active"),
+      eq(automations.triggerEvent, triggerEvent),
+    ];
+    if (publicationId) conditions.push(eq(automations.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(automations)
-      .where(
-        and(
-          eq(automations.status, "active"),
-          eq(automations.triggerEvent, triggerEvent),
-        ),
-      );
+      .where(and(...conditions));
     return rows.map((r) => this.mapAutomationToDomain(r));
   }
 
@@ -237,6 +256,7 @@ export class DrizzleAutomationRepository implements AutomationRepository {
     filter: {
       automationId?: string;
       status?: string;
+      publicationId?: string;
       limit?: number;
       offset?: number;
     } = {},
@@ -249,6 +269,29 @@ export class DrizzleAutomationRepository implements AutomationRepository {
       conditions.push(eq(automationRuns.automationId, filter.automationId));
     if (filter.status)
       conditions.push(eq(automationRuns.status, filter.status));
+
+    if (filter.publicationId) {
+      conditions.push(eq(automations.publicationId, filter.publicationId));
+      const whereClause = conditions.length ? and(...conditions) : undefined;
+      const countRes = await db
+        .select({ total: count() })
+        .from(automationRuns)
+        .innerJoin(automations, eq(automationRuns.automationId, automations.id))
+        .where(whereClause);
+      const rows = await db
+        .select({ run: automationRuns })
+        .from(automationRuns)
+        .innerJoin(automations, eq(automationRuns.automationId, automations.id))
+        .where(whereClause)
+        .orderBy(desc(automationRuns.createdAt))
+        .limit(limit)
+        .offset(offset);
+      return {
+        runs: rows.map((r) => this.mapRunToDomain(r.run)),
+        total: Number(countRes[0]?.total || 0),
+      };
+    }
+
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
     const countRes = await db
@@ -385,6 +428,7 @@ export class DrizzleAutomationRepository implements AutomationRepository {
   private mapAutomationToDomain(row: AutomationRow): Automation {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       key: row.key,
       name: row.name,
       description: row.description || null,

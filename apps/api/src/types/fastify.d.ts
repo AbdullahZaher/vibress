@@ -19,5 +19,6 @@ declare module "fastify" {
       name: string;
       scopes: string[];
     };
+    publicationContext?: import("@vibress/security").PublicationContext;
   }
 }

@@ -45,11 +45,11 @@ describe("ContentSchedulerWorker", () => {
 
   it("publishes due scheduled posts and pages during sweep", async () => {
     mocks.findDueScheduledPosts.mockResolvedValue([
-      { id: "post-1", title: "Scheduled Post 1", primaryAuthorId: "author-1" },
-      { id: "post-2", title: "Scheduled Post 2", primaryAuthorId: "author-2" },
+      { id: "post-1", title: "Scheduled Post 1", primaryAuthorId: "author-1", publicationId: "pub_1" },
+      { id: "post-2", title: "Scheduled Post 2", primaryAuthorId: "author-2", publicationId: "pub_2" },
     ]);
     mocks.findDueScheduledPages.mockResolvedValue([
-      { id: "page-1", title: "Scheduled Page 1", primaryAuthorId: "author-1" },
+      { id: "page-1", title: "Scheduled Page 1", primaryAuthorId: "author-1", publicationId: "pub_1" },
     ]);
     mocks.publishPost.mockResolvedValue({});
     mocks.publishPage.mockResolvedValue({});
@@ -59,9 +59,9 @@ describe("ContentSchedulerWorker", () => {
 
     expect(result.publishedPostsCount).toBe(2);
     expect(result.publishedPagesCount).toBe(1);
-    expect(mocks.publishPost).toHaveBeenCalledWith("post-1", "author-1");
-    expect(mocks.publishPost).toHaveBeenCalledWith("post-2", "author-2");
-    expect(mocks.publishPage).toHaveBeenCalledWith("page-1", "author-1");
+    expect(mocks.publishPost).toHaveBeenCalledWith("post-1", "author-1", "pub_1");
+    expect(mocks.publishPost).toHaveBeenCalledWith("post-2", "author-2", "pub_2");
+    expect(mocks.publishPage).toHaveBeenCalledWith("page-1", "author-1", "pub_1");
   });
 
   it("handles errors gracefully without crashing the sweep", async () => {

@@ -2,6 +2,7 @@ export type SearchEntityType = "post" | "page" | "tag" | "author";
 
 export interface SearchDocument {
   id: string;
+  publicationId: string;
   entityType: SearchEntityType;
   entityId: string;
   title: string;
@@ -22,6 +23,7 @@ export interface SearchResult {
 }
 
 export interface SearchDocumentInput {
+  publicationId?: string | undefined;
   entityType: SearchEntityType;
   entityId: string;
   title: string;
@@ -31,18 +33,20 @@ export interface SearchDocumentInput {
 }
 
 export interface SearchRepository {
-  upsert(doc: SearchDocumentInput): Promise<void>;
-  remove(entityType: string, entityId: string): Promise<void>;
+  upsert(doc: SearchDocumentInput & { publicationId?: string | undefined }): Promise<void>;
+  remove(entityType: string, entityId: string, publicationId?: string): Promise<void>;
   setSearchable(
     entityType: string,
     entityId: string,
     searchable: boolean,
+    publicationId?: string,
   ): Promise<void>;
   query(
     q: string,
     limit: number,
     offset: number,
+    publicationId?: string,
   ): Promise<{ results: SearchResult[]; total: number }>;
-  count(): Promise<number>;
-  clear(): Promise<void>;
+  count(publicationId?: string): Promise<number>;
+  clear(publicationId?: string): Promise<void>;
 }

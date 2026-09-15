@@ -8,6 +8,7 @@ import {
   searchService,
   analyticsService,
   automationsService,
+  workspaceService,
 } from "../services";
 import { enqueueSearchRebuild } from "../async-bridge";
 import { SearchDomainError } from "@vibress/search";
@@ -53,6 +54,34 @@ const sendError = (
 
 // ---------------- Public Search ----------------
 export async function publicSearchRoutes(fastify: FastifyInstance) {
+  fastify.addHook("preHandler", async (req, reply) => {
+    const host = req.hostname || (req.headers["host"] as string) || null;
+    const isDevFallbackAllowed =
+      !getConfig().isProduction && req.headers["x-dev-fallback"] !== "false";
+    try {
+      const pubCtx = await workspaceService.resolvePublicPublicationContext({
+        host,
+        isDevFallbackAllowed,
+      });
+      req.publicationContext = {
+        publicationId: pubCtx.publicationId,
+        workspaceId: pubCtx.workspaceId,
+        actorType: pubCtx.actorType,
+        isSystemOperation: pubCtx.isSystemOperation,
+      };
+    } catch {
+      return reply.status(404).send({
+        errors: [
+          {
+            code: "PUBLICATION_NOT_FOUND",
+            message: "Publication not found",
+            requestId: req.id,
+          },
+        ],
+      });
+    }
+  });
+
   fastify.get("/search", {
     config: {
       rateLimit: { max: getConfig().isTest ? 200 : 30, timeWindow: "1 minute" },
@@ -63,7 +92,12 @@ export async function publicSearchRoutes(fastify: FastifyInstance) {
       const limit = query.limit ? parseInt(query.limit, 10) : 20;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
       try {
-        const result = await searchService.search(q, limit, offset);
+        const result = await searchService.search(
+          q,
+          limit,
+          offset,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send(result);
       } catch (err) {
         if (err instanceof SearchDomainError) {
@@ -115,16 +149,18 @@ export async function adminSearchRoutes(fastify: FastifyInstance) {
       requirePermission("search.manage"),
       validateOrigin,
     ],
-    handler: async (_req, reply) => {
-      await enqueueSearchRebuild();
+    handler: async (req, reply) => {
+      await enqueueSearchRebuild(req.publicationContext?.publicationId);
       return reply.status(202).send({ accepted: true });
     },
   });
 
   fastify.get("/search/index-count", {
     preHandler: [requireStaffSession, requirePermission("search.manage")],
-    handler: async (_req, reply) => {
-      const count = await searchService.indexCount();
+    handler: async (req, reply) => {
+      const count = await searchService.indexCount(
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ count });
     },
   });
@@ -134,8 +170,10 @@ export async function adminSearchRoutes(fastify: FastifyInstance) {
 export async function adminAutomationRoutes(fastify: FastifyInstance) {
   fastify.get("/automations", {
     preHandler: [requireStaffSession, requirePermission("automations.read")],
-    handler: async (_req, reply) => {
-      const automations = await automationsService.listAutomations();
+    handler: async (req, reply) => {
+      const automations = await automationsService.listAutomations(
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ automations });
     },
   });
@@ -172,6 +210,7 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
             actions: body.actions,
           },
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(201).send({ automation });
       } catch (err) {
@@ -206,6 +245,7 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
           id,
           update,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ automation });
       } catch (err) {
@@ -235,6 +275,7 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
         const automation = await automationsService.activateAutomation(
           id,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ automation });
       } catch (err) {
@@ -257,6 +298,7 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
         const automation = await automationsService.deactivateAutomation(
           id,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ automation });
       } catch (err) {
@@ -276,7 +318,11 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const run = await automationsService.manualRun(id, req.user!.id);
+        const run = await automationsService.manualRun(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(201).send({ run });
       } catch (err) {
         if (err instanceof AutomationDomainError)
@@ -293,6 +339,7 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
       const params: {
         automationId?: string;
         status?: string;
+        publicationId?: string;
         limit: number;
         offset: number;
       } = {
@@ -301,6 +348,8 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
       };
       if (query.automationId) params.automationId = query.automationId;
       if (query.status) params.status = query.status;
+      if (req.publicationContext?.publicationId)
+        params.publicationId = req.publicationContext.publicationId;
       const result = await automationsService.listRuns(params);
       return reply.status(200).send({
         runs: result.runs.map((r) => ({
@@ -324,7 +373,10 @@ export async function adminAutomationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("automations.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const steps = await automationsService.getRunSteps(id);
+      const steps = await automationsService.getRunSteps(
+        id,
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ steps });
     },
   });

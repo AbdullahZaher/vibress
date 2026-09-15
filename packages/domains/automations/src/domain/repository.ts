@@ -9,13 +9,13 @@ import {
 } from "./automation";
 
 export interface AutomationRepository {
-  create(data: CreateAutomationData): Promise<Automation>;
-  findById(id: string): Promise<Automation | null>;
-  findByKey(key: string): Promise<Automation | null>;
-  update(id: string, data: Partial<CreateAutomationData>): Promise<Automation>;
-  updateStatus(id: string, status: AutomationStatus): Promise<Automation>;
-  list(): Promise<Automation[]>;
-  listActiveByTrigger(triggerEvent: string): Promise<Automation[]>;
+  create(data: CreateAutomationData, publicationId?: string): Promise<Automation>;
+  findById(id: string, publicationId?: string): Promise<Automation | null>;
+  findByKey(key: string, publicationId?: string): Promise<Automation | null>;
+  update(id: string, data: Partial<CreateAutomationData>, publicationId?: string): Promise<Automation>;
+  updateStatus(id: string, status: AutomationStatus, publicationId?: string): Promise<Automation>;
+  list(publicationId?: string): Promise<Automation[]>;
+  listActiveByTrigger(triggerEvent: string, publicationId?: string): Promise<Automation[]>;
 
   createVersion(
     automationId: string,
@@ -41,6 +41,7 @@ export interface AutomationRepository {
   listRuns(filter?: {
     automationId?: string;
     status?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ runs: AutomationRun[]; total: number }>;

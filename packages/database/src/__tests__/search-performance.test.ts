@@ -12,6 +12,7 @@ describe("DB-01: Search Query Performance & Execution Plan Validation", () => {
     for (let i = 0; i < 100; i++) {
       docs.push({
         id: crypto.randomUUID(),
+        publicationId: "pub_default",
         entityType: "post",
         entityId: `entity-${i}`,
         title: `Vibress Production Engineering Post #${i}`,

@@ -13,6 +13,7 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
 
   const mockPost: Post = {
     id: "post-100",
+    publicationId: "pub_default",
     title: "Author A's Article",
     slug: "author-a-article",
     excerpt: "Excerpt",
@@ -159,10 +160,11 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
       userId: "author-a",
       roles: ["author"],
       permissions: ["posts.delete"],
+      publicationId: "pub_default",
     };
 
     await postsService.deletePost("post-100", actorA);
-    expect(mockPostRepo.delete).toHaveBeenCalledWith("post-100");
+    expect(mockPostRepo.delete).toHaveBeenCalledWith("post-100", "pub_default");
   });
 
   it("REJECTS an unauthorized author restoring revisions on another author's post", async () => {
@@ -177,11 +179,12 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("permits an Editor or Administrator to update and delete another author's post", async () => {
+  it("permits an Editor or Administrator to update and delete another author's post within same publication", async () => {
     const editor: PostActorContext = {
       userId: "editor-1",
       roles: ["editor"],
       permissions: ["posts.edit", "posts.delete"],
+      publicationId: "pub_default",
     };
 
     const updated = await postsService.updatePost(
@@ -192,7 +195,32 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
     expect(updated).toBeDefined();
 
     await postsService.deletePost("post-100", editor);
-    expect(mockPostRepo.delete).toHaveBeenCalledWith("post-100");
+    expect(mockPostRepo.delete).toHaveBeenCalledWith("post-100", "pub_default");
+  });
+
+  it("REJECTS an Administrator from another publication attempting to modify or delete a post (cross-tenant isolation)", async () => {
+    const foreignAdmin: PostActorContext = {
+      userId: "admin-foreign",
+      roles: ["administrator"],
+      permissions: ["posts.edit", "posts.delete"],
+      publicationId: "pub_other",
+    };
+
+    // When repository enforces tenant isolation on findById, it returns null -> POST_NOT_FOUND (404)
+    mockPostRepo.findById.mockImplementation(async (id: string, pubId?: string) => {
+      if (pubId && pubId !== mockPost.publicationId) return null;
+      return { ...mockPost };
+    });
+
+    await expect(
+      postsService.updatePost("post-100", { title: "Cross Tenant Attack" }, foreignAdmin),
+    ).rejects.toMatchObject({ code: "POST_NOT_FOUND" });
+
+    await expect(
+      postsService.deletePost("post-100", foreignAdmin),
+    ).rejects.toMatchObject({ code: "POST_NOT_FOUND" });
+
+    expect(mockPostRepo.delete).not.toHaveBeenCalled();
   });
 
   it("permits a co-author in post authors to update the post", async () => {

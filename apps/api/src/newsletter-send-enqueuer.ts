@@ -39,7 +39,9 @@ export class NewsletterSendEnqueuer {
 
   async startSendAndEnqueue(
     sendId: string,
+    publicationId?: string,
   ): Promise<{ recipientCount: number; batchCount: number }> {
+    const pubId = publicationId || "pub_default";
     const { recipientCount } = await this.newslettersService.startSend(
       sendId,
       async (rows) => {
@@ -67,7 +69,12 @@ export class NewsletterSendEnqueuer {
       await enqueueTraced(
         queue,
         "deliver",
-        { sendId, recipientIds: batches[i] },
+        {
+          scope: "publication",
+          publicationId: pubId,
+          sendId,
+          recipientIds: batches[i]!,
+        },
         {
           jobId: `send-${sendId}-batch-${i}`,
           removeOnComplete: true,

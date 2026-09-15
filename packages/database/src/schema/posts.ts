@@ -5,15 +5,21 @@ import {
   integer,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export const posts = pgTable(
   "posts",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     excerpt: text("excerpt"),
     content: jsonb("content").notNull(),
     contentVersion: integer("content_version").notNull().default(1),
@@ -47,6 +53,10 @@ export const posts = pgTable(
   },
   (table) => {
     return {
+      publicationIdIdx: index("posts_publication_id_idx").on(table.publicationId),
+      publicationSlugActiveIdx: uniqueIndex("posts_publication_slug_active_idx")
+        .on(table.publicationId, table.slug)
+        .where(sql`"deleted_at" IS NULL`),
       slugIdx: index("posts_slug_idx").on(table.slug),
       statusIdx: index("posts_status_idx").on(table.status),
       publishedAtIdx: index("posts_published_at_idx").on(table.publishedAt),

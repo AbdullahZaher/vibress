@@ -16,6 +16,7 @@ import {
 function makeAutomation(overrides: Partial<Automation> = {}): Automation {
   return {
     id: "a1",
+    publicationId: "pub_default",
     key: "welcome",
     name: "Welcome",
     description: null,
@@ -374,6 +375,7 @@ describe("AutomationsService", () => {
       "r1",
       0,
       5000,
+      "pub_default",
     );
   });
 

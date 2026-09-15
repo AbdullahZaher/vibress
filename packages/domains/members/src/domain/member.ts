@@ -2,6 +2,7 @@ export type MemberStatus = "active" | "disabled";
 
 export interface Member {
   id: string;
+  publicationId: string;
   email: string;
   emailNormalized: string;
   name: string | null;
@@ -15,6 +16,7 @@ export interface Member {
 
 export interface CreateMemberData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   email: string;
   emailNormalized: string;
   name?: string | null | undefined;
@@ -31,6 +33,7 @@ export interface UpdateMemberData {
 }
 
 export interface ListMembersFilter {
+  publicationId?: string | undefined;
   search?: string | undefined;
   status?: MemberStatus | undefined;
   limit?: number | undefined;

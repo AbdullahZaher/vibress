@@ -47,6 +47,7 @@ export class MemberAuthService {
   async requestAuthLink(
     emailInput: string,
     context: MemberAuthContext = {},
+    publicationId?: string,
   ): Promise<RequestAuthLinkResult> {
     const emailNormalized = normalizeMemberEmail(emailInput);
     if (!emailNormalized) {
@@ -56,7 +57,8 @@ export class MemberAuthService {
       );
     }
 
-    let member = await this.memberRepo.findByEmailNormalized(emailNormalized);
+    const pubId = publicationId || "pub_default";
+    let member = await this.memberRepo.findByEmailNormalized(emailNormalized, pubId);
 
     if (!member) {
       if (!this.signupEnabled()) {
@@ -66,12 +68,14 @@ export class MemberAuthService {
       member = await this.memberRepo.create({
         email: emailInput.trim(),
         emailNormalized,
+        publicationId: pubId,
         status: "active",
         emailVerifiedAt: null,
       });
       domainEvents.emit("member.created", {
         memberId: member.id,
         emailNormalized,
+        publicationId: pubId,
       });
     }
 

@@ -4,4 +4,5 @@ export * from "./plugins/FloatingFormatToolbarPlugin";
 export * from "./collaboration/types";
 export * from "./collaboration/memory-collaboration-provider";
 export * from "./collaboration/websocket-collaboration-provider";
+export { Doc as YDoc } from "yjs";
 

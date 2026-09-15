@@ -49,7 +49,7 @@ export class ContentSchedulerWorker {
       for (const post of duePosts) {
         try {
           const actorId = post.updatedBy || post.primaryAuthorId;
-          await this.postsService.publishPost(post.id, actorId);
+          await this.postsService.publishPost(post.id, actorId, post.publicationId);
           publishedPostsCount++;
           console.log(
             `[Scheduler] Automatically published post ${post.id} ("${post.title}")`,
@@ -74,7 +74,7 @@ export class ContentSchedulerWorker {
       for (const page of duePages) {
         try {
           const actorId = page.updatedBy || page.primaryAuthorId;
-          await this.pagesService.publishPage(page.id, actorId);
+          await this.pagesService.publishPage(page.id, actorId, page.publicationId);
           publishedPagesCount++;
           console.log(
             `[Scheduler] Automatically published page ${page.id} ("${page.title}")`,

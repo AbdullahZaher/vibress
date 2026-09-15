@@ -2,6 +2,7 @@ export type AssetType = "image" | "video" | "audio" | "file";
 
 export interface MediaAsset {
   id: string;
+  publicationId: string;
   storageProvider: string;
   storageKey: string;
   originalFilename: string;
@@ -41,6 +42,7 @@ export interface MediaReferenceSummary {
 }
 
 export interface UploadMediaInput {
+  publicationId?: string | undefined;
   filename: string;
   mimeType: string;
   buffer: Buffer;

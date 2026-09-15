@@ -38,7 +38,7 @@ describe("ARCH-01: Single-Publication Runtime Boundary & Multi-Tenant Attack Sur
   });
 
   describe("Surface 1: Request Headers Injection", () => {
-    it("strips client-injected x-publication-id, x-workspace-id, and x-tenant-id headers", async () => {
+    it("rejects client-injected x-publication-id headers with 403 fail-closed boundary", async () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/posts",
@@ -50,10 +50,9 @@ describe("ARCH-01: Single-Publication Runtime Boundary & Multi-Tenant Attack Sur
         },
       });
 
-      expect(res.statusCode).toBe(200);
-      // Ensure host singleton posts are returned, not foreign or error
+      expect(res.statusCode).toBe(403);
       const body = JSON.parse(res.body);
-      expect(Array.isArray(body.posts || body)).toBe(true);
+      expect(body.errors?.[0]?.code).toBe("PUBLICATION_ACCESS_DENIED");
     });
   });
 

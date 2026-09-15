@@ -20,6 +20,7 @@ export type PageVisibility = "public" | "members" | "paid";
 
 export interface Page {
   id: string;
+  publicationId: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -44,6 +45,7 @@ export interface Page {
 
 export interface CreatePageData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   title: string;
   slug?: string | undefined;
   excerpt?: string | null | undefined;
@@ -76,6 +78,7 @@ export interface UpdatePageData {
 }
 
 export interface ListPagesFilter {
+  publicationId?: string | undefined;
   status?: PageStatus | undefined;
   visibility?: PageVisibility | undefined;
   publishedOnly?: boolean | undefined;

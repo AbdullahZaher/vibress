@@ -191,6 +191,14 @@ export default defineConfig({
         __dirname,
         "./packages/plugin-core/src/index.ts",
       ),
+      "@vibress/plugin-sdk": path.resolve(
+        __dirname,
+        "./packages/plugin-sdk/src/index.ts",
+      ),
+      "@vibress/plugins": path.resolve(
+        __dirname,
+        "./packages/domains/plugins/src/index.ts",
+      ),
       "@vibress/ui": path.resolve(__dirname, "./packages/ui/src/index.ts"),
       "@vibress/i18n/server": path.resolve(
         __dirname,

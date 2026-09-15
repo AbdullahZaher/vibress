@@ -14,9 +14,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
     const res = await fetch(`${API_BASE}/api/content/v1/verify-site-password`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+      },
       body: JSON.stringify({ password }),
     });
 

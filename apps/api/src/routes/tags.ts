@@ -17,7 +17,10 @@ export async function tagRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("tags.read")],
     handler: async (req, reply) => {
       const { search } = req.query as { search?: string };
-      const tags = await tagsService.listAll(search);
+      const tags = await tagsService.listAll(
+        search,
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ tags });
     },
   });
@@ -27,7 +30,10 @@ export async function tagRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("tags.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const tag = await tagsService.findById(id);
+      const tag = await tagsService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!tag) {
         return reply.status(404).send({
           errors: [
@@ -65,7 +71,10 @@ export async function tagRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const tag = await tagsService.createTag(parseResult.data);
+      const tag = await tagsService.createTag({
+        ...parseResult.data,
+        publicationId: req.publicationContext?.publicationId,
+      });
       return reply.status(201).send({ tag });
     },
   });
@@ -94,7 +103,11 @@ export async function tagRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const tag = await tagsService.updateTag(id, parseResult.data);
+        const tag = await tagsService.updateTag(
+          id,
+          parseResult.data,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ tag });
       } catch (err: unknown) {
         if (err instanceof TagDomainError && err.code === "TAG_NOT_FOUND") {
@@ -122,8 +135,23 @@ export async function tagRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await tagsService.deleteTag(id);
-      return reply.status(200).send({ success: true });
+      try {
+        await tagsService.deleteTag(id, req.publicationContext?.publicationId);
+        return reply.status(200).send({ success: true });
+      } catch (err: unknown) {
+        if (err instanceof TagDomainError && err.code === "TAG_NOT_FOUND") {
+          return reply.status(404).send({
+            errors: [
+              {
+                code: "TAG_NOT_FOUND",
+                message: "Tag not found",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        throw err;
+      }
     },
   });
 }

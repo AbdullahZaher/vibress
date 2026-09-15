@@ -1,3 +1,37 @@
+export type ActorType = "staff" | "member" | "system" | "worker" | "public";
+
+export interface PublicationContext {
+  publicationId: string;
+  workspaceId: string;
+  actorId?: string | null;
+  actorType: ActorType;
+  role?: string | null;
+  permissions?: string[];
+  isSystemOperation?: boolean;
+}
+
+export class PublicationAccessDeniedError extends Error {
+  code = "PUBLICATION_ACCESS_DENIED";
+  constructor(message = "Access denied: cross-publication operation prohibited") {
+    super(message);
+    this.name = "PublicationAccessDeniedError";
+  }
+}
+
+export function assertPublicationAccess(
+  context: PublicationContext,
+  targetPublicationId: string,
+): void {
+  if (context.isSystemOperation) {
+    return;
+  }
+  if (!context.publicationId || context.publicationId !== targetPublicationId) {
+    throw new PublicationAccessDeniedError(
+      `Cross-publication access violation: active publication is '${context.publicationId}' but target resource is '${targetPublicationId}'`,
+    );
+  }
+}
+
 export function hasPermission(
   userPermissions: string[],
   requiredPermission: string,
@@ -19,12 +53,16 @@ export interface ResourceAuthContext {
   resourceAuthorIds?: string[] | undefined;
   userRoles?: string[] | undefined;
   userPermissions?: string[] | undefined;
+  /** Active publication context of the actor */
+  publicationId?: string | null | undefined;
+  /** Publication owning the target resource */
+  resourcePublicationId?: string | null | undefined;
+  isSystemOperation?: boolean | undefined;
 }
 
 /**
  * Checks whether an actor has capability to mutate or delete a specific resource.
- * If the actor has management capability (or elevated role/permission), they can mutate any resource.
- * Otherwise, they must possess the required permission AND be an owner/author of the resource.
+ * Enforces strict publication isolation: cross-publication access is rejected regardless of role.
  */
 export function hasResourcePermission(
   requiredPermission: string,
@@ -36,9 +74,22 @@ export function hasResourcePermission(
     resourceAuthorIds = [],
     userRoles = [],
     userPermissions = [],
+    publicationId,
+    resourcePublicationId,
+    isSystemOperation = false,
   } = context;
 
-  // 1. Owner & Administrator roles possess universal bypass through canonical resolution
+  // 0. Hard tenant boundary: if both publication identities are present and mismatch, reject unless system operation
+  if (
+    !isSystemOperation &&
+    publicationId &&
+    resourcePublicationId &&
+    publicationId !== resourcePublicationId
+  ) {
+    return false;
+  }
+
+  // 1. Owner & Administrator roles possess bypass only WITHIN the authorized publication
   if (userRoles.includes("owner") || userRoles.includes("administrator")) {
     return true;
   }
@@ -59,7 +110,7 @@ export function hasResourcePermission(
     return false;
   }
 
-  // 4. Elevated roles or management permissions (e.g. 'editor', 'posts.manage') can mutate any resource
+  // 4. Elevated roles or management permissions (e.g. 'editor', 'posts.manage') can mutate any resource within tenant
   const domainPrefix = requiredPermission.split(".")[0];
   if (
     userRoles.includes("editor") ||
@@ -70,7 +121,7 @@ export function hasResourcePermission(
     return true;
   }
 
-  // 4. For authors/contributors without management permissions, enforce resource ownership
+  // 5. For authors/contributors without management permissions, enforce resource ownership
   const isPrimaryAuthor =
     resourceOwnerId !== undefined &&
     resourceOwnerId !== null &&
@@ -79,3 +130,4 @@ export function hasResourcePermission(
 
   return isPrimaryAuthor || isCoAuthor;
 }
+

@@ -63,3 +63,27 @@ export const closeRedisClient = async (): Promise<void> => {
     bullMqClient = null;
   }
 };
+
+/**
+ * Generates a strictly publication-isolated cache key.
+ * Pattern: `pub:${publicationId}:${domain}:${key}`
+ * Throws if publicationId is missing or empty to prevent cross-tenant key pollution.
+ */
+export function buildPublicationCacheKey(
+  publicationId: string,
+  domain: string,
+  key: string,
+): string {
+  if (!publicationId || !publicationId.trim()) {
+    throw new Error("Cannot build publication cache key without a valid publicationId");
+  }
+  return `pub:${publicationId}:${domain}:${key}`;
+}
+
+/**
+ * Generates a system-scoped cache key.
+ * Pattern: `sys:${domain}:${key}`
+ */
+export function buildSystemCacheKey(domain: string, key: string): string {
+  return `sys:${domain}:${key}`;
+}

@@ -53,6 +53,7 @@ describe("Visual Automations Engine", () => {
         listActiveByTrigger: vi.fn().mockResolvedValue([
           {
             id: "auto-1",
+            publicationId: "pub_default",
             version: 1,
             conditions: [],
             actions: [{ type: "webhook", config: { url: "https://hook.site" } }],
@@ -81,7 +82,10 @@ describe("Visual Automations Engine", () => {
 
       expect(created).toBe(1);
       expect(mockRepo.createRun).toHaveBeenCalled();
-      expect(mockDispatcher.enqueueRun).toHaveBeenCalledWith("run-101");
+      expect(mockDispatcher.enqueueRun).toHaveBeenCalledWith(
+        "run-101",
+        "pub_default",
+      );
     });
   });
 });

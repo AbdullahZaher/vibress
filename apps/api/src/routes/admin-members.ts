@@ -21,6 +21,7 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
         status: status as "active" | "disabled" | undefined,
         limit: limit ? parseInt(limit, 10) : 20,
         offset: offset ? parseInt(offset, 10) : 0,
+        publicationId: req.publicationContext?.publicationId,
       });
 
       const members = result.members.map((m) => ({
@@ -47,7 +48,10 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("members.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const member = await membersService.findById(id);
+      const member = await membersService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!member) {
         return reply.status(404).send({
           errors: [
@@ -94,7 +98,11 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const updated = await membersService.disableMember(id, req.user!.id);
+        const updated = await membersService.disableMember(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({
           member: {
             id: updated.id,
@@ -145,7 +153,11 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const updated = await membersService.enableMember(id, req.user!.id);
+        const updated = await membersService.enableMember(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({
           member: {
             id: updated.id,
@@ -193,7 +205,10 @@ export async function adminMemberRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const member = await membersService.findById(id);
+      const member = await membersService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!member) {
         return reply.status(404).send({
           errors: [

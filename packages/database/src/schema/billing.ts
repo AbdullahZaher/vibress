@@ -6,15 +6,21 @@ import {
   boolean,
   index,
   uniqueIndex,
+  unique,
+  foreignKey,
   jsonb,
 } from "drizzle-orm/pg-core";
 import { members } from "./members";
+import { publications } from "./publications";
 
 export const products = pgTable(
   "products",
   {
     id: text("id").primaryKey(),
-    key: text("key").notNull().unique(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "restrict" }),
+    key: text("key").notNull(),
     name: text("name").notNull(),
     description: text("description"),
     status: text("status").notNull().default("active"),
@@ -29,6 +35,17 @@ export const products = pgTable(
   },
   (table) => {
     return {
+      idPublicationUnique: unique("products_id_publication_unique").on(
+        table.id,
+        table.publicationId,
+      ),
+      publicationKeyUnique: uniqueIndex("products_publication_key_unique").on(
+        table.publicationId,
+        table.key,
+      ),
+      publicationIdIdx: index("products_publication_id_idx").on(
+        table.publicationId,
+      ),
       statusIdx: index("products_status_idx").on(table.status),
     };
   },
@@ -41,6 +58,9 @@ export const plans = pgTable(
   "plans",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "restrict" }),
     productId: text("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
@@ -65,6 +85,14 @@ export const plans = pgTable(
   },
   (table) => {
     return {
+      publicationIdIdx: index("plans_publication_id_idx").on(
+        table.publicationId,
+      ),
+      plansProductPublicationFk: foreignKey({
+        columns: [table.productId, table.publicationId],
+        foreignColumns: [products.id, products.publicationId],
+        name: "plans_product_publication_fk",
+      }).onDelete("restrict"),
       productIdIdx: index("plans_product_id_idx").on(table.productId),
       uniqueKeyPerProductIdx: uniqueIndex(
         "plans_unique_key_per_product_idx",

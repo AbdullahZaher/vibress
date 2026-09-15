@@ -25,29 +25,31 @@ export class PagesService {
     private mediaService?: MediaService,
   ) {}
 
-  async findById(id: string): Promise<Page | null> {
-    return this.pageRepo.findById(id);
+  async findById(id: string, publicationId?: string): Promise<Page | null> {
+    return this.pageRepo.findById(id, publicationId);
   }
 
-  async findBySlug(slug: string): Promise<Page | null> {
-    return this.pageRepo.findBySlug(slug);
+  async findBySlug(slug: string, publicationId?: string): Promise<Page | null> {
+    return this.pageRepo.findBySlug(slug, publicationId);
   }
 
-  async findPublishedBySlug(slug: string): Promise<Page | null> {
-    return this.pageRepo.findPublishedBySlug(slug);
+  async findPublishedBySlug(slug: string, publicationId?: string): Promise<Page | null> {
+    return this.pageRepo.findPublishedBySlug(slug, publicationId);
   }
 
-  async createPage(data: CreatePageData, actorId: string): Promise<Page> {
-    return runInTransaction(() => this.createPageTx(data, actorId));
+  async createPage(data: CreatePageData, actorId: string, publicationId?: string): Promise<Page> {
+    return runInTransaction(() => this.createPageTx(data, actorId, publicationId));
   }
 
   private async createPageTx(
     data: CreatePageData,
     actorId: string,
+    publicationId?: string,
   ): Promise<Page> {
+    const pubId = publicationId || data.publicationId || "pub_default";
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
-      const existing = await this.pageRepo.findBySlug(candidate);
+      const existing = await this.pageRepo.findBySlug(candidate, pubId);
       return !!existing;
     });
 
@@ -55,6 +57,7 @@ export class PagesService {
 
     const page = await this.pageRepo.create({
       ...data,
+      publicationId: pubId,
       slug: finalSlug,
       content,
       createdBy: data.createdBy || actorId,
@@ -95,7 +98,7 @@ export class PagesService {
       action: "page.created",
       targetType: "page",
       targetId: page.id,
-      metadata: { title: page.title, slug: page.slug },
+      metadata: { title: page.title, slug: page.slug, publicationId: pubId },
     });
 
     return page;
@@ -105,16 +108,18 @@ export class PagesService {
     id: string,
     data: UpdatePageData,
     actorId: string,
+    publicationId?: string,
   ): Promise<Page> {
-    return runInTransaction(() => this.updatePageTx(id, data, actorId));
+    return runInTransaction(() => this.updatePageTx(id, data, actorId, publicationId));
   }
 
   private async updatePageTx(
     id: string,
     data: UpdatePageData,
     actorId: string,
+    publicationId?: string,
   ): Promise<Page> {
-    const current = await this.pageRepo.findById(id);
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
@@ -126,7 +131,7 @@ export class PagesService {
     let finalSlug = current.slug;
     if (data.slug && data.slug !== current.slug) {
       finalSlug = await generateUniqueSlug(data.slug, async (candidate) => {
-        const found = await this.pageRepo.findBySlug(candidate);
+        const found = await this.pageRepo.findBySlug(candidate, current.publicationId);
         return !!found && found.id !== id;
       });
     }
@@ -148,7 +153,7 @@ export class PagesService {
     const updated = await this.pageRepo.update(id, {
       ...updatePayload,
       version: expectedVersion,
-    });
+    }, publicationId);
 
     if (data.primaryAuthorId || data.authorIds) {
       const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
@@ -181,18 +186,18 @@ export class PagesService {
       action: "page.updated",
       targetType: "page",
       targetId: updated.id,
-      metadata: { title: updated.title, version: updated.version },
+      metadata: { title: updated.title, version: updated.version, publicationId: current.publicationId },
     });
 
     return updated;
   }
 
-  async publishPage(id: string, actorId: string): Promise<Page> {
-    return runInTransaction(() => this.publishPageTx(id, actorId));
+  async publishPage(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    return runInTransaction(() => this.publishPageTx(id, actorId, publicationId));
   }
 
-  private async publishPageTx(id: string, actorId: string): Promise<Page> {
-    const current = await this.pageRepo.findById(id);
+  private async publishPageTx(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
@@ -214,7 +219,7 @@ export class PagesService {
       scheduledAt: null,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, publicationId);
 
     await this.revisionService.createRevision({
       resourceType: "page",
@@ -233,18 +238,18 @@ export class PagesService {
       action: "page.published",
       targetType: "page",
       targetId: published.id,
-      metadata: { publishedAt },
+      metadata: { publishedAt, publicationId: current.publicationId },
     });
 
     return published;
   }
 
-  async unpublishPage(id: string, actorId: string): Promise<Page> {
-    return runInTransaction(() => this.unpublishPageTx(id, actorId));
+  async unpublishPage(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    return runInTransaction(() => this.unpublishPageTx(id, actorId, publicationId));
   }
 
-  private async unpublishPageTx(id: string, actorId: string): Promise<Page> {
-    const current = await this.pageRepo.findById(id);
+  private async unpublishPageTx(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
@@ -253,13 +258,14 @@ export class PagesService {
       status: "draft",
       updatedBy: actorId,
       version: current.version,
-    });
+    }, publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
       action: "page.unpublished",
       targetType: "page",
       targetId: unpublished.id,
+      metadata: { publicationId: current.publicationId },
     });
 
     return unpublished;
@@ -269,9 +275,10 @@ export class PagesService {
     id: string,
     scheduledAt: Date,
     actorId: string,
+    publicationId?: string,
   ): Promise<Page> {
     return runInTransaction(() =>
-      this.schedulePageTx(id, scheduledAt, actorId),
+      this.schedulePageTx(id, scheduledAt, actorId, publicationId),
     );
   }
 
@@ -279,8 +286,9 @@ export class PagesService {
     id: string,
     scheduledAt: Date,
     actorId: string,
+    publicationId?: string,
   ): Promise<Page> {
-    const current = await this.pageRepo.findById(id);
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
@@ -304,25 +312,25 @@ export class PagesService {
       scheduledAt,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
       action: "page.scheduled",
       targetType: "page",
       targetId: scheduled.id,
-      metadata: { scheduledAt },
+      metadata: { scheduledAt, publicationId: current.publicationId },
     });
 
     return scheduled;
   }
 
-  async cancelSchedule(id: string, actorId: string): Promise<Page> {
-    return runInTransaction(() => this.cancelScheduleTx(id, actorId));
+  async cancelSchedule(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    return runInTransaction(() => this.cancelScheduleTx(id, actorId, publicationId));
   }
 
-  private async cancelScheduleTx(id: string, actorId: string): Promise<Page> {
-    const current = await this.pageRepo.findById(id);
+  private async cancelScheduleTx(id: string, actorId: string, publicationId?: string): Promise<Page> {
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
@@ -332,35 +340,37 @@ export class PagesService {
       scheduledAt: null,
       updatedBy: actorId,
       version: current.version,
-    });
+    }, publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
       action: "page.schedule.cancelled",
       targetType: "page",
       targetId: canceled.id,
+      metadata: { publicationId: current.publicationId },
     });
 
     return canceled;
   }
 
-  async deletePage(id: string, actorId: string): Promise<void> {
-    return runInTransaction(() => this.deletePageTx(id, actorId));
+  async deletePage(id: string, actorId: string, publicationId?: string): Promise<void> {
+    return runInTransaction(() => this.deletePageTx(id, actorId, publicationId));
   }
 
-  private async deletePageTx(id: string, actorId: string): Promise<void> {
-    const current = await this.pageRepo.findById(id);
+  private async deletePageTx(id: string, actorId: string, publicationId?: string): Promise<void> {
+    const current = await this.pageRepo.findById(id, publicationId);
     if (!current) {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
 
-    await this.pageRepo.delete(id);
+    await this.pageRepo.delete(id, publicationId);
 
     await this.auditRepo.record({
       actorUserId: actorId,
       action: "page.deleted",
       targetType: "page",
       targetId: id,
+      metadata: { publicationId: current.publicationId },
     });
   }
 
@@ -370,7 +380,7 @@ export class PagesService {
     return this.pageRepo.list(filter);
   }
 
-  async findDueScheduledPages(now?: Date): Promise<Page[]> {
-    return this.pageRepo.findDueScheduledPages(now);
+  async findDueScheduledPages(now?: Date, publicationId?: string): Promise<Page[]> {
+    return this.pageRepo.findDueScheduledPages(now, publicationId);
   }
 }

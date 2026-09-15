@@ -23,11 +23,12 @@ export const MAX_AUTOMATION_DEPTH = 5;
 export const MAX_ACTIONS = 10;
 
 export interface AutomationDispatcher {
-  enqueueRun(runId: string): Promise<void>;
+  enqueueRun(runId: string, publicationId?: string): Promise<void>;
   enqueueDelayedStep(
     runId: string,
     stepIndex: number,
     delayMs: number,
+    publicationId?: string,
   ): Promise<void>;
 }
 
@@ -39,6 +40,7 @@ export interface AutomationActionExecutor {
       stepIndex: number;
       memberId?: string | null;
       eventPayload: Record<string, unknown> | null;
+      publicationId?: string;
     },
   ): Promise<{ result: Record<string, unknown>; delayMs?: number }>;
 }
@@ -95,6 +97,7 @@ export class AutomationsService {
   async createAutomation(
     data: CreateAutomationData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Automation> {
     if (
       typeof data.triggerEvent !== "string" ||
@@ -115,17 +118,22 @@ export class AutomationsService {
         `At most ${MAX_ACTIONS} actions are allowed`,
       );
     }
-    const existing = await this.repo.findByKey(data.key);
+    const pubId = publicationId || data.publicationId || "pub_default";
+    const existing = await this.repo.findByKey(data.key, pubId);
     if (existing)
       throw new AutomationDomainError(
         "VALIDATION_ERROR",
         "Automation key already exists",
       );
 
-    const automation = await this.repo.create({
-      ...data,
-      createdBy: actorId || undefined,
-    });
+    const automation = await this.repo.create(
+      {
+        ...data,
+        publicationId: pubId,
+        createdBy: actorId || undefined,
+      },
+      pubId,
+    );
     // Immutable v1 definition snapshot
     await this.repo.createVersion(automation.id, 1, {
       conditions: data.conditions || [],
@@ -133,6 +141,7 @@ export class AutomationsService {
     });
     domainEvents.emit("automation.created", {
       automationId: automation.id,
+      publicationId: pubId,
       actorId,
     });
     return automation;
@@ -142,8 +151,9 @@ export class AutomationsService {
     id: string,
     data: Partial<CreateAutomationData>,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Automation> {
-    const existing = await this.repo.findById(id);
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new AutomationDomainError(
         "AUTOMATION_NOT_FOUND",
@@ -163,27 +173,36 @@ export class AutomationsService {
     }
 
     // Editing an active automation: snapshot a new immutable version
-    const updated = await this.repo.update(id, data);
+    const updated = await this.repo.update(id, data, publicationId);
     if (data.conditions !== undefined || data.actions !== undefined) {
       const newVersion = updated.version + 1;
-      await this.repo.update(id, {
-        version: newVersion,
-      } as Partial<CreateAutomationData>);
+      await this.repo.update(
+        id,
+        {
+          version: newVersion,
+        } as Partial<CreateAutomationData>,
+        publicationId,
+      );
       await this.repo.createVersion(id, newVersion, {
         conditions:
           data.conditions !== undefined ? data.conditions : existing.conditions,
         actions: data.actions !== undefined ? data.actions : existing.actions,
       });
     }
-    domainEvents.emit("automation.updated", { automationId: id, actorId });
+    domainEvents.emit("automation.updated", {
+      automationId: id,
+      publicationId: updated.publicationId,
+      actorId,
+    });
     return updated;
   }
 
   async activateAutomation(
     id: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Automation> {
-    const automation = await this.repo.findById(id);
+    const automation = await this.repo.findById(id, publicationId);
     if (!automation)
       throw new AutomationDomainError(
         "AUTOMATION_NOT_FOUND",
@@ -195,32 +214,41 @@ export class AutomationsService {
         "Cannot activate an automation with no actions",
       );
     }
-    const activated = await this.repo.updateStatus(id, "active");
-    domainEvents.emit("automation.activated", { automationId: id, actorId });
+    const activated = await this.repo.updateStatus(id, "active", publicationId);
+    domainEvents.emit("automation.activated", {
+      automationId: id,
+      publicationId: activated.publicationId,
+      actorId,
+    });
     return activated;
   }
 
   async deactivateAutomation(
     id: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Automation> {
-    const automation = await this.repo.findById(id);
+    const automation = await this.repo.findById(id, publicationId);
     if (!automation)
       throw new AutomationDomainError(
         "AUTOMATION_NOT_FOUND",
         "Automation not found",
       );
-    const deactivated = await this.repo.updateStatus(id, "inactive");
-    domainEvents.emit("automation.deactivated", { automationId: id, actorId });
+    const deactivated = await this.repo.updateStatus(id, "inactive", publicationId);
+    domainEvents.emit("automation.deactivated", {
+      automationId: id,
+      publicationId: deactivated.publicationId,
+      actorId,
+    });
     return deactivated;
   }
 
-  async listAutomations(): Promise<Automation[]> {
-    return this.repo.list();
+  async listAutomations(publicationId?: string): Promise<Automation[]> {
+    return this.repo.list(publicationId);
   }
 
-  async getAutomation(id: string): Promise<Automation | null> {
-    return this.repo.findById(id);
+  async getAutomation(id: string, publicationId?: string): Promise<Automation | null> {
+    return this.repo.findById(id, publicationId);
   }
 
   // ---------------- Runs ----------------
@@ -234,9 +262,10 @@ export class AutomationsService {
   async handleEvent(
     triggerEvent: string,
     payload: Record<string, unknown> | null,
-    opts?: { correlationId?: string | null; depth?: number },
+    opts?: { correlationId?: string | null; depth?: number; publicationId?: string },
   ): Promise<number> {
-    const automations = await this.repo.listActiveByTrigger(triggerEvent);
+    const pubId = opts?.publicationId || (payload?.publicationId as string | undefined);
+    const automations = await this.repo.listActiveByTrigger(triggerEvent, pubId);
     if (automations.length === 0) return 0;
 
     let created = 0;
@@ -268,7 +297,7 @@ export class AutomationsService {
         depth,
         correlationId: opts?.correlationId || null,
       });
-      await this.dispatcher.enqueueRun(run.id);
+      await this.dispatcher.enqueueRun(run.id, automation.publicationId);
       created++;
     }
     return created;
@@ -277,8 +306,9 @@ export class AutomationsService {
   async manualRun(
     automationId: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<AutomationRun> {
-    const automation = await this.repo.findById(automationId);
+    const automation = await this.repo.findById(automationId, publicationId);
     if (!automation)
       throw new AutomationDomainError(
         "AUTOMATION_NOT_FOUND",
@@ -299,7 +329,7 @@ export class AutomationsService {
       depth: 0,
       correlationId: null,
     });
-    await this.dispatcher.enqueueRun(run.id);
+    await this.dispatcher.enqueueRun(run.id, automation.publicationId);
     return run;
   }
 
@@ -350,7 +380,7 @@ export class AutomationsService {
           });
           if (delayMs > 0) {
             await this.repo.updateRunStatus(runId, "waiting");
-            await this.dispatcher.enqueueDelayedStep(runId, i, delayMs);
+            await this.dispatcher.enqueueDelayedStep(runId, i, delayMs, automation.publicationId);
             return; // resume later
           }
           continue;
@@ -365,6 +395,7 @@ export class AutomationsService {
             stepIndex: i,
             memberId: extractMemberId(run.eventPayload),
             eventPayload: run.eventPayload,
+            publicationId: automation.publicationId,
           });
           await this.repo.updateStepStatus(step.id, "completed", {
             result,
@@ -403,6 +434,7 @@ export class AutomationsService {
   async listRuns(filter?: {
     automationId?: string;
     status?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ runs: AutomationRun[]; total: number }> {
@@ -411,6 +443,7 @@ export class AutomationsService {
 
   async getRunSteps(
     runId: string,
+    publicationId?: string,
   ): Promise<
     Array<{
       stepIndex: number;
@@ -421,6 +454,12 @@ export class AutomationsService {
       attempts: number;
     }>
   > {
+    if (publicationId) {
+      const run = await this.repo.findRunById(runId);
+      if (!run) return [];
+      const auto = await this.repo.findById(run.automationId, publicationId);
+      if (!auto) return [];
+    }
     const steps = await this.repo.listSteps(runId);
     return steps.map((s) => ({
       stepIndex: s.stepIndex,

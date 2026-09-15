@@ -21,6 +21,27 @@ export class ApiError extends Error {
   }
 }
 
+let inMemoryPublicationId: string | null = null;
+
+export function setActivePublicationId(id: string | null): void {
+  inMemoryPublicationId = id;
+  if (typeof window !== "undefined") {
+    if (id) {
+      localStorage.setItem("vibress_active_publication_id", id);
+    } else {
+      localStorage.removeItem("vibress_active_publication_id");
+    }
+  }
+}
+
+export function getActivePublicationId(): string | null {
+  if (inMemoryPublicationId) return inMemoryPublicationId;
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("vibress_active_publication_id");
+  }
+  return null;
+}
+
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {},
@@ -30,11 +51,13 @@ export async function apiRequest<T = unknown>(
     : endpoint;
   const url = `${API_BASE}${cleanEndpoint.startsWith("/") ? cleanEndpoint : `/${cleanEndpoint}`}`;
   const hasBody = options.body != null;
+  const pubId = getActivePublicationId();
   const response = await fetch(url, {
     ...options,
     credentials: "include",
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(pubId ? { "X-Publication-Id": pubId } : {}),
       ...options.headers,
     },
   });

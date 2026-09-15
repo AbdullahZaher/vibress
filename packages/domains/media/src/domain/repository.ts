@@ -6,6 +6,7 @@ import {
 } from "./asset";
 
 export interface ListMediaFilter {
+  publicationId?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
   assetType?: AssetType | undefined;
@@ -17,8 +18,8 @@ export interface ListMediaFilter {
 }
 
 export interface MediaRepository {
-  findById(id: string): Promise<MediaAsset | null>;
-  findByStorageKey(storageKey: string): Promise<MediaAsset | null>;
+  findById(id: string, publicationId?: string): Promise<MediaAsset | null>;
+  findByStorageKey(storageKey: string, publicationId?: string): Promise<MediaAsset | null>;
   create(
     asset: Omit<MediaAsset, "createdAt" | "updatedAt">,
   ): Promise<MediaAsset>;
@@ -29,8 +30,9 @@ export interface MediaRepository {
       metadata?: Record<string, unknown>;
       deletedAt?: Date | null;
     },
+    publicationId?: string,
   ): Promise<MediaAsset>;
-  delete(id: string): Promise<void>;
+  delete(id: string, publicationId?: string): Promise<void>;
   list(
     filter?: ListMediaFilter,
   ): Promise<{ items: MediaAsset[]; total: number }>;

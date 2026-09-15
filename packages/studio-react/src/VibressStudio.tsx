@@ -48,7 +48,7 @@ export interface VibressStudioProps {
   /** Durable upload adapter: local file → assetId/src payload. Card editors
    *  must use this instead of transient blob: URLs. */
   uploadMedia?: StudioUploadApi["uploadMedia"];
-  collaboration?: CollaborationConfig;
+  collaboration?: CollaborationConfig | undefined;
   className?: string;
 }
 

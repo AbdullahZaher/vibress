@@ -17,7 +17,7 @@ export class WebhookDomainError extends Error {
 }
 
 export interface DeliveryDispatcher {
-  enqueue(deliveryId: string, endpointId: string): Promise<void>;
+  enqueue(deliveryId: string, endpointId: string, publicationId?: string): Promise<void>;
 }
 
 const MAX_RETRIES = 5;
@@ -38,6 +38,7 @@ export class WebhooksService {
       eventTypes: string[];
     },
     actorId: string | null,
+    publicationId?: string,
   ): Promise<WebhookEndpoint> {
     if (!data.name.trim())
       throw new WebhookDomainError("VALIDATION_ERROR", "Name is required");
@@ -53,14 +54,19 @@ export class WebhooksService {
         "At least one event type is required",
       );
     }
-    const endpoint = await this.repo.createEndpoint({
-      name: data.name,
-      url: data.url,
-      secret: data.secret || null,
-      eventTypes: data.eventTypes,
-    });
+    const pubId = publicationId || "pub_default";
+    const endpoint = await this.repo.createEndpoint(
+      {
+        name: data.name,
+        url: data.url,
+        secret: data.secret || null,
+        eventTypes: data.eventTypes,
+      },
+      pubId,
+    );
     domainEvents.emit("webhook.endpoint_created", {
       endpointId: endpoint.id,
+      publicationId: pubId,
       actorId,
     });
     return endpoint;
@@ -76,8 +82,9 @@ export class WebhooksService {
       eventTypes?: string[];
     },
     actorId: string | null,
+    publicationId?: string,
   ): Promise<WebhookEndpoint> {
-    const existing = await this.repo.findEndpointById(id);
+    const existing = await this.repo.findEndpointById(id, publicationId);
     if (!existing)
       throw new WebhookDomainError(
         "WEBHOOK_NOT_FOUND",
@@ -89,23 +96,38 @@ export class WebhooksService {
         "Webhook URL must be http/https and not point to a private/localhost address",
       );
     }
-    const updated = await this.repo.updateEndpoint(id, data);
-    domainEvents.emit("webhook.endpoint_updated", { endpointId: id, actorId });
+    const updated = await this.repo.updateEndpoint(id, data, publicationId);
+    domainEvents.emit("webhook.endpoint_updated", {
+      endpointId: id,
+      publicationId: updated.publicationId,
+      actorId,
+    });
     return updated;
   }
 
-  async deleteEndpoint(id: string, actorId: string | null): Promise<void> {
-    await this.repo.deleteEndpoint(id);
-    domainEvents.emit("webhook.endpoint_deleted", { endpointId: id, actorId });
+  async deleteEndpoint(id: string, actorId: string | null, publicationId?: string): Promise<void> {
+    const existing = await this.repo.findEndpointById(id, publicationId);
+    if (!existing)
+      throw new WebhookDomainError(
+        "WEBHOOK_NOT_FOUND",
+        "Webhook endpoint not found",
+      );
+    await this.repo.deleteEndpoint(id, publicationId);
+    domainEvents.emit("webhook.endpoint_deleted", {
+      endpointId: id,
+      publicationId: existing.publicationId,
+      actorId,
+    });
   }
 
-  async listEndpoints(): Promise<WebhookEndpoint[]> {
-    return this.repo.listEndpoints();
+  async listEndpoints(publicationId?: string): Promise<WebhookEndpoint[]> {
+    return this.repo.listEndpoints(publicationId);
   }
 
   maskEndpoint(endpoint: WebhookEndpoint) {
     return {
       id: endpoint.id,
+      publicationId: endpoint.publicationId,
       name: endpoint.name,
       url: endpoint.url,
       hasSecret: !!endpoint.secretEncrypted,
@@ -124,8 +146,13 @@ export class WebhooksService {
    * Dedup: UNIQUE(endpoint_id, event_id) — repeated events cannot create
    * duplicate deliveries.
    */
-  async dispatchEvent(eventName: string, payload: unknown): Promise<number> {
-    const endpoints = await this.repo.findActiveEndpointsForEvent(eventName);
+  async dispatchEvent(eventName: string, payload: unknown, publicationId?: string): Promise<number> {
+    const pubId =
+      publicationId ||
+      (payload && typeof payload === "object" && "publicationId" in payload
+        ? (payload as any).publicationId
+        : undefined);
+    const endpoints = await this.repo.findActiveEndpointsForEvent(eventName, pubId);
     if (endpoints.length === 0) return 0;
 
     const eventId = crypto.randomUUID();
@@ -150,7 +177,7 @@ export class WebhooksService {
         eventType: eventName,
         payloadHash,
       });
-      await this.dispatcher.enqueue(delivery.id, endpoint.id);
+      await this.dispatcher.enqueue(delivery.id, endpoint.id, endpoint.publicationId);
       enqueued++;
     }
     return enqueued;
@@ -227,6 +254,7 @@ export class WebhooksService {
   async listDeliveries(filter?: {
     endpointId?: string;
     status?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ deliveries: WebhookDelivery[]; total: number }> {

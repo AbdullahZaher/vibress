@@ -10,7 +10,7 @@ import {
 import crypto from "node:crypto";
 
 export class DrizzlePlanRepository implements PlanRepository {
-  async create(data: CreatePlanData): Promise<Plan> {
+  async create(data: CreatePlanData & { publicationId?: string }): Promise<Plan> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
     const now = new Date();
@@ -18,6 +18,7 @@ export class DrizzlePlanRepository implements PlanRepository {
       .insert(plans)
       .values({
         id,
+        publicationId: data.publicationId || "pub_default",
         productId: data.productId,
         key: data.key,
         name: data.name,
@@ -38,27 +39,31 @@ export class DrizzlePlanRepository implements PlanRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string): Promise<Plan | null> {
+  async findById(id: string, publicationId?: string): Promise<Plan | null> {
     const db = getDb();
-    const rows = await db.select().from(plans).where(eq(plans.id, id)).limit(1);
+    const conditions = [eq(plans.id, id)];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
+    const rows = await db.select().from(plans).where(and(...conditions)).limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findByKey(productId: string, key: string): Promise<Plan | null> {
+  async findByKey(productId: string, key: string, publicationId?: string): Promise<Plan | null> {
     const db = getDb();
+    const conditions = [eq(plans.productId, productId), eq(plans.key, key)];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
     const rows = await db
       .select()
       .from(plans)
-      .where(and(eq(plans.productId, productId), eq(plans.key, key)))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async update(id: string, data: UpdatePlanData): Promise<Plan> {
+  async update(id: string, data: UpdatePlanData, publicationId?: string): Promise<Plan> {
     const db = getDb();
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) updatePayload.name = data.name;
@@ -67,17 +72,23 @@ export class DrizzlePlanRepository implements PlanRepository {
     if (data.visibility !== undefined)
       updatePayload.visibility = data.visibility;
 
+    const conditions = [eq(plans.id, id)];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
+
     const [row] = await db
       .update(plans)
       .set(updatePayload)
-      .where(eq(plans.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Plan not found: ${id}`);
     return this.mapToDomain(row);
   }
 
-  async archive(id: string): Promise<Plan> {
+  async archive(id: string, publicationId?: string): Promise<Plan> {
     const db = getDb();
+    const conditions = [eq(plans.id, id)];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
+
     const [row] = await db
       .update(plans)
       .set({
@@ -85,7 +96,7 @@ export class DrizzlePlanRepository implements PlanRepository {
         archivedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(plans.id, id))
+      .where(and(...conditions))
       .returning();
     if (!row) throw new Error(`Plan not found: ${id}`);
     return this.mapToDomain(row);
@@ -94,9 +105,11 @@ export class DrizzlePlanRepository implements PlanRepository {
   async listByProduct(
     productId: string,
     filter?: { status?: PlanStatus; includeArchived?: boolean },
+    publicationId?: string,
   ): Promise<Plan[]> {
     const db = getDb();
     const conditions = [eq(plans.productId, productId)];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
     if (!filter?.includeArchived && filter?.status) {
       conditions.push(eq(plans.status, filter.status));
     } else if (!filter?.includeArchived && !filter?.status) {
@@ -110,18 +123,19 @@ export class DrizzlePlanRepository implements PlanRepository {
     return rows.map((r) => this.mapToDomain(r));
   }
 
-  async listActivePublic(): Promise<Plan[]> {
+  async listActivePublic(publicationId?: string): Promise<Plan[]> {
     const db = getDb();
+    const conditions = [
+      eq(plans.status, "active"),
+      eq(plans.visibility, "public"),
+      isNull(plans.archivedAt),
+    ];
+    if (publicationId) conditions.push(eq(plans.publicationId, publicationId));
+
     const rows = await db
       .select()
       .from(plans)
-      .where(
-        and(
-          eq(plans.status, "active"),
-          eq(plans.visibility, "public"),
-          isNull(plans.archivedAt),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(plans.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -129,6 +143,7 @@ export class DrizzlePlanRepository implements PlanRepository {
   private mapToDomain(row: PlanRow): Plan {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       productId: row.productId,
       key: row.key,
       name: row.name,

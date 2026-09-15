@@ -57,6 +57,9 @@ export class NewsletterSendSchedulerWorker {
       return { recipientCount: 0, batchCount: 0 };
     }
 
+    const send = await this.sendRepo.findById(sendId);
+    const pubId = send?.publicationId || "pub_default";
+
     const queue = getEmailQueue();
     const pending = await this.recipientRepo.findPending(
       sendId,
@@ -71,7 +74,12 @@ export class NewsletterSendSchedulerWorker {
       const batch = batches[i]!;
       await queue.add(
         "deliver",
-        { sendId, recipientIds: batch },
+        {
+          scope: "publication",
+          publicationId: pubId,
+          sendId,
+          recipientIds: batch,
+        },
         {
           jobId: `send-${sendId}-batch-${i}`,
           removeOnComplete: true,

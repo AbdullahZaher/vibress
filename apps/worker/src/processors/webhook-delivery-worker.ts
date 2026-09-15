@@ -5,6 +5,7 @@ import {
   WebhookDeliveryJob,
   enqueueTraced,
   getBullMqRedisConnection,
+  assertJobScope,
 } from "@vibress/queue";
 import { WebhooksService, DrizzleWebhookRepository } from "@vibress/webhooks";
 import { tracedProcessor } from "./trace-helper";
@@ -28,11 +29,17 @@ class BullMqDispatcher {
     return this.queue;
   }
 
-  async enqueue(deliveryId: string, endpointId: string): Promise<void> {
+  async enqueue(deliveryId: string, endpointId: string, publicationId?: string): Promise<void> {
+    const pubId = publicationId || "pub_default";
     await enqueueTraced(
       this.getQueue(),
       "deliver",
-      { deliveryId, endpointId },
+      {
+        scope: "publication",
+        publicationId: pubId,
+        deliveryId,
+        endpointId,
+      },
       {
         jobId: `delivery-${deliveryId}`,
         removeOnComplete: true,
@@ -57,8 +64,8 @@ export class WebhookDeliveryWorker {
   constructor() {
     const repo = new DrizzleWebhookRepository();
     this.webhooksService = new WebhooksService(repo, {
-      enqueue: (deliveryId, endpointId) =>
-        this.dispatcher.enqueue(deliveryId, endpointId),
+      enqueue: (deliveryId, endpointId, publicationId) =>
+        this.dispatcher.enqueue(deliveryId, endpointId, publicationId),
     });
   }
 
@@ -66,6 +73,7 @@ export class WebhookDeliveryWorker {
     this.worker = new Worker<WebhookDeliveryJob>(
       WEBHOOK_QUEUE_NAME,
       tracedProcessor("worker.job.webhook-delivery", async (job) => {
+        assertJobScope(job.data);
         await this.webhooksService.deliver(job.data.deliveryId);
       }),
       {

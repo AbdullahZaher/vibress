@@ -5,6 +5,7 @@ import {
   TenantAccessDeniedError,
   Workspace,
   WorkspaceMember,
+  WorkspaceRole,
 } from "../index";
 
 class InMemoryWorkspaceRepository implements WorkspaceRepository {
@@ -42,6 +43,17 @@ class InMemoryWorkspaceRepository implements WorkspaceRepository {
 
   async listMembers(workspaceId: string): Promise<WorkspaceMember[]> {
     return Array.from(this.members.values()).filter((m) => m.workspaceId === workspaceId);
+  }
+
+  async listUserWorkspaces(userId: string): Promise<Array<{ workspace: Workspace; role: WorkspaceRole }>> {
+    const list: Array<{ workspace: Workspace; role: WorkspaceRole }> = [];
+    for (const m of this.members.values()) {
+      if (m.userId === userId) {
+        const w = this.workspaces.get(m.workspaceId);
+        if (w) list.push({ workspace: w, role: m.role as WorkspaceRole });
+      }
+    }
+    return list;
   }
 }
 

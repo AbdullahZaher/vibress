@@ -80,7 +80,9 @@ export class NewslettersService {
   async createNewsletter(
     data: CreateNewsletterData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Newsletter> {
+    const pubId = publicationId || data.publicationId || "pub_default";
     const key = data.key.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]*$/.test(key)) {
       throw new NewsletterDomainError(
@@ -103,17 +105,18 @@ export class NewslettersService {
         "Invalid sender email",
       );
     }
-    const existing = await this.deps.newsletterRepo.findByKey(key);
+    const existing = await this.deps.newsletterRepo.findByKey(key, pubId);
     if (existing) {
       throw new NewsletterDomainError(
         "VALIDATION_ERROR",
         "Newsletter key already exists",
       );
     }
-    const newsletter = await this.deps.newsletterRepo.create({ ...data, key });
+    const newsletter = await this.deps.newsletterRepo.create({ ...data, key, publicationId: pubId });
     domainEvents.emit("newsletter.created", {
       newsletterId: newsletter.id,
       actorId,
+      publicationId: pubId,
     });
     return newsletter;
   }
@@ -122,8 +125,9 @@ export class NewslettersService {
     id: string,
     data: UpdateNewsletterData,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Newsletter> {
-    const existing = await this.deps.newsletterRepo.findById(id);
+    const existing = await this.deps.newsletterRepo.findById(id, publicationId);
     if (!existing)
       throw new NewsletterDomainError(
         "NEWSLETTER_NOT_FOUND",
@@ -141,32 +145,34 @@ export class NewslettersService {
     if (data.senderName) assertNoControlChars(data.senderName, "Sender name");
     if (data.senderEmail)
       assertNoControlChars(data.senderEmail, "Sender email");
-    const updated = await this.deps.newsletterRepo.update(id, data);
-    domainEvents.emit("newsletter.updated", { newsletterId: id, actorId });
+    const updated = await this.deps.newsletterRepo.update(id, data, publicationId);
+    domainEvents.emit("newsletter.updated", { newsletterId: id, actorId, publicationId: existing.publicationId });
     return updated;
   }
 
   async archiveNewsletter(
     id: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Newsletter> {
-    const existing = await this.deps.newsletterRepo.findById(id);
+    const existing = await this.deps.newsletterRepo.findById(id, publicationId);
     if (!existing)
       throw new NewsletterDomainError(
         "NEWSLETTER_NOT_FOUND",
         "Newsletter not found",
       );
-    const archived = await this.deps.newsletterRepo.archive(id);
-    domainEvents.emit("newsletter.archived", { newsletterId: id, actorId });
+    const archived = await this.deps.newsletterRepo.archive(id, publicationId);
+    domainEvents.emit("newsletter.archived", { newsletterId: id, actorId, publicationId: existing.publicationId });
     return archived;
   }
 
-  async getNewsletter(id: string): Promise<Newsletter | null> {
-    return this.deps.newsletterRepo.findById(id);
+  async getNewsletter(id: string, publicationId?: string): Promise<Newsletter | null> {
+    return this.deps.newsletterRepo.findById(id, publicationId);
   }
 
   async listNewsletters(filter?: {
     includeArchived?: boolean;
+    publicationId?: string;
   }): Promise<Newsletter[]> {
     return this.deps.newsletterRepo.list(filter);
   }

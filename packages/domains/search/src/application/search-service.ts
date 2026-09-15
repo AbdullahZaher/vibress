@@ -65,7 +65,7 @@ export function sanitizeSearchQuery(q: string): string {
 }
 
 export interface ContentSource {
-  listIndexableContent(): Promise<SearchDocumentInput[]>;
+  listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]>;
 }
 
 export class SearchService {
@@ -75,14 +75,22 @@ export class SearchService {
     q: string,
     limit = 20,
     offset = 0,
+    publicationId?: string,
   ): Promise<{ results: SearchResult[]; total: number }> {
     const start = performance.now();
     const sanitized = sanitizeSearchQuery(q);
-    const result = await this.repo.query(
-      sanitized,
-      Math.min(Math.max(limit, 1), 50),
-      Math.max(offset, 0),
-    );
+    const result = publicationId
+      ? await this.repo.query(
+          sanitized,
+          Math.min(Math.max(limit, 1), 50),
+          Math.max(offset, 0),
+          publicationId,
+        )
+      : await this.repo.query(
+          sanitized,
+          Math.min(Math.max(limit, 1), 50),
+          Math.max(offset, 0),
+        );
     const durationMs = Math.round(performance.now() - start);
 
     domainEvents.emit("search.queried", {
@@ -91,17 +99,21 @@ export class SearchService {
       durationMs,
       isZeroResult: result.total === 0,
       timestamp: new Date().toISOString(),
+      publicationId,
     });
 
     return result;
   }
 
-  async indexDocument(doc: SearchDocumentInput): Promise<void> {
+  async indexDocument(doc: SearchDocumentInput, publicationId?: string): Promise<void> {
     if (!doc.title.trim()) return;
+
+    const pubId = publicationId || doc.publicationId || "pub_default";
 
     // Normalize Arabic text in title and bodyText for high-recall index matching
     const normalizedDoc: SearchDocumentInput = {
       ...doc,
+      publicationId: pubId,
       title: isArabicText(doc.title) ? normalizeArabicText(doc.title) : doc.title,
       bodyText: doc.bodyText && isArabicText(doc.bodyText) ? normalizeArabicText(doc.bodyText) : doc.bodyText,
     };
@@ -110,30 +122,31 @@ export class SearchService {
     domainEvents.emit("search.indexed", {
       entityType: doc.entityType,
       entityId: doc.entityId,
+      publicationId: pubId,
     });
   }
 
-  async removeDocument(entityType: string, entityId: string): Promise<void> {
-    await this.repo.remove(entityType, entityId);
-    domainEvents.emit("search.removed", { entityType, entityId });
+  async removeDocument(entityType: string, entityId: string, publicationId?: string): Promise<void> {
+    await this.repo.remove(entityType, entityId, publicationId);
+    domainEvents.emit("search.removed", { entityType, entityId, publicationId });
   }
 
   /**
-   * Full index rebuild: clears the index and re-indexes all indexable
+   * Full index rebuild: clears the index for the publication and re-indexes all indexable
    * content. Only searchable (published, public) content is indexed.
    */
-  async rebuild(source: ContentSource): Promise<number> {
-    await this.repo.clear();
-    const docs = await source.listIndexableContent();
+  async rebuild(source: ContentSource, publicationId?: string): Promise<number> {
+    await this.repo.clear(publicationId);
+    const docs = await source.listIndexableContent(publicationId);
     let indexed = 0;
     for (const doc of docs) {
-      await this.indexDocument(doc);
+      await this.indexDocument(doc, publicationId);
       indexed++;
     }
     return indexed;
   }
 
-  async indexCount(): Promise<number> {
-    return this.repo.count();
+  async indexCount(publicationId?: string): Promise<number> {
+    return this.repo.count(publicationId);
   }
 }

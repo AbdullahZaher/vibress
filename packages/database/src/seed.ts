@@ -425,6 +425,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     const prodId = crypto.randomUUID();
     await db.insert(products).values({
       id: prodId,
+      publicationId: "pub_default",
       key: "default-membership",
       name: "Default Membership",
       visibility: "public",
@@ -434,6 +435,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     });
     await db.insert(plans).values({
       id: crypto.randomUUID(),
+      publicationId: "pub_default",
       productId: prodId,
       key: "default-monthly",
       name: "Monthly Plan",
@@ -452,6 +454,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
   if (existingNewsletters.length === 0) {
     await db.insert(newsletters).values({
       id: crypto.randomUUID(),
+      publicationId: "pub_default",
       key: "default-newsletter",
       name: "Default Newsletter",
       senderName: "Vibress",

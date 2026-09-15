@@ -3,6 +3,7 @@ export type ProductVisibility = "public" | "private";
 
 export interface Product {
   id: string;
+  publicationId: string;
   key: string;
   name: string;
   description: string | null;
@@ -15,6 +16,7 @@ export interface Product {
 
 export interface CreateProductData {
   id?: string | undefined;
+  publicationId?: string | undefined;
   key: string;
   name: string;
   description?: string | null | undefined;

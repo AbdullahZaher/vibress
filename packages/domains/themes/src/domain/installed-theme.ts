@@ -4,6 +4,7 @@ export type ThemeStatus = "installed" | "active" | "invalid";
 
 export interface InstalledTheme {
   id: string;
+  publicationId: string;
   themeId: string;
   name: string;
   version: string;
@@ -21,21 +22,23 @@ export interface InstalledTheme {
 }
 
 export interface InstalledThemeRepository {
-  listAll(): Promise<InstalledTheme[]>;
-  findById(id: string): Promise<InstalledTheme | null>;
-  findByThemeId(themeId: string): Promise<InstalledTheme | null>;
+  listAll(publicationId?: string): Promise<InstalledTheme[]>;
+  findById(id: string, publicationId?: string): Promise<InstalledTheme | null>;
+  findByThemeId(themeId: string, publicationId?: string): Promise<InstalledTheme | null>;
   findByThemeIdAndVersion(
     themeId: string,
     version: string,
+    publicationId?: string,
   ): Promise<InstalledTheme | null>;
-  listVersions(themeId: string): Promise<InstalledTheme[]>;
-  create(theme: InstalledTheme): Promise<InstalledTheme>;
-  update(theme: InstalledTheme): Promise<InstalledTheme>;
-  delete(themeId: string): Promise<void>;
-  deleteVersion(themeId: string, version: string): Promise<void>;
-  getThemeSettings(themeId: string): Promise<Record<string, unknown> | null>;
+  listVersions(themeId: string, publicationId?: string): Promise<InstalledTheme[]>;
+  create(theme: InstalledTheme, publicationId?: string): Promise<InstalledTheme>;
+  update(theme: InstalledTheme, publicationId?: string): Promise<InstalledTheme>;
+  delete(themeId: string, publicationId?: string): Promise<void>;
+  deleteVersion(themeId: string, version: string, publicationId?: string): Promise<void>;
+  getThemeSettings(themeId: string, publicationId?: string): Promise<Record<string, unknown> | null>;
   saveThemeSettings(
     themeId: string,
     settings: Record<string, unknown>,
+    publicationId?: string,
   ): Promise<void>;
 }

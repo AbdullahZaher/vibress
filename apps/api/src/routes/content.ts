@@ -8,6 +8,7 @@ import {
   mediaService,
   themeService,
   settingsService,
+  workspaceService,
 } from "../services";
 import {
   buildPublicPostSummaryDto,
@@ -91,6 +92,34 @@ async function buildPublicSiteIdentity(): Promise<{
 }
 
 export async function publicContentRoutes(fastify: FastifyInstance) {
+  fastify.addHook("preHandler", async (req, reply) => {
+    const host = req.hostname || (req.headers["host"] as string) || null;
+    const isDevFallbackAllowed =
+      !getConfig().isProduction && req.headers["x-dev-fallback"] !== "false";
+    try {
+      const pubCtx = await workspaceService.resolvePublicPublicationContext({
+        host,
+        isDevFallbackAllowed,
+      });
+      req.publicationContext = {
+        publicationId: pubCtx.publicationId,
+        workspaceId: pubCtx.workspaceId,
+        actorType: pubCtx.actorType,
+        isSystemOperation: pubCtx.isSystemOperation,
+      };
+    } catch {
+      return reply.status(404).send({
+        errors: [
+          {
+            code: "PUBLICATION_NOT_FOUND",
+            message: "Publication not found",
+            requestId: req.id,
+          },
+        ],
+      });
+    }
+  });
+
   // Public Site Metadata + Active Theme
   fastify.get("/site", {
     handler: async (req, reply) => {
@@ -213,11 +242,13 @@ function extractRequestedLocale(req: any): string | null {
       const offset = (page - 1) * limit;
       const requestedLocale = extractRequestedLocale(req);
       
+      const pubId = req.publicationContext?.publicationId;
       const site = await buildPublicSiteIdentity();
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       const { posts, total } = await postsService.listPosts({
+        publicationId: pubId,
         publishedOnly: true,
         visibility: "public",
         tagSlug: filter.tag,
@@ -232,7 +263,7 @@ function extractRequestedLocale(req: any): string | null {
         posts.map(async (post) => {
           let mergedPost: any = post;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("post", post.id, requestedLocale);
+            const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId);
             if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
               mergedPost = {
                 ...post,
@@ -290,27 +321,28 @@ function extractRequestedLocale(req: any): string | null {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const requestedLocale = extractRequestedLocale(req);
+      const pubId = req.publicationContext?.publicationId;
       
       const site = await buildPublicSiteIdentity();
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
-      let post = await postsService.findPublishedBySlug(slug);
+      let post = await postsService.findPublishedBySlug(slug, pubId);
       let translationItem = null;
 
       if (!post) {
         // Try finding by localized slug
         if (requestedLocale) {
-          translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug);
+          translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId);
         }
         if (!translationItem) {
           translationItem =
-            (await translationService.findTranslationBySlug("post", "ar-SA", slug)) ||
-            (await translationService.findTranslationBySlugAny("post", slug));
+            (await translationService.findTranslationBySlug("post", "ar-SA", slug, pubId)) ||
+            (await translationService.findTranslationBySlugAny("post", slug, pubId));
         }
 
         if (translationItem) {
-          post = await postsService.findById(translationItem.contentId);
+          post = await postsService.findById(translationItem.contentId, pubId);
           if (!post || post.status !== "published") {
             post = null;
           }
@@ -321,6 +353,8 @@ function extractRequestedLocale(req: any): string | null {
           "post",
           post.id,
           requestedLocale,
+          undefined,
+          pubId,
         );
 
         if (
@@ -400,11 +434,13 @@ function extractRequestedLocale(req: any): string | null {
       const offset = (page - 1) * limit;
       const requestedLocale = extractRequestedLocale(req);
       
+      const pubId = req.publicationContext?.publicationId;
       const site = await buildPublicSiteIdentity();
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
       const { pages, total } = await pagesService.listPages({
+        publicationId: pubId,
         publishedOnly: true,
         visibility: "public",
         limit,
@@ -415,7 +451,7 @@ function extractRequestedLocale(req: any): string | null {
         pages.map(async (pageObj) => {
           let mergedPage: any = pageObj;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale);
+            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId);
             if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
               mergedPage = {
                 ...pageObj,
@@ -457,26 +493,27 @@ function extractRequestedLocale(req: any): string | null {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
       const requestedLocale = extractRequestedLocale(req);
+      const pubId = req.publicationContext?.publicationId;
       
       const site = await buildPublicSiteIdentity();
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
-      let pageObj = await pagesService.findPublishedBySlug(slug);
+      let pageObj = await pagesService.findPublishedBySlug(slug, pubId);
       let translationItem = null;
 
       if (!pageObj) {
         if (requestedLocale) {
-          translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug);
+          translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId);
         }
         if (!translationItem) {
           translationItem =
-            (await translationService.findTranslationBySlug("page", "ar-SA", slug)) ||
-            (await translationService.findTranslationBySlugAny("page", slug));
+            (await translationService.findTranslationBySlug("page", "ar-SA", slug, pubId)) ||
+            (await translationService.findTranslationBySlugAny("page", slug, pubId));
         }
 
         if (translationItem) {
-          pageObj = await pagesService.findById(translationItem.contentId);
+          pageObj = await pagesService.findById(translationItem.contentId, pubId);
           if (!pageObj || pageObj.status !== "published") {
             pageObj = null;
           }
@@ -486,6 +523,8 @@ function extractRequestedLocale(req: any): string | null {
           "page",
           pageObj.id,
           requestedLocale,
+          undefined,
+          pubId,
         );
 
         if (
@@ -543,7 +582,8 @@ function extractRequestedLocale(req: any): string | null {
   // Public Tags List
   fastify.get("/tags", {
     handler: async (req, reply) => {
-      const tagsList = await tagsService.listAll();
+      const pubId = req.publicationContext?.publicationId;
+      const tagsList = await tagsService.listAll(pubId);
       const formatted = tagsList.map(formatPublicTag);
       return reply.status(200).send({ tags: formatted });
     },
@@ -553,7 +593,8 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/tags/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const tag = await tagsService.findBySlug(slug);
+      const pubId = req.publicationContext?.publicationId;
+      const tag = await tagsService.findBySlug(slug, pubId);
 
       if (!tag) {
         return reply.status(404).send({
@@ -575,7 +616,8 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/tags/:slug/posts", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const tag = await tagsService.findBySlug(slug);
+      const pubId = req.publicationContext?.publicationId;
+      const tag = await tagsService.findBySlug(slug, pubId);
 
       if (!tag) {
         return reply.status(404).send({
@@ -599,6 +641,7 @@ function extractRequestedLocale(req: any): string | null {
       const offset = (page - 1) * limit;
 
       const { posts, total } = await postsService.listPosts({
+        publicationId: pubId,
         publishedOnly: true,
         visibility: "public",
         tagSlug: slug,
@@ -769,7 +812,9 @@ function extractRequestedLocale(req: any): string | null {
       const page = filter.page;
       const offset = (page - 1) * limit;
 
+      const pubId = req.publicationContext?.publicationId;
       const { posts, total } = await postsService.listPosts({
+        publicationId: pubId,
         publishedOnly: true,
         visibility: "public",
         authorSlug: slug,

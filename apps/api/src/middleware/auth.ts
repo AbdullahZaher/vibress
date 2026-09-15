@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { authService } from "../services";
-import { hasPermission } from "@vibress/security";
+import { authService, workspaceService } from "../services";
+import { hasPermission, PublicationAccessDeniedError } from "@vibress/security";
+import { TenantAccessDeniedError } from "@vibress/workspaces";
 import { getConfig } from "@vibress/config";
 
 export const COOKIE_NAME = getConfig().cookies.staffSessionName;
@@ -20,39 +21,75 @@ export async function requireStaffSession(
   req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  if (req.user && req.permissions) {
-    return;
-  }
-  const token = extractSessionToken(req);
-  if (!token) {
-    return reply.status(401).send({
-      errors: [
-        {
-          code: "AUTHENTICATION_REQUIRED",
-          message: "Authentication required",
-          requestId: req.id,
-        },
-      ],
-    });
+  if (!req.user || !req.permissions) {
+    const token = extractSessionToken(req);
+    if (!token) {
+      return reply.status(401).send({
+        errors: [
+          {
+            code: "AUTHENTICATION_REQUIRED",
+            message: "Authentication required",
+            requestId: req.id,
+          },
+        ],
+      });
+    }
+
+    const sessionContext = await authService.resolveSession(token);
+    if (!sessionContext) {
+      return reply.status(401).send({
+        errors: [
+          {
+            code: "AUTHENTICATION_REQUIRED",
+            message: "Session is invalid or expired",
+            requestId: req.id,
+          },
+        ],
+      });
+    }
+
+    req.user = sessionContext.user;
+    req.roles = sessionContext.roles;
+    req.permissions = sessionContext.permissions;
+    req.sessionToken = token;
   }
 
-  const sessionContext = await authService.resolveSession(token);
-  if (!sessionContext) {
-    return reply.status(401).send({
-      errors: [
-        {
-          code: "AUTHENTICATION_REQUIRED",
-          message: "Session is invalid or expired",
-          requestId: req.id,
-        },
-      ],
-    });
+  if (!req.publicationContext) {
+    const requestedPubId = (req.headers["x-publication-id"] as string) || undefined;
+    try {
+      const pubCtx = await workspaceService.resolveStaffPublicationContext(
+        req.user.id,
+        requestedPubId,
+        req.roles,
+      );
+      req.publicationContext = {
+        publicationId: pubCtx.publicationId,
+        workspaceId: pubCtx.workspaceId,
+        actorId: pubCtx.actorId,
+        actorType: pubCtx.actorType,
+        role: pubCtx.role,
+        isSystemOperation: pubCtx.isSystemOperation,
+      };
+    } catch (err: any) {
+      if (
+        err instanceof TenantAccessDeniedError ||
+        err instanceof PublicationAccessDeniedError ||
+        err?.name === "TenantAccessDeniedError" ||
+        err?.name === "PublicationAccessDeniedError"
+      ) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "PUBLICATION_ACCESS_DENIED",
+              message: err.message || "Access to requested publication is denied",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+      throw err;
+    }
   }
-
-  req.user = sessionContext.user;
-  req.roles = sessionContext.roles;
-  req.permissions = sessionContext.permissions;
-  req.sessionToken = token;
 }
 
 export function requirePermission(permissionKey: string) {

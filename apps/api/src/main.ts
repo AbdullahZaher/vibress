@@ -59,6 +59,8 @@ import { mediaStreamRoutes } from "./routes/media-stream";
 import { adminOperationsRoutes } from "./routes/operations";
 import { aiRoutes } from "./routes/ai";
 import { collaborationRoutes } from "./routes/collaboration";
+import websocket from "@fastify/websocket";
+import { collaborationWsRoutes } from "./routes/collaboration-ws";
 import {
   contentModelerRoutes,
   publicContentModelRoutes,
@@ -96,6 +98,12 @@ export const buildApp = () => {
       fileSize: 524288000, // 500MB max limit at multipart route layer
       files: 10,
       fields: 50,
+    },
+  });
+
+  fastify.register(websocket, {
+    options: {
+      maxPayload: 65536,
     },
   });
 
@@ -138,11 +146,8 @@ export const buildApp = () => {
     credentials: true,
   });
 
-  // ARCH-01: Enforce single-publication runtime boundary by stripping client-controlled tenant override headers
+  // Strip raw workspace/tenant override headers; x-publication-id is authoritatively validated by auth middleware
   fastify.addHook("onRequest", async (request) => {
-    if (request.headers["x-publication-id"]) {
-      delete request.headers["x-publication-id"];
-    }
     if (request.headers["x-workspace-id"]) {
       delete request.headers["x-workspace-id"];
     }
@@ -211,6 +216,7 @@ export const buildApp = () => {
   fastify.register(adminOperationsRoutes, { prefix: "/api/admin/v1" });
   fastify.register(aiRoutes, { prefix: "/api/admin/v1" });
   fastify.register(collaborationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(collaborationWsRoutes, { prefix: "/api/admin/v1" });
   fastify.register(contentModelerRoutes, { prefix: "/api/admin/v1" });
   fastify.register(translationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(whatsNewRoutes, { prefix: "/api/admin/v1" });

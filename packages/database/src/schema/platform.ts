@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
+import { publications } from "./publications";
 
 export const integrations = pgTable("integrations", {
   id: text("id").primaryKey(),
@@ -56,20 +57,33 @@ export const apiKeys = pgTable(
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
 export type NewApiKeyRow = typeof apiKeys.$inferInsert;
 
-export const webhookEndpoints = pgTable("webhook_endpoints", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  url: text("url").notNull(),
-  secretEncrypted: text("secret_encrypted"),
-  enabled: boolean("enabled").notNull().default(true),
-  eventTypes: jsonb("event_types").notNull().default([]),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    secretEncrypted: text("secret_encrypted"),
+    enabled: boolean("enabled").notNull().default(true),
+    eventTypes: jsonb("event_types").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => {
+    return {
+      publicationIdIdx: index("webhook_endpoints_publication_id_idx").on(
+        table.publicationId,
+      ),
+    };
+  },
+);
 
 export type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 export type NewWebhookEndpointRow = typeof webhookEndpoints.$inferInsert;

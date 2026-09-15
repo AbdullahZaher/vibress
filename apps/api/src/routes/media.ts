@@ -83,6 +83,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             filename,
             mimeType,
             buffer,
+            publicationId: req.publicationContext?.publicationId,
           },
           req.user!.id,
         );
@@ -167,7 +168,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const result = await mediaService.listMedia(parseResult.data);
+      const result = await mediaService.listMedia({
+        ...parseResult.data,
+        publicationId: req.publicationContext?.publicationId,
+      });
       const storageProvider = defaultStorageRegistry.getActiveProvider();
 
       const itemsWithUrls = await Promise.all(
@@ -190,7 +194,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const asset = await mediaService.getMediaById(id);
+        const asset = await mediaService.getMediaById(
+          id,
+          req.publicationContext?.publicationId,
+        );
         const storageProvider = defaultStorageRegistry.getActiveProvider();
         const url = await storageProvider.getUrl(asset.storageKey);
 
@@ -242,6 +249,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           id,
           parseResult.data,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         const storageProvider = defaultStorageRegistry.getActiveProvider();
         const url = await storageProvider.getUrl(updated.storageKey);
@@ -276,7 +284,11 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        await mediaService.deleteMedia(id, req.user!.id);
+        await mediaService.deleteMedia(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ success: true });
       } catch (err) {
         if (err instanceof MediaInUseError) {
@@ -314,7 +326,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const summary = await mediaService.getMediaReferences(id);
+        const summary = await mediaService.getMediaReferences(
+          id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ summary });
       } catch (err) {
         if (err instanceof MediaNotFoundError) {

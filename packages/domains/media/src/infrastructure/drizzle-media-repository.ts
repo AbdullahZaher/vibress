@@ -16,12 +16,16 @@ import {
 import crypto from "node:crypto";
 
 export class DrizzleMediaRepository implements MediaRepository {
-  async findById(id: string): Promise<MediaAsset | null> {
+  async findById(id: string, publicationId?: string): Promise<MediaAsset | null> {
     const db = getDb();
+    const conditions = [eq(mediaAssets.id, id), isNull(mediaAssets.deletedAt)];
+    if (publicationId) {
+      conditions.push(eq(mediaAssets.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(mediaAssets)
-      .where(and(eq(mediaAssets.id, id), isNull(mediaAssets.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
 
     const row = rows[0];
@@ -29,17 +33,19 @@ export class DrizzleMediaRepository implements MediaRepository {
     return this.mapToDomain(row);
   }
 
-  async findByStorageKey(storageKey: string): Promise<MediaAsset | null> {
+  async findByStorageKey(storageKey: string, publicationId?: string): Promise<MediaAsset | null> {
     const db = getDb();
+    const conditions = [
+      eq(mediaAssets.storageKey, storageKey),
+      isNull(mediaAssets.deletedAt),
+    ];
+    if (publicationId) {
+      conditions.push(eq(mediaAssets.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(mediaAssets)
-      .where(
-        and(
-          eq(mediaAssets.storageKey, storageKey),
-          isNull(mediaAssets.deletedAt),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     const row = rows[0];
@@ -56,6 +62,7 @@ export class DrizzleMediaRepository implements MediaRepository {
 
     const insertPayload = {
       id,
+      publicationId: data.publicationId || "pub_default",
       storageProvider: data.storageProvider || "local",
       storageKey: data.storageKey,
       originalFilename: data.originalFilename,
@@ -88,6 +95,7 @@ export class DrizzleMediaRepository implements MediaRepository {
       metadata?: Record<string, unknown>;
       deletedAt?: Date | null;
     },
+    publicationId?: string,
   ): Promise<MediaAsset> {
     const db = getDb();
     const now = new Date();
@@ -101,10 +109,15 @@ export class DrizzleMediaRepository implements MediaRepository {
     if (data.metadata !== undefined) updatePayload.metadata = data.metadata;
     if (data.deletedAt !== undefined) updatePayload.deletedAt = data.deletedAt;
 
+    const conditions = [eq(mediaAssets.id, id)];
+    if (publicationId) {
+      conditions.push(eq(mediaAssets.publicationId, publicationId));
+    }
+
     const rows = await db
       .update(mediaAssets)
       .set(updatePayload)
-      .where(eq(mediaAssets.id, id))
+      .where(and(...conditions))
       .returning();
 
     const row = rows[0];
@@ -112,12 +125,16 @@ export class DrizzleMediaRepository implements MediaRepository {
     return this.mapToDomain(row);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, publicationId?: string): Promise<void> {
     const db = getDb();
+    const conditions = [eq(mediaAssets.id, id)];
+    if (publicationId) {
+      conditions.push(eq(mediaAssets.publicationId, publicationId));
+    }
     await db
       .update(mediaAssets)
       .set({ deletedAt: new Date() })
-      .where(eq(mediaAssets.id, id));
+      .where(and(...conditions));
   }
 
   async list(
@@ -128,6 +145,9 @@ export class DrizzleMediaRepository implements MediaRepository {
     const offset = filter.offset || 0;
 
     const conditions = [isNull(mediaAssets.deletedAt)];
+    if (filter.publicationId) {
+      conditions.push(eq(mediaAssets.publicationId, filter.publicationId));
+    }
 
     if (filter.assetType) {
       conditions.push(eq(mediaAssets.assetType, filter.assetType));
@@ -304,6 +324,7 @@ export class DrizzleMediaRepository implements MediaRepository {
   private mapToDomain(row: MediaAssetRow): MediaAsset {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       storageProvider: row.storageProvider,
       storageKey: row.storageKey,
       originalFilename: row.originalFilename,

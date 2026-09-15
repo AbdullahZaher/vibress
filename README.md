@@ -21,7 +21,7 @@ The name **Vibress** represents:
 * **Arabic-First Multilingual & RTL**: Native RTL layout detection, Umm al-Qura Hijri calendar formatting, and multilingual translation management.
 * **Subscriptions & Monetization**: Tiered subscription plans, member access gating, Stripe billing integration, and paid newsletters.
 * **Search**: Full-text and fuzzy search powered by PostgreSQL `pg_trgm` GIN indexes.
-* **Extensibility**: Sandboxed plugin architecture, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
+* **Extensibility**: Trusted plugin architecture (Tier 1 bundled & Tier 2 admin-verified) with capability permission scoping, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
 * **Reliability & Observability**: Real-time collaborative CRDT document editing (Yjs), transactional outbox event delivery, Prometheus metrics, and OpenTelemetry tracing.
 
 ---
@@ -40,7 +40,7 @@ Vibress is built as a modular full-stack application with independently containe
              ▼                          ▼                          ▼
    ┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
    │    apps/web       │      │    apps/admin     │      │   apps/portal     │
-   │  Next.js 14 SSR   │      │  Vite/React SPA   │      │  Vite/React SPA   │
+   │  Next.js 15 SSR   │      │  Vite/React SPA   │      │  Vite/React SPA   │
    │   (Port: 7778)    │      │   (Port: 7779)    │      │   (Port: 7781)    │
    └─────────┬─────────┘      └─────────┬─────────┘      └─────────┬─────────┘
              │                          │                          │
@@ -134,7 +134,7 @@ pnpm typecheck
 # Lint all code
 pnpm lint
 
-# Run all unit and integration tests (1,074 tests across 135 files)
+# Run all unit and integration tests (1,250+ tests across 158 files)
 pnpm vitest run
 
 # Build all production bundles

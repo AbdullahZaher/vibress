@@ -22,9 +22,11 @@ interface PluginContext {
   manifestId: string;
   name: string;
   version: string;
+  publicationId?: string | undefined; // Authoritative PublicationContext
   settings: Record<string, unknown>; // plain (non-secret) settings
   getSecret(key: string): Promise<string | null>; // decrypted secret
   log(message: string, level?: "info" | "warn" | "error"): void;
+  hasCapability?(capability: string): boolean;
 }
 
 interface PluginModule {

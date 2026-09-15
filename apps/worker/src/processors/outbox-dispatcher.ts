@@ -15,8 +15,16 @@ import { withSpan, withRemoteTraceContext } from "@vibress/observability";
 export { OutboxDispatcherWorker };
 
 interface OutboxSearchJob {
+  scope?: "publication" | "system";
+  publicationId?: string;
   op: "upsert" | "remove";
-  doc?: { entityType: string; entityId: string; title?: string; slug?: string };
+  doc?: {
+    entityType: string;
+    entityId: string;
+    title?: string;
+    slug?: string;
+    publicationId?: string;
+  };
   entityType?: string;
   entityId?: string;
   traceparent?: string;
@@ -46,23 +54,30 @@ const defaultSearchRelay: OutboxRelay = {
             postId: string;
             title?: string;
             slug?: string;
+            publicationId?: string;
           };
+          const pubId = payload.publicationId || "pub_default";
           const queue = getRelayQueue();
           switch (row.eventType) {
             case "post.published":
               await enqueueTraced(queue, "index", {
+                scope: "publication",
+                publicationId: pubId,
                 op: "upsert",
                 doc: {
                   entityType: "post",
                   entityId: payload.postId,
                   title: payload.title || "",
                   slug: payload.slug || "",
+                  publicationId: pubId,
                 },
               });
               return;
             case "post.unpublished":
             case "post.deleted":
               await enqueueTraced(queue, "remove", {
+                scope: "publication",
+                publicationId: pubId,
                 op: "remove",
                 entityType: "post",
                 entityId: payload.postId,

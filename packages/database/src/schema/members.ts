@@ -1,11 +1,15 @@
-import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { publications } from "./publications";
 
 export const members = pgTable(
   "members",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "restrict" }),
     email: text("email").notNull(),
-    emailNormalized: text("email_normalized").notNull().unique(),
+    emailNormalized: text("email_normalized").notNull(),
     name: text("name"),
     status: text("status").notNull().default("active"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
@@ -20,6 +24,11 @@ export const members = pgTable(
   },
   (table) => {
     return {
+      publicationIdIdx: index("members_publication_id_idx").on(table.publicationId),
+      publicationEmailIdx: uniqueIndex("members_publication_email_idx").on(
+        table.publicationId,
+        table.emailNormalized,
+      ),
       emailNormalizedIdx: index("members_email_normalized_idx").on(
         table.emailNormalized,
       ),

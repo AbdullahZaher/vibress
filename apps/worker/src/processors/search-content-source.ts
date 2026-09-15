@@ -15,7 +15,7 @@ export class WorkerSearchContentSource {
   private pageRepo = new DrizzlePageRepository();
   private tagRepo = new DrizzleTagRepository();
 
-  async listIndexableContent(): Promise<SearchDocumentInput[]> {
+  async listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]> {
     const docs: SearchDocumentInput[] = [];
     const siteUrl = getConfig().site.url;
 
@@ -26,6 +26,7 @@ export class WorkerSearchContentSource {
         publishedOnly: true,
         limit: PAGE_SIZE,
         offset,
+        ...(publicationId ? { publicationId } : {}),
       });
       for (const post of postRows) {
         if (post.visibility !== "public") continue;
@@ -39,6 +40,7 @@ export class WorkerSearchContentSource {
           ),
           slug: post.slug,
           url: `${siteUrl}/posts/${post.slug}`,
+          publicationId: post.publicationId,
         });
       }
       if (postRows.length < PAGE_SIZE) break;
@@ -51,6 +53,7 @@ export class WorkerSearchContentSource {
         publishedOnly: true,
         limit: PAGE_SIZE,
         offset,
+        ...(publicationId ? { publicationId } : {}),
       });
       for (const pg of pageRows) {
         if (pg.visibility !== "public") continue;
@@ -61,13 +64,14 @@ export class WorkerSearchContentSource {
           bodyText: renderStudioDocumentToPlainText(pg.content).slice(0, 2000),
           slug: pg.slug,
           url: `${siteUrl}/${pg.slug}`,
+          publicationId: pg.publicationId,
         });
       }
       if (pageRows.length < PAGE_SIZE) break;
       offset += PAGE_SIZE;
     }
 
-    const tags = await this.tagRepo.listAll();
+    const tags = await this.tagRepo.listAll(publicationId);
     for (const tag of tags) {
       docs.push({
         entityType: "tag",
@@ -75,6 +79,7 @@ export class WorkerSearchContentSource {
         title: tag.name,
         slug: tag.slug,
         url: `${siteUrl}/tags/${tag.slug}`,
+        publicationId: tag.publicationId,
       });
     }
 

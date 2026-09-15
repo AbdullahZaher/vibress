@@ -9,24 +9,42 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 import { members } from "./members";
+import { publications } from "./publications";
 
-export const newsletters = pgTable("newsletters", {
-  id: text("id").primaryKey(),
-  key: text("key").notNull().unique(),
-  name: text("name").notNull(),
-  description: text("description"),
-  senderName: text("sender_name").notNull(),
-  senderEmail: text("sender_email").notNull(),
-  replyTo: text("reply_to"),
-  status: text("status").notNull().default("active"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-});
+export const newsletters = pgTable(
+  "newsletters",
+  {
+    id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    senderName: text("sender_name").notNull(),
+    senderEmail: text("sender_email").notNull(),
+    replyTo: text("reply_to"),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+  },
+  (table) => {
+    return {
+      publicationKeyUnique: uniqueIndex("newsletters_publication_key_unique").on(
+        table.publicationId,
+        table.key,
+      ),
+      publicationIdIdx: index("newsletters_publication_id_idx").on(
+        table.publicationId,
+      ),
+    };
+  },
+);
 
 export type NewsletterRow = typeof newsletters.$inferSelect;
 export type NewNewsletterRow = typeof newsletters.$inferInsert;

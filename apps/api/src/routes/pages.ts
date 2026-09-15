@@ -23,7 +23,9 @@ export async function pageRoutes(fastify: FastifyInstance) {
         limit?: string;
         offset?: string;
       };
-      const params: ListPagesFilter = {};
+      const params: ListPagesFilter = {
+        publicationId: req.publicationContext?.publicationId,
+      };
       if (status) params.status = status as ListPagesFilter["status"];
       if (search) params.search = search;
       if (limit) params.limit = parseInt(limit, 10);
@@ -49,7 +51,10 @@ export async function pageRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("pages.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const page = await pagesService.findById(id);
+      const page = await pagesService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!page) {
         return reply.status(404).send({
           errors: [
@@ -93,6 +98,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
       const page = await pagesService.createPage(
         {
           ...parseResult.data,
+          publicationId: req.publicationContext?.publicationId,
           scheduledAt: parseResult.data.scheduledAt
             ? new Date(parseResult.data.scheduledAt)
             : null,
@@ -134,6 +140,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
           id,
           parseResult.data,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         const authors = await authorsService.getPageAuthors(page.id);
         return reply.status(200).send({
@@ -179,7 +186,11 @@ export async function pageRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        await pagesService.deletePage(id, req.user!.id);
+        await pagesService.deletePage(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
         if (err instanceof PageDomainError && err.code === "PAGE_NOT_FOUND") {
@@ -208,7 +219,11 @@ export async function pageRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const page = await pagesService.publishPage(id, req.user!.id);
+        const page = await pagesService.publishPage(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ page });
       } catch (err: unknown) {
         if (err instanceof PageDomainError) {
@@ -250,7 +265,11 @@ export async function pageRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const page = await pagesService.unpublishPage(id, req.user!.id);
+        const page = await pagesService.unpublishPage(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ page });
       } catch (err: unknown) {
         if (err instanceof PageDomainError && err.code === "PAGE_NOT_FOUND") {
@@ -299,6 +318,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
           id,
           scheduledAt,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ page });
       } catch (err: unknown) {
@@ -341,7 +361,11 @@ export async function pageRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const page = await pagesService.cancelSchedule(id, req.user!.id);
+        const page = await pagesService.cancelSchedule(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ page });
       } catch (err: unknown) {
         if (err instanceof PageDomainError && err.code === "PAGE_NOT_FOUND") {
@@ -365,7 +389,10 @@ export async function pageRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("pages.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const page = await pagesService.findById(id);
+      const page = await pagesService.findById(
+        id,
+        req.publicationContext?.publicationId,
+      );
       if (!page) {
         return reply.status(404).send({
           errors: [

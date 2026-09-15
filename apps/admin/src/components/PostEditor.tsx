@@ -7,7 +7,12 @@ import {
   fetchAiStatus,
   generateAiCompletion,
 } from "../lib/api";
-import { VibressStudio } from "@vibress/studio-react";
+import {
+  VibressStudio,
+  WebSocketCollaborationProvider,
+  YDoc,
+  type CollaborationConfig,
+} from "@vibress/studio-react";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { FileText } from "lucide-react";
 import {
@@ -128,6 +133,34 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       return { words: 0, readingTime: 1 };
     }
   }, [title, studioDoc]);
+
+  const collabConfig = useMemo<CollaborationConfig | undefined>(() => {
+    if (!postId || typeof window === "undefined") return undefined;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/api/admin/v1/posts/${postId}/collaboration/ws`;
+    return {
+      id: postId,
+      user: {
+        id: currentUserId,
+        name: "Staff Editor",
+        color: "#3b82f6",
+      },
+      providerFactory: (id: string, yjsDocMap: Map<string, YDoc>) => {
+        const doc = yjsDocMap.get(id) || new YDoc();
+        yjsDocMap.set(id, doc);
+        return new WebSocketCollaborationProvider(doc, {
+          url: wsUrl,
+          docId: id,
+          user: {
+            id: currentUserId,
+            name: "Staff Editor",
+            color: "#3b82f6",
+          },
+        });
+      },
+    };
+  }, [postId, currentUserId]);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -738,6 +771,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             uploadMedia={handleUploadMedia}
             enableAi={aiEnabled}
             onAiGenerate={handleAiGenerate}
+            collaboration={collabConfig}
           />
         </div>
       </main>

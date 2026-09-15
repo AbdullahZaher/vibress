@@ -514,8 +514,8 @@ describe("Analytics v1 (traffic)", () => {
       const pool = getDbPool();
       const id = crypto.randomUUID();
       await pool.query(
-        `INSERT INTO members (id, email, email_normalized, name, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'active', now(), now())`,
+        `INSERT INTO members (id, publication_id, email, email_normalized, name, status, created_at, updated_at)
+         VALUES ($1, 'pub_default', $2, $3, $4, 'active', now(), now())`,
         [id, email, email.toLowerCase(), email.split("@")[0]],
       );
       return id;
@@ -538,12 +538,12 @@ describe("Analytics v1 (traffic)", () => {
       productId = crypto.randomUUID();
       planId = crypto.randomUUID();
       await pool.query(
-        `INSERT INTO products (id, key, name, status) VALUES ($1, 'analytics-test-product', 'Analytics Test', 'active')`,
+        `INSERT INTO products (id, publication_id, key, name, status) VALUES ($1, 'pub_default', 'analytics-test-product', 'Analytics Test', 'active')`,
         [productId],
       );
       await pool.query(
-        `INSERT INTO plans (id, product_id, key, name, billing_type, currency, amount_minor, status)
-         VALUES ($1, $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
+        `INSERT INTO plans (id, publication_id, product_id, key, name, billing_type, currency, amount_minor, status)
+         VALUES ($1, 'pub_default', $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
         [planId, productId],
       );
       const trialing = await insertMember("trialing@test.local");
@@ -575,12 +575,12 @@ describe("Analytics v1 (traffic)", () => {
       productId = crypto.randomUUID();
       planId = crypto.randomUUID();
       await pool.query(
-        `INSERT INTO products (id, key, name, status) VALUES ($1, 'analytics-test-product', 'Analytics Test', 'active')`,
+        `INSERT INTO products (id, publication_id, key, name, status) VALUES ($1, 'pub_default', 'analytics-test-product', 'Analytics Test', 'active')`,
         [productId],
       );
       await pool.query(
-        `INSERT INTO plans (id, product_id, key, name, billing_type, currency, amount_minor, status)
-         VALUES ($1, $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
+        `INSERT INTO plans (id, publication_id, product_id, key, name, billing_type, currency, amount_minor, status)
+         VALUES ($1, 'pub_default', $2, 'analytics-test-plan', 'Analytics Test Plan', 'recurring', 'usd', 1000, 'active')`,
         [planId, productId],
       );
       const member = await insertMember("multi@test.local");

@@ -30,45 +30,55 @@ import {
 import crypto from "node:crypto";
 
 export class DrizzlePostRepository implements PostRepository {
-  async findById(id: string): Promise<Post | null> {
+  async findById(id: string, publicationId?: string): Promise<Post | null> {
     const db = getDb();
+    const conditions = [eq(posts.id, id), isNull(posts.deletedAt)];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(posts)
-      .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findBySlug(slug: string): Promise<Post | null> {
+  async findBySlug(slug: string, publicationId?: string): Promise<Post | null> {
     const db = getDb();
+    const conditions = [eq(posts.slug, slug), isNull(posts.deletedAt)];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(posts)
-      .where(and(eq(posts.slug, slug), isNull(posts.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findPublishedBySlug(slug: string): Promise<Post | null> {
+  async findPublishedBySlug(slug: string, publicationId?: string): Promise<Post | null> {
     const db = getDb();
     const now = new Date();
+    const conditions = [
+      eq(posts.slug, slug),
+      eq(posts.status, "published"),
+      eq(posts.visibility, "public"),
+      lte(posts.publishedAt, now),
+      isNull(posts.deletedAt),
+    ];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(posts)
-      .where(
-        and(
-          eq(posts.slug, slug),
-          eq(posts.status, "published"),
-          eq(posts.visibility, "public"),
-          lte(posts.publishedAt, now),
-          isNull(posts.deletedAt),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -76,7 +86,7 @@ export class DrizzlePostRepository implements PostRepository {
   }
 
   async create(
-    data: CreatePostData & { slug: string; content: Record<string, unknown> },
+    data: CreatePostData & { slug: string; content: Record<string, unknown>; publicationId?: string },
   ): Promise<Post> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
@@ -84,6 +94,7 @@ export class DrizzlePostRepository implements PostRepository {
 
     const insertPayload = {
       id,
+      publicationId: data.publicationId || "pub_default",
       title: data.title,
       slug: data.slug,
       excerpt: data.excerpt || null,
@@ -115,9 +126,10 @@ export class DrizzlePostRepository implements PostRepository {
   async update(
     id: string,
     data: Partial<Post> & { version: number },
+    publicationId?: string,
   ): Promise<Post> {
     const db = getDb();
-    const current = await this.findById(id);
+    const current = await this.findById(id, publicationId);
     if (!current) throw new Error(`Post not found: ${id}`);
 
     // Optimistic concurrency check
@@ -161,10 +173,15 @@ export class DrizzlePostRepository implements PostRepository {
       updatePayload.canonicalUrl = data.canonicalUrl;
     if (data.deletedAt !== undefined) updatePayload.deletedAt = data.deletedAt;
 
+    const conditions = [eq(posts.id, id), eq(posts.version, current.version)];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
+
     const [row] = await db
       .update(posts)
       .set(updatePayload)
-      .where(and(eq(posts.id, id), eq(posts.version, current.version)))
+      .where(and(...conditions))
       .returning();
     if (!row) {
       throw new PostDomainError(
@@ -175,12 +192,16 @@ export class DrizzlePostRepository implements PostRepository {
     return this.mapToDomain(row);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, publicationId?: string): Promise<void> {
     const db = getDb();
+    const conditions = [eq(posts.id, id)];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
     await db
       .update(posts)
       .set({ deletedAt: new Date() })
-      .where(eq(posts.id, id));
+      .where(and(...conditions));
   }
 
   async list(
@@ -191,6 +212,9 @@ export class DrizzlePostRepository implements PostRepository {
     const offset = filter.offset || 0;
 
     const conditions = [isNull(posts.deletedAt)];
+    if (filter.publicationId) {
+      conditions.push(eq(posts.publicationId, filter.publicationId));
+    }
     if (filter.publishedOnly) {
       conditions.push(eq(posts.status, "published"));
       conditions.push(lte(posts.publishedAt, new Date()));
@@ -210,11 +234,15 @@ export class DrizzlePostRepository implements PostRepository {
     }
 
     if (filter.tagSlug) {
+      const tagConditions = [eq(tags.slug, filter.tagSlug)];
+      if (filter.publicationId) {
+        tagConditions.push(eq(tags.publicationId, filter.publicationId));
+      }
       const tagPosts = db
         .select({ postId: postTags.postId })
         .from(postTags)
         .innerJoin(tags, eq(postTags.tagId, tags.id))
-        .where(eq(tags.slug, filter.tagSlug));
+        .where(and(...tagConditions));
       conditions.push(inArray(posts.id, tagPosts));
     }
 
@@ -273,18 +301,20 @@ export class DrizzlePostRepository implements PostRepository {
     };
   }
 
-  async findDueScheduledPosts(now = new Date()): Promise<Post[]> {
+  async findDueScheduledPosts(now = new Date(), publicationId?: string): Promise<Post[]> {
     const db = getDb();
+    const conditions = [
+      eq(posts.status, "scheduled"),
+      lte(posts.scheduledAt, now),
+      isNull(posts.deletedAt),
+    ];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(posts)
-      .where(
-        and(
-          eq(posts.status, "scheduled"),
-          lte(posts.scheduledAt, now),
-          isNull(posts.deletedAt),
-        ),
-      );
+      .where(and(...conditions));
 
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -319,6 +349,7 @@ export class DrizzlePostRepository implements PostRepository {
   private mapToDomain(row: typeof posts.$inferSelect): Post {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       title: row.title,
       slug: row.slug,
       excerpt: row.excerpt,

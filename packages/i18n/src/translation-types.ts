@@ -46,6 +46,7 @@ export interface FieldLevelSourceDiff {
 }
 
 export interface UpsertTranslationInput {
+  publicationId?: string | undefined;
   contentType: "post" | "page" | "content_entry" | "tag";
   contentId: string;
   translationGroupId?: string | null | undefined;
@@ -68,6 +69,7 @@ export interface UpsertTranslationInput {
 
 export interface ContentTranslationItem {
   id: string;
+  publicationId: string;
   translationGroupId: string | null;
   contentType: string;
   contentId: string;
@@ -125,6 +127,7 @@ export interface TranslationMatrixFilter {
   onlyStale?: boolean | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+  publicationId?: string | undefined;
 }
 
 export interface TranslationQueueItem {
@@ -176,6 +179,7 @@ export interface BulkTranslationUpdateInput {
   translationIds: string[];
   action: "submit_review" | "approve" | "publish" | "mark_stale" | "delete";
   reviewerId?: string | undefined;
+  publicationId?: string | undefined;
 }
 
 export interface BulkTranslationResult {

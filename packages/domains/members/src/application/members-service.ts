@@ -30,19 +30,33 @@ export class MembersService {
     private sessionRepo: MemberSessionRepository,
   ) {}
 
-  async findById(id: string): Promise<Member | null> {
-    return this.memberRepo.findById(id);
+  async findById(id: string, publicationId?: string): Promise<Member | null> {
+    return this.memberRepo.findById(id, publicationId);
   }
 
-  async findByEmail(email: string): Promise<Member | null> {
-    return this.memberRepo.findByEmailNormalized(normalizeMemberEmail(email));
+  async findByEmail(email: string, publicationId?: string): Promise<Member | null> {
+    return this.memberRepo.findByEmailNormalized(normalizeMemberEmail(email), publicationId);
+  }
+
+  async createMember(
+    data: { email: string; name?: string | null | undefined; publicationId?: string },
+  ): Promise<Member> {
+    const emailNormalized = normalizeMemberEmail(data.email);
+    return this.memberRepo.create({
+      email: data.email,
+      emailNormalized,
+      name: data.name,
+      publicationId: data.publicationId || "pub_default",
+      status: "active",
+    });
   }
 
   async updateProfile(
     memberId: string,
     data: { name?: string | null | undefined },
+    publicationId?: string,
   ): Promise<Member> {
-    const member = await this.memberRepo.findById(memberId);
+    const member = await this.memberRepo.findById(memberId, publicationId);
     if (!member) throw new MemberNotFoundError();
 
     const update: UpdateMemberData = {};
@@ -65,7 +79,7 @@ export class MembersService {
       update.name = name;
     }
 
-    const updated = await this.memberRepo.update(memberId, update);
+    const updated = await this.memberRepo.update(memberId, update, publicationId);
     domainEvents.emit("member.profile.updated", { memberId });
     return updated;
   }
@@ -73,15 +87,17 @@ export class MembersService {
   async disableMember(
     memberId: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Member> {
-    return runInTransaction(() => this.disableMemberTx(memberId, actorId));
+    return runInTransaction(() => this.disableMemberTx(memberId, actorId, publicationId));
   }
 
   private async disableMemberTx(
     memberId: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Member> {
-    const member = await this.memberRepo.findById(memberId);
+    const member = await this.memberRepo.findById(memberId, publicationId);
     if (!member) throw new MemberNotFoundError();
     if (member.status === "disabled") {
       throw new MemberStateError(
@@ -94,7 +110,7 @@ export class MembersService {
     const updated = await this.memberRepo.update(memberId, {
       status: "disabled",
       disabledAt: now,
-    });
+    }, publicationId);
 
     // Disable → revoke active sessions (race-safe: future validations fail on status).
     await this.sessionRepo.revokeAllForMember(memberId);
@@ -106,8 +122,9 @@ export class MembersService {
   async enableMember(
     memberId: string,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<Member> {
-    const member = await this.memberRepo.findById(memberId);
+    const member = await this.memberRepo.findById(memberId, publicationId);
     if (!member) throw new MemberNotFoundError();
     if (member.status === "active") {
       throw new MemberStateError(
@@ -119,7 +136,7 @@ export class MembersService {
     const updated = await this.memberRepo.update(memberId, {
       status: "active",
       disabledAt: null,
-    });
+    }, publicationId);
 
     domainEvents.emit("member.enabled", { memberId, actorId });
     return updated;

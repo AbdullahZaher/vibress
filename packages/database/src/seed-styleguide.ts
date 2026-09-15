@@ -218,6 +218,7 @@ export const seedStyleGuide = async () => {
 
   await db.insert(pages).values({
     id,
+    publicationId: "pub_default",
     title: "Style Guide",
     slug: "style-guide",
     content,

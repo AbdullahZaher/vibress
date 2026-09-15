@@ -56,6 +56,9 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       const includeArchived = String(query.includeArchived) === "true";
       const newsletters = await newslettersService.listNewsletters({
         includeArchived,
+        ...(req.publicationContext?.publicationId
+          ? { publicationId: req.publicationContext.publicationId }
+          : {}),
       });
       return reply.status(200).send({ newsletters });
     },
@@ -78,7 +81,10 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         );
       try {
         const newsletter = await newslettersService.createNewsletter(
-          parsed.data,
+          {
+            ...parsed.data,
+            publicationId: req.publicationContext?.publicationId,
+          },
           req.user!.id,
         );
         return reply.status(201).send({ newsletter });
@@ -113,6 +119,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
           id,
           parsed.data as UpdateNewsletterData,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ newsletter });
       } catch (err) {
@@ -135,6 +142,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         const newsletter = await newslettersService.archiveNewsletter(
           id,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ newsletter });
       } catch (err) {

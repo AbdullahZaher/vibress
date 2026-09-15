@@ -25,6 +25,20 @@ describe("Database Migration 0022 -> 0023 Canonical Upgrade Verification", () =>
         await db.execute(sql.raw(trimmed));
       }
     }
+    // Restore migration 0026 multi-publication tenant isolation schema on installed_themes
+    await db.execute(sql`
+      ALTER TABLE "installed_themes" ADD COLUMN IF NOT EXISTS "publication_id" text;
+      UPDATE "installed_themes" SET "publication_id" = 'pub_default' WHERE "publication_id" IS NULL;
+      ALTER TABLE "installed_themes" DROP CONSTRAINT IF EXISTS "installed_themes_publication_id_fk";
+      ALTER TABLE "installed_themes"
+        ADD CONSTRAINT "installed_themes_publication_id_fk"
+        FOREIGN KEY ("publication_id") REFERENCES "publications"("id")
+        ON DELETE CASCADE;
+      DROP INDEX IF EXISTS "installed_themes_theme_id_version_unique_idx";
+      CREATE UNIQUE INDEX IF NOT EXISTS "installed_themes_pub_version_unique_idx"
+        ON "installed_themes" ("publication_id", "theme_id", "version");
+      ALTER TABLE "installed_themes" ALTER COLUMN "publication_id" SET NOT NULL;
+    `);
   });
 
   it("applies 0022_external_themes.sql schema cleanly", async () => {

@@ -12,45 +12,55 @@ import {
 import crypto from "node:crypto";
 
 export class DrizzlePageRepository implements PageRepository {
-  async findById(id: string): Promise<Page | null> {
+  async findById(id: string, publicationId?: string): Promise<Page | null> {
     const db = getDb();
+    const conditions = [eq(pages.id, id), isNull(pages.deletedAt)];
+    if (publicationId) {
+      conditions.push(eq(pages.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(pages)
-      .where(and(eq(pages.id, id), isNull(pages.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findBySlug(slug: string): Promise<Page | null> {
+  async findBySlug(slug: string, publicationId?: string): Promise<Page | null> {
     const db = getDb();
+    const conditions = [eq(pages.slug, slug), isNull(pages.deletedAt)];
+    if (publicationId) {
+      conditions.push(eq(pages.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(pages)
-      .where(and(eq(pages.slug, slug), isNull(pages.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
   }
 
-  async findPublishedBySlug(slug: string): Promise<Page | null> {
+  async findPublishedBySlug(slug: string, publicationId?: string): Promise<Page | null> {
     const db = getDb();
     const now = new Date();
+    const conditions = [
+      eq(pages.slug, slug),
+      eq(pages.status, "published"),
+      eq(pages.visibility, "public"),
+      lte(pages.publishedAt, now),
+      isNull(pages.deletedAt),
+    ];
+    if (publicationId) {
+      conditions.push(eq(pages.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(pages)
-      .where(
-        and(
-          eq(pages.slug, slug),
-          eq(pages.status, "published"),
-          eq(pages.visibility, "public"),
-          lte(pages.publishedAt, now),
-          isNull(pages.deletedAt),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -58,7 +68,7 @@ export class DrizzlePageRepository implements PageRepository {
   }
 
   async create(
-    data: CreatePageData & { slug: string; content: Record<string, unknown> },
+    data: CreatePageData & { slug: string; content: Record<string, unknown>; publicationId?: string },
   ): Promise<Page> {
     const db = getDb();
     const id = data.id || crypto.randomUUID();
@@ -66,6 +76,7 @@ export class DrizzlePageRepository implements PageRepository {
 
     const insertPayload = {
       id,
+      publicationId: data.publicationId || "pub_default",
       title: data.title,
       slug: data.slug,
       excerpt: data.excerpt || null,
@@ -97,9 +108,10 @@ export class DrizzlePageRepository implements PageRepository {
   async update(
     id: string,
     data: Partial<Page> & { version: number },
+    publicationId?: string,
   ): Promise<Page> {
     const db = getDb();
-    const current = await this.findById(id);
+    const current = await this.findById(id, publicationId);
     if (!current) throw new Error(`Page not found: ${id}`);
 
     if (current.version !== data.version) {
@@ -142,10 +154,15 @@ export class DrizzlePageRepository implements PageRepository {
       updatePayload.canonicalUrl = data.canonicalUrl;
     if (data.deletedAt !== undefined) updatePayload.deletedAt = data.deletedAt;
 
+    const whereConditions = [eq(pages.id, id), eq(pages.version, current.version)];
+    if (publicationId) {
+      whereConditions.push(eq(pages.publicationId, publicationId));
+    }
+
     const [row] = await db
       .update(pages)
       .set(updatePayload)
-      .where(and(eq(pages.id, id), eq(pages.version, current.version)))
+      .where(and(...whereConditions))
       .returning();
     if (!row) {
       throw new PageDomainError(
@@ -156,12 +173,16 @@ export class DrizzlePageRepository implements PageRepository {
     return this.mapToDomain(row);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, publicationId?: string): Promise<void> {
     const db = getDb();
+    const conditions = [eq(pages.id, id)];
+    if (publicationId) {
+      conditions.push(eq(pages.publicationId, publicationId));
+    }
     await db
       .update(pages)
       .set({ deletedAt: new Date() })
-      .where(eq(pages.id, id));
+      .where(and(...conditions));
   }
 
   async list(
@@ -172,6 +193,9 @@ export class DrizzlePageRepository implements PageRepository {
     const offset = filter.offset || 0;
 
     const conditions = [isNull(pages.deletedAt)];
+    if (filter.publicationId) {
+      conditions.push(eq(pages.publicationId, filter.publicationId));
+    }
     if (filter.publishedOnly) {
       conditions.push(eq(pages.status, "published"));
       conditions.push(lte(pages.publishedAt, new Date()));
@@ -208,18 +232,20 @@ export class DrizzlePageRepository implements PageRepository {
     };
   }
 
-  async findDueScheduledPages(now = new Date()): Promise<Page[]> {
+  async findDueScheduledPages(now = new Date(), publicationId?: string): Promise<Page[]> {
     const db = getDb();
+    const conditions = [
+      eq(pages.status, "scheduled"),
+      lte(pages.scheduledAt, now),
+      isNull(pages.deletedAt),
+    ];
+    if (publicationId) {
+      conditions.push(eq(pages.publicationId, publicationId));
+    }
     const rows = await db
       .select()
       .from(pages)
-      .where(
-        and(
-          eq(pages.status, "scheduled"),
-          lte(pages.scheduledAt, now),
-          isNull(pages.deletedAt),
-        ),
-      );
+      .where(and(...conditions));
 
     return rows.map((r) => this.mapToDomain(r));
   }
@@ -227,6 +253,7 @@ export class DrizzlePageRepository implements PageRepository {
   private mapToDomain(row: typeof pages.$inferSelect): Page {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       title: row.title,
       slug: row.slug,
       excerpt: row.excerpt,

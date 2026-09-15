@@ -31,12 +31,14 @@ export interface PluginSettingDefinition {
 export interface PluginContext {
   pluginId: string;
   manifest: PluginManifest;
+  publicationId?: string | undefined;
   settings: Record<string, unknown>;
   log: {
     info(msg: string, meta?: Record<string, unknown>): void;
     warn(msg: string, meta?: Record<string, unknown>): void;
     error(msg: string, meta?: Record<string, unknown>): void;
   };
+  hasCapability?(capability: string): boolean;
 }
 
 export interface VibressPlugin {

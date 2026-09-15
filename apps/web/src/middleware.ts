@@ -152,8 +152,13 @@ export async function middleware(request: NextRequest) {
     );
     if (!hasSiteAuth) {
       try {
+        const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
         const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
           cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+          },
         });
         if (siteRes.ok) {
           const siteData = await siteRes.json();

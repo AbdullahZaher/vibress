@@ -8,6 +8,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export type TranslationStatus =
   | "untranslated"
@@ -23,6 +24,9 @@ export const contentTranslations = pgTable(
   "content_translations",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     translationGroupId: text("translation_group_id"),
     contentType: text("content_type").notNull(), // "post" | "page" | "content_entry" | "tag"
     contentId: text("content_id").notNull(),
@@ -60,7 +64,8 @@ export const contentTranslations = pgTable(
       table.contentId,
       table.targetLocale,
     ),
-    targetLocaleSlugIdx: uniqueIndex("content_translations_locale_slug_idx").on(
+    pubLocaleSlugIdx: uniqueIndex("content_translations_pub_locale_slug_idx").on(
+      table.publicationId,
       table.targetLocale,
       table.slug,
     ),

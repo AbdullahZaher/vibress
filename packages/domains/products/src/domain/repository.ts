@@ -6,13 +6,14 @@ import {
 } from "./product";
 
 export interface ProductRepository {
-  create(data: CreateProductData): Promise<Product>;
-  findById(id: string): Promise<Product | null>;
-  findByKey(key: string): Promise<Product | null>;
-  update(id: string, data: UpdateProductData): Promise<Product>;
-  archive(id: string): Promise<Product>;
+  create(data: CreateProductData & { publicationId?: string }): Promise<Product>;
+  findById(id: string, publicationId?: string): Promise<Product | null>;
+  findByKey(key: string, publicationId?: string): Promise<Product | null>;
+  update(id: string, data: UpdateProductData, publicationId?: string): Promise<Product>;
+  archive(id: string, publicationId?: string): Promise<Product>;
   list(filter?: {
     status?: ProductStatus;
     includeArchived?: boolean;
+    publicationId?: string;
   }): Promise<Product[]>;
 }

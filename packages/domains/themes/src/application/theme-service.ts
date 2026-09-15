@@ -53,16 +53,16 @@ export class ThemeService {
     this.previewStore = previewStore || new MemoryPreviewTokenStore();
   }
 
-  async listThemes(): Promise<UnifiedThemeSummary[]> {
+  async listThemes(publicationId?: string): Promise<UnifiedThemeSummary[]> {
     const active = await this.repo.getActive();
     const activeThemeId = active?.themeId || "vibress-default";
 
     const results: UnifiedThemeSummary[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Installed external themes
+    // 1. Installed external themes (scoped to publication)
     if (this.installedRepo) {
-      const installed = await this.installedRepo.listAll();
+      const installed = await this.installedRepo.listAll(publicationId);
       for (const t of installed) {
         if (!seenIds.has(t.themeId)) {
           seenIds.add(t.themeId);
@@ -77,7 +77,7 @@ export class ThemeService {
       }
     }
 
-    // 2. Built-in registry themes
+    // 2. Built-in registry themes (system-wide)
     const builtIn = this.registry.list();
     for (const t of builtIn) {
       if (!seenIds.has(t.manifest.id)) {
@@ -98,6 +98,7 @@ export class ThemeService {
   async getTheme(
     themeId: string,
     version?: string,
+    publicationId?: string,
   ): Promise<{
     manifest: ThemeManifest;
     settingsSchema: ThemeSettingsSchema;
@@ -106,8 +107,8 @@ export class ThemeService {
   } | null> {
     if (this.installedRepo) {
       const installed = version
-        ? await this.installedRepo.findByThemeIdAndVersion(themeId, version)
-        : await this.installedRepo.findByThemeId(themeId);
+        ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, publicationId)
+        : await this.installedRepo.findByThemeId(themeId, publicationId);
       if (installed) {
         return {
           manifest: installed.manifest,
@@ -135,11 +136,11 @@ export class ThemeService {
     return this.repo.getActive();
   }
 
-  async getActiveTheme(): Promise<ActiveThemeResult | null> {
+  async getActiveTheme(publicationId?: string): Promise<ActiveThemeResult | null> {
     const config = await this.repo.getActive();
     const activeThemeId = config?.themeId || "vibress-default";
 
-    const definition = await this.getTheme(activeThemeId, config?.themeVersion);
+    const definition = await this.getTheme(activeThemeId, config?.themeVersion, publicationId);
     if (!definition) return null;
 
     const settings = mergeThemeSettings(
@@ -159,8 +160,9 @@ export class ThemeService {
     themeId: string,
     actorId: string | null,
     version?: string,
+    publicationId?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId, version);
+    const definition = await this.getTheme(themeId, version, publicationId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -171,7 +173,7 @@ export class ThemeService {
     // Retrieve any previously saved settings for this theme identity
     let savedSettings: Record<string, unknown> | null = null;
     if (this.installedRepo) {
-      savedSettings = await this.installedRepo.getThemeSettings(themeId);
+      savedSettings = await this.installedRepo.getThemeSettings(themeId, publicationId);
     }
 
     let settings: Record<string, unknown>;
@@ -196,14 +198,14 @@ export class ThemeService {
 
     // Update statuses in installed repo
     if (this.installedRepo) {
-      const allInstalled = await this.installedRepo.listAll();
+      const allInstalled = await this.installedRepo.listAll(publicationId);
       for (const inst of allInstalled) {
         const shouldBeActive =
           inst.themeId === themeId && inst.version === manifest.version;
         if (shouldBeActive && inst.status !== "active") {
-          await this.installedRepo.update({ ...inst, status: "active" });
+          await this.installedRepo.update({ ...inst, status: "active" }, publicationId);
         } else if (!shouldBeActive && inst.status === "active") {
-          await this.installedRepo.update({ ...inst, status: "installed" });
+          await this.installedRepo.update({ ...inst, status: "installed" }, publicationId);
         }
       }
     }
@@ -215,8 +217,9 @@ export class ThemeService {
     themeId: string,
     input: Record<string, unknown>,
     _actorId: string | null,
+    publicationId?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId);
+    const definition = await this.getTheme(themeId, undefined, publicationId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -230,7 +233,7 @@ export class ThemeService {
 
     // Persist settings per theme identity
     if (this.installedRepo) {
-      await this.installedRepo.saveThemeSettings(themeId, settings);
+      await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
     const config = await this.repo.getActive();
@@ -258,6 +261,7 @@ export class ThemeService {
     themeId: string,
     _actorId: string | null,
     version?: string,
+    publicationId?: string,
   ): Promise<{ success: boolean; themeId: string; version?: string }> {
     const active = await this.repo.getActive();
     if (active?.themeId === themeId && (!version || active.themeVersion === version)) {
@@ -280,8 +284,8 @@ export class ThemeService {
     }
 
     const installed = version
-      ? await this.installedRepo.findByThemeIdAndVersion(themeId, version)
-      : await this.installedRepo.findByThemeId(themeId);
+      ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, publicationId)
+      : await this.installedRepo.findByThemeId(themeId, publicationId);
 
     if (!installed) {
       throw new ThemeNotFoundError(themeId);
@@ -297,9 +301,9 @@ export class ThemeService {
 
     // Delete from DB
     if (version) {
-      await this.installedRepo.deleteVersion(themeId, version);
+      await this.installedRepo.deleteVersion(themeId, version, publicationId);
     } else {
-      await this.installedRepo.delete(themeId);
+      await this.installedRepo.delete(themeId, publicationId);
     }
 
     return {

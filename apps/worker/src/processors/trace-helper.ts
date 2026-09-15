@@ -8,7 +8,7 @@ const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-01$/;
  * the job carries a W3C traceparent (written by enqueueTraced), the span
  * continues the producing process's trace.
  */
-export function tracedProcessor<T extends { traceparent?: string }>(
+export function tracedProcessor<T extends { traceparent?: string | undefined }>(
   spanName: string,
   process: (job: Job<T>) => Promise<void>,
 ): (job: Job<T>) => Promise<void> {

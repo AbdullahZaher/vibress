@@ -52,7 +52,12 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as ProductListQuery;
       const includeArchived = String(query.includeArchived) === "true";
-      const products = await productsService.listProducts({ includeArchived });
+      const products = await productsService.listProducts({
+        includeArchived,
+        ...(req.publicationContext?.publicationId
+          ? { publicationId: req.publicationContext.publicationId }
+          : {}),
+      });
       return reply.status(200).send({ products });
     },
   });
@@ -74,7 +79,10 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
         );
       try {
         const product = await productsService.createProduct(
-          parsed.data,
+          {
+            ...parsed.data,
+            publicationId: req.publicationContext?.publicationId,
+          },
           req.user!.id,
         );
         return reply.status(201).send({ product });
@@ -107,6 +115,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           id,
           parsed.data,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ product });
       } catch (err: unknown) {
@@ -126,7 +135,11 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const product = await productsService.archiveProduct(id, req.user!.id);
+        const product = await productsService.archiveProduct(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ product });
       } catch (err: unknown) {
         if (err instanceof ProductDomainError)
@@ -143,7 +156,10 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       const query = (req.query ?? {}) as PlanListQuery;
       const productId = query.productId as string | undefined;
       const plans = productId
-        ? await plansService.listPlansByProduct(productId)
+        ? await plansService.listPlansByProduct(
+            productId,
+            req.publicationContext?.publicationId,
+          )
         : [];
       return reply.status(200).send({ plans });
     },
@@ -166,7 +182,10 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
         );
       try {
         const plan = await plansService.createPlan(
-          parsed.data as CreatePlanData,
+          {
+            ...parsed.data,
+            publicationId: req.publicationContext?.publicationId,
+          } as CreatePlanData,
           req.user!.id,
         );
         return reply.status(201).send({ plan });
@@ -199,6 +218,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
           id,
           parsed.data as UpdatePlanData,
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({ plan });
       } catch (err: unknown) {
@@ -218,7 +238,11 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const plan = await plansService.archivePlan(id, req.user!.id);
+        const plan = await plansService.archivePlan(
+          id,
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
         return reply.status(200).send({ plan });
       } catch (err: unknown) {
         if (err instanceof PlanDomainError)

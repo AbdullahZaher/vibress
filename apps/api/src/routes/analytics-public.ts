@@ -18,6 +18,7 @@ import {
 } from "@vibress/analytics";
 import type { AnalyticsQueueJob } from "@vibress/queue";
 import { appLogger } from "../observability";
+import { workspaceService } from "../services";
 
 const TRAFFIC_EVENTS = new Set(["post.view", "page.view"]);
 
@@ -70,6 +71,26 @@ function getQueue(): Queue<AnalyticsQueueJob> {
 export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
   const isProduction = getConfig().isProduction;
 
+  fastify.addHook("preHandler", async (req, reply) => {
+    try {
+      const pubCtx = await workspaceService.resolvePublicPublicationContext({
+        host: req.headers.host || "",
+        isDevFallbackAllowed: !isProduction,
+      });
+      req.publicationContext = pubCtx;
+    } catch {
+      return reply.status(404).send({
+        errors: [
+          {
+            code: "PUBLICATION_NOT_FOUND",
+            message: "Publication not found",
+            requestId: req.id,
+          },
+        ],
+      });
+    }
+  });
+
   fastify.post("/events", {
     config: {
       rateLimit: {
@@ -114,11 +135,14 @@ export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
       const isBot = classifyBot(userAgent);
       if (isBot) metrics.counter("analytics.events.bot", 1);
 
+      const pubId = req.publicationContext?.publicationId || "pub_default";
+
       const event: IngestEventData = {
         // Client-supplied eventId is the idempotency key; the server must not
         // replace it, otherwise a retry would produce a different id and the
         // same logical event could be counted twice.
         eventId: input.eventId,
+        publicationId: pubId,
         eventName: input.event,
         occurredAt: new Date(), // server receive time — clients cannot inject history
         path: normalizePath(input.path),
@@ -157,6 +181,8 @@ export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
       // Fire-and-forget enqueue: never await, never let queue failure reach
       // the public client.
       enqueueTraced(getQueue(), input.event, {
+        scope: "publication",
+        publicationId: pubId,
         event: event as AnalyticsQueueJob["event"],
       }).catch((err: unknown) => {
         metrics.counter("analytics.events.queue_failed", 1);

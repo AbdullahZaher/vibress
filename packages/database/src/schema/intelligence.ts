@@ -10,11 +10,15 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export const analyticsEvents = pgTable(
   "analytics_events",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     eventId: text("event_id").notNull().unique(),
     eventName: text("event_name").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
@@ -36,6 +40,10 @@ export const analyticsEvents = pgTable(
   },
   (table) => {
     return {
+      pubOccurredIdx: index("analytics_events_pub_occurred_idx").on(
+        table.publicationId,
+        table.occurredAt,
+      ),
       eventNameIdx: index("analytics_events_name_idx").on(table.eventName),
       occurredAtIdx: index("analytics_events_occurred_at_idx").on(
         table.occurredAt,
@@ -102,6 +110,9 @@ export const searchDocuments = pgTable(
   "search_documents",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
     title: text("title").notNull(),
@@ -115,9 +126,14 @@ export const searchDocuments = pgTable(
   },
   (table) => {
     return {
-      uniqueEntityIdx: uniqueIndex("search_documents_entity_idx").on(
+      pubEntityIdx: uniqueIndex("search_documents_pub_entity_idx").on(
+        table.publicationId,
         table.entityType,
         table.entityId,
+      ),
+      pubSearchableIdx: index("search_documents_pub_searchable_idx").on(
+        table.publicationId,
+        table.searchable,
       ),
       searchableIdx: index("search_documents_searchable_idx").on(
         table.searchable,
@@ -133,7 +149,10 @@ export const automations = pgTable(
   "automations",
   {
     id: text("id").primaryKey(),
-    key: text("key").notNull().unique(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
     name: text("name").notNull(),
     description: text("description"),
     triggerEvent: text("trigger_event").notNull(),
@@ -153,6 +172,10 @@ export const automations = pgTable(
   },
   (table) => {
     return {
+      publicationKeyUnique: uniqueIndex("automations_publication_key_unique").on(
+        table.publicationId,
+        table.key,
+      ),
       statusTriggerIdx: index("automations_status_trigger_idx").on(
         table.status,
         table.triggerEvent,
