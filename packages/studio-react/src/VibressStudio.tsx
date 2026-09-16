@@ -20,7 +20,7 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import LexicalErrorBoundary from "@lexical/react/LexicalErrorBoundary";
 import { CollaborationPlugin } from "@lexical/react/LexicalCollaborationPlugin";
-import { $getRoot, $createParagraphNode } from "lexical";
+import { $getRoot, $createParagraphNode, type LexicalEditor } from "lexical";
 import { SlashMenuPlugin } from "./plugins/SlashMenuPlugin";
 import { FloatingFormatToolbarPlugin } from "./plugins/FloatingFormatToolbarPlugin";
 import { FloatingCardActionToolbarPlugin } from "./plugins/FloatingCardActionToolbarPlugin";
@@ -143,6 +143,21 @@ export function VibressStudio({
   const initialConfig = useMemo(
     () => ({
       namespace: "VibressStudio",
+      editorState: (editor: LexicalEditor) => {
+        if (parsedDoc && parsedDoc.root) {
+          try {
+            const editorState = editor.parseEditorState({
+              root: { ...parsedDoc.root, version: 1 },
+            } as never);
+            editor.setEditorState(editorState);
+          } catch (err) {
+            console.error("Failed to parse initial editor state", err);
+            const root = $getRoot();
+            root.clear();
+            root.append($createParagraphNode());
+          }
+        }
+      },
       nodes: [
         ...STUDIO_CORE_NODES,
         ReactStudioCardNode,
@@ -196,7 +211,7 @@ export function VibressStudio({
         },
       },
     }),
-    [readOnly, onError],
+    [readOnly, onError, parsedDoc],
   );
 
   return (

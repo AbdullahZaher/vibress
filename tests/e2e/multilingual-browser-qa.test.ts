@@ -81,6 +81,7 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
       .insert(posts)
       .values({
         id: testPostId,
+        publicationId: "pub_default",
         title: "Welcome to Vibress Multilingual QA",
         slug: TEST_POST_SLUG,
         excerpt: "High-performance publishing with authentic RTL support.",
@@ -119,6 +120,7 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
       .insert(contentTranslations)
       .values({
         id: randomUUID(),
+        publicationId: "pub_default",
         translationGroupId: testTranslationGroupId,
         contentType: "post",
         contentId: testPostId,
@@ -161,6 +163,7 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
       .insert(pages)
       .values({
         id: testPageId,
+        publicationId: "pub_default",
         title: "About Vibress QA",
         slug: TEST_PAGE_SLUG,
         excerpt: "About the modern publishing engine.",
@@ -193,6 +196,7 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
       .insert(contentTranslations)
       .values({
         id: randomUUID(),
+        publicationId: "pub_default",
         translationGroupId: randomUUID(),
         contentType: "page",
         contentId: testPageId,
@@ -229,6 +233,7 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
       .insert(pages)
       .values({
         id: testEnglishOnlyPageId,
+        publicationId: "pub_default",
         title: "Strict English Only Page",
         slug: TEST_ENGLISH_ONLY_SLUG,
         excerpt: "This page has NO Arabic translation.",

@@ -48,7 +48,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const [status, setStatus] = useState("draft");
   const [version, setVersion] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(pageId));
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -461,6 +461,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           </div>
 
           <VibressStudio
+            key={`${pageId || "new"}-${version}`}
             value={studioDoc}
             onChange={handleStudioChange}
             requestMedia={handleRequestMedia}

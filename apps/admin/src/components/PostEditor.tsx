@@ -118,7 +118,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     [title],
   );
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(postId));
   const [saving, setSaving] = useState(false);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -765,6 +765,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           </div>
 
           <VibressStudio
+            key={`${postId || "new"}-${version}`}
             value={studioDoc}
             onChange={handleDocChange}
             requestMedia={handleRequestMedia}
