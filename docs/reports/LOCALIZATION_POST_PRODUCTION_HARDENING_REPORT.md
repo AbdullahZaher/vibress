@@ -3,7 +3,7 @@
 **Status:** `READY FOR EXPANDED LOCALE ROLLOUT`  
 **Date:** August 23, 2026  
 **Authoritative Context:**
-- `VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md`
+- Multilingual & RTL Implementation Specification
 - `docs/reports/MULTILINGUAL_RTL_VERIFICATION_REPORT.md`
 - `docs/reports/MULTILINGUAL_RTL_BROWSER_QA_REPORT.md`
 

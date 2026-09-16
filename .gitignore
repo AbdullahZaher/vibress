@@ -74,6 +74,9 @@ logs/
 /backups/
 *.backup
 *.dump
+*.sql.gz
+*.tar
+*.tar.gz
 postgres.dump
 
 # ============================================================
@@ -91,7 +94,6 @@ tmp/
 temp/
 /references/
 /plans/
-VIBRESS_POST_V1_HARDENING_MASTER_PLAN.md
 
 # ============================================================
 # Content Uploads & Local Themes (Preserve Starter Theme)

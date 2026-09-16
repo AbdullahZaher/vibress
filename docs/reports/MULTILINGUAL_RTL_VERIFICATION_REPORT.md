@@ -1,6 +1,6 @@
 # Vibress Multilingual & RTL Production Verification Report
 
-**Authoritative Specification:** [`VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md`](file:///Users/abdullahzaher/vibress/VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md)  
+**Authoritative Specification:** Vibress Multilingual & RTL Implementation Specification  
 **Date:** August 22, 2026  
 **Status:** **100% AUDITED, TESTED & PRODUCTION VERIFIED**
 
@@ -144,6 +144,6 @@ The starter theme stylesheet (`content/theme-starter/assets/css/theme.css`) was 
 
 ## Conclusion & Production Readiness
 
-The Vibress Multilingual & RTL implementation strictly conforms to all architectural principles, routing rules, API specifications, and visual standards established in [`VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md`](file:///Users/abdullahzaher/vibress/VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md).
+The Vibress Multilingual & RTL implementation strictly conforms to all architectural principles, routing rules, API specifications, and visual standards established in the Vibress Multilingual & RTL Specification.
 
 The codebase is **100% verified, regression-free, and production-ready**.

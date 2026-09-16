@@ -1,6 +1,6 @@
 # Vibress Multilingual & RTL — Browser QA & Production Certification Report
 
-**Authoritative Acceptance Specification:** `VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md`  
+**Authoritative Acceptance Specification:** Multilingual & RTL Implementation Specification  
 **Evaluation Date:** August 23, 2026  
 **Auditor / Agent:** Google DeepMind Antigravity QA Engine  
 **Final Certification Status:** `READY FOR PRODUCTION` ✅  
@@ -137,6 +137,6 @@ During the QA certification pass, the following defects were isolated, debugged,
 
 ## 6. Final Production Certification
 
-The Vibress Multilingual & RTL subsystem has satisfied all functional, architectural, browser-rendering, accessibility, and performance criteria specified in `VIBRESS_MULTILINGUAL_RTL_IMPLEMENTATION_PLAN.md`.
+The Vibress Multilingual & RTL subsystem has satisfied all functional, architectural, browser-rendering, accessibility, and performance criteria specified in the Multilingual & RTL Implementation Specification.
 
 **Certification Declaration:** **`READY FOR PRODUCTION`** ✅
