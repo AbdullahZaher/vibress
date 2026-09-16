@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb, webhookEndpoints } from "@vibress/database";
+import { getDb, webhookEndpoints, publications } from "@vibress/database";
 import { inArray } from "drizzle-orm";
 import { DrizzleWebhookRepository } from "../src/infrastructure/drizzle-webhook-repositories.js";
 import { WebhooksService } from "../src/application/webhooks-service.js";
@@ -15,6 +15,26 @@ describe("Webhooks Multi-Publication Isolation", () => {
   let betaEpId: string;
 
   beforeAll(async () => {
+    await db
+      .insert(publications)
+      .values([
+        {
+          id: "pub_alpha",
+          workspaceId: "ws_default",
+          name: "Alpha Pub",
+          slug: "alpha",
+          primaryLocale: "en",
+        },
+        {
+          id: "pub_beta",
+          workspaceId: "ws_default",
+          name: "Beta Pub",
+          slug: "beta",
+          primaryLocale: "en",
+        },
+      ])
+      .onConflictDoNothing();
+
     // Create endpoint in pub_alpha
     const alphaEp = await service.createEndpoint(
       {

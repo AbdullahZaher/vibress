@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb, installedThemes } from "@vibress/database";
+import { getDb, installedThemes, publications } from "@vibress/database";
 import { inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { DrizzleInstalledThemeRepository } from "../src/infrastructure/drizzle-installed-theme-repository.js";
@@ -15,6 +15,26 @@ describe("Themes Multi-Publication Isolation", () => {
   let betaThemeDbId: string;
 
   beforeAll(async () => {
+    await db
+      .insert(publications)
+      .values([
+        {
+          id: "pub_alpha",
+          workspaceId: "ws_default",
+          name: "Alpha Pub",
+          slug: "alpha",
+          primaryLocale: "en",
+        },
+        {
+          id: "pub_beta",
+          workspaceId: "ws_default",
+          name: "Beta Pub",
+          slug: "beta",
+          primaryLocale: "en",
+        },
+      ])
+      .onConflictDoNothing();
+
     // Create theme in pub_alpha
     const alphaTheme = await repo.create(
       {

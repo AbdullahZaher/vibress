@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb, automations } from "@vibress/database";
+import { getDb, automations, publications } from "@vibress/database";
 import { inArray } from "drizzle-orm";
 import { DrizzleAutomationRepository } from "../infrastructure/drizzle-automation-repositories.js";
 import { AutomationsService } from "../application/automations-service.js";
@@ -22,6 +22,26 @@ describe("Automations Multi-Publication Isolation", () => {
   let betaAutoId: string;
 
   beforeAll(async () => {
+    await db
+      .insert(publications)
+      .values([
+        {
+          id: "pub_alpha",
+          workspaceId: "ws_default",
+          name: "Alpha Pub",
+          slug: "alpha",
+          primaryLocale: "en",
+        },
+        {
+          id: "pub_beta",
+          workspaceId: "ws_default",
+          name: "Beta Pub",
+          slug: "beta",
+          primaryLocale: "en",
+        },
+      ])
+      .onConflictDoNothing();
+
     // Create automation in pub_alpha
     const alphaAuto = await service.createAutomation(
       {

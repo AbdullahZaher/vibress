@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb, posts, contentTranslations, users } from "@vibress/database";
+import { getDb, posts, contentTranslations, users, publications } from "@vibress/database";
 import { inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { TranslationService } from "../translation-service.js";
@@ -17,6 +17,26 @@ describe("Content Translations Runtime Multi-Publication Isolation", () => {
   let betaTrId: string;
 
   beforeAll(async () => {
+    await db
+      .insert(publications)
+      .values([
+        {
+          id: "pub_alpha",
+          workspaceId: "ws_default",
+          name: "Alpha Pub",
+          slug: "alpha",
+          primaryLocale: "en",
+        },
+        {
+          id: "pub_beta",
+          workspaceId: "ws_default",
+          name: "Beta Pub",
+          slug: "beta",
+          primaryLocale: "en",
+        },
+      ])
+      .onConflictDoNothing();
+
     const [user] = await db.select().from(users).limit(1);
     authorId = user?.id || randomUUID();
     const now = new Date();
