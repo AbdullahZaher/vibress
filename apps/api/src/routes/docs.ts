@@ -5,7 +5,7 @@ export async function openApiDocsRoutes(app: FastifyInstance): Promise<void> {
     openapi: "3.1.0",
     info: {
       title: "Vibress Platform API",
-      version: "1.0.0",
+      version: "1.1.0",
       description:
         "Comprehensive, type-safe API for Vibress Publishing Platform. Includes Public Content, Editorial Admin, Media, Members, Workspaces, and Custom Collections.",
       contact: {

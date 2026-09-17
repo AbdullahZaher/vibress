@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-09-17
+
+### Milestone Summary
+Vibress v1.1.0 brings multi-publication tenant isolation (Migration 0026), dedicated workspace domain service, bundled trusted plugin registry, remote "What's New" notification subsystem, CRDT 64KB/rate-limited collaboration security controls, 740px Studio reading measure redesign, and full Playwright E2E browser verification.
+
+### Added
+- **Multi-Publication Tenant Isolation**: Added Migration `0026_multi_publication_tenant_isolation.sql` introducing `publication_id` scoping with foreign keys across all database tables (posts, pages, media, tags, themes, products, plans, billing, translations, automations, newsletters).
+- **Workspace Domain Service (`@vibress/workspaces`)**: Introduced workspace management domain package with `DrizzleWorkspaceRepository`, `WorkspaceService`, and cross-tenant isolation enforcement.
+- **In-App "What's New" Notification System**: Added remote notification subsystem (`@vibress/utils`, `@vibress/api-contracts`, `@vibress/api`) with semver-aware targeting and user dismiss tracking.
+- **Bundled Trusted Plugin Registry**: Deprecated dynamic vm sandbox in favor of an explicit bundled plugin registry (`@vibress/plugin-core`) with prototype protection and capability-scoped access.
+- **CRDT State Exchange Controls**: Implemented strict 64KB message cap, Base64 validation, and rate limiting for real-time collaborative editing sessions.
+
+### Changed
+- **Studio Editorial Workspace**: Redesigned canvas reading measure to 740px typography alignment, refined floating formatting toolbar, block handle gutter, and card action toolbars.
+- **Studio Document Hydration**: Initialized Lexical editor state synchronously from parsed Studio JSON documents during `initialConfig` initialization prior to collaborative bootstrap.
+- **Security Base Dependencies**: Upgraded container base packages and `smol-toml` to resolve Trivy security scan findings.
+
+### Fixed
+- **Multilingual E2E Database Seeds**: Added missing `publicationId` foreign key references to direct test seed inserts in `multilingual-browser-qa.test.ts`.
+- **Post & Page Editor Hydration**: Corrected asynchronous loading lifecycle and component instance keying in `PostEditor.tsx` and `PageEditor.tsx` to prevent blank editor canvas on post reload.
+- **Dynamic Site Locale Resolution**: Fixed content resolution in API to dynamically resolve site locale settings instead of hardcoding `en`.
+
+### Infrastructure
+- **Container Registry Pull Reliability**: Switched CI workflow to `quay.io/minio/minio` to eliminate Docker Hub unauthenticated pull rate limits.
+- **Repository Cleanliness**: Hardened `.gitignore` and added automated clean-tree verification check (`scripts/verify-clean-tree.mjs`).
+
+---
+
 ## [1.0.0] - 2026-09-13
 
 ### Milestone Summary

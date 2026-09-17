@@ -10,7 +10,8 @@ Only the current major/minor GA releases receive active security updates and pat
 
 | Version | Supported | Security Maintenance Status |
 | :--- | :---: | :--- |
-| **`v1.0.x` (GA)** | :white_check_mark: | Current Active General Availability Release |
+| **`v1.1.x` (GA)** | :white_check_mark: | Current Active General Availability Release |
+| **`v1.0.x`** | :white_check_mark: | Active Security Maintenance |
 | `< 1.0.0` | :x: | Pre-release / Release Candidates (End of Life) |
 
 ---

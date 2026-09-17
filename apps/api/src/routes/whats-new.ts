@@ -23,7 +23,7 @@ export async function whatsNewRoutes(fastify: FastifyInstance) {
           item: null,
           items: [],
           dismissedIds: [],
-          version: "1.0.0",
+          version: "1.1.0",
         });
       }
     },

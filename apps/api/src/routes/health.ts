@@ -8,7 +8,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
     const config = getConfig();
     return {
       status: "ok",
-      version: config.system.version || process.env.VIBRESS_VERSION || "1.0.0",
+      version: config.system.version || process.env.VIBRESS_VERSION || "1.1.0",
       commit: process.env.GIT_SHA || "dev",
       environment: config.env,
     };
@@ -18,7 +18,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
     const config = getConfig();
     return {
       status: "ok",
-      version: config.system.version || process.env.VIBRESS_VERSION || "1.0.0",
+      version: config.system.version || process.env.VIBRESS_VERSION || "1.1.0",
       commit: process.env.GIT_SHA || "dev",
       environment: config.env,
     };
