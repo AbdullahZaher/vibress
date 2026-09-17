@@ -45,17 +45,20 @@ jobs:
       - name: Verify Linting
         run: pnpm -r lint
 
+      - name: Start infrastructure
+        run: docker compose -f compose.dev.yml up -d --wait
+
       - name: Run Test Suite
-        run: pnpm vitest run
+        run: pnpm vitest run --no-file-parallelism
 
       - name: Verify Production Build
         run: pnpm build
 
-      - name: Package Theme Starter Distribution
-        run: node scripts/pack-starter-theme.js || true
-
       - name: Verify Clean Git Tree
         run: pnpm verify:clean-tree
+
+      - name: Package Theme Starter Distribution
+        run: node scripts/pack-starter-theme.js || true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

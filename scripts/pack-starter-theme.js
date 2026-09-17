@@ -1,6 +1,19 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const JSZip = require("jszip");
+
+let JSZip;
+try {
+  JSZip = require("jszip");
+} catch {
+  try {
+    const jszipPath = require.resolve("jszip", {
+      paths: [path.resolve(__dirname, "../packages/theme-core"), path.resolve(__dirname, "../apps/api")],
+    });
+    JSZip = require(jszipPath);
+  } catch (err) {
+    console.error("Could not resolve jszip:", err.message);
+  }
+}
 
 async function packTheme() {
   const themeDir = path.resolve(__dirname, "../content/theme-starter");
