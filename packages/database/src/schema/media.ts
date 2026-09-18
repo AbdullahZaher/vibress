@@ -51,6 +51,9 @@ export const mediaAssets = pgTable(
       assetTypeIdx: index("media_assets_asset_type_idx").on(table.assetType),
       uploadedByIdx: index("media_assets_uploaded_by_idx").on(table.uploadedBy),
       checksumIdx: index("media_assets_checksum_idx").on(table.checksum),
+      mediaAssetsIdPublicationUnique: uniqueIndex(
+        "media_assets_id_publication_unique",
+      ).on(table.id, table.publicationId),
     };
   },
 );

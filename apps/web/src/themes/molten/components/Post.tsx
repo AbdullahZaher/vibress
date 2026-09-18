@@ -53,6 +53,19 @@ export async function Post(props: ThemePostProps) {
             )}
           </header>
 
+          {post.featureImage?.url && (
+            <figure className="vb-article-image vb-canvas">
+              <img
+                src={post.featureImage.url}
+                alt={post.featureImage.alt || post.title}
+                loading="eager"
+              />
+              {post.featureImage.caption && (
+                <figcaption dangerouslySetInnerHTML={{ __html: post.featureImage.caption }} />
+              )}
+            </figure>
+          )}
+
           <div
             className="vb-content vb-canvas studio-html-content"
             dangerouslySetInnerHTML={{ __html: post.html || "" }}

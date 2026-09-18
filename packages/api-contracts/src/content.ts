@@ -6,6 +6,9 @@ export const CreatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featureImageId: z.string().nullable().optional(),
+  featureImageAlt: z.string().max(500).nullable().optional(),
+  featureImageCaption: z.string().max(1000).nullable().optional(),
   primaryAuthorId: z.string().min(1, "Primary author ID is required"),
   authorIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
@@ -22,6 +25,9 @@ export const UpdatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featureImageId: z.string().nullable().optional(),
+  featureImageAlt: z.string().max(500).nullable().optional(),
+  featureImageCaption: z.string().max(1000).nullable().optional(),
   primaryAuthorId: z.string().optional(),
   authorIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
@@ -31,6 +37,13 @@ export const UpdatePostInputSchema = z.object({
   canonicalUrl: z.string().url().nullable().optional(),
 });
 export type UpdatePostInput = z.infer<typeof UpdatePostInputSchema>;
+
+export const PatchPostFeatureImageInputSchema = z.object({
+  featureImageId: z.string().nullable().optional(),
+  featureImageAlt: z.string().max(500).nullable().optional(),
+  featureImageCaption: z.string().max(1000).nullable().optional(),
+});
+export type PatchPostFeatureImageInput = z.infer<typeof PatchPostFeatureImageInputSchema>;
 
 export const SchedulePostInputSchema = z.object({
   scheduledAt: z.string().datetime(),
@@ -110,6 +123,7 @@ export const PublicMediaSchema = z.object({
   assetType: z.string(),
   width: z.number().nullable().optional(),
   height: z.number().nullable().optional(),
+  caption: z.string().nullable().optional(),
 });
 export type PublicMediaDto = z.infer<typeof PublicMediaSchema>;
 

@@ -103,6 +103,9 @@ export class DrizzlePostRepository implements PostRepository {
       status: data.status || "draft",
       visibility: data.visibility || "public",
       version: 1,
+      featureImageId: data.featureImageId || null,
+      featureImageAlt: data.featureImageAlt || null,
+      featureImageCaption: data.featureImageCaption || null,
       primaryAuthorId: data.primaryAuthorId,
       createdBy: data.createdBy || data.primaryAuthorId,
       updatedBy: data.createdBy || data.primaryAuthorId,
@@ -157,6 +160,12 @@ export class DrizzlePostRepository implements PostRepository {
     if (data.status !== undefined) updatePayload.status = data.status;
     if (data.visibility !== undefined)
       updatePayload.visibility = data.visibility;
+    if (data.featureImageId !== undefined)
+      updatePayload.featureImageId = data.featureImageId;
+    if (data.featureImageAlt !== undefined)
+      updatePayload.featureImageAlt = data.featureImageAlt;
+    if (data.featureImageCaption !== undefined)
+      updatePayload.featureImageCaption = data.featureImageCaption;
     if (data.primaryAuthorId !== undefined)
       updatePayload.primaryAuthorId = data.primaryAuthorId;
     if (data.updatedBy !== undefined) updatePayload.updatedBy = data.updatedBy;
@@ -189,6 +198,51 @@ export class DrizzlePostRepository implements PostRepository {
         "Content has been modified by another request",
       );
     }
+    return this.mapToDomain(row);
+  }
+
+  async updateFeatureImage(
+    id: string,
+    data: {
+      featureImageId: string | null;
+      featureImageAlt?: string | null;
+      featureImageCaption?: string | null;
+      updatedBy?: string;
+    },
+    publicationId?: string,
+  ): Promise<Post> {
+    const db = getDb();
+    const current = await this.findById(id, publicationId);
+    if (!current) throw new Error(`Post not found: ${id}`);
+
+    const now = new Date();
+    const updatePayload: Record<string, unknown> = {
+      featureImageId: data.featureImageId,
+      updatedAt: now,
+    };
+    if (data.featureImageAlt !== undefined) {
+      updatePayload.featureImageAlt = data.featureImageAlt;
+    }
+    if (data.featureImageCaption !== undefined) {
+      updatePayload.featureImageCaption = data.featureImageCaption;
+    }
+    if (data.updatedBy !== undefined) {
+      updatePayload.updatedBy = data.updatedBy;
+    }
+
+    const conditions = [eq(posts.id, id)];
+    if (publicationId) {
+      conditions.push(eq(posts.publicationId, publicationId));
+    }
+
+    const rows = await db
+      .update(posts)
+      .set(updatePayload)
+      .where(and(...conditions))
+      .returning();
+
+    const row = rows[0];
+    if (!row) throw new Error("Failed to update feature image");
     return this.mapToDomain(row);
   }
 
@@ -358,6 +412,9 @@ export class DrizzlePostRepository implements PostRepository {
       status: row.status as PostStatus,
       visibility: row.visibility as PostVisibility,
       version: row.version,
+      featureImageId: row.featureImageId || null,
+      featureImageAlt: row.featureImageAlt || null,
+      featureImageCaption: row.featureImageCaption || null,
       primaryAuthorId: row.primaryAuthorId,
       createdBy: row.createdBy,
       updatedBy: row.updatedBy,

@@ -133,6 +133,19 @@ export async function Post(props: ThemePostProps) {
             </div>
           </header>
 
+          {post.featureImage?.url && (
+            <figure className="article-image">
+              <img
+                src={post.featureImage.url}
+                alt={post.featureImage.alt || post.title}
+                loading="eager"
+              />
+              {post.featureImage.caption && (
+                <figcaption dangerouslySetInnerHTML={{ __html: post.featureImage.caption }} />
+              )}
+            </figure>
+          )}
+
           {post.toc && post.toc.length > 1 && (
             <TableOfContents items={post.toc} />
           )}

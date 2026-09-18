@@ -29,6 +29,9 @@ export interface Post {
   status: PostStatus;
   visibility: PostVisibility;
   version: number;
+  featureImageId: string | null;
+  featureImageAlt: string | null;
+  featureImageCaption: string | null;
   primaryAuthorId: string;
   createdBy: string;
   updatedBy: string;
@@ -53,6 +56,9 @@ export interface CreatePostData {
   contentVersion?: number | undefined;
   status?: PostStatus | undefined;
   visibility?: PostVisibility | undefined;
+  featureImageId?: string | null | undefined;
+  featureImageAlt?: string | null | undefined;
+  featureImageCaption?: string | null | undefined;
   primaryAuthorId: string;
   authorIds?: string[] | undefined;
   tagIds?: string[] | undefined;
@@ -70,6 +76,9 @@ export interface UpdatePostData {
   content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   visibility?: PostVisibility | undefined;
+  featureImageId?: string | null | undefined;
+  featureImageAlt?: string | null | undefined;
+  featureImageCaption?: string | null | undefined;
   primaryAuthorId?: string | undefined;
   authorIds?: string[] | undefined;
   tagIds?: string[] | undefined;

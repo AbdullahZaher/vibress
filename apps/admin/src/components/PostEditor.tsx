@@ -20,6 +20,7 @@ import {
   migrateDocument,
   createEmptyStudioDocument,
 } from "@vibress/studio-core";
+import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
 import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
@@ -37,6 +38,9 @@ import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
 import { RevisionDiffModal } from "./editor/RevisionDiffModal";
 import { transitionPostWorkflow } from "../lib/api/collaboration";
+import { PostFeatureImageControl } from "./editor/PostFeatureImageControl";
+import { UnsplashModal } from "./editor/UnsplashModal";
+import type { UnsplashSelectResponse } from "../lib/api/unsplash";
 
 interface AdminPostDetail {
   id: string;
@@ -51,6 +55,10 @@ interface AdminPostDetail {
   version: number;
   content: unknown;
   contentJson: unknown;
+  featureImageId?: string | null;
+  featureImageAlt?: string | null;
+  featureImageCaption?: string | null;
+  featureImage?: ApiMediaAsset | null;
   tags?: Tag[];
 }
 
@@ -92,6 +100,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   );
   const [status, setStatus] = useState("draft");
   const [version, setVersion] = useState(1);
+  const [restoreKey, setRestoreKey] = useState(0);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [revisions, setRevisions] = useState<Revision[]>([]);
@@ -100,6 +109,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [showCollabPanel, setShowCollabPanel] = useState(false);
   const [showDiffModal, setShowDiffModal] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+
+  // Feature Image state (strictly decoupled from Lexical AST / Yjs / restoreKey)
+  const [featureImage, setFeatureImage] = useState<ApiMediaAsset | null>(null);
+  const [featureImageAlt, setFeatureImageAlt] = useState("");
+  const [featureImageCaption, setFeatureImageCaption] = useState("");
+  const [showFeatureImagePicker, setShowFeatureImagePicker] = useState(false);
+  const [showUnsplashModal, setShowUnsplashModal] = useState(false);
 
   useEffect(() => {
     fetchAiStatus()
@@ -134,6 +150,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     }
   }, [title, studioDoc]);
 
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
+
   const collabConfig = useMemo<CollaborationConfig | undefined>(() => {
     if (!postId || typeof window === "undefined") return undefined;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -142,7 +161,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     return {
       id: postId,
       user: {
-        id: currentUserId,
+        id: currentUserIdRef.current || "staff",
         name: "Staff Editor",
         color: "#3b82f6",
       },
@@ -153,17 +172,50 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           url: wsUrl,
           docId: id,
           user: {
-            id: currentUserId,
+            id: currentUserIdRef.current || "staff",
             name: "Staff Editor",
             color: "#3b82f6",
           },
         });
       },
     };
-  }, [postId, currentUserId]);
+  }, [postId]);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const autosaveSeqRef = useRef(0);
+  const lastSavedSeqRef = useRef(0);
+  const latestDocRef = useRef(studioDoc);
+  const latestTitleRef = useRef(title);
+  const latestSlugRef = useRef(slug);
+  const latestExcerptRef = useRef(excerpt);
+  const latestMetaTitleRef = useRef(metaTitle);
+  const latestMetaDescriptionRef = useRef(metaDescription);
+  const latestCanonicalUrlRef = useRef(canonicalUrl);
+  const latestTagIdsRef = useRef(selectedTagIds);
+  const latestVersionRef = useRef(version);
+
+  useEffect(() => { latestDocRef.current = studioDoc; }, [studioDoc]);
+  useEffect(() => { latestTitleRef.current = title; }, [title]);
+  useEffect(() => { latestSlugRef.current = slug; }, [slug]);
+  useEffect(() => { latestExcerptRef.current = excerpt; }, [excerpt]);
+  useEffect(() => { latestMetaTitleRef.current = metaTitle; }, [metaTitle]);
+  useEffect(() => { latestMetaDescriptionRef.current = metaDescription; }, [metaDescription]);
+  useEffect(() => { latestCanonicalUrlRef.current = canonicalUrl; }, [canonicalUrl]);
+  useEffect(() => { latestTagIdsRef.current = selectedTagIds; }, [selectedTagIds]);
+  useEffect(() => { latestVersionRef.current = version; }, [version]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerConfig, setPickerConfig] = useState<{
@@ -313,6 +365,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setCanonicalUrl(p.canonicalUrl || "");
         setStatus(p.status || "draft");
         setVersion(p.version || 1);
+        if (p.featureImage !== undefined) {
+          setFeatureImage(p.featureImage || null);
+        }
+        if (p.featureImageAlt !== undefined) {
+          setFeatureImageAlt(p.featureImageAlt || "");
+        }
+        if (p.featureImageCaption !== undefined) {
+          setFeatureImageCaption(p.featureImageCaption || "");
+        }
         if (p.scheduledAt) {
           const d = new Date(p.scheduledAt);
           setScheduledAtStr(d.toISOString().slice(0, 16));
@@ -361,32 +422,87 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const performAutosave = useCallback(async () => {
     if (!postId || !hasUnsavedChangesRef.current) return;
 
+    const currentDoc = latestDocRef.current;
+    const currentVersion = latestVersionRef.current;
+    const currentSeq = ++autosaveSeqRef.current;
+
+    const stats = extractDocStats(currentDoc);
+    logForensicEvent("BEFORE_AUTOSAVE", {
+      postId,
+      version: currentVersion,
+      childCount: stats.childCount,
+      wordCount: stats.wordCount,
+      hash: stats.hash,
+      seq: currentSeq,
+    });
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setAutosaveState("saving");
     try {
       const payload = {
-        title,
-        slug: slug || undefined,
-        excerpt: excerpt || null,
-        metaTitle: metaTitle || null,
-        metaDescription: metaDescription || null,
-        canonicalUrl: canonicalUrl || null,
-        content: studioDoc,
-        tagIds: selectedTagIds,
-        expectedVersion: version,
+        title: latestTitleRef.current,
+        slug: latestSlugRef.current || undefined,
+        excerpt: latestExcerptRef.current || null,
+        metaTitle: latestMetaTitleRef.current || null,
+        metaDescription: latestMetaDescriptionRef.current || null,
+        canonicalUrl: latestCanonicalUrlRef.current || null,
+        content: currentDoc,
+        tagIds: latestTagIdsRef.current,
+        expectedVersion: currentVersion,
       };
+
+      logForensicEvent("AUTOSAVE_PAYLOAD", {
+        postId,
+        version: currentVersion,
+        childCount: stats.childCount,
+        wordCount: stats.wordCount,
+        hash: stats.hash,
+        seq: currentSeq,
+      });
 
       const res = await apiRequest<{ post: AdminPostDetail }>(
         `/posts/${postId}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
+          signal: controller.signal,
         },
       );
 
+      // Guard against out-of-order responses
+      if (currentSeq < lastSavedSeqRef.current) {
+        return;
+      }
+      lastSavedSeqRef.current = currentSeq;
+
+      const returnedStats = extractDocStats(res.post.content);
+      logForensicEvent("API_RESPONSE", {
+        postId,
+        sentVersion: currentVersion,
+        returnedVersion: res.post.version,
+        returnedChildCount: returnedStats.childCount,
+        returnedWordCount: returnedStats.wordCount,
+        returnedHash: returnedStats.hash,
+        seq: currentSeq,
+      });
+
       setVersion(res.post.version);
+      latestVersionRef.current = res.post.version;
       setAutosaveState("saved");
-      hasUnsavedChangesRef.current = false;
-    } catch (err) {
+
+      // Only mark unsaved changes as false if no newer edits occurred while in flight
+      if (currentSeq === autosaveSeqRef.current) {
+        hasUnsavedChangesRef.current = false;
+      }
+    } catch (err: unknown) {
+      if ((err as Error)?.name === "AbortError") {
+        return;
+      }
       if (
         err instanceof ApiError &&
         (err.statusCode === 409 || err.message.includes("Version conflict"))
@@ -398,19 +514,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       } else {
         setAutosaveState("failed");
       }
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
-  }, [
-    postId,
-    title,
-    slug,
-    excerpt,
-    metaTitle,
-    metaDescription,
-    canonicalUrl,
-    studioDoc,
-    selectedTagIds,
-    version,
-  ]);
+  }, [postId]);
 
   const triggerAutosaveDebounced = useCallback(() => {
     hasUnsavedChangesRef.current = true;
@@ -441,8 +550,70 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   };
 
   const handleDocChange = (doc: StudioDocument) => {
+    const stats = extractDocStats(doc);
+    logForensicEvent("PARENT_STATE_UPDATE", {
+      childCount: stats.childCount,
+      wordCount: stats.wordCount,
+      hash: stats.hash,
+    });
     setStudioDoc(doc);
     triggerAutosaveDebounced();
+  };
+
+
+  const handleUpdateFeatureImage = useCallback(
+    async (
+      asset: ApiMediaAsset | null,
+      alt?: string | null,
+      caption?: string | null,
+    ) => {
+      setFeatureImage(asset);
+      if (alt !== undefined) setFeatureImageAlt(alt || "");
+      if (caption !== undefined) setFeatureImageCaption(caption || "");
+
+      if (!postId) {
+        hasUnsavedChangesRef.current = true;
+        return;
+      }
+
+      try {
+        const res = await apiRequest<{ post: AdminPostDetail }>(
+          `/posts/${postId}/feature-image`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              featureImageId: asset ? asset.id : null,
+              featureImageAlt: alt !== undefined ? (alt || null) : (featureImageAlt || null),
+              featureImageCaption: caption !== undefined ? (caption || null) : (featureImageCaption || null),
+            }),
+          },
+        );
+        if (res.post.featureImage !== undefined) {
+          setFeatureImage(res.post.featureImage);
+        }
+      } catch (err) {
+        console.error("Failed to patch feature image", err);
+      }
+    },
+    [postId, featureImageAlt, featureImageCaption],
+  );
+
+  const handleSelectFeatureImageFromLibrary = (asset: ApiMediaAsset) => {
+    handleUpdateFeatureImage(asset, asset.displayName || "", null);
+    setShowFeatureImagePicker(false);
+  };
+
+  const handleSelectPhotoFromUnsplash = (media: UnsplashSelectResponse["media"]) => {
+    handleUpdateFeatureImage(media, media.altText || "", media.caption || "");
+    setShowUnsplashModal(false);
+  };
+
+  const handleRemoveFeatureImage = () => {
+    handleUpdateFeatureImage(null, "", "");
+  };
+
+  const handleUpdateAltAndCaption = (newAlt: string, newCaption: string) => {
+    handleUpdateFeatureImage(featureImage, newAlt, newCaption);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -479,6 +650,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           method: "POST",
           body: JSON.stringify({
             ...payload,
+            featureImageId: featureImage ? featureImage.id : null,
+            featureImageAlt: featureImageAlt || null,
+            featureImageCaption: featureImageCaption || null,
             primaryAuthorId: currentUserId,
             authorIds: [currentUserId],
           }),
@@ -550,6 +724,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setTitle(p.title || "");
       setStudioDoc(migrateDocument(p.content || p.contentJson));
       setVersion(p.version);
+      latestVersionRef.current = p.version;
+      setRestoreKey((k) => k + 1);
+      hasUnsavedChangesRef.current = false;
       alert("Revision restored successfully");
     } catch (err) {
       setErrorMsg(
@@ -750,6 +927,16 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           )}
 
           <div className="max-w-[740px] mx-auto">
+            <PostFeatureImageControl
+              featureImage={featureImage}
+              featureImageAlt={featureImageAlt}
+              featureImageCaption={featureImageCaption}
+              onOpenMediaPicker={() => setShowFeatureImagePicker(true)}
+              onOpenUnsplashModal={() => setShowUnsplashModal(true)}
+              onRemoveFeatureImage={handleRemoveFeatureImage}
+              onUpdateAltAndCaption={handleUpdateAltAndCaption}
+            />
+
             <textarea
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
@@ -765,7 +952,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           </div>
 
           <VibressStudio
-            key={`${postId || "new"}-${version}`}
+            key={`${postId || "new"}-${restoreKey}`}
             value={studioDoc}
             onChange={handleDocChange}
             requestMedia={handleRequestMedia}
@@ -836,6 +1023,22 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           onClose={handlePickerClose}
         />
       )}
+
+      {/* Feature Image Library Picker */}
+      {showFeatureImagePicker && (
+        <MediaPicker
+          allowedTypes={["image"]}
+          onSelectAsset={handleSelectFeatureImageFromLibrary}
+          onClose={() => setShowFeatureImagePicker(false)}
+        />
+      )}
+
+      {/* Unsplash Search & Import Modal */}
+      <UnsplashModal
+        isOpen={showUnsplashModal}
+        onClose={() => setShowUnsplashModal(false)}
+        onSelectPhoto={handleSelectPhotoFromUnsplash}
+      />
     </div>
   );
 };

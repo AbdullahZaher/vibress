@@ -52,6 +52,19 @@ export async function Post(props: ThemePostProps) {
             </div>
           </header>
 
+          {post.featureImage?.url && (
+            <figure className="vb-article-image">
+              <img
+                src={post.featureImage.url}
+                alt={post.featureImage.alt || post.title}
+                loading="eager"
+              />
+              {post.featureImage.caption && (
+                <figcaption dangerouslySetInnerHTML={{ __html: post.featureImage.caption }} />
+              )}
+            </figure>
+          )}
+
           <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
           </section>

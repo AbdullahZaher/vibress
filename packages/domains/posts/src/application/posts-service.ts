@@ -53,18 +53,20 @@ export class PostsService {
 
   async createPost(
     data: CreatePostData,
-    actorId: string,
+    actor: string | PostActorContext,
     publicationId?: string,
   ): Promise<Post> {
-    return runInTransaction(() => this.createPostTx(data, actorId, publicationId));
+    return runInTransaction(() => this.createPostTx(data, actor, publicationId));
   }
 
   private async createPostTx(
     data: CreatePostData,
-    actorId: string,
+    actor: string | PostActorContext,
     publicationId?: string,
   ): Promise<Post> {
-    const targetPublicationId = data.publicationId || publicationId || "pub_default";
+    const actorId = typeof actor === "string" ? actor : actor.userId;
+    const actorPublicationId = typeof actor === "object" ? actor.publicationId : publicationId;
+    const targetPublicationId = data.publicationId || actorPublicationId || "pub_default";
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
       const existing = await this.postRepo.findBySlug(candidate, targetPublicationId);
@@ -72,6 +74,23 @@ export class PostsService {
     });
 
     const content = data.content || { version: 1, root: {} };
+
+    if (data.featureImageId && this.mediaService) {
+      try {
+        const media = await this.mediaService.getMediaById(data.featureImageId, targetPublicationId);
+        if (!media || media.publicationId !== targetPublicationId) {
+          throw new PostDomainError(
+            "INVALID_FEATURE_IMAGE",
+            "Feature image does not belong to this publication",
+          );
+        }
+      } catch (err: any) {
+        throw new PostDomainError(
+          "INVALID_FEATURE_IMAGE",
+          "Feature image does not belong to this publication",
+        );
+      }
+    }
 
     const post = await this.postRepo.create({
       ...data,
@@ -100,6 +119,9 @@ export class PostsService {
     // Update media references
     if (this.mediaService) {
       const mediaRefs = extractMediaReferencesFromDocument(post.content);
+      if (post.featureImageId) {
+        mediaRefs.push({ mediaId: post.featureImageId, fieldPath: "featureImage" });
+      }
       await this.mediaService.updateResourceMediaReferences(
         "post",
         post.id,
@@ -194,8 +216,27 @@ export class PostsService {
       updatePayload.contentVersion = data.contentVersion;
     if (data.visibility !== undefined)
       updatePayload.visibility = data.visibility;
-    if (data.primaryAuthorId !== undefined)
-      updatePayload.primaryAuthorId = data.primaryAuthorId;
+    if (data.featureImageId !== undefined) {
+      if (data.featureImageId) {
+        try {
+          const media = await this.mediaService?.getMediaById(data.featureImageId, current.publicationId);
+          if (!media || media.publicationId !== current.publicationId) {
+            throw new PostDomainError(
+              "INVALID_FEATURE_IMAGE",
+              "Feature image does not belong to this publication",
+            );
+          }
+        } catch (err: any) {
+          throw new PostDomainError(
+            "INVALID_FEATURE_IMAGE",
+            "Feature image does not belong to this publication",
+          );
+        }
+      }
+      updatePayload.featureImageId = data.featureImageId;
+    }
+    if (data.featureImageAlt !== undefined) updatePayload.featureImageAlt = data.featureImageAlt;
+    if (data.featureImageCaption !== undefined) updatePayload.featureImageCaption = data.featureImageCaption;
 
     const updated = await this.postRepo.update(id, {
       ...updatePayload,
@@ -212,8 +253,11 @@ export class PostsService {
       await this.postRepo.setPostTagIds(id, data.tagIds);
     }
 
-    if (this.mediaService && data.content !== undefined) {
+    if (this.mediaService && (data.content !== undefined || data.featureImageId !== undefined)) {
       const mediaRefs = extractMediaReferencesFromDocument(updated.content);
+      if (updated.featureImageId) {
+        mediaRefs.push({ mediaId: updated.featureImageId, fieldPath: "featureImage" });
+      }
       await this.mediaService.updateResourceMediaReferences(
         "post",
         updated.id,
@@ -239,6 +283,105 @@ export class PostsService {
       targetType: "post",
       targetId: updated.id,
       metadata: { title: updated.title, version: updated.version },
+    });
+
+    return updated;
+  }
+
+  async patchFeatureImage(
+    id: string,
+    data: {
+      featureImageId: string | null;
+      featureImageAlt?: string | null;
+      featureImageCaption?: string | null;
+    },
+    actor: string | PostActorContext,
+  ): Promise<Post> {
+    return runInTransaction(() => this.patchFeatureImageTx(id, data, actor));
+  }
+
+  private async patchFeatureImageTx(
+    id: string,
+    data: {
+      featureImageId: string | null;
+      featureImageAlt?: string | null;
+      featureImageCaption?: string | null;
+    },
+    actor: string | PostActorContext,
+  ): Promise<Post> {
+    const actorId = typeof actor === "string" ? actor : actor.userId;
+    const actorRoles = typeof actor === "object" ? actor.roles : undefined;
+    const actorPermissions = typeof actor === "object" ? actor.permissions : undefined;
+    const actorPublicationId = typeof actor === "object" ? actor.publicationId : undefined;
+
+    const current = await this.postRepo.findById(id, actorPublicationId);
+    if (!current) {
+      throw new PostDomainError("POST_NOT_FOUND", "Post not found");
+    }
+
+    const postAuthors = await this.authorRepo.getPostAuthors(id);
+    const postAuthorIds = (postAuthors || []).map((a: any) => a?.id || a?.authorId).filter(Boolean);
+
+    const isAuthorized = hasResourcePermission("posts.edit", {
+      actorId,
+      resourceOwnerId: current.primaryAuthorId,
+      resourceAuthorIds: postAuthorIds,
+      userRoles: actorRoles,
+      userPermissions: actorPermissions,
+      publicationId: actorPublicationId,
+      resourcePublicationId: current.publicationId,
+    });
+
+    if (!isAuthorized) {
+      throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to modify another author's post");
+    }
+
+    if (data.featureImageId) {
+      try {
+        const media = await this.mediaService?.getMediaById(data.featureImageId, current.publicationId);
+        if (!media || media.publicationId !== current.publicationId) {
+          throw new PostDomainError(
+            "INVALID_FEATURE_IMAGE",
+            "Feature image does not belong to this publication",
+          );
+        }
+      } catch (err: any) {
+        throw new PostDomainError(
+          "INVALID_FEATURE_IMAGE",
+          "Feature image does not belong to this publication",
+        );
+      }
+    }
+
+    const updated = await this.postRepo.updateFeatureImage(
+      id,
+      {
+        featureImageId: data.featureImageId,
+        ...(data.featureImageAlt !== undefined ? { featureImageAlt: data.featureImageAlt } : {}),
+        ...(data.featureImageCaption !== undefined ? { featureImageCaption: data.featureImageCaption } : {}),
+        updatedBy: actorId,
+      },
+      current.publicationId,
+    );
+
+    if (this.mediaService) {
+      const mediaRefs = extractMediaReferencesFromDocument(updated.content);
+      if (updated.featureImageId) {
+        mediaRefs.push({ mediaId: updated.featureImageId, fieldPath: "featureImage" });
+      }
+      await this.mediaService.updateResourceMediaReferences(
+        "post",
+        updated.id,
+        mediaRefs,
+      );
+    }
+
+    await this.auditRepo.record({
+      actorUserId: actorId,
+      action: "post.feature_image.updated",
+      targetType: "post",
+      targetId: updated.id,
+      metadata: { featureImageId: updated.featureImageId },
     });
 
     return updated;
@@ -549,6 +692,10 @@ export class PostsService {
     }
 
     await this.postRepo.delete(id, current.publicationId);
+
+    if (this.mediaService) {
+      await this.mediaService.updateResourceMediaReferences("post", id, []);
+    }
 
     await this.auditRepo.record({
       actorUserId: actorId,

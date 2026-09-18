@@ -44,6 +44,7 @@ import {
   adminCommentModerationRoutes,
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
+import { unsplashRoutes } from "./routes/integrations-unsplash";
 import {
   publicSearchRoutes,
   adminAnalyticsRoutes,
@@ -210,6 +211,9 @@ export const buildApp = () => {
   fastify.register(adminRecommendationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(unsplashRoutes, {
+    prefix: "/api/admin/v1/integrations/unsplash",
+  });
   fastify.register(adminAnalyticsRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminSearchRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminAutomationRoutes, { prefix: "/api/admin/v1" });

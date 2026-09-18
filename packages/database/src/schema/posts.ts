@@ -6,10 +6,12 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { users } from "./users";
 import { publications } from "./publications";
+import { mediaAssets } from "./media";
 
 export const posts = pgTable(
   "posts",
@@ -26,6 +28,9 @@ export const posts = pgTable(
     status: text("status").notNull().default("draft"),
     visibility: text("visibility").notNull().default("public"),
     version: integer("version").notNull().default(1),
+    featureImageId: text("feature_image_id"),
+    featureImageAlt: text("feature_image_alt"),
+    featureImageCaption: text("feature_image_caption"),
     primaryAuthorId: text("primary_author_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -62,6 +67,12 @@ export const posts = pgTable(
       publishedAtIdx: index("posts_published_at_idx").on(table.publishedAt),
       scheduledAtIdx: index("posts_scheduled_at_idx").on(table.scheduledAt),
       updatedAtIdx: index("posts_updated_at_idx").on(table.updatedAt),
+      featureImageIdIdx: index("posts_feature_image_id_idx").on(table.featureImageId),
+      postsFeatureImagePublicationFk: foreignKey({
+        columns: [table.featureImageId, table.publicationId],
+        foreignColumns: [mediaAssets.id, mediaAssets.publicationId],
+        name: "posts_feature_image_publication_fk",
+      }).onDelete("set null"),
     };
   },
 );

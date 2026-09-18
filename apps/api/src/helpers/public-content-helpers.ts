@@ -214,7 +214,35 @@ export async function buildPublicPostSummaryDto(
   mediaService: MediaService,
 ): Promise<PublicPostSummaryDto> {
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
-  const featureImage = extractFeatureImage(resolvedDoc);
+  let featureImage: PublicMediaDto | null = null;
+  if (post.featureImageId) {
+    try {
+      const asset = await mediaService.getMediaById(post.featureImageId, post.publicationId);
+      if (asset) {
+        const unsplashHotlinkUrl = (asset.metadata as any)?.unsplash?.urls?.regular;
+        const url = unsplashHotlinkUrl || (await mediaService.getMediaUrl(asset));
+        const unsplashMeta = (asset.metadata as any)?.unsplash;
+        const defaultCaption = unsplashMeta?.photographerName
+          ? `Photo by [${unsplashMeta.photographerName}](${unsplashMeta.photographerUrl}) on [Unsplash](${unsplashMeta.photoUrl})`
+          : null;
+        featureImage = {
+          id: asset.id,
+          url,
+          alt: post.featureImageAlt || asset.displayName || post.title,
+          caption: post.featureImageCaption || defaultCaption,
+          assetType: "image",
+          width: asset.width ?? null,
+          height: asset.height ?? null,
+        };
+      }
+    } catch {
+      // Fallback to legacy extraction if asset not found
+    }
+  }
+
+  if (!featureImage) {
+    featureImage = extractFeatureImage(resolvedDoc);
+  }
   const siteUrl = getSiteUrl();
 
   const formattedAuthors = (authors || []).map(formatPublicAuthor);

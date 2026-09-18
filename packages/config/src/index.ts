@@ -68,6 +68,7 @@ export interface AppConfig {
   };
   secrets: { encryptionKey: string | null };
   setup: { token: string | null };
+  unsplash: { accessKey: string | null };
   outbox: {
     deliveryMode: EventDeliveryMode;
     publishedRetentionDays: number;
@@ -173,6 +174,7 @@ const envSchema = z.object({
   VIBRESS_ENCRYPTION_KEY: optionalNonEmptyString,
   VIBRESS_SETUP_TOKEN: optionalNonEmptyString,
   STORAGE_PROVIDER: nonEmptyString.default("local"),
+  UNSPLASH_ACCESS_KEY: optionalNonEmptyString,
 
   EVENT_DELIVERY_MODE: z.enum(["outbox", "direct"]).default("outbox"),
   OUTBOX_PUBLISHED_RETENTION_DAYS: intString.default(7),
@@ -255,8 +257,10 @@ export function loadConfig(env: EnvSource): AppConfig {
         isProduction,
         [
           "http://localhost:7777",
+          "http://localhost:7779",
           "http://localhost:7780",
           "http://127.0.0.1:7777",
+          "http://127.0.0.1:7779",
           "http://127.0.0.1:7780",
         ],
         [adminOrigin, ...configuredCorsOrigins],
@@ -308,6 +312,9 @@ export function loadConfig(env: EnvSource): AppConfig {
     system: {
       version: raw.VIBRESS_VERSION,
       storageProvider: raw.STORAGE_PROVIDER,
+    },
+    unsplash: {
+      accessKey: raw.UNSPLASH_ACCESS_KEY || null,
     },
     observability: {
       metricsEnabled: raw.METRICS_ENABLED,

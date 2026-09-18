@@ -3,14 +3,43 @@ import {
   CreatePostInputSchema,
   UpdatePostInputSchema,
   SchedulePostInputSchema,
+  PatchPostFeatureImageInputSchema,
 } from "@vibress/api-contracts";
-import { postsService, authorsService, revisionsService } from "../services";
+import { postsService, authorsService, revisionsService, mediaService } from "../services";
 import {
   requireStaffSession,
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
 import { PostDomainError, ListPostsFilter } from "@vibress/posts";
+import { crdtPersistence } from "../collaboration/crdt-persistence";
+
+async function resolvePostFeatureImage(
+  featureImageId: string | null,
+  publicationId?: string,
+) {
+  if (!featureImageId) return null;
+  try {
+    const asset = await mediaService.getMediaById(featureImageId, publicationId);
+    const unsplashHotlinkUrl = (asset.metadata as any)?.unsplash?.urls?.regular;
+    const url = unsplashHotlinkUrl || (await mediaService.getMediaUrl(asset));
+    return {
+      id: asset.id,
+      url,
+      storageProvider: asset.storageProvider,
+      storageKey: asset.storageKey,
+      originalFilename: asset.originalFilename,
+      displayName: asset.displayName,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes,
+      width: asset.width,
+      height: asset.height,
+      metadata: asset.metadata,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function postRoutes(fastify: FastifyInstance) {
   // List posts
@@ -78,9 +107,13 @@ export async function postRoutes(fastify: FastifyInstance) {
 
       const authors = await authorsService.getPostAuthors(id);
       const tagIds = await postsService.getPostTagIds(id);
+      const featureImage = await resolvePostFeatureImage(
+        post.featureImageId,
+        req.publicationContext?.publicationId,
+      );
 
       return reply.status(200).send({
-        post: { ...post, authors, tagIds },
+        post: { ...post, authors, tagIds, featureImage },
       });
     },
   });
@@ -148,6 +181,9 @@ export async function postRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const incomingChildren = (parseResult.data.content as any)?.root?.children?.length ?? -1;
+      console.log(`[FORENSIC] API_RECEIVED postId=${id} expectedVersion=${parseResult.data.expectedVersion} incomingChildren=${incomingChildren}`);
+
       try {
         const post = await postsService.updatePost(
           id,
@@ -159,13 +195,31 @@ export async function postRoutes(fastify: FastifyInstance) {
             publicationId: req.publicationContext?.publicationId,
           },
         );
+        const persistedChildren = (post.content as any)?.root?.children?.length ?? -1;
+        console.log(`[FORENSIC] DB_PERSISTED postId=${id} newVersion=${post.version} persistedChildren=${persistedChildren}`);
+
+        // Authoritative REST update resets any stale/partial CRDT buffer in Redis
+        try {
+          await crdtPersistence.clear(
+            req.publicationContext?.publicationId || "pub_default",
+            id,
+          );
+        } catch {
+          // Non-blocking cache clear
+        }
+
         const authors = await authorsService.getPostAuthors(post.id);
         const tagIds = await postsService.getPostTagIds(post.id);
+        const featureImage = await resolvePostFeatureImage(
+          post.featureImageId,
+          req.publicationContext?.publicationId,
+        );
 
         return reply.status(200).send({
-          post: { ...post, authors, tagIds },
+          post: { ...post, authors, tagIds, featureImage },
         });
       } catch (err: unknown) {
+
         if (err instanceof PostDomainError) {
           if (err.code === "FORBIDDEN") {
             return reply.status(403).send({
@@ -183,6 +237,99 @@ export async function postRoutes(fastify: FastifyInstance) {
               errors: [
                 {
                   code: "CONTENT_CONFLICT",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          if (err.code === "POST_NOT_FOUND") {
+            return reply.status(404).send({
+              errors: [
+                {
+                  code: "POST_NOT_FOUND",
+                  message: "Post not found",
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+        }
+        throw err;
+      }
+    },
+  });
+
+  // Patch feature image (metadata only — does NOT touch content, Yjs, CRDT, or increment content version)
+  fastify.patch("/posts/:id/feature-image", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const parseResult = PatchPostFeatureImageInputSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: parseResult.error.errors[0]?.message || "Invalid input",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      try {
+        const post = await postsService.patchFeatureImage(
+          id,
+          {
+            featureImageId: parseResult.data.featureImageId ?? null,
+            ...(parseResult.data.featureImageAlt !== undefined
+              ? { featureImageAlt: parseResult.data.featureImageAlt }
+              : {}),
+            ...(parseResult.data.featureImageCaption !== undefined
+              ? { featureImageCaption: parseResult.data.featureImageCaption }
+              : {}),
+          },
+          {
+            userId: req.user!.id,
+            roles: req.roles,
+            permissions: req.permissions,
+            publicationId: req.publicationContext?.publicationId,
+          },
+        );
+
+        const authors = await authorsService.getPostAuthors(post.id);
+        const tagIds = await postsService.getPostTagIds(post.id);
+        const featureImage = await resolvePostFeatureImage(
+          post.featureImageId,
+          req.publicationContext?.publicationId,
+        );
+
+        return reply.status(200).send({
+          post: { ...post, authors, tagIds, featureImage },
+        });
+      } catch (err: unknown) {
+        if (err instanceof PostDomainError) {
+          if (err.code === "FORBIDDEN") {
+            return reply.status(403).send({
+              errors: [
+                {
+                  code: "FORBIDDEN",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          if (err.code === "INVALID_FEATURE_IMAGE") {
+            return reply.status(400).send({
+              errors: [
+                {
+                  code: "INVALID_FEATURE_IMAGE",
                   message: err.message,
                   requestId: req.id,
                 },

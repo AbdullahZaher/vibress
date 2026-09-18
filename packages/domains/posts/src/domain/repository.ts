@@ -12,6 +12,16 @@ export interface PostRepository {
     data: Partial<Post> & { version: number },
     publicationId?: string,
   ): Promise<Post>;
+  updateFeatureImage(
+    id: string,
+    data: {
+      featureImageId: string | null;
+      featureImageAlt?: string | null;
+      featureImageCaption?: string | null;
+      updatedBy?: string;
+    },
+    publicationId?: string,
+  ): Promise<Post>;
   delete(id: string, publicationId?: string): Promise<void>;
   list(filter?: ListPostsFilter): Promise<{ posts: Post[]; total: number }>;
   findDueScheduledPosts(now?: Date, publicationId?: string): Promise<Post[]>;
