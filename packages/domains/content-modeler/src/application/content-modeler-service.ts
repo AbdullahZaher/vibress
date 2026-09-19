@@ -25,6 +25,7 @@ import {
   validateModelDefinition,
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
+  MAX_RELATION_EXPANSION_DEPTH,
 } from "../domain/validation";
 import { domainEvents } from "@vibress/events";
 
@@ -318,7 +319,10 @@ export class ContentModelerService {
     }));
 
     if (filter?.includeRelations) {
-      const depth = Math.min(filter.relationDepth ?? 1, 2);
+      const depth = Math.min(
+        filter.relationDepth ?? 1,
+        MAX_RELATION_EXPANSION_DEPTH,
+      );
       for (const entry of entries) {
         entry.data = await this.resolveRelationsForEntry(
           entry.data,

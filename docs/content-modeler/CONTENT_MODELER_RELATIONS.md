@@ -26,7 +26,7 @@ Relations are strictly enforced within publication boundaries:
 
 To protect system memory and API response latency, relation resolution is strictly depth-bounded:
 - **Default Resolution Depth**: `depth = 1`
-- **Maximum Resolution Depth**: `MAX_RELATION_EXPANSION_DEPTH = 3`
+- **Maximum Resolution Depth**: `MAX_RELATION_EXPANSION_DEPTH = 2`
 - Circular dependencies (e.g. Model A relates to Model B, which relates back to Model A) stop resolving once maximum depth is reached, preventing infinite recursion or denial of service.
 
 ---

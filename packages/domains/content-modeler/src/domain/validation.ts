@@ -28,7 +28,7 @@ export const RESERVED_FIELD_KEYS = new Set([
 
 export const MAX_FIELDS_PER_MODEL = 100;
 export const MAX_DATA_PAYLOAD_BYTES = 1024 * 1024; // 1 MB
-export const MAX_RELATION_EXPANSION_DEPTH = 3;
+export const MAX_RELATION_EXPANSION_DEPTH = 2;
 
 export function validateModelDefinition(input: {
   name: string;
@@ -136,6 +136,22 @@ export function validateEntryData(
       case "studio_doc":
         if (field.type === "studio_doc" && typeof val === "object" && val !== null) {
           // studio_doc can be serialized AST / JSON
+          break;
+        }
+        if (field.localizable && typeof val === "object" && val !== null && !Array.isArray(val)) {
+          const dict = val as Record<string, unknown>;
+          for (const [locKey, locVal] of Object.entries(dict)) {
+            if (typeof locVal !== "string") {
+              errors[field.key] = `Localized value for '${locKey}' in '${field.name}' must be a string.`;
+            } else {
+              if (minLength !== undefined && locVal.length < minLength) {
+                errors[field.key] = `Field '${field.name}' (${locKey}) must be at least ${minLength} characters.`;
+              }
+              if (maxLength !== undefined && locVal.length > maxLength) {
+                errors[field.key] = `Field '${field.name}' (${locKey}) must be at most ${maxLength} characters.`;
+              }
+            }
+          }
           break;
         }
         if (typeof val !== "string") {
