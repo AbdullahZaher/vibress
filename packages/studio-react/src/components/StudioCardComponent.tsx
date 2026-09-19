@@ -114,11 +114,11 @@ export function StudioCardComponent({
   );
 
   const isInteractiveTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false;
-    // Inside popovers, toolbars, or nested form inputs: keep native interactive behavior
+    if (!(target instanceof Element)) return false;
+    // Inside popovers, toolbars, buttons, or nested form inputs: keep native interactive behavior
     if (
       target.closest(
-        ".studio-glassy-menu, .floating-card-action-popup, form, input, textarea, select",
+        ".studio-glassy-menu, [data-studio-toolbar], button, .floating-card-action-popup, form, input, textarea, select",
       )
     ) {
       return true;

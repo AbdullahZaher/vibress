@@ -6,7 +6,9 @@ import { FileCardData, StudioCardNode } from "@vibress/studio-cards";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
 import { CardPlaceholder } from "../ui/CardPlaceholder";
-import { useStudioUpload } from "../../upload-context";
+import { useStudioMedia } from "../../media-context";
+import { StudioMediaFloatingToolbar } from "../ui/StudioMediaFloatingToolbar";
+import { FileMetadataPopover } from "../ui/media-popovers/FileMetadataPopover";
 import { File as FileIcon, Download } from "lucide-react";
 
 interface Props {
@@ -18,7 +20,7 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] =
     useLexicalNodeSelection(nodeKey);
-  const { uploadMedia } = useStudioUpload();
+  const { uploadMedia, requestMedia } = useStudioMedia();
   const [uploading, setUploading] = useState(false);
 
   const isPopulated = !!cardData.src;
@@ -39,6 +41,49 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
       })
       .finally(() => setUploading(false));
   };
+
+  const handleChangeFromLibrary = useCallback(async () => {
+    if (!requestMedia) return;
+    const payload = await requestMedia({
+      cardType: "file",
+      source: "library",
+    });
+    if (!payload) return;
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
+          ...cardData,
+          ...payload,
+        });
+      }
+    });
+  }, [editor, nodeKey, cardData, requestMedia]);
+
+  const handleMetadataUpdate = useCallback(
+    (data: { fileName: string; caption: string }) => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
+            ...cardData,
+            fileName: data.fileName,
+            caption: data.caption,
+          });
+        }
+      });
+    },
+    [editor, nodeKey, cardData],
+  );
+
+  const handleDelete = useCallback(() => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node) {
+        node.remove();
+      }
+    });
+  }, [editor, nodeKey]);
 
   const onCaptionChange = useCallback(
     (captionJSON: Record<string, unknown>, captionHtml: string) => {
@@ -73,9 +118,12 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
     );
   }
 
+  const captionStr =
+    typeof cardData.caption === "string" ? cardData.caption : "";
+
   return (
     <figure
-      className={`vb-file-card relative my-3`}
+      className={`vb-file-card relative group my-3`}
       onClick={() => {
         clearSelection();
         setSelected(true);
@@ -85,6 +133,25 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
         transition: "outline 0.1s ease",
       }}
     >
+      <StudioMediaFloatingToolbar
+        onChange={requestMedia ? handleChangeFromLibrary : undefined}
+        changeLabel="Change"
+        changeTitle="Change file from library"
+        metadataLabel="Details"
+        metadataTitle="Edit file name and description"
+        metadataContent={
+          <FileMetadataPopover
+            fileName={cardData.fileName || ""}
+            caption={captionStr}
+            onUpdate={handleMetadataUpdate}
+            onClose={() => {}}
+          />
+        }
+        onDelete={handleDelete}
+        deleteTitle="Remove file"
+        isSelected={isSelected}
+      />
+
       <div className="flex items-center gap-3.5 py-2.5 px-3.5 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md text-foreground shadow-sm">
         <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0">
           <FileIcon size={20} />
@@ -111,3 +178,4 @@ export function FileCardEditor({ nodeKey, cardData }: Props) {
     </figure>
   );
 }
+

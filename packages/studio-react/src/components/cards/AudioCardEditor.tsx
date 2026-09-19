@@ -6,7 +6,9 @@ import { AudioCardData, StudioCardNode } from "@vibress/studio-cards";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
 import { CardPlaceholder } from "../ui/CardPlaceholder";
-import { useStudioUpload } from "../../upload-context";
+import { useStudioMedia } from "../../media-context";
+import { StudioMediaFloatingToolbar } from "../ui/StudioMediaFloatingToolbar";
+import { AudioMetadataPopover } from "../ui/media-popovers/AudioMetadataPopover";
 
 interface Props {
   nodeKey: NodeKey;
@@ -17,7 +19,7 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] =
     useLexicalNodeSelection(nodeKey);
-  const { uploadMedia } = useStudioUpload();
+  const { uploadMedia, requestMedia } = useStudioMedia();
   const [uploading, setUploading] = useState(false);
 
   const isPopulated = !!cardData.src;
@@ -38,6 +40,49 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
       })
       .finally(() => setUploading(false));
   };
+
+  const handleChangeFromLibrary = useCallback(async () => {
+    if (!requestMedia) return;
+    const payload = await requestMedia({
+      cardType: "audio",
+      source: "library",
+    });
+    if (!payload) return;
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node instanceof StudioCardNode) {
+        node.setCardData({
+          ...cardData,
+          ...payload,
+        });
+      }
+    });
+  }, [editor, nodeKey, cardData, requestMedia]);
+
+  const handleMetadataUpdate = useCallback(
+    (data: { title: string; caption: string }) => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
+            ...cardData,
+            title: data.title,
+            caption: data.caption,
+          });
+        }
+      });
+    },
+    [editor, nodeKey, cardData],
+  );
+
+  const handleDelete = useCallback(() => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node) {
+        node.remove();
+      }
+    });
+  }, [editor, nodeKey]);
 
   const onCaptionChange = useCallback(
     (captionJSON: Record<string, unknown>, captionHtml: string) => {
@@ -72,9 +117,12 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
     );
   }
 
+  const captionStr =
+    typeof cardData.caption === "string" ? cardData.caption : "";
+
   return (
     <figure
-      className={`vb-audio-card relative flex flex-col gap-2 p-4 my-3.5 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md shadow-sm`}
+      className={`vb-audio-card relative group flex flex-col gap-2 p-4 my-3.5 border border-border/80 dark:border-white/10 rounded-xl bg-card dark:bg-[#1a1c20]/90 backdrop-blur-md shadow-sm`}
       onClick={() => {
         clearSelection();
         setSelected(true);
@@ -84,6 +132,25 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
         transition: "outline 0.1s ease",
       }}
     >
+      <StudioMediaFloatingToolbar
+        onChange={requestMedia ? handleChangeFromLibrary : undefined}
+        changeLabel="Change"
+        changeTitle="Change audio file from library"
+        metadataLabel="Title / Caption"
+        metadataTitle="Edit audio title and caption"
+        metadataContent={
+          <AudioMetadataPopover
+            title={cardData.title || ""}
+            caption={captionStr}
+            onUpdate={handleMetadataUpdate}
+            onClose={() => {}}
+          />
+        }
+        onDelete={handleDelete}
+        deleteTitle="Remove audio"
+        isSelected={isSelected}
+      />
+
       {cardData.title && (
         <div className="text-sm font-semibold">{cardData.title}</div>
       )}
@@ -98,3 +165,4 @@ export function AudioCardEditor({ nodeKey, cardData }: Props) {
     </figure>
   );
 }
+

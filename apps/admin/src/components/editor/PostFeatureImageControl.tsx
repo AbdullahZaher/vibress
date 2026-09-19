@@ -2,15 +2,13 @@ import React, { useState } from "react";
 import {
   ImageIcon,
   Sparkles,
-  Trash2,
-  RefreshCw,
-  Info,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
 } from "lucide-react";
-import { Button } from "../ui/button";
 import { ApiMediaAsset } from "../../lib/api";
+import {
+  StudioMediaFloatingToolbar,
+  ImageMetadataPopover,
+} from "@vibress/studio-react";
 
 export interface PostFeatureImageControlProps {
   featureImage: ApiMediaAsset | null;
@@ -33,7 +31,6 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
   onUpdateAltAndCaption,
   disabled = false,
 }) => {
-  const [showMetadataPanel, setShowMetadataPanel] = useState(false);
   const [altText, setAltText] = useState(featureImageAlt);
   const [caption, setCaption] = useState(featureImageCaption);
 
@@ -45,12 +42,6 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
   React.useEffect(() => {
     setCaption(featureImageCaption);
   }, [featureImageCaption]);
-
-  const handleBlurMetadata = () => {
-    if (altText !== featureImageAlt || caption !== featureImageCaption) {
-      onUpdateAltAndCaption(altText, caption);
-    }
-  };
 
   const unsplashMeta = (featureImage?.metadata as any)?.unsplash;
 
@@ -94,72 +85,34 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
           className="w-full h-auto max-h-[440px] object-cover transition-transform duration-300"
         />
 
-        {/* Floating Action Bar (visible on hover or focus) */}
-        <div className="absolute top-3 right-3 flex items-center gap-1.5 p-1.5 rounded-xl bg-background/85 dark:bg-card/90 backdrop-blur-md border border-border/80 shadow-lg opacity-90 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={onOpenMediaPicker}
-            className="h-7 px-2.5 text-xs font-medium gap-1.5 hover:bg-muted"
-            title="Change image from library"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Change</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={onOpenUnsplashModal}
-            className="h-7 px-2.5 text-xs font-medium gap-1.5 hover:bg-muted text-amber-600 dark:text-amber-400"
-            title="Replace from Unsplash"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Unsplash</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMetadataPanel((prev) => !prev)}
-            className={`h-7 px-2 text-xs font-medium gap-1 hover:bg-muted ${
-              showMetadataPanel ? "bg-muted text-foreground" : ""
-            }`}
-            title="Edit alt text and caption"
-          >
-            <Info className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Alt / Caption</span>
-            {showMetadataPanel ? (
-              <ChevronUp className="w-3 h-3" />
-            ) : (
-              <ChevronDown className="w-3 h-3" />
-            )}
-          </Button>
-
-          <div className="w-px h-4 bg-border/60 mx-0.5" />
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={onRemoveFeatureImage}
-            className="h-7 px-2 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
-            title="Remove feature image"
-            aria-label="Remove feature image"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
+        {/* Floating Action Bar (reusing StudioMediaFloatingToolbar) */}
+        <StudioMediaFloatingToolbar
+          onChange={onOpenMediaPicker}
+          changeLabel="Change"
+          changeTitle="Change image from library"
+          onUnsplash={onOpenUnsplashModal}
+          metadataLabel="Alt / Caption"
+          metadataTitle="Edit alt text and caption"
+          metadataContent={
+            <ImageMetadataPopover
+              alt={altText}
+              caption={caption}
+              onUpdate={({ alt: newAlt, caption: newCaption }) => {
+                setAltText(newAlt);
+                setCaption(newCaption);
+                onUpdateAltAndCaption(newAlt, newCaption);
+              }}
+              onClose={() => {}}
+            />
+          }
+          onDelete={onRemoveFeatureImage}
+          deleteTitle="Remove feature image"
+          disabled={disabled}
+        />
       </div>
 
       {/* Unsplash Attribution / Caption Footer */}
-      {(caption || unsplashMeta) && !showMetadataPanel && (
+      {(caption || unsplashMeta) && (
         <div className="px-4 py-2 border-t border-border/40 bg-card/50 text-xs text-muted-foreground flex items-center justify-between">
           <div className="truncate">
             {caption ? (
@@ -188,57 +141,6 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
                 </a>
               </span>
             ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* Collapsible Metadata (Alt text & Caption) Editor Panel */}
-      {showMetadataPanel && (
-        <div className="p-4 border-t border-border/60 bg-muted/20 animate-in slide-in-from-top-2 duration-150">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                Alt Text (accessibility & SEO)
-              </label>
-              <input
-                type="text"
-                value={altText}
-                onChange={(e) => setAltText(e.target.value)}
-                onBlur={handleBlurMetadata}
-                placeholder="Describe this image for screen readers..."
-                className="w-full text-xs px-3 py-2 rounded-lg bg-background border border-border/70 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">
-                Editorial Caption
-              </label>
-              <input
-                type="text"
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                onBlur={handleBlurMetadata}
-                placeholder="Add an editorial caption or photo credit..."
-                className="w-full text-xs px-3 py-2 rounded-lg bg-background border border-border/70 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/30">
-            <span>Changes save automatically on blur.</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                handleBlurMetadata();
-                setShowMetadataPanel(false);
-              }}
-              className="h-6 text-xs px-2"
-            >
-              Done
-            </Button>
           </div>
         </div>
       )}

@@ -222,8 +222,17 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     cardType: string;
     resolve: (payload: Record<string, unknown> | null) => void;
   } | null>(null);
+  const [unsplashConfig, setUnsplashConfig] = useState<{
+    resolve: (payload: Record<string, unknown> | null) => void;
+  } | null>(null);
 
-  const handleRequestMedia = useCallback((req: { cardType: string }) => {
+  const handleRequestMedia = useCallback((req: { cardType: string; source?: string }) => {
+    if (req.source === "unsplash") {
+      return new Promise<Record<string, unknown> | null>((resolve) => {
+        setUnsplashConfig({ resolve });
+        setShowUnsplashModal(true);
+      });
+    }
     const mediaTypes = ["image", "gallery", "video", "audio", "file"];
     if (!mediaTypes.includes(req.cardType)) {
       return Promise.resolve(null);
@@ -604,7 +613,28 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   };
 
   const handleSelectPhotoFromUnsplash = (media: UnsplashSelectResponse["media"]) => {
+    if (unsplashConfig) {
+      unsplashConfig.resolve({
+        assetId: media.id,
+        src: media.url,
+        alt: media.altText || media.displayName || "",
+        caption: media.caption || "",
+        width: media.width || undefined,
+        height: media.height || undefined,
+      });
+      setUnsplashConfig(null);
+      setShowUnsplashModal(false);
+      return;
+    }
     handleUpdateFeatureImage(media, media.altText || "", media.caption || "");
+    setShowUnsplashModal(false);
+  };
+
+  const handleCloseUnsplashModal = () => {
+    if (unsplashConfig) {
+      unsplashConfig.resolve(null);
+      setUnsplashConfig(null);
+    }
     setShowUnsplashModal(false);
   };
 
@@ -956,6 +986,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             value={studioDoc}
             onChange={handleDocChange}
             requestMedia={handleRequestMedia}
+            allowUnsplash={true}
             uploadMedia={handleUploadMedia}
             enableAi={aiEnabled}
             onAiGenerate={handleAiGenerate}
@@ -1036,7 +1067,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       {/* Unsplash Search & Import Modal */}
       <UnsplashModal
         isOpen={showUnsplashModal}
-        onClose={() => setShowUnsplashModal(false)}
+        onClose={handleCloseUnsplashModal}
         onSelectPhoto={handleSelectPhotoFromUnsplash}
       />
     </div>

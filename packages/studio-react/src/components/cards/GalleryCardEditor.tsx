@@ -1,13 +1,14 @@
 import { useCallback, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
-import { NodeKey } from "lexical";
+import { NodeKey, $getNodeByKey } from "lexical";
 import { GalleryCardData, StudioCardNode } from "@vibress/studio-cards";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
-import { $getNodeByKey } from "lexical";
 import { CardPlaceholder } from "../ui/CardPlaceholder";
-import { useStudioUpload } from "../../upload-context";
+import { useStudioMedia } from "../../media-context";
+import { StudioMediaFloatingToolbar } from "../ui/StudioMediaFloatingToolbar";
+import { GalleryMetadataPopover } from "../ui/media-popovers/GalleryMetadataPopover";
 
 interface Props {
   nodeKey: NodeKey;
@@ -18,7 +19,7 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
   const [editor] = useLexicalComposerContext();
   const [isSelected, setSelected, clearSelection] =
     useLexicalNodeSelection(nodeKey);
-  const { uploadMedia } = useStudioUpload();
+  const { uploadMedia, requestMedia } = useStudioMedia();
   const [uploading, setUploading] = useState(false);
 
   const isPopulated = cardData.images && cardData.images.length > 0;
@@ -54,6 +55,69 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
       })
       .finally(() => setUploading(false));
   };
+
+  const handleChangeFromLibrary = useCallback(async () => {
+    if (!requestMedia) return;
+    const payload = await requestMedia({
+      cardType: "gallery",
+      source: "library",
+    });
+    if (!payload) return;
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node instanceof StudioCardNode) {
+        const newImages = Array.isArray(payload.images)
+          ? payload.images
+          : payload.src
+            ? [payload]
+            : [];
+        node.setCardData({
+          ...cardData,
+          images: newImages.length > 0 ? newImages : cardData.images,
+        });
+      }
+    });
+  }, [editor, nodeKey, cardData, requestMedia]);
+
+  const handleMetadataUpdate = useCallback(
+    (data: { caption: string }) => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
+            ...cardData,
+            caption: data.caption,
+            captionHtml: data.caption,
+          });
+        }
+      });
+    },
+    [editor, nodeKey, cardData],
+  );
+
+  const handleWidthChange = useCallback(
+    (newWidth: "regular" | "wide" | "full") => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
+            ...cardData,
+            width: newWidth,
+          });
+        }
+      });
+    },
+    [editor, nodeKey, cardData],
+  );
+
+  const handleDelete = useCallback(() => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node) {
+        node.remove();
+      }
+    });
+  }, [editor, nodeKey]);
 
   const onCaptionChange = useCallback(
     (captionJSON: Record<string, unknown>, captionHtml: string) => {
@@ -94,9 +158,14 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
     );
   }
 
+  const captionStr =
+    typeof cardData.caption === "string"
+      ? cardData.caption
+      : cardData.captionHtml || "";
+
   return (
     <figure
-      className={`vb-gallery-card${widthClass} relative my-3.5`}
+      className={`vb-gallery-card${widthClass} relative group my-3.5`}
       onClick={() => {
         clearSelection();
         setSelected(true);
@@ -107,14 +176,33 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
         transition: "outline 0.1s ease",
       }}
     >
+      <StudioMediaFloatingToolbar
+        onChange={requestMedia ? handleChangeFromLibrary : undefined}
+        changeLabel="Add / Change"
+        changeTitle="Add or change gallery images from library"
+        metadataLabel="Caption"
+        metadataTitle="Edit gallery caption"
+        metadataContent={
+          <GalleryMetadataPopover
+            caption={captionStr}
+            onUpdate={handleMetadataUpdate}
+            onClose={() => {}}
+          />
+        }
+        width={cardData.width}
+        onWidthChange={handleWidthChange}
+        onDelete={handleDelete}
+        deleteTitle="Remove gallery"
+        isSelected={isSelected}
+      />
+
       <div className="flex flex-wrap gap-2.5">
-        {cardData.images.map((img, i) => (
+        {cardData.images.map((img, idx) => (
           <img
-            key={i}
+            key={idx}
             src={img.src}
             alt={img.alt || ""}
-            className="flex-1 object-cover min-w-[200px] rounded-xl shadow-sm"
-            style={{ maxHeight: "300px" }}
+            className="rounded-lg object-cover max-h-[260px] flex-1"
           />
         ))}
       </div>

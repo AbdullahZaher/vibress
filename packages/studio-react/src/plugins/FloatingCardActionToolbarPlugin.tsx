@@ -8,6 +8,15 @@ import {
 } from "../nodes/ReactStudioCardNode";
 import { Trash2, Maximize2, Minimize2, Move } from "lucide-react";
 
+const MEDIA_CARD_TYPES = new Set([
+  "image",
+  "video",
+  "audio",
+  "gallery",
+  "file",
+  "embed",
+]);
+
 export function FloatingCardActionToolbarPlugin({
   anchorElem = document.body,
 }: {
@@ -27,6 +36,11 @@ export function FloatingCardActionToolbarPlugin({
           const nodes = selection.getNodes();
           if (nodes.length === 1 && $isReactStudioCardNode(nodes[0])) {
             const card = nodes[0] as ReactStudioCardNode;
+            if (MEDIA_CARD_TYPES.has(card.getCardType())) {
+              setSelectedNode(null);
+              setCardRect(null);
+              return;
+            }
             setSelectedNode(card);
             const dom = editor.getElementByKey(card.getKey());
             if (dom) {

@@ -6,6 +6,8 @@ import { EmbedCardData, StudioCardNode } from "@vibress/studio-cards";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
 import { UrlPlaceholder } from "../ui/UrlPlaceholder";
+import { StudioMediaFloatingToolbar } from "../ui/StudioMediaFloatingToolbar";
+import { EmbedMetadataPopover } from "../ui/media-popovers/EmbedMetadataPopover";
 
 interface Props {
   nodeKey: NodeKey;
@@ -30,6 +32,32 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
       }
     });
   };
+
+  const handleMetadataUpdate = useCallback(
+    (data: { url: string; caption: string }) => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if (node instanceof StudioCardNode) {
+          node.setCardData({
+            ...cardData,
+            url: data.url,
+            caption: data.caption,
+            captionHtml: data.caption,
+          });
+        }
+      });
+    },
+    [editor, nodeKey, cardData],
+  );
+
+  const handleDelete = useCallback(() => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (node) {
+        node.remove();
+      }
+    });
+  }, [editor, nodeKey]);
 
   const onCaptionChange = useCallback(
     (captionJSON: Record<string, unknown>, captionHtml: string) => {
@@ -63,15 +91,18 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
     );
   }
 
-  // Very basic iframe rendering. In a real app you would process the URL to get proper embed codes (like turning youtube watch URLs into embed URLs)
+  // Basic embed code handling
   let src = cardData.url;
   if (src.includes("youtube.com/watch?v=")) {
     src = src.replace("youtube.com/watch?v=", "youtube.com/embed/");
   }
 
+  const captionStr =
+    typeof cardData.caption === "string" ? cardData.caption : "";
+
   return (
     <figure
-      className={`vb-embed-card relative w-full mb-4 flex flex-col gap-2`}
+      className={`vb-embed-card relative group w-full mb-4 flex flex-col gap-2`}
       onClick={() => {
         clearSelection();
         setSelected(true);
@@ -81,6 +112,22 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         transition: "outline 0.1s ease",
       }}
     >
+      <StudioMediaFloatingToolbar
+        metadataLabel="Edit URL / Caption"
+        metadataTitle="Edit embed URL and caption"
+        metadataContent={
+          <EmbedMetadataPopover
+            url={cardData.url || ""}
+            caption={captionStr}
+            onUpdate={handleMetadataUpdate}
+            onClose={() => {}}
+          />
+        }
+        onDelete={handleDelete}
+        deleteTitle="Remove embed"
+        isSelected={isSelected}
+      />
+
       <div
         className="relative w-full overflow-hidden bg-muted/60 dark:bg-white/[0.04] rounded-xl border border-border/80 dark:border-white/10 shadow-sm"
         style={{ paddingTop: "56.25%" /* 16:9 Aspect Ratio */ }}
@@ -111,3 +158,4 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
     </figure>
   );
 }
+
