@@ -31,6 +31,27 @@ export const MAX_DATA_PAYLOAD_BYTES = 1024 * 1024; // 1 MB
 export const MAX_RELATION_EXPANSION_DEPTH = 2;
 export const MAX_RELATION_LIST_ITEMS = 100;
 
+export const VALID_FIELD_TYPES = [
+  "short_text",
+  "text",
+  "long_text",
+  "rich_text",
+  "studio_doc",
+  "number",
+  "boolean",
+  "date",
+  "datetime",
+  "url",
+  "email",
+  "select",
+  "multi_select",
+  "taxonomy",
+  "relation",
+  "relation_list",
+  "media",
+  "json",
+] as const;
+
 export function validateModelDefinition(input: {
   name: string;
   slug?: string | undefined;
@@ -66,6 +87,12 @@ export function validateModelDefinition(input: {
       });
     }
     seenKeys.add(key);
+
+    if (field.type && !VALID_FIELD_TYPES.includes(field.type as any)) {
+      throw new ValidationError({
+        [key]: `Invalid field type '${field.type}'. Must be one of: ${VALID_FIELD_TYPES.join(", ")}`,
+      });
+    }
   }
 }
 

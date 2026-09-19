@@ -103,10 +103,10 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
   });
 
   // =========================================================================
-  // 1. ALL 17 FIELD TYPES REGISTRY & VALIDATION
+  // 1. ALL 18 FIELD TYPES REGISTRY & VALIDATION
   // =========================================================================
-  describe("1. All 17 Field Types Validation & Storage Matrix", () => {
-    const all17Fields: ContentFieldDefinition[] = [
+  describe("1. All 18 Field Types Validation & Storage Matrix", () => {
+    const all18Fields: ContentFieldDefinition[] = [
       { id: "f_text", name: "Text", key: "textField", type: "text", required: true },
       { id: "f_short_text", name: "Short Text", key: "shortTextField", type: "short_text" },
       { id: "f_long_text", name: "Long Text", key: "longTextField", type: "long_text" },
@@ -146,7 +146,7 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
       { id: "f_json", name: "JSON", key: "jsonField", type: "json" },
     ];
 
-    it("accepts valid values for all 17 field types", () => {
+    it("accepts valid values for all 18 field types", () => {
       const validPayload: Record<string, unknown> = {
         textField: "Hello World",
         shortTextField: "Short string",
@@ -168,7 +168,7 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
         jsonField: { key: "value", count: 10, nested: { flag: true } },
       };
 
-      expect(() => validateEntryData(validPayload, all17Fields)).not.toThrow();
+      expect(() => validateEntryData(validPayload, all18Fields)).not.toThrow();
     });
 
     it("rejects invalid values with strict field error messages", () => {
@@ -185,7 +185,7 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
       };
 
       try {
-        validateEntryData(invalidPayload, all17Fields);
+        validateEntryData(invalidPayload, all18Fields);
         expect.unreachable("Validation should have failed");
       } catch (err) {
         expect(err).toBeInstanceOf(ValidationError);

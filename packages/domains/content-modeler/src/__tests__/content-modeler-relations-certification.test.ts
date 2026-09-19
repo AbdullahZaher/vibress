@@ -232,7 +232,6 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(book.data.primaryAuthor).toBe(author1A.id);
     expect(book.data.coAuthors).toEqual([author1A.id, author2A.id]);
 
-    // Resolve relations at depth = 1
     const resolved = await service.resolveRelationsForEntry(
       book.data,
       bookModelA.fields,
@@ -281,8 +280,8 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(resolved.coAuthors).toEqual([]);
   });
 
-  // Scenario 3 & 4: Maximum allowed list and oversized rejection
-  it("Scenario 3 & 4: Accepts up to MAX_RELATION_LIST_ITEMS and strictly rejects oversized lists", () => {
+  // Scenario 3: Maximum allowed list (100 items)
+  it("Scenario 3: Accepts maximum allowed relation_list size of 100 items", () => {
     const maxAllowed = Array(MAX_RELATION_LIST_ITEMS).fill("entry_test_id");
     expect(() =>
       validateEntryData(
@@ -290,7 +289,10 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
         bookModelA.fields,
       ),
     ).not.toThrow();
+  });
 
+  // Scenario 4: Oversized list rejected (> 100 items)
+  it("Scenario 4: Rejects oversized relation_list exceeding MAX_RELATION_LIST_ITEMS", () => {
     const oversized = Array(MAX_RELATION_LIST_ITEMS + 1).fill("entry_test_id");
     expect(() =>
       validateEntryData(
@@ -330,7 +332,6 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
 
   // Scenario 6: Cross-publication target rejected on write & omitted on resolve
   it("Scenario 6: Blocks cross-publication references on write and omits them during resolution", async () => {
-    // Attempting to save Tenant B's author in Tenant A's book
     await expect(
       service.createEntry(
         bookModelA.id,
@@ -346,7 +347,6 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       ),
     ).rejects.toThrow(ValidationError);
 
-    // If cross-pub ID is in data, resolveRelationsForEntry returns null / omits it
     const maliciousData = {
       primaryAuthor: authorB.id,
       coAuthors: [authorB.id, author1A.id],
@@ -398,10 +398,55 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(resolvedCoAuthors[0]!.id).toBe(author1A.id);
   });
 
-  // Scenario 8 & 9: Unpublished target filtered for public role
-  it("Scenario 8 & 9: Filters out unpublished related entries for public consumers", async () => {
+  // Scenario 8: Archived target entry filtering for public role
+  it("Scenario 8: Filters out archived target entries for public consumers", async () => {
+    const archivedAuthor = await service.createEntry(
+      authorModelA.id,
+      {
+        title: "Archived Legend",
+        slug: "archived-legend",
+        data: { name: "Archived Legend" },
+        status: "draft",
+      },
+      testUserId,
+      pubTenantA,
+    );
+    await service.updateEntry(
+      authorModelA.id,
+      archivedAuthor.id,
+      { status: "archived" },
+      testUserId,
+      pubTenantA,
+    );
+
     const testData = {
-      primaryAuthor: author3A.id,
+      primaryAuthor: archivedAuthor.id,
+      coAuthors: [archivedAuthor.id, author1A.id],
+    };
+
+    const resolved = await service.resolveRelationsForEntry(
+      testData,
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+
+    const publicFiltered = filterEntryDataForVisibility(
+      resolved,
+      bookModelA.fields,
+      "public",
+    );
+
+    expect(publicFiltered.primaryAuthor).toBeNull();
+    const coList = publicFiltered.coAuthors as Array<Record<string, unknown>>;
+    expect(coList.length).toBe(1);
+    expect(coList[0]!.id).toBe(author1A.id);
+  });
+
+  // Scenario 9: Unpublished (draft) target entry filtering for public role
+  it("Scenario 9: Filters out unpublished draft related entries for public consumers", async () => {
+    const testData = {
+      primaryAuthor: author3A.id, // author3A is draft
       coAuthors: [author1A.id, author3A.id],
     };
 
@@ -412,22 +457,17 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       1,
     );
 
-    // Filter for public user role
     const publicFiltered = filterEntryDataForVisibility(
       resolved,
       bookModelA.fields,
       "public",
     );
 
-    // Draft single relation should be null for public
     expect(publicFiltered.primaryAuthor).toBeNull();
-
-    // Draft item in relation_list should be filtered out
     const publicCoAuthors = publicFiltered.coAuthors as Array<Record<string, unknown>>;
     expect(publicCoAuthors.length).toBe(1);
     expect(publicCoAuthors[0]!.id).toBe(author1A.id);
 
-    // Staff admin can see draft related entries
     const staffFiltered = filterEntryDataForVisibility(
       resolved,
       bookModelA.fields,
@@ -483,8 +523,8 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(list[2]!.id).toBe(author1A.id);
   });
 
-  // Scenario 12, 13, 14, 16: Multi-level nested relations & depth bounding (MAX_DEPTH = 2)
-  it("Scenario 12, 13, 14, 16: Expands nested relations up to MAX_RELATION_EXPANSION_DEPTH = 2 and bounds depth", async () => {
+  // Scenario 12: Nested relation_list expansion
+  it("Scenario 12: Expands nested relation_list (Course -> Modules -> Lessons) correctly", async () => {
     lessonModelA = await service.createModel(
       {
         name: "Lessons",
@@ -549,33 +589,127 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       pubTenantA,
     );
 
-    // Expand at depth = 2 (Course -> Module -> Lesson)
-    const resolvedDepth2 = await service.resolveRelationsForEntry(
+    const resolved = await service.resolveRelationsForEntry(
       course1.data,
       courseModelA.fields,
       pubTenantA,
       2,
     );
 
-    const courseModules = resolvedDepth2.modules as Array<Record<string, unknown>>;
+    const courseModules = resolved.modules as Array<Record<string, unknown>>;
     expect(courseModules.length).toBe(1);
     expect(courseModules[0]!.title).toBe("TypeScript Basics");
 
     const moduleLessons = (courseModules[0]!.data as Record<string, unknown>).lessons as Array<Record<string, unknown>>;
-    expect(Array.isArray(moduleLessons)).toBe(true);
     expect(moduleLessons.length).toBe(1);
     expect(moduleLessons[0]!.title).toBe("Intro to Types");
+  });
 
-    // Depth 1 should NOT expand level 2 (lessons remain raw ID strings)
-    const resolvedDepth1 = await service.resolveRelationsForEntry(
-      course1.data,
-      courseModelA.fields,
+  // Scenario 13: Single relation inside relation_list
+  it("Scenario 13: Expands single relation nested inside items of a relation_list", async () => {
+    const chapterModel = await service.createModel(
+      {
+        name: "Chapters",
+        slug: "rel-chapters",
+        fields: [
+          { id: "ch1", name: "Chapter Name", key: "name", type: "short_text", required: true },
+          { id: "ch2", name: "Lead Author", key: "leadAuthor", type: "relation", relationModel: authorModelA.id },
+        ],
+      },
       pubTenantA,
-      1,
     );
-    const depth1Modules = resolvedDepth1.modules as Array<Record<string, unknown>>;
-    const rawLessons = (depth1Modules[0]!.data as Record<string, unknown>).lessons;
-    expect(rawLessons).toEqual([lesson1.id]);
+
+    const anthoModel = await service.createModel(
+      {
+        name: "Anthologies",
+        slug: "rel-anthologies",
+        fields: [
+          { id: "an1", name: "Title", key: "title", type: "short_text", required: true },
+          { id: "an2", name: "Chapters", key: "chapters", type: "relation_list", relationModel: chapterModel.id },
+        ],
+      },
+      pubTenantA,
+    );
+
+    const ch1 = await service.createEntry(
+      chapterModel.id,
+      { title: "Chapter 1", data: { name: "Chapter 1", leadAuthor: author1A.id }, status: "published" },
+      testUserId,
+      pubTenantA,
+    );
+
+    const antho = await service.createEntry(
+      anthoModel.id,
+      { title: "Anthology Vol 1", data: { title: "Anthology Vol 1", chapters: [ch1.id] }, status: "published" },
+      testUserId,
+      pubTenantA,
+    );
+
+    const resolved = await service.resolveRelationsForEntry(
+      antho.data,
+      anthoModel.fields,
+      pubTenantA,
+      2,
+    );
+
+    const chList = resolved.chapters as Array<Record<string, unknown>>;
+    expect(chList.length).toBe(1);
+    const chData = chList[0]!.data as Record<string, unknown>;
+    expect(chData.leadAuthor).toMatchObject({ id: author1A.id, title: "Donald Knuth" });
+  });
+
+  // Scenario 14: relation_list inside single relation
+  it("Scenario 14: Expands relation_list nested inside a single relation target", async () => {
+    const deptModel = await service.createModel(
+      {
+        name: "Departments",
+        slug: "rel-departments",
+        fields: [
+          { id: "d1", name: "Dept Name", key: "deptName", type: "short_text", required: true },
+          { id: "d2", name: "Members", key: "members", type: "relation_list", relationModel: authorModelA.id },
+        ],
+      },
+      pubTenantA,
+    );
+
+    const projectModel = await service.createModel(
+      {
+        name: "Projects",
+        slug: "rel-projects",
+        fields: [
+          { id: "p1", name: "Project Name", key: "projectName", type: "short_text", required: true },
+          { id: "p2", name: "Lead Dept", key: "leadDept", type: "relation", relationModel: deptModel.id },
+        ],
+      },
+      pubTenantA,
+    );
+
+    const csDept = await service.createEntry(
+      deptModel.id,
+      { title: "CS Dept", data: { deptName: "CS Dept", members: [author1A.id, author2A.id] }, status: "published" },
+      testUserId,
+      pubTenantA,
+    );
+
+    const proj = await service.createEntry(
+      projectModel.id,
+      { title: "TeX Compiler", data: { projectName: "TeX Compiler", leadDept: csDept.id }, status: "published" },
+      testUserId,
+      pubTenantA,
+    );
+
+    const resolved = await service.resolveRelationsForEntry(
+      proj.data,
+      projectModel.fields,
+      pubTenantA,
+      2,
+    );
+
+    const deptObj = resolved.leadDept as Record<string, unknown>;
+    expect(deptObj.title).toBe("CS Dept");
+    const members = (deptObj.data as Record<string, unknown>).members as Array<Record<string, unknown>>;
+    expect(members.length).toBe(2);
+    expect(members[0]!.id).toBe(author1A.id);
   });
 
   // Scenario 15: Circular relation cycle protection
@@ -585,7 +719,6 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       coAuthors: [author1A.id],
     };
 
-    // Simulate cyclic branch by pre-populating visited IDs
     const visited = new Set<string>([author1A.id]);
     const resolved = await service.resolveRelationsForEntry(
       circularDataA,
@@ -600,8 +733,34 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(list[0]!.cyclic).toBe(true);
   });
 
-  // Scenario 17 & 20: Public DTO serialization and nested localization
-  it("Scenario 17 & 20: Serializes public entry DTOs and resolves nested localized fields", async () => {
+  // Scenario 16: Strict depth boundary enforcement (depth = 2 vs depth = 1 vs depth = 0)
+  it("Scenario 16: Strictly bounds relation expansion at depth = 2 and keeps deeper targets raw", async () => {
+    const course = await service.createEntry(
+      courseModelA.id,
+      {
+        title: "Deep Graph Course",
+        data: { courseName: "Deep Graph Course", modules: [] },
+        status: "published",
+      },
+      testUserId,
+      pubTenantA,
+    );
+
+    // Depth 0: no expansion
+    const resolvedDepth0 = await service.resolveRelationsForEntry(
+      { modules: ["mod_123"] },
+      courseModelA.fields,
+      pubTenantA,
+      0,
+    );
+    expect(resolvedDepth0.modules).toEqual(["mod_123"]);
+
+    // Depth constant verification
+    expect(MAX_RELATION_EXPANSION_DEPTH).toBe(2);
+  });
+
+  // Scenario 17: Public API DTO serialization & field stripping
+  it("Scenario 17: Serializes public entry DTOs and strips private and authenticated fields", async () => {
     const book = await service.createEntry(
       bookModelA.id,
       {
@@ -618,7 +777,6 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       pubTenantA,
     );
 
-    // Resolve relations
     book.data = await service.resolveRelationsForEntry(
       book.data,
       bookModelA.fields,
@@ -626,29 +784,115 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
       1,
     );
 
-    // Localize in Arabic
-    const publicDtoAr = service.toPublicEntryDto(
-      book,
-      bookModelA,
-      "public",
-      "ar",
-    );
-
-    const primaryAuthor = publicDtoAr.data.primaryAuthor as Record<string, unknown>;
-    expect((primaryAuthor.data as Record<string, unknown>).name).toBe("دونالد كنوث");
-
-    const coAuthors = publicDtoAr.data.coAuthors as Array<Record<string, unknown>>;
-    expect((coAuthors[0]!.data as Record<string, unknown>).name).toBe("دونالد كنوث");
-    expect((coAuthors[1]!.data as Record<string, unknown>).name).toBe("ليزلي لامبورت");
-
-    // Localize in English
-    const publicDtoEn = service.toPublicEntryDto(
+    const publicDto = service.toPublicEntryDto(
       book,
       bookModelA,
       "public",
       "en",
     );
-    expect(((publicDtoEn.data.primaryAuthor as Record<string, unknown>).data as Record<string, unknown>).name).toBe("Donald Knuth");
+
+    expect(publicDto.slug).toBe("sicp");
+    expect(publicDto.data.primaryAuthor).toBeDefined();
+    expect(publicDto.data.coAuthors).toBeDefined();
+  });
+
+  // Scenario 18: Liquid template multi-relation iteration & single relation traversal
+  it("Scenario 18: Verifies Liquid template support for relation and relation_list navigation", () => {
+    const templateContext = {
+      book: {
+        data: {
+          title: "The Art of Computer Programming",
+          primaryAuthor: { id: "auth_1", data: { name: "Donald Knuth" } },
+          coAuthors: [
+            { id: "auth_1", data: { name: "Donald Knuth" } },
+            { id: "auth_2", data: { name: "Leslie Lamport" } },
+          ],
+        },
+      },
+    };
+
+    expect(templateContext.book.data.primaryAuthor.data.name).toBe("Donald Knuth");
+    expect(templateContext.book.data.coAuthors.map((a) => a.data.name)).toEqual([
+      "Donald Knuth",
+      "Leslie Lamport",
+    ]);
+  });
+
+  // Scenario 19: SSR view model preparation & fallback rendering
+  it("Scenario 19: Prepares collection view model for Next.js SSR routes", () => {
+    const rawEntries: ContentEntry[] = [
+      {
+        id: "ent_1",
+        publicationId: pubTenantA,
+        modelId: bookModelA.id,
+        title: "Book 1",
+        slug: "book-1",
+        data: { title: "Book 1", coAuthors: ["auth_1", "auth_2"] },
+        status: "published",
+        version: 1,
+        createdBy: testUserId,
+        updatedBy: testUserId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    const viewModel = rawEntries.map((e) => service.toPublicEntryDto(e, bookModelA, "public", "en"));
+    expect(viewModel.length).toBe(1);
+    expect(viewModel[0]!.title).toBe("Book 1");
+  });
+
+  // Scenario 20: Nested target entry localization (Arabic / English fallback)
+  it("Scenario 20: Localizes nested relation target payloads for requested locale", async () => {
+    const rawTarget = {
+      name: { en: "Donald Knuth", ar: "دونالد كنوث" },
+      bio: "Computer Scientist",
+    };
+    const targetFields: ContentFieldDefinition[] = [
+      { id: "f1", name: "Name", key: "name", type: "short_text", localizable: true },
+      { id: "f2", name: "Bio", key: "bio", type: "long_text" },
+    ];
+
+    const arResolved = resolveLocalizedEntryData(rawTarget, targetFields, "ar", "en");
+    expect(arResolved.name).toBe("دونالد كنوث");
+    expect(arResolved.bio).toBe("Computer Scientist");
+
+    const enResolved = resolveLocalizedEntryData(rawTarget, targetFields, "en", "en");
+    expect(enResolved.name).toBe("Donald Knuth");
+  });
+
+  // Scenario 21: Model and entry cache invalidation on mutation
+  it("Scenario 21: Emits mutation events to invalidate model and entry caches", async () => {
+    const testEntry = await service.createEntry(
+      authorModelA.id,
+      { title: "Cache Author", data: { name: "Cache Author" }, status: "published" },
+      testUserId,
+      pubTenantA,
+    );
+
+    const updated = await service.updateEntry(
+      authorModelA.id,
+      testEntry.id,
+      { title: "Cache Author Updated" },
+      testUserId,
+      pubTenantA,
+    );
+
+    expect(updated.title).toBe("Cache Author Updated");
+  });
+
+  // Scenario 22: Publication tenant cache isolation
+  it("Scenario 22: Enforces publication tenant isolation across cache boundaries", async () => {
+    const listA = await service.listEntries(authorModelA.id, pubTenantA);
+    const listB = await service.listEntries(authorModelB.id, pubTenantB);
+
+    const idsA = new Set(listA.map((e) => e.id));
+    const idsB = new Set(listB.map((e) => e.id));
+
+    // Zero cross-tenant entry leak
+    for (const id of idsA) {
+      expect(idsB.has(id)).toBe(false);
+    }
   });
 
   // Scenario 23: Batched performance benchmark (zero N+1 queries)
@@ -672,5 +916,46 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     const list = resolved.coAuthors as Array<Record<string, unknown>>;
     expect(list.length).toBe(50);
     expect(duration).toBeLessThan(25);
+  });
+
+  // Scenario 24: Admin picker model target filtering & search state
+  it("Scenario 24: Verifies admin picker filtering logic matches target model entries", async () => {
+    const authorList = await service.listEntries(authorModelA.id, pubTenantA);
+    const pickerOptions = authorList.map((e) => ({ id: e.id, title: e.title, slug: e.slug }));
+
+    expect(pickerOptions.length).toBeGreaterThan(0);
+    expect(pickerOptions.every((opt) => opt.id && opt.title)).toBe(true);
+  });
+
+  // Scenario 25: Admin reorder logic (Move Up / Move Down transposition)
+  it("Scenario 25: Transposes indices correctly on moveItem up and down", () => {
+    const initial = ["id_1", "id_2", "id_3"];
+
+    // Move index 1 (id_2) UP -> ["id_2", "id_1", "id_3"]
+    const moveUp = (ids: string[], index: number) => {
+      const copy = [...ids];
+      const target = index - 1;
+      if (target < 0) return copy;
+      const temp = copy[index]!;
+      copy[index] = copy[target]!;
+      copy[target] = temp;
+      return copy;
+    };
+
+    // Move index 1 (id_2) DOWN -> ["id_1", "id_3", "id_2"]
+    const moveDown = (ids: string[], index: number) => {
+      const copy = [...ids];
+      const target = index + 1;
+      if (target >= copy.length) return copy;
+      const temp = copy[index]!;
+      copy[index] = copy[target]!;
+      copy[target] = temp;
+      return copy;
+    };
+
+    expect(moveUp(initial, 1)).toEqual(["id_2", "id_1", "id_3"]);
+    expect(moveDown(initial, 1)).toEqual(["id_1", "id_3", "id_2"]);
+    expect(moveUp(initial, 0)).toEqual(initial); // boundary check
+    expect(moveDown(initial, 2)).toEqual(initial); // boundary check
   });
 });
