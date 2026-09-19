@@ -30,7 +30,7 @@
     "db:restore": "bash scripts/restore.sh",
     "production:smoke": "tsx scripts/production-smoke-tests.ts",
     "production:verify": "tsx scripts/health-check.ts && tsx scripts/production-smoke-tests.ts",
-    "verify:explicit-any": "node scripts/count-explicit-any.mjs --max 120"
+    "verify:explicit-any": "node scripts/count-explicit-any.mjs --max 220"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,0 +1,55 @@
+{
+  "nav": {
+    "home": "Home",
+    "primary": "Primary navigation",
+    "secondary": "Secondary navigation",
+    "navigate": "Navigate"
+  },
+  "meta": {
+    "by": "By",
+    "min_read": "%{minutes} min read",
+    "min": "%{minutes} min",
+    "edition": "Edition",
+    "edition_desc": "Stories, perspectives, and visual culture—published with Vibress.",
+    "theme_credit": "Editorial theme: Morrowe"
+  },
+  "pagination": {
+    "newer": "← Newer",
+    "older": "Older →",
+    "aria": "Pagination",
+    "page_of": "%{current} / %{total}"
+  },
+  "archive": {
+    "section": "Section",
+    "contributor": "Contributor",
+    "archive": "Archive",
+    "stories": "Stories",
+    "explore_sections": "Explore sections",
+    "view_stories": "View stories →",
+    "latest_in": "Latest in %{name}",
+    "stories_by": "Stories by %{name}",
+    "no_stories": "No published stories yet."
+  },
+  "home": {
+    "lead_kicker": "Featured story",
+    "story": "Story",
+    "perspective": "Perspective",
+    "magazine": "Magazine",
+    "explore_sections": "Explore sections",
+    "editors_selection": "Editor’s selection",
+    "recent_stories": "Recent stories",
+    "banner_kicker": "A magazine for curious minds",
+    "banner_title": "Ideas worth slowing down for.",
+    "read_latest": "Read the latest ↘",
+    "more_stories_note": "More stories will appear here as your publication grows."
+  },
+  "post": {
+    "magazine": "Magazine",
+    "share": "Share",
+    "related": "Related Articles",
+    "comments": "Discussion"
+  },
+  "page": {
+    "eyebrow": "Page"
+  }
+}

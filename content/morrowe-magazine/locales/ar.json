@@ -1,0 +1,55 @@
+{
+  "nav": {
+    "home": "الرئيسية",
+    "primary": "التنقل الرئيسي",
+    "secondary": "التنقل الثانوي",
+    "navigate": "تصفح الأقسام"
+  },
+  "meta": {
+    "by": "بقلم",
+    "min_read": "%{minutes} دقيقة للقراءة",
+    "min": "%{minutes} دقيقة",
+    "edition": "الإصدار",
+    "edition_desc": "قصص، ورؤى، وثقافة بصرية — نُشرت عبر فايبرس.",
+    "theme_credit": "قالب تحريري: مورو"
+  },
+  "pagination": {
+    "newer": "← الأحدث",
+    "older": "الأقدم →",
+    "aria": "التنقل بين الصفحات",
+    "page_of": "%{current} / %{total}"
+  },
+  "archive": {
+    "section": "القسم",
+    "contributor": "كاتب مشارك",
+    "archive": "الأرشيف",
+    "stories": "القصص",
+    "explore_sections": "استكشف الأقسام",
+    "view_stories": "عرض المقالات ←",
+    "latest_in": "أحدث المقالات في %{name}",
+    "stories_by": "مقالات بقلم %{name}",
+    "no_stories": "لا توجد مقالات منشورة بعد."
+  },
+  "home": {
+    "lead_kicker": "قصة مميزة",
+    "story": "قصة",
+    "perspective": "رؤية",
+    "magazine": "مجلة",
+    "explore_sections": "استكشف الأقسام",
+    "editors_selection": "اختيارات المحرر",
+    "recent_stories": "أحدث القصص",
+    "banner_kicker": "مجلة للعقول الفضولية والملهمة",
+    "banner_title": "أفكار تستحق التأمل والتروي.",
+    "read_latest": "اقرأ الأحدث ↙",
+    "more_stories_note": "ستظهر المزيد من القصص هنا مع نمو نشرتك."
+  },
+  "post": {
+    "magazine": "مجلة",
+    "share": "مشاركة",
+    "related": "مقالات ذات صلة",
+    "comments": "النقاش والتعليقات"
+  },
+  "page": {
+    "eyebrow": "صفحة"
+  }
+}

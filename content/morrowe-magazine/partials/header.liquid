@@ -1,0 +1,46 @@
+{% if site.announcement and site.announcement.enabled %}
+  <aside class="mr-announcement" aria-label="{{ 'nav.primary' | t }}">
+    <div class="mr-container mr-announcement-inner">
+      {% if site.announcement.url %}
+        <a href="{{ site.announcement.url | escape }}">{{ site.announcement.text | escape }}</a>
+      {% else %}
+        <span>{{ site.announcement.text | escape }}</span>
+      {% endif %}
+    </div>
+  </aside>
+{% endif %}
+
+<header class="mr-header">
+  <div class="mr-container mr-header-top">
+    <div class="mr-header-left">
+      <span class="mr-edition-stamp">{{ 'meta.edition' | t }} #01</span>
+      <span class="mr-date-stamp">{{ 'now' | format_date }}</span>
+    </div>
+
+    <a class="mr-brand" href="{% route 'home' %}" aria-label="{{ site.title | escape }} — {{ 'nav.home' | t }}">
+      {% if site.logo %}
+        <img class="mr-logo" src="{{ site.logo | escape }}" alt="{{ site.title | escape }}" />
+      {% else %}
+        <span class="mr-wordmark">{{ site.title | escape }}</span>
+      {% endif %}
+    </a>
+
+    <div class="mr-header-right">
+      {% if site.tagline %}
+        <p class="mr-tagline">{{ site.tagline | escape }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mr-nav-shell">
+    <div class="mr-container mr-nav-row">
+      <nav class="mr-nav" aria-label="{{ 'nav.primary' | t }}">
+        <a class="mr-nav-link mr-nav-home" href="{% route 'home' %}">{{ 'nav.home' | t }}</a>
+        {% for item in site.navigation.primary %}
+          <a class="mr-nav-link" href="{{ item.url | escape }}">{{ item.label | escape }}</a>
+        {% endfor %}
+      </nav>
+      <span class="mr-issue-mark" aria-hidden="true">{% if site.direction == 'rtl' %}م / ٠١{% else %}M / 01{% endif %}</span>
+    </div>
+  </div>
+</header>

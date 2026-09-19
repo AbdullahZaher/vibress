@@ -1,0 +1,24 @@
+<div class="morrowe mode-{{ settings.colorMode | default: 'auto' }} display-{{ settings.displayStyle | default: 'serif' }}" dir="{{ site.direction | default: 'ltr' | escape }}" lang="{{ site.locale | default: 'en' | escape }}" style="--mr-accent: {{ settings.accentColor | default: '#D8F75A' }};">
+  {% include 'header' %}
+
+  <main class="mr-main mr-page-main">
+    <article class="mr-page mr-container-narrow">
+      <header class="mr-page-header">
+        <span class="mr-eyebrow">{{ 'page.eyebrow' | t }}</span>
+        <h1>{{ page.title | escape }}</h1>
+        {% if page.excerpt %}<p class="mr-article-deck">{{ page.excerpt | escape }}</p>{% endif %}
+      </header>
+
+      {% if page.featureImage and page.featureImage.url %}
+        <figure class="mr-page-image">
+          <img src="{{ page.featureImage.url | escape }}" alt="{{ page.featureImage.alt | default: page.title | escape }}" />
+          {% if page.featureImage.caption %}<figcaption>{{ page.featureImage.caption | escape }}</figcaption>{% endif %}
+        </figure>
+      {% endif %}
+
+      <div class="mr-article-body mr-studio-content">{{ page.html }}</div>
+    </article>
+  </main>
+
+  {% include 'footer' %}
+</div>

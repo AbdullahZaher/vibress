@@ -1,0 +1,199 @@
+<div class="morrowe mode-{{ settings.colorMode | default: 'auto' }} display-{{ settings.displayStyle | default: 'serif' }}" dir="{{ site.direction | default: 'ltr' | escape }}" lang="{{ site.locale | default: 'en' | escape }}" style="--mr-accent: {{ settings.accentColor | default: '#D8F75A' }};">
+  {% include 'header' %}
+
+  <main class="mr-main">
+    <section class="mr-container mr-front-grid">
+      {% if posts.size > 0 %}
+        <div class="mr-front-lead">
+          {% for post in posts limit: 1 %}
+            <article class="mr-lead-story">
+              <a class="mr-lead-media" href="{{ post.url | escape }}" aria-label="{{ 'home.lead_kicker' | t }}: {{ post.title | escape }}">
+                {% if post.featureImage and post.featureImage.url %}
+                  <img src="{{ post.featureImage.url | escape }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" loading="eager" />
+                {% else %}
+                  <div class="mr-placeholder-art" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                {% endif %}
+              </a>
+              <div class="mr-lead-copy">
+                <div class="mr-story-kicker">
+                  {% for tag in post.tags limit: 1 %}
+                    <a href="{{ tag.url | escape }}">{{ tag.name | escape }}</a>
+                  {% else %}
+                    <span>{{ 'home.lead_kicker' | t }}</span>
+                  {% endfor %}
+                </div>
+                <h2><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h2>
+                {% if settings.showExcerpts and post.excerpt %}
+                  <p>{{ post.excerpt | excerpt: 190 | escape }}</p>
+                {% endif %}
+                <div class="mr-byline">
+                  {% if post.primaryAuthor %}
+                    <a href="{{ post.primaryAuthor.url | escape }}">{{ post.primaryAuthor.name | escape }}</a>
+                  {% endif %}
+                  {% if post.publishedAt %}<time datetime="{{ post.publishedAt | escape }}">{{ post.publishedAt | format_date }}</time>{% endif %}
+                  {% if settings.showReadingTime and post.readingTimeMinutes %}<span>{{ 'meta.min' | t: minutes: post.readingTimeMinutes }}</span>{% endif %}
+                  {% if site.comments_enabled != false and settings.showComments != false and post.comment_count != nil and post.comment_count > 0 %}
+                    <span class="mr-byline-comments">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      {{ post.comment_count }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        <div class="mr-front-stack">
+          {% for post in posts offset: 1 limit: 3 %}
+            <article class="mr-compact-story">
+              <a class="mr-compact-media" href="{{ post.url | escape }}" aria-label="{{ post.title | escape }}">
+                {% if post.featureImage and post.featureImage.url %}
+                  <img src="{{ post.featureImage.url | escape }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" loading="lazy" />
+                {% else %}
+                  <span class="mr-image-placeholder mr-image-placeholder-{{ forloop.index }}" aria-hidden="true"></span>
+                {% endif %}
+              </a>
+              <div class="mr-compact-copy">
+                <div class="mr-story-kicker">
+                  {% for tag in post.tags limit: 1 %}<a href="{{ tag.url | escape }}">{{ tag.name | escape }}</a>{% else %}<span>{{ 'home.story' | t }}</span>{% endfor %}
+                </div>
+                <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
+                <div class="mr-byline mr-byline-compact">
+                  {% if post.publishedAt %}<time datetime="{{ post.publishedAt | escape }}">{{ post.publishedAt | format_date }}</time>{% endif %}
+                  {% if post.primaryAuthor %}<span>—</span><a href="{{ post.primaryAuthor.url | escape }}">{{ post.primaryAuthor.name | escape }}</a>{% endif %}
+                  {% if site.comments_enabled != false and settings.showComments != false and post.comment_count != nil and post.comment_count > 0 %}
+                    <span class="mr-byline-comments">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      {{ post.comment_count }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="mr-editorial-banner">
+      <div class="mr-container mr-editorial-banner-inner">
+        <div>
+          <span class="mr-eyebrow">{{ 'home.banner_kicker' | t }}</span>
+          <h2>{{ 'home.banner_title' | t }}</h2>
+        </div>
+        <a class="mr-round-link" href="#latest">{{ 'home.read_latest' | t }}</a>
+      </div>
+    </section>
+
+    {% if tags.size > 0 %}
+      <section class="mr-container mr-section mr-topics" aria-labelledby="topics-title">
+        <div class="mr-section-heading">
+          <span class="mr-index">01</span>
+          <h2 id="topics-title">{{ 'home.explore_sections' | t }}</h2>
+          <span class="mr-rule"></span>
+        </div>
+        <div class="mr-topic-grid">
+          {% for tag in tags limit: 6 %}
+            <a class="mr-topic-card" href="{{ tag.url | escape }}">
+              <span class="mr-topic-count">0{{ forloop.index }}</span>
+              <h3>{{ tag.name | escape }}</h3>
+              {% if tag.description %}<p>{{ tag.description | excerpt: 120 | escape }}</p>{% endif %}
+              <span class="mr-topic-action">{{ 'archive.view_stories' | t }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if posts.size > 1 %}
+      <section class="mr-container mr-section" aria-labelledby="editors-title">
+        <div class="mr-section-heading">
+          <span class="mr-index">02</span>
+          <h2 id="editors-title">{{ 'home.editors_selection' | t }}</h2>
+          <span class="mr-rule"></span>
+        </div>
+        <div class="mr-feature-grid">
+          {% for post in posts offset: 1 limit: 3 %}
+            <article class="mr-feature-card">
+              <a class="mr-feature-media" href="{{ post.url | escape }}">
+                {% if post.featureImage and post.featureImage.url %}
+                  <img src="{{ post.featureImage.url | escape }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" loading="lazy" />
+                {% else %}
+                  <span class="mr-image-placeholder mr-image-placeholder-{{ forloop.index }}" aria-hidden="true"></span>
+                {% endif %}
+              </a>
+              <div class="mr-feature-copy">
+                <div class="mr-story-kicker">{% for tag in post.tags limit: 1 %}<a href="{{ tag.url | escape }}">{{ tag.name | escape }}</a>{% else %}<span>{{ 'home.perspective' | t }}</span>{% endfor %}</div>
+                <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
+                {% if settings.showExcerpts and post.excerpt %}<p>{{ post.excerpt | excerpt: 145 | escape }}</p>{% endif %}
+                <div class="mr-byline">
+                  {% if post.primaryAuthor %}<a href="{{ post.primaryAuthor.url | escape }}">{{ post.primaryAuthor.name | escape }}</a>{% endif %}
+                  {% if post.publishedAt %}<time datetime="{{ post.publishedAt | escape }}">{{ post.publishedAt | format_date }}</time>{% endif %}
+                  {% if settings.showReadingTime and post.readingTimeMinutes %}<span>{{ 'meta.min_read' | t: minutes: post.readingTimeMinutes }}</span>{% endif %}
+                  {% if site.comments_enabled != false and settings.showComments != false and post.comment_count != nil and post.comment_count > 0 %}
+                    <span class="mr-byline-comments">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      {{ post.comment_count }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <section id="latest" class="mr-container mr-section mr-latest" aria-labelledby="latest-title">
+      <div class="mr-section-heading">
+        <span class="mr-index">03</span>
+        <h2 id="latest-title">{{ 'home.recent_stories' | t }}</h2>
+        <span class="mr-rule"></span>
+      </div>
+
+      <div class="mr-latest-list">
+        {% for post in posts offset: 4 %}
+          <article class="mr-latest-row">
+            <div class="mr-latest-number">{{ forloop.index }}</div>
+            <a class="mr-latest-media" href="{{ post.url | escape }}">
+              {% if post.featureImage and post.featureImage.url %}
+                <img src="{{ post.featureImage.url | escape }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" loading="lazy" />
+              {% else %}
+                <span class="mr-image-placeholder mr-image-placeholder-{{ forloop.index }}" aria-hidden="true"></span>
+              {% endif %}
+            </a>
+            <div class="mr-latest-copy">
+              <div class="mr-story-kicker">{% for tag in post.tags limit: 1 %}<a href="{{ tag.url | escape }}">{{ tag.name | escape }}</a>{% else %}<span>{{ 'home.magazine' | t }}</span>{% endfor %}</div>
+              <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
+              {% if settings.showExcerpts and post.excerpt %}<p>{{ post.excerpt | excerpt: 130 | escape }}</p>{% endif %}
+            </div>
+            <div class="mr-latest-meta">
+              {% if post.primaryAuthor %}<a href="{{ post.primaryAuthor.url | escape }}">{{ post.primaryAuthor.name | escape }}</a>{% endif %}
+              {% if post.publishedAt %}<time datetime="{{ post.publishedAt | escape }}">{{ post.publishedAt | format_date }}</time>{% endif %}
+              {% if settings.showReadingTime and post.readingTimeMinutes %}<span>{{ 'meta.min_read' | t: minutes: post.readingTimeMinutes }}</span>{% endif %}
+              {% if site.comments_enabled != false and settings.showComments != false and post.comment_count != nil and post.comment_count > 0 %}
+                <span class="mr-byline-comments">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  {{ post.comment_count }}
+                </span>
+              {% endif %}
+            </div>
+          </article>
+        {% else %}
+          {% if posts.size > 0 %}
+            <p class="mr-latest-note">{{ 'home.more_stories_note' | t }}</p>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% include 'pagination' %}
+    </section>
+  </main>
+
+  {% include 'footer' %}
+</div>

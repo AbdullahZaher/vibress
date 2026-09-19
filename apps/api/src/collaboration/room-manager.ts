@@ -124,7 +124,6 @@ export class RoomManager {
       room.removePeer(peerId);
       if (room.peerCount === 0) {
         this.rooms.delete(key);
-        crdtPersistence.clear(publicationId, postId).catch(() => {});
       }
     }
   }

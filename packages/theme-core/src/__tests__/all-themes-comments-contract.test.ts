@@ -14,6 +14,9 @@ import type {
 
 function loadDirectoryFiles(dir: string, prefix = ""): Map<string, string> {
   const map = new Map<string, string>();
+  if (!fs.existsSync(dir)) {
+    return map;
+  }
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);

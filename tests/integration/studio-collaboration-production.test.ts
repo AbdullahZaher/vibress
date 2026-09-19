@@ -318,10 +318,8 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
 
       wsB.on("message", (data: WebSocket.RawData) => {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
-        if (buf.length > 0 && buf[0] === 0x7b) {
-          try {
-            if (JSON.parse(buf.toString()).type === "awareness") return;
-          } catch {}
+        if (buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
+          return;
         }
         const u = new Uint8Array(buf);
         receivedByB.push(u);
@@ -330,10 +328,8 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
 
       wsA.on("message", (data: WebSocket.RawData) => {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
-        if (buf.length > 0 && buf[0] === 0x7b) {
-          try {
-            if (JSON.parse(buf.toString()).type === "awareness") return;
-          } catch {}
+        if (buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
+          return;
         }
         const u = new Uint8Array(buf);
         receivedByA.push(u);
@@ -382,19 +378,15 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
 
       wsA.on("message", (data: WebSocket.RawData) => {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
-        if (buf.length > 0 && buf[0] === 0x7b) {
-          try {
-            if (JSON.parse(buf.toString()).type === "awareness") return;
-          } catch {}
+        if (buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
+          return;
         }
         Y.applyUpdate(docA, new Uint8Array(buf));
       });
       wsB.on("message", (data: WebSocket.RawData) => {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as any);
-        if (buf.length > 0 && buf[0] === 0x7b) {
-          try {
-            if (JSON.parse(buf.toString()).type === "awareness") return;
-          } catch {}
+        if (buf.length > 0 && (buf[0] === 0x7b || buf[0] === 0x5b)) {
+          return;
         }
         Y.applyUpdate(docB, new Uint8Array(buf));
       });

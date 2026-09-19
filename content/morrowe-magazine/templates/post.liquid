@@ -1,0 +1,66 @@
+<div class="morrowe mode-{{ settings.colorMode | default: 'auto' }} display-{{ settings.displayStyle | default: 'serif' }}" dir="{{ site.direction | default: 'ltr' | escape }}" lang="{{ site.locale | default: 'en' | escape }}" style="--mr-accent: {{ settings.accentColor | default: '#D8F75A' }};">
+  {% include 'header' %}
+
+  <main class="mr-main mr-article-main">
+    <article class="mr-article">
+      <header class="mr-article-header mr-container">
+        <div class="mr-article-taxonomy">
+          {% for tag in post.tags limit: 1 %}<a href="{{ tag.url | escape }}">{{ tag.name | escape }}</a>{% else %}<span>{{ 'post.magazine' | t }}</span>{% endfor %}
+        </div>
+        <h1>{{ post.title | escape }}</h1>
+        {% if post.excerpt %}<p class="mr-article-deck">{{ post.excerpt | escape }}</p>{% endif %}
+
+        <div class="mr-article-meta">
+          {% if post.primaryAuthor %}
+            <div class="mr-author-inline">
+              {% if post.primaryAuthor.avatar %}<img src="{{ post.primaryAuthor.avatar | escape }}" alt="" />{% endif %}
+              <div>
+                <span>{{ 'meta.by' | t }}</span>
+                <a href="{{ post.primaryAuthor.url | escape }}">{{ post.primaryAuthor.name | escape }}</a>
+              </div>
+            </div>
+          {% endif %}
+          <div class="mr-article-stats">
+            {% if post.publishedAt %}<time datetime="{{ post.publishedAt | escape }}">{{ post.publishedAt | format_date }}</time>{% endif %}
+            {% if settings.showReadingTime and post.readingTimeMinutes %}<span>{{ 'meta.min_read' | t: minutes: post.readingTimeMinutes }}</span>{% endif %}
+            {% if site.comments_enabled != false and settings.showComments != false and post.comment_count != nil and post.comment_count > 0 %}
+              <a href="#comments" class="mr-article-comments-link" aria-label="{{ post.comment_count }} {{ 'post.comments' | t }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>{{ post.comment_count }}</span>
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </header>
+
+      {% if post.featureImage and post.featureImage.url %}
+        <figure class="mr-article-hero mr-container-wide">
+          <img src="{{ post.featureImage.url | escape }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" />
+          {% if post.featureImage.caption %}<figcaption>{{ post.featureImage.caption | escape }}</figcaption>{% endif %}
+        </figure>
+      {% endif %}
+
+      <div class="mr-article-body mr-studio-content">
+        {{ post.html }}
+      </div>
+
+      {% if post.tags.size > 0 %}
+        <footer class="mr-article-footer mr-container">
+          <div class="mr-tag-pills">
+            {% for tag in post.tags %}
+              <a class="mr-tag-pill" href="{{ tag.url | escape }}">#{{ tag.name | escape }}</a>
+            {% endfor %}
+          </div>
+        </footer>
+      {% endif %}
+
+      {% if site.comments_enabled != false and site.commentsEnabled != false and settings.showComments != false %}
+        <div class="mr-comments-wrap mr-container" id="comments">
+          {% comments %}
+        </div>
+      {% endif %}
+    </article>
+  </main>
+
+  {% include 'footer' %}
+</div>

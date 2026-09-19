@@ -1,0 +1,56 @@
+{
+  "fields": [
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Accent Color",
+      "description": "Highlight color used for editorial accents, badges, and interactive states.",
+      "default": "#D8F75A"
+    },
+    {
+      "key": "colorMode",
+      "type": "select",
+      "label": "Color Mode",
+      "description": "Choose a light, dark, or system-aware presentation.",
+      "options": ["auto", "light", "dark"],
+      "default": "auto"
+    },
+    {
+      "key": "displayStyle",
+      "type": "select",
+      "label": "Display Typography",
+      "description": "Choose the personality of large editorial headlines.",
+      "options": ["serif", "sans"],
+      "default": "serif"
+    },
+    {
+      "key": "showExcerpts",
+      "type": "boolean",
+      "label": "Show Story Excerpts",
+      "description": "Show article summaries on editorial cards where space allows.",
+      "default": true
+    },
+    {
+      "key": "showReadingTime",
+      "type": "boolean",
+      "label": "Show Reading Time",
+      "description": "Display reading-time metadata when Vibress provides it.",
+      "default": true
+    },
+    {
+      "key": "homeKicker",
+      "type": "string",
+      "label": "Homepage Kicker",
+      "description": "Short editorial line above the homepage statement.",
+      "default": "A magazine for curious minds",
+      "maxLength": 90
+    },
+    {
+      "key": "showComments",
+      "type": "boolean",
+      "label": "Show Comments Section",
+      "description": "Display reader comments and discussion on published articles.",
+      "default": true
+    }
+  ]
+}

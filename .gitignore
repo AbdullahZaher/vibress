@@ -96,13 +96,16 @@ temp/
 /plans/
 
 # ============================================================
-# Content Uploads & Local Themes (Preserve Starter Theme)
+# Content Uploads & Local Themes (Preserve Starter & Morrowe Themes)
 # ============================================================
 /content/*
 !/content/.gitkeep
 !/content/theme-starter/
 !/content/theme-starter/**
 !/content/vibress-theme-starter.zip
+!/content/morrowe-magazine/
+!/content/morrowe-magazine/**
+!/content/MORROWE_VIBRESS_MAGAZINE_v1.1.0.zip
 apps/api/content/*
 !apps/api/content/.gitkeep
 infrastructure/data/

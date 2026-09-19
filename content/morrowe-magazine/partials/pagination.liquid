@@ -1,0 +1,19 @@
+{% if pagination and pagination.pages > 1 %}
+  <nav class="mr-pagination" aria-label="{{ 'pagination.aria' | t }}">
+    <div class="mr-pagination-edge">
+      {% if pagination.hasPrevious %}
+        <a href="{{ pagination.previous | pagination_url }}" rel="prev">{{ 'pagination.newer' | t }}</a>
+      {% else %}
+        <span aria-hidden="true">{{ 'pagination.newer' | t }}</span>
+      {% endif %}
+    </div>
+    <div class="mr-pagination-count">{{ 'pagination.page_of' | t: current: pagination.page, total: pagination.pages }}</div>
+    <div class="mr-pagination-edge mr-pagination-next">
+      {% if pagination.hasNext %}
+        <a href="{{ pagination.next | pagination_url }}" rel="next">{{ 'pagination.older' | t }}</a>
+      {% else %}
+        <span aria-hidden="true">{{ 'pagination.older' | t }}</span>
+      {% endif %}
+    </div>
+  </nav>
+{% endif %}

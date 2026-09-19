@@ -1,0 +1,29 @@
+<footer class="mr-footer">
+  <div class="mr-container mr-footer-grid">
+    <div class="mr-footer-brand">
+      <a class="mr-footer-wordmark" href="{% route 'home' %}">{{ site.title | escape }}</a>
+      {% if site.description %}
+        <p>{{ site.description | escape }}</p>
+      {% endif %}
+    </div>
+
+    {% if site.navigation.secondary.size > 0 %}
+      <nav class="mr-footer-nav" aria-label="{{ 'nav.secondary' | t }}">
+        <span class="mr-footer-label">{{ 'nav.navigate' | t }}</span>
+        {% for item in site.navigation.secondary %}
+          <a href="{{ item.url | escape }}">{{ item.label | escape }}</a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+
+    <div class="mr-footer-note">
+      <span class="mr-footer-label">{{ 'meta.edition' | t }}</span>
+      <p>{{ 'meta.edition_desc' | t }}</p>
+    </div>
+  </div>
+  <div class="mr-container mr-footer-bottom">
+    <span>&copy; {{ 'now' | format_date: 'year' }} {{ site.title | escape }}</span>
+    <span class="mr-footer-dot">●</span>
+    <span>{{ 'meta.theme_credit' | t }}</span>
+  </div>
+</footer>

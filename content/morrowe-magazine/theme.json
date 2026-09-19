@@ -1,0 +1,26 @@
+{
+  "id": "morrowe-magazine",
+  "name": "Morrowe Magazine",
+  "version": "1.1.0",
+  "description": "A refined grid-first editorial magazine theme for Vibress, designed for culture, design, travel, ideas, and modern publications with full Arabic & RTL localization.",
+  "author": {
+    "name": "Vibress Theme Studio",
+    "email": "themes@vibress.org",
+    "url": "https://vibress.org"
+  },
+  "homepage": "https://vibress.org",
+  "license": "Custom",
+  "previewImage": "preview.webp",
+  "themeApi": 1,
+  "capabilities": ["post", "page", "tag", "author", "archive"],
+  "localization": {
+    "supportedLocales": ["en", "en-US", "ar", "ar-SA", "*"],
+    "supportsLocales": ["*"],
+    "rtl": true,
+    "dynamicLocale": true,
+    "localizedNavigation": true,
+    "localizedDates": true,
+    "dictionaryDir": "locales"
+  },
+  "settingsSchemaVersion": 1
+}
