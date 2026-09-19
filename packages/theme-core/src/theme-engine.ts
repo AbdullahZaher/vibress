@@ -437,6 +437,26 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     },
   });
 
+  // Custom filter: collection_url
+  liquid.registerFilter(
+    "collection_url",
+    function (this: any, modelSlug: unknown, entrySlugOrLocale?: unknown, explicitLocale?: unknown) {
+      if (!modelSlug || typeof modelSlug !== "string") return "/";
+      const activeLocale = getContextLocale(this);
+
+      if (entrySlugOrLocale && typeof entrySlugOrLocale === "string") {
+        // Check if second param is a locale code or entrySlug
+        if (entrySlugOrLocale.length <= 5 && (entrySlugOrLocale.includes("-") || entrySlugOrLocale === "en" || entrySlugOrLocale === "ar")) {
+          return routes.collection(modelSlug, entrySlugOrLocale);
+        }
+        const targetLocale = typeof explicitLocale === "string" ? explicitLocale : activeLocale;
+        return routes.collectionEntry(modelSlug, entrySlugOrLocale, targetLocale);
+      }
+
+      return routes.collection(modelSlug, activeLocale);
+    },
+  );
+
   // Custom tag: comments
   liquid.registerTag("comments", {
     parse(tagToken) {
@@ -483,5 +503,40 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     },
   });
 
+  // Custom tag: collection (exposes structured custom collection entries to template scope)
+  liquid.registerTag("collection", {
+    parse(tagToken) {
+      const raw = tagToken.args.trim();
+      // e.g. "products", limit: 6 as items  OR  "books" as items
+      const asMatch = raw.match(/\s+as\s+([a-zA-Z0-9_]+)$/);
+      this.targetVar = asMatch ? asMatch[1] : "items";
+      const beforeAs = asMatch ? raw.substring(0, asMatch.index).trim() : raw;
+
+      const limitMatch = beforeAs.match(/limit:\s*([0-9]+)/);
+      this.limit = limitMatch ? parseInt(limitMatch[1]!, 10) : undefined;
+
+      const modelMatch = beforeAs.match(/^['"]?([a-zA-Z0-9_-]+)['"]?/);
+      this.modelSlug = modelMatch ? modelMatch[1] : "";
+    },
+    render(ctx, emitter) {
+      const env = ctx.environments || {};
+      const collections = env.collections || (ctx.get(["collections"]) as Record<string, any[]>) || {};
+      let items = collections[this.modelSlug] || [];
+
+      if (!Array.isArray(items) && env.collection?.entries && env.collection?.model?.slug === this.modelSlug) {
+        items = env.collection.entries;
+      }
+
+      if (Array.isArray(items) && this.limit && this.limit > 0) {
+        items = items.slice(0, this.limit);
+      }
+
+      // Expose to current context scope
+      ctx.environments[this.targetVar] = items;
+      return "";
+    },
+  });
+
   return liquid;
 }
+

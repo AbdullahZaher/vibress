@@ -527,6 +527,83 @@ export function mapPageToViewModel(
   };
 }
 
+export interface CollectionEntryViewModel {
+  id: string;
+  modelSlug: string;
+  title: string;
+  slug: string;
+  data: Record<string, unknown>;
+  publishedAt?: string | null | undefined;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  [key: string]: unknown;
+}
+
+export interface ContentModelViewModel {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null | undefined;
+  entries: CollectionEntryViewModel[];
+  totalCount: number;
+}
+
+export function buildCollectionEntryViewModel(
+  entry: {
+    id: string;
+    modelSlug: string;
+    title: string;
+    slug: string;
+    data: Record<string, unknown>;
+    publishedAt?: Date | string | null | undefined;
+    createdAt?: Date | string | undefined;
+    updatedAt?: Date | string | undefined;
+  },
+  locale?: string,
+): CollectionEntryViewModel {
+  const publishedAtStr = entry.publishedAt
+    ? entry.publishedAt instanceof Date
+      ? entry.publishedAt.toISOString()
+      : entry.publishedAt
+    : null;
+
+  const createdAtStr = entry.createdAt
+    ? entry.createdAt instanceof Date
+      ? entry.createdAt.toISOString()
+      : entry.createdAt
+    : new Date().toISOString();
+
+  const updatedAtStr = entry.updatedAt
+    ? entry.updatedAt instanceof Date
+      ? entry.updatedAt.toISOString()
+      : entry.updatedAt
+    : createdAtStr;
+
+  const entryUrl = routes.collectionEntry(entry.modelSlug, entry.slug, locale);
+
+  const base: CollectionEntryViewModel = {
+    id: entry.id,
+    modelSlug: entry.modelSlug,
+    title: entry.title,
+    slug: entry.slug,
+    data: entry.data || {},
+    publishedAt: publishedAtStr,
+    createdAt: createdAtStr,
+    updatedAt: updatedAtStr,
+    url: entryUrl,
+  };
+
+  // Provide direct property access for custom fields on the view model
+  for (const [k, v] of Object.entries(entry.data || {})) {
+    if (!(k in base)) {
+      base[k] = v;
+    }
+  }
+
+  return base;
+}
+
 export interface ThemeViewModelContext {
   site?: SiteViewModel | null | undefined;
   settings?: Record<string, unknown> | null | undefined;
@@ -537,6 +614,12 @@ export interface ThemeViewModelContext {
   tag?: TagViewModel | null | undefined;
   author?: AuthorViewModel | null | undefined;
   pagination?: PaginationViewModel | null | undefined;
+  collections?: Record<string, CollectionEntryViewModel[]> | undefined;
+  collection?: {
+    model: { name: string; slug: string; description?: string | null };
+    entries: CollectionEntryViewModel[];
+    entry?: CollectionEntryViewModel | null;
+  } | undefined;
   theme?: {
     id: string;
     version: string;
@@ -546,3 +629,4 @@ export interface ThemeViewModelContext {
   availableLocales?: AvailableLocaleItem[] | undefined;
   [key: string]: unknown;
 }
+

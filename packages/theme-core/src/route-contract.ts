@@ -4,6 +4,8 @@ export interface RouteContract {
   page(slug: string, locale?: string): string;
   tag(slug: string, locale?: string): string;
   author(slug: string, locale?: string): string;
+  collection(modelSlug: string, locale?: string): string;
+  collectionEntry(modelSlug: string, entrySlug: string, locale?: string): string;
   portal: {
     signIn(locale?: string): string;
     signUp(locale?: string): string;
@@ -35,6 +37,13 @@ export const routes: RouteContract = {
     prefixRoute(`/tags/${encodeURIComponent(slug)}`, locale),
   author: (slug: string, locale?: string) =>
     prefixRoute(`/authors/${encodeURIComponent(slug)}`, locale),
+  collection: (modelSlug: string, locale?: string) =>
+    prefixRoute(`/collections/${encodeURIComponent(modelSlug)}`, locale),
+  collectionEntry: (modelSlug: string, entrySlug: string, locale?: string) =>
+    prefixRoute(
+      `/collections/${encodeURIComponent(modelSlug)}/${encodeURIComponent(entrySlug)}`,
+      locale,
+    ),
   portal: {
     signIn: (locale?: string) => prefixRoute("/portal/signin", locale),
     signUp: (locale?: string) => prefixRoute("/portal/signup", locale),
@@ -49,3 +58,4 @@ export const routes: RouteContract = {
     return `/preview/${encodeURIComponent(token)}${cleanSubpath}`;
   },
 };
+
