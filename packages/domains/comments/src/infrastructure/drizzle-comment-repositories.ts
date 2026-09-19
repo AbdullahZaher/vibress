@@ -44,8 +44,19 @@ export class DrizzleCommentRepository implements CommentRepository {
           createdAt: now,
           updatedAt: now,
         })
+        .onConflictDoNothing()
         .returning();
-      if (!row) throw new Error("Failed to insert comment");
+      if (!row) {
+        if (data.clientCommentId) {
+          const existing = await this.findByClientId(
+            data.publicationId,
+            data.memberId,
+            data.clientCommentId,
+          );
+          if (existing) return existing;
+        }
+        throw new Error("Failed to insert comment");
+      }
       return this.mapToDomain(row);
     } catch (err: any) {
       if (
