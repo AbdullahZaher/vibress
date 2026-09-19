@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, ArrowLeft, Save, GripVertical } from "lucide-react";
-import { apiRequest } from "../../lib/api";
+import {
+  Plus,
+  Trash2,
+  ArrowLeft,
+  Save,
+  GripVertical,
+  Globe,
+  Eye,
+  AlertTriangle,
+  Link as LinkIcon,
+} from "lucide-react";
+import { apiRequest } from "../../lib/api/client";
 
 export interface FieldItem {
   id: string;
@@ -9,19 +19,34 @@ export interface FieldItem {
   type: string;
   required: boolean;
   description?: string;
-  options?: Array<{ label: string; value: string }>;
+  helpText?: string;
+  localizable?: boolean;
+  searchable?: boolean;
+  filterable?: boolean;
+  apiVisibility?: "public" | "authenticated" | "private";
+  relationModel?: string;
+  options?: Array<{ label: string; value: string | number }>;
+  optionsRaw?: string; // For convenient options editing in UI
 }
 
 const FIELD_TYPES = [
   { value: "text", label: "Short Text" },
+  { value: "long_text", label: "Long Text / Multi-line" },
   { value: "rich_text", label: "Rich Text / Markdown" },
-  { value: "number", label: "Number" },
+  { value: "studio_doc", label: "Studio Document" },
+  { value: "number", label: "Number / Decimal" },
   { value: "boolean", label: "Boolean / Switch" },
-  { value: "date", label: "Date / Timestamp" },
-  { value: "media", label: "Media / Asset" },
-  { value: "relation", label: "Relation" },
+  { value: "date", label: "Date" },
+  { value: "datetime", label: "Date & Time" },
+  { value: "url", label: "URL Link" },
+  { value: "email", label: "Email Address" },
   { value: "select", label: "Single Select Dropdown" },
-  { value: "json", label: "Custom JSON" },
+  { value: "multi_select", label: "Multi Select List" },
+  { value: "taxonomy", label: "Taxonomy / Tags" },
+  { value: "relation", label: "Single Relation (1:1 / N:1)" },
+  { value: "relation_list", label: "Multi Relation (1:N / M:N)" },
+  { value: "media", label: "Media Asset / Image" },
+  { value: "json", label: "Custom JSON Object" },
 ];
 
 export function ContentModelEditor({
@@ -36,23 +61,37 @@ export function ContentModelEditor({
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [fields, setFields] = useState<FieldItem[]>([]);
+  const [availableModels, setAvailableModels] = useState<
+    Array<{ id: string; name: string; slug: string }>
+  >([]);
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evolutionWarnings, setEvolutionWarnings] = useState<string[]>([]);
 
   useEffect(() => {
-    if (isEditing && modelId) {
-      void (async () => {
-        try {
+    void (async () => {
+      try {
+        // Fetch all models for relation target options
+        const allRes = await apiRequest<{
+          data?: Array<{ id: string; name: string; slug: string }>;
+        }>("/content-models");
+        if (allRes.data) {
+          setAvailableModels(allRes.data);
+        }
+
+        if (isEditing && modelId) {
           setLoading(true);
           const res = await apiRequest<{
             data?: {
+              id: string;
               name: string;
               slug: string;
               description?: string;
               fields: FieldItem[];
             };
             model?: {
+              id: string;
               name: string;
               slug: string;
               description?: string;
@@ -64,15 +103,22 @@ export function ContentModelEditor({
             setName(m.name);
             setSlug(m.slug);
             setDescription(m.description || "");
-            setFields(m.fields || []);
+            setFields(
+              (m.fields || []).map((f) => ({
+                ...f,
+                optionsRaw: f.options
+                  ? f.options.map((o) => `${o.label}:${o.value}`).join(", ")
+                  : "",
+              })),
+            );
           }
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to load model");
-        } finally {
-          setLoading(false);
         }
-      })();
-    }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load model");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [isEditing, modelId]);
 
   const handleNameChange = (val: string) => {
@@ -94,6 +140,10 @@ export function ContentModelEditor({
       key: `field_${fields.length + 1}`,
       type: "text",
       required: false,
+      apiVisibility: "public",
+      searchable: true,
+      filterable: true,
+      localizable: false,
     };
     setFields([...fields, newField]);
   };
@@ -111,6 +161,21 @@ export function ContentModelEditor({
     setFields(fields.filter((_, i) => i !== index));
   };
 
+  const parseOptionsRaw = (raw?: string): Array<{ label: string; value: string }> => {
+    if (!raw || !raw.trim()) return [];
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const parts = item.split(":");
+        if (parts.length >= 2) {
+          return { label: parts[0]!.trim(), value: parts.slice(1).join(":").trim() };
+        }
+        return { label: item, value: item.toLowerCase().replace(/\s+/g, "-") };
+      });
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -125,20 +190,46 @@ export function ContentModelEditor({
     try {
       setSaving(true);
       setError(null);
+      setEvolutionWarnings([]);
+
+      const formattedFields = fields.map((f) => {
+        const fieldCopy = { ...f };
+        if (f.type === "select" || f.type === "multi_select") {
+          fieldCopy.options = parseOptionsRaw(f.optionsRaw);
+        }
+        delete fieldCopy.optionsRaw;
+        return fieldCopy;
+      });
+
       const payload = {
-        name,
-        slug,
+        name: name.trim(),
+        slug: slug.trim(),
         description: description || undefined,
-        fields,
+        fields: formattedFields,
       };
 
-      if (isEditing) {
-        await apiRequest(`/api/admin/v1/content-models/${modelId}`, {
+      if (isEditing && modelId) {
+        // Run evolution check first
+        try {
+          const previewRes = await apiRequest<{
+            data?: { safe: boolean; warnings: string[] };
+          }>(`/content-models/${modelId}/schema-evolution-preview`, {
+            method: "POST",
+            body: JSON.stringify({ fields: formattedFields }),
+          });
+          if (previewRes.data?.warnings && previewRes.data.warnings.length > 0) {
+            setEvolutionWarnings(previewRes.data.warnings);
+          }
+        } catch {
+          // Continue to save
+        }
+
+        await apiRequest(`/content-models/${modelId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
       } else {
-        await apiRequest("/api/admin/v1/content-models", {
+        await apiRequest("/content-models", {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -189,6 +280,20 @@ export function ContentModelEditor({
       {error && (
         <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
           {error}
+        </div>
+      )}
+
+      {evolutionWarnings.length > 0 && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 rounded-md text-xs space-y-1">
+          <div className="flex items-center gap-1.5 font-bold">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            Schema Evolution Warnings:
+          </div>
+          {evolutionWarnings.map((w, idx) => (
+            <p key={idx} className="ml-5">
+              • {w}
+            </p>
+          ))}
         </div>
       )}
 
@@ -260,7 +365,7 @@ export function ContentModelEditor({
             No fields defined yet. Click "Add Field" to build your schema.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {fields.map((field, idx) => (
               <div
                 key={field.id || idx}
@@ -327,16 +432,83 @@ export function ContentModelEditor({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
+                {/* Conditional Sub-editors for specific field types */}
+                {(field.type === "relation" || field.type === "relation_list") && (
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs flex items-center gap-2">
+                    <LinkIcon className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">
+                      Target Related Model:
+                    </span>
+                    <select
+                      value={field.relationModel || ""}
+                      onChange={(e) => handleUpdateField(idx, { relationModel: e.target.value })}
+                      className="px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
+                    >
+                      <option value="">-- Select Target Model --</option>
+                      {availableModels.map((m) => (
+                        <option key={m.id} value={m.slug}>
+                          {m.name} ({m.slug})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {(field.type === "select" || field.type === "multi_select") && (
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs space-y-1">
+                    <label className="block font-medium text-slate-600 dark:text-slate-400">
+                      Options (comma-separated Label:Value or Value):
+                    </label>
+                    <input
+                      type="text"
+                      value={field.optionsRaw || ""}
+                      onChange={(e) => handleUpdateField(idx, { optionsRaw: e.target.value })}
+                      placeholder="e.g. In Stock:in_stock, Out of Stock:out_of_stock"
+                      className="w-full px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
+                    />
+                  </div>
+                )}
+
+                {/* Field Flags & API Visibility */}
+                <div className="flex flex-wrap items-center gap-5 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
                     <input
                       type="checkbox"
                       checked={field.required}
                       onChange={(e) => handleUpdateField(idx, { required: e.target.checked })}
-                      className="rounded border-slate-300 text-primary focus:ring-primary"
+                      className="rounded border-slate-300 text-primary focus:ring-primary h-3.5 w-3.5"
                     />
-                    Required field
+                    Required
                   </label>
+
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
+                    <Globe className="w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="checkbox"
+                      checked={field.localizable}
+                      onChange={(e) => handleUpdateField(idx, { localizable: e.target.checked })}
+                      className="rounded border-slate-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                    />
+                    Localizable (i18n)
+                  </label>
+
+                  <div className="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-300 ml-auto">
+                    <Eye className="w-3.5 h-3.5 text-slate-400" />
+                    <span>API Visibility:</span>
+                    <select
+                      value={field.apiVisibility || "public"}
+                      onChange={(e) =>
+                        handleUpdateField(idx, {
+                          apiVisibility: e.target.value as "public" | "authenticated" | "private",
+                        })
+                      }
+                      className="px-2 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
+                    >
+                      <option value="public">Public (Default)</option>
+                      <option value="authenticated">Authenticated Only</option>
+                      <option value="private">Private / Staff Only</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             ))}
