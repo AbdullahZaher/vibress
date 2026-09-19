@@ -9,11 +9,16 @@ import {
 } from "drizzle-orm/pg-core";
 import { members } from "./members";
 import { posts } from "./posts";
+import { publications } from "./publications";
+import { users } from "./users";
 
 export const comments = pgTable(
   "comments",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     postId: text("post_id")
       .notNull()
       .references(() => posts.id, { onDelete: "cascade" }),
@@ -26,6 +31,7 @@ export const comments = pgTable(
     likeCount: integer("like_count").notNull().default(0),
     replyCount: integer("reply_count").notNull().default(0),
     depth: integer("depth").notNull().default(0),
+    clientCommentId: text("client_comment_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -36,14 +42,30 @@ export const comments = pgTable(
   },
   (table) => {
     return {
+      pkPubUnique: uniqueIndex("comments_id_publication_unique").on(
+        table.id,
+        table.publicationId,
+      ),
+      clientUnique: uniqueIndex("comments_pub_member_client_unique").on(
+        table.publicationId,
+        table.memberId,
+        table.clientCommentId,
+      ),
       postIdx: index("comments_post_idx").on(table.postId),
       memberIdx: index("comments_member_idx").on(table.memberId),
       parentIdx: index("comments_parent_idx").on(table.parentId),
       statusIdx: index("comments_status_idx").on(table.status),
-      postStatusIdx: index("comments_post_status_idx").on(
+      postPubStatusIdx: index("comments_post_pub_status_created_idx").on(
         table.postId,
+        table.publicationId,
         table.status,
+        table.createdAt,
       ),
+      memberPubIdx: index("comments_member_pub_idx").on(
+        table.memberId,
+        table.publicationId,
+      ),
+      pubIdx: index("comments_publication_id_idx").on(table.publicationId),
     };
   },
 );
@@ -55,6 +77,9 @@ export const commentLikes = pgTable(
   "comment_likes",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     commentId: text("comment_id")
       .notNull()
       .references(() => comments.id, { onDelete: "cascade" }),
@@ -72,6 +97,10 @@ export const commentLikes = pgTable(
         table.commentId,
       ),
       commentIdx: index("comment_likes_comment_idx").on(table.commentId),
+      commentPubIdx: index("comment_likes_comment_pub_idx").on(
+        table.commentId,
+        table.publicationId,
+      ),
     };
   },
 );
@@ -83,6 +112,9 @@ export const commentReports = pgTable(
   "comment_reports",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     commentId: text("comment_id")
       .notNull()
       .references(() => comments.id, { onDelete: "cascade" }),
@@ -101,6 +133,10 @@ export const commentReports = pgTable(
     return {
       commentIdx: index("comment_reports_comment_idx").on(table.commentId),
       statusIdx: index("comment_reports_status_idx").on(table.status),
+      pubStatusIdx: index("comment_reports_pub_status_idx").on(
+        table.publicationId,
+        table.status,
+      ),
       uniqueReporterCommentIdx: uniqueIndex(
         "comment_reports_reporter_comment_idx",
       ).on(table.reporterId, table.commentId),
@@ -110,6 +146,46 @@ export const commentReports = pgTable(
 
 export type CommentReportRow = typeof commentReports.$inferSelect;
 export type NewCommentReportRow = typeof commentReports.$inferInsert;
+
+export const commentModerationEvents = pgTable(
+  "comment_moderation_events",
+  {
+    id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    commentId: text("comment_id")
+      .notNull()
+      .references(() => comments.id, { onDelete: "cascade" }),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    fromStatus: text("from_status").notNull(),
+    toStatus: text("to_status").notNull(),
+    reason: text("reason"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => {
+    return {
+      commentEventIdx: index("comment_mod_events_comment_idx").on(
+        table.commentId,
+        table.createdAt,
+      ),
+      pubEventIdx: index("comment_mod_events_pub_idx").on(
+        table.publicationId,
+        table.createdAt,
+      ),
+    };
+  },
+);
+
+export type CommentModerationEventRow = typeof commentModerationEvents.$inferSelect;
+export type NewCommentModerationEventRow = typeof commentModerationEvents.$inferInsert;
+
 
 export const notifications = pgTable(
   "notifications",

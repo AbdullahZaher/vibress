@@ -9,6 +9,7 @@ import {
   themeService,
   settingsService,
   workspaceService,
+  commentsService,
 } from "../services";
 import {
   buildPublicPostSummaryDto,
@@ -259,6 +260,12 @@ function extractRequestedLocale(req: any): string | null {
         sortOrder: "desc",
       });
 
+      const postIds = posts.map((p) => p.id);
+      const commentCounts =
+        postIds.length > 0 && pubId
+          ? await commentsService.getCommentCounts(pubId, postIds)
+          : new Map<string, number>();
+
       const summaries = await Promise.all(
         posts.map(async (post) => {
           let mergedPost: any = post;
@@ -295,6 +302,7 @@ function extractRequestedLocale(req: any): string | null {
             authors,
             validTags,
             mediaService,
+            commentCounts.get(post.id) ?? 0,
           );
         }),
       );
@@ -411,11 +419,16 @@ function extractRequestedLocale(req: any): string | null {
       ]);
       const validTags = tagsList.filter((t): t is NonNullable<typeof t> => !!t);
 
+      const commentCounts = pubId
+        ? await commentsService.getCommentCounts(pubId, [post.id])
+        : new Map<string, number>();
+
       const postDetail = await buildPublicPostDetailDto(
         mergedPost,
         authors,
         validTags,
         mediaService,
+        commentCounts.get(post.id) ?? 0,
       );
       return reply.status(200).send({ post: postDetail, locale: mergedPost.locale || "en" });
     },
@@ -651,6 +664,12 @@ function extractRequestedLocale(req: any): string | null {
         sortOrder: "desc",
       });
 
+      const postIds = posts.map((p) => p.id);
+      const commentCounts =
+        postIds.length > 0 && pubId
+          ? await commentsService.getCommentCounts(pubId, postIds)
+          : new Map<string, number>();
+
       const summaries = await Promise.all(
         posts.map(async (post) => {
           const tagIds = await postsService.getPostTagIds(post.id);
@@ -667,6 +686,7 @@ function extractRequestedLocale(req: any): string | null {
             authors,
             validTags,
             mediaService,
+            commentCounts.get(post.id) ?? 0,
           );
         }),
       );
@@ -824,6 +844,12 @@ function extractRequestedLocale(req: any): string | null {
         sortOrder: "desc",
       });
 
+      const postIds = posts.map((p) => p.id);
+      const commentCounts =
+        postIds.length > 0 && pubId
+          ? await commentsService.getCommentCounts(pubId, postIds)
+          : new Map<string, number>();
+
       const summaries = await Promise.all(
         posts.map(async (post) => {
           const tagIds = await postsService.getPostTagIds(post.id);
@@ -840,6 +866,7 @@ function extractRequestedLocale(req: any): string | null {
             authors,
             validTags,
             mediaService,
+            commentCounts.get(post.id) ?? 0,
           );
         }),
       );

@@ -212,6 +212,7 @@ export async function buildPublicPostSummaryDto(
   authors: Author[],
   tags: Tag[],
   mediaService: MediaService,
+  commentCount?: number,
 ): Promise<PublicPostSummaryDto> {
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
   let featureImage: PublicMediaDto | null = null;
@@ -266,6 +267,13 @@ export async function buildPublicPostSummaryDto(
   const seoTitle = post.metaTitle || post.title;
   const seoDescription = post.metaDescription || excerpt;
 
+  const resolvedCommentCount =
+    typeof commentCount === "number"
+      ? commentCount
+      : typeof (post as any).commentCount === "number"
+      ? (post as any).commentCount
+      : 0;
+
   return {
     id: post.id,
     title: post.title,
@@ -286,6 +294,8 @@ export async function buildPublicPostSummaryDto(
       ogImage: featureImage?.url || undefined,
       ogType: "article",
     },
+    commentCount: resolvedCommentCount,
+    comment_count: resolvedCommentCount,
   };
 }
 
@@ -304,12 +314,14 @@ export async function buildPublicPostDetailDto(
   authors: Author[],
   tags: Tag[],
   mediaService: MediaService,
+  commentCount?: number,
 ): Promise<PublicPostDetailDto> {
   const summary = await buildPublicPostSummaryDto(
     post,
     authors,
     tags,
     mediaService,
+    commentCount,
   );
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
 

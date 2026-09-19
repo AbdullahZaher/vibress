@@ -140,7 +140,10 @@ export class Translator {
         const strVal = String(pVal);
         template = template
           .replace(new RegExp(`\\{\\{\\s*${pKey}\\s*\\}\\}`, "g"), strVal)
-          .replace(new RegExp(`\\{${pKey}\\}`, "g"), strVal);
+          .replace(new RegExp(`%\\{\\s*${pKey}\\s*\\}`, "g"), strVal)
+          .replace(new RegExp(`\\{${pKey}\\}`, "g"), strVal)
+          .replace(new RegExp(`:${pKey}\\b`, "g"), strVal)
+          .replace(new RegExp(`%${pKey}\\b`, "g"), strVal);
       }
     }
 

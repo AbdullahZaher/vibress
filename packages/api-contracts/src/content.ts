@@ -150,6 +150,8 @@ export const PublicPostSummarySchema = z.object({
   tags: z.array(PublicTagSchema),
   featureImage: PublicMediaSchema.nullable().optional(),
   seo: PublicSeoSchema,
+  commentCount: z.number().optional(),
+  comment_count: z.number().optional(),
 });
 export type PublicPostSummaryDto = z.infer<typeof PublicPostSummarySchema>;
 

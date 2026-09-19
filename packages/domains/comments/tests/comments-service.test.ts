@@ -3,11 +3,13 @@ import {
   CommentsService,
   CommentDomainError,
   sanitizeCommentBody,
+  validateCommentTransition,
 } from "../src/application/comments-service";
 import {
   CommentRepository,
   CommentLikeRepository,
   CommentReportRepository,
+  CommentModerationEventRepository,
 } from "../src/domain/repository";
 import { Comment, CommentStatus } from "../src/domain/comment";
 import {
@@ -18,6 +20,7 @@ import {
 function makeComment(overrides: Partial<Comment> = {}): Comment {
   return {
     id: "c1",
+    publicationId: "pub-1",
     postId: "post-1",
     memberId: "member-1",
     parentId: null,
@@ -26,12 +29,42 @@ function makeComment(overrides: Partial<Comment> = {}): Comment {
     likeCount: 0,
     replyCount: 0,
     depth: 0,
+    clientCommentId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
     ...overrides,
   };
 }
+
+describe("validateCommentTransition", () => {
+  it("allows legal transitions", () => {
+    expect(() =>
+      validateCommentTransition("pending_review", "published"),
+    ).not.toThrow();
+    expect(() =>
+      validateCommentTransition("pending_review", "rejected"),
+    ).not.toThrow();
+    expect(() =>
+      validateCommentTransition("published", "hidden"),
+    ).not.toThrow();
+    expect(() =>
+      validateCommentTransition("hidden", "published"),
+    ).not.toThrow();
+    expect(() =>
+      validateCommentTransition("published", "deleted"),
+    ).not.toThrow();
+  });
+
+  it("rejects illegal transitions", () => {
+    expect(() =>
+      validateCommentTransition("deleted", "published"),
+    ).toThrowError(CommentDomainError);
+    expect(() =>
+      validateCommentTransition("rejected", "published"),
+    ).toThrowError(CommentDomainError);
+  });
+});
 
 describe("sanitizeCommentBody", () => {
   it("strips HTML tags", () => {
@@ -56,20 +89,24 @@ describe("CommentsService", () => {
   const commentRepo: CommentRepository = {
     create: vi.fn(async (d) => makeComment({ ...d, body: d.body })),
     findById: vi.fn(async () => null),
-    update: vi.fn(async (id, d) => makeComment({ id, body: d.body })),
-    updateStatus: vi.fn(async (id, status) => makeComment({ id, status })),
+    findByClientId: vi.fn(async () => null),
+    update: vi.fn(async (_pub, id, d) => makeComment({ id, body: d.body })),
+    updateStatus: vi.fn(async (_pub, id, status) => makeComment({ id, status })),
     incrementLikeCount: vi.fn(async () => undefined),
     incrementReplyCount: vi.fn(async () => undefined),
     list: vi.fn(async () => ({ comments: [], total: 0 })),
     listThreaded: vi.fn(async () => ({ comments: [], total: 0 })),
     countForPost: vi.fn(async () => 0),
+    countForPosts: vi.fn(async () => new Map()),
+    hardErase: vi.fn(async () => undefined),
   };
   const likeRepo: CommentLikeRepository = {
     toggle: vi.fn(async () => ({ liked: true })),
     exists: vi.fn(async () => false),
+    getLikedCommentIdsForMember: vi.fn(async () => new Set()),
   };
   const reportRepo: CommentReportRepository = {
-    create: vi.fn(async (_cid, _rid, _reason) => ({
+    create: vi.fn(async (_pub, _cid, _rid, _reason) => ({
       id: "r1",
       status: "pending",
     })),
@@ -77,13 +114,26 @@ describe("CommentsService", () => {
     list: vi.fn(async () => ({ reports: [], total: 0 })),
     resolve: vi.fn(async () => undefined),
   };
+  const moderationEventRepo: CommentModerationEventRepository = {
+    create: vi.fn(async (e) => ({
+      id: "event-1",
+      createdAt: new Date(),
+      ...e,
+    })),
+    listForComment: vi.fn(async () => []),
+  };
   const notificationSink = { notify: vi.fn(async () => undefined) };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   function makeService(overrides: Record<string, unknown> = {}) {
     return new CommentsService({
       commentRepo,
       likeRepo,
       reportRepo,
+      moderationEventRepo,
       notificationSink,
       ...overrides,
     } as any);
@@ -92,6 +142,7 @@ describe("CommentsService", () => {
   it("creates a top-level comment with sanitized body", async () => {
     const service = makeService();
     const comment = await service.createComment({
+      publicationId: "pub-1",
       postId: "post-1",
       memberId: "m1",
       body: "<b>Hello</b> world",
@@ -99,10 +150,33 @@ describe("CommentsService", () => {
     expect(comment.body).toBe("Hello world");
   });
 
+  it("returns existing comment idempotently when clientCommentId matches", async () => {
+    const existing = makeComment({ id: "c-existing", clientCommentId: "client-uuid-1" });
+    const repoWith: CommentRepository = {
+      ...commentRepo,
+      findByClientId: vi.fn(async () => existing),
+    };
+    const service = makeService({ commentRepo: repoWith });
+    const result = await service.createComment({
+      publicationId: "pub-1",
+      postId: "post-1",
+      memberId: "m1",
+      body: "Hello",
+      clientCommentId: "client-uuid-1",
+    });
+    expect(result.id).toBe("c-existing");
+    expect(commentRepo.create).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty comment", async () => {
     const service = makeService();
     await expect(
-      service.createComment({ postId: "post-1", memberId: "m1", body: "   " }),
+      service.createComment({
+        publicationId: "pub-1",
+        postId: "post-1",
+        memberId: "m1",
+        body: "   ",
+      }),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
@@ -110,30 +184,32 @@ describe("CommentsService", () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "parent-1", postId: "post-1", depth: 2 }),
+        makeComment({ id: "parent-1", publicationId: "pub-1", postId: "post-1", depth: 2 }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
     const reply = await service.createComment({
+      publicationId: "pub-1",
       postId: "post-1",
       memberId: "m2",
       parentId: "parent-1",
       body: "Reply",
     });
     expect(reply.depth).toBe(3);
-    expect(repoWith.incrementReplyCount).toHaveBeenCalledWith("parent-1", 1);
+    expect(repoWith.incrementReplyCount).toHaveBeenCalledWith("pub-1", "parent-1", 1);
   });
 
   it("rejects a reply to a comment in a different post", async () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "parent-1", postId: "other-post" }),
+        makeComment({ id: "parent-1", publicationId: "pub-1", postId: "other-post" }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
     await expect(
       service.createComment({
+        publicationId: "pub-1",
         postId: "post-1",
         memberId: "m2",
         parentId: "parent-1",
@@ -148,6 +224,7 @@ describe("CommentsService", () => {
       findById: vi.fn(async () =>
         makeComment({
           id: "parent-1",
+          publicationId: "pub-1",
           postId: "post-1",
           depth: MAX_COMMENT_DEPTH,
         }),
@@ -156,6 +233,7 @@ describe("CommentsService", () => {
     const service = makeService({ commentRepo: repoWith });
     await expect(
       service.createComment({
+        publicationId: "pub-1",
         postId: "post-1",
         memberId: "m2",
         parentId: "parent-1",
@@ -168,12 +246,13 @@ describe("CommentsService", () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "parent-1", postId: "post-1", status: "deleted" }),
+        makeComment({ id: "parent-1", publicationId: "pub-1", postId: "post-1", status: "deleted" }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
     await expect(
       service.createComment({
+        publicationId: "pub-1",
         postId: "post-1",
         memberId: "m2",
         parentId: "parent-1",
@@ -189,6 +268,7 @@ describe("CommentsService", () => {
       findById: vi.fn(async () =>
         makeComment({
           id: "parent-1",
+          publicationId: "pub-1",
           postId: "post-1",
           memberId: "parent-author",
           depth: 0,
@@ -200,6 +280,7 @@ describe("CommentsService", () => {
       notificationSink: sink,
     });
     await service.createComment({
+      publicationId: "pub-1",
       postId: "post-1",
       memberId: "replier",
       parentId: "parent-1",
@@ -220,6 +301,7 @@ describe("CommentsService", () => {
       findById: vi.fn(async () =>
         makeComment({
           id: "parent-1",
+          publicationId: "pub-1",
           postId: "post-1",
           memberId: "same-author",
           depth: 0,
@@ -231,6 +313,7 @@ describe("CommentsService", () => {
       notificationSink: sink,
     });
     await service.createComment({
+      publicationId: "pub-1",
       postId: "post-1",
       memberId: "same-author",
       parentId: "parent-1",
@@ -243,12 +326,12 @@ describe("CommentsService", () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "c1", memberId: "member-A" }),
+        makeComment({ id: "c1", publicationId: "pub-1", memberId: "member-A" }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
     await expect(
-      service.updateComment("c1", "member-B", "hacked"),
+      service.updateComment("pub-1", "c1", "member-B", "hacked"),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -256,26 +339,26 @@ describe("CommentsService", () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "c1", memberId: "member-A" }),
+        makeComment({ id: "c1", publicationId: "pub-1", memberId: "member-A" }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
-    await expect(service.deleteComment("c1", "member-B")).rejects.toMatchObject(
-      { code: "FORBIDDEN" },
-    );
+    await expect(
+      service.deleteComment("pub-1", "c1", "member-B"),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("delete uses tombstone semantics (body cleared, status deleted)", async () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
-      findById: vi.fn(async () => makeComment({ id: "c1", memberId: "m1" })),
-      update: vi.fn(async (id, d) => makeComment({ id, body: d.body })),
-      updateStatus: vi.fn(async (id, status) =>
+      findById: vi.fn(async () => makeComment({ id: "c1", publicationId: "pub-1", memberId: "m1" })),
+      update: vi.fn(async (_pub, id, d) => makeComment({ id, body: d.body })),
+      updateStatus: vi.fn(async (_pub, id, status) =>
         makeComment({ id, status, body: "[deleted]" }),
       ),
     };
     const service = makeService({ commentRepo: repoWith });
-    const result = await service.deleteComment("c1", "m1");
+    const result = await service.deleteComment("pub-1", "c1", "m1");
     expect(result.status).toBe("deleted");
     expect(result.body).toBe("[deleted]");
   });
@@ -283,18 +366,18 @@ describe("CommentsService", () => {
   it("toggle like increments/decrements like count", async () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
-      findById: vi.fn(async () => makeComment({ id: "c1" })),
+      findById: vi.fn(async () => makeComment({ id: "c1", publicationId: "pub-1" })),
     };
     const service = makeService({ commentRepo: repoWith });
-    const result = await service.toggleLike("c1", "m1");
+    const result = await service.toggleLike("pub-1", "c1", "m1");
     expect(result.liked).toBe(true);
-    expect(repoWith.incrementLikeCount).toHaveBeenCalledWith("c1", 1);
+    expect(repoWith.incrementLikeCount).toHaveBeenCalledWith("pub-1", "c1", 1);
   });
 
   it("report spam: one report per member per comment", async () => {
     const repoWith: CommentRepository = {
       ...commentRepo,
-      findById: vi.fn(async () => makeComment({ id: "c1" })),
+      findById: vi.fn(async () => makeComment({ id: "c1", publicationId: "pub-1" })),
     };
     const reportRepoWith: CommentReportRepository = {
       ...reportRepo,
@@ -305,24 +388,42 @@ describe("CommentsService", () => {
       reportRepo: reportRepoWith,
     });
     await expect(
-      service.reportComment("c1", "m1", "spam"),
+      service.reportComment("pub-1", "c1", "m1", "spam"),
     ).rejects.toMatchObject({ code: "ALREADY_REPORTED" });
   });
 
-  it("moderation: hide sets status hidden and notifies author", async () => {
+  it("moderation: hide sets status hidden, records audit event, and notifies author", async () => {
     const sink = { notify: vi.fn(async () => undefined) };
     const repoWith: CommentRepository = {
       ...commentRepo,
       findById: vi.fn(async () =>
-        makeComment({ id: "c1", memberId: "author-1" }),
+        makeComment({ id: "c1", publicationId: "pub-1", memberId: "author-1" }),
       ),
+      updateStatus: vi.fn(async (_pub, id, status) =>
+        makeComment({ id, publicationId: "pub-1", status }),
+      ),
+    };
+    const eventRepoMock: CommentModerationEventRepository = {
+      create: vi.fn(async (e) => ({ id: "ev-1", createdAt: new Date(), ...e })),
+      listForComment: vi.fn(async () => []),
     };
     const service = makeService({
       commentRepo: repoWith,
+      moderationEventRepo: eventRepoMock,
       notificationSink: sink,
     });
-    const result = await service.hideComment("c1");
+    const result = await service.hideComment("pub-1", "c1", "admin-user");
     expect(result.status).toBe("hidden");
+    expect(eventRepoMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicationId: "pub-1",
+        commentId: "c1",
+        actorId: "admin-user",
+        action: "hide",
+        fromStatus: "published",
+        toStatus: "hidden",
+      }),
+    );
     expect(sink.notify).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientId: "author-1",
@@ -331,3 +432,4 @@ describe("CommentsService", () => {
     );
   });
 });
+

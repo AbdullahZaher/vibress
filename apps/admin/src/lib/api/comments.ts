@@ -23,6 +23,19 @@ export interface AdminCommentReport {
   createdAt: string;
 }
 
+export interface AdminModerationEvent {
+  id: string;
+  commentId: string;
+  actorId: string;
+  actorType: "staff" | "system" | "member";
+  action: "approve" | "reject" | "hide" | "restore" | "delete";
+  previousStatus: string;
+  newStatus: string;
+  reason: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export async function listCommentsApi(
   params: {
     status?: string;
@@ -39,22 +52,60 @@ export async function listCommentsApi(
   return apiRequest(`/comments?${query.toString()}`);
 }
 
+export async function approveCommentApi(
+  id: string,
+  reason?: string,
+): Promise<{ comment: { id: string; status: string } }> {
+  return apiRequest(`/comments/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function rejectCommentApi(
+  id: string,
+  reason?: string,
+): Promise<{ comment: { id: string; status: string } }> {
+  return apiRequest(`/comments/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export async function hideCommentApi(
   id: string,
+  reason?: string,
 ): Promise<{ comment: { id: string; status: string } }> {
-  return apiRequest(`/comments/${id}/hide`, { method: "POST" });
+  return apiRequest(`/comments/${id}/hide`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }
 
 export async function restoreCommentApi(
   id: string,
+  reason?: string,
 ): Promise<{ comment: { id: string; status: string } }> {
-  return apiRequest(`/comments/${id}/restore`, { method: "POST" });
+  return apiRequest(`/comments/${id}/restore`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }
 
 export async function adminDeleteCommentApi(
   id: string,
+  reason?: string,
 ): Promise<{ comment: { id: string; status: string } }> {
-  return apiRequest(`/comments/${id}/delete`, { method: "POST" });
+  return apiRequest(`/comments/${id}/delete`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function getCommentModerationHistoryApi(
+  id: string,
+): Promise<{ events: AdminModerationEvent[] }> {
+  return apiRequest(`/comments/${id}/history`);
 }
 
 export async function listCommentReportsApi(
@@ -69,10 +120,11 @@ export async function listCommentReportsApi(
 
 export async function resolveCommentReportApi(
   id: string,
-  action: string,
+  action: "resolve" | "dismiss" | string,
 ): Promise<{ success: boolean }> {
   return apiRequest(`/comment-reports/${id}/resolve`, {
     method: "POST",
     body: JSON.stringify({ action }),
   });
 }
+

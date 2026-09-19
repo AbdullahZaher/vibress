@@ -9,7 +9,7 @@ import {
   plans,
   newsletters,
 } from "./schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
 
@@ -464,6 +464,22 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
       updatedAt: now,
     });
   }
+
+  // 6. Ensure audit log immutability trigger exists
+  await db.execute(sql`
+    CREATE OR REPLACE FUNCTION prevent_comment_moderation_events_mutation()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      RAISE EXCEPTION 'comment_moderation_events is an immutable audit log. UPDATE and DELETE operations are prohibited at database engine level.';
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_immutable_comment_moderation_events ON "comment_moderation_events";
+    CREATE TRIGGER trg_immutable_comment_moderation_events
+    BEFORE UPDATE OR DELETE ON "comment_moderation_events"
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_comment_moderation_events_mutation();
+  `);
 
   console.log("Database seeding complete.");
 };
