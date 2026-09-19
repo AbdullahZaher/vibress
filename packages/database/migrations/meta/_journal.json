@@ -204,6 +204,13 @@
       "when": 1786609000000,
       "tag": "0028_post_feature_image",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786610000000,
+      "tag": "0029_content_modeler_publication_isolation",
+      "breakpoints": true
     }
   ]
 }

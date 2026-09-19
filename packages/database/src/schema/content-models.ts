@@ -6,8 +6,11 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export type ContentFieldType =
   | "text"
@@ -56,8 +59,11 @@ export const contentModels = pgTable(
   "content_models",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     description: text("description"),
     fields: jsonb("fields").notNull().default([]),
     settings: jsonb("settings").default({}),
@@ -69,7 +75,17 @@ export const contentModels = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    slugIdx: uniqueIndex("content_models_slug_idx").on(table.slug),
+    publicationIdIdx: index("content_models_publication_id_idx").on(
+      table.publicationId,
+    ),
+    publicationSlugIdx: uniqueIndex("content_models_publication_slug_idx").on(
+      table.publicationId,
+      table.slug,
+    ),
+    idPublicationIdx: uniqueIndex("content_models_id_publication_unique").on(
+      table.id,
+      table.publicationId,
+    ),
   }),
 );
 
@@ -80,9 +96,10 @@ export const contentEntries = pgTable(
   "content_entries",
   {
     id: text("id").primaryKey(),
-    modelId: text("model_id")
+    publicationId: text("publication_id")
       .notNull()
-      .references(() => contentModels.id, { onDelete: "cascade" }),
+      .references(() => publications.id, { onDelete: "cascade" }),
+    modelId: text("model_id").notNull(),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     data: jsonb("data").notNull().default({}),
@@ -104,17 +121,25 @@ export const contentEntries = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => ({
-    modelSlugIdx: uniqueIndex("content_entries_model_slug_idx").on(
-      table.modelId,
-      table.slug,
+    publicationIdIdx: index("content_entries_publication_id_idx").on(
+      table.publicationId,
     ),
     modelIdx: index("content_entries_model_idx").on(table.modelId),
+    modelSlugActiveIdx: uniqueIndex("content_entries_model_slug_active_idx")
+      .on(table.modelId, table.slug)
+      .where(sql`"deleted_at" IS NULL`),
     statusIdx: index("content_entries_status_idx").on(table.status),
     publishedAtIdx: index("content_entries_published_at_idx").on(
       table.publishedAt,
     ),
+    contentEntriesModelPublicationFk: foreignKey({
+      columns: [table.modelId, table.publicationId],
+      foreignColumns: [contentModels.id, contentModels.publicationId],
+      name: "content_entries_model_publication_fk",
+    }).onDelete("cascade"),
   }),
 );
 
 export type ContentEntryRow = typeof contentEntries.$inferSelect;
 export type NewContentEntryRow = typeof contentEntries.$inferInsert;
+
