@@ -1,17 +1,27 @@
 import { test, expect } from "@playwright/test";
-import { getDb, closeDbPool, posts, revisions } from "@vibress/database";
+import { getDb, closeDbPool, posts, revisions, seedFixturePost } from "@vibress/database";
 import { eq } from "drizzle-orm";
 
 const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 
 async function resetTargetPost() {
   const db = getDb();
-  const [rev1] = await db
+  let [rev1] = await db
     .select()
     .from(revisions)
     .where(eq(revisions.resourceId, TARGET_POST_ID))
     .orderBy(revisions.revisionNumber)
     .limit(1);
+
+  if (!rev1) {
+    await seedFixturePost();
+    [rev1] = await db
+      .select()
+      .from(revisions)
+      .where(eq(revisions.resourceId, TARGET_POST_ID))
+      .orderBy(revisions.revisionNumber)
+      .limit(1);
+  }
 
   if (!rev1) {
     throw new Error("Revision 1 not found for target post");

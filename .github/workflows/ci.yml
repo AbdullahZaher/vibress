@@ -158,9 +158,10 @@ jobs:
         run: |
           set -e
 
-          # --- Dev infrastructure + migrations ---
+          # --- Dev infrastructure + migrations + seed ---
           docker compose -f compose.dev.yml up -d --wait
           pnpm --filter @vibress/database run db:migrate
+          pnpm --filter @vibress/database run db:seed
 
           # --- Production-mode web build (fast SSR, no dev cold-compile) ---
           pnpm --filter @vibress/web build

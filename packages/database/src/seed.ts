@@ -481,6 +481,11 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     EXECUTE FUNCTION prevent_comment_moderation_events_mutation();
   `);
 
+  if (!skipDevUsers) {
+    const { seedFixturePost } = await import("./seed-fixture-post");
+    await seedFixturePost();
+  }
+
   console.log("Database seeding complete.");
 };
 

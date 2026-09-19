@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getDb, posts, revisions, mediaAssets } from "@vibress/database";
+import { getDb, posts, revisions, mediaAssets, seedFixturePost } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
 import fs from "node:fs";
@@ -76,12 +76,22 @@ async function ensureTestMediaAssets() {
 
 async function resetTargetPostWithMedia() {
   const db = getDb();
-  const [rev1] = await db
+  let [rev1] = await db
     .select()
     .from(revisions)
     .where(eq(revisions.resourceId, TARGET_POST_ID))
     .orderBy(revisions.revisionNumber)
     .limit(1);
+
+  if (!rev1) {
+    await seedFixturePost();
+    [rev1] = await db
+      .select()
+      .from(revisions)
+      .where(eq(revisions.resourceId, TARGET_POST_ID))
+      .orderBy(revisions.revisionNumber)
+      .limit(1);
+  }
 
   if (!rev1) {
     throw new Error("Revision 1 not found for target post");

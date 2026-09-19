@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { seedFixturePost } from "@vibress/database";
 
 test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
   test("Reproduce and trace real image insertion flow on 2000+ word article", async ({ page }) => {
+    await seedFixturePost();
     const logs: string[] = [];
     page.on("console", (msg) => {
       const text = msg.text();

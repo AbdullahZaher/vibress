@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { getDb, getDbPool, posts, revisions, mediaAssets } from "@vibress/database";
+import { getDb, getDbPool, posts, revisions, mediaAssets, seedFixturePost } from "@vibress/database";
 import { eq, and } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
@@ -137,6 +137,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     page,
   }) => {
     test.setTimeout(60000);
+    await seedFixturePost();
     await loginUser(page);
     await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
     await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 15000 });

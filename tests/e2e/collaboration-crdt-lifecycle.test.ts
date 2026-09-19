@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import WebSocket from "ws";
 import * as Y from "yjs";
 import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
-import { getDb, posts } from "@vibress/database";
+import { getDb, posts, seedFixturePost } from "@vibress/database";
 import { eq } from "drizzle-orm";
 
 const PUBLICATION_ID = "pub_default";
@@ -12,6 +12,7 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
   test("Tests all 5 CRDT room lifecycle scenarios: stale Redis buffer, 2nd peer catchup, peer disconnect cleanup, new peer after cleanup, REST save while WS active", async ({
     request,
   }) => {
+    await seedFixturePost();
     const redis = getRedisClient();
     const redisUpdatesKey = buildPublicationCacheKey(PUBLICATION_ID, "crdt:updates", TARGET_POST_ID);
 
