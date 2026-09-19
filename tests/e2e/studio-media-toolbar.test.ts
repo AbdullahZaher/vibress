@@ -828,4 +828,363 @@ test.describe("Vibress Studio — Unified Media Floating Toolbar Suite", () => {
     // Verify only the targeted node (index 5) has the updated alt
     expect(afterDoc.root.children[5].cardData.alt).toBe("Structural Test Alt");
   });
+
+  // ============================================================
+  // TEST H: TOOLBAR HIDDEN BY DEFAULT
+  // ============================================================
+  test("TEST H: Toolbar hidden by default when idle (computed opacity 0, pointer-events none)", async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const editorArea = page.locator(
+      'div.vibress-studio-editor div[contenteditable="true"]',
+    );
+    await expect(editorArea).toBeVisible({ timeout: 10000 });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Move mouse completely away to ensure no hover
+    await page.mouse.move(0, 0);
+
+    // Verify toolbar is hidden by default before hover/selection
+    const styles = await toolbar.evaluate((el) => {
+      const computed = window.getComputedStyle(el);
+      return {
+        opacity: parseFloat(computed.opacity),
+        pointerEvents: computed.pointerEvents,
+      };
+    });
+
+    expect(styles.opacity).toBe(0);
+    expect(styles.pointerEvents).toBe("none");
+  });
+
+  // ============================================================
+  // TEST I: HOVER REVEALS TOOLBAR
+  // ============================================================
+  test("TEST I: Hover reveals toolbar with smooth transition and interactive buttons", async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Start away from media
+    await page.mouse.move(0, 0);
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => parseFloat(window.getComputedStyle(el).opacity));
+    }, { timeout: 5000 }).toBe(0);
+
+    // Hover media card
+    await imageA.hover();
+
+    // Verify toolbar becomes visible and interactive
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 1,
+      pointerEvents: "auto",
+    });
+
+    // Verify Change button and metadata button are visible and interactive
+    const changeBtn = toolbar.locator(
+      'button[aria-label="Change image from library"]',
+    );
+    const metadataBtn = toolbar.locator(
+      'button[aria-label="Edit alt text and caption"]',
+    );
+    await expect(changeBtn).toBeVisible();
+    await expect(metadataBtn).toBeVisible();
+
+    // Move pointer from media onto toolbar itself
+    await toolbar.hover();
+
+    // Verify toolbar remains visible without flicker
+    const toolbarOpacity = await toolbar.evaluate((el) =>
+      parseFloat(window.getComputedStyle(el).opacity),
+    );
+    expect(toolbarOpacity).toBe(1);
+  });
+
+  // ============================================================
+  // TEST J: LEAVING MEDIA HIDES TOOLBAR
+  // ============================================================
+  test("TEST J: Leaving media hides toolbar", async ({ page }) => {
+    test.setTimeout(60000);
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Hover media to reveal
+    await imageA.hover();
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => parseFloat(window.getComputedStyle(el).opacity));
+    }, { timeout: 5000 }).toBe(1);
+
+    // Move pointer outside media interaction region
+    await page.mouse.move(0, 0);
+
+    // Verify toolbar hides
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 0,
+      pointerEvents: "none",
+    });
+  });
+
+  // ============================================================
+  // TEST K: POPOVER KEEPS TOOLBAR VISIBLE
+  // ============================================================
+  test("TEST K: Metadata popover keeps toolbar visible even if pointer moves into popover", async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Hover media
+    await imageA.hover();
+    const metadataBtn = toolbar.locator(
+      'button[aria-label="Edit alt text and caption"]',
+    );
+    await expect(metadataBtn).toBeVisible({ timeout: 5000 });
+    await metadataBtn.click();
+
+    // Popover is open
+    const popover = page.locator('[data-testid="image-metadata-popover"]');
+    await expect(popover).toBeVisible({ timeout: 5000 });
+
+    // Toolbar must remain visible while popover is open
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => parseFloat(window.getComputedStyle(el).opacity));
+    }, { timeout: 5000 }).toBe(1);
+
+    // Move pointer into popover
+    await popover.hover();
+    expect(
+      await toolbar.evaluate((el) => parseFloat(window.getComputedStyle(el).opacity)),
+    ).toBe(1);
+
+    // Close popover
+    const doneBtn = popover.locator('button:has-text("Done")');
+    await doneBtn.click();
+    await expect(popover).toBeHidden({ timeout: 5000 });
+
+    // Move pointer outside media and clear card selection by clicking outside text
+    await page.mouse.move(0, 0);
+    await page
+      .locator('div.vibress-studio-editor div[contenteditable="true"]')
+      .click({ position: { x: 10, y: 10 } });
+    await page.mouse.move(0, 0);
+
+    // Toolbar hides
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 0,
+      pointerEvents: "none",
+    });
+  });
+
+  // ============================================================
+  // TEST L: KEYBOARD FOCUS
+  // ============================================================
+  test("TEST L: Keyboard focus keeps toolbar visible without pointer hover", async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Move pointer outside media
+    await page.mouse.move(0, 0);
+
+    // Focus a button inside the toolbar using keyboard focus
+    const changeBtn = toolbar.locator(
+      'button[aria-label="Change image from library"]',
+    );
+    await changeBtn.focus();
+
+    // Verify toolbar is visible and interactive while focused
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 1,
+      pointerEvents: "auto",
+    });
+
+    // Move focus away and clear card selection
+    await page
+      .locator('div.vibress-studio-editor div[contenteditable="true"]')
+      .click({ position: { x: 10, y: 10 } });
+    await page.mouse.move(0, 0);
+
+    // Verify toolbar hides when focus leaves and no hover exists
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 0,
+      pointerEvents: "none",
+    });
+  });
+
+  // ============================================================
+  // TEST M: TOUCH / SELECTION
+  // ============================================================
+  test("TEST M: Touch / selection reveals toolbar on mobile viewports without hover", async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    // Emulate mobile touch viewport
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await ensureTestMediaAssets();
+    await resetTargetPostWithMedia();
+
+    await loginUser(page);
+    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.waitForSelector('textarea[aria-label="Post Title"]', {
+      timeout: 15000,
+    });
+
+    const imageA = page.locator('[data-studio-card="image"]').first();
+    await expect(imageA).toBeVisible({ timeout: 15000 });
+    const toolbar = imageA.locator('[data-studio-toolbar="true"]');
+
+    // Tap / select media card
+    await imageA.click();
+
+    // Toolbar becomes visible and interactive
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 1,
+      pointerEvents: "auto",
+    });
+
+    // Action buttons are clickable
+    const metadataBtn = toolbar.locator(
+      'button[aria-label="Edit alt text and caption"]',
+    );
+    await expect(metadataBtn).toBeVisible();
+    await metadataBtn.click();
+
+    const popover = page.locator('[data-testid="image-metadata-popover"]');
+    await expect(popover).toBeVisible({ timeout: 5000 });
+
+    // Close popover
+    await popover.locator('button:has-text("Done")').click();
+    await expect(popover).toBeHidden({ timeout: 5000 });
+
+    // Click outside to clear selection
+    await page.locator('textarea[aria-label="Post Title"]').click();
+
+    // Toolbar hides
+    await expect.poll(async () => {
+      return toolbar.evaluate((el) => {
+        const computed = window.getComputedStyle(el);
+        return {
+          opacity: parseFloat(computed.opacity),
+          pointerEvents: computed.pointerEvents,
+        };
+      });
+    }, { timeout: 5000 }).toEqual({
+      opacity: 0,
+      pointerEvents: "none",
+    });
+  });
 });

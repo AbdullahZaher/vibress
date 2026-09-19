@@ -172,6 +172,7 @@ export function StudioCardComponent({
     return (
       <div
         data-studio-card={cardType}
+        className="group relative"
         onMouseDown={handleMouseDown}
         onFocusCapture={handleFocusCapture}
       >

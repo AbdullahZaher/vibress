@@ -444,6 +444,24 @@ html[dir="rtl"] .studio-h2 {
   color: #f8fafc !important;
 }
 
+/* ==========================================================================
+   Media Floating Toolbar Visibility & Hover UX
+   ========================================================================== */
+
+[data-studio-toolbar="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.group:hover [data-studio-toolbar="true"],
+[data-studio-toolbar="true"]:hover,
+[data-studio-toolbar="true"]:focus-within,
+[data-studio-toolbar="true"][data-visible="true"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
 /* Slash Menu Elements */
 .studio-slash-header {
   padding: 8px 12px 4px 12px;
