@@ -21,6 +21,7 @@ import { DrizzlePageRepository, PagesService } from "@vibress/pages";
 import {
   LocalStorageProvider,
   defaultStorageRegistry,
+  resolveCanonicalStorageRoot,
 } from "@vibress/storage-core";
 import { DrizzleMediaRepository, MediaService } from "@vibress/media";
 import { getConfig } from "@vibress/config";
@@ -88,6 +89,7 @@ import {
   DrizzleCommentRepository,
   DrizzleCommentLikeRepository,
   DrizzleCommentReportRepository,
+  DrizzleCommentModerationEventRepository,
   CommentsService,
 } from "@vibress/comments";
 import {
@@ -168,7 +170,9 @@ const postRepo = new DrizzlePostRepository();
 const pageRepo = new DrizzlePageRepository();
 const storageRepo = new DrizzleStorageRepository();
 
-const localStorageProvider = new LocalStorageProvider();
+const localStorageProvider = new LocalStorageProvider({
+  storageRoot: config.system.storageLocalRoot || resolveCanonicalStorageRoot(),
+});
 defaultStorageRegistry.register(localStorageProvider);
 defaultStorageRegistry.setActiveProvider("local");
 
@@ -285,6 +289,7 @@ export const commentsService = new CommentsService({
   commentRepo: new DrizzleCommentRepository(),
   likeRepo: new DrizzleCommentLikeRepository(),
   reportRepo: new DrizzleCommentReportRepository(),
+  moderationEventRepo: new DrizzleCommentModerationEventRepository(),
   notificationSink: notificationsService,
 });
 export const recommendationsService = new RecommendationsService(

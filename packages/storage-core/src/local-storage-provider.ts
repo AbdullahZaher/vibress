@@ -19,6 +19,74 @@ export interface LocalStorageOptions {
   baseUrl?: string;
 }
 
+/**
+ * Resolves the canonical persistent local media storage root.
+ *
+ * Precedence:
+ * 1. Explicit `customRoot` passed via options.
+ * 2. `STORAGE_LOCAL_ROOT` environment variable.
+ * 3. Deterministic monorepo root discovery: climbs upward from `__dirname`
+ *    (with fallback to `process.cwd()`) locating `pnpm-workspace.yaml` or `nx.json`,
+ *    then anchors persistent media at `<repoRoot>/content/media`.
+ * 4. Fallback to `<process.cwd()>/content/media` if no repository boundary is found.
+ */
+export function resolveCanonicalStorageRoot(customRoot?: string): string {
+  if (customRoot && typeof customRoot === "string" && customRoot.trim().length > 0) {
+    return path.resolve(customRoot.trim());
+  }
+
+  const envRoot = process.env.STORAGE_LOCAL_ROOT;
+  if (envRoot && typeof envRoot === "string" && envRoot.trim().length > 0) {
+    return path.resolve(envRoot.trim());
+  }
+
+  // 1. Traverse upward from __dirname (handles tsx/ts-node and compiled packages)
+  try {
+    let curr = path.resolve(__dirname);
+    while (curr !== path.dirname(curr)) {
+      if (
+        fs.existsSync(path.join(curr, "pnpm-workspace.yaml")) ||
+        fs.existsSync(path.join(curr, "nx.json"))
+      ) {
+        return path.resolve(curr, "content", "media");
+      }
+      curr = path.dirname(curr);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Traverse upward from process.cwd() (handles when cwd is inside apps/api or workspace root)
+  try {
+    let curr = path.resolve(process.cwd());
+    while (curr !== path.dirname(curr)) {
+      if (
+        fs.existsSync(path.join(curr, "pnpm-workspace.yaml")) ||
+        fs.existsSync(path.join(curr, "nx.json"))
+      ) {
+        return path.resolve(curr, "content", "media");
+      }
+      curr = path.dirname(curr);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback
+  return path.resolve("content", "media");
+}
+
+/**
+ * Resolves the temporary upload directory relative to the canonical storage parent.
+ */
+export function resolveCanonicalTempDir(customTemp?: string): string {
+  if (customTemp && typeof customTemp === "string" && customTemp.trim().length > 0) {
+    return path.resolve(customTemp.trim());
+  }
+  const storageRoot = resolveCanonicalStorageRoot();
+  return path.resolve(path.dirname(storageRoot), "temp");
+}
+
 export class LocalStorageProvider implements StorageProvider {
   readonly name = "local";
   private readonly storageRoot: string;
@@ -26,13 +94,17 @@ export class LocalStorageProvider implements StorageProvider {
   private readonly baseUrl: string;
 
   constructor(options: LocalStorageOptions = {}) {
-    this.storageRoot = path.resolve(
-      options.storageRoot || path.join(process.cwd(), "content", "media"),
-    );
-    this.tempDir = path.resolve(
-      options.tempDir || path.join(process.cwd(), "content", "temp"),
-    );
+    this.storageRoot = resolveCanonicalStorageRoot(options.storageRoot);
+    this.tempDir = resolveCanonicalTempDir(options.tempDir);
     this.baseUrl = (options.baseUrl || "/content/media").replace(/\/+$/, "");
+  }
+
+  getStorageRoot(): string {
+    return this.storageRoot;
+  }
+
+  getTempDir(): string {
+    return this.tempDir;
   }
 
   getCapabilities(): StorageCapabilities {

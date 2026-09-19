@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 import { getDb, posts, revisions, mediaAssets } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
+import fs from "node:fs";
+import path from "node:path";
+import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
 
 const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 const PUBLICATION_ID = "pub_default";
@@ -9,7 +12,21 @@ const PUBLICATION_ID = "pub_default";
 let mediaAssetAId: string;
 let mediaAssetBId: string;
 
+const SAMPLE_JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=",
+  "base64",
+);
+
 async function ensureTestMediaAssets() {
+  const storageRoot = resolveCanonicalStorageRoot();
+  const fileA = path.join(storageRoot, "media", "test-feature-a.jpg");
+  const fileB = path.join(storageRoot, "media", "test-feature-b.jpg");
+  const fileU = path.join(storageRoot, "media", "test-unsplash.jpg");
+  await fs.promises.mkdir(path.dirname(fileA), { recursive: true });
+  await fs.promises.writeFile(fileA, SAMPLE_JPEG);
+  await fs.promises.writeFile(fileB, SAMPLE_JPEG);
+  await fs.promises.writeFile(fileU, SAMPLE_JPEG);
+
   const db = getDb();
   mediaAssetAId = "fa000000-0000-4000-a000-000000000001";
   mediaAssetBId = "fa000000-0000-4000-a000-000000000002";
@@ -25,7 +42,7 @@ async function ensureTestMediaAssets() {
         displayName: "Feature Image A",
         mimeType: "image/jpeg",
         extension: "jpg",
-        sizeBytes: 12345,
+        sizeBytes: SAMPLE_JPEG.length,
         checksum: "fakechecksum1",
         assetType: "image",
       },
@@ -37,7 +54,7 @@ async function ensureTestMediaAssets() {
         displayName: "Feature Image B",
         mimeType: "image/jpeg",
         extension: "jpg",
-        sizeBytes: 23456,
+        sizeBytes: SAMPLE_JPEG.length,
         checksum: "fakechecksum2",
         assetType: "image",
       },
@@ -49,7 +66,7 @@ async function ensureTestMediaAssets() {
         displayName: "Dense pine forest with misty canopy",
         mimeType: "image/jpeg",
         extension: "jpg",
-        sizeBytes: 34567,
+        sizeBytes: SAMPLE_JPEG.length,
         checksum: "fakechecksum3",
         assetType: "image",
       },

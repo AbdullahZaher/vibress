@@ -98,8 +98,10 @@ services:
       VIBRESS_ENCRYPTION_KEY: ${VIBRESS_ENCRYPTION_KEY:?set VIBRESS_ENCRYPTION_KEY}
       VIBRESS_SETUP_TOKEN: ${VIBRESS_SETUP_TOKEN:-}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      STORAGE_LOCAL_ROOT: ${STORAGE_LOCAL_ROOT:-/repo/content/media}
       EVENT_DELIVERY_MODE: ${EVENT_DELIVERY_MODE:-outbox}
     volumes:
+      - vibress_content:/repo/content
       - vibress_content:/repo/apps/api/content
     networks: [frontend, backend]
     depends_on:
@@ -123,6 +125,7 @@ services:
     restart: unless-stopped
     environment: *app-environment
     volumes:
+      - vibress_content:/repo/content
       - vibress_content:/repo/apps/api/content
     networks: [frontend, backend]
     depends_on:
@@ -162,8 +165,9 @@ services:
       PORT: "7778"
       HOSTNAME: 0.0.0.0
       API_URL: "http://api:7780"
-      THEME_STORAGE_ROOT: "/repo/apps/api/content/themes"
+      THEME_STORAGE_ROOT: "/repo/content/themes"
     volumes:
+      - vibress_content:/repo/content
       - vibress_content:/repo/apps/api/content
     networks: [frontend]
     healthcheck:

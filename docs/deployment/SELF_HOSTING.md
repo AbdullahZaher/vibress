@@ -55,6 +55,10 @@ SMTP_SECURE=true
 SMTP_USER=your-smtp-user
 SMTP_PASS=your-smtp-password
 SMTP_FROM=Vibress <no-reply@yourdomain.com>
+
+# Storage Configuration (Local canonical storage root)
+STORAGE_PROVIDER=local
+STORAGE_LOCAL_ROOT=/opt/vibress/content/media
 ```
 
 ### Step 3: Run Canonical Production Deployment
@@ -139,6 +143,19 @@ crontab -e
 ### Restoring Backups
 ```bash
 ./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz
+```
+
+### Media Storage Backups & Restore
+Media assets uploaded to Vibress reside in the canonical storage directory (`content/media`). Back up the media directory alongside database snapshots:
+```bash
+# Backup media storage to a compressed archive
+tar -czf /opt/vibress/backups/vibress_media_$(date +%Y%m%d_%H%M%S).tar.gz -C /opt/vibress content/media
+```
+
+To restore media from an archive:
+```bash
+# Restore media into /opt/vibress/content/media
+tar -xzf /opt/vibress/backups/vibress_media_YYYYMMDD_HHMMSS.tar.gz -C /opt/vibress
 ```
 
 ### Upgrading to New Releases

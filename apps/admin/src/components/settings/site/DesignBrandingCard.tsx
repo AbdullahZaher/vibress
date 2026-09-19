@@ -63,7 +63,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
     setUploadError(null);
     try {
       const res = await uploadMediaApi(file);
-      onChange?.("iconUrl", res.media.url);
+      if (res.media.url) onChange?.("iconUrl", res.media.url);
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : "Icon upload failed");
     } finally {
@@ -78,7 +78,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
     setUploadError(null);
     try {
       const res = await uploadMediaApi(file);
-      onChange?.("logoUrl", res.media.url);
+      if (res.media.url) onChange?.("logoUrl", res.media.url);
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : "Logo upload failed");
     } finally {

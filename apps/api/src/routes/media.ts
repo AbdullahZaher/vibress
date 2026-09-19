@@ -3,7 +3,6 @@ import {
   ListMediaFilterSchema,
   UpdateMediaInputSchema,
 } from "@vibress/api-contracts";
-import { defaultStorageRegistry } from "@vibress/storage-core";
 import { mediaService } from "../services";
 import {
   requireStaffSession,
@@ -88,8 +87,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           req.user!.id,
         );
 
-        const storageProvider = defaultStorageRegistry.getActiveProvider();
-        const url = await storageProvider.getUrl(asset.storageKey);
+        const url = await mediaService.getMediaUrl(asset);
 
         return reply.status(201).send({
           media: {
@@ -172,11 +170,9 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         ...parseResult.data,
         publicationId: req.publicationContext?.publicationId,
       });
-      const storageProvider = defaultStorageRegistry.getActiveProvider();
-
       const itemsWithUrls = await Promise.all(
         result.items.map(async (item) => {
-          const url = await storageProvider.getUrl(item.storageKey);
+          const url = await mediaService.getMediaUrl(item);
           return { ...item, url };
         }),
       );
@@ -198,8 +194,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           id,
           req.publicationContext?.publicationId,
         );
-        const storageProvider = defaultStorageRegistry.getActiveProvider();
-        const url = await storageProvider.getUrl(asset.storageKey);
+        const url = await mediaService.getMediaUrl(asset);
 
         return reply.status(200).send({
           media: { ...asset, url },
@@ -251,8 +246,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           req.user!.id,
           req.publicationContext?.publicationId,
         );
-        const storageProvider = defaultStorageRegistry.getActiveProvider();
-        const url = await storageProvider.getUrl(updated.storageKey);
+        const url = await mediaService.getMediaUrl(updated);
 
         return reply.status(200).send({
           media: { ...updated, url },

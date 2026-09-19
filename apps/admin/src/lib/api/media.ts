@@ -16,7 +16,7 @@ export interface ApiMediaAsset {
   durationMs?: number | null;
   metadata?: Record<string, unknown> | null;
   uploadedBy?: string | null;
-  url: string;
+  url: string | null;
   createdAt: string;
   updatedAt: string;
 }

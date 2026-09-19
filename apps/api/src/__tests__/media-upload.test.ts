@@ -3,10 +3,11 @@ import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import path from "path";
 import fs from "fs";
+import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
 
 describe("Media API Upload & Security Integration", () => {
   let app: FastifyInstance;
-  const mediaDir = path.resolve(process.cwd(), "content", "media");
+  const mediaDir = resolveCanonicalStorageRoot();
   const testFileName = "test-stream-sample.mp4";
   const testFilePath = path.join(mediaDir, testFileName);
   const testFileContent = Buffer.from("0123456789abcdefghijklmnopqrstuvwxyz"); // 36 bytes

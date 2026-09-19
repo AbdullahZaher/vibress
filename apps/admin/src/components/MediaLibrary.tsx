@@ -213,7 +213,7 @@ export const MediaLibrary: React.FC = () => {
               <div className="aspect-square bg-muted/40 flex items-center justify-center relative overflow-hidden">
                 {asset.assetType === "image" ? (
                   <img
-                    src={asset.url}
+                    src={asset.url ?? undefined}
                     alt={asset.displayName}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
@@ -249,19 +249,19 @@ export const MediaLibrary: React.FC = () => {
             <div className="aspect-video rounded-lg bg-neutral-950 border border-border overflow-hidden flex items-center justify-center">
               {selectedAsset.assetType === "image" ? (
                 <img
-                  src={selectedAsset.url}
+                  src={selectedAsset.url ?? undefined}
                   alt={selectedAsset.displayName}
                   className="max-h-full object-contain"
                 />
               ) : selectedAsset.assetType === "video" ? (
                 <video
-                  src={selectedAsset.url}
+                  src={selectedAsset.url ?? undefined}
                   controls
                   className="max-h-full"
                 />
               ) : selectedAsset.assetType === "audio" ? (
                 <audio
-                  src={selectedAsset.url}
+                  src={selectedAsset.url ?? undefined}
                   controls
                   className="w-full px-4"
                 />
@@ -295,7 +295,7 @@ export const MediaLibrary: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Input
                     readOnly
-                    value={selectedAsset.url}
+                    value={selectedAsset.url ?? ""}
                     className="h-8 text-xs font-mono bg-muted/40 border-border"
                   />
                   <Button
@@ -303,6 +303,7 @@ export const MediaLibrary: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() =>
+                      selectedAsset.url &&
                       handleCopyUrl(selectedAsset.url, selectedAsset.id)
                     }
                     className="h-8 text-xs shrink-0 border-border bg-card hover:bg-accent"

@@ -80,7 +80,7 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
       {/* Feature Image Responsive Preview */}
       <div className="relative w-full max-h-[440px] overflow-hidden bg-muted/20 flex items-center justify-center">
         <img
-          src={featureImage.url}
+          src={featureImage.url ?? undefined}
           alt={altText || featureImage.displayName || "Feature image"}
           className="w-full h-auto max-h-[440px] object-cover transition-transform duration-300"
         />

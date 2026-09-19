@@ -1,6 +1,8 @@
 import { FastifyInstance } from "fastify";
 import path from "node:path";
 import fs from "node:fs";
+import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
+import { getConfig } from "@vibress/config";
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -16,6 +18,8 @@ function getMimeType(filePath: string): string {
       return "image/webp";
     case ".svg":
       return "image/svg+xml";
+    case ".ico":
+      return "image/x-icon";
     case ".mp4":
       return "video/mp4";
     case ".webm":
@@ -41,6 +45,7 @@ const INLINE_TYPES = new Set([
   "image/gif",
   "image/webp",
   "image/svg+xml",
+  "image/x-icon",
   "video/mp4",
   "video/webm",
   "video/ogg",
@@ -52,10 +57,10 @@ const INLINE_TYPES = new Set([
 
 function getContentDisposition(mimeType: string, filePath: string): string {
   const filename = path.basename(filePath);
-  if (INLINE_TYPES.has(mimeType)) {
-    return `inline; filename="${filename}"`;
-  }
-  return `attachment; filename="${filename}"`;
+  const disposition = INLINE_TYPES.has(mimeType) ? "inline" : "attachment";
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_");
+  const encodedFilename = encodeURIComponent(filename);
+  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
 }
 
 function parseRangeHeader(
@@ -102,7 +107,8 @@ function parseRangeHeader(
 }
 
 export async function mediaStreamRoutes(fastify: FastifyInstance) {
-  const mediaPath = path.resolve(process.cwd(), "content", "media");
+  const canonicalMediaRoot =
+    getConfig().system.storageLocalRoot || resolveCanonicalStorageRoot();
 
   // Stream-based media serving route with Range request (206) support
   fastify.get("/content/media/*", async (request, reply) => {
@@ -116,12 +122,50 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
     ) {
       return reply.status(404).send();
     }
-    const resolved = path.resolve(mediaPath, rawKey);
-    if (!resolved.startsWith(mediaPath + path.sep) && resolved !== mediaPath) {
+    let resolved = path.resolve(canonicalMediaRoot, rawKey);
+    if (
+      !resolved.startsWith(canonicalMediaRoot + path.sep) &&
+      resolved !== canonicalMediaRoot
+    ) {
       return reply.status(404).send();
     }
+
+    let stat: fs.Stats;
     try {
-      const stat = await fs.promises.stat(resolved);
+      stat = await fs.promises.stat(resolved);
+    } catch {
+      // Transitional fallback check for legacy API storage directory
+      const legacyMediaRoot = path.resolve(
+        path.dirname(canonicalMediaRoot),
+        "apps",
+        "api",
+        "content",
+        "media",
+      );
+      const legacyResolved = path.resolve(legacyMediaRoot, rawKey);
+      if (
+        (legacyResolved.startsWith(legacyMediaRoot + path.sep) ||
+          legacyResolved === legacyMediaRoot) &&
+        fs.existsSync(legacyResolved)
+      ) {
+        resolved = legacyResolved;
+        stat = await fs.promises.stat(resolved);
+        request.log.warn(
+          {
+            rawKey,
+            servedFrom: "transitional_legacy_root",
+            canonicalPath: path.resolve(canonicalMediaRoot, rawKey),
+            removalCondition:
+              "Vibress v1.2.0 or upon completed sync via scripts/sync-media-storage.ts",
+          },
+          "Serving media asset from transitional legacy root. Run scripts/sync-media-storage.ts to migrate.",
+        );
+      } else {
+        return reply.status(404).send();
+      }
+    }
+
+    try {
       if (!stat.isFile()) {
         return reply.status(404).send();
       }

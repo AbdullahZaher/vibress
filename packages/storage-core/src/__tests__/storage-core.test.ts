@@ -89,4 +89,44 @@ describe("Storage Core & LocalStorageProvider", () => {
     expect(registry.getProvider("local")).toBe(provider);
     expect(registry.hasProvider("local")).toBe(true);
   });
+
+  describe("Canonical Storage Root Resolution", () => {
+    const originalEnv = process.env.STORAGE_LOCAL_ROOT;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.STORAGE_LOCAL_ROOT = originalEnv;
+      } else {
+        delete process.env.STORAGE_LOCAL_ROOT;
+      }
+    });
+
+    it("uses explicit storageRoot option when provided", () => {
+      const customPath = "/custom/media/root";
+      const p = new LocalStorageProvider({ storageRoot: customPath });
+      expect(p.getStorageRoot()).toBe(path.resolve(customPath));
+    });
+
+    it("respects STORAGE_LOCAL_ROOT environment variable", () => {
+      const customEnvPath = "/env/configured/media";
+      process.env.STORAGE_LOCAL_ROOT = customEnvPath;
+      const p = new LocalStorageProvider();
+      expect(p.getStorageRoot()).toBe(path.resolve(customEnvPath));
+    });
+
+    it("resolves deterministically to monorepo content/media when unconfigured", () => {
+      delete process.env.STORAGE_LOCAL_ROOT;
+      const p = new LocalStorageProvider();
+      const resolvedRoot = p.getStorageRoot();
+      expect(resolvedRoot.endsWith(path.join("content", "media"))).toBe(true);
+      expect(resolvedRoot).not.toContain(path.join("apps", "api"));
+      expect(fs.existsSync(resolvedRoot)).toBe(true);
+    });
+
+    it("exposes getStorageRoot and getTempDir getters", () => {
+      expect(provider.getStorageRoot()).toBe(storageRoot);
+      expect(provider.getTempDir()).toBe(path.join(tempDir, "temp"));
+    });
+  });
 });
+

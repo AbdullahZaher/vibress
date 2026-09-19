@@ -74,7 +74,11 @@ export interface AppConfig {
     publishedRetentionDays: number;
     failedRetentionDays: number;
   };
-  system: { version: string; storageProvider: string };
+  system: {
+    version: string;
+    storageProvider: string;
+    storageLocalRoot?: string | undefined;
+  };
   observability: {
     metricsEnabled: boolean;
     tracingEnabled: boolean;
@@ -174,6 +178,7 @@ const envSchema = z.object({
   VIBRESS_ENCRYPTION_KEY: optionalNonEmptyString,
   VIBRESS_SETUP_TOKEN: optionalNonEmptyString,
   STORAGE_PROVIDER: nonEmptyString.default("local"),
+  STORAGE_LOCAL_ROOT: optionalNonEmptyString,
   UNSPLASH_ACCESS_KEY: optionalNonEmptyString,
 
   EVENT_DELIVERY_MODE: z.enum(["outbox", "direct"]).default("outbox"),
@@ -312,6 +317,7 @@ export function loadConfig(env: EnvSource): AppConfig {
     system: {
       version: raw.VIBRESS_VERSION,
       storageProvider: raw.STORAGE_PROVIDER,
+      storageLocalRoot: raw.STORAGE_LOCAL_ROOT,
     },
     unsplash: {
       accessKey: raw.UNSPLASH_ACCESS_KEY || null,

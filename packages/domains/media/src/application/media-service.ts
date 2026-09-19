@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { StorageRegistry } from "@vibress/storage-core";
+import { StorageRegistry, StorageProvider } from "@vibress/storage-core";
 import { AuditRepository } from "@vibress/audit";
 import { MediaRepository, ListMediaFilter } from "../domain/repository";
 import {
@@ -24,19 +24,56 @@ export class MediaService {
     private limitsConfig?: MediaLimitsConfig,
   ) {}
 
-  resolveProviderForAsset(storageProviderName?: string | null) {
+  resolveProviderForAsset(
+    storageProviderName?: string | null,
+  ): StorageProvider | null {
     if (
       storageProviderName &&
-      this.storageRegistry.hasProvider(storageProviderName)
+      this.storageRegistry?.hasProvider?.(storageProviderName)
     ) {
       return this.storageRegistry.getProvider(storageProviderName);
     }
-    return this.storageRegistry.getActiveProvider();
+    if (!storageProviderName) {
+      return this.storageRegistry?.getActiveProvider?.() ?? null;
+    }
+    return null;
   }
 
-  async getMediaUrl(asset: MediaAsset): Promise<string> {
+  async getMediaUrl(asset: MediaAsset): Promise<string | null> {
     const provider = this.resolveProviderForAsset(asset.storageProvider);
-    return provider.getUrl(asset.storageKey);
+    if (provider) {
+      return provider.getUrl(asset.storageKey);
+    }
+
+    // Deliberate fallback for external providers (e.g. Unsplash canonical metadata)
+    const unsplashUrl =
+      (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.regular ||
+      (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.small ||
+      (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.thumb ||
+      (asset.metadata as Record<string, any> | null)?.sourceUrl ||
+      (asset.metadata as Record<string, any> | null)?.url;
+
+    if (unsplashUrl && typeof unsplashUrl === "string") {
+      return unsplashUrl;
+    }
+
+    if (asset.storageProvider === "unsplash" && asset.storageKey) {
+      const cleanKey = asset.storageKey.replace(/^media\//, "");
+      return `https://images.unsplash.com/${cleanKey}?w=1200&auto=format&fit=crop&q=80`;
+    }
+
+    // Safe structured diagnostic without exposing secrets
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        message: "Storage provider unavailable for media asset",
+        mediaId: asset.id,
+        storageProvider: asset.storageProvider,
+        storageKey: asset.storageKey,
+      }),
+    );
+
+    return null;
   }
 
   async uploadMedia(
@@ -198,6 +235,13 @@ export class MediaService {
 
     // Invoke asset's owner storage provider to purge or soft-delete object if required
     const provider = this.resolveProviderForAsset(asset.storageProvider);
+    if (provider) {
+      try {
+        await provider.delete(asset.storageKey);
+      } catch {
+        // ignore storage cleanup error if object is already missing
+      }
+    }
 
     if (this.auditRepo && actorId) {
       await this.auditRepo.record({
@@ -208,7 +252,7 @@ export class MediaService {
         metadata: {
           displayName: asset.displayName,
           mimeType: asset.mimeType,
-          storageProvider: provider.name,
+          storageProvider: provider?.name ?? asset.storageProvider ?? "unknown",
         },
       });
     }

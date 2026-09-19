@@ -213,4 +213,47 @@ describe("MediaService Application Use Cases", () => {
       "44444444-4444-4444-4444-444444444444",
     ]);
   });
+
+  describe("Provider-aware getMediaUrl", () => {
+    it("resolves URL using registered provider", async () => {
+      const url = await mediaService.getMediaUrl(sampleAsset);
+      expect(url).toBe("/content/media/media/asset-123/sample.png");
+    });
+
+    it("returns null when provider is not registered and has no Unsplash metadata", async () => {
+      const unregAsset: MediaAsset = {
+        ...sampleAsset,
+        storageProvider: "minio-test-inst",
+        metadata: null,
+      };
+      const url = await mediaService.getMediaUrl(unregAsset);
+      expect(url).toBeNull();
+    });
+
+    it("falls back to canonical Unsplash CDN URL when provider is not registered", async () => {
+      const unsplashAsset: MediaAsset = {
+        ...sampleAsset,
+        storageProvider: "unsplash-external",
+        metadata: {
+          unsplash: {
+            urls: {
+              regular: "https://images.unsplash.com/photo-sample",
+            },
+          },
+        },
+      };
+      const url = await mediaService.getMediaUrl(unsplashAsset);
+      expect(url).toBe("https://images.unsplash.com/photo-sample");
+    });
+
+    it("falls back to active provider when storageProvider is null/undefined", async () => {
+      const defaultAsset: MediaAsset = {
+        ...sampleAsset,
+        storageProvider: null as any,
+      };
+      const url = await mediaService.getMediaUrl(defaultAsset);
+      expect(url).toBe("/content/media/media/asset-123/sample.png");
+    });
+  });
 });
+

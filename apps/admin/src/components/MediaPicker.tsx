@@ -11,6 +11,7 @@ import {
   Music,
   FileText,
   Image as ImageIcon,
+  ImageOff,
   Loader2,
 } from "lucide-react";
 
@@ -21,6 +22,53 @@ export interface MediaPickerProps {
   allowedTypes?: Array<"image" | "video" | "audio" | "file">;
   onClose?: () => void;
 }
+
+const MediaPickerImageThumbnail: React.FC<{ asset: ApiMediaAsset }> = ({
+  asset,
+}) => {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attemptedUnsplashFallback, setAttemptedUnsplashFallback] =
+    useState(false);
+
+  const unsplashFallback =
+    (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.thumb ||
+    (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.small ||
+    (asset.metadata as Record<string, any> | null)?.unsplash?.urls?.regular;
+
+  const currentSrc = !attemptedUnsplashFallback
+    ? asset.url || unsplashFallback
+    : unsplashFallback;
+
+  if (!currentSrc || loadFailed) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-muted/40 text-muted-foreground p-2 text-center">
+        <ImageOff className="w-7 h-7 opacity-40 mb-1" />
+        <span className="text-[10px] font-medium text-muted-foreground/80 truncate max-w-full">
+          Unavailable
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={asset.displayName}
+      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      onError={() => {
+        if (
+          !attemptedUnsplashFallback &&
+          unsplashFallback &&
+          asset.url !== unsplashFallback
+        ) {
+          setAttemptedUnsplashFallback(true);
+        } else {
+          setLoadFailed(true);
+        }
+      }}
+    />
+  );
+};
 
 export const MediaPicker: React.FC<MediaPickerProps> = ({
   onSelectAsset,
@@ -130,7 +178,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
-      <div className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
+      <div role="dialog" aria-modal="true" aria-label="Select Media Asset" className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-border/60 dark:border-white/10">
           <div className="flex items-center gap-2.5">
@@ -270,11 +318,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                   >
                     <div className="h-28 bg-muted/50 dark:bg-white/[0.03] flex items-center justify-center overflow-hidden relative">
                       {asset.assetType === "image" ? (
-                        <img
-                          src={asset.url}
-                          alt={asset.displayName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
+                        <MediaPickerImageThumbnail asset={asset} />
                       ) : (
                         <div className="text-muted-foreground flex items-center justify-center">
                           {asset.assetType === "video" && (

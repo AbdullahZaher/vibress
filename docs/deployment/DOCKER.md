@@ -48,7 +48,7 @@ Vibress implements strict two-tier network isolation:
 | :--- | :--- | :--- | :---: |
 | **`postgres_data`** | `/var/lib/postgresql/data` | Relational tables & indexes | **Critical (Daily Dump)** |
 | **`redis_data`** | `/data` | AOF append-only queue logs | Ephemeral / Reconstructible |
-| **`vibress_content`**| `/repo/apps/api/content` | Uploaded media & theme files | **Critical (Sync to S3/Cold)** |
+| **`vibress_content`**| `/repo/content` (and transitional `/repo/apps/api/content`) | Uploaded media & theme files | **Critical (Daily Tar Dump / Sync to S3)** |
 
 ---
 
