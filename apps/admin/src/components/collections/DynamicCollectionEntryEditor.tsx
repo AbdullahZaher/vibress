@@ -558,12 +558,16 @@ export function DynamicCollectionEntryEditor({
               // 6. RELATION FIELD (1:1 or N:1)
               if (field.type === "relation") {
                 const targetOptions = relationOptions[field.relationModel || ""] || [];
-                const selectedRelId =
+                const rawRelVal =
                   typeof val === "string"
                     ? val
                     : typeof val === "object" && val !== null
                       ? (val as any).id || (val as any).slug
                       : "";
+                const matchingOpt = targetOptions.find(
+                  (opt) => opt.id === rawRelVal || opt.slug === rawRelVal,
+                );
+                const selectedRelId = matchingOpt ? matchingOpt.id : rawRelVal;
 
                 return (
                   <div key={field.id || field.key}>
@@ -592,13 +596,20 @@ export function DynamicCollectionEntryEditor({
               if (field.type === "relation_list") {
                 const targetOptions = relationOptions[field.relationModel || ""] || [];
                 const selectedIds = Array.isArray(val)
-                  ? (val as Array<string | { id: string }>).map((x) =>
-                      typeof x === "string" ? x : x.id,
+                  ? (val as Array<string | { id: string; slug?: string }>).map((x) =>
+                      typeof x === "string" ? x : x.id || (x as any).slug,
                     )
                   : [];
 
                 const selectedItems = selectedIds
-                  .map((id) => targetOptions.find((opt) => opt.id === id) || { id, title: id, slug: "" })
+                  .map(
+                    (id) =>
+                      targetOptions.find((opt) => opt.id === id || opt.slug === id) || {
+                        id,
+                        title: id,
+                        slug: "",
+                      },
+                  )
                   .filter(Boolean);
 
                 const moveItem = (index: number, direction: "up" | "down") => {
@@ -612,7 +623,13 @@ export function DynamicCollectionEntryEditor({
                 };
 
                 const removeItem = (idToRemove: string) => {
-                  onFieldValChange(selectedIds.filter((id) => id !== idToRemove));
+                  onFieldValChange(
+                    selectedIds.filter(
+                      (id) =>
+                        id !== idToRemove &&
+                        targetOptions.find((opt) => (opt.id === id || opt.slug === id) && (opt.id === idToRemove || opt.slug === idToRemove)) === undefined,
+                    ),
+                  );
                 };
 
                 return (
@@ -688,7 +705,7 @@ export function DynamicCollectionEntryEditor({
                         </p>
                       ) : (
                         targetOptions.map((item) => {
-                          const isChecked = selectedIds.includes(item.id);
+                          const isChecked = selectedIds.some((id) => id === item.id || id === item.slug);
                           return (
                             <label
                               key={item.id}
@@ -701,7 +718,9 @@ export function DynamicCollectionEntryEditor({
                                   if (e.target.checked) {
                                     onFieldValChange([...selectedIds, item.id]);
                                   } else {
-                                    onFieldValChange(selectedIds.filter((id) => id !== item.id));
+                                    onFieldValChange(
+                                      selectedIds.filter((id) => id !== item.id && id !== item.slug),
+                                    );
                                   }
                                 }}
                                 className="rounded border-slate-300 text-primary h-3.5 w-3.5"
@@ -709,7 +728,9 @@ export function DynamicCollectionEntryEditor({
                               <span className="font-medium text-slate-800 dark:text-slate-200">
                                 {item.title}
                               </span>
-                              <span className="text-slate-400 font-mono">({item.slug})</span>
+                              <span className="text-slate-400 font-mono text-[10px]">
+                                ({item.slug})
+                              </span>
                             </label>
                           );
                         })

@@ -958,4 +958,152 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(moveUp(initial, 0)).toEqual(initial); // boundary check
     expect(moveDown(initial, 2)).toEqual(initial); // boundary check
   });
+
+  // Scenario 26: UUID-based single relation resolution
+  it("Scenario 26: Resolves relation target referenced by UUID", async () => {
+    const resolved = await service.resolveRelationsForEntry(
+      { primaryAuthor: author1A.id },
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+    const author = resolved.primaryAuthor as Record<string, unknown>;
+    expect(author).toBeDefined();
+    expect(author.id).toBe(author1A.id);
+    expect(author.slug).toBe(author1A.slug);
+    expect((author.data as Record<string, unknown>).name).toEqual({
+      en: "Donald Knuth",
+      ar: "دونالد كنوث",
+    });
+  });
+
+  // Scenario 27: Slug-based single relation resolution
+  it("Scenario 27: Resolves relation target referenced by Slug", async () => {
+    const resolved = await service.resolveRelationsForEntry(
+      { primaryAuthor: author1A.slug },
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+    const author = resolved.primaryAuthor as Record<string, unknown>;
+    expect(author).toBeDefined();
+    expect(author.id).toBe(author1A.id);
+    expect(author.slug).toBe(author1A.slug);
+    expect((author.data as Record<string, unknown>).name).toEqual({
+      en: "Donald Knuth",
+      ar: "دونالد كنوث",
+    });
+  });
+
+  // Scenario 28: Mixed UUID and slug array in relation_list resolution
+  it("Scenario 28: Resolves mixed UUID and slug array in relation_list preserving order", async () => {
+    const resolved = await service.resolveRelationsForEntry(
+      { coAuthors: [author2A.slug, author1A.id] },
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+    const coAuthors = resolved.coAuthors as Array<Record<string, unknown>>;
+    expect(coAuthors.length).toBe(2);
+    expect(coAuthors[0]!.id).toBe(author2A.id);
+    expect(coAuthors[0]!.slug).toBe(author2A.slug);
+    expect(coAuthors[1]!.id).toBe(author1A.id);
+    expect(coAuthors[1]!.slug).toBe(author1A.slug);
+  });
+
+  // Scenario 29: Invalid slug resolution
+  it("Scenario 29: Safely handles invalid slug references in relation and relation_list", async () => {
+    const resolved = await service.resolveRelationsForEntry(
+      {
+        primaryAuthor: "nonexistent-slug-xyz",
+        coAuthors: ["nonexistent-slug-xyz", author1A.slug],
+      },
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+    expect(resolved.primaryAuthor).toBeNull();
+    const coAuthors = resolved.coAuthors as Array<Record<string, unknown>>;
+    expect(coAuthors.length).toBe(1);
+    expect(coAuthors[0]!.id).toBe(author1A.id);
+  });
+
+  // Scenario 30: Cross-publication slug reference rejection
+  it("Scenario 30: Rejects cross-publication slug relation references at write time", async () => {
+    await expect(
+      service.createEntry(
+        bookModelA.id,
+        {
+          title: "Cross Pub Slug Book",
+          data: { primaryAuthor: authorB.slug },
+        },
+        testUserId,
+        pubTenantA,
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  // Scenario 31: Wrong-model slug reference rejection
+  it("Scenario 31: Rejects wrong-model slug relation references at write time", async () => {
+    const wrongModelEntry = await service.createEntry(
+      bookModelA.id,
+      {
+        title: "Wrong Model Target",
+        slug: "wrong-model-target-slug",
+        data: { title: "Wrong Model Target" },
+      },
+      testUserId,
+      pubTenantA,
+    );
+
+    await expect(
+      service.createEntry(
+        bookModelA.id,
+        {
+          title: "Wrong Model Slug Book",
+          data: { primaryAuthor: wrongModelEntry.slug },
+        },
+        testUserId,
+        pubTenantA,
+      ),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  // Scenario 32: Slug-referenced relation canonical normalization in public DTO
+  it("Scenario 32: Normalizes slug-referenced relations to canonical public DTO structure", async () => {
+    const rawData = {
+      title: "SICP",
+      primaryAuthor: author1A.slug,
+      coAuthors: [author1A.slug, author2A.id],
+    };
+    const resolvedData = await service.resolveRelationsForEntry(
+      rawData,
+      bookModelA.fields,
+      pubTenantA,
+      1,
+    );
+    const mockEntry: ContentEntry = {
+      id: "ent_norm_1",
+      publicationId: pubTenantA,
+      modelId: bookModelA.id,
+      title: "SICP",
+      slug: "sicp",
+      data: resolvedData,
+      status: "published",
+      version: 1,
+      createdBy: testUserId,
+      updatedBy: testUserId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const publicDto = service.toPublicEntryDto(mockEntry, bookModelA, "public", "en");
+    const primaryAuthor = publicDto.data.primaryAuthor as Record<string, unknown>;
+    expect(primaryAuthor.id).toBe(author1A.id);
+    expect(primaryAuthor.slug).toBe(author1A.slug);
+
+    const coAuthors = publicDto.data.coAuthors as Array<Record<string, unknown>>;
+    expect(coAuthors[0]!.id).toBe(author1A.id);
+    expect(coAuthors[1]!.id).toBe(author2A.id);
+  });
 });
