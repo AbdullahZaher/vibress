@@ -20,6 +20,54 @@ export class ValidationError extends Error {
   }
 }
 
+export const RESERVED_FIELD_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
+
+export const MAX_FIELDS_PER_MODEL = 100;
+export const MAX_DATA_PAYLOAD_BYTES = 1024 * 1024; // 1 MB
+export const MAX_RELATION_EXPANSION_DEPTH = 3;
+
+export function validateModelDefinition(input: {
+  name: string;
+  slug?: string | undefined;
+  fields?: ContentFieldDefinition[] | undefined;
+}): void {
+  if (!input.name || !input.name.trim()) {
+    throw new ValidationError({ name: "Model name is required" });
+  }
+
+  const fields = input.fields || [];
+  if (fields.length > MAX_FIELDS_PER_MODEL) {
+    throw new ValidationError({
+      fields: `A model cannot exceed ${MAX_FIELDS_PER_MODEL} fields.`,
+    });
+  }
+
+  const seenKeys = new Set<string>();
+  for (const field of fields) {
+    if (!field.key || !field.key.trim()) {
+      throw new ValidationError({
+        [field.id || "field"]: "Each field must have a valid non-empty 'key'",
+      });
+    }
+    const key = field.key.trim();
+    if (RESERVED_FIELD_KEYS.has(key)) {
+      throw new ValidationError({
+        [key]: `Field key '${key}' is reserved and cannot be used.`,
+      });
+    }
+    if (seenKeys.has(key)) {
+      throw new ValidationError({
+        [key]: `Duplicate field key '${key}' in content model.`,
+      });
+    }
+    seenKeys.add(key);
+  }
+}
+
 export function validateEntryData(
   data: Record<string, unknown>,
   fieldDefs: (ContentFieldDefinition & {
@@ -32,6 +80,13 @@ export function validateEntryData(
     };
   })[],
 ): void {
+  const jsonStr = JSON.stringify(data);
+  if (jsonStr.length > MAX_DATA_PAYLOAD_BYTES) {
+    throw new ValidationError({
+      _payload: "Data payload exceeds maximum allowed size (1 MB)",
+    });
+  }
+
   const errors: Record<string, string> = {};
 
   for (const field of fieldDefs) {
@@ -152,10 +207,43 @@ export function validateEntryData(
         break;
 
       case "media":
+        if (typeof val === "string") {
+          // Can be asset ID (e.g. med_...) or URL
+          if (!val.trim()) {
+            errors[field.key] = `Field '${field.name}' media reference cannot be empty.`;
+          }
+        } else if (typeof val === "object" && val !== null) {
+          const mediaObj = val as Record<string, unknown>;
+          if (!mediaObj.id && !mediaObj.url) {
+            errors[field.key] = `Field '${field.name}' media object must contain an 'id' or 'url'.`;
+          }
+        } else {
+          errors[field.key] = `Field '${field.name}' must be a media ID, URL string, or media object.`;
+        }
+        break;
+
       case "relation":
+        if (typeof val === "string") {
+          if (!val.trim()) {
+            errors[field.key] = `Field '${field.name}' relation ID cannot be empty.`;
+          }
+        } else if (typeof val === "object" && val !== null) {
+          const relObj = val as Record<string, unknown>;
+          if (!relObj.id && !relObj.slug) {
+            errors[field.key] = `Field '${field.name}' relation must contain an 'id' or 'slug'.`;
+          }
+        } else {
+          errors[field.key] = `Field '${field.name}' must be a referenced entry ID string or entry object.`;
+        }
+        break;
+
       case "json":
+        if (typeof val !== "object" || val === null) {
+          errors[field.key] = `Field '${field.name}' must be a valid JSON object or array.`;
+        }
+        break;
+
       default:
-        // Permissive structure validation for media URLs/IDs, relations, or arbitrary JSON objects
         break;
     }
   }
@@ -186,6 +274,52 @@ export function filterEntryDataForVisibility(
   return result;
 }
 
+/**
+ * Resolves localized values for entry data given a target locale and fallback locale.
+ * If a field is defined as localizable: true, its data value can be a dictionary mapping locale -> value
+ * or a single fallback value.
+ */
+export function resolveLocalizedEntryData(
+  data: Record<string, unknown>,
+  fieldDefs: ContentFieldDefinition[],
+  targetLocale = "en",
+  fallbackLocale = "en",
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const normTarget = targetLocale.toLowerCase();
+  const targetLang = normTarget.split("-")[0];
+  const normFallback = fallbackLocale.toLowerCase();
+
+  for (const field of fieldDefs) {
+    const val = data[field.key];
+    if (val === undefined || val === null) {
+      result[field.key] = val;
+      continue;
+    }
+
+    if (field.localizable && typeof val === "object" && !Array.isArray(val)) {
+      const dict = val as Record<string, unknown>;
+      // Look for exact locale match, e.g. "ar-SA"
+      if (normTarget in dict) {
+        result[field.key] = dict[normTarget];
+      } else if (targetLang && targetLang in dict) {
+        result[field.key] = dict[targetLang];
+      } else if (normFallback in dict) {
+        result[field.key] = dict[normFallback];
+      } else if ("en" in dict) {
+        result[field.key] = dict["en"];
+      } else {
+        const firstVal = Object.values(dict)[0];
+        result[field.key] = firstVal !== undefined ? firstVal : val;
+      }
+    } else {
+      result[field.key] = val;
+    }
+  }
+
+  return result;
+}
+
 export function extractSearchableText(
   data: Record<string, unknown>,
   fieldDefs: ContentFieldDefinition[],
@@ -200,6 +334,13 @@ export function extractSearchableText(
         chunks.push(String(val));
       } else if (Array.isArray(val)) {
         chunks.push(val.filter((x) => typeof x === "string").join(" "));
+      } else if (val && typeof val === "object") {
+        // Localized dictionary values
+        for (const localizedVal of Object.values(val)) {
+          if (typeof localizedVal === "string") {
+            chunks.push(localizedVal);
+          }
+        }
       }
     }
   }
@@ -245,3 +386,75 @@ export function checkEntryDataValidity(
     throw err;
   }
 }
+
+/**
+ * Analyzes schema changes between old model fields and new model fields.
+ * Identifies breaking changes (e.g., removing fields, changing types, adding required fields without defaults).
+ */
+export function analyzeSchemaEvolution(
+  oldFields: ContentFieldDefinition[],
+  newFields: ContentFieldDefinition[],
+): {
+  changes: Array<{
+    key: string;
+    action: "added" | "removed" | "modified";
+    isSafe: boolean;
+    warning?: string;
+  }>;
+  safe: boolean;
+  warnings: string[];
+} {
+  const oldMap = new Map(oldFields.map((f) => [f.key, f]));
+  const newMap = new Map(newFields.map((f) => [f.key, f]));
+  const changes: Array<{
+    key: string;
+    action: "added" | "removed" | "modified";
+    isSafe: boolean;
+    warning?: string;
+  }> = [];
+  const warnings: string[] = [];
+  let isOverallSafe = true;
+
+  // Check added or modified
+  for (const [key, newField] of newMap.entries()) {
+    const oldField = oldMap.get(key);
+    if (!oldField) {
+      // Added
+      if (newField.required && newField.defaultValue === undefined) {
+        isOverallSafe = false;
+        const w = `New required field '${newField.name}' (${key}) has no default value and may fail on existing entries.`;
+        warnings.push(w);
+        changes.push({ key, action: "added", isSafe: false, warning: w });
+      } else {
+        changes.push({ key, action: "added", isSafe: true });
+      }
+    } else {
+      // Check for type change
+      if (oldField.type !== newField.type) {
+        isOverallSafe = false;
+        const w = `Field '${newField.name}' changed type from '${oldField.type}' to '${newField.type}'. Existing entry data may be incompatible.`;
+        warnings.push(w);
+        changes.push({ key, action: "modified", isSafe: false, warning: w });
+      } else if (!oldField.required && newField.required) {
+        isOverallSafe = false;
+        const w = `Field '${newField.name}' became required. Existing entries without a value will require updates.`;
+        warnings.push(w);
+        changes.push({ key, action: "modified", isSafe: false, warning: w });
+      } else {
+        changes.push({ key, action: "modified", isSafe: true });
+      }
+    }
+  }
+
+  // Check removed
+  for (const [key, oldField] of oldMap.entries()) {
+    if (!newMap.has(key)) {
+      const w = `Field '${oldField.name}' (${key}) was removed. Existing entry data for this field will be preserved in DB but excluded from active schema.`;
+      warnings.push(w);
+      changes.push({ key, action: "removed", isSafe: true, warning: w });
+    }
+  }
+
+  return { changes, safe: isOverallSafe, warnings };
+}
+

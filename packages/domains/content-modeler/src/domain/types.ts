@@ -7,6 +7,7 @@ export type { ContentFieldDefinition, ContentFieldType };
 
 export interface ContentModel {
   id: string;
+  publicationId: string;
   name: string;
   slug: string;
   description?: string | null | undefined;
@@ -18,6 +19,7 @@ export interface ContentModel {
 
 export interface ContentEntry {
   id: string;
+  publicationId: string;
   modelId: string;
   title: string;
   slug: string;
@@ -61,3 +63,43 @@ export interface UpdateEntryInput {
   data?: Record<string, unknown> | undefined;
   status?: "draft" | "published" | "archived" | undefined;
 }
+
+export interface ListEntriesFilter {
+  status?: "draft" | "published" | "archived" | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  search?: string | undefined;
+  sortBy?: "createdAt" | "updatedAt" | "publishedAt" | "title" | "slug" | undefined;
+  sortOrder?: "asc" | "desc" | undefined;
+  locale?: string | undefined;
+  includeRelations?: boolean | undefined;
+  relationDepth?: number | undefined;
+}
+
+export interface PublicContentEntryDto {
+  id: string;
+  modelSlug: string;
+  title: string;
+  slug: string;
+  data: Record<string, unknown>;
+  publishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SchemaDiffFieldChange {
+  key: string;
+  action: "added" | "removed" | "modified" | "renamed";
+  oldField?: ContentFieldDefinition;
+  newField?: ContentFieldDefinition;
+  isSafe: boolean;
+  warnings?: string[];
+}
+
+export interface SchemaEvolutionPlan {
+  modelId: string;
+  changes: SchemaDiffFieldChange[];
+  safe: boolean;
+  warnings: string[];
+}
+
