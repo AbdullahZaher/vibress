@@ -46,6 +46,7 @@ export class DurableCrdtPersistence {
       if (items && items.length > 0) {
         return items.map((b64) => new Uint8Array(Buffer.from(b64, "base64")));
       }
+      return [];
     } catch (err: unknown) {
       console.warn(`[CRDT Persistence] Redis read failed for post ${postId}, falling back to memory:`, (err as Error).message);
     }
@@ -65,6 +66,7 @@ export class DurableCrdtPersistence {
       if (b64) {
         return new Uint8Array(Buffer.from(b64, "base64"));
       }
+      return null;
     } catch {
       // Fall back to memory
     }

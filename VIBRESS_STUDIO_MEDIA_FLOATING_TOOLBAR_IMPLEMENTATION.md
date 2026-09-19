@@ -288,9 +288,17 @@ All existing regression suites were executed and passed cleanly:
 
 ## 22. Git Commit History
 
-- **Base Feature Commit SHA**: `d431c383c0ffc22c199e6409d69fe25ced01b695` (`feat(studio): unify media floating toolbar`)
-- **Hover UX Refinement Commit**: To be committed as `fix(studio): refine media toolbar hover visibility`
-- **Files Staged & Committed**: Strictly 5 feature-scoped files. Pre-existing unrelated work in Comments and Theme Designer was safely preserved uncommitted in the working tree.
+- **Base Feature Commit**: `d431c383c0ffc22c199e6409d69fe25ced01b695`
+  - **Commit Message**: `feat(studio): unify media floating toolbar`
+- **Hover UX Refinement Commit**: `add9dfc50f9d6eeceacf7757c6a9bfac4c485bb7`
+  - **Commit Message**: `fix(studio): refine media toolbar hover visibility`
+- **Files Staged & Committed in Refinement**:
+  - `packages/studio-react/src/components/ui/StudioMediaFloatingToolbar.tsx`
+  - `packages/studio-react/src/components/StudioCardComponent.tsx`
+  - `apps/admin/src/styles/globals.css`
+  - `tests/e2e/studio-media-toolbar.test.ts`
+  - `VIBRESS_STUDIO_MEDIA_FLOATING_TOOLBAR_IMPLEMENTATION.md`
+  *(Pre-existing unrelated work in Comments and Theme Designer was safely preserved uncommitted in the working tree).*
 
 ---
 

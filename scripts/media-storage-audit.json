@@ -1,0 +1,333 @@
+{
+  "generatedAt": "2026-09-19T11:45:03.992Z",
+  "summary": {
+    "totalDbRecords": 52,
+    "rootFilesCount": 1296,
+    "apiFilesCount": 444,
+    "referencedAndExistsInRoot": 19,
+    "referencedAndExistsInApiOnly": 28,
+    "referencedAndExistsInBoth": 0,
+    "referencedAndMissingInBoth": 5,
+    "unreferencedInRoot": 1277,
+    "unreferencedInApi": 416,
+    "conflictsBetweenRoots": 0,
+    "duplicateDbKeys": 0
+  },
+  "referencedAndExists": [
+    {
+      "id": "92ad025f-7b71-466b-b8ee-019d87b08246",
+      "key": "media/92ad025f-7b71-466b-b8ee-019d87b08246/brand-new-upload.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "c6eb9b10-ad06-45b5-8eec-95fc7c39606c",
+      "key": "media/c6eb9b10-ad06-45b5-8eec-95fc7c39606c/unsplash-6ast1xZ9YJY.jpg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "217becea-7680-46a2-8d3b-e0dd192bc203",
+      "key": "media/217becea-7680-46a2-8d3b-e0dd192bc203/test-feature-b.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "d491fe2e-f34c-4c7c-95c4-d9ea020a6ca2",
+      "key": "media/d491fe2e-f34c-4c7c-95c4-d9ea020a6ca2/test-feature-a.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "c028ccbc-a3ea-468b-bd51-75eb6552ecf2",
+      "key": "media/c028ccbc-a3ea-468b-bd51-75eb6552ecf2/unsplash-m_HRfLhgABo.jpg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "41b757bc-b319-4836-a04d-291af28be854",
+      "key": "media/41b757bc-b319-4836-a04d-291af28be854/test-feature-b.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "1a4c9379-93b3-48df-891b-3e13f1cf6e66",
+      "key": "media/1a4c9379-93b3-48df-891b-3e13f1cf6e66/test-feature-a.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "9e5f14fa-ba04-43f6-aced-6948cac2a3e1",
+      "key": "media/9e5f14fa-ba04-43f6-aced-6948cac2a3e1/unsplash-K67sBVqLLuw.jpg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "aa1bbeaf-7344-4cbb-b483-979ce2e1caa1",
+      "key": "media/aa1bbeaf-7344-4cbb-b483-979ce2e1caa1/test-feature-b.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "2fd50dc9-25a3-48bf-8177-68f6a7ee032a",
+      "key": "media/2fd50dc9-25a3-48bf-8177-68f6a7ee032a/test-feature-a.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "be92ea06-bc66-4b30-8a84-dc643ee078c5",
+      "key": "media/be92ea06-bc66-4b30-8a84-dc643ee078c5/unsplash-K67sBVqLLuw.jpg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "1f9a9792-d9c9-464b-8c6c-9b6cc15f7484",
+      "key": "media/1f9a9792-d9c9-464b-8c6c-9b6cc15f7484/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "fbcdc393-5c5d-4635-8344-32ef48068731",
+      "key": "media/fbcdc393-5c5d-4635-8344-32ef48068731/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "35ec32ed-a3ee-42be-84ff-cc51750a33cb",
+      "key": "media/35ec32ed-a3ee-42be-84ff-cc51750a33cb/unsplash-K67sBVqLLuw.jpg",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "1845def7-b7ce-4c05-924f-b4f148f58489",
+      "key": "media/1845def7-b7ce-4c05-924f-b4f148f58489/unsplash-K67sBVqLLuw.jpg",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "9baa5582-ec72-49ad-952d-ca899c9d932a",
+      "key": "media/9baa5582-ec72-49ad-952d-ca899c9d932a/unsplash-EHLd2utEf68.jpg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "4a2e9235-1bee-4c6c-8881-5dc6ee856270",
+      "key": "media/4a2e9235-1bee-4c6c-8881-5dc6ee856270/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "9c60bd0b-0aff-4e1a-bd98-1cb2e597029d",
+      "key": "media/9c60bd0b-0aff-4e1a-bd98-1cb2e597029d/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "697329d0-4584-4576-9398-ae346b6d35ba",
+      "key": "media/697329d0-4584-4576-9398-ae346b6d35ba/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "739e07ff-6580-4d52-9ca2-087cb60ac7f5",
+      "key": "media/739e07ff-6580-4d52-9ca2-087cb60ac7f5/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "e41adac4-b861-48e4-a5e6-56915b7898ab",
+      "key": "media/e41adac4-b861-48e4-a5e6-56915b7898ab/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "b064ff79-068c-4949-83ee-9a52fb35319a",
+      "key": "media/b064ff79-068c-4949-83ee-9a52fb35319a/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "3a88cbb2-e8bf-4243-856a-4d6f4d4f60a1",
+      "key": "media/3a88cbb2-e8bf-4243-856a-4d6f4d4f60a1/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "ed20bcf5-4568-4b08-979c-96505cfb0705",
+      "key": "media/ed20bcf5-4568-4b08-979c-96505cfb0705/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "fd2e299a-f374-4579-aacf-09f967958f92",
+      "key": "media/fd2e299a-f374-4579-aacf-09f967958f92/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "06c28680-a6d2-4fe6-8c06-94024d1e620d",
+      "key": "media/06c28680-a6d2-4fe6-8c06-94024d1e620d/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "4216e15a-a613-4b53-9e67-0bae6a050ef8",
+      "key": "media/4216e15a-a613-4b53-9e67-0bae6a050ef8/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "3ffa2823-19d4-49b0-b5ea-ebad83141328",
+      "key": "media/3ffa2823-19d4-49b0-b5ea-ebad83141328/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "d912568f-9c5c-4452-af30-e8050e9040c8",
+      "key": "media/d912568f-9c5c-4452-af30-e8050e9040c8/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "6c0057b0-6a02-4281-98db-65e7856c8d2e",
+      "key": "media/6c0057b0-6a02-4281-98db-65e7856c8d2e/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "d7240b0d-25df-4e9e-a79a-d36a07fb0d87",
+      "key": "media/d7240b0d-25df-4e9e-a79a-d36a07fb0d87/test-feature-b.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "009dff1d-947f-45fa-9fd0-7370b4ca566e",
+      "key": "media/009dff1d-947f-45fa-9fd0-7370b4ca566e/test-feature-a.png",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "d03b5ba1-288b-4941-bfb6-fd79e9ec2e9a",
+      "key": "media/d03b5ba1-288b-4941-bfb6-fd79e9ec2e9a/test-feature-a.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "cfcff9ef-3a95-48b1-aa63-c6267a5be804",
+      "key": "media/cfcff9ef-3a95-48b1-aa63-c6267a5be804/0001-2gPfomN.gif",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "f7a0d455-34bc-4627-b893-fc11c364727d",
+      "key": "media/f7a0d455-34bc-4627-b893-fc11c364727d/Gemini_Generated_Image_aj2o32aj2o32aj2o.jpeg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "fa0aafb1-dd2c-4d5e-be48-83438b516aad",
+      "key": "media/fa0aafb1-dd2c-4d5e-be48-83438b516aad/Gemini_Generated_Image_aj2o32aj2o32aj2o.jpeg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "bfb13390-f87f-4f68-b926-ba5b36b58ff9",
+      "key": "media/bfb13390-f87f-4f68-b926-ba5b36b58ff9/Gemini_Generated_Image_aj2o32aj2o32aj2o.jpeg",
+      "location": "api",
+      "provider": "local"
+    },
+    {
+      "id": "d7fb04dd-ec0e-47a1-b4c3-1276b0e4d98f",
+      "key": "media/d7fb04dd-ec0e-47a1-b4c3-1276b0e4d98f/local-asset.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "27aa122b-551f-4621-889b-27bc24a09de7",
+      "key": "media/27aa122b-551f-4621-889b-27bc24a09de7/report.pdf",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "327715c8-3677-4938-b258-988e475345b0",
+      "key": "media/327715c8-3677-4938-b258-988e475345b0/favicon.ico",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "55fffb94-c8c0-4e77-97a6-b1805d48e139",
+      "key": "media/55fffb94-c8c0-4e77-97a6-b1805d48e139/logo.svg",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "19174989-54e1-4773-a525-6a7830f09d43",
+      "key": "media/19174989-54e1-4773-a525-6a7830f09d43/Screenshot 2026-08-17 at 12.34.56 PM.png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "398acdb9-7c02-42f2-a2c5-9b0dd81413d4",
+      "key": "media/398acdb9-7c02-42f2-a2c5-9b0dd81413d4/صورة الشعار الجديد (1).png",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "418a7365-923d-4b1d-8786-448f3b48b9be",
+      "key": "media/418a7365-923d-4b1d-8786-448f3b48b9be/test-anim.gif",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "6afbf57e-4e41-4751-8deb-a58f9484b486",
+      "key": "media/6afbf57e-4e41-4751-8deb-a58f9484b486/test-graphic.webp",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "d2bf8497-8c80-4193-be2d-44b27cd26a5b",
+      "key": "media/d2bf8497-8c80-4193-be2d-44b27cd26a5b/test-photo.jpg",
+      "location": "root",
+      "provider": "local"
+    },
+    {
+      "id": "c0aa990a-0eda-43e1-b723-9221c2c895a5",
+      "key": "media/c0aa990a-0eda-43e1-b723-9221c2c895a5/test-image.png",
+      "location": "root",
+      "provider": "local"
+    }
+  ],
+  "referencedAndMissing": [
+    {
+      "id": "fa000000-0000-4000-a000-000000000088",
+      "key": "media/test-unsplash.jpg",
+      "name": "Dense pine forest with misty canopy",
+      "provider": "local"
+    },
+    {
+      "id": "54d286e2-f721-4f5a-a0f7-9d9bb28caca7",
+      "key": "media/test-fk-1789769911262.jpg",
+      "name": "Test FK Asset",
+      "provider": "local"
+    },
+    {
+      "id": "fa000000-0000-4000-a000-000000000001",
+      "key": "media/test-feature-a.jpg",
+      "name": "Feature Image A",
+      "provider": "local"
+    },
+    {
+      "id": "fa000000-0000-4000-a000-000000000002",
+      "key": "media/test-feature-b.jpg",
+      "name": "Feature Image B",
+      "provider": "local"
+    },
+    {
+      "id": "fa44856b-cffb-41dd-8ce0-ab2f74a75f7b",
+      "key": "media/fa44856b-cffb-41dd-8ce0-ab2f74a75f7b/minio-asset.png",
+      "name": "minio-asset.png",
+      "provider": "minio-test-inst"
+    }
+  ],
+  "conflicts": []
+}

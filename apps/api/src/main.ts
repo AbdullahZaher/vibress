@@ -36,12 +36,15 @@ import {
 import { emailWebhookRoutes } from "./routes/email-webhooks";
 import { startWebhookEventBridge } from "./webhook-event-bridge";
 import { startAsyncBridge } from "./async-bridge";
-import { publicCommentRoutes, memberCommentRoutes } from "./routes/comments";
+import {
+  publicCommentRoutes,
+  memberCommentRoutes,
+  adminCommentModerationRoutes,
+} from "./routes/comments";
 import { memberNotificationRoutes } from "./routes/notifications";
 import {
   publicRecommendationRoutes,
   adminRecommendationRoutes,
-  adminCommentModerationRoutes,
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
 import { unsplashRoutes } from "./routes/integrations-unsplash";

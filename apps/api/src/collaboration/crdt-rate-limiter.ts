@@ -33,4 +33,4 @@ export class CrdtRateLimiter {
   }
 }
 
-export const crdtRateLimiter = new CrdtRateLimiter(60000, 120);
+export const crdtRateLimiter = new CrdtRateLimiter(60000, 1200);

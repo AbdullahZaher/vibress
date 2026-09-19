@@ -8,10 +8,12 @@ import {
 import {
   $getSelection,
   $getNodeByKey,
+  $getRoot,
   $isRangeSelection,
   TextNode,
   $createParagraphNode,
 } from "lexical";
+import { logForensicEvent, extractDocStats, hashString } from "@vibress/studio-utils";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $createListNode } from "@lexical/list";
 import { $createCodeNode } from "@lexical/code";
@@ -20,6 +22,7 @@ import {
   $createReactStudioCardNode,
   $isReactStudioCardNode,
 } from "../nodes/ReactStudioCardNode";
+import { StudioCardNode } from "@vibress/studio-cards";
 import { createPortal } from "react-dom";
 import {
   ImageIcon,
@@ -280,10 +283,23 @@ export function SlashMenuPlugin({
       selectedOption: StudioMenuOption,
       nodeToRemove: TextNode | null,
       closeMenu: () => void,
+      matchingString?: string,
     ) => {
       let insertedKey: string | null = null;
       const cardType = selectedOption.cardType;
       const actionType = selectedOption.actionType;
+
+      const beforeDoc = editor.getEditorState().toJSON();
+      const beforeStats = extractDocStats(beforeDoc);
+      logForensicEvent("BEFORE_SLASH_COMMAND", {
+        cardType,
+        actionType,
+        childCount: beforeStats.childCount,
+        wordCount: beforeStats.wordCount,
+        hash: beforeStats.hash,
+        hasNodeToRemove: !!nodeToRemove,
+        nodeToRemoveText: nodeToRemove?.getTextContent(),
+      });
 
       editor.update(() => {
         const selection = $getSelection();
@@ -292,7 +308,67 @@ export function SlashMenuPlugin({
         }
 
         if (nodeToRemove) {
-          nodeToRemove.remove();
+          const query = matchingString ?? queryString ?? "";
+          const textContent = nodeToRemove.getTextContent();
+          const triggerQuery = "/" + query;
+
+          // 1. Authoritative check: If nodeToRemove was already split by Lexical,
+          // it contains only the trigger + query.
+          if (
+            textContent === triggerQuery ||
+            textContent === "/" ||
+            textContent.trim() === triggerQuery
+          ) {
+            nodeToRemove.remove();
+          } else {
+            // 2. Authoritative selection check: if caret is inside nodeToRemove
+            let triggerStart = -1;
+            let triggerLen = triggerQuery.length;
+
+            if (selection.isCollapsed()) {
+              const anchor = selection.anchor;
+              if (anchor.getNode().getKey() === nodeToRemove.getKey()) {
+                const caret = anchor.offset;
+                if (
+                  caret >= triggerLen &&
+                  textContent.slice(caret - triggerLen, caret) === triggerQuery
+                ) {
+                  triggerStart = caret - triggerLen;
+                }
+              }
+            }
+
+            // 3. Fallback: match Lexical typeahead trigger pattern (^|\s|\()(/query)
+            if (triggerStart === -1) {
+              const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const regex = new RegExp("(^|\\s|\\()(\\/" + escapedQuery + ")", "g");
+              let match: RegExpExecArray | null;
+              let lastMatchIdx = -1;
+              while ((match = regex.exec(textContent)) !== null) {
+                lastMatchIdx = match.index + (match[1]?.length ?? 0);
+              }
+              if (lastMatchIdx !== -1) {
+                triggerStart = lastMatchIdx;
+              } else {
+                triggerStart = textContent.lastIndexOf("/");
+                triggerLen = query.length + 1;
+              }
+            }
+
+            if (triggerStart !== -1) {
+              const prefix = textContent.slice(0, triggerStart);
+              const suffix = textContent.slice(triggerStart + triggerLen);
+              const newText = prefix + suffix;
+              if (newText.length > 0) {
+                nodeToRemove.setTextContent(newText);
+                nodeToRemove.select(prefix.length, prefix.length);
+              } else {
+                nodeToRemove.remove();
+              }
+            } else {
+              nodeToRemove.remove();
+            }
+          }
         }
 
         if (actionType) {
@@ -345,6 +421,12 @@ export function SlashMenuPlugin({
           selection.insertNodes([cardNode]);
           insertedKey = cardNode.getKey();
         }
+
+        logForensicEvent("AFTER_CARD_INSERT", {
+          cardType,
+          insertedKey,
+          childCount: $getRoot().getChildrenSize(),
+        });
       });
 
       closeMenu();
@@ -357,20 +439,38 @@ export function SlashMenuPlugin({
         "file",
       ]);
       if (cardType && MEDIA_CARD_TYPES.has(cardType) && requestMedia) {
+        logForensicEvent("BEFORE_UPLOAD", { cardType, insertedKey });
         requestMedia({ cardType }).then((payload) => {
+          logForensicEvent("AFTER_UPLOAD", {
+            cardType,
+            insertedKey,
+            hasPayload: !!payload,
+            payloadHash: payload ? hashString(JSON.stringify(payload)) : null,
+          });
           if (!payload || insertedKey == null) return;
           const nodeKey = insertedKey;
           editor.update(() => {
             const node = $getNodeByKey(nodeKey);
-            if ($isReactStudioCardNode(node)) {
-              node.setCardData(payload);
+            if (node && ($isReactStudioCardNode(node) || node instanceof StudioCardNode)) {
+              const newNode = $createReactStudioCardNode(
+                (node as StudioCardNode).getCardType(),
+                payload,
+              );
+              node.replace(newNode);
             }
+            logForensicEvent("AFTER_SET_CARD_DATA", {
+              cardType,
+              nodeKey,
+              nodeFound: !!node,
+              childCount: $getRoot().getChildrenSize(),
+            });
           });
         });
       }
     },
     [editor, requestMedia],
   );
+
 
   return (
     <LexicalTypeaheadMenuPlugin<StudioMenuOption>
@@ -389,6 +489,7 @@ export function SlashMenuPlugin({
         return createPortal(
           <div
             className="notion-slash-menu studio-glassy-menu"
+            onMouseDown={(e) => e.preventDefault()}
             style={{
               position: "absolute",
               width: "330px",
@@ -407,6 +508,7 @@ export function SlashMenuPlugin({
                     key={option.title}
                     role="option"
                     aria-selected={isSelected}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => selectOptionAndCleanUp(option)}
                     onMouseEnter={() => setHighlightedIndex(index)}
                     className={`studio-slash-item ${isSelected ? "is-selected" : ""}`}

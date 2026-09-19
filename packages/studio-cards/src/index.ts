@@ -26,7 +26,7 @@ export interface StudioCardDefinition<TData = Record<string, unknown>> {
 // 1. Image Card
 export const ImageCardSchema = z.object({
   assetId: z.string().optional(),
-  src: z.string(),
+  src: z.string().default(""),
   alt: z.string().default(""),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
   captionHtml: z.string().optional(),
@@ -43,8 +43,9 @@ export type ImageCardData = z.infer<typeof ImageCardSchema>;
 export const ImageCardDefinition: StudioCardDefinition<ImageCardData> = {
   type: "image",
   version: 1,
-  validate: (data) => ImageCardSchema.parse(data),
+  validate: (data) => ImageCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.src) return "";
     const src = sanitizeUrl(data.src);
     const alt = escapeHtml(data.alt || "");
     const capStr =
@@ -79,7 +80,7 @@ export const ImageCardDefinition: StudioCardDefinition<ImageCardData> = {
 
 // 2. Gallery Card
 export const GalleryCardSchema = z.object({
-  images: z.array(ImageCardSchema),
+  images: z.array(ImageCardSchema).default([]),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
   captionHtml: z.string().optional(),
   width: z.enum(["regular", "wide", "full"]).optional().default("regular"),
@@ -89,9 +90,11 @@ export type GalleryCardData = z.infer<typeof GalleryCardSchema>;
 export const GalleryCardDefinition: StudioCardDefinition<GalleryCardData> = {
   type: "gallery",
   version: 1,
-  validate: (data) => GalleryCardSchema.parse(data),
+  validate: (data) => GalleryCardSchema.parse(data || {}),
   renderHtml: (data) => {
-    const imgs = data.images
+    const validImages = (data.images || []).filter((img) => img && img.src);
+    if (validImages.length === 0) return "";
+    const imgs = validImages
       .map(
         (img) =>
           `<img src="${sanitizeUrl(img.src)}" alt="${escapeHtml(img.alt || "")}" />`,
@@ -118,7 +121,7 @@ export const GalleryCardDefinition: StudioCardDefinition<GalleryCardData> = {
 // 3. Video Card
 export const VideoCardSchema = z.object({
   assetId: z.string().optional(),
-  src: z.string(),
+  src: z.string().default(""),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
   captionHtml: z.string().optional(),
   poster: z.string().optional(),
@@ -131,8 +134,9 @@ export type VideoCardData = z.infer<typeof VideoCardSchema>;
 export const VideoCardDefinition: StudioCardDefinition<VideoCardData> = {
   type: "video",
   version: 1,
-  validate: (data) => VideoCardSchema.parse(data),
+  validate: (data) => VideoCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.src) return "";
     const src = sanitizeUrl(data.src);
     const posterAttr = data.poster
       ? ` poster="${sanitizeUrl(data.poster)}"`
@@ -158,7 +162,7 @@ export const VideoCardDefinition: StudioCardDefinition<VideoCardData> = {
 // 4. Audio Card
 export const AudioCardSchema = z.object({
   assetId: z.string().optional(),
-  src: z.string(),
+  src: z.string().default(""),
   title: z.string().default(""),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
 });
@@ -167,8 +171,9 @@ export type AudioCardData = z.infer<typeof AudioCardSchema>;
 export const AudioCardDefinition: StudioCardDefinition<AudioCardData> = {
   type: "audio",
   version: 1,
-  validate: (data) => AudioCardSchema.parse(data),
+  validate: (data) => AudioCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.src) return "";
     const src = sanitizeUrl(data.src);
     const title = data.title
       ? `<div class="title">${escapeHtml(data.title)}</div>`
@@ -184,8 +189,8 @@ export const AudioCardDefinition: StudioCardDefinition<AudioCardData> = {
 // 5. File Card
 export const FileCardSchema = z.object({
   assetId: z.string().optional(),
-  src: z.string(),
-  fileName: z.string(),
+  src: z.string().default(""),
+  fileName: z.string().default(""),
   fileSize: z.string().default(""),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
 });
@@ -194,10 +199,11 @@ export type FileCardData = z.infer<typeof FileCardSchema>;
 export const FileCardDefinition: StudioCardDefinition<FileCardData> = {
   type: "file",
   version: 1,
-  validate: (data) => FileCardSchema.parse(data),
+  validate: (data) => FileCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.src) return "";
     const src = sanitizeUrl(data.src);
-    const name = escapeHtml(data.fileName);
+    const name = escapeHtml(data.fileName || "Download");
     const size = data.fileSize
       ? ` <span class="size">(${escapeHtml(data.fileSize)})</span>`
       : "";
@@ -211,7 +217,7 @@ export const FileCardDefinition: StudioCardDefinition<FileCardData> = {
 
 // 6. Bookmark Card
 export const BookmarkCardSchema = z.object({
-  url: z.string(),
+  url: z.string().default(""),
   title: z.string().default(""),
   description: z.string().default(""),
   author: z.string().default(""),
@@ -224,8 +230,9 @@ export type BookmarkCardData = z.infer<typeof BookmarkCardSchema>;
 export const BookmarkCardDefinition: StudioCardDefinition<BookmarkCardData> = {
   type: "bookmark",
   version: 1,
-  validate: (data) => BookmarkCardSchema.parse(data),
+  validate: (data) => BookmarkCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.url) return "";
     const url = sanitizeUrl(data.url);
     const title = escapeHtml(data.title || data.url);
     const desc = escapeHtml(data.description || "");
@@ -236,7 +243,7 @@ export const BookmarkCardDefinition: StudioCardDefinition<BookmarkCardData> = {
 
 // 7. Embed Card
 export const EmbedCardSchema = z.object({
-  url: z.string(),
+  url: z.string().default(""),
   embedType: z.string().default("video"),
   html: z.string().optional(),
   caption: z.union([z.string(), z.record(z.unknown())]).default(""),
@@ -246,8 +253,9 @@ export type EmbedCardData = z.infer<typeof EmbedCardSchema>;
 export const EmbedCardDefinition: StudioCardDefinition<EmbedCardData> = {
   type: "embed",
   version: 1,
-  validate: (data) => EmbedCardSchema.parse(data),
+  validate: (data) => EmbedCardSchema.parse(data || {}),
   renderHtml: (data) => {
+    if (!data.url) return "";
     // Only approved providers produce an iframe; everything else becomes a
     // safe external link. Arbitrary user-supplied iframe markup is never
     // trusted — the final output sanitizer enforces this a second time.
@@ -269,8 +277,8 @@ export const EmbedCardDefinition: StudioCardDefinition<EmbedCardData> = {
 
 // 8. Button Card
 export const ButtonCardSchema = z.object({
-  text: z.string(),
-  url: z.string(),
+  text: z.string().default(""),
+  url: z.string().default(""),
   alignment: z.enum(["left", "center", "right"]).default("center"),
 });
 export type ButtonCardData = z.infer<typeof ButtonCardSchema>;
@@ -278,10 +286,10 @@ export type ButtonCardData = z.infer<typeof ButtonCardSchema>;
 export const ButtonCardDefinition: StudioCardDefinition<ButtonCardData> = {
   type: "button",
   version: 1,
-  validate: (data) => ButtonCardSchema.parse(data),
+  validate: (data) => ButtonCardSchema.parse(data || {}),
   renderHtml: (data) => {
-    const url = sanitizeUrl(data.url);
-    const text = escapeHtml(data.text);
+    const url = sanitizeUrl(data.url || "#");
+    const text = escapeHtml(data.text || "Button");
     return `<div class="kg-card kg-button-card align-${data.alignment}"><a href="${url}" class="btn">${text}</a></div>`;
   },
   renderPlainText: (data) => `${data.text} (${data.url})`,
@@ -289,7 +297,7 @@ export const ButtonCardDefinition: StudioCardDefinition<ButtonCardData> = {
 
 // 9. Callout Card
 export const CalloutCardSchema = z.object({
-  text: z.string(),
+  text: z.string().default(""),
   emoji: z.string().default("💡"),
   backgroundColor: z.string().default("grey"),
 });
@@ -298,10 +306,10 @@ export type CalloutCardData = z.infer<typeof CalloutCardSchema>;
 export const CalloutCardDefinition: StudioCardDefinition<CalloutCardData> = {
   type: "callout",
   version: 1,
-  validate: (data) => CalloutCardSchema.parse(data),
+  validate: (data) => CalloutCardSchema.parse(data || {}),
   renderHtml: (data) => {
-    const emoji = escapeHtml(data.emoji);
-    const content = sanitizeHtml(data.text);
+    const emoji = escapeHtml(data.emoji || "💡");
+    const content = sanitizeHtml(data.text || "");
     return `<div class="kg-card kg-callout-card bg-${data.backgroundColor}"><span class="emoji">${emoji}</span><div class="content">${content}</div></div>`;
   },
   renderPlainText: (data) => `${data.emoji} ${data.text}`,
@@ -309,18 +317,18 @@ export const CalloutCardDefinition: StudioCardDefinition<CalloutCardData> = {
 
 // 10. Toggle Card
 export const ToggleCardSchema = z.object({
-  heading: z.string(),
-  content: z.string(),
+  heading: z.string().default(""),
+  content: z.string().default(""),
 });
 export type ToggleCardData = z.infer<typeof ToggleCardSchema>;
 
 export const ToggleCardDefinition: StudioCardDefinition<ToggleCardData> = {
   type: "toggle",
   version: 1,
-  validate: (data) => ToggleCardSchema.parse(data),
+  validate: (data) => ToggleCardSchema.parse(data || {}),
   renderHtml: (data) => {
-    const heading = escapeHtml(data.heading);
-    const content = sanitizeHtml(data.content);
+    const heading = escapeHtml(data.heading || "");
+    const content = sanitizeHtml(data.content || "");
     return `<details class="kg-card kg-toggle-card"><summary>${heading}</summary><div>${content}</div></details>`;
   },
   renderPlainText: (data) => `${data.heading}\n${data.content}`,
@@ -328,29 +336,29 @@ export const ToggleCardDefinition: StudioCardDefinition<ToggleCardData> = {
 
 // 11. Markdown Card
 export const MarkdownCardSchema = z.object({
-  markdown: z.string(),
+  markdown: z.string().default(""),
 });
 export type MarkdownCardData = z.infer<typeof MarkdownCardSchema>;
 
 export const MarkdownCardDefinition: StudioCardDefinition<MarkdownCardData> = {
   type: "markdown",
   version: 1,
-  validate: (data) => MarkdownCardSchema.parse(data),
-  renderHtml: (data) => parseMarkdownToHtml(data.markdown),
+  validate: (data) => MarkdownCardSchema.parse(data || {}),
+  renderHtml: (data) => parseMarkdownToHtml(data.markdown || ""),
   renderPlainText: (data) => data.markdown || "",
 };
 
 // 12. HTML Card (Privileged raw HTML card - sanitized before render)
 export const HtmlCardSchema = z.object({
-  html: z.string(),
+  html: z.string().default(""),
 });
 export type HtmlCardData = z.infer<typeof HtmlCardSchema>;
 
 export const HtmlCardDefinition: StudioCardDefinition<HtmlCardData> = {
   type: "html",
   version: 1,
-  validate: (data) => HtmlCardSchema.parse(data),
-  renderHtml: (data) => data.html,
+  validate: (data) => HtmlCardSchema.parse(data || {}),
+  renderHtml: (data) => data.html || "",
   renderPlainText: (data) => stripHtml(data.html || ""),
 };
 
@@ -363,7 +371,7 @@ export type DividerCardData = z.infer<typeof DividerCardSchema>;
 export const DividerCardDefinition: StudioCardDefinition<DividerCardData> = {
   type: "divider",
   version: 1,
-  validate: (data) => DividerCardSchema.parse(data),
+  validate: (data) => DividerCardSchema.parse(data || {}),
   renderHtml: () => "<hr />",
   renderPlainText: () => "---",
 };

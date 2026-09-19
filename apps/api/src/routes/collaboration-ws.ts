@@ -232,7 +232,7 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        const rateLimitKey = `${session.user.id}:${postId}`;
+        const rateLimitKey = `${session.user.id}:${peerId}`;
         if (!crdtRateLimiter.isAllowed(rateLimitKey)) {
           // Throttled
           return;
@@ -252,18 +252,44 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
       });
 
       // 8. Initial catch-up synchronization
-      crdtPersistence
-        .getUpdates(publicationId, postId)
-        .then((updates) => {
-          for (const update of updates) {
-            if (socket.readyState === 1 /* OPEN */) {
-              socket.send(update, { binary: true });
-            }
+      console.log(`[WS Room ${postId}] peerCount=${room.peerCount}, peerId=${peerId}`);
+      if (room.peerCount === 1) {
+        // First peer in room bootstraps from authoritative PostgreSQL content
+        crdtPersistence.clear(publicationId, postId).catch(() => {});
+        if (socket.readyState === 1 /* OPEN */) {
+          socket.send(JSON.stringify({ type: "sync-done" }));
+        }
+      } else {
+        // Subsequent peers catch up to active room session
+        const inMemoryState = room.getCurrentStateUpdate();
+        if (inMemoryState) {
+          if (socket.readyState === 1 /* OPEN */) {
+            socket.send(inMemoryState, { binary: true });
           }
-        })
-        .catch((err) => {
-          console.error(`[WS Room ${postId}] Catch-up sync failed:`, err);
-        });
+          if (socket.readyState === 1 /* OPEN */) {
+            socket.send(JSON.stringify({ type: "sync-done" }));
+          }
+        } else {
+          crdtPersistence
+            .getUpdates(publicationId, postId)
+            .then((updates) => {
+              for (const update of updates) {
+                if (socket.readyState === 1 /* OPEN */) {
+                  socket.send(update, { binary: true });
+                }
+              }
+              if (socket.readyState === 1 /* OPEN */) {
+                socket.send(JSON.stringify({ type: "sync-done" }));
+              }
+            })
+            .catch((err) => {
+              console.error(`[WS Room ${postId}] Catch-up sync failed:`, err);
+              if (socket.readyState === 1 /* OPEN */) {
+                socket.send(JSON.stringify({ type: "sync-done" }));
+              }
+            });
+        }
+      }
     },
   );
 }

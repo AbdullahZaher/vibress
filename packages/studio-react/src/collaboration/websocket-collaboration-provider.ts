@@ -20,6 +20,8 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   private awarenessListeners = new Map<string, Set<(...args: unknown[]) => void>>();
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private syncTimeout: ReturnType<typeof setTimeout> | null = null;
+  private synced = false;
   private isDestroyed = false;
 
   constructor(doc: Y.Doc, options: WebSocketCollaborationOptions) {
@@ -73,6 +75,13 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
     };
   }
 
+  public emit(type: string, args: unknown[] = []): void {
+    const handlers = this.awarenessListeners.get(type);
+    if (handlers) {
+      handlers.forEach((h) => h(...args));
+    }
+  }
+
   public on(type: string, cb: (...args: any[]) => void): void {
     if (!this.awarenessListeners.has(type)) {
       this.awarenessListeners.set(type, new Set());
@@ -100,16 +109,33 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
         this.broadcastAwareness();
+        this.emit("status", [{ status: "connected" }]);
+        // Fallback: If server does not send sync-done frame within 2 seconds, emit sync
+        if (this.syncTimeout) clearTimeout(this.syncTimeout);
+        this.syncTimeout = setTimeout(() => {
+          if (!this.synced) {
+            this.synced = true;
+            this.emit("sync", [true]);
+          }
+        }, 2000);
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
         if (event.data instanceof ArrayBuffer) {
           const update = new Uint8Array(event.data);
+          console.log("[FORENSIC] WS_RECEIVED_BINARY byteLength=" + update.byteLength);
           Y.applyUpdate(this.doc, update, this);
         } else if (typeof event.data === "string") {
           try {
             const parsed = JSON.parse(event.data);
-            if (parsed.type === "awareness" && parsed.clientId && parsed.state) {
+            if (parsed.type === "sync-done") {
+              if (this.syncTimeout) {
+                clearTimeout(this.syncTimeout);
+                this.syncTimeout = null;
+              }
+              this.synced = true;
+              this.emit("sync", [true]);
+            } else if (parsed.type === "awareness" && parsed.clientId && parsed.state) {
               this.remoteStates.set(parsed.clientId, parsed.state);
               this.notifyAwarenessChange();
             }
@@ -120,6 +146,13 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
       };
 
       this.ws.onclose = () => {
+        if (this.syncTimeout) {
+          clearTimeout(this.syncTimeout);
+          this.syncTimeout = null;
+        }
+        this.synced = false;
+        this.emit("status", [{ status: "disconnected" }]);
+        this.emit("sync", [false]);
         this.scheduleReconnect();
       };
 
@@ -166,6 +199,11 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   }
 
   public disconnect(): void {
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout);
+      this.syncTimeout = null;
+    }
+    this.synced = false;
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;

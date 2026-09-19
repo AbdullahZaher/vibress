@@ -1,4 +1,5 @@
 import type { WebSocket } from "ws";
+import * as Y from "yjs";
 import { crdtPersistence } from "./crdt-persistence";
 
 export const MAX_CRDT_UPDATE_BYTES = 64 * 1024; // 64 KB
@@ -15,11 +16,13 @@ export class CollaborationRoom {
   public publicationId: string;
   public postId: string;
   public peers = new Map<string, CollaborationPeer>();
+  public ydoc: Y.Doc;
   private updateCountSinceCompact = 0;
 
   constructor(publicationId: string, postId: string) {
     this.publicationId = publicationId;
     this.postId = postId;
+    this.ydoc = new Y.Doc();
   }
 
   addPeer(peer: CollaborationPeer): boolean {
@@ -35,7 +38,15 @@ export class CollaborationRoom {
   }
 
   get peerCount(): number {
-    return this.peers.size;
+    let active = 0;
+    for (const [id, peer] of this.peers.entries()) {
+      if (peer.socket.readyState === 1 /* OPEN */) {
+        active++;
+      } else {
+        this.peers.delete(id);
+      }
+    }
+    return active;
   }
 
   broadcastBinary(data: Uint8Array, senderPeerId?: string): void {
@@ -64,7 +75,24 @@ export class CollaborationRoom {
 
   async recordUpdate(update: Uint8Array): Promise<void> {
     this.updateCountSinceCompact++;
+    try {
+      Y.applyUpdate(this.ydoc, update);
+    } catch (err) {
+      console.error(`[Room ${this.postId}] Error applying update to room ydoc:`, err);
+    }
     await crdtPersistence.saveUpdate(this.publicationId, this.postId, update);
+  }
+
+  getCurrentStateUpdate(): Uint8Array | null {
+    try {
+      const state = Y.encodeStateAsUpdate(this.ydoc);
+      if (state.length > 2) {
+        return state;
+      }
+    } catch {
+      // Fallback
+    }
+    return null;
   }
 }
 
@@ -96,6 +124,7 @@ export class RoomManager {
       room.removePeer(peerId);
       if (room.peerCount === 0) {
         this.rooms.delete(key);
+        crdtPersistence.clear(publicationId, postId).catch(() => {});
       }
     }
   }

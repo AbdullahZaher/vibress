@@ -74,3 +74,4 @@ import { sanitizeStudioHtml } from "./sanitize";
 
 export * from "./markdown";
 export * from "./sanitize";
+export * from "./forensic-logger";
