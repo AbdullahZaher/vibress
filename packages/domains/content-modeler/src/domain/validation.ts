@@ -29,6 +29,7 @@ export const RESERVED_FIELD_KEYS = new Set([
 export const MAX_FIELDS_PER_MODEL = 100;
 export const MAX_DATA_PAYLOAD_BYTES = 1024 * 1024; // 1 MB
 export const MAX_RELATION_EXPANSION_DEPTH = 2;
+export const MAX_RELATION_LIST_ITEMS = 100;
 
 export function validateModelDefinition(input: {
   name: string;
@@ -197,7 +198,6 @@ export function validateEntryData(
         break;
 
       case "multi_select":
-      case "relation_list":
       case "taxonomy":
         if (!Array.isArray(val)) {
           errors[field.key] = `Field '${field.name}' must be an array.`;
@@ -206,6 +206,38 @@ export function validateEntryData(
           const invalid = val.filter((item) => !allowed.includes(item as string | number));
           if (invalid.length > 0) {
             errors[field.key] = `Field '${field.name}' contains invalid options: ${invalid.join(", ")}`;
+          }
+        }
+        break;
+
+      case "relation_list":
+        if (!Array.isArray(val)) {
+          errors[field.key] = `Field '${field.name}' must be an array of entry IDs.`;
+        } else {
+          if (field.required && val.length === 0) {
+            errors[field.key] = `Field '${field.name}' is required and must contain at least one relation.`;
+          }
+          const maxItems = field.max ?? MAX_RELATION_LIST_ITEMS;
+          if (val.length > maxItems) {
+            errors[field.key] = `Field '${field.name}' cannot exceed ${maxItems} items.`;
+          }
+          for (let i = 0; i < val.length; i++) {
+            const item = val[i];
+            if (typeof item === "string") {
+              if (!item.trim()) {
+                errors[field.key] = `Field '${field.name}' relation ID at index ${i} cannot be empty.`;
+                break;
+              }
+            } else if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+              const relObj = item as Record<string, unknown>;
+              if (!relObj.id && !relObj.slug) {
+                errors[field.key] = `Field '${field.name}' relation item at index ${i} must contain an 'id' or 'slug'.`;
+                break;
+              }
+            } else {
+              errors[field.key] = `Field '${field.name}' items must be relation ID strings or entry objects.`;
+              break;
+            }
           }
         }
         break;
@@ -243,7 +275,7 @@ export function validateEntryData(
           if (!val.trim()) {
             errors[field.key] = `Field '${field.name}' relation ID cannot be empty.`;
           }
-        } else if (typeof val === "object" && val !== null) {
+        } else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
           const relObj = val as Record<string, unknown>;
           if (!relObj.id && !relObj.slug) {
             errors[field.key] = `Field '${field.name}' relation must contain an 'id' or 'slug'.`;
@@ -284,7 +316,27 @@ export function filterEntryDataForVisibility(
       continue;
     }
     if (field.key in data) {
-      result[field.key] = data[field.key];
+      const val = data[field.key];
+      if (userRole === "public") {
+        if (field.type === "relation" && typeof val === "object" && val !== null && !Array.isArray(val)) {
+          const relObj = val as Record<string, unknown>;
+          if (relObj.status && relObj.status !== "published") {
+            result[field.key] = null;
+            continue;
+          }
+        } else if (field.type === "relation_list" && Array.isArray(val)) {
+          const filteredList = val.filter((item) => {
+            if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+              const itemObj = item as Record<string, unknown>;
+              return !itemObj.status || itemObj.status === "published";
+            }
+            return true;
+          });
+          result[field.key] = filteredList;
+          continue;
+        }
+      }
+      result[field.key] = val;
     }
   }
   return result;
@@ -293,7 +345,7 @@ export function filterEntryDataForVisibility(
 /**
  * Resolves localized values for entry data given a target locale and fallback locale.
  * If a field is defined as localizable: true, its data value can be a dictionary mapping locale -> value
- * or a single fallback value.
+ * or a single fallback value. Also handles resolving localized fields in nested relation data.
  */
 export function resolveLocalizedEntryData(
   data: Record<string, unknown>,
@@ -328,6 +380,62 @@ export function resolveLocalizedEntryData(
         const firstVal = Object.values(dict)[0];
         result[field.key] = firstVal !== undefined ? firstVal : val;
       }
+    } else if (field.type === "relation" && typeof val === "object" && val !== null && !Array.isArray(val)) {
+      const relObj = val as Record<string, unknown>;
+      if (relObj.data && typeof relObj.data === "object" && !Array.isArray(relObj.data)) {
+        // Recursively localize target data fields if any are localized dicts
+        const localizedTargetData: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(relObj.data as Record<string, unknown>)) {
+          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+            const d = v as Record<string, unknown>;
+            if (normTarget in d) {
+              localizedTargetData[k] = d[normTarget];
+            } else if (targetLang && targetLang in d) {
+              localizedTargetData[k] = d[targetLang];
+            } else if (normFallback in d) {
+              localizedTargetData[k] = d[normFallback];
+            } else if ("en" in d) {
+              localizedTargetData[k] = d["en"];
+            } else {
+              localizedTargetData[k] = Object.values(d)[0] ?? v;
+            }
+          } else {
+            localizedTargetData[k] = v;
+          }
+        }
+        result[field.key] = { ...relObj, data: localizedTargetData };
+      } else {
+        result[field.key] = val;
+      }
+    } else if (field.type === "relation_list" && Array.isArray(val)) {
+      result[field.key] = val.map((item) => {
+        if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+          const itemObj = item as Record<string, unknown>;
+          if (itemObj.data && typeof itemObj.data === "object" && !Array.isArray(itemObj.data)) {
+            const localizedTargetData: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(itemObj.data as Record<string, unknown>)) {
+              if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+                const d = v as Record<string, unknown>;
+                if (normTarget in d) {
+                  localizedTargetData[k] = d[normTarget];
+                } else if (targetLang && targetLang in d) {
+                  localizedTargetData[k] = d[targetLang];
+                } else if (normFallback in d) {
+                  localizedTargetData[k] = d[normFallback];
+                } else if ("en" in d) {
+                  localizedTargetData[k] = d["en"];
+                } else {
+                  localizedTargetData[k] = Object.values(d)[0] ?? v;
+                }
+              } else {
+                localizedTargetData[k] = v;
+              }
+            }
+            return { ...itemObj, data: localizedTargetData };
+          }
+        }
+        return item;
+      });
     } else {
       result[field.key] = val;
     }

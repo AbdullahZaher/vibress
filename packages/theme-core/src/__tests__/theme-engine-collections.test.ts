@@ -133,4 +133,51 @@ describe("Theme Core Liquid Custom Collections Integration", () => {
     expect(rendered).toContain('href="/ar/collections/books/programming-book"');
     expect(rendered).toContain("كتاب البرمجة");
   });
+
+  it("Scenario 18: Liquid templates render both book.primaryAuthor and book.coAuthors relations effortlessly", async () => {
+    const engine = createLiquidThemeEngine();
+
+    const bookEntry = buildCollectionEntryViewModel({
+      id: "b1",
+      modelSlug: "books",
+      title: "Art of Computer Programming",
+      slug: "taocp",
+      data: {
+        primaryAuthor: {
+          title: "Donald Knuth",
+          slug: "donald-knuth",
+          data: { name: "Donald Knuth" },
+        },
+        coAuthors: [
+          { title: "Donald Knuth", slug: "donald-knuth", data: { name: "Donald Knuth" } },
+          { title: "Leslie Lamport", slug: "leslie-lamport", data: { name: "Leslie Lamport" } },
+        ],
+      },
+    });
+
+    const context: ThemeViewModelContext = {
+      collections: {
+        books: [bookEntry],
+      },
+    };
+
+    const template = `
+      {% for book in collections.books %}
+        <h2>{{ book.title }}</h2>
+        <p>Lead: {{ book.primaryAuthor.title }}</p>
+        <ul>
+          {% for co in book.coAuthors %}
+            <li>{{ co.title }} ({{ co.slug }})</li>
+          {% endfor %}
+        </ul>
+      {% endfor %}
+    `;
+
+    const rendered = await engine.parseAndRender(template, context);
+
+    expect(rendered).toContain("<h2>Art of Computer Programming</h2>");
+    expect(rendered).toContain("Lead: Donald Knuth");
+    expect(rendered).toContain("<li>Donald Knuth (donald-knuth)</li>");
+    expect(rendered).toContain("<li>Leslie Lamport (leslie-lamport)</li>");
+  });
 });

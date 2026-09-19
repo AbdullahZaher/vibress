@@ -473,8 +473,8 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
 
       const resolved = await service.getEntryById(courseModel.id, brokenEntry.id, pubAlpha, true);
       expect(resolved).not.toBeNull();
-      // Should remain untouched ID string if target is non-existent
-      expect(resolved!.data.mainModule).toBe("non_existent_module_id");
+      // Should resolve safely to null if target is non-existent
+      expect(resolved!.data.mainModule).toBeNull();
     });
   });
 

@@ -188,7 +188,7 @@ export async function renderThemeTemplate(
         return (
           <DefaultCollectionEntryView
             model={context.collection?.model || { name: "Collection", slug: "" }}
-            entry={context.collection?.entry!}
+            entry={context.collection?.entry as any}
             site={context.site || mapSiteToViewModel(site)}
             settings={settings}
           />
@@ -292,9 +292,47 @@ export async function renderThemeTemplate(
     },
   };
 
-  let rawHtml = "";
   try {
-    rawHtml = await engine.renderFile(templateName, fullContext);
+    const rawHtml = await engine.renderFile(templateName, fullContext);
+    const cleanHtml = cleanThemeHtml(rawHtml);
+
+    // Check if theme has a primary stylesheet that should be linked
+    let cssHref: string | null = null;
+    const cssCandidates = [
+      "assets/css/theme.css",
+      "assets/theme.css",
+      "assets/css/style.css",
+      "assets/css/screen.css",
+      "assets/css/main.css",
+      "theme.css",
+      "style.css",
+    ];
+    for (const candidate of cssCandidates) {
+      if (fileMap.has(candidate)) {
+        const cacheBuster = process.env.GIT_SHA || Date.now().toString();
+        cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}?v=${cacheBuster}`;
+        break;
+      }
+    }
+
+    return (
+      <div className="vibress-liquid-theme-root" data-theme={themeId}>
+        {cssHref && (
+          <link rel="stylesheet" href={cssHref} />
+        )}
+        <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+        {templateName === "post" && context.post && (
+          <LiquidCommentsHydrator
+            postId={context.post.id}
+            postSlug={context.post.slug}
+            initialCount={context.post.commentCount ?? context.post.comment_count}
+            commentsEnabled={site.commentsEnabled !== false}
+            commentAccess={(site.comments?.commentAccess || (site as any).commentAccess || "public") as any}
+            locale={activeLocale}
+          />
+        )}
+      </div>
+    );
   } catch (renderErr) {
     if (templateName === "collection") {
       return (
@@ -326,43 +364,4 @@ export async function renderThemeTemplate(
     }
     throw renderErr;
   }
-  const cleanHtml = cleanThemeHtml(rawHtml);
-
-  // Check if theme has a primary stylesheet that should be linked
-  let cssHref: string | null = null;
-  const cssCandidates = [
-    "assets/css/theme.css",
-    "assets/theme.css",
-    "assets/css/style.css",
-    "assets/css/screen.css",
-    "assets/css/main.css",
-    "theme.css",
-    "style.css",
-  ];
-  for (const candidate of cssCandidates) {
-    if (fileMap.has(candidate)) {
-      const cacheBuster = process.env.GIT_SHA || Date.now().toString();
-      cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}?v=${cacheBuster}`;
-      break;
-    }
-  }
-
-  return (
-    <div className="vibress-liquid-theme-root" data-theme={themeId}>
-      {cssHref && (
-        <link rel="stylesheet" href={cssHref} />
-      )}
-      <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
-      {templateName === "post" && context.post && (
-        <LiquidCommentsHydrator
-          postId={context.post.id}
-          postSlug={context.post.slug}
-          initialCount={context.post.commentCount ?? context.post.comment_count}
-          commentsEnabled={site.commentsEnabled !== false}
-          commentAccess={(site.comments?.commentAccess || (site as any).commentAccess || "public") as any}
-          locale={activeLocale}
-        />
-      )}
-    </div>
-  );
 }

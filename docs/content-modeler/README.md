@@ -24,8 +24,8 @@ The Vibress **Content Modeler** is a fully integrated, multi-tenant structured c
 │ Content Modeler Domain       │ │ Theme Engine / Liquid│
 │ - Multi-Tenant Isolation     │ │ - {% collection %}   │
 │ - Schema Evolution / Diff    │ │ - collection_url     │
-│ - Field Registry (17 Types)  │ │ - View Models        │
-│ - Relation Graph (Depth <= 3)│ └──────────┬───────────┘
+│ - Field Registry (18 Types)  │ │ - View Models        │
+│ - Relation Graph (Depth <= 2)│ └──────────┬───────────┘
 │ - Arabic / i18n Dictionary   │            │
 └──────────────┬───────────────┘            ▼
                │                 ┌──────────────────────┐
@@ -43,8 +43,8 @@ The Vibress **Content Modeler** is a fully integrated, multi-tenant structured c
 ## Core Capabilities
 
 1. **Publication Isolation**: Strict tenant scoping across all models and entries using composite foreign keys `(model_id, publication_id) -> (id, publication_id)` and publication-scoped unique constraints.
-2. **17 Supported Field Types**: `text`, `short_text`, `long_text`, `rich_text`, `studio_doc`, `number`, `boolean`, `date`, `datetime`, `url`, `email`, `select`, `multi_select`, `taxonomy`, `media`, `relation`, `relation_list`, and `json`.
-3. **First-Class Relations**: One-to-one, one-to-many, and relation lists resolved safely with strict publication boundary validation and bounded recursion depth (<= 3).
+2. **18 Supported Field Types**: `short_text`, `text`, `long_text`, `rich_text`, `studio_doc`, `number`, `boolean`, `date`, `datetime`, `url`, `email`, `select`, `multi_select`, `taxonomy`, `media`, `relation`, `relation_list`, and `json`.
+3. **First-Class Relations & Relation Lists**: One-to-one, one-to-many, and many-to-many relation lists (`relation_list`) resolved safely with strict publication boundary validation, deterministic list ordering, cycle protection, and authoritative bounded recursion depth (`MAX_RELATION_EXPANSION_DEPTH = 2`).
 4. **Localization & RTL**: Locale dictionary support for all fields, automatic Arabic/RTL direction detection, and fallback resolution.
 5. **Entry Lifecycle**: Full editorial lifecycle (`draft`, `published`, `archived`) with audit logging and transactional outbox events.
 6. **Schema Evolution**: Non-destructive schema diff preview engine analyzing additions, deprecations, renames, type mutations, and validation changes.

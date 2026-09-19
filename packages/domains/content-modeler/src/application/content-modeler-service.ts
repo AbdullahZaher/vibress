@@ -8,7 +8,7 @@ import {
   ContentEntryRow,
   ContentFieldDefinition,
 } from "@vibress/database";
-import { eq, desc, asc, and, or, isNull, sql } from "drizzle-orm";
+import { eq, desc, asc, and, or, isNull, sql, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   ContentModel,
@@ -21,11 +21,13 @@ import {
   PublicContentEntryDto,
 } from "../domain/types";
 import {
+  ValidationError,
   validateEntryData,
   validateModelDefinition,
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
   MAX_RELATION_EXPANSION_DEPTH,
+  MAX_RELATION_LIST_ITEMS,
 } from "../domain/validation";
 import { domainEvents } from "@vibress/events";
 
@@ -406,8 +408,15 @@ export class ContentModelerService {
       );
     }
 
+    // Populate title in entry data if defined in fields and not explicitly passed
+    const entryData = { ...input.data };
+    if (entryData.title === undefined && input.title) {
+      entryData.title = input.title;
+    }
+
     // Validate entry data against model fields
-    validateEntryData(input.data, model.fields);
+    validateEntryData(entryData, model.fields);
+    await this.validateRelationReferences(entryData, model.fields, publicationId);
 
     const db = getDb();
     const id = randomUUID();
@@ -428,7 +437,7 @@ export class ContentModelerService {
       modelId: model.id,
       title: input.title,
       slug,
-      data: input.data,
+      data: entryData,
       status,
       version: 1,
       createdBy: userId,
@@ -508,6 +517,7 @@ export class ContentModelerService {
 
     const mergedData = { ...existing.data, ...(input.data || {}) };
     validateEntryData(mergedData, model.fields);
+    await this.validateRelationReferences(mergedData, model.fields, publicationId);
 
     const db = getDb();
     const updates: Partial<ContentEntryRow> = {
@@ -700,13 +710,97 @@ export class ContentModelerService {
 
   // ---------------- Relations & Localization Resolution ----------------
 
+  private async validateRelationReferences(
+    data: Record<string, unknown>,
+    fields: ContentFieldDefinition[],
+    publicationId: string,
+  ): Promise<void> {
+    const errors: Record<string, string> = {};
+    const db = getDb();
+
+    for (const field of fields) {
+      if ((field.type === "relation" || field.type === "relation_list") && field.relationModel) {
+        const targetModel = await this.getModelByIdOrSlug(field.relationModel, publicationId);
+        if (!targetModel) {
+          errors[field.key] = `Target model '${field.relationModel}' does not exist in publication.`;
+          continue;
+        }
+
+        if (field.type === "relation") {
+          const val = data[field.key];
+          if (val !== undefined && val !== null && val !== "") {
+            const targetIdOrSlug = typeof val === "string" ? val : ((val as any)?.id || (val as any)?.slug);
+            if (targetIdOrSlug) {
+              const rows = await db
+                .select()
+                .from(contentEntries)
+                .where(
+                  or(
+                    eq(contentEntries.id, targetIdOrSlug),
+                    eq(contentEntries.slug, targetIdOrSlug),
+                  ),
+                )
+                .limit(1);
+
+              if (rows[0]) {
+                const targetEntry = rows[0];
+                if (targetEntry.publicationId !== publicationId) {
+                  errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' is prohibited.`;
+                } else if (targetEntry.modelId !== targetModel.id) {
+                  errors[field.key] = `Referenced entry '${targetIdOrSlug}' belongs to a different content model.`;
+                }
+              }
+            }
+          }
+        } else if (field.type === "relation_list") {
+          const val = data[field.key];
+          if (Array.isArray(val) && val.length > 0) {
+            for (let i = 0; i < val.length; i++) {
+              const item = val[i];
+              const targetIdOrSlug = typeof item === "string" ? item : ((item as any)?.id || (item as any)?.slug);
+              if (targetIdOrSlug) {
+                const rows = await db
+                  .select()
+                  .from(contentEntries)
+                  .where(
+                    or(
+                      eq(contentEntries.id, targetIdOrSlug),
+                      eq(contentEntries.slug, targetIdOrSlug),
+                    ),
+                  )
+                  .limit(1);
+
+                if (rows[0]) {
+                  const targetEntry = rows[0];
+                  if (targetEntry.publicationId !== publicationId) {
+                    errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' at index ${i} is prohibited.`;
+                    break;
+                  } else if (targetEntry.modelId !== targetModel.id) {
+                    errors[field.key] = `Referenced entry '${targetIdOrSlug}' at index ${i} belongs to a different content model.`;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      throw new ValidationError(errors);
+    }
+  }
+
   async resolveRelationsForEntry(
     data: Record<string, unknown>,
     fields: ContentFieldDefinition[],
     publicationId: string,
     maxDepth = 1,
+    visitedEntryIds: Set<string> = new Set(),
   ): Promise<Record<string, unknown>> {
-    if (maxDepth <= 0) return data;
+    const boundedDepth = Math.min(Math.max(maxDepth, 0), MAX_RELATION_EXPANSION_DEPTH);
+    if (boundedDepth <= 0) return data;
 
     const resolved = { ...data };
 
@@ -716,11 +810,17 @@ export class ContentModelerService {
         const targetIdOrSlug =
           typeof val === "string"
             ? val
-            : typeof val === "object" && val !== null
+            : typeof val === "object" && val !== null && !Array.isArray(val)
               ? (val as any).id || (val as any).slug
               : null;
 
         if (targetIdOrSlug) {
+          if (visitedEntryIds.has(targetIdOrSlug)) {
+            // Stop cycle
+            resolved[field.key] = { id: targetIdOrSlug, cyclic: true };
+            continue;
+          }
+
           const targetEntry = await this.getEntryById(
             field.relationModel,
             targetIdOrSlug,
@@ -728,46 +828,151 @@ export class ContentModelerService {
             false,
           );
           if (targetEntry) {
+            let targetData = targetEntry.data;
+            if (boundedDepth > 1) {
+              const targetModel = await this.getModelByIdOrSlug(
+                targetEntry.modelId,
+                publicationId,
+              );
+              if (targetModel && targetModel.fields) {
+                const nextVisited = new Set([...visitedEntryIds, targetEntry.id, targetEntry.slug]);
+                targetData = await this.resolveRelationsForEntry(
+                  targetData,
+                  targetModel.fields,
+                  publicationId,
+                  boundedDepth - 1,
+                  nextVisited,
+                );
+              }
+            }
             resolved[field.key] = {
               id: targetEntry.id,
               title: targetEntry.title,
               slug: targetEntry.slug,
               status: targetEntry.status,
-              data: targetEntry.data,
+              data: targetData,
             };
+          } else {
+            resolved[field.key] = null;
           }
+        } else if (val === null) {
+          resolved[field.key] = null;
         }
       } else if (field.type === "relation_list" && field.relationModel) {
         const val = data[field.key];
         if (Array.isArray(val)) {
-          const targetList: Array<Record<string, unknown>> = [];
-          for (const item of val) {
-            const targetIdOrSlug =
-              typeof item === "string"
-                ? item
-                : typeof item === "object" && item !== null
-                  ? (item as any).id || (item as any).slug
-                  : null;
-
-            if (targetIdOrSlug) {
-              const targetEntry = await this.getEntryById(
-                field.relationModel,
-                targetIdOrSlug,
-                publicationId,
-                false,
-              );
-              if (targetEntry) {
-                targetList.push({
-                  id: targetEntry.id,
-                  title: targetEntry.title,
-                  slug: targetEntry.slug,
-                  status: targetEntry.status,
-                  data: targetEntry.data,
-                });
-              }
-            }
+          if (val.length === 0) {
+            resolved[field.key] = [];
+            continue;
           }
+
+          const targetModel = await this.getModelByIdOrSlug(
+            field.relationModel,
+            publicationId,
+          );
+          if (!targetModel) {
+            resolved[field.key] = [];
+            continue;
+          }
+
+          // Extract IDs/slugs preserving input positions
+          const rawItems = val.map((item) =>
+            typeof item === "string"
+              ? item
+              : typeof item === "object" && item !== null && !Array.isArray(item)
+                ? (item as any).id || (item as any).slug
+                : null,
+          );
+
+          const validTargetKeys = rawItems.filter((k): k is string => typeof k === "string" && k.trim().length > 0);
+          if (validTargetKeys.length === 0) {
+            resolved[field.key] = [];
+            continue;
+          }
+
+          // Batched query to prevent N+1 queries
+          const db = getDb();
+          const targetRows = await db
+            .select()
+            .from(contentEntries)
+            .where(
+              and(
+                eq(contentEntries.modelId, targetModel.id),
+                eq(contentEntries.publicationId, publicationId),
+                isNull(contentEntries.deletedAt),
+                or(
+                  inArray(contentEntries.id, validTargetKeys),
+                  inArray(contentEntries.slug, validTargetKeys),
+                ),
+              ),
+            );
+
+          const entryMap = new Map<string, ContentEntry>();
+          for (const r of targetRows) {
+            const entryObj: ContentEntry = {
+              id: r.id,
+              publicationId: r.publicationId,
+              modelId: r.modelId,
+              title: r.title,
+              slug: r.slug,
+              data: (r.data as Record<string, unknown>) || {},
+              status: r.status as "draft" | "published" | "archived",
+              version: r.version,
+              createdBy: r.createdBy,
+              updatedBy: r.updatedBy,
+              publishedAt: r.publishedAt,
+              createdAt: r.createdAt,
+              updatedAt: r.updatedAt,
+              deletedAt: r.deletedAt,
+            };
+            entryMap.set(entryObj.id, entryObj);
+            entryMap.set(entryObj.slug, entryObj);
+          }
+
+          // Map items in EXACT ORIGINAL ORDER
+          const targetList: Array<Record<string, unknown>> = [];
+          for (const itemKey of rawItems) {
+            if (!itemKey) continue;
+            const targetEntry = entryMap.get(itemKey);
+            if (!targetEntry) continue; // omit deleted/missing/cross-publication targets safely
+
+            if (visitedEntryIds.has(targetEntry.id) || visitedEntryIds.has(targetEntry.slug)) {
+              // Cycle stop
+              targetList.push({
+                id: targetEntry.id,
+                title: targetEntry.title,
+                slug: targetEntry.slug,
+                status: targetEntry.status,
+                data: targetEntry.data,
+                cyclic: true,
+              });
+              continue;
+            }
+
+            let targetData = targetEntry.data;
+            if (boundedDepth > 1 && targetModel.fields) {
+              const nextVisited = new Set([...visitedEntryIds, targetEntry.id, targetEntry.slug]);
+              targetData = await this.resolveRelationsForEntry(
+                targetData,
+                targetModel.fields,
+                publicationId,
+                boundedDepth - 1,
+                nextVisited,
+              );
+            }
+
+            targetList.push({
+              id: targetEntry.id,
+              title: targetEntry.title,
+              slug: targetEntry.slug,
+              status: targetEntry.status,
+              data: targetData,
+            });
+          }
+
           resolved[field.key] = targetList;
+        } else {
+          resolved[field.key] = [];
         }
       }
     }

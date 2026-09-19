@@ -9,6 +9,8 @@ import {
   Code,
   CheckCircle,
   FileText,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
 
@@ -595,12 +597,90 @@ export function DynamicCollectionEntryEditor({
                     )
                   : [];
 
+                const selectedItems = selectedIds
+                  .map((id) => targetOptions.find((opt) => opt.id === id) || { id, title: id, slug: "" })
+                  .filter(Boolean);
+
+                const moveItem = (index: number, direction: "up" | "down") => {
+                  const newIds = [...selectedIds];
+                  const targetIndex = direction === "up" ? index - 1 : index + 1;
+                  if (targetIndex < 0 || targetIndex >= newIds.length) return;
+                  const temp = newIds[index]!;
+                  newIds[index] = newIds[targetIndex]!;
+                  newIds[targetIndex] = temp;
+                  onFieldValChange(newIds);
+                };
+
+                const removeItem = (idToRemove: string) => {
+                  onFieldValChange(selectedIds.filter((id) => id !== idToRemove));
+                };
+
                 return (
-                  <div key={field.id || field.key} className="space-y-2">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                      {field.name} {field.required && "*"} (Multi-relation to: {field.relationModel || "Model"})
-                    </label>
+                  <div key={field.id || field.key} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <LinkIcon className="w-3.5 h-3.5 text-primary" />
+                        {field.name} {field.required && "*"} (Multi-relation to: {field.relationModel || "Model"})
+                      </label>
+                      <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        {selectedIds.length} selected
+                      </span>
+                    </div>
+
+                    {/* Selected Ordered Items */}
+                    {selectedItems.length > 0 && (
+                      <div className="space-y-1.5 border border-primary/20 bg-primary/5 dark:bg-primary/10 rounded-md p-2">
+                        <span className="text-[11px] font-semibold text-primary block">
+                          Selected Items (Drag / Reorder):
+                        </span>
+                        {selectedItems.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-slate-400 text-[10px]">#{idx + 1}</span>
+                              <span className="font-medium text-slate-800 dark:text-slate-200">
+                                {item.title}
+                              </span>
+                              {item.slug && (
+                                <span className="text-slate-400 font-mono text-[10px]">({item.slug})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveItem(idx, "up")}
+                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
+                                title="Move up"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === selectedItems.length - 1}
+                                onClick={() => moveItem(idx, "down")}
+                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
+                                title="Move down"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.id)}
+                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded text-rose-500"
+                                title="Remove item"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Available Items Picker */}
                     <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-md p-2 space-y-1">
                       {targetOptions.length === 0 ? (
                         <p className="text-xs text-slate-500 py-1 px-2">

@@ -30,7 +30,8 @@ export interface FieldItem {
 }
 
 const FIELD_TYPES = [
-  { value: "text", label: "Short Text" },
+  { value: "short_text", label: "Short Text (Single Line)" },
+  { value: "text", label: "Text / String" },
   { value: "long_text", label: "Long Text / Multi-line" },
   { value: "rich_text", label: "Rich Text / Markdown" },
   { value: "studio_doc", label: "Studio Document" },
