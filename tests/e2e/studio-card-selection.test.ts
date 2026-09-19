@@ -256,14 +256,14 @@ test.describe("Studio card selection (real UI)", () => {
       ".studio-html-content, .mr-studio-content, .st-studio-content, .article-body, .vb-content, main",
       { timeout: 15000 },
     );
-    await expect(page.locator(".studio-html-content h2, .mr-studio-content h2, .st-studio-content h2, main h2")).toHaveText(
-      "A Heading",
-    );
-    await expect(page.locator(".studio-html-content strong, .mr-studio-content strong, .st-studio-content strong, main strong")).toHaveText(
-      "bold text",
-    );
     await expect(
-      page.locator('.studio-html-content a[href="https://example.com/a"], .mr-studio-content a[href="https://example.com/a"], .st-studio-content a[href="https://example.com/a"], main a[href="https://example.com/a"]'),
+      page.locator(".studio-html-content h2, .mr-studio-content h2, .st-studio-content h2, .vb-content h2, .article-body h2").first(),
+    ).toHaveText("A Heading");
+    await expect(
+      page.locator(".studio-html-content strong, .mr-studio-content strong, .st-studio-content strong, .vb-content strong, .article-body strong").first(),
+    ).toHaveText("bold text");
+    await expect(
+      page.locator('.studio-html-content a[href="https://example.com/a"], .mr-studio-content a[href="https://example.com/a"], .st-studio-content a[href="https://example.com/a"], .vb-content a[href="https://example.com/a"], .article-body a[href="https://example.com/a"]').first(),
     ).toHaveText("link");
   });
 
@@ -314,7 +314,7 @@ test.describe("Studio card selection (real UI)", () => {
     await expect(page.locator("p.safe-html")).toHaveText(
       "Safe visible content",
     );
-    const html = await page.locator(".studio-html-content, .mr-studio-content, .st-studio-content, .article-body, .vb-content, main").first().innerHTML();
+    const html = await page.locator(".studio-html-content, .mr-studio-content, .st-studio-content, .vb-content, .article-body").first().innerHTML();
     expect(html).not.toContain("<script");
     expect(html).not.toContain("onerror");
     const executed = await page.evaluate(
