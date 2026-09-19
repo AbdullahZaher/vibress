@@ -483,6 +483,13 @@ describe("First-run setup", () => {
       await pool.query(
         `UPDATE installation SET installed = false, installed_at = NULL, installed_version = NULL WHERE id = 'singleton';`,
       );
+      await pool.query(`DELETE FROM revisions;`);
+      await pool.query(`DELETE FROM post_authors;`);
+      await pool.query(`DELETE FROM post_tags;`);
+      await pool.query(`DELETE FROM posts;`);
+      await pool.query(`DELETE FROM page_authors;`);
+      await pool.query(`DELETE FROM pages;`);
+      await pool.query(`DELETE FROM user_roles;`);
       await pool.query(`DELETE FROM users CASCADE;`);
       await pool.query(`DELETE FROM settings;`);
       await pool.query(
@@ -502,10 +509,15 @@ describe("First-run setup", () => {
       await pool.query(
         `UPDATE installation SET installed = false, installed_at = NULL, installed_version = NULL WHERE id = 'singleton';`,
       );
+      await pool.query(`DELETE FROM revisions;`);
+      await pool.query(`DELETE FROM post_authors;`);
+      await pool.query(`DELETE FROM post_tags;`);
+      await pool.query(`DELETE FROM posts;`);
+      await pool.query(`DELETE FROM page_authors;`);
+      await pool.query(`DELETE FROM pages;`);
+      await pool.query(`DELETE FROM user_roles;`);
       await pool.query(`DELETE FROM users CASCADE;`);
       await pool.query(`DELETE FROM settings;`);
-      await pool.query(`DELETE FROM posts;`);
-      await pool.query(`DELETE FROM pages;`);
 
       const service = new SetupService(new DrizzleInstallationRepository());
       await service.classifyLegacyInstallation();
