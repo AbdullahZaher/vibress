@@ -89,6 +89,14 @@ export async function Home(props: ThemeHomeProps) {
                           },
                         )}
                       </time>
+                      {props.site.commentsEnabled !== false && typeof (post as any).commentCount === "number" && (
+                        <>
+                          {" "}&bull;{" "}
+                          <span>
+                            💬 {(post as any).commentCount}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </a>

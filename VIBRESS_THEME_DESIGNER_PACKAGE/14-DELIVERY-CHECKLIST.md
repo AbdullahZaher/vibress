@@ -54,7 +54,18 @@ Use this checklist as the final quality gate before submitting your theme packag
 
 ---
 
-## 🤖 5. Automated Verification
+## 💬 5. Comments & Community Integration
+
+- [ ] `templates/post.liquid` includes official `{% comments %}` tag (or mounts official `#comments` container).
+- [ ] Post header/byline displays `post.comment_count` (when `> 0`) linked to `#comments`.
+- [ ] Feed & archive cards display `post.comment_count` badge in metadata row.
+- [ ] Comment thread lines and indentation use CSS logical properties (`border-inline-start`, `margin-inline-start`).
+- [ ] Thread tested with Arabic locale (`dir="rtl"`) without layout mirroring bugs.
+- [ ] No direct `fetch()` or custom comments REST APIs used in theme templates.
+
+---
+
+## 🤖 6. Automated Verification
 
 - [ ] Ran `node scripts/validate-theme.mjs my-theme.zip` and all checks returned **PASS**.
 - [ ] Successfully uploaded, previewed, and activated on a local or test Vibress instance.

@@ -5,6 +5,7 @@ import { ReadingProgressBar } from "../../../components/reader/ReadingProgressBa
 import { TableOfContents } from "../../../components/reader/TableOfContents";
 import { CodeCopyHandler } from "../../../components/reader/CodeCopyHandler";
 import { ImageLightbox } from "../../../components/reader/ImageLightbox";
+import { CommentSection } from "../../../components/comments/CommentSection";
 import { t } from "../../../lib/i18n";
 
 export async function Post(props: ThemePostProps) {
@@ -128,6 +129,18 @@ export async function Post(props: ThemePostProps) {
                   <span className="byline-meta-date">
                     {t("post.readTime", { minutes: readTimeMins })}
                   </span>
+                  {props.site.commentsEnabled !== false && (
+                    <>
+                      <span style={{ opacity: 0.4 }}>&bull;</span>
+                      <a
+                        href="#comments-container"
+                        className="byline-meta-date"
+                        style={{ textDecoration: "none", color: "inherit" }}
+                      >
+                        💬 {post.commentCount ?? 0} {t("comments.title", undefined, dateLocale) || "Comments"}
+                      </a>
+                    </>
+                  )}
                 </div>
               </section>
             </div>
@@ -153,6 +166,15 @@ export async function Post(props: ThemePostProps) {
           <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
           </section>
+
+          <CommentSection
+            postId={post.id}
+            postSlug={post.slug}
+            initialCount={post.commentCount}
+            commentsEnabled={props.site.commentsEnabled !== false}
+            commentAccess={(props.site.comments?.commentAccess || props.site.commentAccess || "public") as any}
+            locale={dateLocale}
+          />
         </article>
       </main>
     </ThemeLayout>

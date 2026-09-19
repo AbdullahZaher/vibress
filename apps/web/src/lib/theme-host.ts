@@ -129,6 +129,8 @@ export interface ThemeSiteSettings {
         preModeration?: boolean | undefined;
       }
     | undefined;
+  commentsEnabled?: boolean | undefined;
+  commentAccess?: string | undefined;
 }
 
 /**
@@ -152,6 +154,8 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     analytics: {},
     code: {},
     comments: { commentAccess: "all", preModeration: false },
+    commentsEnabled: true,
+    commentAccess: "all",
   };
   try {
     const baseUrl = process.env.API_URL || "http://127.0.0.1:7780";
@@ -182,6 +186,9 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     if (!site || typeof site.title !== "string") return fallback;
     const requestLocale = await getRequestLocaleFromHeaders();
     const activeLocale = requestLocale || (site.locale as string) || fallback.locale;
+    const commentsData = (data.comments as ThemeSiteSettings["comments"]) || {};
+    const commentAccess = commentsData?.commentAccess || "all";
+    const commentsEnabled = commentAccess !== "disabled";
 
     return {
       title: site.title as string,
@@ -209,7 +216,9 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       security: data.security || { isPrivate: false },
       analytics: (data.analytics as ThemeSiteSettings["analytics"]) || {},
       code: (data.code as ThemeSiteSettings["code"]) || {},
-      comments: (data.comments as ThemeSiteSettings["comments"]) || {},
+      comments: commentsData,
+      commentsEnabled,
+      commentAccess,
     };
   } catch {
     return fallback;

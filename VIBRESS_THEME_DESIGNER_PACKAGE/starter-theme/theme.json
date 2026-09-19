@@ -2,7 +2,7 @@
   "id": "vibress-starter-theme",
   "name": "Vibress Starter Theme",
   "version": "1.0.0",
-  "description": "Clean, elegant starter theme for Vibress with full Liquid templating support, dark mode, and responsive layout.",
+  "description": "Clean, elegant starter theme for Vibress with full Liquid templating support, dark mode, responsive layout, and complete Arabic & RTL localization.",
   "author": {
     "name": "Vibress Team",
     "email": "support@vibress.org",
@@ -13,5 +13,14 @@
   "previewImage": "preview.webp",
   "themeApi": 1,
   "capabilities": ["post", "page", "tag", "author", "archive"],
+  "localization": {
+    "supportedLocales": ["en", "en-US", "ar", "ar-SA", "*"],
+    "supportsLocales": ["*"],
+    "rtl": true,
+    "dynamicLocale": true,
+    "localizedNavigation": true,
+    "localizedDates": true,
+    "dictionaryDir": "locales"
+  },
   "settingsSchemaVersion": 1
 }

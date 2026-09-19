@@ -112,6 +112,19 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
 }
 
+function flattenDictionary(obj: Record<string, any>, prefix = ""): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (typeof val === "string") {
+      result[fullKey] = val;
+    } else if (val && typeof val === "object" && !Array.isArray(val)) {
+      Object.assign(result, flattenDictionary(val, fullKey));
+    }
+  }
+  return result;
+}
+
 /**
  * Extracts and parses theme-level locale JSON files (e.g. locales/en.json, locales/ar.json).
  */
@@ -126,11 +139,12 @@ function extractThemeDictionaries(files: Map<string, string> | Record<string, st
       try {
         const parsed = JSON.parse(content);
         if (parsed && typeof parsed === "object") {
+          const flat = flattenDictionary(parsed);
           const canonical = canonicalizeLocale(localeCode);
-          dict[canonical] = parsed as Record<string, string>;
+          dict[canonical] = flat;
           const lang = canonical.split("-")[0];
           if (lang && !dict[lang]) {
-            dict[lang] = parsed as Record<string, string>;
+            dict[lang] = flat;
           }
         }
       } catch {
@@ -184,24 +198,31 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
     return "en";
   }
 
+  function parseLiquidFilterParams(args: any[]): Record<string, string | number> | undefined {
+    if (!args || args.length === 0) return undefined;
+    const result: Record<string, string | number> = {};
+    for (const arg of args) {
+      if (Array.isArray(arg) && arg.length === 2 && typeof arg[0] === "string") {
+        result[arg[0]] = arg[1];
+      } else if (arg && typeof arg === "object" && !Array.isArray(arg)) {
+        Object.assign(result, arg);
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
   // Custom filter: t / translate
-  liquid.registerFilter("t", function (this: any, key: unknown, params?: any) {
+  liquid.registerFilter("t", function (this: any, key: unknown, ...args: any[]) {
     if (!key || typeof key !== "string") return "";
     const activeLocale = getContextLocale(this);
-    let parsedParams: Record<string, string | number> | undefined = undefined;
-    if (params && typeof params === "object") {
-      parsedParams = params as Record<string, string | number>;
-    }
+    const parsedParams = parseLiquidFilterParams(args);
     return translator.translate(key, parsedParams, activeLocale);
   });
 
-  liquid.registerFilter("translate", function (this: any, key: unknown, params?: any) {
+  liquid.registerFilter("translate", function (this: any, key: unknown, ...args: any[]) {
     if (!key || typeof key !== "string") return "";
     const activeLocale = getContextLocale(this);
-    let parsedParams: Record<string, string | number> | undefined = undefined;
-    if (params && typeof params === "object") {
-      parsedParams = params as Record<string, string | number>;
-    }
+    const parsedParams = parseLiquidFilterParams(args);
     return translator.translate(key, parsedParams, activeLocale);
   });
 
@@ -413,6 +434,52 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
       }).join("\n  ");
 
       return `<nav class="vb-locale-switcher" aria-label="Language selection">\n  ${links}\n</nav>`;
+    },
+  });
+
+  // Custom tag: comments
+  liquid.registerTag("comments", {
+    parse(tagToken) {
+      const args = tagToken.args.trim();
+      if (args) {
+        const match = args.match(/post:\s*([^\s,]+)/);
+        this.postVar = match ? match[1] : (args.startsWith("post") ? "post" : args);
+      } else {
+        this.postVar = "post";
+      }
+    },
+    render(ctx) {
+      const post = (this.postVar ? ctx.get([this.postVar]) : ctx.get(["post"])) || ctx.environments?.post;
+      const site = ctx.get(["site"]) || ctx.environments?.site;
+
+      if (!post || !post.id) {
+        return "";
+      }
+
+      const commentAccess = site?.comments?.commentAccess || site?.commentAccess || "public";
+      if (commentAccess === "disabled" || site?.commentsEnabled === false) {
+        return "";
+      }
+
+      const postId = String(post.id).replace(/"/g, "&quot;");
+      const postSlug = String(post.slug || "").replace(/"/g, "&quot;");
+      const count = Number(post.commentCount ?? post.comment_count) || 0;
+      const accessAttr = String(commentAccess).replace(/"/g, "&quot;");
+
+      return `<section class="vb-comments-section" id="comments-container" aria-label="Comments">
+  <div 
+    class="vb-comments-mount"
+    id="vb-comments-root"
+    data-post-id="${postId}"
+    data-post-slug="${postSlug}"
+    data-comment-count="${count}"
+    data-access="${accessAttr}"
+  >
+    <noscript>
+      <p class="vb-comments-noscript">Please enable JavaScript to view and post comments.</p>
+    </noscript>
+  </div>
+</section>`;
     },
   });
 

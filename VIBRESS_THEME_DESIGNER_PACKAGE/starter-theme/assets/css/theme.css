@@ -1,12 +1,14 @@
 /**
  * Vibress Starter Theme CSS
  * Modern, responsive typography and layout design
+ * Built using 100% CSS Logical Properties for seamless LTR & RTL support
  */
 
 :root {
   --theme-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --theme-font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
   --theme-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --theme-font-arabic: "Noto Sans Arabic", "IBM Plex Sans Arabic", "Cairo", "Segoe UI", Tahoma, sans-serif;
 
   --theme-bg: #ffffff;
   --theme-text: #111827;
@@ -17,6 +19,10 @@
   --theme-accent: #6366f1;
   --theme-accent-hover: #4f46e5;
   --theme-max-width: 1120px;
+}
+
+[dir="rtl"] {
+  --theme-font-sans: var(--theme-font-arabic);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,12 +44,14 @@
   padding: 0;
 }
 
-body.theme-body {
+body.theme-body,
+.vibress-liquid-theme-root {
   background-color: var(--theme-bg);
   color: var(--theme-text);
   font-family: var(--theme-font-sans);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-align: start;
 }
 
 body.font-serif {
@@ -68,14 +76,16 @@ img {
 .theme-container {
   width: 100%;
   max-width: var(--theme-max-width);
-  margin: 0 auto;
-  padding: 0 1.5rem;
+  margin-inline: auto;
+  margin-block: 0;
+  padding-inline: 1.5rem;
+  padding-block: 0;
 }
 
 /* Header */
 .theme-header {
-  border-bottom: 1px solid var(--theme-border);
-  padding: 1.25rem 0;
+  border-block-end: 1px solid var(--theme-border);
+  padding-block: 1.25rem;
   background: var(--theme-bg);
 }
 
@@ -103,6 +113,12 @@ img {
   color: var(--theme-text-muted);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
 .nav-list {
   display: flex;
   list-style: none;
@@ -121,12 +137,42 @@ img {
   color: var(--theme-accent);
 }
 
+/* Locale Switcher */
+.vb-locale-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.vb-locale-switcher a {
+  padding-inline: 0.5rem;
+  padding-block: 0.25rem;
+  border-radius: 0.375rem;
+  color: var(--theme-text-muted);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.vb-locale-switcher a:hover {
+  color: var(--theme-accent);
+  background: var(--theme-card-border);
+}
+
+.vb-locale-switcher a.is-active {
+  color: var(--theme-accent);
+  border-color: var(--theme-border);
+  background: var(--theme-card-bg);
+}
+
 /* Hero */
 .hero-section {
-  padding: 3.5rem 0 2rem 0;
+  padding-block: 3.5rem 2rem;
   text-align: center;
   max-width: 760px;
-  margin: 0 auto;
+  margin-inline: auto;
+  margin-block: 0;
 }
 
 .hero-title {
@@ -134,7 +180,7 @@ img {
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1.15;
-  margin-bottom: 0.75rem;
+  margin-block-end: 0.75rem;
 }
 
 .hero-subtitle {
@@ -147,9 +193,9 @@ img {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 1.5rem 0;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--theme-border);
+  padding-block: 1.5rem;
+  margin-block-end: 1rem;
+  border-block-end: 1px solid var(--theme-border);
 }
 
 .tags-filter-label {
@@ -167,7 +213,8 @@ img {
 .tag-chip {
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.25rem 0.625rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.625rem;
   border-radius: 9999px;
   background: var(--theme-card-border);
   color: var(--theme-text);
@@ -184,7 +231,7 @@ img {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 2rem;
-  padding: 1rem 0 3rem 0;
+  padding-block: 1rem 3rem;
 }
 
 .post-card {
@@ -228,7 +275,7 @@ img {
   font-weight: 700;
   color: var(--theme-accent);
   text-transform: uppercase;
-  margin-bottom: 0.375rem;
+  margin-block-end: 0.375rem;
   display: inline-block;
 }
 
@@ -236,7 +283,7 @@ img {
   font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.3;
-  margin-bottom: 0.5rem;
+  margin-block-end: 0.5rem;
   letter-spacing: -0.02em;
 }
 
@@ -244,7 +291,7 @@ img {
   font-size: 0.875rem;
   color: var(--theme-text-muted);
   line-height: 1.5;
-  margin-bottom: 1rem;
+  margin-block-end: 1rem;
   flex: 1;
 }
 
@@ -254,8 +301,8 @@ img {
   gap: 0.75rem;
   font-size: 0.75rem;
   color: var(--theme-text-muted);
-  border-top: 1px solid var(--theme-border);
-  padding-top: 0.75rem;
+  border-block-start: 1px solid var(--theme-border);
+  padding-block-start: 0.75rem;
 }
 
 .post-card-author {
@@ -274,12 +321,14 @@ img {
 .post-article-layout,
 .page-article-layout {
   max-width: 800px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
+  margin-inline: auto;
+  margin-block: 0;
+  padding-block: 3rem;
+  padding-inline: 1.5rem;
 }
 
 .article-header {
-  margin-bottom: 2.5rem;
+  margin-block-end: 2.5rem;
 }
 
 .article-title {
@@ -287,24 +336,25 @@ img {
   font-weight: 900;
   line-height: 1.15;
   letter-spacing: -0.03em;
-  margin: 0.5rem 0 1rem 0;
+  margin-block: 0.5rem 1rem;
+  margin-inline: 0;
 }
 
 .article-lead {
   font-size: 1.25rem;
   line-height: 1.5;
   color: var(--theme-text-muted);
-  margin-bottom: 1.5rem;
+  margin-block-end: 1.5rem;
 }
 
 .article-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--theme-border);
-  border-bottom: 1px solid var(--theme-border);
-  padding: 1rem 0;
-  margin-bottom: 2rem;
+  border-block-start: 1px solid var(--theme-border);
+  border-block-end: 1px solid var(--theme-border);
+  padding-block: 1rem;
+  margin-block-end: 2rem;
 }
 
 .article-author {
@@ -324,7 +374,8 @@ img {
 }
 
 .article-featured-image-wrap {
-  margin: 2rem 0;
+  margin-block: 2rem;
+  margin-inline: 0;
   border-radius: 0.75rem;
   overflow: hidden;
 }
@@ -335,26 +386,29 @@ img {
 }
 
 .article-content p {
-  margin-bottom: 1.5rem;
+  margin-block-end: 1.5rem;
 }
 
 .article-content h2 {
   font-size: 1.75rem;
   font-weight: 800;
-  margin: 2.5rem 0 1rem 0;
+  margin-block: 2.5rem 1rem;
+  margin-inline: 0;
 }
 
 .article-content h3 {
   font-size: 1.35rem;
   font-weight: 700;
-  margin: 2rem 0 0.75rem 0;
+  margin-block: 2rem 0.75rem;
+  margin-inline: 0;
 }
 
 /* Pagination */
 .theme-pagination {
-  margin: 3rem 0;
-  border-top: 1px solid var(--theme-border);
-  padding-top: 1.5rem;
+  margin-block: 3rem;
+  margin-inline: 0;
+  border-block-start: 1px solid var(--theme-border);
+  padding-block-start: 1.5rem;
 }
 
 .pagination-inner {
@@ -366,11 +420,21 @@ img {
 .pagination-btn {
   font-size: 0.875rem;
   font-weight: 600;
-  padding: 0.5rem 1rem;
+  padding-block: 0.5rem;
+  padding-inline: 1rem;
   border-radius: 0.375rem;
   border: 1px solid var(--theme-border);
   background: var(--theme-card-bg);
   transition: all 0.15s ease;
+}
+
+.pagination-arrow {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+[dir="rtl"] .pagination-arrow {
+  transform: scaleX(-1);
 }
 
 .pagination-btn:hover:not(.pagination-disabled) {
@@ -390,9 +454,9 @@ img {
 
 /* Footer */
 .theme-footer {
-  border-top: 1px solid var(--theme-border);
-  padding: 3rem 0;
-  margin-top: 4rem;
+  border-block-start: 1px solid var(--theme-border);
+  padding-block: 3rem;
+  margin-block-start: 4rem;
   background: var(--theme-bg);
 }
 
@@ -428,3 +492,273 @@ img {
 .footer-link:hover {
   color: var(--theme-accent);
 }
+
+/* Responsive Mobile Layout (<= 768px) */
+@media (max-width: 768px) {
+  .theme-container {
+    padding-inline: 1rem;
+  }
+
+  .header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .nav-list {
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .hero-title {
+    font-size: 1.875rem;
+  }
+
+  .posts-grid {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .tags-filter-bar {
+    flex-wrap: wrap;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+  }
+
+  .footer-nav-list {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+}
+
+/* ==========================================================================
+   Comments System & Badges (Vibress Official Contract)
+   ========================================================================== */
+
+.post-card-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.75rem;
+  color: var(--theme-text-muted);
+  font-weight: 600;
+}
+
+.post-card-comments-icon {
+  opacity: 0.75;
+}
+
+.article-comments-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.article-comments-link:hover {
+  color: var(--theme-accent);
+}
+
+.theme-comments-section {
+  margin-block-start: 3.5rem;
+  padding-block-start: 2.5rem;
+  border-block-start: 1px solid var(--theme-border);
+}
+
+.theme-comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: 1.5rem;
+}
+
+.theme-comments-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.theme-comments-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding-inline: 0.5rem;
+  background: var(--theme-card-border);
+  color: var(--theme-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+/* Comments Runtime Styles */
+.vb-comments-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.vb-comment-form-box {
+  background: var(--theme-card-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius, 8px);
+  padding: 1.25rem;
+}
+
+.vb-comment-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 5rem;
+  padding: 0.75rem 1rem;
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius, 8px);
+  color: var(--theme-text);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.vb-comment-textarea:focus {
+  border-color: var(--theme-accent);
+}
+
+.vb-comment-submit-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-start: 0.75rem;
+}
+
+.vb-comment-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 1.25rem;
+  padding-block: 0.625rem;
+  background: var(--theme-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--theme-radius, 8px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.vb-comment-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.vb-comment-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vb-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.vb-comment-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: var(--theme-card-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--theme-radius, 8px);
+  text-align: start;
+}
+
+.vb-comment-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+}
+
+.vb-comment-author-group {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.vb-comment-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.vb-comment-author-name {
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.vb-comment-time {
+  color: var(--theme-text-muted);
+}
+
+.vb-comment-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--theme-text);
+  word-break: break-word;
+}
+
+.vb-comment-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8125rem;
+}
+
+.vb-comment-action-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--theme-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: color 0.15s ease;
+}
+
+.vb-comment-action-btn:hover {
+  color: var(--theme-accent);
+}
+
+.vb-comment-replies-thread {
+  margin-inline-start: 1.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-block-start: 0.75rem;
+}
+

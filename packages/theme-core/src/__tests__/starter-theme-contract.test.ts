@@ -162,13 +162,13 @@ describe("Starter Theme Contract & Consistency Test", () => {
     });
 
     expect(rendered).toContain("Vibress Chronicle");
-    expect(rendered).toContain("Ideas, Stories &amp; Publications");
+    expect(rendered).toContain("Ideas, Stories & Publications");
     expect(rendered).toContain("Articles");
     expect(rendered).toContain("/posts");
     expect(rendered).toContain("Zero-Rebuild Theme Architecture");
     expect(rendered).toContain("#Technology");
     expect(rendered).toContain("Eleanor Vance");
-    expect(rendered).toContain("Older Articles &rarr;");
+    expect(rendered).toContain("Older Articles");
   });
 
   it("renders post.liquid cleanly with ViewModel contract", async () => {

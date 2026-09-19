@@ -143,15 +143,35 @@ export async function validateAndExtractThemeZip(
     );
   }
 
-  // Check if archive has a single top-level folder wrapper
-  const nonDirectoryEntries = entries.filter((e) => !zip.files[e]?.dir);
+  // Helper to identify OS junk files (__MACOSX, .DS_Store, Thumbs.db, resource forks)
+  const isJunkPath = (p: string) =>
+    p.startsWith("__MACOSX/") ||
+    p.includes("/__MACOSX/") ||
+    p.endsWith(".DS_Store") ||
+    p.endsWith("Thumbs.db") ||
+    p.split("/").some((part) => part.startsWith("._"));
+
+  // Check if archive has a top-level folder wrapper
+  const nonDirectoryEntries = entries.filter((e) => !zip.files[e]?.dir && !isJunkPath(e));
   let prefixToStrip = "";
 
-  const rootFiles = nonDirectoryEntries.filter((e) => !e.includes("/"));
-  if (rootFiles.length === 0) {
-    const topLevels = new Set(entries.map((e) => e.split("/")[0]));
-    if (topLevels.size === 1) {
-      prefixToStrip = Array.from(topLevels)[0] + "/";
+  // Locate theme.json to determine the canonical root of the theme package
+  const themeJsonEntry = nonDirectoryEntries.find(
+    (e) => e === "theme.json" || e.endsWith("/theme.json"),
+  );
+
+  if (themeJsonEntry && themeJsonEntry.includes("/")) {
+    prefixToStrip = themeJsonEntry.slice(
+      0,
+      themeJsonEntry.lastIndexOf("theme.json"),
+    );
+  } else if (!themeJsonEntry) {
+    const rootFiles = nonDirectoryEntries.filter((e) => !e.includes("/"));
+    if (rootFiles.length === 0) {
+      const topLevels = new Set(nonDirectoryEntries.map((e) => e.split("/")[0]));
+      if (topLevels.size === 1) {
+        prefixToStrip = Array.from(topLevels)[0] + "/";
+      }
     }
   }
 
@@ -161,6 +181,11 @@ export async function validateAndExtractThemeZip(
   for (const entryName of entries) {
     const entry = zip.files[entryName];
     if (!entry || entry.dir) continue;
+
+    // Skip OS junk files (__MACOSX, .DS_Store, Thumbs.db, resource forks)
+    if (isJunkPath(entryName)) {
+      continue;
+    }
 
     // Check for symlinks in zip metadata
     const unixPermissions = (entry as any).unixPermissions;
@@ -176,13 +201,7 @@ export async function validateAndExtractThemeZip(
       relativePath = relativePath.slice(prefixToStrip.length);
     }
 
-    // Skip OS junk files (__MACOSX, .DS_Store, Thumbs.db)
-    if (
-      relativePath.startsWith("__MACOSX/") ||
-      relativePath.includes("/__MACOSX/") ||
-      relativePath.endsWith(".DS_Store") ||
-      relativePath.endsWith("Thumbs.db")
-    ) {
+    if (isJunkPath(relativePath)) {
       continue;
     }
 

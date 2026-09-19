@@ -9,9 +9,10 @@ import {
 import { getDirection, isRtl, defaultLocaleRegistry, type Direction } from "@vibress/i18n";
 import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
+import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHydrator";
 
 const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
-const CACHE_TTL_MS = 60 * 1000; // 1 minute in-memory cache
+const CACHE_TTL_MS = process.env.NODE_ENV === "production" ? 60 * 1000 : 0;
 
 function findThemeDirectory(themeId: string, version: string): string | null {
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
@@ -20,12 +21,16 @@ function findThemeDirectory(themeId: string, version: string): string | null {
   const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
 
   const candidates = [
-    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion)] : []),
+    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion), path.join(explicitRoot, cleanId)] : []),
     path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "content", cleanId),
+    path.join(process.cwd(), "..", "..", "content", cleanId),
+    path.join(process.cwd(), "..", "api", "content", cleanId),
+    path.join(process.cwd(), "apps", "api", "content", cleanId),
     path.join(process.cwd(), "content", "theme-starter"),
     path.join(process.cwd(), "..", "..", "content", "theme-starter"),
     path.join(process.cwd(), "..", "api", "content", "theme-starter"),
@@ -277,6 +282,16 @@ export async function renderThemeTemplate(
         <link rel="stylesheet" href={cssHref} />
       )}
       <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+      {templateName === "post" && context.post && (
+        <LiquidCommentsHydrator
+          postId={context.post.id}
+          postSlug={context.post.slug}
+          initialCount={context.post.commentCount ?? context.post.comment_count}
+          commentsEnabled={site.commentsEnabled !== false}
+          commentAccess={(site.comments?.commentAccess || (site as any).commentAccess || "public") as any}
+          locale={activeLocale}
+        />
+      )}
     </div>
   );
 }

@@ -25,18 +25,30 @@
 6. **`05-VIEW-MODELS-REFERENCE.md`**: مرجع كامل لجميع الكائنات المتاحة (`site`, `post`, `page`, `author`, `tag`, `pagination`).
 7. **`06-ROUTES-AND-HELPERS.md`**: دوال التوجيه وروابط المقالات والأصول.
 8. **`07-THEME-SETTINGS-GUIDE.md`**: كيفية بناء خيارات تخصيص في `settings.json` لمدير الموقع.
-9. **`08-ASSETS-AND-STYLING.md`**: التعامل مع ملفات CSS، الخطوط، والصور.
-10. **`09-SECURITY-RULES.md`**: القواعد الأمنية الصارمة وأنواع الملفات المحظورة.
-11. **`10-RESPONSIVE-RTL-ACCESSIBILITY.md`**: معايير دعم الهواتف، الاتجاه العربي (RTL)، وسهولة الوصول (a11y).
-12. **`11-THEME-TESTING-GUIDE.md`**: كيفية اختبار الثيم محليًا والتحقق من سلامته.
-13. **`12-PACKAGING-AND-DELIVERY.md`**: تعليمات ضغط الثيم وتسليمه كملف ZIP نهائي جاهز للنشر.
-14. **`13-DESIGN-BRIEF-TEMPLATE.md`**: نموذج وثيقة متطلبات التصميم.
-15. **`14-DELIVERY-CHECKLIST.md`**: قائمة التدقيق قبل التسليم.
-16. **`15-EXAMPLE-NEWS-BRIEF.md` / `16-EXAMPLE-BLOG-BRIEF.md` / `17-EXAMPLE-LANDING-PAGE-BRIEF.md`**: نماذج وتطبيقات عملية لثيمات إخبارية، مدونات، وصفحات هبوط.
-17. **`starter-theme/`**: القالب النموذجي المصدري المفتوح لبدء العمل منه مباشرة.
-18. **`examples/`**: أمثلة حية لـ `theme.json` و `settings.json` ومقتطفات Liquid.
-19. **`scripts/validate-theme.mjs`**: أداة فحص آلية للتحقق من مطابقة الثيم لمواصفات Vibress.
-20. **`vibress-theme-starter.zip`**: حزمة الثيم المرجعي مضغوطة وجاهزة للرفع الفوري للتجربة.
+9. **`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`**: الدليل الشامل لدمج التعليقات، وسم `{% comments %}`، عداد التعليقات `post.comment_count`، وهيكلية RTL.
+10. **`08-ASSETS-AND-STYLING.md`**: التعامل مع ملفات CSS، الخطوط، والصور.
+11. **`09-SECURITY-RULES.md`**: القواعد الأمنية الصارمة وأنواع الملفات المحظورة.
+12. **`10-RESPONSIVE-RTL-ACCESSIBILITY.md`**: معايير دعم الهواتف، الاتجاه العربي (RTL)، وسهولة الوصول (a11y).
+13. **`11-THEME-TESTING-GUIDE.md`**: كيفية اختبار الثيم محليًا والتحقق من سلامته.
+14. **`12-PACKAGING-AND-DELIVERY.md`**: تعليمات ضغط الثيم وتسليمه كملف ZIP نهائي جاهز للنشر.
+15. **`13-DESIGN-BRIEF-TEMPLATE.md`**: نموذج وثيقة متطلبات التصميم.
+16. **`14-DELIVERY-CHECKLIST.md`**: قائمة التدقيق قبل التسليم.
+17. **`15-EXAMPLE-NEWS-BRIEF.md` / `16-EXAMPLE-BLOG-BRIEF.md` / `17-EXAMPLE-LANDING-PAGE-BRIEF.md`**: نماذج وتطبيقات عملية لثيمات إخبارية، مدونات، وصفحات هبوط.
+18. **`starter-theme/`**: القالب النموذجي المصدري المفتوح لبدء العمل منه مباشرة.
+19. **`examples/`**: أمثلة حية لـ `theme.json` و `settings.json` ومقتطفات Liquid.
+20. **`scripts/validate-theme.mjs`**: أداة فحص آلية للتحقق من مطابقة الثيم لمواصفات Vibress.
+21. **`vibress-theme-starter.zip`**: حزمة الثيم المرجعي مضغوطة وجاهزة للرفع الفوري للتجربة.
+
+---
+
+## 💬 نظام التعليقات والمجتمع (Comments & Discussion)
+
+تدعم منصة Vibress نظام تعليقات تفاعلي متكامل للأعضاء والقراء:
+* **وسم Liquid الرسمي**: يتم تضمين قسم التعليقات داخل `post.liquid` باستخدام `{% comments %}`.
+* **عداد التعليقات التجميعي**: يوفر نموذج العرض `post.comment_count` و `post.commentCount` العدد الإجمالي للتعليقات المنشورة دون استعلامات إضافية (Zero N+1 Queries).
+* **دعم كامل للغة العربية والاتجاه RTL**: استخدام خصائص CSS المنطقية (`margin-inline`, `padding-inline`, `border-inline-start`) لضمان محاذاة وتداخل الردود بصورة طبيعية باللغتين العربية والإنجليزية.
+* **نماذج البيانات المعتمدة**: كائنات `CommentViewModel` و `SiteCommentsConfig`.
+* راجع الدليل الكامل: **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)**.
 
 ---
 

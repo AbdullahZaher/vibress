@@ -119,6 +119,7 @@ To get the most out of this package, read the documents in this sequence:
 | **[`05-VIEW-MODELS-REFERENCE.md`](./05-VIEW-MODELS-REFERENCE.md)** | Complete reference of all data variables (`site`, `post`, etc.) |
 | **[`06-ROUTES-AND-HELPERS.md`](./06-ROUTES-AND-HELPERS.md)** | URLs, asset resolution, and date formatting helpers |
 | **[`07-THEME-SETTINGS-GUIDE.md`](./07-THEME-SETTINGS-GUIDE.md)** | Custom admin customization controls (colors, fonts, toggles) |
+| **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)** | Official Comments integration, `{% comments %}`, `comment_count`, and states |
 | **[`08-ASSETS-AND-STYLING.md`](./08-ASSETS-AND-STYLING.md)** | CSS design tokens, typography, dark mode, and fonts |
 | **[`09-SECURITY-RULES.md`](./09-SECURITY-RULES.md)** | Security constraints and forbidden file types |
 | **[`10-RESPONSIVE-RTL-ACCESSIBILITY.md`](./10-RESPONSIVE-RTL-ACCESSIBILITY.md)** | Mobile responsiveness, RTL (Arabic) support, and a11y |

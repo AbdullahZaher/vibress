@@ -112,6 +112,8 @@ If you need specific font or styling adjustments when Arabic is active:
 </div>
 ```
 
+> 💬 **Comments & Discussion RTL**: See **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)** for detailed CSS logical rules applied to comment threads, indentation lines, and author headers.
+
 ---
 
 ## ♿ 3. Web Accessibility (WCAG 2.2 AA)

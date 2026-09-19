@@ -156,6 +156,13 @@ Generates platform URLs for resources:
 <a href="{% route 'home' %}">Back to Home</a>
 ```
 
+### 3. `{% comments %}` Tag
+Mounts the official Vibress Comments runtime container and interactive components on article detail pages:
+```liquid
+{% comments %}
+```
+See **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)** for full architecture, state handling, and styling options.
+
 ---
 
 ## 🛡️ HTML Rendering vs Text Escaping Contract

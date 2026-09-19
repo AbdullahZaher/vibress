@@ -32,12 +32,16 @@ function resolveThemeAssetPath(
 
   // 1. External theme storage paths (e.g. content/themes/{themeId}/{version}/...)
   const externalThemeRoots = [
-    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion)] : []),
+    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion), path.join(explicitRoot, cleanId)] : []),
     path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
     path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(process.cwd(), "content", cleanId),
+    path.join(process.cwd(), "..", "..", "content", cleanId),
+    path.join(process.cwd(), "..", "api", "content", cleanId),
+    path.join(process.cwd(), "apps", "api", "content", cleanId),
   ];
 
   for (const themeRoot of externalThemeRoots) {
@@ -202,10 +206,14 @@ export async function GET(
       responseBody = new Uint8Array(buffer);
     }
 
+    const cacheControl = process.env.NODE_ENV === "production"
+      ? "public, max-age=3600, stale-while-revalidate=86400"
+      : "no-cache, no-store, must-revalidate";
+
     return new NextResponse(responseBody, {
       headers: {
         "Content-Type": mimeType,
-        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Cache-Control": cacheControl,
       },
     });
   } catch (error) {

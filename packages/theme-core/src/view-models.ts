@@ -51,9 +51,39 @@ export interface PostViewModel {
   tags: TagViewModel[];
   url: string;
   seo: SeoViewModel;
+  commentCount?: number | undefined;
+  comment_count?: number | undefined;
+}
+
+export interface CommentViewModel {
+  id: string;
+  postId: string;
+  parentId: string | null;
+  author: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null | undefined;
+  };
+  body: string | null; // Null for deleted tombstones
+  status: "published" | "pending_review";
+  likeCount: number;
+  hasLiked: boolean;
+  isDeleted: boolean;
+  replyCount: number;
+  depth: number;
+  createdAt: string;
+  replies?: CommentViewModel[] | undefined;
+}
+
+export interface PostCommentsViewModel {
+  enabled: boolean;
+  access: "public" | "members_only" | "disabled";
+  totalCount: number;
+  comments: CommentViewModel[];
 }
 
 export interface PageViewModel {
+
   id: string;
   title: string;
   slug: string;
@@ -99,6 +129,10 @@ export interface SiteViewModel {
     commentAccess?: string | undefined;
     preModeration?: boolean | undefined;
   } | undefined;
+  commentsEnabled?: boolean | undefined;
+  comments_enabled?: boolean | undefined;
+  commentAccess?: string | undefined;
+  comment_access?: string | undefined;
 }
 
 export interface PaginationViewModel {
@@ -260,6 +294,10 @@ export function mapSiteToViewModel(site: {
     commentAccess?: string | undefined;
     preModeration?: boolean | undefined;
   } | undefined;
+  commentsEnabled?: boolean | undefined;
+  comments_enabled?: boolean | undefined;
+  commentAccess?: string | undefined;
+  comment_access?: string | undefined;
 }): SiteViewModel {
   const locale = site.locale || "en";
   const rtlLocales = ["ar", "he", "fa", "ur"];
@@ -268,6 +306,17 @@ export function mapSiteToViewModel(site: {
   )
     ? "rtl"
     : "ltr";
+
+  const commentAccess =
+    site.comments?.commentAccess ||
+    site.commentAccess ||
+    site.comment_access ||
+    "public";
+
+  const commentsEnabled =
+    site.commentsEnabled ??
+    site.comments_enabled ??
+    (commentAccess !== "disabled");
 
   return {
     title: site.title || "Vibress",
@@ -291,6 +340,10 @@ export function mapSiteToViewModel(site: {
       url: site.announcementUrl ?? null,
     },
     comments: site.comments,
+    commentsEnabled,
+    comments_enabled: commentsEnabled,
+    commentAccess,
+    comment_access: commentAccess,
   };
 }
 
@@ -376,6 +429,16 @@ export function mapPostToViewModel(
     authors,
     tags,
     url: postUrl,
+    commentCount: typeof (post as any).commentCount === "number"
+      ? (post as any).commentCount
+      : typeof (post as any).comment_count === "number"
+      ? (post as any).comment_count
+      : 0,
+    comment_count: typeof (post as any).comment_count === "number"
+      ? (post as any).comment_count
+      : typeof (post as any).commentCount === "number"
+      ? (post as any).commentCount
+      : 0,
     seo: {
       title: post.seo?.title || title,
       description: post.seo?.description || post.excerpt || "",

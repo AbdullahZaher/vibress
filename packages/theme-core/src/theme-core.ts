@@ -113,6 +113,12 @@ export interface ThemeSiteSettings {
   url: string;
   locale: string;
   direction?: "ltr" | "rtl" | undefined;
+  commentsEnabled?: boolean | undefined;
+  commentAccess?: string | undefined;
+  comments?: {
+    commentAccess?: string | undefined;
+    preModeration?: boolean | undefined;
+  } | undefined;
 }
 
 export interface AvailableLocaleItem {

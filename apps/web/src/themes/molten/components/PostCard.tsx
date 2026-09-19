@@ -65,7 +65,14 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
         </div>
 
         <footer className="post-footer">
-          <span className="post-more">{t("post.readMore")}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span className="post-more">{t("post.readMore")}</span>
+            {typeof post.commentCount === "number" && (
+              <span className="post-comments-count" style={{ fontSize: "0.85rem", opacity: 0.8, fontWeight: 600 }}>
+                💬 {post.commentCount}
+              </span>
+            )}
+          </div>
 
           <div className="post-author">
             {authors.map((author, i) => {

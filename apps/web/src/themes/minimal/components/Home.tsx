@@ -56,7 +56,7 @@ export async function Home(props: ThemeHomeProps) {
                         )}
                         <footer className="vb-card-meta">
                           {showAuthor && post.primaryAuthor && (
-                            <span style={{ marginRight: "0.75rem" }}>
+                            <span style={{ marginInlineEnd: "0.75rem" }}>
                               {post.primaryAuthor.name}
                             </span>
                           )}
@@ -71,6 +71,11 @@ export async function Home(props: ThemeHomeProps) {
                                 },
                               )}
                             </time>
+                          )}
+                          {props.site.commentsEnabled !== false && typeof (post as any).commentCount === "number" && (
+                            <span style={{ marginInlineStart: "0.75rem", opacity: 0.7 }}>
+                              {(post as any).commentCount} {dateLocale.startsWith("ar") ? "تعليقات" : "comments"}
+                            </span>
                           )}
                         </footer>
                       </div>

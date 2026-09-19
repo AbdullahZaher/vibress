@@ -41,6 +41,12 @@
               <span class="meta-dot">&bull;</span>
               <span class="article-reading-time">{{ post.readingTimeMinutes }} {{ "theme.minRead" | t }}</span>
             {% endif %}
+            {% if settings.showCommentsCount | default: true %}
+              <span class="meta-dot">&bull;</span>
+              <a href="#comments-container" class="article-comments-count">
+                💬 {{ post.comment_count | default: 0 }} {{ "theme.comments" | t }}
+              </a>
+            {% endif %}
           </div>
         </div>
 
@@ -68,6 +74,9 @@
           </div>
         </footer>
       {% endif %}
+
+      <!-- Official Vibress Comments Mount: Injected seamlessly by Theme Core engine -->
+      {% comments %}
     </article>
   </main>
 

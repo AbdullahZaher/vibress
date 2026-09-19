@@ -541,3 +541,224 @@ img {
     gap: 1rem;
   }
 }
+
+/* ==========================================================================
+   Comments System & Badges (Vibress Official Contract)
+   ========================================================================== */
+
+.post-card-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.75rem;
+  color: var(--theme-text-muted);
+  font-weight: 600;
+}
+
+.post-card-comments-icon {
+  opacity: 0.75;
+}
+
+.article-comments-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.article-comments-link:hover {
+  color: var(--theme-accent);
+}
+
+.theme-comments-section {
+  margin-block-start: 3.5rem;
+  padding-block-start: 2.5rem;
+  border-block-start: 1px solid var(--theme-border);
+}
+
+.theme-comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: 1.5rem;
+}
+
+.theme-comments-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.theme-comments-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding-inline: 0.5rem;
+  background: var(--theme-card-border);
+  color: var(--theme-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+/* Comments Runtime Styles */
+.vb-comments-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.vb-comment-form-box {
+  background: var(--theme-card-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius, 8px);
+  padding: 1.25rem;
+}
+
+.vb-comment-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 5rem;
+  padding: 0.75rem 1rem;
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius, 8px);
+  color: var(--theme-text);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.vb-comment-textarea:focus {
+  border-color: var(--theme-accent);
+}
+
+.vb-comment-submit-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-start: 0.75rem;
+}
+
+.vb-comment-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 1.25rem;
+  padding-block: 0.625rem;
+  background: var(--theme-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--theme-radius, 8px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.vb-comment-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.vb-comment-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vb-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.vb-comment-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: var(--theme-card-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--theme-radius, 8px);
+  text-align: start;
+}
+
+.vb-comment-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+}
+
+.vb-comment-author-group {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.vb-comment-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.vb-comment-author-name {
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.vb-comment-time {
+  color: var(--theme-text-muted);
+}
+
+.vb-comment-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--theme-text);
+  word-break: break-word;
+}
+
+.vb-comment-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8125rem;
+}
+
+.vb-comment-action-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--theme-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: color 0.15s ease;
+}
+
+.vb-comment-action-btn:hover {
+  color: var(--theme-accent);
+}
+
+.vb-comment-replies-thread {
+  margin-inline-start: 1.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-block-start: 0.75rem;
+}
+

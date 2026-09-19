@@ -243,4 +243,36 @@ describe("Theme Core — ZIP Validator & Security", () => {
       /must have a non-empty "options" array/i,
     );
   });
+
+  it("handles macOS archives with __MACOSX, .DS_Store, and root wrapper directories seamlessly", async () => {
+    const macFiles: Record<string, string | Buffer> = {
+      "__MACOSX/._theme.json": Buffer.from([0, 1, 2, 3]),
+      "__MACOSX/MORROWE_VIBRESS_MAGAZINE_v1.1.0/._theme.json": Buffer.from([0, 1, 2, 3]),
+      ".DS_Store": Buffer.from([0, 1, 2, 3]),
+      "MORROWE_VIBRESS_MAGAZINE_v1.1.0/.DS_Store": Buffer.from([0, 1, 2, 3]),
+    };
+    for (const [path, content] of Object.entries(minimalValidFiles)) {
+      macFiles[`MORROWE_VIBRESS_MAGAZINE_v1.1.0/${path}`] = content;
+    }
+
+    const zipBuffer = await createMockThemeZip(macFiles);
+    const result = await validateAndExtractThemeZip(zipBuffer);
+
+    expect(result.manifest.id).toBe("test-theme");
+    expect(result.files.has("theme.json")).toBe(true);
+    expect(result.files.has("templates/home.liquid")).toBe(true);
+    expect(result.files.has(".DS_Store")).toBe(false);
+  });
+
+  it("throws THEME_MANIFEST_MISSING if theme.json is truly missing anywhere in archive", async () => {
+    const noManifestFiles: Record<string, string | Buffer> = {
+      "templates/home.liquid": "<h1>Home</h1>",
+      "templates/post.liquid": "<h1>Post</h1>",
+      "templates/page.liquid": "<h1>Page</h1>",
+    };
+    const zipBuffer = await createMockThemeZip(noManifestFiles);
+    await expect(validateAndExtractThemeZip(zipBuffer)).rejects.toThrow(
+      /Theme archive is missing required theme\.json manifest/i,
+    );
+  });
 });

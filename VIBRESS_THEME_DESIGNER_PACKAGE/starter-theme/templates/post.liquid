@@ -4,29 +4,28 @@
   <main class="theme-main theme-container post-article-layout">
     <article class="article-single">
       <header class="article-header">
-        {% if post.tags.size > 0 %}
-          {% assign primaryTag = post.tags[0] %}
+        {% if post.primaryTag %}
           <div class="article-tag-wrap">
-            <a href="{{ primaryTag.url }}" class="post-card-tag">#{{ primaryTag.name | escape }}</a>
+            <a href="{{ post.primaryTag.url }}" class="post-card-tag">#{{ post.primaryTag.name }}</a>
           </div>
         {% endif %}
 
-        <h1 class="article-title">{{ post.title | escape }}</h1>
+        <h1 class="article-title">{{ post.title }}</h1>
 
         {% if post.excerpt %}
-          <p class="article-lead">{{ post.excerpt | escape }}</p>
+          <p class="article-lead">{{ post.excerpt }}</p>
         {% endif %}
 
         <div class="article-meta">
           {% if post.primaryAuthor and settings.showAuthorAvatars %}
             <div class="article-author">
               {% if post.primaryAuthor.avatar %}
-                <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name | escape }}" class="author-avatar" />
+                <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="author-avatar" />
               {% endif %}
               <div class="author-details">
-                <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name | escape }}</a>
+                <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name }}</a>
                 {% if post.primaryAuthor.bio %}
-                  <span class="author-bio-snippet">{{ post.primaryAuthor.bio | escape }}</span>
+                  <span class="author-bio-snippet">{{ post.primaryAuthor.bio }}</span>
                 {% endif %}
               </div>
             </div>
@@ -40,16 +39,22 @@
             {% endif %}
             {% if post.readingTimeMinutes %}
               <span class="meta-dot">&bull;</span>
-              <span class="article-reading-time">{{ post.readingTimeMinutes }} min read</span>
+              <span class="article-reading-time">{{ post.readingTimeMinutes }} {{ "theme.minRead" | t }}</span>
+            {% endif %}
+            {% if settings.showCommentsCount | default: true %}
+              <span class="meta-dot">&bull;</span>
+              <a href="#comments-container" class="article-comments-count">
+                💬 {{ post.comment_count | default: 0 }} {{ "theme.comments" | t }}
+              </a>
             {% endif %}
           </div>
         </div>
 
         {% if post.featureImage.url %}
           <figure class="article-featured-image-wrap">
-            <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" class="article-featured-image" />
+            <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="article-featured-image" />
             {% if post.featureImage.caption %}
-              <figcaption class="article-image-caption">{{ post.featureImage.caption | escape }}</figcaption>
+              <figcaption class="article-image-caption">{{ post.featureImage.caption }}</figcaption>
             {% endif %}
           </figure>
         {% endif %}
@@ -62,13 +67,16 @@
       {% if post.tags.size > 0 %}
         <footer class="article-footer">
           <div class="article-tags-list">
-            <span class="tags-title">Tags:</span>
+            <span class="tags-title">{{ "nav.tags" | t }}:</span>
             {% for tag in post.tags %}
-              <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name | escape }}</a>
+              <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
             {% endfor %}
           </div>
         </footer>
       {% endif %}
+
+      <!-- Official Vibress Comments Mount: Injected seamlessly by Theme Core engine -->
+      {% comments %}
     </article>
   </main>
 

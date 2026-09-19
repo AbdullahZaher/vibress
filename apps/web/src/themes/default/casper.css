@@ -6,9 +6,10 @@
 
 :root {
   --vb-accent-color: #ff2865;
-  --brand-pink: #ff2865;
-  --brand-pink-hover: #e01f53;
-  --brand-pink-light: rgba(255, 40, 101, 0.1);
+  --accent-color: var(--vb-accent-color);
+  --brand-pink: var(--vb-accent-color);
+  --brand-pink-hover: var(--vb-accent-color);
+  --brand-pink-light: rgba(255, 40, 101, 0.08);
 
   --bg-base: #fdfdfd;
   --bg-surface: #ffffff;
@@ -152,7 +153,7 @@ a {
 }
 
 .vb-head-subscribe-btn {
-  background-color: var(--brand-pink);
+  background-color: var(--vb-accent-color);
   color: #ffffff;
   border: none;
   padding: 0.55rem 1.35rem;
@@ -160,14 +161,14 @@ a {
   font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(255, 40, 101, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
 }
 
 .vb-head-subscribe-btn:hover {
-  background-color: var(--brand-pink-hover);
+  filter: brightness(0.92);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(255, 40, 101, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 
 /* ==========================================================================
@@ -221,7 +222,7 @@ a {
 }
 
 .inline-subscribe-submit {
-  background-color: var(--brand-pink);
+  background-color: var(--vb-accent-color);
   color: #ffffff;
   border: none;
   padding: 0.7rem 1.6rem;
@@ -230,11 +231,13 @@ a {
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
 }
 
 .inline-subscribe-submit:hover {
-  background-color: var(--brand-pink-hover);
+  filter: brightness(0.92);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
 }
 
 /* Footer Variant of Email Form */
@@ -386,7 +389,7 @@ a {
 
 .footer-social-btn:hover {
   transform: translateY(-2px);
-  color: var(--brand-pink);
+  color: var(--vb-accent-color);
 }
 
 /* Bottom Footer Bar */
@@ -476,17 +479,19 @@ a {
   right: 1.25rem;
   background: none;
   border: none;
-  color: #f43f5e;
+  color: #64748b;
   cursor: pointer;
   padding: 0.25rem;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .subscribe-modal-close:hover {
-  transform: scale(1.1);
+  color: var(--text-primary);
+  background-color: #f1f5f9;
 }
 
 .subscribe-modal-title {
@@ -530,13 +535,13 @@ a {
 }
 
 .subscribe-modal-field input:focus {
-  border-color: var(--brand-pink);
+  border-color: var(--vb-accent-color);
 }
 
 .subscribe-modal-submit {
   width: 100%;
   height: 48px;
-  background-color: var(--brand-pink);
+  background-color: var(--vb-accent-color);
   color: #ffffff;
   border: none;
   border-radius: var(--radius-full);
@@ -545,11 +550,14 @@ a {
   font-weight: 700;
   cursor: pointer;
   margin-top: 0.5rem;
-  transition: background-color 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
 }
 
 .subscribe-modal-submit:hover {
-  background-color: var(--brand-pink-hover);
+  filter: brightness(0.92);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
 }
 
 .subscribe-modal-footer-text {
@@ -560,7 +568,7 @@ a {
 }
 
 .subscribe-modal-footer-text a {
-  color: var(--brand-pink);
+  color: var(--vb-accent-color);
   font-weight: 600;
 }
 
@@ -807,7 +815,7 @@ body.dark .site-footer-bottom {
   transform: scale(1.05);
   border-color: var(--vb-accent-color);
   color: var(--vb-accent-color);
-  box-shadow: 0 0 12px rgba(255, 40, 101, 0.15);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.08);
 }
 
 /* ==========================================================================

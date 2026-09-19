@@ -44,6 +44,7 @@ Verify every template against these scenarios:
 - [ ] **Typography & Prose**: Check headings (`<h2>`, `<h3>`), blockquotes, code blocks (`<pre><code>`), lists, tables, and images embedded in the body.
 - [ ] **Author Bio & Avatar**: Author name, bio, and avatar render cleanly.
 - [ ] **Multiple Tags**: Tags display as clean pill links without wrapping awkwardly.
+- [ ] **Comments Mount & Count**: Official `{% comments %}` tag mounts `#comments` container; `post.comment_count` displays accurate count in meta byline and links to `#comments` (see **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)**).
 
 ### 📄 Static Page (`page.liquid`)
 - [ ] Renders long-form text (e.g. Privacy Policy or About Us) with comfortable reading line-length (max ~75ch).

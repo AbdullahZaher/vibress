@@ -19,7 +19,7 @@ export async function ThemeLayout({
       ? (extendedSite.accentColor as string)
       : typeof settings.accentColor === "string"
         ? settings.accentColor
-        : "#6366f1";
+        : "#ff2865";
   const siteIcon = (extendedSite.iconUrl || extendedSite.icon) as
     string | undefined;
   const siteLogo = extendedSite.logoUrl as string | undefined;
@@ -39,7 +39,9 @@ export async function ThemeLayout({
           __html: `
         :root {
           --vb-accent-color: ${accentColor};
+          --accent-color: ${accentColor};
           --brand-pink: ${accentColor};
+          --brand-pink-hover: ${accentColor};
         }
       `,
         }}

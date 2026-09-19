@@ -1,6 +1,7 @@
 import React from "react";
 import { ThemePostProps } from "../../types";
 import { ThemeLayout } from "./Layout";
+import { CommentSection } from "../../../components/comments/CommentSection";
 import { t } from "../../../lib/i18n";
 
 export async function Post(props: ThemePostProps) {
@@ -44,6 +45,18 @@ export async function Post(props: ThemePostProps) {
               <time dateTime={post.publishedAt?.substring(0, 10)}>
                 {dateFormatted}
               </time>
+              {site.commentsEnabled !== false && (
+                <>
+                  {" "}—{" "}
+                  <a
+                    href="#comments-container"
+                    className="vb-article-comments-badge"
+                    style={{ textDecoration: "none", color: "inherit", fontWeight: 700 }}
+                  >
+                    💬 {post.commentCount ?? 0}
+                  </a>
+                </>
+              )}
             </span>
 
             <h1 className="vb-article-title">{post.title}</h1>
@@ -69,6 +82,16 @@ export async function Post(props: ThemePostProps) {
           <div
             className="vb-content vb-canvas studio-html-content"
             dangerouslySetInnerHTML={{ __html: post.html || "" }}
+          />
+
+          <CommentSection
+            postId={post.id}
+            postSlug={post.slug}
+            initialCount={post.commentCount}
+            commentsEnabled={site.commentsEnabled !== false}
+            commentAccess={(site.comments?.commentAccess || site.commentAccess || "public") as any}
+            locale={dateLocale}
+            className="vb-canvas"
           />
         </article>
 

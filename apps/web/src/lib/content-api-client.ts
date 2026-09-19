@@ -190,4 +190,43 @@ export const ContentApiClient = {
       options,
     );
   },
+
+  async getPostComments(
+    postId: string,
+    options?: { limit?: number; offset?: number },
+  ): Promise<{
+    comments: any[];
+    total: number;
+  } | null> {
+    return fetchContentApi(`/posts/${encodeURIComponent(postId)}/comments`, options);
+  },
+
+  async getPostCommentCount(postId: string): Promise<number> {
+    const data = await fetchContentApi<{ count: number }>(
+      `/posts/${encodeURIComponent(postId)}/comments/count`,
+    );
+    return data?.count || 0;
+  },
+
+  async getPostCommentCounts(
+    postIds: string[],
+  ): Promise<Record<string, number>> {
+    if (postIds.length === 0) return {};
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/api/content/v1/posts/comments/counts`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postIds }),
+        cache: "no-store",
+      });
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.counts || {};
+    } catch {
+      return {};
+    }
+  },
 };
+

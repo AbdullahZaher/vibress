@@ -73,6 +73,8 @@ interface PostViewModel {
   updatedAt?: string | null;
   readingTimeMinutes?: number;
   featured: boolean;
+  commentCount: number;
+  comment_count: number;
   featureImage?: ImageViewModel | null;
   primaryAuthor?: AuthorViewModel | null;
   authors: AuthorViewModel[];
@@ -91,6 +93,8 @@ interface PostViewModel {
 | `post.slug` | `string` | No | Clean URL slug | `"architecting-modern-web-themes"` |
 | `post.excerpt` | `string` | Yes | Short summary or subtitle | `"A deep dive into zero-rebuild architecture..."` |
 | `post.html` | `string` | No | Sanitized full HTML article body | `"<p>Content goes here...</p>"` |
+| `post.commentCount` | `number` | No | Authoritative count of published comments | `14` |
+| `post.comment_count` | `number` | No | Canonical snake_case alias matching `commentCount` | `14` |
 | `post.publishedAt` | `string` | Yes | ISO 8601 publication timestamp | `"2026-08-17T01:30:00.000Z"` |
 | `post.updatedAt` | `string` | Yes | ISO 8601 last update timestamp | `"2026-08-17T03:15:00.000Z"` |
 | `post.readingTimeMinutes`| `number` | No | Estimated read time in minutes | `4` |
@@ -104,6 +108,8 @@ interface PostViewModel {
 | `post.url` | `string` | No | Pre-computed relative link | `"/posts/architecting-modern-web-themes"` |
 | `post.seo.title` | `string` | No | SEO meta title | `"Architecting Modern Themes — Tech Horizon"` |
 | `post.seo.description` | `string` | No | SEO meta description | `"A deep dive into..."` |
+
+> 💡 **Comments Integration**: See **[`07B-COMMENTS-AND-COMMUNITY-GUIDE.md`](./07B-COMMENTS-AND-COMMUNITY-GUIDE.md)** for discussion setup, `{% comments %}` tag, and state handling.
 
 ---
 

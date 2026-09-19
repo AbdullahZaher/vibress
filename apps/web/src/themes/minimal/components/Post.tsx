@@ -1,6 +1,7 @@
 import React from "react";
 import { ThemePostProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
+import { CommentSection } from "../../../components/comments/CommentSection";
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
@@ -49,6 +50,15 @@ export async function Post(props: ThemePostProps) {
                   })}
                 </time>
               )}
+              {props.site.commentsEnabled !== false && (
+                <a
+                  href="#comments-container"
+                  className="vb-article-meta-date"
+                  style={{ textDecoration: "none", opacity: 0.8 }}
+                >
+                  {post.commentCount ?? 0} {dateLocale.startsWith("ar") ? "تعليقات" : "comments"}
+                </a>
+              )}
             </div>
           </header>
 
@@ -68,6 +78,15 @@ export async function Post(props: ThemePostProps) {
           <section className="vb-content studio-html-content">
             <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
           </section>
+
+          <CommentSection
+            postId={post.id}
+            postSlug={post.slug}
+            initialCount={post.commentCount}
+            commentsEnabled={props.site.commentsEnabled !== false}
+            commentAccess={(props.site.comments?.commentAccess || props.site.commentAccess || "public") as any}
+            locale={dateLocale}
+          />
         </article>
       </main>
     </ThemeLayout>

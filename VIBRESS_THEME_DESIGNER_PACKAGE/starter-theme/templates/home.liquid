@@ -3,18 +3,18 @@
 
   <main class="theme-main theme-container">
     <section class="hero-section">
-      <h1 class="hero-title">{{ settings.heroHeadline | default: site.title | escape }}</h1>
+      <h1 class="hero-title">{{ settings.heroHeadline | default: site.title }}</h1>
       {% if site.description %}
-        <p class="hero-subtitle">{{ site.description | escape }}</p>
+        <p class="hero-subtitle">{{ site.description }}</p>
       {% endif %}
     </section>
 
     {% if tags.size > 0 %}
       <div class="tags-filter-bar">
-        <span class="tags-filter-label">Explore topics:</span>
+        <span class="tags-filter-label">{{ "theme.tagFilter" | t }}:</span>
         <div class="tags-chips">
           {% for tag in tags %}
-            <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name | escape }}</a>
+            <a href="{{ tag.url }}" class="tag-chip">#{{ tag.name }}</a>
           {% endfor %}
         </div>
       </div>
@@ -23,39 +23,37 @@
     <section class="posts-grid">
       {% if posts.size == 0 %}
         <div class="empty-state">
-          <h3>No articles published yet.</h3>
-          <p>Check back soon for new stories.</p>
+          <h3>{{ "theme.noPosts" | t }}</h3>
         </div>
       {% else %}
         {% for post in posts %}
           <article class="post-card {% if post.featured %}post-card-featured{% endif %}">
             {% if post.featureImage.url %}
               <a href="{{ post.url }}" class="post-card-image-link">
-                <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title | escape }}" class="post-card-image" loading="lazy" />
+                <img src="{{ post.featureImage.url }}" alt="{{ post.featureImage.alt | default: post.title }}" class="post-card-image" loading="lazy" />
               </a>
             {% endif %}
 
             <div class="post-card-content">
-              {% if post.tags.size > 0 %}
-                {% assign primaryTag = post.tags[0] %}
-                <a href="{{ primaryTag.url }}" class="post-card-tag">#{{ primaryTag.name | escape }}</a>
+              {% if post.primaryTag %}
+                <a href="{{ post.primaryTag.url }}" class="post-card-tag">#{{ post.primaryTag.name }}</a>
               {% endif %}
 
               <h2 class="post-card-title">
-                <a href="{{ post.url }}">{{ post.title | escape }}</a>
+                <a href="{{ post.url }}">{{ post.title }}</a>
               </h2>
 
               <p class="post-card-excerpt">
-                {{ post.excerpt | excerpt: 160 | escape }}
+                {{ post.excerpt | excerpt: 160 }}
               </p>
 
               <div class="post-card-meta">
                 {% if post.primaryAuthor and settings.showAuthorAvatars %}
                   <div class="post-card-author">
                     {% if post.primaryAuthor.avatar %}
-                      <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name | escape }}" class="author-avatar" />
+                      <img src="{{ post.primaryAuthor.avatar }}" alt="{{ post.primaryAuthor.name }}" class="author-avatar" />
                     {% endif %}
-                    <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name | escape }}</a>
+                    <a href="{{ post.primaryAuthor.url }}" class="author-name">{{ post.primaryAuthor.name }}</a>
                   </div>
                 {% endif %}
 
@@ -66,7 +64,14 @@
                 {% endif %}
 
                 {% if post.readingTimeMinutes %}
-                  <span class="post-reading-time">{{ post.readingTimeMinutes }} min read</span>
+                  <span class="post-reading-time">{{ post.readingTimeMinutes }} {{ "theme.minRead" | t }}</span>
+                {% endif %}
+
+                {% if post.comment_count != nil and post.comment_count > 0 %}
+                  <span class="post-card-comments">
+                    <svg class="post-card-comments-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    {{ post.comment_count }}
+                  </span>
                 {% endif %}
               </div>
             </div>

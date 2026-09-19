@@ -58,6 +58,11 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                       </a>
                     </span>
                   )}
+                  {props.site.commentsEnabled !== false && typeof (post as any).commentCount === "number" && (
+                    <span>
+                      💬 {(post as any).commentCount}
+                    </span>
+                  )}
                 </div>
                 {post.excerpt && (
                   <p className="post-card-excerpt">{post.excerpt}</p>
