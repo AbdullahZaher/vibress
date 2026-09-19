@@ -228,5 +228,66 @@ export const ContentApiClient = {
       return {};
     }
   },
+
+  async getCollection(
+    modelSlug: string,
+    options?: {
+      limit?: number;
+      offset?: number;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      locale?: string;
+    },
+  ): Promise<{
+    data: Array<{
+      id: string;
+      modelSlug: string;
+      title: string;
+      slug: string;
+      data: Record<string, unknown>;
+      publishedAt?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    meta: {
+      model: {
+        id: string;
+        name: string;
+        slug: string;
+        description?: string | null;
+      };
+      pagination: {
+        limit: number;
+        offset: number;
+        count: number;
+      };
+    };
+  } | null> {
+    return fetchContentApi(`/collections/${encodeURIComponent(modelSlug)}`, options);
+  },
+
+  async getCollectionEntry(
+    modelSlug: string,
+    entrySlug: string,
+    options?: { locale?: string },
+  ): Promise<{
+    data: {
+      id: string;
+      modelSlug: string;
+      title: string;
+      slug: string;
+      data: Record<string, unknown>;
+      publishedAt?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    };
+  } | null> {
+    return fetchContentApi(
+      `/collections/${encodeURIComponent(modelSlug)}/${encodeURIComponent(entrySlug)}`,
+      options,
+    );
+  },
 };
+
 

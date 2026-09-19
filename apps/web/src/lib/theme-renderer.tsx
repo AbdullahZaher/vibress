@@ -85,6 +85,8 @@ function cleanThemeHtml(html: string): string {
     .trim();
 }
 
+import { DefaultCollectionView, DefaultCollectionEntryView } from "../components/collections/DefaultCollectionViews";
+
 export interface RenderThemeOptions {
   themeId: string;
   themeVersion?: string;
@@ -94,7 +96,16 @@ export interface RenderThemeOptions {
 }
 
 export async function renderThemeTemplate(
-  templateName: "home" | "post" | "page" | "tag" | "author" | "archive" | "404",
+  templateName:
+    | "home"
+    | "post"
+    | "page"
+    | "tag"
+    | "author"
+    | "archive"
+    | "404"
+    | "collection"
+    | "collection-entry",
   context: ThemeViewModelContext,
   options: RenderThemeOptions,
 ): Promise<React.ReactElement> {
@@ -155,6 +166,33 @@ export async function renderThemeTemplate(
           site,
           settings,
         });
+      case "collection":
+        return (
+          <DefaultCollectionView
+            model={context.collection?.model || { name: "Collection", slug: "" }}
+            entries={context.collection?.entries || []}
+            site={context.site || mapSiteToViewModel(site)}
+            settings={settings}
+            pagination={
+              context.pagination
+                ? {
+                    limit: context.pagination.limit,
+                    offset: 0,
+                    count: context.collection?.entries?.length || 0,
+                  }
+                : undefined
+            }
+          />
+        );
+      case "collection-entry":
+        return (
+          <DefaultCollectionEntryView
+            model={context.collection?.model || { name: "Collection", slug: "" }}
+            entry={context.collection?.entry!}
+            site={context.site || mapSiteToViewModel(site)}
+            settings={settings}
+          />
+        );
       default:
         return builtinTheme.components.Home({
           posts: [],
@@ -254,7 +292,40 @@ export async function renderThemeTemplate(
     },
   };
 
-  const rawHtml = await engine.renderFile(templateName, fullContext);
+  let rawHtml = "";
+  try {
+    rawHtml = await engine.renderFile(templateName, fullContext);
+  } catch (renderErr) {
+    if (templateName === "collection") {
+      return (
+        <DefaultCollectionView
+          model={context.collection?.model || { name: "Collection", slug: "" }}
+          entries={context.collection?.entries || []}
+          site={context.site || mapSiteToViewModel(site)}
+          settings={settings}
+          pagination={
+            context.pagination
+              ? {
+                  limit: context.pagination.limit,
+                  offset: 0,
+                  count: context.collection?.entries?.length || 0,
+                }
+              : undefined
+          }
+        />
+      );
+    } else if (templateName === "collection-entry" && context.collection?.entry) {
+      return (
+        <DefaultCollectionEntryView
+          model={context.collection?.model || { name: "Collection", slug: "" }}
+          entry={context.collection.entry}
+          site={context.site || mapSiteToViewModel(site)}
+          settings={settings}
+        />
+      );
+    }
+    throw renderErr;
+  }
   const cleanHtml = cleanThemeHtml(rawHtml);
 
   // Check if theme has a primary stylesheet that should be linked
