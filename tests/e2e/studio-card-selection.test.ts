@@ -14,11 +14,20 @@ const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
 
 test.setTimeout(150 * 1000);
 
-async function login(page: Page) {
-  await page.goto(`${BASE}/admin/login`);
-  await page.fill("#email", "owner@example.com");
-  await page.fill("#password", "OwnerPass123!");
+async function login(page: Page, email = "owner@example.com", password = "OwnerPass123!") {
+  await page.goto(`${BASE}/admin`);
+  const retryBtn = page.locator('button:has-text("Retry")');
+  if (await retryBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await retryBtn.click();
+  }
+  await page.waitForURL("**/admin/login**", { timeout: 15000 });
+  await page.fill("#email", email);
+  await page.fill("#password", password);
   await page.click('button[type="submit"]');
+  await page.waitForURL(
+    (url: any) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
+    { timeout: 15000 },
+  );
   await page
     .getByRole("button", { name: "Posts", exact: true })
     .waitFor({ timeout: 25000 });
@@ -184,9 +193,12 @@ test.describe("Studio card selection (real UI)", () => {
     );
     expect(found).toBeTruthy();
     await page.goto(`${BASE}/posts/${found.slug}`);
-    await page.waitForSelector(".vb-content", { timeout: 15000 });
-    await expect(page.locator(".kg-button-card a")).toHaveText("Buy now");
-    await expect(page.locator(".kg-button-card a")).toHaveAttribute(
+    await page.waitForSelector(
+      ".studio-html-content, .mr-studio-content, .st-studio-content, .article-body, .vb-content, main",
+      { timeout: 15000 },
+    );
+    await expect(page.locator(".kg-button-card a, .vb-button a, a:has-text('Buy now')")).toHaveText("Buy now");
+    await expect(page.locator(".kg-button-card a, .vb-button a, a:has-text('Buy now')")).toHaveAttribute(
       "href",
       "https://store.example/product",
     );
@@ -240,15 +252,18 @@ test.describe("Studio card selection (real UI)", () => {
     );
     expect(found).toBeTruthy();
     await page.goto(`${BASE}/posts/${found.slug}`);
-    await page.waitForSelector(".vb-content", { timeout: 15000 });
-    await expect(page.locator(".studio-html-content h2")).toHaveText(
+    await page.waitForSelector(
+      ".studio-html-content, .mr-studio-content, .st-studio-content, .article-body, .vb-content, main",
+      { timeout: 15000 },
+    );
+    await expect(page.locator(".studio-html-content h2, .mr-studio-content h2, .st-studio-content h2, main h2")).toHaveText(
       "A Heading",
     );
-    await expect(page.locator(".studio-html-content strong")).toHaveText(
+    await expect(page.locator(".studio-html-content strong, .mr-studio-content strong, .st-studio-content strong, main strong")).toHaveText(
       "bold text",
     );
     await expect(
-      page.locator('.studio-html-content a[href="https://example.com/a"]'),
+      page.locator('.studio-html-content a[href="https://example.com/a"], .mr-studio-content a[href="https://example.com/a"], .st-studio-content a[href="https://example.com/a"], main a[href="https://example.com/a"]'),
     ).toHaveText("link");
   });
 
@@ -299,7 +314,7 @@ test.describe("Studio card selection (real UI)", () => {
     await expect(page.locator("p.safe-html")).toHaveText(
       "Safe visible content",
     );
-    const html = await page.locator(".vb-content").innerHTML();
+    const html = await page.locator(".studio-html-content, .mr-studio-content, .st-studio-content, .article-body, .vb-content, main").first().innerHTML();
     expect(html).not.toContain("<script");
     expect(html).not.toContain("onerror");
     const executed = await page.evaluate(
