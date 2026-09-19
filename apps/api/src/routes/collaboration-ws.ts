@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { WebSocket } from "ws";
 import crypto from "node:crypto";
+import * as Y from "yjs";
 import {
   authService,
   workspaceService,
@@ -243,38 +244,47 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
         room.broadcastBinary(updateBytes, peerId);
       });
 
-      socket.on("close", async () => {
+      socket.on("close", () => {
         roomManager.removePeer(publicationId, postId, peerId);
-        const activeRoom = roomManager.getRoom(publicationId, postId);
-        if (!activeRoom || activeRoom.peerCount === 0) {
-          await crdtPersistence.clear(publicationId, postId).catch(() => {});
-        }
       });
 
-      socket.on("error", async () => {
+      socket.on("error", () => {
         roomManager.removePeer(publicationId, postId, peerId);
-        const activeRoom = roomManager.getRoom(publicationId, postId);
-        if (!activeRoom || activeRoom.peerCount === 0) {
-          await crdtPersistence.clear(publicationId, postId).catch(() => {});
-        }
       });
 
       // 8. Initial catch-up synchronization
-      if (room.peerCount === 1) {
-        // First peer in room: purge any stale Redis buffer from past dead sessions
-        crdtPersistence.clear(publicationId, postId).catch(() => {});
+      const inMemoryState = room.getCurrentStateUpdate();
+      if (inMemoryState) {
         if (socket.readyState === 1 /* OPEN */) {
-          socket.send(JSON.stringify({ type: "sync-done" }));
-        }
-      } else {
-        // Subsequent peer (peer 2+) joining active room: sync in-memory state
-        const inMemoryState = room.getCurrentStateUpdate();
-        if (inMemoryState && socket.readyState === 1 /* OPEN */) {
           socket.send(inMemoryState, { binary: true });
         }
         if (socket.readyState === 1 /* OPEN */) {
           socket.send(JSON.stringify({ type: "sync-done" }));
         }
+      } else {
+        crdtPersistence
+          .getUpdates(publicationId, postId)
+          .then((updates) => {
+            for (const update of updates) {
+              if (socket.readyState === 1 /* OPEN */) {
+                socket.send(update, { binary: true });
+              }
+              try {
+                Y.applyUpdate(room.ydoc, update);
+              } catch (applyErr) {
+                console.warn(`[WS Room ${postId}] Failed to apply catch-up update to in-memory ydoc:`, applyErr);
+              }
+            }
+            if (socket.readyState === 1 /* OPEN */) {
+              socket.send(JSON.stringify({ type: "sync-done" }));
+            }
+          })
+          .catch((err) => {
+            console.error(`[WS Room ${postId}] Catch-up sync failed:`, err);
+            if (socket.readyState === 1 /* OPEN */) {
+              socket.send(JSON.stringify({ type: "sync-done" }));
+            }
+          });
       }
     },
   );

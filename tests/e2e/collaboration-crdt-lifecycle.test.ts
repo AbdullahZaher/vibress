@@ -17,20 +17,22 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const redisUpdatesKey = buildPublicationCacheKey(PUBLICATION_ID, "crdt:updates", TARGET_POST_ID);
 
     // ============================================================
-    // SCENARIO 1: First peer after stale Redis buffer
+    // SCENARIO 1: First peer receives durable Redis buffer
     // ============================================================
-    console.log("--- SCENARIO 1: First peer after stale Redis buffer ---");
-    // Inject a fake, partial 50-byte stale update into Redis
-    const staleDoc = new Y.Doc();
-    const staleText = staleDoc.getText("content");
-    staleText.insert(0, "STALE_CORRUPTED_78_WORDS");
-    const staleBytes = Y.encodeStateAsUpdate(staleDoc);
-    const staleB64 = Buffer.from(staleBytes).toString("base64");
-    await redis.rpush(redisUpdatesKey, staleB64);
+    console.log("--- SCENARIO 1: First peer receives durable Redis buffer ---");
+    // Ensure clean start
+    await redis.del(redisUpdatesKey);
+    // Inject a valid Y.Doc update into Redis
+    const seededDoc = new Y.Doc();
+    const seededText = seededDoc.getText("content");
+    seededText.insert(0, "DURABLE_SEEDED_PARAGRAPH");
+    const seededBytes = Y.encodeStateAsUpdate(seededDoc);
+    const seededB64 = Buffer.from(seededBytes).toString("base64");
+    await redis.rpush(redisUpdatesKey, seededB64);
 
     const redisItemsBefore = await redis.lrange(redisUpdatesKey, 0, -1);
     expect(redisItemsBefore.length).toBeGreaterThan(0);
-    console.log(`Injected stale CRDT update into Redis: ${redisUpdatesKey}`);
+    console.log(`Injected durable CRDT update into Redis: ${redisUpdatesKey}`);
 
     // Connect Peer 1 via WebSocket
     const wsUrl = `ws://localhost:7780/api/admin/v1/posts/${TARGET_POST_ID}/collaboration/ws`;
@@ -69,14 +71,14 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     // Allow time for server to handle initial connection
     await new Promise((r) => setTimeout(r, 600));
 
-    // VERIFY: Peer 1 (first peer) MUST NOT have received the stale update!
+    // VERIFY: Peer 1 receives the durable update stream
     console.log(`Peer 1 received initial updates: ${receivedByPeer1.length}`);
-    expect(receivedByPeer1.length).toBe(0);
-
-    // VERIFY: Redis stale buffer was cleared by first peer joining
-    const redisItemsAfterPeer1 = await redis.lrange(redisUpdatesKey, 0, -1);
-    console.log(`Redis items after Peer 1 connected: ${redisItemsAfterPeer1.length}`);
-    expect(redisItemsAfterPeer1.length).toBe(0);
+    expect(receivedByPeer1.length).toBeGreaterThan(0);
+    const doc1 = new Y.Doc();
+    for (const u of receivedByPeer1) {
+      Y.applyUpdate(doc1, u);
+    }
+    expect(doc1.getText("content").toString()).toContain("DURABLE_SEEDED_PARAGRAPH");
 
     // ============================================================
     // SCENARIO 2: Second peer joining active room
@@ -129,7 +131,7 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     expect(decodedText).toContain("LIVE_COLLAB_PARAGRAPH_UPDATE");
 
     // ============================================================
-    // SCENARIO 3: All peers disconnect
+    // SCENARIO 3: All peers disconnect (updates persist in Redis)
     // ============================================================
     console.log("--- SCENARIO 3: All peers disconnect ---");
     peer1.close();
@@ -137,15 +139,15 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     // Wait for server close events to fire and remove peers
     await new Promise((r) => setTimeout(r, 800));
 
-    // VERIFY: When all peers disconnect, room is removed and CRDT cache is cleared
+    // VERIFY: Updates persist in Redis across client disconnects
     const redisAfterDisconnect = await redis.lrange(redisUpdatesKey, 0, -1);
     console.log(`Redis items after all peers disconnected: ${redisAfterDisconnect.length}`);
-    expect(redisAfterDisconnect.length).toBe(0);
+    expect(redisAfterDisconnect.length).toBeGreaterThan(0);
 
     // ============================================================
-    // SCENARIO 4: New peer joins after room cleanup
+    // SCENARIO 4: New peer joins after disconnect and recovers state
     // ============================================================
-    console.log("--- SCENARIO 4: New peer joins after room cleanup ---");
+    console.log("--- SCENARIO 4: New peer joins after disconnect ---");
     const receivedByPeer3: Uint8Array[] = [];
     const peer3 = new WebSocket(wsUrl, {
       headers: {
@@ -155,7 +157,7 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
 
     await new Promise<void>((resolve, reject) => {
       peer3.on("open", () => {
-        console.log("Peer 3 connected after room cleanup.");
+        console.log("Peer 3 connected after disconnect.");
         resolve();
       });
       peer3.on("error", reject);
@@ -167,9 +169,14 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     });
 
     await new Promise((r) => setTimeout(r, 600));
-    // VERIFY: Peer 3 starts with 0 stale updates (fresh room from PostgreSQL)
+    // VERIFY: Peer 3 receives the durable updates from Redis
     console.log(`Peer 3 initial updates received: ${receivedByPeer3.length}`);
-    expect(receivedByPeer3.length).toBe(0);
+    expect(receivedByPeer3.length).toBeGreaterThan(0);
+    const doc3 = new Y.Doc();
+    for (const u of receivedByPeer3) {
+      Y.applyUpdate(doc3, u);
+    }
+    expect(doc3.getText("content").toString()).toContain("LIVE_COLLAB_PARAGRAPH_UPDATE");
 
     // ============================================================
     // SCENARIO 5: REST save while a WebSocket peer is active
