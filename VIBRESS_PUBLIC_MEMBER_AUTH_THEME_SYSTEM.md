@@ -10,7 +10,7 @@ Vibress enforces a strict separation of concerns across public identity, members
 A Theme **must never** implement member authentication itself. A Theme must NOT:
 - Parse session cookies (`vb_member_session` / `vibress_member_session`).
 - Validate authentication tokens.
-- Call private administrative endpoints.
+- Query database session tables or private internal API routes.
 - Trust `memberId`, `authorId`, or `name` from client query strings or payload bodies.
 - Determine authentication by querying browser `localStorage` or `sessionStorage`.
 - Duplicate the Member session subsystem.
@@ -24,13 +24,13 @@ A Theme **must never** implement member authentication itself. A Theme must NOT:
                              │
                     Public Member Context
                              │
-                      Theme API Contract
+                    Theme API Contract (v1)
                              │
              ┌───────────────┼───────────────┐
              │               │               │
-        Default Theme   Molten Theme    Minimal Theme
+        Default Theme   Morrowe Theme   Future Theme
              │               │               │
-          Header          Header          Header
+       Visual Present. Custom Layout   Custom Present.
              │               │               │
              └───────────────┼───────────────┘
                              │
@@ -40,9 +40,9 @@ A Theme **must never** implement member authentication itself. A Theme must NOT:
 
 ---
 
-## 2. Canonical Public Member Identity Contract
+## 2. Canonical Public Member Identity & Theme API Contract (v1)
 
-The canonical identity shape exported from `@vibress/theme-core` is minimal, safe, and stripped of all private fields:
+The canonical identity types and capability contract are exported from `@vibress/theme-core`:
 
 ```typescript
 export interface PublicMemberIdentity {
@@ -57,6 +57,22 @@ export type MemberAuthStatus = "loading" | "authenticated" | "unauthenticated";
 export interface MemberAuthState {
   status: MemberAuthStatus;
   member: PublicMemberIdentity | null;
+}
+
+/**
+ * Versioned Theme Auth Contract (V1)
+ * Canonical capability consumed by themes without knowledge of session/cookie internals.
+ */
+export interface ThemeAuthContractV1 {
+  status: MemberAuthStatus;
+  member: PublicMemberIdentity | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (returnUrl?: string) => void;
+  signup: (returnUrl?: string) => void;
+  account: () => void;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 ```
 
@@ -95,7 +111,7 @@ Deterministic state transitions govern member sessions:
 
 ---
 
-## 4. Server-Side Member Resolution (SSR)
+## 4. Server-Side Member Resolution (SSR) & Cache Isolation
 
 Server-side resolution runs in Next.js Server Components and Root Layout via `getCurrentPublicMember()` in `apps/web/src/lib/member-session.ts`:
 
@@ -105,7 +121,10 @@ Server-side resolution runs in Next.js Server Components and Root Layout via `ge
 4. Returns the verified `MemberAuthState`.
 5. Passes `initialAuth` into `<MemberAuthProvider initialAuth={initialAuth}>`.
 
-**SSR Result**: The page renders with the correct authenticated header on the server and hydrates on the client without layout shift, flicker, or hydration mismatches.
+### Cache Isolation & Request-Scoped Dynamic Identity
+- Public post/page content is cached at the edge/application layer, while member identity is resolved dynamically per request.
+- The root layout reads request headers/cookies dynamically, ensuring authenticated member HTML is never cached across distinct visitors or served to unauthenticated users.
+- Verified with zero cross-request cache bleed.
 
 ---
 
@@ -113,39 +132,40 @@ Server-side resolution runs in Next.js Server Components and Root Layout via `ge
 
 Themes consume the authentication capability through simple, high-level hooks without needing to understand backend mechanics:
 
-### Hook Usage
+### Hook Usage (`useThemeMember`)
 
 ```tsx
 import { useThemeMember } from "@vibress/web/auth"; // or useMemberAuth()
 
-export function MyThemeHeader() {
-  const { status, member, isAuthenticated, login, logout, account } = useThemeMember();
+export function CustomThemeHeader() {
+  const auth = useThemeMember();
 
-  if (status === "loading") {
+  if (auth.isLoading) {
     return <div className="skeleton-header" />;
   }
 
-  if (isAuthenticated && member) {
+  if (auth.isAuthenticated && auth.member) {
     return (
-      <div className="member-menu">
-        <span className="member-name">{member.name}</span>
-        <button onClick={account}>Account</button>
-        <button onClick={logout}>Sign out</button>
+      <div className="custom-member-pill">
+        <span className="custom-avatar">{auth.member.initials || "M"}</span>
+        <span className="custom-name">{auth.member.name}</span>
+        <button onClick={auth.account} className="btn-account">Account</button>
+        <button onClick={auth.logout} className="btn-logout">Sign out</button>
       </div>
     );
   }
 
   return (
-    <button onClick={() => login()} className="btn-signin">
+    <button onClick={() => auth.login()} className="btn-signin">
       Sign in
     </button>
   );
 }
 ```
 
-### Reusable Platform Component: `<MemberHeaderAuth />`
+### Optional Platform Component: `<MemberHeaderAuth />`
 
-For themes using standard header configurations, Vibress provides a drop-in, fully accessible `<MemberHeaderAuth />` component:
+For themes opting for standard header configurations, Vibress provides a drop-in, fully accessible `<MemberHeaderAuth />` component. `<MemberHeaderAuth />` is an optional visual convenience; themes are free to render completely custom layouts.
 
 ```tsx
 import { MemberHeaderAuth } from "@vibress/web/auth";
@@ -173,25 +193,43 @@ When a member logs in, logs out, or updates their profile in Portal or another b
 1. Portal dispatches a lightweight message on `BroadcastChannel("vb_member_auth")` (`LOGIN`, `LOGOUT`, `REFRESH`).
 2. All open public web tabs receive the event and refresh their member session state in the background.
 3. If focus returns to the tab (`window.addEventListener("focus")`), session freshness is quietly verified.
-4. No sensitive tokens or keys are ever stored in `localStorage`.
+4. BroadcastChannel carries only event signals (`{ type: "LOGIN" | "LOGOUT" | "REFRESH" }`), never sensitive tokens or session credentials.
 
 ---
 
-## 7. Security Model
+## 7. Security Model & Credential Protection
 
 1. **Server Authoritative**: Client-supplied `memberId`, `authorName`, or `userId` in POST/PATCH bodies are completely ignored. The HTTP-only session cookie is the single source of truth.
 2. **HttpOnly & SameSite**: Session cookies are strictly `HttpOnly`, `SameSite: Lax`, and `Secure` in production environments.
 3. **Publication Scope Isolation**: Member sessions are strictly tied to `publicationId`. A session for Publication A will never authenticate in Publication B.
 4. **Zero Token Leakage**: Tokens and credentials never enter HTML payloads, JSON-LD scripts, client logs, or theme view models.
-5. **Rate Limiting & CSRF**: Public endpoints are rate-limited and protected against origin spoofing.
+5. **Comments Consistency**: Comments, Header identity, and Member Portal profile all resolve to the exact same canonical `member.name` and `member.id`.
 
 ---
 
-## 8. Cross-Theme Certification Matrix
+## 8. Accessibility Requirements
+
+1. **Semantic Roles & ARIA**: Trigger buttons use `aria-haspopup="menu"`, `aria-expanded`, and descriptive labels (e.g. `t("member_menu")` / "Member account menu").
+2. **Keyboard Navigation**: Full keyboard tab order, arrow navigation, and `Escape` key dismissal with focus restoration to the trigger button.
+3. **RTL & Unicode**: Full support for right-to-left layout direction and non-Latin character sets.
+
+---
+
+## 9. Performance & Single-Request Contract
+
+- **Zero N+1 Auth Requests**: Header, Footer, Comments, and Theme layouts share a single `MemberAuthProvider` context.
+- **SSR Pre-resolution**: `initialAuth` is passed from the server layout to the client provider, eliminating client-side flash or secondary bootstrap `/session` fetch on first page load.
+- **Background Refresh**: Token expiry and session status checks happen non-blockingly without layout disruption.
+
+---
+
+## 10. Cross-Theme Certification Matrix
 
 | Theme | Implementation | SSR State | Client Hydration | Logged Out UI | Logged In UI | Logout Transition | Arabic RTL | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Default** | `<MemberHeaderAuth />` | ✅ Verified | ✅ Seamless | `Sign in` + `Subscribe` | Avatar + Name + Dropdown | Instant refresh | ✅ Verified | **Certified** |
 | **Molten** | `<MemberHeaderAuth />` | ✅ Verified | ✅ Seamless | `Sign in` + `Subscribe` | Avatar + Name + Dropdown | Instant refresh | ✅ Verified | **Certified** |
 | **Minimal** | `<MemberHeaderAuth />` | ✅ Verified | ✅ Seamless | `Sign in` | Avatar + Name + Dropdown | Instant refresh | ✅ Verified | **Certified** |
-| **Synthetic 3rd-Party** | `useThemeMember()` | ✅ Verified | ✅ Seamless | `[ Sign in ]` | `[ Abdullah Zaher ▼ ]` | Instant transition | ✅ Verified | **Certified** |
+| **Starter** | `<MemberHeaderAuth />` | ✅ Verified | ✅ Seamless | `Sign in` + `Subscribe` | Avatar + Name + Dropdown | Instant refresh | ✅ Verified | **Certified** |
+| **Morrowe** | `<MemberHeaderAuth />` | ✅ Verified | ✅ Seamless | `Sign in` + `Subscribe` | Avatar + Name + Dropdown | Instant refresh | ✅ Verified | **Certified** |
+| **Synthetic 3rd-Party** | `useThemeMember()` | ✅ Verified | ✅ Seamless | `[ Sign in ]` | `[ عبدالله زاهر ▼ ]` | Instant transition | ✅ Verified | **Certified** |
