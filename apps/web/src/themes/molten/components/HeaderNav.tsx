@@ -63,12 +63,12 @@ export function HeaderNav({
 
         <div className="vb-head-actions">
           <div className="vb-head-members">
-            <a className="vb-head-link" href="#/portal/signin">
+            <a className="vb-head-link" href="/portal/#/signin">
               {t("nav.signin")}
             </a>
             <a
               className="vb-head-btn vb-btn vb-primary-btn"
-              href="#/portal/signup"
+              href="/portal/#/signup"
             >
               {t("nav.subscribe")}
             </a>

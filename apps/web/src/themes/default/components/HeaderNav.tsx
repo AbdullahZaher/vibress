@@ -89,7 +89,7 @@ export function HeaderNav({
               </svg>
             </button>
 
-            <a href="#/portal/signin" className="vb-head-signin">
+            <a href="/portal/#/signin" className="vb-head-signin">
               {t("nav.signin")}
             </a>
 

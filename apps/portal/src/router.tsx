@@ -41,7 +41,7 @@ export function Router() {
   if (path.startsWith("/account")) {
     return <AccountPage />;
   }
-  if (path.startsWith("/plans")) {
+  if (path.startsWith("/plans") || path.startsWith("/signup") || path.startsWith("/sign-up")) {
     return <PlansPage />;
   }
   return <SignInPage />;

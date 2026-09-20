@@ -128,7 +128,7 @@ export function SubscribeModal({
 
             <p className="subscribe-modal-footer-text">
               {t("modal.alreadyMember")}{" "}
-              <a href="#/portal/signin">{t("nav.signin")}</a>
+              <a href="/portal/#/signin">{t("nav.signin")}</a>
             </p>
           </form>
         )}

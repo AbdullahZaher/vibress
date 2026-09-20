@@ -73,7 +73,7 @@ export async function ThemeLayout({
               </div>
             ) : null}
             <div>
-              <a href="#/portal/signup">Sign up</a>
+              <a href="/portal/#/signup">Sign up</a>
             </div>
             <div>
               <a
