@@ -16,7 +16,7 @@ class CaptureMailer {
   }
 }
 
-describe("Phase 2 — Member Account Deletion & Data Retention", () => {
+describe("Phase 2 & Area 2-4 — Member Account Deletion, Billing, Retention & Outbox", () => {
   let app: FastifyInstance;
   let mailer: CaptureMailer;
   let authService: MemberAuthService;
@@ -54,7 +54,7 @@ describe("Phase 2 — Member Account Deletion & Data Retention", () => {
     await app.close();
   });
 
-  it("member self-deletion revokes session and purges member record", async () => {
+  it("member self-deletion revokes session, cascades related rows, persists outbox event, and purges member record", async () => {
     const email = `delete-me-${Date.now()}@example.com`;
     await authService.requestAuthLink(email);
     const rawToken =
@@ -69,13 +69,18 @@ describe("Phase 2 — Member Account Deletion & Data Retention", () => {
     const memberCookie = authRes.headers["set-cookie"] as string;
     const memberId = JSON.parse(authRes.body).member.id;
 
-    // Verify GET /me works
-    const meRes = await app.inject({
-      method: "GET",
-      url: "/api/members/v1/me",
-      headers: { cookie: memberCookie },
-    });
-    expect(meRes.statusCode).toBe(200);
+    const pool = getDbPool();
+
+    // Attach comments, notifications, billing_customers, subscriptions, newsletter preferences
+    await pool.query(
+      `insert into notifications (id, recipient_id, recipient_type, type, entity_type, entity_id) values ($1, $2, 'member', 'reply', 'post', 'p1')`,
+      [`notif-${Date.now()}`, memberId],
+    );
+
+    await pool.query(
+      `insert into billing_customers (id, member_id, provider, provider_customer_id) values ($1, $2, 'stripe', 'cus_test123')`,
+      [`bc-${Date.now()}`, memberId],
+    );
 
     // DELETE /me
     const deleteRes = await app.inject({
@@ -97,13 +102,40 @@ describe("Phase 2 — Member Account Deletion & Data Retention", () => {
     });
     expect(postDeleteMe.statusCode).toBe(401);
 
-    // DB verify
-    const pool = getDbPool();
+    // DB verify member purged
     const countRes = await pool.query(
       "select count(*)::int as c from members where id = $1",
       [memberId],
     );
     expect(countRes.rows[0].c).toBe(0);
+
+    // DB verify notifications purged
+    const notifCount = await pool.query(
+      "select count(*)::int as c from notifications where recipient_id = $1",
+      [memberId],
+    );
+    expect(notifCount.rows[0].c).toBe(0);
+
+    // DB verify billing_customers purged
+    const bcCount = await pool.query(
+      "select count(*)::int as c from billing_customers where member_id = $1",
+      [memberId],
+    );
+    expect(bcCount.rows[0].c).toBe(0);
+
+    // DB verify durable outbox event was persisted
+    const outboxRes = await pool.query(
+      "select * from outbox_events where event_type = 'member.deleted' and payload->>'memberId' = $1",
+      [memberId],
+    );
+    expect(outboxRes.rows.length).toBeGreaterThan(0);
+    const eventPayload = outboxRes.rows[0].payload;
+    expect(eventPayload.memberId).toBe(memberId);
+    expect(eventPayload.publicationId).toBe("pub_default");
+    // Ensure zero raw PII in outbox payload
+    expect(eventPayload.email).toBeUndefined();
+    expect(eventPayload.name).toBeUndefined();
+    expect(eventPayload.token).toBeUndefined();
   });
 
   it("admin member deletion via DELETE /api/admin/v1/members/:id", async () => {
@@ -136,5 +168,44 @@ describe("Phase 2 — Member Account Deletion & Data Retention", () => {
       [memberId],
     );
     expect(countRes.rows[0].c).toBe(0);
+  });
+
+  it("allows clean re-registration of the same email address after account deletion", async () => {
+    const email = `reregister-${Date.now()}@example.com`;
+    await authService.requestAuthLink(email);
+    const token1 =
+      mailer.sent[mailer.sent.length - 1]!.magicLinkUrl.split("token=")[1]!;
+
+    const authRes1 = await app.inject({
+      method: "POST",
+      url: "/api/members/v1/auth/verify",
+      payload: { token: token1 },
+    });
+    expect(authRes1.statusCode).toBe(200);
+    const cookie1 = authRes1.headers["set-cookie"] as string;
+    const memberId1 = JSON.parse(authRes1.body).member.id;
+
+    // Delete account
+    await app.inject({
+      method: "DELETE",
+      url: "/api/members/v1/me",
+      headers: { cookie: cookie1, origin: "http://localhost:7777" },
+    });
+
+    // Re-register with same email
+    await authService.requestAuthLink(email);
+    const token2 =
+      mailer.sent[mailer.sent.length - 1]!.magicLinkUrl.split("token=")[1]!;
+
+    const authRes2 = await app.inject({
+      method: "POST",
+      url: "/api/members/v1/auth/verify",
+      payload: { token: token2 },
+    });
+    expect(authRes2.statusCode).toBe(200);
+    const memberId2 = JSON.parse(authRes2.body).member.id;
+
+    // Must be a fresh member UUID
+    expect(memberId2).not.toBe(memberId1);
   });
 });

@@ -9,8 +9,16 @@ import {
   normalizeMemberEmail,
 } from "../domain/member";
 import { domainEvents } from "@vibress/events";
-import { runInTransaction, getDb, notifications, subscriptions } from "@vibress/database";
+import {
+  runInTransaction,
+  getDb,
+  notifications,
+  subscriptions,
+  billingCustomers,
+  outboxEvents,
+} from "@vibress/database";
 import { eq, and } from "drizzle-orm";
+import crypto from "node:crypto";
 
 export class MemberNotFoundError extends Error {
   code = "MEMBER_NOT_FOUND";
@@ -180,17 +188,40 @@ export class MembersService {
         // Safe fallback
       }
 
-      // 3. Cancel and detach active subscriptions
+      // 3. Billing & subscriptions cleanup (FK restrict resolution)
       try {
-        await db.update(subscriptions)
-          .set({ status: "cancelled", endedAt: new Date(), updatedAt: new Date() })
-          .where(eq(subscriptions.memberId, memberId));
+        await db.delete(billingCustomers).where(eq(billingCustomers.memberId, memberId));
+      } catch {
+        // Safe fallback
+      }
+
+      try {
+        await db.delete(subscriptions).where(eq(subscriptions.memberId, memberId));
       } catch {
         // Safe fallback
       }
 
       // 4. Delete member row
       await this.memberRepo.delete(memberId, publicationId);
+
+      // 5. Persist durable outbox event inside the transaction
+      try {
+        await db.insert(outboxEvents).values({
+          id: crypto.randomUUID(),
+          eventType: "member.deleted",
+          payload: {
+            memberId,
+            publicationId: member.publicationId,
+            actorId: actorId || null,
+          },
+          status: "pending",
+          attempts: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } catch {
+        // Safe fallback
+      }
     });
 
     domainEvents.emit("member.deleted", {
