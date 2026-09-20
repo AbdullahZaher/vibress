@@ -313,7 +313,9 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     const context2 = await page.context().browser()!.newContext();
     const page2 = await context2.newPage();
     await page2.goto(link);
-    await expect(page2.locator("body")).toContainText("invalid or expired");
+    await expect(page2.locator("body")).toContainText("invalid or has expired", {
+      ignoreCase: true,
+    });
     await context2.close();
   });
 });
