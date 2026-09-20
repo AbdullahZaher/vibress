@@ -270,6 +270,59 @@ export async function memberRoutes(fastify: FastifyInstance) {
     },
   });
 
+  // Canonical public member session endpoint (non-throwing, safe public member identity)
+  fastify.get("/session", {
+    handler: async (req, reply) => {
+      const token = extractMemberSessionToken(req);
+      if (!token) {
+        return reply.status(200).send({
+          status: "unauthenticated",
+          member: null,
+        });
+      }
+
+      const member = await memberAuthService.resolveSession(token);
+      if (!member) {
+        return reply.status(200).send({
+          status: "unauthenticated",
+          member: null,
+        });
+      }
+
+      // Publication tenant isolation check
+      const pubId = req.publicationContext?.publicationId;
+      if (pubId && member.publicationId && member.publicationId !== pubId) {
+        return reply.status(200).send({
+          status: "unauthenticated",
+          member: null,
+        });
+      }
+
+      const name = member.name?.trim() || "";
+      const words = name ? name.split(/\s+/).filter(Boolean) : [];
+      const firstWord = words[0] || "";
+      const lastWord = words[words.length - 1] || "";
+      const firstChar = firstWord ? Array.from(firstWord)[0] || "" : "";
+      const lastChar = lastWord ? Array.from(lastWord)[0] || "" : "";
+      const initials =
+        words.length > 1
+          ? `${firstChar}${lastChar}`.toUpperCase()
+          : firstChar
+            ? firstChar.toUpperCase()
+            : "M";
+
+      return reply.status(200).send({
+        status: "authenticated",
+        member: {
+          id: member.id,
+          name: member.name || "Member",
+          avatarUrl: (member as { avatarUrl?: string | null }).avatarUrl || null,
+          initials,
+        },
+      });
+    },
+  });
+
   // Current member
   fastify.get("/me", {
     preHandler: [requireMemberSession],

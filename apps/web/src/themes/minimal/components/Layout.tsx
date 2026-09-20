@@ -1,5 +1,6 @@
 import React from "react";
-import { ThemeSiteSettings } from "@vibress/theme-core";
+import type { ThemeSiteSettings } from "@vibress/theme-core";
+import { MemberHeaderAuth } from "../../../components/auth/MemberHeaderAuth";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -7,7 +8,7 @@ interface ThemeLayoutProps {
   settings: Record<string, unknown>;
 }
 
-export async function ThemeLayout({
+export function ThemeLayout({
   children,
   site,
   settings,
@@ -47,17 +48,22 @@ export async function ThemeLayout({
 
       <div className="vb-viewport">
         <header id="vb-navigation" className="vb-navigation vb-outer">
-          <div className="vb-navigation-inner vb-inner">
-            <a className="vb-navigation-logo" href="/">
-              {site.title}
-            </a>
-            <nav className="vb-navigation-menu">
-              <ul className="nav">
-                <li className="nav-home">
-                  <a href="/">Home</a>
-                </li>
-              </ul>
-            </nav>
+          <div className="vb-navigation-inner vb-inner" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+              <a className="vb-navigation-logo" href="/">
+                {site.title}
+              </a>
+              <nav className="vb-navigation-menu">
+                <ul className="nav">
+                  <li className="nav-home">
+                    <a href="/">Home</a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+            <div className="vb-head-actions">
+              <MemberHeaderAuth showSubscribe={false} />
+            </div>
           </div>
         </header>
 

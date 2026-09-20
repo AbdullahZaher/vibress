@@ -5,8 +5,13 @@ import { getConfig } from "@vibress/config";
 export const MEMBER_COOKIE_NAME = getConfig().cookies.memberSessionName;
 
 export function extractMemberSessionToken(req: FastifyRequest): string | null {
-  if (req.cookies && req.cookies[MEMBER_COOKIE_NAME]) {
-    return req.cookies[MEMBER_COOKIE_NAME] as string;
+  if (req.cookies) {
+    if (req.cookies[MEMBER_COOKIE_NAME]) {
+      return req.cookies[MEMBER_COOKIE_NAME] as string;
+    }
+    if (req.cookies["vb_member_session"]) {
+      return req.cookies["vb_member_session"] as string;
+    }
   }
   return null;
 }

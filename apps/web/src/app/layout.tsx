@@ -9,6 +9,8 @@ import {
 } from "../lib/theme-host";
 import { AnalyticsTracker } from "../components/analytics-tracker";
 import { HeadCodeInjection } from "../components/HeadCodeInjection";
+import { MemberAuthProvider } from "../components/auth/MemberAuthProvider";
+import { getCurrentPublicMember } from "../lib/member-session";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getThemeSiteSettings();
@@ -61,6 +63,7 @@ export default async function RootLayout({
   }
 
   const site = await getThemeSiteSettings();
+  const initialAuth = await getCurrentPublicMember();
   const isBuiltIn = hostState?.isBuiltIn !== false;
   const themeCss = isBuiltIn
     ? hostState?.theme.cssPath ||
@@ -76,37 +79,39 @@ export default async function RootLayout({
         )}
       </head>
       <body suppressHydrationWarning>
-        {site.announcementEnabled && site.announcementText && (
-          <div
-            id="vb-announcement-bar"
-            style={{
-              backgroundColor: site.accentColor || "#6366f1",
-              color: "#ffffff",
-              textAlign: "center",
-              padding: "10px 16px",
-              fontSize: "14px",
-              fontWeight: "500",
-              zIndex: 9999,
-              position: "relative",
-            }}
-          >
-            {site.announcementUrl ? (
-              <a
-                href={site.announcementUrl}
-                style={{ color: "#ffffff", textDecoration: "underline" }}
-              >
-                {site.announcementText}
-              </a>
-            ) : (
-              site.announcementText
-            )}
-          </div>
-        )}
-        {children}
-        {site.code?.footerCode && (
-          <div dangerouslySetInnerHTML={{ __html: site.code.footerCode }} />
-        )}
-        <AnalyticsTracker analytics={site.analytics} />
+        <MemberAuthProvider initialAuth={initialAuth}>
+          {site.announcementEnabled && site.announcementText && (
+            <div
+              id="vb-announcement-bar"
+              style={{
+                backgroundColor: site.accentColor || "#6366f1",
+                color: "#ffffff",
+                textAlign: "center",
+                padding: "10px 16px",
+                fontSize: "14px",
+                fontWeight: "500",
+                zIndex: 9999,
+                position: "relative",
+              }}
+            >
+              {site.announcementUrl ? (
+                <a
+                  href={site.announcementUrl}
+                  style={{ color: "#ffffff", textDecoration: "underline" }}
+                >
+                  {site.announcementText}
+                </a>
+              ) : (
+                site.announcementText
+              )}
+            </div>
+          )}
+          {children}
+          {site.code?.footerCode && (
+            <div dangerouslySetInnerHTML={{ __html: site.code.footerCode }} />
+          )}
+          <AnalyticsTracker analytics={site.analytics} />
+        </MemberAuthProvider>
       </body>
     </html>
   );

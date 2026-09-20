@@ -5,6 +5,8 @@ import { SubscribeModal } from "./SubscribeModal";
 import { ThemeToggle } from "../../../components/reader/ThemeToggle";
 import { t } from "../../../lib/i18n";
 
+import { MemberHeaderAuth } from "../../../components/auth/MemberHeaderAuth";
+
 interface HeaderNavProps {
   siteTitle: string;
   siteIcon?: string | undefined;
@@ -89,17 +91,11 @@ export function HeaderNav({
               </svg>
             </button>
 
-            <a href="/portal/#/signin" className="vb-head-signin">
-              {t("nav.signin")}
-            </a>
-
-            <button
-              type="button"
-              className="vb-head-subscribe-btn"
-              onClick={() => setIsModalOpen(true)}
-            >
-              {t("nav.subscribe")}
-            </button>
+            <MemberHeaderAuth
+              onSubscribeClick={() => setIsModalOpen(true)}
+              signInClassName="vb-head-signin"
+              subscribeClassName="vb-head-subscribe-btn"
+            />
           </div>
         </div>
       </header>

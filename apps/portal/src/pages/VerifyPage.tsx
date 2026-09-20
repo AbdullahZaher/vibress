@@ -57,6 +57,13 @@ export function VerifyPage({ token }: { token: string }) {
 
         if (!isMounted) return;
         setState("success");
+        if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+          try {
+            const bc = new BroadcastChannel("vb_member_auth");
+            bc.postMessage({ type: "LOGIN" });
+            bc.close();
+          } catch {}
+        }
         navigate("/account");
         window.history.replaceState(null, "", "/portal/#/account");
       } catch (err) {

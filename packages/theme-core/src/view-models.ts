@@ -104,6 +104,20 @@ export interface SiteNavigationItemViewModel {
   url: string;
 }
 
+export interface PublicMemberIdentity {
+  id: string;
+  name: string;
+  avatarUrl?: string | null | undefined;
+  initials?: string | undefined;
+}
+
+export type MemberAuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+export interface MemberAuthState {
+  status: MemberAuthStatus;
+  member: PublicMemberIdentity | null;
+}
+
 export interface SiteViewModel {
   title: string;
   description: string;
@@ -133,6 +147,8 @@ export interface SiteViewModel {
   comments_enabled?: boolean | undefined;
   commentAccess?: string | undefined;
   comment_access?: string | undefined;
+  member?: PublicMemberIdentity | null | undefined;
+  auth?: MemberAuthState | undefined;
 }
 
 export interface PaginationViewModel {
@@ -627,6 +643,8 @@ export interface ThemeViewModelContext {
   localeContext?: ThemeLocaleContext | undefined;
   locale?: string | ThemeLocaleContext | undefined;
   availableLocales?: AvailableLocaleItem[] | undefined;
+  member?: PublicMemberIdentity | null | undefined;
+  auth?: MemberAuthState | undefined;
   [key: string]: unknown;
 }
 

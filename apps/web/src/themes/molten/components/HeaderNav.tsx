@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
 import { t } from "../../../lib/i18n";
+import { MemberHeaderAuth } from "../../../components/auth/MemberHeaderAuth";
 
 interface HeaderNavProps {
   siteTitle: string;
@@ -63,15 +66,10 @@ export function HeaderNav({
 
         <div className="vb-head-actions">
           <div className="vb-head-members">
-            <a className="vb-head-link" href="/portal/#/signin">
-              {t("nav.signin")}
-            </a>
-            <a
-              className="vb-head-btn vb-btn vb-primary-btn"
-              href="/portal/#/signup"
-            >
-              {t("nav.subscribe")}
-            </a>
+            <MemberHeaderAuth
+              signInClassName="vb-head-link"
+              subscribeClassName="vb-head-btn vb-btn vb-primary-btn"
+            />
           </div>
         </div>
       </div>

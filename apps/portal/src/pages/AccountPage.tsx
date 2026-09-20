@@ -49,6 +49,16 @@ export function AccountPage() {
     })();
   }, []);
 
+  const broadcastAuthEvent = (type: string = "AUTH_CHANGED") => {
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        const bc = new BroadcastChannel("vb_member_auth");
+        bc.postMessage({ type });
+        bc.close();
+      } catch {}
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -59,6 +69,7 @@ export function AccountPage() {
       setMember(res.member);
       setName(res.member.name || "");
       setMessage(t("portal.profile_saved"));
+      broadcastAuthEvent("REFRESH");
     } catch (err) {
       if (err instanceof MemberApiError && err.status === 401) {
         setAuthError(true);
@@ -96,6 +107,7 @@ export function AccountPage() {
     setDeleteError(null);
     try {
       await memberApi.deleteAccount();
+      broadcastAuthEvent("LOGOUT");
       navigate("/sign-in");
     } catch (err) {
       if (err instanceof MemberApiError) {
@@ -110,6 +122,7 @@ export function AccountPage() {
   const handleLogout = async () => {
     try {
       await memberApi.logout();
+      broadcastAuthEvent("LOGOUT");
     } catch {
       // Ignore logout errors; always redirect
     }
