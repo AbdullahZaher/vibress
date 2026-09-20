@@ -1,6 +1,7 @@
 import {
   getDb,
   comments,
+  members,
   CommentRow,
   commentLikes,
   commentReports,
@@ -57,7 +58,8 @@ export class DrizzleCommentRepository implements CommentRepository {
         }
         throw new Error("Failed to insert comment");
       }
-      return this.mapToDomain(row);
+      const hydrated = await this.findById(data.publicationId, row.id);
+      return hydrated || this.mapToDomain(row);
     } catch (err: any) {
       if (
         data.clientCommentId &&
@@ -79,8 +81,31 @@ export class DrizzleCommentRepository implements CommentRepository {
   async findById(publicationId: string, id: string): Promise<Comment | null> {
     const db = getDb();
     const rows = await db
-      .select()
+      .select({
+        id: comments.id,
+        publicationId: comments.publicationId,
+        postId: comments.postId,
+        memberId: comments.memberId,
+        parentId: comments.parentId,
+        body: comments.body,
+        status: comments.status,
+        likeCount: comments.likeCount,
+        replyCount: comments.replyCount,
+        depth: comments.depth,
+        clientCommentId: comments.clientCommentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        deletedAt: comments.deletedAt,
+        memberName: members.name,
+      })
       .from(comments)
+      .leftJoin(
+        members,
+        and(
+          eq(comments.memberId, members.id),
+          eq(comments.publicationId, members.publicationId),
+        ),
+      )
       .where(and(eq(comments.publicationId, publicationId), eq(comments.id, id)))
       .limit(1);
     const row = rows[0];
@@ -95,8 +120,31 @@ export class DrizzleCommentRepository implements CommentRepository {
   ): Promise<Comment | null> {
     const db = getDb();
     const rows = await db
-      .select()
+      .select({
+        id: comments.id,
+        publicationId: comments.publicationId,
+        postId: comments.postId,
+        memberId: comments.memberId,
+        parentId: comments.parentId,
+        body: comments.body,
+        status: comments.status,
+        likeCount: comments.likeCount,
+        replyCount: comments.replyCount,
+        depth: comments.depth,
+        clientCommentId: comments.clientCommentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        deletedAt: comments.deletedAt,
+        memberName: members.name,
+      })
       .from(comments)
+      .leftJoin(
+        members,
+        and(
+          eq(comments.memberId, members.id),
+          eq(comments.publicationId, members.publicationId),
+        ),
+      )
       .where(
         and(
           eq(comments.publicationId, publicationId),
@@ -122,7 +170,8 @@ export class DrizzleCommentRepository implements CommentRepository {
       .where(and(eq(comments.publicationId, publicationId), eq(comments.id, id)))
       .returning();
     if (!row) throw new Error(`Comment not found: ${id}`);
-    return this.mapToDomain(row);
+    const hydrated = await this.findById(publicationId, id);
+    return hydrated || this.mapToDomain(row);
   }
 
   async updateStatus(
@@ -141,7 +190,8 @@ export class DrizzleCommentRepository implements CommentRepository {
       .where(and(eq(comments.publicationId, publicationId), eq(comments.id, id)))
       .returning();
     if (!row) throw new Error(`Comment not found: ${id}`);
-    return this.mapToDomain(row);
+    const hydrated = await this.findById(publicationId, id);
+    return hydrated || this.mapToDomain(row);
   }
 
   async incrementLikeCount(
@@ -194,8 +244,31 @@ export class DrizzleCommentRepository implements CommentRepository {
       .from(comments)
       .where(whereClause);
     const rows = await db
-      .select()
+      .select({
+        id: comments.id,
+        publicationId: comments.publicationId,
+        postId: comments.postId,
+        memberId: comments.memberId,
+        parentId: comments.parentId,
+        body: comments.body,
+        status: comments.status,
+        likeCount: comments.likeCount,
+        replyCount: comments.replyCount,
+        depth: comments.depth,
+        clientCommentId: comments.clientCommentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        deletedAt: comments.deletedAt,
+        memberName: members.name,
+      })
       .from(comments)
+      .leftJoin(
+        members,
+        and(
+          eq(comments.memberId, members.id),
+          eq(comments.publicationId, members.publicationId),
+        ),
+      )
       .where(whereClause)
       .orderBy(desc(comments.createdAt))
       .limit(limit)
@@ -226,8 +299,31 @@ export class DrizzleCommentRepository implements CommentRepository {
       .where(whereClause);
 
     const rows = await db
-      .select()
+      .select({
+        id: comments.id,
+        publicationId: comments.publicationId,
+        postId: comments.postId,
+        memberId: comments.memberId,
+        parentId: comments.parentId,
+        body: comments.body,
+        status: comments.status,
+        likeCount: comments.likeCount,
+        replyCount: comments.replyCount,
+        depth: comments.depth,
+        clientCommentId: comments.clientCommentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        deletedAt: comments.deletedAt,
+        memberName: members.name,
+      })
       .from(comments)
+      .leftJoin(
+        members,
+        and(
+          eq(comments.memberId, members.id),
+          eq(comments.publicationId, members.publicationId),
+        ),
+      )
       .where(whereClause)
       .orderBy(comments.createdAt)
       .limit(Math.min(limit, 100))
@@ -293,7 +389,23 @@ export class DrizzleCommentRepository implements CommentRepository {
       .where(and(eq(comments.publicationId, publicationId), eq(comments.id, id)));
   }
 
-  private mapToDomain(row: CommentRow): Comment {
+  private mapToDomain(row: {
+    id: string;
+    publicationId: string;
+    postId: string;
+    memberId: string;
+    parentId: string | null;
+    body: string;
+    status: string;
+    likeCount: number;
+    replyCount: number;
+    depth: number;
+    clientCommentId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt: Date | null;
+    memberName?: string | null | undefined;
+  }): Comment {
     return {
       id: row.id,
       publicationId: row.publicationId,
@@ -306,6 +418,13 @@ export class DrizzleCommentRepository implements CommentRepository {
       replyCount: row.replyCount,
       depth: row.depth,
       clientCommentId: row.clientCommentId || null,
+      member: row.memberId
+        ? {
+            id: row.memberId,
+            name: row.memberName || "Anonymous",
+            avatarUrl: null,
+          }
+        : undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       deletedAt: row.deletedAt,

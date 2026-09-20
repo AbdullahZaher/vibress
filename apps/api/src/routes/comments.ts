@@ -31,10 +31,11 @@ import { posts, publications } from "@vibress/database";
 import { and, eq } from "drizzle-orm";
 
 function publicCommentDto(comment: Comment) {
+  const authorName = comment.member?.name?.trim() || "Anonymous";
   const author = comment.member
     ? {
         id: comment.member.id,
-        name: comment.member.name ?? "Anonymous",
+        name: authorName,
         avatarUrl: comment.member.avatarUrl ?? null,
       }
     : {
@@ -63,8 +64,8 @@ function publicCommentDto(comment: Comment) {
     member: comment.member
       ? {
           id: comment.member.id,
-          name: comment.member.name,
-          avatarUrl: comment.member.avatarUrl,
+          name: authorName,
+          avatarUrl: comment.member.avatarUrl ?? null,
         }
       : undefined,
   };
