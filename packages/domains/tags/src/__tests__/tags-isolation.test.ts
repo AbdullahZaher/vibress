@@ -39,7 +39,7 @@ describe("Tags Multi-Publication Isolation", () => {
   it("permits identical slugs across distinct publications (Same-slug requirement)", async () => {
     const pubA = "pub_alpha";
     const pubB = "pub_beta";
-    const commonSlug = "exclusive";
+    const commonSlug = `exclusive-${Date.now()}`;
 
     const tagA = await tagsService.createTag(
       {

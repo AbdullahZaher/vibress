@@ -36,7 +36,9 @@ async function signupMemberForPub(
   await authService.requestAuthLink(email, {}, publicationId);
   const link = mailer.sent[0]?.magicLinkUrl;
   if (!link) throw new Error("no magic link");
-  const token = new URL(link).searchParams.get("token") || "";
+  const token =
+    new URL(link).searchParams.get("token") ||
+    (link.includes("token=") ? link.split("token=")[1]!.split("&")[0]! : "");
   const res = await app.inject({
     method: "POST",
     url: "/api/members/v1/auth/verify",
