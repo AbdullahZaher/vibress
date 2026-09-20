@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
 import { useTranslation, LanguageSwitcher } from "../lib/i18n";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Button,
+  Spinner,
+} from "@vibress/ui";
+import { CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
 
 type VerifyState = "verifying" | "success" | "error";
 
@@ -102,87 +112,88 @@ export function VerifyPage({ token }: { token: string }) {
     };
   }, [token]);
 
-  if (state === "verifying") {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <LanguageSwitcher />
-          </div>
-          <h1 style={styles.title}>{t("portal.verify_title")}</h1>
-          <p style={styles.status}>{t("portal.verifying")}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (state === "success") {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>{t("portal.verify_title")}</h1>
-          <p style={styles.status}>{t("portal.verify_success")}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md space-y-4">
+        {/* Top Control Bar */}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2 select-none">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-xs shadow-2xs">
+              V
+            </div>
+            <span className="font-bold text-sm tracking-tight text-foreground">
+              Vibress
+            </span>
+          </div>
           <LanguageSwitcher />
         </div>
-        <h1 style={styles.title}>{t("portal.verify_error")}</h1>
-        <p style={styles.subtitle}>
-          {errorCode === "AUTH_TOKEN_USED"
-            ? "This sign-in link has already been used."
-            : errorCode === "AUTH_TOKEN_EXPIRED"
-              ? "This sign-in link has expired."
-              : t("portal.verify_error")}
-        </p>
-        <button id="verify-return-signin" onClick={() => navigate("/sign-in")} style={styles.button}>
-          {t("portal.return_signin")}
-        </button>
+
+        {/* Verification Card */}
+        <Card className="border border-border/80 shadow-sm text-center">
+          {state === "verifying" && (
+            <CardHeader className="space-y-4 py-8 items-center text-center">
+              <Spinner size="lg" label={t("portal.verifying")} />
+              <div className="space-y-1">
+                <h1 className="text-xl font-bold tracking-tight text-foreground">
+                  {t("portal.verify_title")}
+                </h1>
+                <CardDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  {t("portal.verifying")}
+                </CardDescription>
+              </div>
+            </CardHeader>
+          )}
+
+          {state === "success" && (
+            <CardHeader className="space-y-3 py-8 items-center text-center">
+              <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
+                <CheckCircle2 className="size-8" />
+              </div>
+              <div className="space-y-1">
+                <h1 className="text-xl font-bold tracking-tight text-foreground">
+                  {t("portal.verify_title")}
+                </h1>
+                <CardDescription className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+                  {t("portal.verify_success")}
+                </CardDescription>
+              </div>
+            </CardHeader>
+          )}
+
+          {state === "error" && (
+            <>
+              <CardHeader className="space-y-3 pb-4 items-center text-center">
+                <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-2xs">
+                  <AlertCircle className="size-8" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-xl font-bold tracking-tight text-foreground">
+                    {t("portal.verify_error")}
+                  </h1>
+                  <CardDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                    {errorCode === "AUTH_TOKEN_USED"
+                      ? "This sign-in link has already been used. Please request a new one."
+                      : errorCode === "AUTH_TOKEN_EXPIRED"
+                        ? "This sign-in link has expired. Magic links are valid for a limited time."
+                        : t("portal.verify_error")}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-2">
+                <Button
+                  id="verify-return-signin"
+                  onClick={() => navigate("/sign-in")}
+                  className="w-full h-9 text-xs sm:text-sm font-semibold gap-2 shadow-2xs"
+                >
+                  <ArrowLeft className="size-3.5 rtl:rotate-180" />
+                  <span>{t("portal.return_signin")}</span>
+                </Button>
+              </CardContent>
+            </>
+          )}
+        </Card>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f8fafc",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
-    padding: 16,
-    boxSizing: "border-box",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    padding: 32,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-    boxSizing: "border-box",
-    textAlign: "center",
-  },
-  title: { margin: 0, fontSize: 22, fontWeight: 700 },
-  subtitle: { margin: "8px 0 20px", fontSize: 14, color: "#64748b" },
-  status: { fontSize: 14, color: "#475569" },
-  button: {
-    width: "100%",
-    padding: "11px 16px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

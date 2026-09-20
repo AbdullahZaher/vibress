@@ -2,6 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { memberApi, MemberSubscription } from "../lib/member-api";
 import { navigate } from "../router";
 import { useTranslation } from "../lib/i18n";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Button,
+  Badge,
+  Alert,
+  Spinner,
+} from "@vibress/ui";
+import { CreditCard, Calendar, AlertTriangle, ArrowUpRight } from "lucide-react";
 
 interface Props {
   authLost: () => void;
@@ -81,164 +93,190 @@ export function SubscriptionSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p style={{ color: "#64748b", fontSize: 14 }}>{t("common.loading")}</p>;
+  if (loading) {
+    return (
+      <div className="py-6 flex items-center justify-center text-muted-foreground gap-2">
+        <Spinner size="sm" />
+        <span className="text-xs">{t("common.loading")}</span>
+      </div>
+    );
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge variant="published">Active</Badge>;
+      case "trialing":
+        return <Badge variant="scheduled">Trial</Badge>;
+      case "past_due":
+      case "unpaid":
+        return <Badge variant="destructive">Payment Due</Badge>;
+      case "cancelled":
+        return <Badge variant="draft">Cancelled</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   return (
-    <div
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
-    >
-      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 4px", textAlign: "start" }}>
-        {t("portal.subscriptions_title")}
-      </h2>
-      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px", textAlign: "start" }}>
-        {t("portal.subscriptions_desc")}
-      </p>
+    <div className="space-y-3 pt-6 border-t border-border/80">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5 text-start">
+          <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
+            <CreditCard className="size-4 text-primary" />
+            <span>{t("portal.subscriptions_title")}</span>
+          </h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("portal.subscriptions_desc")}
+          </p>
+        </div>
+      </div>
 
-      {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" }}
-        >
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
 
       {subscriptions.length === 0 ? (
-        <div style={{ textAlign: "start" }}>
-          <p style={{ fontSize: 14, color: "#475569", margin: "0 0 12px" }}>
-            {t("portal.free_plan")}
-          </p>
-          <button id="btn-view-plans" onClick={() => navigate("/plans")} style={styles.button}>
-            {t("portal.upgrade_plan")}
-          </button>
-        </div>
-      ) : (
-        subscriptions.map((sub) => (
-          <div
-            key={sub.id}
-            style={{
-              border: "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: 16,
-              marginBottom: 12,
-              textAlign: "start",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+        <Card className="border border-border/80 bg-muted/20 p-5 text-start">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-semibold text-foreground">
+                  {t("portal.free_plan")}
+                </h4>
+                <Badge variant="secondary">Current</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You are currently on the free member tier.
+              </p>
+            </div>
+            <Button
+              id="btn-view-plans"
+              size="sm"
+              onClick={() => navigate("/plans")}
+              className="gap-1.5 shrink-0 shadow-2xs font-semibold"
             >
-              <div>
-                <strong style={{ fontSize: 15, color: "#0f172a" }}>{sub.planName}</strong>
-                <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>
-                  <span>{t("portal.current_plan")}: {sub.status}</span>
-                  {sub.status !== "free" && (
-                    <>
-                      {" · "}
-                      {formatCurrency(sub.amountMinor / 100, sub.currency)}
-                      {sub.billingInterval === "year" ? "/year" : "/month"}
-                    </>
-                  )}
+              <span>{t("portal.upgrade_plan")}</span>
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {subscriptions.map((sub) => (
+            <Card
+              key={sub.id}
+              className="border border-border/80 shadow-2xs overflow-hidden text-start"
+            >
+              <CardHeader className="p-4 sm:p-5 pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className="text-base font-bold text-foreground">
+                        {sub.planName}
+                      </CardTitle>
+                      {getStatusBadge(sub.status)}
+                    </div>
+                    <CardDescription className="text-xs text-muted-foreground font-mono">
+                      {sub.status !== "free" && (
+                        <>
+                          {formatCurrency(sub.amountMinor / 100, sub.currency)}
+                          <span>
+                            {sub.billingInterval === "year" ? "/year" : "/month"}
+                          </span>
+                        </>
+                      )}
+                    </CardDescription>
+                  </div>
                 </div>
+              </CardHeader>
+
+              <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
                 {sub.trialEnd && sub.status === "trialing" && (
-                  <div style={{ fontSize: 13, color: "#b45309", marginTop: 4 }}>
-                    Trial ends {formatDate(new Date(sub.trialEnd))}
+                  <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-400 text-xs flex items-center gap-2">
+                    <Calendar className="size-3.5 shrink-0" />
+                    <span>Trial ends {formatDate(new Date(sub.trialEnd))}</span>
                   </div>
                 )}
+
                 {sub.currentPeriodEnd &&
                   ["active", "past_due", "unpaid"].includes(sub.status) && (
-                    <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>
-                      {sub.status === "past_due" || sub.status === "unpaid"
-                        ? "Payment failed — update your payment method to keep access."
-                        : `Renews ${formatDate(new Date(sub.currentPeriodEnd))}`}
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Calendar className="size-3.5 text-muted-foreground" />
+                      <span>
+                        {sub.status === "past_due" || sub.status === "unpaid"
+                          ? "Payment failed — update your payment method to keep access."
+                          : `Renews ${formatDate(new Date(sub.currentPeriodEnd))}`}
+                      </span>
                     </div>
                   )}
+
                 {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                  <div style={{ fontSize: 13, color: "#b45309", marginTop: 4 }}>
-                    Cancellation scheduled for period end
-                    {sub.currentPeriodEnd
-                      ? ` (${formatDate(new Date(sub.currentPeriodEnd))})`
-                      : ""}
+                  <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                    <AlertTriangle className="size-3.5 shrink-0" />
+                    <span>
+                      Cancellation scheduled for period end
+                      {sub.currentPeriodEnd
+                        ? ` (${formatDate(new Date(sub.currentPeriodEnd))})`
+                        : ""}
+                    </span>
                   </div>
                 )}
-              </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                <button
-                  onClick={() =>
-                    runAction("resume", () =>
-                      memberApi.resumeSubscription(sub.id),
-                    )
-                  }
-                  disabled={action !== null}
-                  style={styles.button}
-                >
-                  {action === "resume" ? t("portal.saving") : "Resume membership"}
-                </button>
-              )}
-              {!sub.cancelAtPeriodEnd &&
-                ["active", "trialing", "past_due"].includes(sub.status) && (
-                  <button
-                    onClick={() =>
-                      runAction("cancel", () =>
-                        memberApi.cancelSubscription(sub.id),
-                      )
-                    }
-                    disabled={action !== null}
-                    style={styles.cancelButton}
-                  >
-                    {action === "cancel"
-                      ? t("portal.saving")
-                      : t("portal.cancel_sub")}
-                  </button>
-                )}
-              {["active", "past_due", "unpaid"].includes(sub.status) && (
-                <button
-                  onClick={openBillingPortal}
-                  disabled={action !== null}
-                  style={styles.button}
-                >
-                  {action === "portal" ? t("portal.saving") : t("portal.manage_sub")}
-                </button>
-              )}
-            </div>
-          </div>
-        ))
+
+                {/* Actions */}
+                <div className="flex items-center gap-2.5 pt-2 flex-wrap border-t border-border/40">
+                  {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        runAction("resume", () =>
+                          memberApi.resumeSubscription(sub.id),
+                        )
+                      }
+                      loading={action === "resume"}
+                      className="font-semibold shadow-2xs"
+                    >
+                      {action === "resume" ? t("portal.saving") : "Resume membership"}
+                    </Button>
+                  )}
+
+                  {!sub.cancelAtPeriodEnd &&
+                    ["active", "trialing", "past_due"].includes(sub.status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          runAction("cancel", () =>
+                            memberApi.cancelSubscription(sub.id),
+                          )
+                        }
+                        loading={action === "cancel"}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive border-border/80 text-xs"
+                      >
+                        {action === "cancel"
+                          ? t("portal.saving")
+                          : t("portal.cancel_sub")}
+                      </Button>
+                    )}
+
+                  {["active", "past_due", "unpaid"].includes(sub.status) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={openBillingPortal}
+                      loading={action === "portal"}
+                      className="text-xs border-border/80 shadow-2xs gap-1.5"
+                    >
+                      <span>
+                        {action === "portal" ? t("portal.saving") : t("portal.manage_sub")}
+                      </span>
+                      <ArrowUpRight className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  button: {
-    padding: "8px 14px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  cancelButton: {
-    padding: "8px 14px",
-    backgroundColor: "#ffffff",
-    color: "#dc2626",
-    border: "1px solid #fecaca",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

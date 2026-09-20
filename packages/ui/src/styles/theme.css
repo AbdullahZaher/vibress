@@ -1,0 +1,96 @@
+:root {
+  /* Vibress Light Mode Theme Tokens */
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #0f172a;
+  --radius: 0.5rem;
+
+  --sidebar-background: #ffffff;
+  --sidebar-foreground: #475569;
+  --sidebar-primary: #0f172a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #0f172a;
+  --surface-elevated: #ffffff;
+  --status-published-bg: #ecfdf5;
+  --status-published-fg: #047857;
+  --status-published-border: #a7f3d0;
+  --status-draft-bg: #f1f5f9;
+  --status-draft-fg: #475569;
+  --status-draft-border: #e2e8f0;
+  --status-scheduled-bg: #eff6ff;
+  --status-scheduled-fg: #1d4ed8;
+  --status-scheduled-border: #bfdbfe;
+  --status-review-bg: #fffbeb;
+  --status-review-fg: #b45309;
+  --status-review-border: #fde68a;
+  --status-danger-bg: #fef2f2;
+  --status-danger-fg: #b91c1c;
+  --status-danger-border: #fecaca;
+}
+
+.dark {
+  /* Vibress Official Dark Mode Theme Tokens (#15171a main bg, #1d1f23 cards, #2b2f36 borders, #738a94 muted text) */
+  --background: #15171a;
+  --foreground: #f8fafc;
+  --card: #1d1f23;
+  --card-foreground: #f8fafc;
+  --popover: #1d1f23;
+  --popover-foreground: #f8fafc;
+  --primary: #f8fafc;
+  --primary-foreground: #15171a;
+  --secondary: #22252a;
+  --secondary-foreground: #f8fafc;
+  --muted: #22252a;
+  --muted-foreground: #738a94;
+  --accent: #22252a;
+  --accent-foreground: #f8fafc;
+  --destructive: #f87171;
+  --destructive-foreground: #ffffff;
+  --border: #2b2f36;
+  --input: #2b2f36;
+  --ring: #3eb083;
+
+  --sidebar-background: #15171a;
+  --sidebar-foreground: #8f9ca7;
+  --sidebar-primary: #f8fafc;
+  --sidebar-primary-foreground: #15171a;
+  --sidebar-accent: #22252a;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #22252a;
+  --sidebar-ring: #3eb083;
+  --surface-elevated: #24272c;
+  --status-published-bg: rgba(16, 185, 129, 0.12);
+  --status-published-fg: #34d399;
+  --status-published-border: rgba(16, 185, 129, 0.25);
+  --status-draft-bg: rgba(255, 255, 255, 0.06);
+  --status-draft-fg: #94a3b8;
+  --status-draft-border: rgba(255, 255, 255, 0.12);
+  --status-scheduled-bg: rgba(59, 130, 246, 0.12);
+  --status-scheduled-fg: #60a5fa;
+  --status-scheduled-border: rgba(59, 130, 246, 0.25);
+  --status-review-bg: rgba(245, 158, 11, 0.12);
+  --status-review-fg: #fbbf24;
+  --status-review-border: rgba(245, 158, 11, 0.25);
+  --status-danger-bg: rgba(239, 68, 68, 0.12);
+  --status-danger-fg: #f87171;
+  --status-danger-border: rgba(239, 68, 68, 0.25);
+}

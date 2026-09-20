@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { memberApi } from "../lib/member-api";
 import { useTranslation } from "../lib/i18n";
+import {
+  Card,
+  Alert,
+  Spinner,
+  EmptyState,
+  Checkbox,
+} from "@vibress/ui";
+import { Mail, Inbox } from "lucide-react";
 
 interface Props {
   authLost: () => void;
@@ -77,83 +85,86 @@ export function NewsletterPreferencesSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p style={{ color: "#64748b", fontSize: 14 }}>{t("common.loading")}</p>;
+  if (loading) {
+    return (
+      <div className="py-6 flex items-center justify-center text-muted-foreground gap-2">
+        <Spinner size="sm" />
+        <span className="text-xs">{t("common.loading")}</span>
+      </div>
+    );
+  }
 
   return (
     <div
       id="newsletter-preferences-section"
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
+      className="space-y-3 pt-6 border-t border-border/80 text-start"
     >
-      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 4px" }}>
-        {t("portal.newsletters_title")}
-      </h2>
-      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>
-        {t("portal.newsletters_desc")}
-      </p>
-
-      {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}
-        >
-          {error}
+      <div className="space-y-0.5">
+        <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
+          <Mail className="size-4 text-primary" />
+          <span>{t("portal.newsletters_title")}</span>
+        </h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {t("portal.newsletters_desc")}
         </p>
-      )}
+      </div>
+
+      {error && <Alert variant="destructive">{error}</Alert>}
 
       {preferences.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#475569" }}>
-          {t("portal.no_newsletters")}
-        </p>
+        <EmptyState
+          icon={<Inbox className="size-6" />}
+          title={t("portal.no_newsletters")}
+          className="py-6"
+        />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="space-y-2.5">
           {preferences.map((item) => (
-            <div
+            <Card
               key={item.newsletterId}
               id={`newsletter-pref-${item.key}`}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                padding: "12px",
-                border: "1px solid #e2e8f0",
-                borderRadius: 8,
-                backgroundColor: item.subscribed ? "#f0fdf4" : "#ffffff",
-              }}
+              className={`p-3.5 sm:p-4 border transition-colors ${
+                item.subscribed
+                  ? "bg-emerald-500/5 border-emerald-500/20 dark:bg-emerald-950/10"
+                  : "bg-card border-border/70"
+              }`}
             >
-              <div style={{ flex: 1, marginInlineEnd: 12 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>
-                  {item.name}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <h4 className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                    {item.name}
+                  </h4>
+                  {item.description && (
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {item.description}
+                    </p>
+                  )}
                 </div>
-                {item.description && (
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                    {item.description}
-                  </div>
-                )}
-              </div>
 
-              <label
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: item.subscribed ? "#166534" : "#64748b",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={item.subscribed}
-                  disabled={saving === item.newsletterId}
-                  onChange={(e) => toggle(item.newsletterId, e.target.checked)}
-                  style={{ cursor: "pointer" }}
-                />
-                <span>
-                  {item.subscribed ? t("portal.subscribed") : t("portal.unsubscribed")}
-                </span>
-              </label>
-            </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Checkbox
+                    id={`checkbox-${item.newsletterId}`}
+                    checked={item.subscribed}
+                    disabled={saving === item.newsletterId}
+                    onCheckedChange={(checked) =>
+                      toggle(item.newsletterId, checked)
+                    }
+                  />
+                  <label
+                    htmlFor={`checkbox-${item.newsletterId}`}
+                    className={`text-xs font-medium cursor-pointer select-none hidden sm:inline-block ${
+                      item.subscribed
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {item.subscribed
+                      ? t("portal.subscribed")
+                      : t("portal.unsubscribed")}
+                  </label>
+                </div>
+              </div>
+            </Card>
           ))}
         </div>
       )}

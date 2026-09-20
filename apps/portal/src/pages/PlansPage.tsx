@@ -7,7 +7,22 @@ import {
 } from "../lib/catalog";
 import { memberApi } from "../lib/member-api";
 import { navigate } from "../router";
-import { useTranslation, LanguageSwitcher } from "../lib/i18n";
+import { useTranslation } from "../lib/i18n";
+import { PortalHeader } from "../components/PortalHeader";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  Button,
+  Badge,
+  Alert,
+  Skeleton,
+  EmptyState,
+} from "@vibress/ui";
+import { CreditCard, Check, Sparkles, ArrowLeft } from "lucide-react";
 
 export function PlansPage() {
   const { t } = useTranslation();
@@ -35,137 +50,159 @@ export function PlansPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.card}>{t("common.loading")}</div>
-      </div>
-    );
-  }
-
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h1 style={{ ...styles.title, margin: 0 }}>{t("portal.plans_title")}</h1>
-          <LanguageSwitcher />
+    <div className="min-h-screen bg-background flex flex-col text-foreground">
+      <PortalHeader showBack={true} backPath="/account" />
+
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+        {/* Page Header */}
+        <div className="mb-8 text-start">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="outline" className="text-xs font-semibold gap-1.5 py-0.5">
+              <Sparkles className="size-3 text-primary" />
+              {t("portal.plans_title")}
+            </Badge>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            {t("portal.plans_title")}
+          </h1>
+          <p className="mt-1.5 text-sm sm:text-base text-muted-foreground max-w-2xl">
+            {t("portal.plans_desc")}
+          </p>
         </div>
 
-        <p style={styles.subtitle}>{t("portal.plans_desc")}</p>
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <span>{error}</span>
+          </Alert>
+        )}
 
-        {error && <div style={styles.error}>{error}</div>}
-        {products.length === 0 && <p style={{ color: "#64748b", textAlign: "start" }}>No plans available yet.</p>}
-
-        {products.map((product) => (
-          <section key={product.id} style={{ marginBottom: 24, textAlign: "start" }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 4px" }}>{product.name}</h2>
-            {product.description && <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 12px" }}>{product.description}</p>}
-            <div style={{ display: "grid", gap: 12 }}>
-              {product.plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 8,
-                    padding: 16,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <strong>{plan.name}</strong>
-                      {plan.description && (
-                        <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>{plan.description}</div>
-                      )}
-                      <div style={{ fontSize: 14, color: "#334155", fontWeight: 600, marginTop: 4 }}>
-                        {formatPrice(plan)}
-                      </div>
-                      {plan.trialDays > 0 && (
-                        <div style={{ fontSize: 12, color: "#16a34a", marginTop: 2 }}>
-                          {plan.trialDays}-day free trial
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => startCheckout(plan)}
-                      disabled={starting === plan.id}
-                      style={styles.button}
-                    >
-                      {starting === plan.id
-                        ? t("portal.saving")
-                        : t("portal.select_plan")}
-                    </button>
-                  </div>
-                </div>
-              ))}
+        {/* Loading Skeletons */}
+        {loading && (
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-48" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <Skeleton className="h-72 w-full rounded-xl" />
+                <Skeleton className="h-72 w-full rounded-xl" />
+                <Skeleton className="h-72 w-full rounded-xl" />
+              </div>
             </div>
-          </section>
-        ))}
+          </div>
+        )}
 
-        <button
-          onClick={() => navigate("/account")}
-          style={styles.secondaryButton}
-        >
-          {t("portal.account_title")}
-        </button>
-      </div>
+        {/* Empty State */}
+        {!loading && products.length === 0 && (
+          <Card className="p-8">
+            <EmptyState
+              icon={<CreditCard className="size-10" />}
+              title="No plans available yet"
+              description="Membership tiers are being prepared. Check back soon."
+              action={
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/account")}
+                  className="mt-4"
+                >
+                  <ArrowLeft className="size-4 rtl:rotate-180 me-1.5" />
+                  {t("portal.account_title")}
+                </Button>
+              }
+            />
+          </Card>
+        )}
+
+        {/* Products and Plans List */}
+        {!loading &&
+          products.map((product) => (
+            <section key={product.id} className="mb-10 text-start">
+              <div className="mb-4">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                  {product.name}
+                </h2>
+                {product.description && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {product.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {product.plans.map((plan) => {
+                  const isProcessing = starting === plan.id;
+                  return (
+                    <Card
+                      key={plan.id}
+                      className="flex flex-col justify-between transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                    >
+                      <CardHeader className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base sm:text-lg font-semibold text-foreground">
+                            {plan.name}
+                          </CardTitle>
+                          {plan.trialDays > 0 && (
+                            <Badge variant="success" className="text-xs shrink-0">
+                              {plan.trialDays}-day trial
+                            </Badge>
+                          )}
+                        </div>
+                        {plan.description && (
+                          <CardDescription className="text-xs sm:text-sm line-clamp-2">
+                            {plan.description}
+                          </CardDescription>
+                        )}
+                      </CardHeader>
+
+                      <CardContent className="space-y-4">
+                        <div className="pt-2 border-t border-border/60">
+                          <div className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+                            {formatPrice(plan)}
+                          </div>
+                        </div>
+
+                        {/* Feature bullets if trial */}
+                        {plan.trialDays > 0 && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Check className="size-3.5 text-success shrink-0" />
+                            <span>Free trial included</span>
+                          </div>
+                        )}
+                      </CardContent>
+
+                      <CardFooter className="pt-2">
+                        <Button
+                          onClick={() => startCheckout(plan)}
+                          disabled={isProcessing}
+                          loading={isProcessing}
+                          className="w-full"
+                          variant="primary"
+                        >
+                          {isProcessing
+                            ? t("portal.saving")
+                            : t("portal.select_plan")}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
+        {/* Back to Account CTA */}
+        <div className="pt-6 border-t border-border/60 flex items-center justify-start">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/account")}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180 me-1.5" />
+            {t("portal.account_title")}
+          </Button>
+        </div>
+      </main>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f8fafc",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
-    padding: "32px 16px",
-    boxSizing: "border-box",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 540,
-    padding: 32,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-    boxSizing: "border-box",
-  },
-  title: { fontSize: 22, fontWeight: 700, textAlign: "start" },
-  subtitle: {
-    margin: "0 0 24px",
-    fontSize: 14,
-    color: "#64748b",
-    textAlign: "start",
-  },
-  button: {
-    padding: "8px 14px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    marginTop: 16,
-    padding: "8px 14px",
-    backgroundColor: "#f1f5f9",
-    color: "#475569",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: "pointer",
-  },
-  error: { color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" },
-};

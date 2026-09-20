@@ -8,17 +8,24 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "typecheck": "tsc -b",
     "preview": "vite preview"
   },
   "dependencies": {
     "@vibress/i18n": "workspace:*",
+    "@vibress/ui": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.30.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.5.3",
     "vite": "^8.2.1"
   },

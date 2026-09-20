@@ -5,6 +5,15 @@ import {
   MemberNotification,
 } from "../lib/member-api";
 import { useTranslation } from "../lib/i18n";
+import {
+  Card,
+  Button,
+  Badge,
+  Alert,
+  Spinner,
+  EmptyState,
+} from "@vibress/ui";
+import { Bell, Check, Inbox, MessageSquare } from "lucide-react";
 
 interface Props {
   authLost: () => void;
@@ -69,93 +78,90 @@ export function NotificationsSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p style={{ color: "#64748b", fontSize: 14 }}>{t("common.loading")}</p>;
+  if (loading) {
+    return (
+      <div className="py-6 flex items-center justify-center text-muted-foreground gap-2">
+        <Spinner size="sm" />
+        <span className="text-xs">{t("common.loading")}</span>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0, textAlign: "start" }}>
-          {t("portal.notifications_title")}{" "}
-          {unreadCount > 0 && (
-            <span style={{ fontSize: 13, color: "#dc2626", marginInlineStart: 8 }}>
-              ({unreadCount})
-            </span>
-          )}
-        </h2>
+    <div className="space-y-3 pt-6 border-t border-border/80 text-start">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Bell className="size-4 text-primary" />
+            <span>{t("portal.notifications_title")}</span>
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="ms-1.5 px-1.5 py-0 text-[11px] font-mono">
+                {unreadCount}
+              </Badge>
+            )}
+          </h3>
+        </div>
+
         {unreadCount > 0 && (
-          <button
+          <Button
+            variant="ghost"
+            size="xs"
             onClick={handleMarkAllRead}
-            style={{
-              fontSize: 13,
-              color: "#2563eb",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
+            className="text-xs text-primary hover:text-primary font-semibold"
           >
             {t("portal.mark_all_read")}
-          </button>
+          </Button>
         )}
       </div>
-      {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" }}
-        >
-          {error}
-        </p>
-      )}
+
+      {error && <Alert variant="destructive">{error}</Alert>}
+
       {notifications.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#475569", textAlign: "start" }}>{t("portal.no_notifications")}</p>
+        <EmptyState
+          icon={<Inbox className="size-6" />}
+          title={t("portal.no_notifications")}
+          className="py-6"
+        />
       ) : (
-        notifications.map((n) => (
-          <div
-            key={n.id}
-            style={{
-              padding: "10px 12px",
-              marginBottom: 8,
-              borderRadius: 6,
-              border: "1px solid #e2e8f0",
-              backgroundColor: n.readAt ? "#ffffff" : "#f0fdf4",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              textAlign: "start",
-            }}
-          >
-            <div style={{ flex: 1, marginInlineEnd: 12 }}>
-              <div style={{ fontSize: 13, color: "#0f172a" }}>
-                {TYPE_LABELS[n.type] || n.type}
+        <div className="space-y-2">
+          {notifications.map((n) => (
+            <Card
+              key={n.id}
+              className={`p-3 sm:p-3.5 border transition-colors flex items-center justify-between gap-3 ${
+                n.readAt
+                  ? "bg-card border-border/60 opacity-80"
+                  : "bg-primary/5 border-primary/20 dark:bg-primary/10 shadow-2xs"
+              }`}
+            >
+              <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                <div className="size-7 rounded-lg bg-muted/80 text-muted-foreground flex items-center justify-center shrink-0 mt-0.5 border border-border/50">
+                  <MessageSquare className="size-3.5 text-primary" />
+                </div>
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {TYPE_LABELS[n.type] || n.type}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    {formatDate(new Date(n.createdAt))}
+                  </p>
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                {formatDate(new Date(n.createdAt))}
-              </div>
-            </div>
-            {!n.readAt && (
-              <button
-                onClick={() => handleMarkRead(n.id)}
-                style={{
-                  fontSize: 12,
-                  color: "#2563eb",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
-                ✓
-              </button>
-            )}
-          </div>
-        ))
+
+              {!n.readAt && (
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  onClick={() => handleMarkRead(n.id)}
+                  title="Mark as read"
+                  aria-label="Mark notification as read"
+                  className="size-7 shrink-0 rounded-md border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  <Check className="size-3.5" />
+                </Button>
+              )}
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -2,17 +2,34 @@ import { useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
 import { useTranslation, LanguageSwitcher } from "../lib/i18n";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  Button,
+  Input,
+  Alert,
+  Label,
+} from "@vibress/ui";
+import { Mail, ArrowLeft, RefreshCw, Send } from "lucide-react";
 
 export function CheckEmailPage() {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const handleResend = async () => {
-    if (cooldown > 0 || !email) return;
+    if (cooldown > 0 || !email.trim()) return;
+    setSending(true);
+    setError(null);
     try {
-      await memberApi.requestAuthLink(email);
+      await memberApi.requestAuthLink(email.trim());
       setMessage(t("portal.check_email_desc"));
       setCooldown(30);
       const timer = setInterval(() => {
@@ -26,110 +43,103 @@ export function CheckEmailPage() {
       }, 1000);
     } catch (err) {
       if (err instanceof MemberApiError && err.status === 429) {
-        setMessage(t("common.error"));
+        setError(t("common.error"));
       } else {
-        setMessage(t("common.error"));
+        setError(t("common.error"));
       }
+    } finally {
+      setSending(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md space-y-4">
+        {/* Top Control Bar */}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2 select-none">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-xs shadow-2xs">
+              V
+            </div>
+            <span className="font-bold text-sm tracking-tight text-foreground">
+              Vibress
+            </span>
+          </div>
           <LanguageSwitcher />
         </div>
 
-        <h1 style={styles.title}>{t("portal.check_email_title")}</h1>
-        <p style={styles.subtitle}>
-          {t("portal.check_email_desc")}
-        </p>
+        {/* Check Email Card */}
+        <Card className="border border-border/80 shadow-sm text-center">
+          <CardHeader className="space-y-2 pb-4 items-center text-center">
+            <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20 shadow-2xs mb-1">
+              <Mail className="size-6" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {t("portal.check_email_title")}
+            </h1>
+            <CardDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+              {t("portal.check_email_desc")}
+            </CardDescription>
+          </CardHeader>
 
-        <input
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={t("portal.email_placeholder")}
-          style={styles.input}
-        />
+          <CardContent className="space-y-4">
+            {message && <Alert variant="success">{message}</Alert>}
+            {error && <Alert variant="destructive">{error}</Alert>}
 
-        {message && (
-          <p role="status" style={styles.message}>
-            {message}
-          </p>
-        )}
-        <button
-          onClick={handleResend}
-          disabled={cooldown > 0 || !email}
-          style={styles.button}
-        >
-          {cooldown > 0 ? `${t("portal.send_magic_link")} (${cooldown}s)` : t("portal.send_magic_link")}
-        </button>
+            <div className="space-y-2 text-start pt-1">
+              <Label htmlFor="resend-email">
+                {t("portal.email_label")} (resend to another email)
+              </Label>
+              <div className="relative">
+                <Mail className="absolute start-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  id="resend-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={t("portal.email_placeholder")}
+                  className="ps-9 h-9 text-xs sm:text-sm"
+                />
+              </div>
+            </div>
 
-        <p style={styles.hint}>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("/sign-in");
-            }}
-            style={styles.link}
-          >
-            {t("portal.return_signin")}
-          </a>
-        </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResend}
+              disabled={cooldown > 0 || !email.trim() || sending}
+              loading={sending}
+              className="w-full h-9 text-xs sm:text-sm font-semibold gap-2 border-border/80 shadow-2xs"
+            >
+              {cooldown > 0 ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  <span>
+                    {t("portal.send_magic_link")} ({cooldown}s)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Send className="size-3.5" />
+                  <span>{t("portal.send_magic_link")}</span>
+                </>
+              )}
+            </Button>
+          </CardContent>
+
+          <CardFooter className="border-t border-border/60 pt-3.5 pb-4 text-center justify-center">
+            <Button
+              variant="link"
+              onClick={() => navigate("/sign-in")}
+              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
+            >
+              <ArrowLeft className="size-3.5 rtl:rotate-180" />
+              <span>{t("portal.return_signin")}</span>
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f8fafc",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
-    padding: 16,
-    boxSizing: "border-box",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    padding: 32,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-    boxSizing: "border-box",
-    textAlign: "center",
-  },
-  title: { margin: 0, fontSize: 22, fontWeight: 700 },
-  subtitle: { margin: "8px 0 20px", fontSize: 14, color: "#64748b" },
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #cbd5e1",
-    fontSize: 14,
-    boxSizing: "border-box",
-    marginBottom: 16,
-    textAlign: "start",
-  },
-  button: {
-    width: "100%",
-    padding: "11px 16px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  message: { color: "#166534", fontSize: 13, margin: "0 0 12px" },
-  hint: { marginTop: 20, fontSize: 13 },
-  link: { color: "#2563eb", textDecoration: "none" },
-};

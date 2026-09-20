@@ -7,6 +7,7 @@ import {
   isRtl,
   type Direction,
 } from "@vibress/i18n";
+import { LanguageSwitcher as UILanguageSwitcher } from "@vibress/ui";
 
 interface I18nContextValue {
   locale: string;
@@ -99,43 +100,12 @@ export function LanguageSwitcher({ className }: { className?: string }) {
   const { locale, setLocale, t } = useTranslation();
 
   return (
-    <div className={`portal-lang-switcher ${className || ""}`} style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-      <button
-        type="button"
-        id="portal-lang-en"
-        onClick={() => setLocale("en")}
-        style={{
-          background: locale === "en" ? "#2563eb" : "transparent",
-          color: locale === "en" ? "#fff" : "inherit",
-          border: "1px solid #d1d5db",
-          borderRadius: "4px",
-          padding: "4px 8px",
-          fontSize: "12px",
-          cursor: "pointer",
-          fontWeight: locale === "en" ? 600 : 400,
-        }}
-        aria-label={t("portal.english")}
-      >
-        English
-      </button>
-      <button
-        type="button"
-        id="portal-lang-ar"
-        onClick={() => setLocale("ar")}
-        style={{
-          background: locale === "ar" ? "#2563eb" : "transparent",
-          color: locale === "ar" ? "#fff" : "inherit",
-          border: "1px solid #d1d5db",
-          borderRadius: "4px",
-          padding: "4px 8px",
-          fontSize: "12px",
-          cursor: "pointer",
-          fontWeight: locale === "ar" ? 600 : 400,
-        }}
-        aria-label={t("portal.arabic")}
-      >
-        العربية
-      </button>
-    </div>
+    <UILanguageSwitcher
+      locale={locale}
+      onSelectLocale={setLocale}
+      className={`portal-lang-switcher ${className || ""}`}
+      enLabel={t("portal.english")}
+      arLabel={t("portal.arabic")}
+    />
   );
 }

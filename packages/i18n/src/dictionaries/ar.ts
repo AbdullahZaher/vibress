@@ -240,5 +240,6 @@ export const arDictionary: Record<string, string> = {
   "portal.language": "اللغة",
   "portal.english": "English",
   "portal.arabic": "العربية",
+  "portal.portal_name": "بوابة الأعضاء",
 };
 

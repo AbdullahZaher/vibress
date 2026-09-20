@@ -4,7 +4,32 @@ import { navigate } from "../router";
 import { SubscriptionSection } from "../components/SubscriptionSection";
 import { NewsletterPreferencesSection } from "../components/NewsletterPreferencesSection";
 import { NotificationsSection } from "../components/NotificationsSection";
-import { useTranslation, LanguageSwitcher } from "../lib/i18n";
+import { PortalHeader } from "../components/PortalHeader";
+import { useTranslation } from "../lib/i18n";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Button,
+  Input,
+  Dialog,
+  Avatar,
+  Alert,
+  Label,
+  Spinner,
+} from "@vibress/ui";
+import {
+  User,
+  Mail,
+  Calendar,
+  AlertTriangle,
+  LogOut,
+  Trash2,
+  Lock,
+  Save,
+} from "lucide-react";
 
 export function AccountPage() {
   const { t, formatDate } = useTranslation();
@@ -133,343 +158,335 @@ export function AccountPage() {
 
   if (loading) {
     return (
-      <div style={styles.container}>
-        <p style={styles.status}>{t("common.loading")}</p>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-4 font-sans">
+        <Spinner size="lg" label={t("common.loading")} />
+        <p className="text-xs text-muted-foreground mt-3 font-medium">
+          {t("common.loading")}
+        </p>
       </div>
     );
   }
 
   if (authError || !member) {
     return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <LanguageSwitcher />
-          </div>
-          <h1 style={styles.title}>{t("portal.session_expired")}</h1>
-          <button id="account-signin-redirect" onClick={() => navigate("/sign-in")} style={styles.button}>
-            {t("portal.return_signin")}
-          </button>
-        </div>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-4 sm:p-6 font-sans">
+        <Card className="w-full max-w-md border border-border/80 shadow-sm text-center">
+          <CardHeader className="space-y-2 py-6 items-center text-center">
+            <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-2xs mb-1">
+              <Lock className="size-6" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {t("portal.session_expired")}
+            </h1>
+            <CardDescription className="text-xs text-muted-foreground">
+              Your member session is no longer active. Please sign in again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <Button
+              id="account-signin-redirect"
+              onClick={() => navigate("/sign-in")}
+              className="w-full h-9 text-xs sm:text-sm font-semibold shadow-2xs"
+            >
+              {t("portal.return_signin")}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h1 style={{ ...styles.title, margin: 0 }}>{t("portal.account_title")}</h1>
-          <LanguageSwitcher />
-        </div>
+    <div className="min-h-screen w-full flex flex-col bg-background font-sans">
+      {/* Portal Top Header */}
+      <PortalHeader
+        memberEmail={member.email}
+        memberName={member.name}
+        onLogout={handleLogout}
+        title={t("portal.account_title")}
+      />
 
-        <p style={styles.subtitle}>{t("portal.account_desc")}</p>
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-3xl mx-auto p-4 sm:p-6 md:p-8 space-y-6">
+        {/* Page Header */}
+        <div className="text-start space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            {t("portal.account_title")}
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {t("portal.account_desc")}
+          </p>
+        </div>
 
         {/* Profile Card */}
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>{t("portal.profile")}</h2>
-          
-          <div style={styles.field}>
-            <label style={styles.label}>{t("portal.email")}</label>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              <p style={styles.value} id="member-email-display">{member.email}</p>
-              <button
-                type="button"
-                id="btn-open-change-email"
-                onClick={() => {
-                  setShowEmailModal(true);
-                  setEmailChangeStatus(null);
-                  setEmailChangeError(null);
-                }}
-                style={styles.secondaryButton}
-              >
-                {t("portal.change_email")}
-              </button>
+        <Card className="border border-border/80 shadow-sm overflow-hidden text-start">
+          <CardHeader className="p-5 sm:p-6 border-b border-border/60 bg-muted/15">
+            <div className="flex items-center gap-3.5">
+              <Avatar
+                fallback={member.name || member.email}
+                size="lg"
+                className="border-2 border-border shadow-2xs"
+              />
+              <div className="space-y-0.5 min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground truncate">
+                  {member.name || "Vibress Member"}
+                </h2>
+                <p
+                  id="member-email-display"
+                  className="text-xs text-muted-foreground font-mono truncate"
+                >
+                  {member.email}
+                </p>
+              </div>
             </div>
-          </div>
+          </CardHeader>
 
-          <div style={styles.field}>
-            <label style={styles.label}>{t("nav.members")}</label>
-            <p style={styles.value}>
-              {formatDate(new Date(member.createdAt), {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          </div>
+          <CardContent className="p-5 sm:p-6 space-y-6">
+            {/* Account Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3.5 rounded-xl bg-card border border-border/70 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Mail className="size-3.5" />
+                    <span>{t("portal.email")}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    id="btn-open-change-email"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => {
+                      setShowEmailModal(true);
+                      setEmailChangeStatus(null);
+                      setEmailChangeError(null);
+                    }}
+                    className="h-6 text-[11px] px-2 border-border/80"
+                  >
+                    {t("portal.change_email")}
+                  </Button>
+                </div>
+                <p className="text-xs font-mono font-medium text-foreground truncate">
+                  {member.email}
+                </p>
+              </div>
 
-          <form onSubmit={handleSave}>
-            <label style={styles.label} htmlFor="name">
-              {t("portal.name")}
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              placeholder={t("portal.name_placeholder")}
-              onChange={(e) => setName(e.target.value)}
-              style={styles.input}
-              maxLength={200}
-            />
-            {saveError && (
-              <p role="alert" style={styles.error}>
-                {saveError}
-              </p>
-            )}
-            {message && (
-              <p role="status" style={styles.success}>
-                {message}
-              </p>
-            )}
-            <button id="btn-save-profile" type="submit" disabled={saving} style={styles.button}>
-              {saving ? t("portal.saving") : t("portal.save_profile")}
-            </button>
-          </form>
-        </div>
+              <div className="p-3.5 rounded-xl bg-card border border-border/70 shadow-2xs space-y-1">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="size-3.5" />
+                  <span>{t("nav.members") || "Member Since"}</span>
+                </span>
+                <p className="text-xs font-medium text-foreground">
+                  {formatDate(new Date(member.createdAt), {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+            </div>
 
-        <SubscriptionSection authLost={() => setAuthError(true)} />
-        <NewsletterPreferencesSection authLost={() => setAuthError(true)} />
-        <NotificationsSection authLost={() => setAuthError(true)} />
+            {/* Edit Name Form */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <User className="size-4 text-primary" />
+                <span>{t("portal.profile")}</span>
+              </h3>
 
-        {/* Danger Zone: Account Deletion & Logout */}
-        <div style={{ marginTop: 32, paddingTop: 20, borderTop: "1px solid #fee2e2" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-            <button id="btn-open-delete-account" onClick={() => setShowDeleteModal(true)} style={styles.deleteButton}>
-              {t("portal.delete_account")}
-            </button>
-            <button id="btn-sign-out" onClick={handleLogout} style={styles.logout}>
-              {t("portal.sign_out")}
-            </button>
-          </div>
-        </div>
+              <form onSubmit={handleSave} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name">{t("portal.name")}</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    value={name}
+                    placeholder={t("portal.name_placeholder")}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={200}
+                    className="h-9 text-xs sm:text-sm"
+                  />
+                </div>
 
-        {/* Change Email Modal */}
-        {showEmailModal && (
-          <div id="modal-change-email" style={styles.modalOverlay}>
-            <div style={styles.modal}>
-              <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>{t("portal.change_email")}</h3>
-              <p style={{ margin: "0 0 16px", fontSize: 13, color: "#64748b" }}>
-                {t("portal.change_email_desc")}
-              </p>
-              <form onSubmit={handleRequestEmailChange}>
-                <label style={styles.label} htmlFor="new-email">
-                  {t("portal.new_email")}
-                </label>
-                <input
+                {saveError && <Alert variant="destructive">{saveError}</Alert>}
+                {message && <Alert variant="success">{message}</Alert>}
+
+                <Button
+                  id="btn-save-profile"
+                  type="submit"
+                  size="sm"
+                  loading={saving}
+                  className="font-semibold shadow-2xs gap-1.5"
+                >
+                  <Save className="size-3.5" />
+                  <span>
+                    {saving ? t("portal.saving") : t("portal.save_profile")}
+                  </span>
+                </Button>
+              </form>
+            </div>
+
+            {/* Subscriptions */}
+            <SubscriptionSection authLost={() => setAuthError(true)} />
+
+            {/* Newsletters */}
+            <NewsletterPreferencesSection authLost={() => setAuthError(true)} />
+
+            {/* Notifications */}
+            <NotificationsSection authLost={() => setAuthError(true)} />
+
+            {/* Danger Zone: Account Deletion & Logout */}
+            <div className="pt-6 border-t border-red-500/20 space-y-3">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-destructive flex items-center gap-2">
+                  <AlertTriangle className="size-4" />
+                  <span>Account Actions</span>
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Manage sensitive member account credentials or terminate session.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <Button
+                  id="btn-open-delete-account"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDeleteModal(true)}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-red-500/30 gap-1.5 text-xs font-semibold"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>{t("portal.delete_account")}</span>
+                </Button>
+
+                <Button
+                  id="btn-sign-out"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-foreground gap-1.5 text-xs font-semibold"
+                >
+                  <LogOut className="size-3.5 rtl:rotate-180" />
+                  <span>{t("portal.sign_out")}</span>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+
+      {/* Change Email Modal */}
+      {showEmailModal && (
+        <Dialog
+          id="modal-change-email"
+          isOpen={showEmailModal}
+          onClose={() => setShowEmailModal(false)}
+          title={t("portal.change_email")}
+          description={t("portal.change_email_desc")}
+        >
+          <form onSubmit={handleRequestEmailChange} className="space-y-4">
+            <div className="space-y-1.5 text-start">
+              <Label htmlFor="new-email" required>
+                {t("portal.new_email")}
+              </Label>
+              <div className="relative">
+                <Mail className="absolute start-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+                <Input
                   id="new-email"
                   type="email"
                   required
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder={t("portal.new_email_placeholder")}
-                  style={styles.input}
+                  className="ps-9 h-9 text-xs sm:text-sm"
                 />
-                {emailChangeError && (
-                  <p role="alert" style={styles.error}>
-                    {emailChangeError}
-                  </p>
-                )}
-                {emailChangeStatus && (
-                  <p id="email-change-status" role="status" style={styles.success}>
-                    {emailChangeStatus}
-                  </p>
-                )}
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowEmailModal(false)}
-                    style={styles.cancelModalButton}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    type="submit"
-                    id="btn-confirm-email-change"
-                    disabled={requestingEmailChange}
-                    style={styles.button}
-                  >
-                    {requestingEmailChange ? t("portal.saving") : t("portal.send_change_link")}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Account Modal */}
-        {showDeleteModal && (
-          <div id="modal-delete-account" style={styles.modalOverlay}>
-            <div style={styles.modal}>
-              <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#b91c1c" }}>
-                {t("portal.delete_confirm_title")}
-              </h3>
-              <p style={{ margin: "0 0 16px", fontSize: 13, color: "#475569", lineHeight: 1.5 }}>
-                {t("portal.delete_confirm_desc")}
-              </p>
-              {deleteError && (
-                <p role="alert" style={styles.error}>
-                  {deleteError}
-                </p>
-              )}
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteModal(false)}
-                  style={styles.cancelModalButton}
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  type="button"
-                  id="btn-confirm-delete-account"
-                  onClick={handleDeleteAccount}
-                  disabled={deleting}
-                  style={styles.confirmDeleteButton}
-                >
-                  {deleting ? t("portal.deleting") : t("portal.delete_confirm_button")}
-                </button>
               </div>
             </div>
+
+            {emailChangeError && (
+              <Alert variant="destructive">{emailChangeError}</Alert>
+            )}
+
+            {emailChangeStatus && (
+              <Alert variant="success">
+                <p id="email-change-status">{emailChangeStatus}</p>
+              </Alert>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEmailModal(false)}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                id="btn-confirm-email-change"
+                size="sm"
+                loading={requestingEmailChange}
+                className="font-semibold shadow-2xs"
+              >
+                {requestingEmailChange
+                  ? t("portal.saving")
+                  : t("portal.send_change_link")}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <Dialog
+          id="modal-delete-account"
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          title={t("portal.delete_confirm_title")}
+          description={t("portal.delete_confirm_desc")}
+        >
+          <div className="space-y-4 text-start">
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs leading-relaxed flex items-start gap-2.5">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <span>
+                This will permanently delete your member account, active
+                subscriptions, and newsletter preferences. This action cannot be
+                undone.
+              </span>
+            </div>
+
+            {deleteError && (
+              <Alert variant="destructive">{deleteError}</Alert>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                id="btn-confirm-delete-account"
+                variant="destructive"
+                size="sm"
+                loading={deleting}
+                onClick={handleDeleteAccount}
+                className="font-semibold shadow-2xs"
+              >
+                {deleting
+                  ? t("portal.deleting")
+                  : t("portal.delete_confirm_button")}
+              </Button>
+            </div>
           </div>
-        )}
-      </div>
+        </Dialog>
+      )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f8fafc",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
-    padding: "32px 16px",
-    boxSizing: "border-box",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 540,
-    padding: 32,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-    boxSizing: "border-box",
-  },
-  title: { fontSize: 22, fontWeight: 700, textAlign: "start" },
-  subtitle: {
-    margin: "0 0 24px",
-    fontSize: 14,
-    color: "#64748b",
-    textAlign: "start",
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    margin: "0 0 12px",
-    textAlign: "start",
-  },
-  field: { marginBottom: 16, textAlign: "start" },
-  label: { display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4, textAlign: "start" },
-  value: { margin: 0, fontSize: 14, color: "#334155", textAlign: "start" },
-  input: {
-    width: "100%",
-    padding: "9px 12px",
-    borderRadius: 8,
-    border: "1px solid #cbd5e1",
-    fontSize: 14,
-    boxSizing: "border-box",
-    marginBottom: 12,
-    textAlign: "start",
-  },
-  button: {
-    padding: "9px 16px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    padding: "5px 10px",
-    backgroundColor: "#f1f5f9",
-    color: "#1e293b",
-    border: "1px solid #cbd5e1",
-    borderRadius: 6,
-    fontSize: 12,
-    fontWeight: 500,
-    cursor: "pointer",
-  },
-  deleteButton: {
-    padding: "8px 12px",
-    backgroundColor: "#fff1f2",
-    color: "#be123c",
-    border: "1px solid #fecdd3",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  confirmDeleteButton: {
-    padding: "9px 16px",
-    backgroundColor: "#dc2626",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  cancelModalButton: {
-    padding: "9px 16px",
-    backgroundColor: "#f1f5f9",
-    color: "#475569",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: "pointer",
-  },
-  logout: {
-    padding: "8px 12px",
-    backgroundColor: "#f8fafc",
-    color: "#64748b",
-    border: "1px solid #cbd5e1",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: "pointer",
-  },
-  error: { color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" },
-  success: { color: "#166534", fontSize: 13, margin: "0 0 12px", textAlign: "start" },
-  status: { fontSize: 14, color: "#475569", textAlign: "center" },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    zIndex: 1000,
-  },
-  modal: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 24,
-    maxWidth: 440,
-    width: "100%",
-    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-  },
-};

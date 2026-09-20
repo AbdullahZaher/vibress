@@ -240,5 +240,6 @@ export const enDictionary: Record<string, string> = {
   "portal.language": "Language",
   "portal.english": "English",
   "portal.arabic": "العربية",
+  "portal.portal_name": "Member Portal",
 };
 
