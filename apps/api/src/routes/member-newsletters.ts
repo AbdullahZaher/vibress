@@ -122,7 +122,8 @@ export async function publicUnsubscribeRoutes(fastify: FastifyInstance) {
           });
       }
       try {
-        const result = await newslettersService.confirmSubscription(body.token);
+        const pubId = (req as unknown as { publicationContext?: { publicationId?: string } }).publicationContext?.publicationId;
+        const result = await newslettersService.confirmSubscription(body.token, pubId);
         return reply.status(200).send({
           confirmed: true,
           memberId: result.memberId,
@@ -141,7 +142,7 @@ export async function publicUnsubscribeRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // Public GET convenience endpoint for email links (safely confirms and renders/redirects)
+  // Public GET convenience endpoint for email links (Scanner-safe: non-mutating validation)
   fastify.get("/newsletters/confirm", {
     handler: async (req, reply) => {
       const query = req.query as { token?: string };
@@ -157,12 +158,15 @@ export async function publicUnsubscribeRoutes(fastify: FastifyInstance) {
         });
       }
       try {
-        const result = await newslettersService.confirmSubscription(query.token);
+        const pubId = (req as unknown as { publicationContext?: { publicationId?: string } }).publicationContext?.publicationId;
+        const claims = await newslettersService.validateOptInToken(query.token, pubId);
         return reply.status(200).send({
-          confirmed: true,
-          memberId: result.memberId,
-          newsletterId: result.newsletterId,
-          message: "Subscription confirmed successfully",
+          valid: true,
+          pendingConfirmation: true,
+          memberId: claims.memberId,
+          newsletterId: claims.newsletterId,
+          message:
+            "Confirmation token is valid. Submit POST to confirm subscription.",
         });
       } catch (err) {
         if (err instanceof NewsletterDomainError) {

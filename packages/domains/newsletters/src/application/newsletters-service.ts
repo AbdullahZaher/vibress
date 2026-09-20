@@ -69,6 +69,12 @@ export interface NewsletterServiceDeps {
   isMemberSuppressed: (email: string) => Promise<boolean>;
   unsubscribeSecret: string;
   portalUrl: string;
+  memberRepo?: {
+    findById(
+      id: string,
+      publicationId?: string,
+    ): Promise<{ id: string; status: string; publicationId: string } | null>;
+  };
 }
 
 export const UNSUBSCRIBE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
@@ -555,16 +561,79 @@ export class NewslettersService {
   }
 
   /**
-   * Confirms a double opt-in subscription using a signed token.
+   * Non-mutating validation of a double opt-in confirmation token.
    */
-  async confirmSubscription(
+  async validateOptInToken(
     token: string,
+    publicationId?: string,
   ): Promise<{ memberId: string; newsletterId: string }> {
     const claims = this.unwrapOptInToken(token);
     if (!claims) {
       throw new NewsletterDomainError(
         "INVALID_CONFIRMATION_TOKEN",
         "Invalid or expired confirmation link",
+      );
+    }
+
+    const newsletter = await this.deps.newsletterRepo.findById(
+      claims.newsletterId,
+      publicationId,
+    );
+    if (!newsletter || newsletter.status === "archived") {
+      throw new NewsletterDomainError(
+        "NEWSLETTER_NOT_FOUND",
+        "Newsletter not found",
+      );
+    }
+
+    if (publicationId && newsletter.publicationId !== publicationId) {
+      throw new NewsletterDomainError(
+        "NEWSLETTER_NOT_FOUND",
+        "Newsletter not found for publication",
+      );
+    }
+
+    if (this.deps.memberRepo) {
+      const member = await this.deps.memberRepo.findById(
+        claims.memberId,
+        publicationId,
+      );
+      if (!member || member.status === "disabled") {
+        throw new NewsletterDomainError(
+          "MEMBER_NOT_FOUND",
+          "Member not found or disabled",
+        );
+      }
+      if (publicationId && member.publicationId !== publicationId) {
+        throw new NewsletterDomainError(
+          "MEMBER_NOT_FOUND",
+          "Member not found for publication",
+        );
+      }
+    }
+
+    return claims;
+  }
+
+  /**
+   * Confirms a double opt-in subscription using a signed token.
+   * Consumes the token and enforces single-use replay protection.
+   */
+  async confirmSubscription(
+    token: string,
+    publicationId?: string,
+  ): Promise<{ memberId: string; newsletterId: string }> {
+    const claims = await this.validateOptInToken(token, publicationId);
+
+    // Replay protection: if already subscribed, token has already been consumed
+    const existingPref = await this.deps.preferenceRepo.get(
+      claims.memberId,
+      claims.newsletterId,
+    );
+    if (existingPref && existingPref.subscribed) {
+      throw new NewsletterDomainError(
+        "TOKEN_ALREADY_USED",
+        "Confirmation link has already been used",
       );
     }
 
