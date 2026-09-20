@@ -8,10 +8,7 @@ import {
   MemberAuthService,
 } from "@vibress/members";
 import { getDbPool } from "@vibress/database";
-import type {
-  PublicMemberIdentity,
-  MemberAuthState,
-} from "@vibress/theme-core";
+import type { ThemeAuthContractV1 } from "@vibress/theme-core";
 
 class CaptureMailer {
   sent: Array<{ to: string; magicLinkUrl: string }> = [];
@@ -266,50 +263,114 @@ describe("Vibress Public Member Auth & Theme-Agnostic Identity Certification", (
   });
 
   // --------------------------------------------------------------------------
-  // Phase 18 & 21: Theme API Contract & Synthetic Third-Party Theme Test
+  // Phase 6 & 7: SSR Request-Awareness & Cache Isolation Simulation
   // --------------------------------------------------------------------------
-  describe("Phase 18 & 21: Theme API Contract & Synthetic Future Theme Certification", () => {
-    it("synthetic theme consumes MemberAuthState contract without importing auth internals", () => {
-      // Synthetic Theme rendering logic that strictly consumes Theme API contract
-      function renderSyntheticThemeHeader(auth: MemberAuthState): {
-        viewState: "LOGGED_IN" | "LOGGED_OUT" | "LOADING";
-        renderedName?: string;
-      } {
-        if (auth.status === "loading") {
-          return { viewState: "LOADING" };
+  describe("Phase 6 & 7: SSR Request-Awareness & Cache Isolation", () => {
+    it("guarantees request-scoped auth resolution with zero cross-request cache leakage", async () => {
+      const email = `ssr-cache-${Date.now()}@example.com`;
+      await authService.requestAuthLink(email, {}, "pub_default");
+      const rawToken =
+        mailer.sent[mailer.sent.length - 1]!.magicLinkUrl.split("token=")[1]!;
+      const { member, sessionToken } =
+        await authService.verifyAndCreateSession(rawToken);
+      await memberRepo.update(member.id, { name: "Abdullah Zaher" });
+
+      // Request A: Unauthenticated Visitor
+      const reqA1 = await app.inject({
+        method: "GET",
+        url: "/api/members/v1/session",
+      });
+      expect(JSON.parse(reqA1.body)).toEqual({
+        status: "unauthenticated",
+        member: null,
+      });
+
+      // Request B: Authenticated Member
+      const reqB1 = await app.inject({
+        method: "GET",
+        url: "/api/members/v1/session",
+        headers: { cookie: `vibress_member_session=${sessionToken}` },
+      });
+      expect(JSON.parse(reqB1.body).status).toBe("authenticated");
+      expect(JSON.parse(reqB1.body).member.name).toBe("Abdullah Zaher");
+
+      // Request A (re-fetch): Must remain unauthenticated (no cross-request cache bleed)
+      const reqA2 = await app.inject({
+        method: "GET",
+        url: "/api/members/v1/session",
+      });
+      expect(JSON.parse(reqA2.body)).toEqual({
+        status: "unauthenticated",
+        member: null,
+      });
+
+      // Request B (re-fetch): Must remain authenticated
+      const reqB2 = await app.inject({
+        method: "GET",
+        url: "/api/members/v1/session",
+        headers: { cookie: `vibress_member_session=${sessionToken}` },
+      });
+      expect(JSON.parse(reqB2.body).status).toBe("authenticated");
+      expect(JSON.parse(reqB2.body).member.name).toBe("Abdullah Zaher");
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Phase 18 & 21: Theme API Contract V1 & Custom Third-Party Theme Certification
+  // --------------------------------------------------------------------------
+  describe("Phase 18 & 21: Theme API Contract V1 & Custom Theme Certification", () => {
+    it("custom theme renders arbitrary UI using ThemeAuthContractV1 without MemberHeaderAuth", () => {
+      // Completely custom theme renderer that does NOT use MemberHeaderAuth
+      function renderCustomThemeLayout(auth: import("@vibress/theme-core").ThemeAuthContractV1) {
+        if (auth.isLoading) {
+          return `<div class="custom-skeleton">Loading...</div>`;
         }
-        if (auth.status === "authenticated" && auth.member) {
-          return {
-            viewState: "LOGGED_IN",
-            renderedName: auth.member.name,
-          };
+        if (auth.isAuthenticated && auth.member) {
+          return `<div class="custom-member-pill">
+            <span class="custom-avatar">${auth.member.initials || "M"}</span>
+            <span class="custom-name">${auth.member.name}</span>
+            <button class="custom-signout" data-action="logout">Sign out</button>
+          </div>`;
         }
-        return { viewState: "LOGGED_OUT" };
+        return `<button class="custom-signin-btn" data-action="login">Sign in</button>`;
       }
 
       // 1. Unauthenticated test
-      const loggedOutState: MemberAuthState = {
+      const loggedOutContract: ThemeAuthContractV1 = {
         status: "unauthenticated",
         member: null,
+        isAuthenticated: false,
+        isLoading: false,
+        login: () => {},
+        signup: () => {},
+        account: () => {},
+        logout: async () => {},
+        refresh: async () => {},
       };
-      expect(renderSyntheticThemeHeader(loggedOutState)).toEqual({
-        viewState: "LOGGED_OUT",
-      });
+      expect(renderCustomThemeLayout(loggedOutContract)).toContain("custom-signin-btn");
 
-      // 2. Authenticated test with Arabic name
-      const loggedInState: MemberAuthState = {
+      // 2. Authenticated test with Arabic display name
+      const loggedInContract: ThemeAuthContractV1 = {
         status: "authenticated",
         member: {
-          id: "mem_123",
+          id: "mem_custom_123",
           name: "عبدالله زاهر",
           avatarUrl: null,
           initials: "عز",
         },
+        isAuthenticated: true,
+        isLoading: false,
+        login: () => {},
+        signup: () => {},
+        account: () => {},
+        logout: async () => {},
+        refresh: async () => {},
       };
-      expect(renderSyntheticThemeHeader(loggedInState)).toEqual({
-        viewState: "LOGGED_IN",
-        renderedName: "عبدالله زاهر",
-      });
+      const rendered = renderCustomThemeLayout(loggedInContract);
+      expect(rendered).toContain("custom-member-pill");
+      expect(rendered).toContain("عبدالله زاهر");
+      expect(rendered).toContain("عز");
+      expect(rendered).toContain("custom-signout");
     });
   });
 });

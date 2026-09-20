@@ -55,7 +55,9 @@ export function AccountPage() {
         const bc = new BroadcastChannel("vb_member_auth");
         bc.postMessage({ type });
         bc.close();
-      } catch {}
+      } catch {
+        // BroadcastChannel optional fallback
+      }
     }
   };
 

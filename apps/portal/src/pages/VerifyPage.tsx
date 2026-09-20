@@ -62,7 +62,9 @@ export function VerifyPage({ token }: { token: string }) {
             const bc = new BroadcastChannel("vb_member_auth");
             bc.postMessage({ type: "LOGIN" });
             bc.close();
-          } catch {}
+          } catch {
+            // BroadcastChannel optional fallback
+          }
         }
         navigate("/account");
         window.history.replaceState(null, "", "/portal/#/account");

@@ -118,6 +118,22 @@ export interface MemberAuthState {
   member: PublicMemberIdentity | null;
 }
 
+/**
+ * Versioned Theme Auth Contract (V1)
+ * Canonical capability consumed by themes without knowledge of session/cookie internals.
+ */
+export interface ThemeAuthContractV1 {
+  status: MemberAuthStatus;
+  member: PublicMemberIdentity | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (returnUrl?: string) => void;
+  signup: (returnUrl?: string) => void;
+  account: () => void;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
 export interface SiteViewModel {
   title: string;
   description: string;

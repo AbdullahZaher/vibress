@@ -13,19 +13,10 @@ import type {
   MemberAuthState,
   MemberAuthStatus,
   PublicMemberIdentity,
+  ThemeAuthContractV1,
 } from "@vibress/theme-core";
 
-export interface ThemeMemberAuthContract {
-  status: MemberAuthStatus;
-  member: PublicMemberIdentity | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (returnUrl?: string) => void;
-  signup: (returnUrl?: string) => void;
-  account: () => void;
-  logout: () => Promise<void>;
-  refresh: () => Promise<void>;
-}
+export type ThemeMemberAuthContract = ThemeAuthContractV1;
 
 const MemberAuthContext = createContext<ThemeMemberAuthContract | null>(null);
 
