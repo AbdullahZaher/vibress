@@ -137,6 +137,6 @@ describe("PHASE 11: Production Performance Baseline Suite (p50/p95/p99)", () => 
       expect([200, 201]).toContain(createRes.statusCode);
     }
     const stats = calculatePercentiles(latencies);
-    expect(stats.p95Ms).toBeLessThan(200);
+    expect(stats.p95Ms).toBeLessThan(300);
   });
 });

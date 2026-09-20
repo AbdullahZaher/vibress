@@ -62,7 +62,7 @@ describe("Pages Multi-Publication Isolation", () => {
   it("permits identical slugs across distinct publications (Same-slug requirement)", async () => {
     const pubA = "pub_alpha";
     const pubB = "pub_beta";
-    const commonSlug = "about-us";
+    const commonSlug = `about-us-${Date.now()}`;
 
     const pageA = await pagesService.createPage(
       {
