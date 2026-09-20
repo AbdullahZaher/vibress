@@ -187,17 +187,23 @@ export function formatRelativeTime(
   return rtf.format(diffInYears, "year");
 }
 
+export interface ListFormatOptions {
+  type?: "conjunction" | "disjunction" | "unit";
+  style?: "long" | "short" | "narrow";
+}
+
 export function formatList(
   items: string[],
   locale = "en",
-  options?: Intl.ListFormatOptions,
+  options?: ListFormatOptions,
 ): string {
   if (!items || items.length === 0) return "";
   const canonical = defaultLocaleRegistry.canonicalize(locale);
 
   try {
-    if (typeof Intl.ListFormat !== "undefined") {
-      return new Intl.ListFormat(canonical, options || { style: "long", type: "conjunction" }).format(items);
+    const listFormatCtor = (Intl as any).ListFormat;
+    if (typeof listFormatCtor !== "undefined") {
+      return new listFormatCtor(canonical, options || { style: "long", type: "conjunction" }).format(items);
     }
   } catch {
     // Fallback

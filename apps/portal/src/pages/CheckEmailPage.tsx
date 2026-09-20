@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
+import { useTranslation, LanguageSwitcher } from "../lib/i18n";
 
 export function CheckEmailPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -11,7 +13,7 @@ export function CheckEmailPage() {
     if (cooldown > 0 || !email) return;
     try {
       await memberApi.requestAuthLink(email);
-      setMessage("A new sign-in link has been sent.");
+      setMessage(t("portal.check_email_desc"));
       setCooldown(30);
       const timer = setInterval(() => {
         setCooldown((c) => {
@@ -24,9 +26,9 @@ export function CheckEmailPage() {
       }, 1000);
     } catch (err) {
       if (err instanceof MemberApiError && err.status === 429) {
-        setMessage("Too many requests. Please wait a moment.");
+        setMessage(t("common.error"));
       } else {
-        setMessage("Something went wrong. Please try again.");
+        setMessage(t("common.error"));
       }
     }
   };
@@ -34,10 +36,13 @@ export function CheckEmailPage() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Check your email</h1>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+          <LanguageSwitcher />
+        </div>
+
+        <h1 style={styles.title}>{t("portal.check_email_title")}</h1>
         <p style={styles.subtitle}>
-          We sent you a secure sign-in link. Open it in this browser to
-          continue.
+          {t("portal.check_email_desc")}
         </p>
 
         <input
@@ -45,7 +50,7 @@ export function CheckEmailPage() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
+          placeholder={t("portal.email_placeholder")}
           style={styles.input}
         />
 
@@ -59,7 +64,7 @@ export function CheckEmailPage() {
           disabled={cooldown > 0 || !email}
           style={styles.button}
         >
-          {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend link"}
+          {cooldown > 0 ? `${t("portal.send_magic_link")} (${cooldown}s)` : t("portal.send_magic_link")}
         </button>
 
         <p style={styles.hint}>
@@ -71,7 +76,7 @@ export function CheckEmailPage() {
             }}
             style={styles.link}
           >
-            Use a different email
+            {t("portal.return_signin")}
           </a>
         </p>
       </div>
@@ -87,7 +92,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "#f8fafc",
     fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
+    padding: 16,
+    boxSizing: "border-box",
   },
   card: {
     width: "100%",
@@ -109,6 +116,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     boxSizing: "border-box",
     marginBottom: 16,
+    textAlign: "start",
   },
   button: {
     width: "100%",

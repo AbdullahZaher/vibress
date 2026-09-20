@@ -386,6 +386,9 @@ importers:
 
   apps/portal:
     dependencies:
+      '@vibress/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       react:
         specifier: ^18.3.1
         version: 18.3.1

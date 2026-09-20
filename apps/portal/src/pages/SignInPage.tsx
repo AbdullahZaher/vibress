@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
+import { useTranslation, LanguageSwitcher } from "../lib/i18n";
 
 export function SignInPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -16,9 +18,9 @@ export function SignInPage() {
       navigate("/check-email");
     } catch (err) {
       if (err instanceof MemberApiError && err.status === 429) {
-        setError("Too many requests. Please try again shortly.");
+        setError(t("common.error"));
       } else {
-        setError("Something went wrong. Please try again.");
+        setError(t("common.error"));
       }
     } finally {
       setSubmitting(false);
@@ -28,12 +30,16 @@ export function SignInPage() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+          <LanguageSwitcher />
+        </div>
+
         <h1 style={styles.title}>Vibress</h1>
-        <p style={styles.subtitle}>Sign in with your email</p>
+        <p style={styles.subtitle}>{t("portal.signin_title")}</p>
 
         <form onSubmit={handleSubmit}>
           <label style={styles.label} htmlFor="email">
-            Email Address
+            {t("portal.email_label")}
           </label>
           <input
             id="email"
@@ -42,7 +48,7 @@ export function SignInPage() {
             inputMode="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder={t("portal.email_placeholder")}
             required
             style={styles.input}
           />
@@ -53,13 +59,13 @@ export function SignInPage() {
             </p>
           )}
 
-          <button type="submit" disabled={submitting} style={styles.button}>
-            {submitting ? "Sending…" : "Continue"}
+          <button id="submit-sign-in" type="submit" disabled={submitting} style={styles.button}>
+            {submitting ? t("portal.sending") : t("portal.send_magic_link")}
           </button>
         </form>
 
         <p style={styles.hint}>
-          We'll email you a secure sign-in link. No password needed.
+          {t("portal.signin_desc")}
         </p>
       </div>
     </div>
@@ -74,7 +80,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "#f8fafc",
     fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
+    padding: 16,
+    boxSizing: "border-box",
   },
   card: {
     width: "100%",
@@ -92,7 +100,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#64748b",
     textAlign: "center",
   },
-  label: { display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 },
+  label: { display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6, textAlign: "start" },
   input: {
     width: "100%",
     padding: "10px 12px",
@@ -101,6 +109,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     boxSizing: "border-box",
     marginBottom: 16,
+    textAlign: "start",
   },
   button: {
     width: "100%",
@@ -113,6 +122,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: "pointer",
   },
-  error: { color: "#dc2626", fontSize: 13, margin: "0 0 12px" },
+  error: { color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" },
   hint: { marginTop: 20, fontSize: 12, color: "#94a3b8", textAlign: "center" },
 };

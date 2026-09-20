@@ -131,10 +131,30 @@ export const memberApi = {
     return request(`/subscriptions/${id}/resume`, { method: "POST" });
   },
 
+  deleteAccount(): Promise<{ deleted: boolean }> {
+    return request("/me", { method: "DELETE" });
+  },
+
+  requestEmailChange(newEmail: string): Promise<{ sent: boolean }> {
+    return request("/auth/request-email-change", {
+      method: "POST",
+      body: JSON.stringify({ newEmail }),
+    });
+  },
+
+  confirmEmailChange(token: string): Promise<{ success: boolean; member: MemberSelf; newEmail: string }> {
+    return request("/auth/confirm-email-change", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+  },
+
   listNewsletterPreferences(): Promise<{
     preferences: Array<{
-      id: string;
       newsletterId: string;
+      key: string;
+      name: string;
+      description: string | null;
       subscribed: boolean;
     }>;
   }> {

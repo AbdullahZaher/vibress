@@ -1,15 +1,15 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
+import { useTranslation, LanguageSwitcher } from "../lib/i18n";
 
 type VerifyState = "verifying" | "success" | "error";
 
-// In-flight and verified token caches to protect against React StrictMode double-mounts
-// or rapid re-renders from double-consuming single-use magic tokens.
 const inFlightVerifications = new Map<string, Promise<unknown>>();
 const verifiedTokens = new Set<string>();
 
 export function VerifyPage({ token }: { token: string }) {
+  const { t } = useTranslation();
   const [state, setState] = useState<VerifyState>(() =>
     token && verifiedTokens.has(token) ? "success" : "verifying",
   );
@@ -17,7 +17,6 @@ export function VerifyPage({ token }: { token: string }) {
 
   useEffect(() => {
     if (!token) {
-      // Check if user is already signed in before showing invalid token
       (async () => {
         try {
           const res = await memberApi.me();
@@ -63,7 +62,6 @@ export function VerifyPage({ token }: { token: string }) {
       } catch (err) {
         inFlightVerifications.delete(token);
 
-        // If the token was already consumed, check if this browser is already authenticated
         if (err instanceof MemberApiError && err.code === "AUTH_TOKEN_USED") {
           try {
             const meRes = await memberApi.me();
@@ -98,7 +96,13 @@ export function VerifyPage({ token }: { token: string }) {
   if (state === "verifying") {
     return (
       <div style={styles.container}>
-        <p style={styles.status}>Verifying your sign-in link…</p>
+        <div style={styles.card}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <LanguageSwitcher />
+          </div>
+          <h1 style={styles.title}>{t("portal.verify_title")}</h1>
+          <p style={styles.status}>{t("portal.verifying")}</p>
+        </div>
       </div>
     );
   }
@@ -106,7 +110,10 @@ export function VerifyPage({ token }: { token: string }) {
   if (state === "success") {
     return (
       <div style={styles.container}>
-        <p style={styles.status}>Signed in. Redirecting…</p>
+        <div style={styles.card}>
+          <h1 style={styles.title}>{t("portal.verify_title")}</h1>
+          <p style={styles.status}>{t("portal.verify_success")}</p>
+        </div>
       </div>
     );
   }
@@ -114,16 +121,19 @@ export function VerifyPage({ token }: { token: string }) {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Link invalid or expired</h1>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+          <LanguageSwitcher />
+        </div>
+        <h1 style={styles.title}>{t("portal.verify_error")}</h1>
         <p style={styles.subtitle}>
           {errorCode === "AUTH_TOKEN_USED"
             ? "This sign-in link has already been used."
             : errorCode === "AUTH_TOKEN_EXPIRED"
               ? "This sign-in link has expired."
-              : "This sign-in link is no longer valid."}
+              : t("portal.verify_error")}
         </p>
-        <button onClick={() => navigate("/sign-in")} style={styles.button}>
-          Request a new link
+        <button id="verify-return-signin" onClick={() => navigate("/sign-in")} style={styles.button}>
+          {t("portal.return_signin")}
         </button>
       </div>
     </div>
@@ -138,7 +148,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "#f8fafc",
     fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif',
+    padding: 16,
+    boxSizing: "border-box",
   },
   card: {
     width: "100%",

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { memberApi, MemberSubscription } from "../lib/member-api";
 import { navigate } from "../router";
+import { useTranslation } from "../lib/i18n";
 
 interface Props {
   authLost: () => void;
 }
 
 export function SubscriptionSection({ authLost }: Props) {
+  const { t, formatCurrency, formatDate } = useTranslation();
   const [subscriptions, setSubscriptions] = useState<MemberSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +28,12 @@ export function SubscriptionSection({ authLost }: Props) {
         authLost();
       else
         setError(
-          err instanceof Error ? err.message : "Failed to load subscription",
+          err instanceof Error ? err.message : t("common.error"),
         );
     } finally {
       setLoading(false);
     }
-  }, [authLost]);
+  }, [authLost, t]);
 
   useEffect(() => {
     refresh();
@@ -52,7 +54,7 @@ export function SubscriptionSection({ authLost }: Props) {
         (err as { status?: number }).status === 401
       )
         authLost();
-      else setError(err instanceof Error ? err.message : "Action failed");
+      else setError(err instanceof Error ? err.message : t("common.error"));
     } finally {
       setAction(null);
     }
@@ -73,37 +75,41 @@ export function SubscriptionSection({ authLost }: Props) {
         authLost();
       else
         setError(
-          err instanceof Error ? err.message : "Could not open billing portal",
+          err instanceof Error ? err.message : t("common.error"),
         );
       setAction(null);
     }
   };
 
-  if (loading) return <p>Loading subscription…</p>;
+  if (loading) return <p style={{ color: "#64748b", fontSize: 14 }}>{t("common.loading")}</p>;
 
   return (
     <div
       style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
     >
-      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 12px" }}>
-        Membership
+      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 4px", textAlign: "start" }}>
+        {t("portal.subscriptions_title")}
       </h2>
+      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px", textAlign: "start" }}>
+        {t("portal.subscriptions_desc")}
+      </p>
+
       {error && (
         <p
           role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}
+          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px", textAlign: "start" }}
         >
           {error}
         </p>
       )}
 
       {subscriptions.length === 0 ? (
-        <div>
-          <p style={{ fontSize: 14, color: "#475569" }}>
-            You don't have a membership yet.
+        <div style={{ textAlign: "start" }}>
+          <p style={{ fontSize: 14, color: "#475569", margin: "0 0 12px" }}>
+            {t("portal.free_plan")}
           </p>
-          <button onClick={() => navigate("/plans")} style={styles.button}>
-            View plans
+          <button id="btn-view-plans" onClick={() => navigate("/plans")} style={styles.button}>
+            {t("portal.upgrade_plan")}
           </button>
         </div>
       ) : (
@@ -115,6 +121,7 @@ export function SubscriptionSection({ authLost }: Props) {
               borderRadius: 8,
               padding: 16,
               marginBottom: 12,
+              textAlign: "start",
             }}
           >
             <div
@@ -125,37 +132,35 @@ export function SubscriptionSection({ authLost }: Props) {
               }}
             >
               <div>
-                <strong>{sub.planName}</strong>
-                <div style={{ fontSize: 13, color: "#475569" }}>
-                  {sub.status === "cancelled" || sub.status === "expired"
-                    ? `Status: ${sub.status}`
-                    : `Status: ${sub.status}`}
+                <strong style={{ fontSize: 15, color: "#0f172a" }}>{sub.planName}</strong>
+                <div style={{ fontSize: 13, color: "#475569", marginTop: 2 }}>
+                  <span>{t("portal.current_plan")}: {sub.status}</span>
                   {sub.status !== "free" && (
                     <>
                       {" · "}
-                      {formatAmount(sub.currency, sub.amountMinor)}
+                      {formatCurrency(sub.amountMinor / 100, sub.currency)}
                       {sub.billingInterval === "year" ? "/year" : "/month"}
                     </>
                   )}
                 </div>
                 {sub.trialEnd && sub.status === "trialing" && (
-                  <div style={{ fontSize: 13, color: "#b45309" }}>
-                    Trial ends {new Date(sub.trialEnd).toLocaleDateString()}
+                  <div style={{ fontSize: 13, color: "#b45309", marginTop: 4 }}>
+                    Trial ends {formatDate(new Date(sub.trialEnd))}
                   </div>
                 )}
                 {sub.currentPeriodEnd &&
                   ["active", "past_due", "unpaid"].includes(sub.status) && (
-                    <div style={{ fontSize: 13, color: "#475569" }}>
+                    <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>
                       {sub.status === "past_due" || sub.status === "unpaid"
                         ? "Payment failed — update your payment method to keep access."
-                        : `Renews ${new Date(sub.currentPeriodEnd).toLocaleDateString()}`}
+                        : `Renews ${formatDate(new Date(sub.currentPeriodEnd))}`}
                     </div>
                   )}
                 {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                  <div style={{ fontSize: 13, color: "#b45309" }}>
+                  <div style={{ fontSize: 13, color: "#b45309", marginTop: 4 }}>
                     Cancellation scheduled for period end
                     {sub.currentPeriodEnd
-                      ? ` (${new Date(sub.currentPeriodEnd).toLocaleDateString()})`
+                      ? ` (${formatDate(new Date(sub.currentPeriodEnd))})`
                       : ""}
                   </div>
                 )}
@@ -179,7 +184,7 @@ export function SubscriptionSection({ authLost }: Props) {
                   disabled={action !== null}
                   style={styles.button}
                 >
-                  {action === "resume" ? "Resuming…" : "Resume membership"}
+                  {action === "resume" ? t("portal.saving") : "Resume membership"}
                 </button>
               )}
               {!sub.cancelAtPeriodEnd &&
@@ -194,8 +199,8 @@ export function SubscriptionSection({ authLost }: Props) {
                     style={styles.cancelButton}
                   >
                     {action === "cancel"
-                      ? "Cancelling…"
-                      : "Cancel at period end"}
+                      ? t("portal.saving")
+                      : t("portal.cancel_sub")}
                   </button>
                 )}
               {["active", "past_due", "unpaid"].includes(sub.status) && (
@@ -204,7 +209,7 @@ export function SubscriptionSection({ authLost }: Props) {
                   disabled={action !== null}
                   style={styles.button}
                 >
-                  {action === "portal" ? "Opening…" : "Billing portal"}
+                  {action === "portal" ? t("portal.saving") : t("portal.manage_sub")}
                 </button>
               )}
             </div>
@@ -213,13 +218,6 @@ export function SubscriptionSection({ authLost }: Props) {
       )}
     </div>
   );
-}
-
-function formatAmount(currency: string, amountMinor: number): string {
-  const amount = amountMinor / 100;
-  const symbol =
-    currency === "USD" ? "$" : currency === "SAR" ? "SAR " : `${currency} `;
-  return `${symbol}${amount.toFixed(2)}`;
 }
 
 const styles: Record<string, React.CSSProperties> = {
