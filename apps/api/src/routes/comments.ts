@@ -31,6 +31,18 @@ import { posts, publications } from "@vibress/database";
 import { and, eq } from "drizzle-orm";
 
 function publicCommentDto(comment: Comment) {
+  const author = comment.member
+    ? {
+        id: comment.member.id,
+        name: comment.member.name ?? "Anonymous",
+        avatarUrl: comment.member.avatarUrl ?? null,
+      }
+    : {
+        id: comment.memberId ?? "anonymous",
+        name: "Anonymous",
+        avatarUrl: null,
+      };
+
   return {
     id: comment.id,
     publicationId: comment.publicationId,
@@ -40,11 +52,14 @@ function publicCommentDto(comment: Comment) {
     body: comment.body,
     status: comment.status,
     likeCount: comment.likeCount,
+    hasLiked: false,
+    isDeleted: !!comment.deletedAt,
     replyCount: comment.replyCount,
     depth: comment.depth,
     createdAt: comment.createdAt.toISOString(),
     updatedAt: comment.updatedAt.toISOString(),
     deletedAt: comment.deletedAt?.toISOString() ?? null,
+    author,
     member: comment.member
       ? {
           id: comment.member.id,

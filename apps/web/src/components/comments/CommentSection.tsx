@@ -272,6 +272,9 @@ export function CommentSection({
   const renderCommentNode = (comment: ThreadedComment, depth = 0) => {
     const isReplying = replyingToId === comment.id;
     const isDeleted = comment.isDeleted;
+    const authorName = comment.author?.name || (comment as any).member?.name || "Anonymous";
+    const authorAvatar = comment.author?.avatarUrl || (comment as any).member?.avatarUrl || null;
+    const initialLetter = authorName.charAt(0).toUpperCase() || "A";
 
     return (
       <li
@@ -286,20 +289,22 @@ export function CommentSection({
         <div className="vb-comment-card">
           <div className="vb-comment-header">
             <div className="vb-comment-avatar">
-              {comment.author.avatarUrl ? (
-                <img src={comment.author.avatarUrl} alt={comment.author.name} />
+              {authorAvatar ? (
+                <img src={authorAvatar} alt={authorName} />
               ) : (
-                <span>{comment.author.name ? comment.author.name.charAt(0).toUpperCase() : "A"}</span>
+                <span>{initialLetter}</span>
               )}
             </div>
             <div className="vb-comment-meta">
-              <span className="vb-comment-author-name">{comment.author.name || "Anonymous"}</span>
+              <span className="vb-comment-author-name">{authorName}</span>
               <time className="vb-comment-date" dateTime={comment.createdAt}>
-                {new Date(comment.createdAt).toLocaleDateString(locale, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                {comment.createdAt
+                  ? new Date(comment.createdAt).toLocaleDateString(locale, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : ""}
               </time>
             </div>
           </div>
@@ -351,7 +356,7 @@ export function CommentSection({
               <textarea
                 value={replyBody}
                 onChange={(e) => setReplyBody(e.target.value)}
-                placeholder={t("comments.replyTo", { name: comment.author.name }, locale)}
+                placeholder={t("comments.replyTo", { name: authorName }, locale)}
                 rows={2}
                 maxLength={5000}
                 aria-label={t("comments.reply", undefined, locale)}
