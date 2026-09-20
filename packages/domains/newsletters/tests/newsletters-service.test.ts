@@ -485,4 +485,55 @@ describe("NewslettersService", () => {
     expect(text).toContain("Hello world");
     expect(text).toContain("Unsubscribe:");
   });
+
+  describe("Double Opt-In and Token Expiration", () => {
+    it("signs double opt-in token and confirms subscription successfully", async () => {
+      const prefRepoWith: NewsletterPreferenceRepository = {
+        ...prefRepo,
+        setSubscription: vi.fn(async (memberId, newsletterId, sub) => ({
+          id: "p1",
+          memberId,
+          newsletterId,
+          subscribed: sub,
+          subscribedAt: new Date(),
+          unsubscribedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+      };
+      const service = makeService({
+        preferenceRepo: prefRepoWith,
+      });
+
+      const token = service.signOptInToken("m1", "nl-1");
+      const result = await service.confirmSubscription(token);
+
+      expect(result.memberId).toBe("m1");
+      expect(result.newsletterId).toBe("nl-1");
+      expect(prefRepoWith.setSubscription).toHaveBeenCalledWith("m1", "nl-1", true);
+    });
+
+    it("rejects expired double opt-in token", async () => {
+      const service = makeService();
+      // Generate token with expired timestamp (8 days ago)
+      const token = service.signOptInToken("m1", "nl-1", Date.now() - (8 * 24 * 60 * 60 * 1000));
+      await expect(
+        service.confirmSubscription(token),
+      ).rejects.toMatchObject({ code: "INVALID_CONFIRMATION_TOKEN" });
+    });
+
+    it("rejects expired unsubscribe token", async () => {
+      const sendRepoWith: SendRepository = {
+        ...sendRepo,
+        findById: vi.fn(async (id) => makeSend({ id, newsletterId: "nl-1" })),
+      };
+      const service = makeService({ sendRepo: sendRepoWith });
+      // Sign with an old timestamp exceeding 365 days (e.g. 400 days ago)
+      const expiredToken = service.signUnsubscribeToken("m1", "send-1", Date.now() - (400 * 24 * 60 * 60 * 1000));
+
+      await expect(
+        service.unsubscribeWithToken(expiredToken),
+      ).rejects.toMatchObject({ code: "INVALID_UNSUBSCRIBE_TOKEN" });
+    });
+  });
 });

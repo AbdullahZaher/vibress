@@ -46,6 +46,11 @@ export interface EmailRecipientRepository {
   markDelivered(id: string, at: Date): Promise<EmailRecipient>;
   markOpened(id: string, at: Date): Promise<EmailRecipient>;
   markClicked(id: string, at: Date): Promise<EmailRecipient>;
+  findRetryableFailed(
+    limit: number,
+    maxAttempts: number,
+  ): Promise<EmailRecipient[]>;
+  resetToPending(id: string): Promise<EmailRecipient>;
   countByStatus(sendId: string): Promise<Record<string, number>>;
 }
 

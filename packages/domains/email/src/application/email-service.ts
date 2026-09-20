@@ -126,9 +126,24 @@ export class EmailService {
    * Bounded maintenance op: re-queues failed recipients for retry.
    * The worker skips recipients not in 'pending' state, so this is
    * idempotent and cannot duplicate side effects.
+   * Checks suppression before resetting to pending.
    */
-  async retryFailedRecipients(): Promise<number> {
-    return 0;
+  async retryFailedRecipients(limit = 100, maxAttempts = 3): Promise<number> {
+    const retryable = await this.deps.recipientRepo.findRetryableFailed(
+      limit,
+      maxAttempts,
+    );
+    let resetCount = 0;
+    for (const recipient of retryable) {
+      const isSuppressed = await this.deps.suppressionRepo.isSuppressed(
+        recipient.email,
+      );
+      if (!isSuppressed) {
+        await this.deps.recipientRepo.resetToPending(recipient.id);
+        resetCount++;
+      }
+    }
+    return resetCount;
   }
 
   async removeSuppression(

@@ -185,6 +185,40 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
     return this.mapToDomain(row);
   }
 
+  async findRetryableFailed(
+    limit: number,
+    maxAttempts: number,
+  ): Promise<EmailRecipient[]> {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(emailRecipients)
+      .where(
+        and(
+          eq(emailRecipients.status, "failed"),
+          sql`${emailRecipients.attemptCount} < ${maxAttempts}`,
+          sql`(${emailRecipients.lastError} IS NULL OR (${emailRecipients.lastError} NOT ILIKE '%suppress%' AND ${emailRecipients.lastError} NOT ILIKE '%spam%' AND ${emailRecipients.lastError} NOT ILIKE '%bounce%'))`,
+        ),
+      )
+      .limit(limit);
+    return rows.map((r) => this.mapToDomain(r));
+  }
+
+  async resetToPending(id: string): Promise<EmailRecipient> {
+    const db = getDb();
+    const [row] = await db
+      .update(emailRecipients)
+      .set({
+        status: "pending",
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(emailRecipients.id, id))
+      .returning();
+    if (!row) throw new Error(`Recipient not found: ${id}`);
+    return this.mapToDomain(row);
+  }
+
   async countByStatus(sendId: string): Promise<Record<string, number>> {
     const db = getDb();
     const rows = await db

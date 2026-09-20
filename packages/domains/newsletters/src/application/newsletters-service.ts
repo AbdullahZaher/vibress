@@ -5,6 +5,7 @@ import {
   UpdateNewsletterData,
   NewsletterPreference,
   NewsletterPreferenceRepository,
+  MemberNewsletterPreferenceView,
 } from "../domain/newsletter";
 import {
   SendRepository,
@@ -210,8 +211,24 @@ export class NewslettersService {
 
   async listPreferencesForMember(
     memberId: string,
-  ): Promise<NewsletterPreference[]> {
-    return this.deps.preferenceRepo.listForMember(memberId);
+    publicationId?: string,
+  ): Promise<MemberNewsletterPreferenceView[]> {
+    if (this.deps.preferenceRepo.listWithMetadataForMember) {
+      return this.deps.preferenceRepo.listWithMetadataForMember(
+        memberId,
+        publicationId,
+      );
+    }
+    const raw = await this.deps.preferenceRepo.listForMember(memberId);
+    return raw.map((p) => ({
+      newsletterId: p.newsletterId,
+      key: p.newsletterId,
+      name: `Newsletter (${p.newsletterId.slice(0, 8)})`,
+      description: null,
+      subscribed: p.subscribed,
+      subscribedAt: p.subscribedAt,
+      unsubscribedAt: p.unsubscribedAt,
+    }));
   }
 
   // ---------------- Audience ----------------
@@ -414,16 +431,22 @@ export class NewslettersService {
     return this.deps.sendRepo.findDueScheduled(now, limit);
   }
 
-  // ---------------- Unsubscribe ----------------
+  // ---------------- Unsubscribe & Opt-In Tokens ----------------
 
   /**
-   * HMAC-signed, scoped, idempotent unsubscribe token.
-   * token = base64url(memberId:sendId) + "." + hmac(secret, "unsub:" + payload)
+   * HMAC-signed, scoped, idempotent unsubscribe token with timestamp.
+   * token = base64url(memberId:sendId:timestamp) + "." + hmac(secret, "unsub:" + payload)
    */
-  signUnsubscribeToken(memberId: string, sendId: string): string {
-    const payload = Buffer.from(`${memberId}:${sendId}`, "utf8").toString(
-      "base64url",
-    );
+  signUnsubscribeToken(
+    memberId: string,
+    sendId: string,
+    customTimestamp?: number,
+  ): string {
+    const timestamp = customTimestamp !== undefined ? customTimestamp : Date.now();
+    const payload = Buffer.from(
+      `${memberId}:${sendId}:${timestamp}`,
+      "utf8",
+    ).toString("base64url");
     const sig = crypto
       .createHmac("sha256", this.deps.unsubscribeSecret)
       .update(`unsub:${payload}`)
@@ -493,9 +516,106 @@ export class NewslettersService {
     } catch {
       return null;
     }
-    const [memberId, sendId] = decoded.split(":");
+    const parts = decoded.split(":");
+    const memberId = parts[0];
+    const sendId = parts[1];
+    const timestampStr = parts[2];
+
     if (!memberId || !sendId) return null;
+
+    if (timestampStr) {
+      const issuedAt = parseInt(timestampStr, 10);
+      if (!isNaN(issuedAt) && Date.now() - issuedAt > UNSUBSCRIBE_MAX_AGE_MS) {
+        return null;
+      }
+    }
+
     return { memberId, sendId };
+  }
+
+  /**
+   * HMAC-signed, scoped opt-in confirmation token.
+   * token = base64url(memberId:newsletterId:timestamp) + "." + hmac(secret, "optin:" + payload)
+   */
+  signOptInToken(
+    memberId: string,
+    newsletterId: string,
+    customTimestamp?: number,
+  ): string {
+    const timestamp = customTimestamp !== undefined ? customTimestamp : Date.now();
+    const payload = Buffer.from(
+      `${memberId}:${newsletterId}:${timestamp}`,
+      "utf8",
+    ).toString("base64url");
+    const sig = crypto
+      .createHmac("sha256", this.deps.unsubscribeSecret)
+      .update(`optin:${payload}`)
+      .digest("hex");
+    return `${payload}.${sig}`;
+  }
+
+  /**
+   * Confirms a double opt-in subscription using a signed token.
+   */
+  async confirmSubscription(
+    token: string,
+  ): Promise<{ memberId: string; newsletterId: string }> {
+    const claims = this.unwrapOptInToken(token);
+    if (!claims) {
+      throw new NewsletterDomainError(
+        "INVALID_CONFIRMATION_TOKEN",
+        "Invalid or expired confirmation link",
+      );
+    }
+
+    await this.deps.preferenceRepo.setSubscription(
+      claims.memberId,
+      claims.newsletterId,
+      true,
+    );
+
+    domainEvents.emit("newsletter.subscription_confirmed", {
+      memberId: claims.memberId,
+      newsletterId: claims.newsletterId,
+    });
+
+    return { memberId: claims.memberId, newsletterId: claims.newsletterId };
+  }
+
+  private unwrapOptInToken(
+    token: string,
+  ): { memberId: string; newsletterId: string } | null {
+    if (!token || typeof token !== "string" || token.length > 512) return null;
+    const dot = token.lastIndexOf(".");
+    if (dot < 1) return null;
+    const payloadPart = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expected = crypto
+      .createHmac("sha256", this.deps.unsubscribeSecret)
+      .update(`optin:${payloadPart}`)
+      .digest("hex");
+    if (
+      sig.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))
+    ) {
+      return null;
+    }
+    let decoded: string;
+    try {
+      decoded = Buffer.from(payloadPart, "base64url").toString("utf8");
+    } catch {
+      return null;
+    }
+    const [memberId, newsletterId, timestampStr] = decoded.split(":");
+    if (!memberId || !newsletterId) return null;
+    if (timestampStr) {
+      const issuedAt = parseInt(timestampStr, 10);
+      // 7 days expiration for opt-in confirmation
+      if (!isNaN(issuedAt) && Date.now() - issuedAt > 7 * 24 * 60 * 60 * 1000) {
+        return null;
+      }
+    }
+    return { memberId, newsletterId };
   }
 
   // ---------------- Rendering ----------------

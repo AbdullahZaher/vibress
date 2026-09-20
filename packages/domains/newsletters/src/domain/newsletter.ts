@@ -46,6 +46,16 @@ export interface NewsletterPreference {
   updatedAt: Date;
 }
 
+export interface MemberNewsletterPreferenceView {
+  newsletterId: string;
+  key: string;
+  name: string;
+  description: string | null;
+  subscribed: boolean;
+  subscribedAt: Date | null;
+  unsubscribedAt: Date | null;
+}
+
 export interface NewsletterPreferenceRepository {
   setSubscription(
     memberId: string,
@@ -57,4 +67,8 @@ export interface NewsletterPreferenceRepository {
     newsletterId: string,
   ): Promise<NewsletterPreference | null>;
   listForMember(memberId: string): Promise<NewsletterPreference[]>;
+  listWithMetadataForMember?(
+    memberId: string,
+    publicationId?: string,
+  ): Promise<MemberNewsletterPreferenceView[]>;
 }

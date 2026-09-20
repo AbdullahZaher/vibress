@@ -16,6 +16,7 @@ import {
   UpdateNewsletterData,
   NewsletterPreference,
   NewsletterPreferenceRepository,
+  MemberNewsletterPreferenceView,
 } from "../domain/newsletter";
 import {
   SendRepository,
@@ -232,6 +233,45 @@ export class DrizzleNewsletterPreferenceRepository implements NewsletterPreferen
       .from(newsletterPreferences)
       .where(eq(newsletterPreferences.memberId, memberId));
     return rows.map((r) => this.mapToDomain(r));
+  }
+
+  async listWithMetadataForMember(
+    memberId: string,
+    publicationId?: string,
+  ): Promise<MemberNewsletterPreferenceView[]> {
+    const db = getDb();
+    const conditions = [eq(newsletters.status, "active")];
+    if (publicationId) conditions.push(eq(newsletters.publicationId, publicationId));
+
+    const rows = await db
+      .select({
+        newsletterId: newsletters.id,
+        key: newsletters.key,
+        name: newsletters.name,
+        description: newsletters.description,
+        subscribed: newsletterPreferences.subscribed,
+        subscribedAt: newsletterPreferences.subscribedAt,
+        unsubscribedAt: newsletterPreferences.unsubscribedAt,
+      })
+      .from(newsletters)
+      .leftJoin(
+        newsletterPreferences,
+        and(
+          eq(newsletterPreferences.newsletterId, newsletters.id),
+          eq(newsletterPreferences.memberId, memberId),
+        ),
+      )
+      .where(and(...conditions));
+
+    return rows.map((r) => ({
+      newsletterId: r.newsletterId,
+      key: r.key,
+      name: r.name,
+      description: r.description || null,
+      subscribed: r.subscribed ?? false,
+      subscribedAt: r.subscribedAt || null,
+      unsubscribedAt: r.unsubscribedAt || null,
+    }));
   }
 
   private mapToDomain(row: NewsletterPreferenceRow): NewsletterPreference {

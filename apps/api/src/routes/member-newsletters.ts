@@ -14,6 +14,7 @@ export async function memberNewsletterRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const preferences = await newslettersService.listPreferencesForMember(
         req.member!.id,
+        req.member!.publicationId,
       );
       return reply.status(200).send({ preferences });
     },
@@ -97,6 +98,79 @@ export async function publicUnsubscribeRoutes(fastify: FastifyInstance) {
                 { code: err.code, message: err.message, requestId: req.id },
               ],
             });
+        }
+        throw err;
+      }
+    },
+  });
+
+  // Public, token-authenticated double opt-in confirmation (POST)
+  fastify.post("/newsletters/confirm", {
+    handler: async (req, reply) => {
+      const body = (req.body || {}) as { token?: string };
+      if (!body.token || typeof body.token !== "string") {
+        return reply
+          .status(400)
+          .send({
+            errors: [
+              {
+                code: "INVALID_OPTIN_TOKEN",
+                message: "Invalid or missing confirmation token",
+                requestId: req.id,
+              },
+            ],
+          });
+      }
+      try {
+        const result = await newslettersService.confirmSubscription(body.token);
+        return reply.status(200).send({
+          confirmed: true,
+          memberId: result.memberId,
+          newsletterId: result.newsletterId,
+        });
+      } catch (err) {
+        if (err instanceof NewsletterDomainError) {
+          return reply.status(400).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        throw err;
+      }
+    },
+  });
+
+  // Public GET convenience endpoint for email links (safely confirms and renders/redirects)
+  fastify.get("/newsletters/confirm", {
+    handler: async (req, reply) => {
+      const query = req.query as { token?: string };
+      if (!query.token || typeof query.token !== "string") {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "INVALID_OPTIN_TOKEN",
+              message: "Invalid or missing confirmation token",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+      try {
+        const result = await newslettersService.confirmSubscription(query.token);
+        return reply.status(200).send({
+          confirmed: true,
+          memberId: result.memberId,
+          newsletterId: result.newsletterId,
+          message: "Subscription confirmed successfully",
+        });
+      } catch (err) {
+        if (err instanceof NewsletterDomainError) {
+          return reply.status(400).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
         }
         throw err;
       }

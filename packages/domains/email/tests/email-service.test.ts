@@ -316,4 +316,68 @@ describe("EmailService suppression policy", () => {
     const res = await service.handleWebhook("smtp", payload, sign(payload));
     expect(res.status).toBe(200);
   });
+
+  describe("retryFailedRecipients", () => {
+    it("resets failed unsuppressed recipients to pending", async () => {
+      const failedRecipients = [
+        {
+          id: "r1",
+          sendId: "s1",
+          memberId: "m1",
+          email: "ok@example.com",
+          name: null,
+          status: "failed",
+          providerMessageId: null,
+          unsubscribeToken: "t1",
+          attemptCount: 1,
+          lastError: "timeout",
+          sentAt: null,
+          deliveredAt: null,
+          openedAt: null,
+          clickedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "r2",
+          sendId: "s1",
+          memberId: "m2",
+          email: "bad@example.com",
+          name: null,
+          status: "failed",
+          providerMessageId: null,
+          unsubscribeToken: "t2",
+          attemptCount: 1,
+          lastError: "timeout",
+          sentAt: null,
+          deliveredAt: null,
+          openedAt: null,
+          clickedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      const rRepo: EmailRecipientRepository = {
+        ...recipientRepo,
+        findRetryableFailed: vi.fn(async () => failedRecipients as any),
+        resetToPending: vi.fn(async (id) => ({ id, status: "pending" } as any)),
+      };
+
+      const sRepo: EmailSuppressionRepository = {
+        ...suppressionRepo,
+        isSuppressed: vi.fn(async (email) => email === "bad@example.com"),
+      };
+
+      const service = makeService({
+        recipientRepo: rRepo,
+        suppressionRepo: sRepo,
+      });
+
+      const count = await service.retryFailedRecipients(50, 3);
+      expect(count).toBe(1);
+      expect(rRepo.resetToPending).toHaveBeenCalledTimes(1);
+      expect(rRepo.resetToPending).toHaveBeenCalledWith("r1");
+    });
+  });
 });
