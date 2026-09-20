@@ -16,6 +16,7 @@ export interface MemberRepository {
   findById(id: string, publicationId?: string): Promise<Member | null>;
   findByEmailNormalized(emailNormalized: string, publicationId?: string): Promise<Member | null>;
   update(id: string, data: UpdateMemberData, publicationId?: string): Promise<Member>;
+  delete(id: string, publicationId?: string): Promise<boolean>;
   list(
     filter?: ListMembersFilter,
   ): Promise<{ members: Member[]; total: number }>;

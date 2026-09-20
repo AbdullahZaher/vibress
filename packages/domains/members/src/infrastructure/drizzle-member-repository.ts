@@ -67,6 +67,9 @@ export class DrizzleMemberRepository implements MemberRepository {
     const db = getDb();
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
 
+    if (data.email !== undefined) updatePayload.email = data.email;
+    if (data.emailNormalized !== undefined)
+      updatePayload.emailNormalized = data.emailNormalized;
     if (data.name !== undefined) updatePayload.name = data.name;
     if (data.status !== undefined) updatePayload.status = data.status;
     if (data.emailVerifiedAt !== undefined)
@@ -86,6 +89,18 @@ export class DrizzleMemberRepository implements MemberRepository {
       .returning();
     if (!row) throw new Error(`Member not found for update: ${id}`);
     return this.mapToDomain(row);
+  }
+
+  async delete(id: string, publicationId?: string): Promise<boolean> {
+    const db = getDb();
+    const conditions = [eq(members.id, id)];
+    if (publicationId) conditions.push(eq(members.publicationId, publicationId));
+
+    const rows = await db
+      .delete(members)
+      .where(and(...conditions))
+      .returning({ id: members.id });
+    return rows.length > 0;
   }
 
   async list(

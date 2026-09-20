@@ -5,7 +5,7 @@ import {
   MemberAuthTokenRow,
   MemberSessionRow,
 } from "@vibress/database";
-import { eq, and, isNull, lt } from "drizzle-orm";
+import { eq, and, isNull, lt, or, like } from "drizzle-orm";
 import {
   MemberAuthTokenRepository,
   MemberSessionRepository,
@@ -28,13 +28,14 @@ export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenReposito
         id,
         memberId: data.memberId,
         tokenHash: data.tokenHash,
-        purpose: data.purpose || "authenticate",
+        purpose: data.purpose,
         expiresAt: data.expiresAt,
         userAgent: data.userAgent || null,
         ipAddress: data.ipAddress || null,
+        createdAt: new Date(),
       })
       .returning();
-    if (!row) throw new Error("Failed to insert member auth token");
+    if (!row) throw new Error("Failed to create member auth token");
     return this.mapToDomain(row);
   }
 
@@ -58,7 +59,10 @@ export class DrizzleMemberAuthTokenRepository implements MemberAuthTokenReposito
       .where(
         and(
           eq(memberAuthTokens.memberId, memberId),
-          eq(memberAuthTokens.purpose, purpose),
+          or(
+            eq(memberAuthTokens.purpose, purpose),
+            like(memberAuthTokens.purpose, `${purpose}:%`),
+          ),
           isNull(memberAuthTokens.usedAt),
         ),
       );

@@ -25,6 +25,8 @@ export interface CreateMemberData {
 }
 
 export interface UpdateMemberData {
+  email?: string | undefined;
+  emailNormalized?: string | undefined;
   name?: string | null | undefined;
   status?: MemberStatus | undefined;
   emailVerifiedAt?: Date | null | undefined;

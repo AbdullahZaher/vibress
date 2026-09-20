@@ -9,7 +9,8 @@ import {
   normalizeMemberEmail,
 } from "../domain/member";
 import { domainEvents } from "@vibress/events";
-import { runInTransaction } from "@vibress/database";
+import { runInTransaction, getDb, notifications, subscriptions } from "@vibress/database";
+import { eq, and } from "drizzle-orm";
 
 export class MemberNotFoundError extends Error {
   code = "MEMBER_NOT_FOUND";
@@ -154,5 +155,48 @@ export class MembersService {
 
   async revokeAllSessionsForMember(memberId: string): Promise<number> {
     return this.sessionRepo.revokeAllForMember(memberId);
+  }
+
+  async deleteMember(
+    memberId: string,
+    publicationId?: string,
+    actorId?: string | null,
+  ): Promise<void> {
+    const member = await this.memberRepo.findById(memberId, publicationId);
+    if (!member) throw new MemberNotFoundError();
+
+    await runInTransaction(async () => {
+      const db = getDb();
+      // 1. Revoke and delete sessions
+      await this.sessionRepo.revokeAllForMember(memberId);
+
+      // 2. Cascade notifications cleanup
+      try {
+        await db.delete(notifications).where(and(
+          eq(notifications.recipientId, memberId),
+          eq(notifications.recipientType, "member"),
+        ));
+      } catch {
+        // Safe fallback
+      }
+
+      // 3. Cancel and detach active subscriptions
+      try {
+        await db.update(subscriptions)
+          .set({ status: "cancelled", endedAt: new Date(), updatedAt: new Date() })
+          .where(eq(subscriptions.memberId, memberId));
+      } catch {
+        // Safe fallback
+      }
+
+      // 4. Delete member row
+      await this.memberRepo.delete(memberId, publicationId);
+    });
+
+    domainEvents.emit("member.deleted", {
+      memberId,
+      publicationId: member.publicationId,
+      actorId,
+    });
   }
 }

@@ -126,11 +126,23 @@ class MemorySessionRepo implements MemberSessionRepository {
 
 class MockMailer implements MemberAuthMailer {
   sent: Array<{ to: string; magicLinkUrl: string }> = [];
+  verificationSent: Array<{ to: string; verifyUrl: string }> = [];
+  noticeSent: Array<{ to: string; newEmail: string }> = [];
   fail = false;
 
   async sendMagicLink(input: any): Promise<void> {
     if (this.fail) throw new Error("SMTP down");
     this.sent.push({ to: input.to, magicLinkUrl: input.magicLinkUrl });
+  }
+
+  async sendEmailChangeVerification(input: any): Promise<void> {
+    if (this.fail) throw new Error("SMTP down");
+    this.verificationSent.push({ to: input.to, verifyUrl: input.verifyUrl });
+  }
+
+  async sendEmailChangeNotice(input: any): Promise<void> {
+    if (this.fail) throw new Error("SMTP down");
+    this.noticeSent.push({ to: input.to, newEmail: input.newEmail });
   }
 }
 
@@ -139,8 +151,8 @@ describe("MemberAuthService — Passwordless Authentication", () => {
     expect(normalizeMemberEmail("  Person@Example.COM  ")).toBe(
       "person@example.com",
     );
-    expect(normalizeMemberEmail("Other@Sub.Example.com")).toBe(
-      "other@sub.example.com",
+    expect(normalizeMemberEmail("user@SUB.DOMAIN.ORG")).toBe(
+      "user@sub.domain.org",
     );
   });
 
@@ -162,7 +174,7 @@ describe("MemberAuthService — Passwordless Authentication", () => {
     expect(mailer.sent).toHaveLength(1);
     expect(mailer.sent[0]!.to).toBe("new@example.com");
     expect(mailer.sent[0]!.magicLinkUrl).toContain(
-      "/portal/auth/verify?token=",
+      "#/auth/verify?token=",
     );
     // Token stored as hash, not raw
     expect(tokenRepo.tokens[0]!.tokenHash).toMatch(/^[0-9a-f]{64}$/);
@@ -437,5 +449,81 @@ describe("MemberAuthService — Passwordless Authentication", () => {
       code: "MAIL_DELIVERY_FAILED",
     });
     expect(sessionRepo.sessions).toHaveLength(0);
+  });
+
+  describe("Verified Email Change Flow", () => {
+    it("requests email change and confirms successfully with notice sent to old address", async () => {
+      const memberRepo = new MemoryMemberRepo();
+      const member = makeMember({
+        id: "m1",
+        email: "old@example.com",
+        emailNormalized: "old@example.com",
+      });
+      memberRepo.members.push(member);
+      const tokenRepo = new MemoryTokenRepo();
+      const sessionRepo = new MemorySessionRepo();
+      const mailer = new MockMailer();
+      const service = new MemberAuthService(
+        memberRepo,
+        tokenRepo,
+        sessionRepo,
+        mailer,
+      );
+
+      const reqResult = await service.requestEmailChange(
+        "m1",
+        "new@example.com",
+      );
+      expect(reqResult.sent).toBe(true);
+      expect(mailer.verificationSent).toHaveLength(1);
+      expect(mailer.verificationSent[0]!.to).toBe("new@example.com");
+
+      // Extract raw token
+      const rawToken = mailer.verificationSent[0]!.verifyUrl.split("token=")[1]!;
+      const confirmResult = await service.confirmEmailChange(rawToken);
+      expect(confirmResult.member.id).toBe("m1");
+      expect(confirmResult.newEmail).toBe("new@example.com");
+
+      // Check member updated
+      const updated = await memberRepo.findById("m1");
+      expect(updated?.email).toBe("new@example.com");
+      expect(updated?.emailNormalized).toBe("new@example.com");
+
+      // Check notice sent to old email
+      expect(mailer.noticeSent).toHaveLength(1);
+      expect(mailer.noticeSent[0]!.to).toBe("old@example.com");
+      expect(mailer.noticeSent[0]!.newEmail).toBe("new@example.com");
+    });
+
+    it("rejects email change if new email is already used in publication", async () => {
+      const memberRepo = new MemoryMemberRepo();
+      memberRepo.members.push(
+        makeMember({
+          id: "m1",
+          email: "m1@example.com",
+          emailNormalized: "m1@example.com",
+        }),
+        makeMember({
+          id: "m2",
+          email: "m2@example.com",
+          emailNormalized: "m2@example.com",
+        }),
+      );
+      const tokenRepo = new MemoryTokenRepo();
+      const sessionRepo = new MemorySessionRepo();
+      const mailer = new MockMailer();
+      const service = new MemberAuthService(
+        memberRepo,
+        tokenRepo,
+        sessionRepo,
+        mailer,
+      );
+
+      await expect(
+        service.requestEmailChange("m1", "m2@example.com"),
+      ).rejects.toMatchObject({
+        code: "EMAIL_IN_USE",
+      });
+    });
   });
 });

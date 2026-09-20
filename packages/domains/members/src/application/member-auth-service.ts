@@ -257,9 +257,147 @@ export class MemberAuthService {
     return this.sessionRepo.revokeAllForMember(memberId);
   }
 
+  async requestEmailChange(
+    memberId: string,
+    newEmailInput: string,
+    context: MemberAuthContext = {},
+    publicationId?: string,
+  ): Promise<{ sent: boolean }> {
+    const newEmailNormalized = normalizeMemberEmail(newEmailInput);
+    if (!newEmailNormalized) {
+      throw new MemberAuthError(
+        "VALIDATION_ERROR",
+        "A valid new email address is required",
+      );
+    }
+
+    const member = await this.memberRepo.findById(memberId, publicationId);
+    if (!member || member.status === "disabled") {
+      throw new MemberAuthError("MEMBER_NOT_FOUND", "Member not found");
+    }
+
+    if (member.emailNormalized === newEmailNormalized) {
+      throw new MemberAuthError(
+        "VALIDATION_ERROR",
+        "New email must be different from current email",
+      );
+    }
+
+    const pubId = publicationId || member.publicationId || "pub_default";
+    const existing = await this.memberRepo.findByEmailNormalized(
+      newEmailNormalized,
+      pubId,
+    );
+    if (existing && existing.id !== memberId) {
+      throw new MemberAuthError(
+        "EMAIL_IN_USE",
+        "This email address is already in use by another account",
+      );
+    }
+
+    // Invalidate existing pending change_email tokens
+    await this.tokenRepo.invalidateForMember(memberId, "change_email");
+
+    const rawToken = generateOpaqueToken();
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS);
+
+    await this.tokenRepo.create({
+      memberId: member.id,
+      tokenHash,
+      purpose: `change_email:${newEmailNormalized}`,
+      expiresAt,
+      userAgent: context.userAgent || null,
+      ipAddress: context.ipAddress || null,
+    });
+
+    const portalBase = getConfig().site.portalUrl;
+    const verifyUrl = `${portalBase}/portal/#/auth/verify-email-change?token=${encodeURIComponent(rawToken)}`;
+
+    if (this.mailer.sendEmailChangeVerification) {
+      await this.mailer.sendEmailChangeVerification({
+        to: newEmailInput.trim(),
+        verifyUrl,
+        expiresInMinutes: 15,
+      });
+    }
+
+    if (this.mailer.sendEmailChangeNotice) {
+      await this.mailer.sendEmailChangeNotice({
+        to: member.email,
+        newEmail: newEmailInput.trim(),
+      }).catch(() => undefined);
+    }
+
+    domainEvents.emit("member.email_change_requested", {
+      memberId: member.id,
+      oldEmailNormalized: member.emailNormalized,
+      newEmailNormalized,
+      publicationId: pubId,
+    });
+
+    return { sent: true };
+  }
+
+  async confirmEmailChange(
+    rawToken: string,
+    context: MemberAuthContext = {},
+  ): Promise<{ member: Member; newEmail: string }> {
+    if (!rawToken || typeof rawToken !== "string") {
+      throw new MemberAuthError("AUTH_TOKEN_INVALID", "Invalid or missing token");
+    }
+
+    const tokenHash = hashToken(rawToken);
+    const token = await this.tokenRepo.findByTokenHash(tokenHash);
+
+    if (!token) {
+      throw new MemberAuthError("AUTH_TOKEN_INVALID", "Invalid token");
+    }
+
+    if (!token.purpose.startsWith("change_email:")) {
+      throw new MemberAuthError("AUTH_TOKEN_INVALID", "Invalid token purpose");
+    }
+
+    if (token.usedAt) {
+      throw new MemberAuthError("AUTH_TOKEN_USED", "This email change link has already been used");
+    }
+
+    if (token.expiresAt.getTime() < Date.now()) {
+      throw new MemberAuthError("AUTH_TOKEN_EXPIRED", "This email change link has expired");
+    }
+
+    const newEmailNormalized = token.purpose.slice("change_email:".length);
+    const member = await this.memberRepo.findById(token.memberId);
+    if (!member || member.status === "disabled") {
+      throw new MemberAuthError("MEMBER_DISABLED", "Member is disabled or not found");
+    }
+
+    const updatedMember = await runInTransaction(async () => {
+      const marked = await this.tokenRepo.markUsed(token.id, new Date());
+      if (!marked) {
+        throw new MemberAuthError("AUTH_TOKEN_USED", "This email change link has already been used");
+      }
+
+      return this.memberRepo.update(member.id, {
+        email: newEmailNormalized,
+        emailNormalized: newEmailNormalized,
+        emailVerifiedAt: new Date(),
+      }, member.publicationId);
+    });
+
+    domainEvents.emit("member.email_changed", {
+      memberId: member.id,
+      oldEmailNormalized: member.emailNormalized,
+      newEmailNormalized,
+      publicationId: member.publicationId,
+    });
+
+    return { member: updatedMember, newEmail: newEmailNormalized };
+  }
+
   private buildMagicLinkUrl(rawToken: string): string {
     const normalizedBase = getConfig().site.portalUrl;
-    return `${normalizedBase}/portal/auth/verify?token=${encodeURIComponent(rawToken)}`;
+    return `${normalizedBase}/portal/#/auth/verify?token=${encodeURIComponent(rawToken)}`;
   }
 }
 

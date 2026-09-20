@@ -133,7 +133,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // GET verify (browser navigation convenience) — verifies and sets cookie, returns member
+  // GET verify (browser navigation convenience) — scanner-safe non-mutating handler
   fastify.get("/auth/verify", {
     config: {
       rateLimit: {
@@ -155,23 +155,100 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Scanner safety: GET does NOT mutate state or consume token.
+      // Redirect safely to Portal UI where client POST will perform single-use verification.
+      const portalBase = getConfig().site.portalUrl;
+      const destination = `${portalBase}/portal/#/auth/verify?token=${encodeURIComponent(token)}`;
+      return reply.redirect(destination, 302);
+    },
+  });
+
+  // Request email change (authenticated member)
+  fastify.post("/auth/request-email-change", {
+    config: {
+      rateLimit: {
+        max: getConfig().isProduction ? 10 : 200,
+        timeWindow: "1 minute",
+      },
+    },
+    preHandler: [requireMemberSession, validateMemberOrigin],
+    handler: async (req, reply) => {
+      const { newEmail } = (req.body || {}) as { newEmail?: string };
+      if (!newEmail || typeof newEmail !== "string" || !newEmail.includes("@")) {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "VALIDATION_ERROR",
+              message: "A valid new email address is required",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       try {
-        const result = await memberAuthService.verifyAndCreateSession(token, {
+        await memberAuthService.requestEmailChange(
+          req.member!.id,
+          newEmail,
+          {
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"] || null,
+            requestId: req.id,
+          },
+          req.publicationContext?.publicationId,
+        );
+
+        return reply.status(200).send({
+          sent: true,
+          message:
+            "If this email can receive a verification link, we have sent one.",
+        });
+      } catch (err: unknown) {
+        if (err instanceof MemberAuthError) {
+          return reply.status(400).send({
+            errors: [
+              { code: err.code, message: err.message, requestId: req.id },
+            ],
+          });
+        }
+        throw err;
+      }
+    },
+  });
+
+  // Confirm email change (token verification)
+  fastify.post("/auth/confirm-email-change", {
+    config: {
+      rateLimit: {
+        max: getConfig().isTest ? 200 : 20,
+        timeWindow: "1 minute",
+      },
+    },
+    preHandler: [validateMemberOrigin],
+    handler: async (req, reply) => {
+      const { token } = (req.body || {}) as { token?: string };
+      if (!token || typeof token !== "string") {
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "AUTH_TOKEN_INVALID",
+              message: "Invalid or missing token",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      try {
+        const result = await memberAuthService.confirmEmailChange(token, {
           ipAddress: req.ip,
           userAgent: req.headers["user-agent"] || null,
           requestId: req.id,
         });
 
-        const isProduction = getConfig().isProduction;
-        reply.setCookie(MEMBER_COOKIE_NAME, result.sessionToken, {
-          path: "/",
-          httpOnly: true,
-          secure: isProduction,
-          sameSite: "lax",
-          maxAge: 30 * 24 * 60 * 60,
-        });
-
         return reply.status(200).send({
+          success: true,
+          newEmail: result.newEmail,
           member: {
             id: result.member.id,
             email: result.member.email,
@@ -182,8 +259,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof MemberAuthError) {
-          const status = err.code === "MEMBER_DISABLED" ? 401 : 400;
-          return reply.status(status).send({
+          return reply.status(400).send({
             errors: [
               { code: err.code, message: err.message, requestId: req.id },
             ],
@@ -232,6 +308,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
         const updated = await membersService.updateProfile(
           req.member!.id,
           parseResult.data,
+          req.publicationContext?.publicationId,
         );
         return reply.status(200).send({
           member: {
@@ -260,6 +337,19 @@ export async function memberRoutes(fastify: FastifyInstance) {
         }
         throw err;
       }
+    },
+  });
+
+  // Self-deletion (GDPR Right to Erasure)
+  fastify.delete("/me", {
+    preHandler: [requireMemberSession, validateMemberOrigin],
+    handler: async (req, reply) => {
+      const memberId = req.member!.id;
+      const pubId = req.publicationContext?.publicationId || req.member!.publicationId;
+
+      await membersService.deleteMember(memberId, pubId, memberId);
+      reply.clearCookie(MEMBER_COOKIE_NAME, { path: "/" });
+      return reply.status(200).send({ success: true, deleted: true, message: "Account deleted successfully" });
     },
   });
 

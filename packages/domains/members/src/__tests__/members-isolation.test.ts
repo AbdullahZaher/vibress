@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll } from "vitest";
-import { getDb, publications } from "@vibress/database";
+import { getDb, publications, members } from "@vibress/database";
+import { eq, or } from "drizzle-orm";
+import crypto from "node:crypto";
 import { DrizzleMemberRepository } from "../infrastructure/drizzle-member-repository";
 import { MembersService, MemberNotFoundError } from "../application/members-service";
 
@@ -38,7 +40,16 @@ describe("Members Multi-Publication Isolation", () => {
       .onConflictDoNothing();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const db = getDb();
+    await db
+      .delete(members)
+      .where(
+        or(
+          eq(members.publicationId, "pub_alpha"),
+          eq(members.publicationId, "pub_beta"),
+        ),
+      );
     memberRepo = new DrizzleMemberRepository();
     membersService = new MembersService(memberRepo, mockSessionRepo);
   });
