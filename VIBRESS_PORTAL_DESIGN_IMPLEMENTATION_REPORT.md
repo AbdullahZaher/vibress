@@ -221,19 +221,40 @@ Representative screenshots captured during Playwright certification:
 
 ---
 
-### 12. Final Assessment & Production Readiness
+### 13. Button Scale Enhancement & Modern Select Menu Language Switcher
+
+Based on user feedback, two targeted design and UX enhancements were implemented:
+
+1. **Button Scale & Touch Target Upgrade**:
+   - Upgraded `@vibress/ui` button size variants:
+     - `default`: `h-10 px-4 py-2 text-sm`
+     - `lg`: `h-11 sm:h-12 px-6 py-2.5 text-sm sm:text-base font-semibold rounded-xl`
+     - `sm`: `h-9 px-3.5 py-1.5 text-xs sm:text-sm`
+     - `icon`: `size-10 p-0 shrink-0`
+   - Primary Portal action buttons upgraded to prominent `h-11 sm:h-12 font-bold rounded-xl shadow-xs` (Sign In, Send Magic Link, Select Plan, Return to Sign-in).
+   - Dialog modals upgraded to responsive `flex-col-reverse sm:flex-row` with full-width action buttons on mobile screens (<640px) to guarantee zero horizontal clipping and optimal thumb-reach.
+
+2. **Modern Select Menu Language Switcher**:
+   - Replaced legacy dual-pill toggle method with a sleek, modern Select Menu dropdown (`packages/ui/src/primitives/language-switcher.tsx`).
+   - Trigger: `Globe` icon + current language label + rotating `ChevronDown` arrow inside a refined `h-9 sm:h-10 px-3 rounded-xl border border-border bg-card/90 shadow-2xs backdrop-blur-xs`.
+   - Floating Menu: Dropdown panel with `bg-popover/95 backdrop-blur-md border border-border shadow-lg rounded-xl p-1.5 z-50`.
+   - Options: Highlighting the active selection with `bg-primary/10 text-primary font-bold` and `Check` icon indicator.
+   - Accessibility: ARIA `role="listbox"`, `role="option"`, `aria-selected`, outside-click detection, and `Escape` key dismissal.
+   - Backward-compatibility: Preserves `#portal-language-selector`, `#portal-lang-en`, and `#portal-lang-ar` selectors.
+
+---
+
+### 14. Final Assessment & Production Readiness
 
 - [x] Portal has a coherent, modern visual design unified with Vibress Admin.
 - [x] Portal remains a dedicated Member self-service experience without admin complexity.
-- [x] Zero inline styling remaining in Portal components.
-- [x] Canonical primitives established in `packages/ui`.
-- [x] Dialogs meet WCAG 2.2 AA standards (portal, focus trap, Escape key, scroll lock).
+- [x] Buttons across Portal have comfortable, modern touch targets and bold visual weight.
+- [x] Language switcher upgraded to modern select menu dropdown with Globe, Chevron, and Checkmark.
+- [x] Dialogs meet WCAG 2.2 AA standards with responsive mobile action button layouts.
 - [x] RTL direction fully supported with logical CSS properties.
 - [x] Dark mode fully supported via semantic tokens.
-- [x] Zero raw hex colors or Unicode icons.
-- [x] Mobile UX verified at 320px, 375px, 390px, 430px.
-- [x] Desktop UX verified up to 1920px with zero horizontal overflow.
 - [x] All DOM selectors and E2E test contracts strictly preserved.
-- [x] All automated tests, lints, typechecks, and builds pass 100%.
+- [x] All automated tests, lints, typechecks, and visual QA suites pass 100%.
 
 **Status: PRODUCTION READY**
+
