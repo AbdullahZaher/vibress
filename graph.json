@@ -1,14 +1,82 @@
 {
   "graph": {
     "nodes": {
+      "@vibress/content-modeler": {
+        "name": "@vibress/content-modeler",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/content-modeler",
+          "targets": {
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/content-modeler",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/content-modeler",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "@vibress/recommendations": {
         "name": "@vibress/recommendations",
         "type": "lib",
         "data": {
           "root": "packages/domains/recommendations",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -22,7 +90,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -37,14 +108,21 @@
             }
           },
           "name": "@vibress/recommendations",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/recommendations",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -52,14 +130,37 @@
           "implicitDependencies": []
         }
       },
-      "@vibress/notifications": {
-        "name": "@vibress/notifications",
+      "@vibress/import-export": {
+        "name": "@vibress/import-export",
         "type": "lib",
         "data": {
-          "root": "packages/domains/notifications",
+          "root": "packages/domains/import-export",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -73,7 +174,94 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/import-export",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/import-export",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/notifications": {
+        "name": "@vibress/notifications",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/notifications",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -88,14 +276,21 @@
             }
           },
           "name": "@vibress/notifications",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/notifications",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -109,8 +304,31 @@
         "data": {
           "root": "packages/domains/subscriptions",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -124,7 +342,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -139,14 +360,21 @@
             }
           },
           "name": "@vibress/subscriptions",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/subscriptions",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -160,8 +388,31 @@
         "data": {
           "root": "packages/domains/integrations",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -175,7 +426,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -190,65 +444,21 @@
             }
           },
           "name": "@vibress/integrations",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/integrations",
-              "packageVersion": "0.0.0",
-              "packageMain": "src/index.ts",
-              "isInPackageManagerWorkspaces": true
-            }
-          },
-          "implicitDependencies": []
-        }
-      },
-      "@vibress/automations": {
-        "name": "@vibress/automations",
-        "type": "lib",
-        "data": {
-          "root": "packages/domains/automations",
-          "targets": {
-            "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
-              "cache": true,
-              "executor": "nx:run-script",
-              "metadata": {
-                "scriptContent": "eslint \"src/**/*.ts\"",
-                "runCommand": "pnpm run lint"
-              },
-              "options": {
-                "script": "lint"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "typecheck": {
-              "inputs": ["default", "^production"],
-              "cache": true,
-              "executor": "nx:run-script",
-              "metadata": {
-                "scriptContent": "tsc --noEmit",
-                "runCommand": "pnpm run typecheck"
-              },
-              "options": {
-                "script": "typecheck"
-              },
-              "configurations": {},
-              "parallelism": true
-            }
-          },
-          "name": "@vibress/automations",
-          "tags": ["npm:private", "type:domain"],
-          "metadata": {
-            "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
-            },
-            "js": {
-              "packageName": "@vibress/automations",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -262,8 +472,31 @@
         "data": {
           "root": "packages/domains/newsletters",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -277,7 +510,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -292,14 +528,21 @@
             }
           },
           "name": "@vibress/newsletters",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/newsletters",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -314,7 +557,10 @@
           "root": "packages/domains/permissions",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -328,7 +574,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -343,14 +592,84 @@
             }
           },
           "name": "@vibress/permissions",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/permissions",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/workspaces": {
+        "name": "@vibress/workspaces",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/workspaces",
+          "targets": {
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "inputs": [
+                "default",
+                "^production",
+                "{workspaceRoot}/jest.preset.js"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "vitest run",
+                "runCommand": "pnpm run test"
+              },
+              "options": {
+                "script": "test"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/workspaces",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "test",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/workspaces",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -364,8 +683,31 @@
         "data": {
           "root": "packages/domains/analytics",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -379,7 +721,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -394,14 +739,105 @@
             }
           },
           "name": "@vibress/analytics",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/analytics",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/redirects": {
+        "name": "@vibress/redirects",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/redirects",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/redirects",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/redirects",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -416,7 +852,10 @@
           "root": "packages/domains/revisions",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -430,7 +869,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -445,15 +887,219 @@
             }
           },
           "name": "@vibress/revisions",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/revisions",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-plugin-sdk": {
+        "name": "@vibress/studio-plugin-sdk",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-plugin-sdk",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-plugin-sdk",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-plugin-sdk",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-serializer": {
+        "name": "@vibress/studio-serializer",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-serializer",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-serializer",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-serializer",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-transforms": {
+        "name": "@vibress/studio-transforms",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-transforms",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-transforms",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-transforms",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -466,8 +1112,31 @@
         "data": {
           "root": "packages/domains/comments",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -481,7 +1150,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -496,14 +1168,21 @@
             }
           },
           "name": "@vibress/comments",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/comments",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -517,8 +1196,31 @@
         "data": {
           "root": "packages/domains/products",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -532,7 +1234,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -547,14 +1252,21 @@
             }
           },
           "name": "@vibress/products",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/products",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -568,8 +1280,31 @@
         "data": {
           "root": "packages/domains/settings",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -583,7 +1318,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -598,14 +1336,21 @@
             }
           },
           "name": "@vibress/settings",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/settings",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -619,8 +1364,31 @@
         "data": {
           "root": "packages/domains/webhooks",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -634,7 +1402,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -649,14 +1420,21 @@
             }
           },
           "name": "@vibress/webhooks",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/webhooks",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -671,7 +1449,10 @@
           "root": "packages/domains/authors",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -685,7 +1466,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -700,14 +1484,20 @@
             }
           },
           "name": "@vibress/authors",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/authors",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -721,8 +1511,31 @@
         "data": {
           "root": "packages/domains/billing",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -736,7 +1549,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -751,14 +1567,21 @@
             }
           },
           "name": "@vibress/billing",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/billing",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -772,8 +1595,31 @@
         "data": {
           "root": "packages/domains/members",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -787,7 +1633,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -802,14 +1651,21 @@
             }
           },
           "name": "@vibress/members",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/members",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -817,14 +1673,37 @@
           "implicitDependencies": []
         }
       },
-      "@vibress/offers": {
-        "name": "@vibress/offers",
+      "@vibress/plugins": {
+        "name": "@vibress/plugins",
         "type": "lib",
         "data": {
-          "root": "packages/domains/offers",
+          "root": "packages/domains/plugins",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -838,7 +1717,394 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/plugins",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/plugins",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/storage-domain": {
+        "name": "@vibress/storage-domain",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/storage",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/storage-domain",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/storage-domain",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-markdown": {
+        "name": "@vibress/studio-markdown",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-markdown",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-markdown",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-markdown",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-renderer": {
+        "name": "@vibress/studio-renderer",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-renderer",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-renderer",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-renderer",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/themes-registry": {
+        "name": "@vibress/themes-registry",
+        "type": "lib",
+        "data": {
+          "root": "packages/themes-registry",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/themes-registry",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/themes-registry",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/offers": {
+        "name": "@vibress/offers",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/offers",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -853,14 +2119,21 @@
             }
           },
           "name": "@vibress/offers",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/offers",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -874,8 +2147,31 @@
         "data": {
           "root": "packages/domains/search",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -889,7 +2185,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -904,15 +2203,88 @@
             }
           },
           "name": "@vibress/search",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/search",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-testing": {
+        "name": "@vibress/studio-testing",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-testing",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-testing",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-testing",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -925,8 +2297,31 @@
         "data": {
           "root": "packages/domains/themes",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -940,7 +2335,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -955,14 +2353,21 @@
             }
           },
           "name": "@vibress/themes",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/themes",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -976,8 +2381,31 @@
         "data": {
           "root": "packages/api-contracts",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -991,7 +2419,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1006,14 +2437,21 @@
             }
           },
           "name": "@vibress/api-contracts",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/api-contracts",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1028,7 +2466,10 @@
           "root": "packages/domains/audit",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1042,7 +2483,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1057,14 +2501,20 @@
             }
           },
           "name": "@vibress/audit",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/audit",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1078,8 +2528,31 @@
         "data": {
           "root": "packages/domains/email",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1093,7 +2566,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1108,14 +2584,21 @@
             }
           },
           "name": "@vibress/email",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/email",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1130,7 +2613,10 @@
           "root": "packages/domains/files",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1144,7 +2630,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1159,14 +2648,20 @@
             }
           },
           "name": "@vibress/files",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/files",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1181,7 +2676,10 @@
           "root": "packages/domains/media",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1195,7 +2693,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1210,14 +2711,20 @@
             }
           },
           "name": "@vibress/media",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/media",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1232,7 +2739,10 @@
           "root": "packages/observability",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1246,7 +2756,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1261,14 +2774,20 @@
             }
           },
           "name": "@vibress/observability",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/observability",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1283,7 +2802,10 @@
           "root": "packages/domains/pages",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1297,7 +2819,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1312,14 +2837,20 @@
             }
           },
           "name": "@vibress/pages",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/pages",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1333,8 +2864,31 @@
         "data": {
           "root": "packages/domains/plans",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1348,7 +2902,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1363,14 +2920,21 @@
             }
           },
           "name": "@vibress/plans",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/plans",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1385,7 +2949,10 @@
           "root": "packages/domains/posts",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1399,7 +2966,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1414,14 +2984,20 @@
             }
           },
           "name": "@vibress/posts",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/posts",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1436,7 +3012,10 @@
           "root": "packages/domains/roles",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1450,7 +3029,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1465,14 +3047,83 @@
             }
           },
           "name": "@vibress/roles",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/roles",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/setup": {
+        "name": "@vibress/setup",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/setup",
+          "targets": {
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/setup",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/setup",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1487,7 +3138,10 @@
           "root": "packages/domains/users",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1501,7 +3155,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1516,14 +3173,20 @@
             }
           },
           "name": "@vibress/users",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/users",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1538,7 +3201,10 @@
           "root": "packages/domains/auth",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1552,7 +3218,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1567,14 +3236,20 @@
             }
           },
           "name": "@vibress/auth",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/auth",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1589,7 +3264,10 @@
           "root": "packages/storage-core",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1603,7 +3281,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1618,15 +3299,285 @@
             }
           },
           "name": "@vibress/storage-core",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/storage-core",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-cards": {
+        "name": "@vibress/studio-cards",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-cards",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-cards",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-cards",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-nodes": {
+        "name": "@vibress/studio-nodes",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-nodes",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-nodes",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-nodes",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-react": {
+        "name": "@vibress/studio-react",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-react",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-react",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-react",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-utils": {
+        "name": "@vibress/studio-utils",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-utils",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-utils",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-utils",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -1640,7 +3591,10 @@
           "root": "packages/domains/tags",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1654,7 +3608,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1669,14 +3626,20 @@
             }
           },
           "name": "@vibress/tags",
-          "tags": ["npm:private", "type:domain"],
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/tags",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1691,7 +3654,10 @@
           "root": "packages/plugin-core",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1705,7 +3671,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1720,14 +3689,20 @@
             }
           },
           "name": "@vibress/plugin-core",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/plugin-core",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1735,14 +3710,169 @@
           "implicitDependencies": []
         }
       },
-      "@vibress/plugin-sdk": {
-        "name": "@vibress/plugin-sdk",
+      "@vibress/studio-core": {
+        "name": "@vibress/studio-core",
         "type": "lib",
         "data": {
-          "root": "packages/plugin-sdk",
+          "root": "packages/studio-core",
           "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-core",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-core",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/studio-html": {
+        "name": "@vibress/studio-html",
+        "type": "lib",
+        "data": {
+          "root": "packages/studio-html",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/studio-html",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/studio-html",
+              "packageVersion": "1.1.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/ai": {
+        "name": "@vibress/ai",
+        "type": "lib",
+        "data": {
+          "root": "packages/domains/ai",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1756,7 +3886,94 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/ai",
+          "tags": [
+            "npm:private",
+            "type:domain"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/ai",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/plugin-sdk": {
+        "name": "@vibress/plugin-sdk",
+        "type": "lib",
+        "data": {
+          "root": "packages/plugin-sdk",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1771,14 +3988,190 @@
             }
           },
           "name": "@vibress/plugin-sdk",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck",
+                "build"
+              ]
             },
             "js": {
               "packageName": "@vibress/plugin-sdk",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/storage-s3": {
+        "name": "@vibress/storage-s3",
+        "type": "lib",
+        "data": {
+          "root": "packages/storage-s3",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "inputs": [
+                "default",
+                "^production",
+                "{workspaceRoot}/jest.preset.js"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "vitest run",
+                "runCommand": "pnpm run test"
+              },
+              "options": {
+                "script": "test"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/storage-s3",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "typecheck",
+                "test"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/storage-s3",
+              "packageVersion": "1.1.0",
+              "packageMain": "src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "@vibress/theme-core": {
+        "name": "@vibress/theme-core",
+        "type": "lib",
+        "data": {
+          "root": "packages/theme-core",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc",
+                "runCommand": "pnpm run build"
+              },
+              "options": {
+                "script": "build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "eslint \"src/**/*.ts\"",
+                "runCommand": "pnpm run lint"
+              },
+              "options": {
+                "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc --noEmit",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "@vibress/theme-core",
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "build",
+                "lint",
+                "typecheck"
+              ]
+            },
+            "js": {
+              "packageName": "@vibress/theme-core",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1793,7 +4186,10 @@
           "root": "packages/database",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1807,7 +4203,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1819,17 +4218,62 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "db:generate": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "drizzle-kit generate",
+                "runCommand": "pnpm run db:generate"
+              },
+              "options": {
+                "script": "db:generate"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "db:migrate": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsx src/migrate.ts",
+                "runCommand": "pnpm run db:migrate"
+              },
+              "options": {
+                "script": "db:migrate"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "db:seed": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsx src/seed.ts",
+                "runCommand": "pnpm run db:seed"
+              },
+              "options": {
+                "script": "db:seed"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "@vibress/database",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "db:generate",
+                "db:migrate",
+                "db:seed",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/database",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1844,7 +4288,10 @@
           "root": "packages/security",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1858,7 +4305,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1873,14 +4323,20 @@
             }
           },
           "name": "@vibress/security",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/security",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1895,7 +4351,10 @@
           "root": "packages/testing",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1909,7 +4368,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1924,14 +4386,20 @@
             }
           },
           "name": "@vibress/testing",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/testing",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1946,7 +4414,10 @@
           "root": "packages/config",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1960,7 +4431,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -1975,14 +4449,20 @@
             }
           },
           "name": "@vibress/config",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/config",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -1997,7 +4477,10 @@
           "root": "packages/events",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2011,7 +4494,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2026,14 +4512,20 @@
             }
           },
           "name": "@vibress/events",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/events",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2048,7 +4540,10 @@
           "root": "packages/cache",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2062,7 +4557,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2077,14 +4575,20 @@
             }
           },
           "name": "@vibress/cache",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/cache",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2099,7 +4603,10 @@
           "root": "packages/queue",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2113,7 +4620,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2128,14 +4638,20 @@
             }
           },
           "name": "@vibress/queue",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/queue",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2150,7 +4666,10 @@
           "root": "packages/utils",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2164,7 +4683,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2179,14 +4701,20 @@
             }
           },
           "name": "@vibress/utils",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/utils",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2201,7 +4729,10 @@
           "root": "packages/i18n",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2215,7 +4746,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2230,14 +4764,37 @@
             }
           },
           "name": "@vibress/i18n",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/i18n",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageExports": {
+                ".": {
+                  "types": "./src/index.ts",
+                  "import": "./src/index.ts",
+                  "default": "./src/index.ts"
+                },
+                "./server": {
+                  "types": "./src/server.ts",
+                  "import": "./src/server.ts",
+                  "default": "./src/server.ts"
+                },
+                "./translation-service": {
+                  "types": "./src/translation-service.ts",
+                  "import": "./src/translation-service.ts",
+                  "default": "./src/translation-service.ts"
+                }
+              },
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2252,8 +4809,13 @@
           "root": "apps/portal",
           "targets": {
             "build": {
-              "dependsOn": ["^build"],
-              "inputs": ["production", "^production"],
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2267,7 +4829,10 @@
               "parallelism": true
             },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2276,6 +4841,23 @@
               },
               "options": {
                 "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc -b",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
               },
               "configurations": {},
               "parallelism": true
@@ -2306,14 +4888,23 @@
             }
           },
           "name": "@vibress/portal",
-          "tags": ["npm:private", "type:app"],
+          "tags": [
+            "npm:private",
+            "type:app"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["dev", "build", "lint", "preview"]
+              "NPM Scripts": [
+                "dev",
+                "build",
+                "lint",
+                "typecheck",
+                "preview"
+              ]
             },
             "js": {
               "packageName": "@vibress/portal",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -2327,11 +4918,14 @@
           "root": "packages/ui",
           "targets": {
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
-                "scriptContent": "eslint \"src/**/*.ts\"",
+                "scriptContent": "eslint \"src/**/*.ts*\"",
                 "runCommand": "pnpm run lint"
               },
               "options": {
@@ -2341,7 +4935,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2356,14 +4953,25 @@
             }
           },
           "name": "@vibress/ui",
-          "tags": ["npm:private", "type:platform"],
+          "tags": [
+            "npm:private",
+            "type:platform"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["lint", "typecheck"]
+              "NPM Scripts": [
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/ui",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
+              "packageExports": {
+                ".": "./src/index.ts",
+                "./styles/*": "./src/styles/*",
+                "./*": "./src/*"
+              },
               "packageMain": "src/index.ts",
               "isInPackageManagerWorkspaces": true
             }
@@ -2378,8 +4986,13 @@
           "root": "apps/worker",
           "targets": {
             "build": {
-              "dependsOn": ["^build"],
-              "inputs": ["production", "^production"],
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2393,7 +5006,10 @@
               "parallelism": true
             },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2407,7 +5023,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2435,7 +5054,7 @@
             "start": {
               "executor": "nx:run-script",
               "metadata": {
-                "scriptContent": "node dist/main.js",
+                "scriptContent": "tsx src/main.ts",
                 "runCommand": "pnpm run start"
               },
               "options": {
@@ -2443,17 +5062,39 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "start:prod": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "node dist/main.js",
+                "runCommand": "pnpm run start:prod"
+              },
+              "options": {
+                "script": "start:prod"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "@vibress/worker",
-          "tags": ["npm:private", "type:app"],
+          "tags": [
+            "npm:private",
+            "type:app"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["dev", "build", "start", "lint", "typecheck"]
+              "NPM Scripts": [
+                "dev",
+                "build",
+                "start",
+                "start:prod",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/worker",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -2467,8 +5108,13 @@
           "root": "apps/admin",
           "targets": {
             "build": {
-              "dependsOn": ["^build"],
-              "inputs": ["production", "^production"],
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2482,7 +5128,10 @@
               "parallelism": true
             },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2491,6 +5140,23 @@
               },
               "options": {
                 "script": "lint"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "typecheck": {
+              "inputs": [
+                "default",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "tsc -b",
+                "runCommand": "pnpm run typecheck"
+              },
+              "options": {
+                "script": "typecheck"
               },
               "configurations": {},
               "parallelism": true
@@ -2521,14 +5187,23 @@
             }
           },
           "name": "@vibress/admin",
-          "tags": ["npm:private", "type:app"],
+          "tags": [
+            "npm:private",
+            "type:app"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["dev", "build", "lint", "preview"]
+              "NPM Scripts": [
+                "dev",
+                "build",
+                "lint",
+                "typecheck",
+                "preview"
+              ]
             },
             "js": {
               "packageName": "@vibress/admin",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -2542,8 +5217,13 @@
           "root": "apps/api",
           "targets": {
             "build": {
-              "dependsOn": ["^build"],
-              "inputs": ["production", "^production"],
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2557,7 +5237,10 @@
               "parallelism": true
             },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2571,7 +5254,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2599,7 +5285,7 @@
             "start": {
               "executor": "nx:run-script",
               "metadata": {
-                "scriptContent": "node dist/main.js",
+                "scriptContent": "tsx src/main.ts",
                 "runCommand": "pnpm run start"
               },
               "options": {
@@ -2607,17 +5293,39 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "start:prod": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "node dist/main.js",
+                "runCommand": "pnpm run start:prod"
+              },
+              "options": {
+                "script": "start:prod"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "@vibress/api",
-          "tags": ["npm:private", "type:app"],
+          "tags": [
+            "npm:private",
+            "type:app"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["dev", "build", "start", "lint", "typecheck"]
+              "NPM Scripts": [
+                "dev",
+                "build",
+                "start",
+                "start:prod",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/api",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -2631,8 +5339,13 @@
           "root": "apps/web",
           "targets": {
             "build": {
-              "dependsOn": ["^build"],
-              "inputs": ["production", "^production"],
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2646,7 +5359,10 @@
               "parallelism": true
             },
             "lint": {
-              "inputs": ["default", "{workspaceRoot}/.eslintrc.json"],
+              "inputs": [
+                "default",
+                "{workspaceRoot}/.eslintrc.json"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2660,7 +5376,10 @@
               "parallelism": true
             },
             "typecheck": {
-              "inputs": ["default", "^production"],
+              "inputs": [
+                "default",
+                "^production"
+              ],
               "cache": true,
               "executor": "nx:run-script",
               "metadata": {
@@ -2699,14 +5418,23 @@
             }
           },
           "name": "@vibress/web",
-          "tags": ["npm:private", "type:app"],
+          "tags": [
+            "npm:private",
+            "type:app"
+          ],
           "metadata": {
             "targetGroups": {
-              "NPM Scripts": ["dev", "build", "start", "lint", "typecheck"]
+              "NPM Scripts": [
+                "dev",
+                "build",
+                "start",
+                "lint",
+                "typecheck"
+              ]
             },
             "js": {
               "packageName": "@vibress/web",
-              "packageVersion": "0.0.0",
+              "packageVersion": "1.1.0",
               "isInPackageManagerWorkspaces": true
             }
           },
@@ -2715,66 +5443,1202 @@
       }
     },
     "dependencies": {
-      "@vibress/recommendations": [],
-      "@vibress/notifications": [],
-      "@vibress/subscriptions": [],
-      "@vibress/integrations": [],
-      "@vibress/automations": [],
-      "@vibress/newsletters": [],
-      "@vibress/permissions": [],
-      "@vibress/analytics": [],
-      "@vibress/revisions": [],
-      "@vibress/comments": [],
-      "@vibress/products": [],
-      "@vibress/settings": [],
-      "@vibress/webhooks": [],
-      "@vibress/authors": [],
-      "@vibress/billing": [],
-      "@vibress/members": [],
-      "@vibress/offers": [],
-      "@vibress/search": [],
-      "@vibress/themes": [],
+      "@vibress/content-modeler": [
+        {
+          "source": "@vibress/content-modeler",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/content-modeler",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/recommendations": [
+        {
+          "source": "@vibress/recommendations",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/recommendations",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/recommendations",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/import-export": [
+        {
+          "source": "@vibress/import-export",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/import-export",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/notifications": [
+        {
+          "source": "@vibress/notifications",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/notifications",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/subscriptions": [
+        {
+          "source": "@vibress/subscriptions",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/subscriptions",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/integrations": [
+        {
+          "source": "@vibress/integrations",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/integrations",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/integrations",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/newsletters": [
+        {
+          "source": "@vibress/newsletters",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/newsletters",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/newsletters",
+          "target": "@vibress/members",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/newsletters",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/newsletters",
+          "target": "@vibress/subscriptions",
+          "type": "static"
+        }
+      ],
+      "@vibress/permissions": [
+        {
+          "source": "@vibress/permissions",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/workspaces": [
+        {
+          "source": "@vibress/workspaces",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/workspaces",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/analytics": [
+        {
+          "source": "@vibress/analytics",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/analytics",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/analytics",
+          "target": "@vibress/subscriptions",
+          "type": "static"
+        }
+      ],
+      "@vibress/redirects": [
+        {
+          "source": "@vibress/redirects",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/redirects",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/revisions": [
+        {
+          "source": "@vibress/revisions",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-plugin-sdk": [
+        {
+          "source": "@vibress/studio-plugin-sdk",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-plugin-sdk",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-serializer": [
+        {
+          "source": "@vibress/studio-serializer",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-serializer",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-serializer",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-transforms": [
+        {
+          "source": "@vibress/studio-transforms",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-transforms",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        }
+      ],
+      "@vibress/comments": [
+        {
+          "source": "@vibress/comments",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/comments",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/products": [
+        {
+          "source": "@vibress/products",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/products",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/settings": [
+        {
+          "source": "@vibress/settings",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/settings",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/webhooks": [
+        {
+          "source": "@vibress/webhooks",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/webhooks",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/webhooks",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/authors": [
+        {
+          "source": "@vibress/authors",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/authors",
+          "target": "@vibress/users",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/authors",
+          "target": "@vibress/utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/billing": [
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/subscriptions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/plans",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/products",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/members",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/billing",
+          "target": "@vibress/offers",
+          "type": "static"
+        }
+      ],
+      "@vibress/members": [
+        {
+          "source": "@vibress/members",
+          "target": "@vibress/config",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/members",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/members",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/members",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/plugins": [
+        {
+          "source": "@vibress/plugins",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/plugins",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/plugins",
+          "target": "@vibress/plugin-sdk",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/plugins",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/storage-domain": [
+        {
+          "source": "@vibress/storage-domain",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/storage-domain",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/storage-domain",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/storage-domain",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/storage-domain",
+          "target": "@vibress/storage-s3",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-markdown": [
+        {
+          "source": "@vibress/studio-markdown",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-markdown",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-markdown",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-renderer": [
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-testing",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-serializer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-renderer",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/themes-registry": [
+        {
+          "source": "@vibress/themes-registry",
+          "target": "@vibress/theme-core",
+          "type": "static"
+        }
+      ],
+      "@vibress/offers": [
+        {
+          "source": "@vibress/offers",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/offers",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/search": [
+        {
+          "source": "@vibress/search",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/search",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-testing": [
+        {
+          "source": "@vibress/studio-testing",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-testing",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-testing",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-testing",
+          "target": "@vibress/studio-serializer",
+          "type": "static"
+        }
+      ],
+      "@vibress/themes": [
+        {
+          "source": "@vibress/themes",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/themes",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/themes",
+          "target": "@vibress/theme-core",
+          "type": "static"
+        }
+      ],
       "@vibress/api-contracts": [],
-      "@vibress/audit": [],
-      "@vibress/email": [],
-      "@vibress/files": [],
-      "@vibress/media": [],
+      "@vibress/audit": [
+        {
+          "source": "@vibress/audit",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/email": [
+        {
+          "source": "@vibress/email",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/email",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/files": [
+        {
+          "source": "@vibress/files",
+          "target": "@vibress/media",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/files",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        }
+      ],
+      "@vibress/media": [
+        {
+          "source": "@vibress/media",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/media",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/media",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        }
+      ],
       "@vibress/observability": [],
-      "@vibress/pages": [],
-      "@vibress/plans": [],
-      "@vibress/posts": [],
-      "@vibress/roles": [],
-      "@vibress/users": [],
-      "@vibress/auth": [],
+      "@vibress/pages": [
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/authors",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/media",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/revisions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/utils",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/pages",
+          "target": "@vibress/security",
+          "type": "static"
+        }
+      ],
+      "@vibress/plans": [
+        {
+          "source": "@vibress/plans",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/plans",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/posts": [
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/authors",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/media",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/revisions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/tags",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/utils",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/posts",
+          "target": "@vibress/events",
+          "type": "static"
+        }
+      ],
+      "@vibress/roles": [
+        {
+          "source": "@vibress/roles",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/setup": [
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/roles",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/settings",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/users",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/setup",
+          "target": "@vibress/cache",
+          "type": "static"
+        }
+      ],
+      "@vibress/users": [
+        {
+          "source": "@vibress/users",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/auth": [
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/permissions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/roles",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/auth",
+          "target": "@vibress/users",
+          "type": "static"
+        }
+      ],
       "@vibress/storage-core": [],
-      "@vibress/tags": [],
+      "@vibress/studio-cards": [
+        {
+          "source": "@vibress/studio-cards",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-cards",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-cards",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-nodes": [
+        {
+          "source": "@vibress/studio-nodes",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-nodes",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-react": [
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-html",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-markdown",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-plugin-sdk",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-serializer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-transforms",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-react",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-utils": [],
+      "@vibress/tags": [
+        {
+          "source": "@vibress/tags",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/tags",
+          "target": "@vibress/utils",
+          "type": "static"
+        }
+      ],
       "@vibress/plugin-core": [],
+      "@vibress/studio-core": [
+        {
+          "source": "@vibress/studio-core",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/studio-html": [
+        {
+          "source": "@vibress/studio-html",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-html",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-html",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/studio-html",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
+      "@vibress/ai": [
+        {
+          "source": "@vibress/ai",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/ai",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/ai",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/ai",
+          "target": "@vibress/settings",
+          "type": "static"
+        }
+      ],
       "@vibress/plugin-sdk": [],
-      "@vibress/database": [],
-      "@vibress/security": [],
+      "@vibress/storage-s3": [
+        {
+          "source": "@vibress/storage-s3",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        }
+      ],
+      "@vibress/theme-core": [
+        {
+          "source": "@vibress/theme-core",
+          "target": "@vibress/i18n",
+          "type": "static"
+        }
+      ],
+      "@vibress/database": [
+        {
+          "source": "@vibress/database",
+          "target": "@vibress/config",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/database",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/database",
+          "target": "@vibress/observability",
+          "type": "static"
+        }
+      ],
+      "@vibress/security": [
+        {
+          "source": "@vibress/security",
+          "target": "@vibress/config",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/security",
+          "target": "@vibress/observability",
+          "type": "static"
+        }
+      ],
       "@vibress/testing": [],
       "@vibress/config": [],
-      "@vibress/events": [],
-      "@vibress/cache": [],
-      "@vibress/queue": [],
+      "@vibress/events": [
+        {
+          "source": "@vibress/events",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/events",
+          "target": "@vibress/observability",
+          "type": "static"
+        }
+      ],
+      "@vibress/cache": [
+        {
+          "source": "@vibress/cache",
+          "target": "@vibress/config",
+          "type": "static"
+        }
+      ],
+      "@vibress/queue": [
+        {
+          "source": "@vibress/queue",
+          "target": "@vibress/cache",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/queue",
+          "target": "@vibress/observability",
+          "type": "static"
+        }
+      ],
       "@vibress/utils": [],
-      "@vibress/i18n": [],
-      "@vibress/portal": [],
+      "@vibress/i18n": [
+        {
+          "source": "@vibress/i18n",
+          "target": "@vibress/database",
+          "type": "static"
+        }
+      ],
+      "@vibress/portal": [
+        {
+          "source": "@vibress/portal",
+          "target": "@vibress/i18n",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/portal",
+          "target": "@vibress/ui",
+          "type": "static"
+        }
+      ],
       "@vibress/ui": [],
       "@vibress/worker": [
         {
           "source": "@vibress/worker",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/authors",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/cache",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
           "target": "@vibress/config",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/observability",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/pages",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/posts",
           "type": "static"
         },
         {
           "source": "@vibress/worker",
           "target": "@vibress/queue",
           "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/revisions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/newsletters",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/email",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/members",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/subscriptions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/webhooks",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/analytics",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/search",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/tags",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/worker",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
         }
       ],
-      "@vibress/admin": [],
+      "@vibress/admin": [
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/i18n",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-cards",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-html",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-markdown",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-nodes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-plugin-sdk",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-react",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-serializer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-transforms",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/admin",
+          "target": "@vibress/studio-utils",
+          "type": "static"
+        }
+      ],
       "@vibress/api": [
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/ai",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/analytics",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/api-contracts",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/audit",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/auth",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/authors",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/billing",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/cache",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/comments",
+          "type": "static"
+        },
         {
           "source": "@vibress/api",
           "target": "@vibress/config",
@@ -2782,11 +6646,247 @@
         },
         {
           "source": "@vibress/api",
+          "target": "@vibress/content-modeler",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/database",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/email",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/events",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/i18n",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/import-export",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/integrations",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/media",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/members",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/newsletters",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/notifications",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
           "target": "@vibress/observability",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/offers",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/pages",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/permissions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/plans",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/plugin-sdk",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/plugins",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/posts",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/products",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/queue",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/recommendations",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/redirects",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/revisions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/roles",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/search",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/security",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/settings",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/setup",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/storage-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/storage-domain",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/storage-s3",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/studio-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/studio-renderer",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/subscriptions",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/tags",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/theme-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/themes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/themes-registry",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/users",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/utils",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/webhooks",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/api",
+          "target": "@vibress/workspaces",
           "type": "static"
         }
       ],
-      "@vibress/web": []
+      "@vibress/web": [
+        {
+          "source": "@vibress/web",
+          "target": "@vibress/api-contracts",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/web",
+          "target": "@vibress/i18n",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/web",
+          "target": "@vibress/theme-core",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/web",
+          "target": "@vibress/themes",
+          "type": "static"
+        },
+        {
+          "source": "@vibress/web",
+          "target": "@vibress/themes-registry",
+          "type": "static"
+        }
+      ]
     }
   }
 }
