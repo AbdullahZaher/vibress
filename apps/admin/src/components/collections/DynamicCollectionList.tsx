@@ -1,6 +1,21 @@
-import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, ArrowLeft, Layers } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Edit, Trash2, ArrowLeft, Layers, Search, RefreshCw, Calendar } from "lucide-react";
 import { apiRequest } from "../../lib/api";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Card } from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui/table";
+import { Dialog } from "../ui/dialog";
+import { EmptyState } from "../ui/empty-state";
+import { Alert, AlertDescription } from "../ui/alert";
 
 export interface CollectionEntryItem {
   id: string;
@@ -22,10 +37,16 @@ export function DynamicCollectionList({
   const [modelName, setModelName] = useState(modelSlug);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft" | "archived">("all");
+  const [deleteTarget, setDeleteTarget] = useState<CollectionEntryItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchEntries = async () => {
     try {
       setLoading(true);
+      setError(null);
       const modelRes = await apiRequest<{
         data?: { name: string };
         model?: { name: string };
@@ -49,134 +70,306 @@ export function DynamicCollectionList({
     void fetchEntries();
   }, [modelSlug]);
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
+  const filteredEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      const matchesStatus = statusFilter === "all" || entry.status === statusFilter;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        entry.title.toLowerCase().includes(q) ||
+        entry.slug.toLowerCase().includes(q);
+      return matchesStatus && matchesSearch;
+    });
+  }, [entries, statusFilter, searchQuery]);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await apiRequest(`/api/admin/v1/content-models/${modelSlug}/entries/${id}`, {
+      setIsDeleting(true);
+      setDeleteError(null);
+      await apiRequest(`/api/admin/v1/content-models/${modelSlug}/entries/${deleteTarget.id}`, {
         method: "DELETE",
       });
+      setDeleteTarget(null);
       await fetchEntries();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete entry");
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete entry");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "published":
+        return (
+          <Badge variant="published" className="text-[11px] font-mono capitalize">
+            Published
+          </Badge>
+        );
+      case "archived":
+        return (
+          <Badge variant="secondary" className="text-[11px] font-mono capitalize">
+            Archived
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="draft" className="text-[11px] font-mono capitalize">
+            Draft
+          </Badge>
+        );
     }
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onNavigate("/admin/models")}
-            className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+            title="Back to Content Models"
           >
-            <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
-          </button>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            <span className="hidden sm:inline">Back to Models</span>
+          </Button>
+
+          <div className="h-4 w-[1px] bg-border hidden sm:block" />
+
           <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Layers className="w-6 h-6 text-primary" />
-              {modelName}
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              Collection: /api/content/v1/collections/{modelSlug}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
+                <Layers className="h-3.5 w-3.5" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                {modelName}
+              </h1>
+              <Badge variant="secondary" className="text-[10px] font-mono">
+                /api/content/v1/collections/{modelSlug}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Structured entry records belonging to the {modelName} collection.
             </p>
           </div>
         </div>
-        <button
+
+        <Button
           onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
+          className="gap-2 self-start sm:self-auto cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
           New Entry
-        </button>
+        </Button>
       </div>
 
+      {/* Global Error Alert */}
       {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
-          {error}
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{error}</span>
+            <Button variant="outline" size="xs" onClick={fetchEntries} className="gap-1 shrink-0">
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filter / Search Toolbar */}
+      {entries.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {(["all", "published", "draft", "archived"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setStatusFilter(tab)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer whitespace-nowrap ${
+                  statusFilter === tab
+                    ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab === "all" ? "All Entries" : tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search entries..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="ps-9 h-8 text-xs bg-card border-border/70"
+            />
+          </div>
         </div>
       )}
 
+      {/* Content Area */}
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
-          Loading collection entries...
-        </div>
+        <Card className="p-0 overflow-hidden shadow-2xs">
+          <div className="p-4 space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 w-full bg-muted/40 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </Card>
       ) : entries.length === 0 ? (
-        <div className="text-center py-12 border-2 border-dashed border-border/70 rounded-lg p-8">
-          <Layers className="w-12 h-12 text-muted-foreground/60 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-foreground">
-            No Entries Yet
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-            Create your first entry in this structured content collection.
-          </p>
-          <button
-            onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
+        <EmptyState
+          icon={<Layers className="h-6 w-6 text-primary" />}
+          title="No Entries Yet"
+          description="Create your first entry in this structured content collection."
+          action={
+            <Button
+              onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Create Entry
+            </Button>
+          }
+        />
+      ) : filteredEntries.length === 0 ? (
+        <div className="py-12 text-center rounded-xl border border-dashed border-border/70 bg-muted/10 p-6">
+          <p className="text-sm font-medium text-foreground">No entries match your filter</p>
+          <p className="text-xs text-muted-foreground mt-1">Try resetting search or status filters.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSearchQuery("");
+              setStatusFilter("all");
+            }}
+            className="mt-3 text-xs"
           >
-            <Plus className="w-4 h-4" />
-            Create Entry
-          </button>
+            Reset Filters
+          </Button>
         </div>
       ) : (
-        <div className="border border-border/70 rounded-lg overflow-hidden bg-card shadow-sm">
-          <table className="w-full text-start text-sm">
-            <thead className="bg-muted/30 text-xs font-semibold text-muted-foreground uppercase border-b border-border/70">
-              <tr>
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Slug</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Last Updated</th>
-                <th className="px-4 py-3 text-end">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {entries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="px-4 py-3 font-medium text-foreground">
+        <Card className="p-0 overflow-hidden shadow-2xs">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="ps-5">Title</TableHead>
+                <TableHead>Slug</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead className="text-end pe-5">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredEntries.map((entry) => (
+                <TableRow key={entry.id} className="cursor-pointer">
+                  <TableCell
+                    className="ps-5 font-medium text-foreground hover:text-primary"
+                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                  >
                     {entry.title}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell
+                    className="font-mono text-xs text-muted-foreground"
+                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                  >
                     {entry.slug}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex px-2 py-0.5 text-[11px] font-medium uppercase rounded ${
-                        entry.status === "published"
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                          : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                      }`}
-                    >
-                      {entry.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {new Date(entry.updatedAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-end">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                        className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
-                        title="Edit Entry"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(entry.id, entry.title)}
-                        className="p-1.5 text-destructive/80 hover:text-destructive rounded hover:bg-destructive/10"
-                        title="Delete Entry"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  </TableCell>
+                  <TableCell onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}>
+                    {getStatusBadge(entry.status)}
+                  </TableCell>
+                  <TableCell
+                    className="text-xs text-muted-foreground"
+                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <Calendar className="h-3 w-3 text-muted-foreground/60" />
+                      <span>{new Date(entry.updatedAt).toLocaleDateString()}</span>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-end pe-5">
+                    <div className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Edit Entry"
+                        aria-label={`Edit ${entry.title}`}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setDeleteTarget(entry)}
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Delete Entry"
+                        aria-label={`Delete ${entry.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
+
+      {/* Accessible Confirmation Modal Dialog */}
+      <Dialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => {
+          if (!isDeleting) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+        title="Delete Collection Entry"
+        description={`Are you sure you want to delete "${deleteTarget?.title}"? This entry will be permanently removed from ${modelName}.`}
+      >
+        <div className="space-y-4">
+          {deleteError && (
+            <Alert variant="destructive">
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            This action cannot be undone. Any references to this entry across other models will no longer resolve.
+          </p>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={confirmDelete}
+              loading={isDeleting}
+            >
+              Delete Entry
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

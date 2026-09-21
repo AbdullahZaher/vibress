@@ -40,6 +40,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
     if (currentPath.startsWith("/admin/pages")) return "Pages";
     if (currentPath.startsWith("/admin/tags")) return "Tags";
     if (currentPath.startsWith("/admin/media")) return "Media Library";
+    if (currentPath.startsWith("/admin/models/new")) return "New Model";
+    if (currentPath.startsWith("/admin/models/")) return "Edit Model";
+    if (currentPath.startsWith("/admin/models")) return "Content Modeler";
+    if (currentPath.startsWith("/admin/collections/")) return "Collection";
     if (currentPath.startsWith("/admin/members")) return "Members";
     if (currentPath.startsWith("/admin/comments") || currentPath.startsWith("/admin/community"))
       return "Comments";

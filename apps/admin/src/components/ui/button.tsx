@@ -37,16 +37,29 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends
     React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  loading?: boolean;
+}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, loading = false, disabled, children, ...props }, ref) => {
     return (
       <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        disabled={disabled || loading}
+        aria-busy={loading}
         {...props}
-      />
+      >
+        {loading && (
+          <span
+            className="inline-block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent shrink-0"
+            role="status"
+            aria-label="Loading"
+          />
+        )}
+        {children}
+      </button>
     );
   },
 );

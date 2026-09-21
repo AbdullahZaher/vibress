@@ -9,8 +9,21 @@ import {
   Eye,
   AlertTriangle,
   Link as LinkIcon,
+  Database,
+  ArrowUp,
+  ArrowDown,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
+import { Button } from "../ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../ui/card";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Switch } from "../ui/switch";
+import { Alert, AlertTitle, AlertDescription } from "../ui/alert";
+import { EmptyState } from "../ui/empty-state";
+import { Spinner } from "../ui/spinner";
 
 export interface FieldItem {
   id: string;
@@ -158,6 +171,16 @@ export function ContentModelEditor({
     }
   };
 
+  const handleMoveField = (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= fields.length) return;
+    const copy = [...fields];
+    const temp = copy[index]!;
+    copy[index] = copy[targetIndex]!;
+    copy[targetIndex] = temp;
+    setFields(copy);
+  };
+
   const handleRemoveField = (index: number) => {
     setFields(fields.filter((_, i) => i !== index));
   };
@@ -246,276 +269,382 @@ export function ContentModelEditor({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-slate-500">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
-        Loading model schema...
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+        <Spinner size="md" />
+        <span className="text-xs sm:text-sm font-medium">Loading model schema...</span>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSave} className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <form onSubmit={handleSave} className="space-y-6 w-full max-w-5xl mx-auto">
+      {/* Page Header & Navigation Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onNavigate("/admin/models")}
-            className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            title="Back to Content Models"
           >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-            {isEditing ? `Edit Model: ${name}` : "Create Content Model"}
-          </h1>
-        </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save Model"}
-        </button>
-      </div>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            <span className="hidden sm:inline">Back to Models</span>
+          </Button>
 
-      {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
-          {error}
-        </div>
-      )}
+          <div className="h-4 w-[1px] bg-border hidden sm:block" />
 
-      {evolutionWarnings.length > 0 && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 rounded-md text-xs space-y-1">
-          <div className="flex items-center gap-1.5 font-bold">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Schema Evolution Warnings:
-          </div>
-          {evolutionWarnings.map((w, idx) => (
-            <p key={idx} className="ml-5">
-              • {w}
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
+                MODEL
+              </span>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                {isEditing ? `Edit Model: ${name}` : "Create Content Model"}
+              </h1>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isEditing
+                ? `Configure schema, validation rules, and API endpoints for ${slug}`
+                : "Define field types, schema rules, and relationship mappings."}
             </p>
-          ))}
+          </div>
         </div>
-      )}
 
-      {/* Basic Model Info */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
-          Model Details
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Model Name *
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="e.g. Portfolio Project"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-              API Slug *
-            </label>
-            <input
-              type="text"
-              required
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="e.g. portfolio-projects"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent font-mono text-sm"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-            Description
-          </label>
-          <textarea
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief description of this content structure..."
-            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
-          />
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate("/admin/models")}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={saving}
+            loading={saving}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "Saving..." : "Save Model"}
+          </Button>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Schema Evolution Warnings */}
+      {evolutionWarnings.length > 0 && (
+        <Alert variant="warning">
+          <AlertTitle className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold">
+            <AlertTriangle className="h-4 w-4" />
+            Schema Evolution Warnings
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-1">
+            {evolutionWarnings.map((w, idx) => (
+              <p key={idx} className="text-xs">
+                • {w}
+              </p>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Basic Model Info Card */}
+      <Card className="shadow-2xs">
+        <CardHeader className="p-5 pb-4 border-b border-border/50">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-semibold tracking-tight text-foreground uppercase">
+              Model Details
+            </CardTitle>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground">
+            Core metadata used for administrative identification and API routing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-foreground">
+                Model Name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="e.g. Portfolio Project"
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-foreground">
+                API Slug <span className="text-destructive">*</span>
+              </label>
+              <Input
+                type="text"
+                required
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="e.g. portfolio-projects"
+                className="h-9 font-mono text-xs"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-foreground">
+              Description
+            </label>
+            <Textarea
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of this content structure..."
+              className="min-h-[70px] text-xs sm:text-sm"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Visual Fields Builder */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
-            Fields Schema ({fields.length})
-          </h2>
-          <button
-            type="button"
-            onClick={handleAddField}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-800 dark:text-slate-200"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Field
-          </button>
-        </div>
-
-        {fields.length === 0 ? (
-          <div className="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-md text-sm text-slate-500">
-            No fields defined yet. Click "Add Field" to build your schema.
+      <Card className="shadow-2xs">
+        <CardHeader className="p-5 pb-4 border-b border-border/50 flex flex-row items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-semibold tracking-tight text-foreground uppercase">
+                Fields Schema ({fields.length})
+              </CardTitle>
+            </div>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Add and configure data attributes for entries of this model.
+            </CardDescription>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {fields.map((field, idx) => (
-              <div
-                key={field.id || idx}
-                className="p-4 border border-slate-200 dark:border-slate-800 rounded-md bg-slate-50 dark:bg-slate-950/50 space-y-3"
-              >
-                <div className="flex items-center gap-3">
-                  <GripVertical className="w-4 h-4 text-slate-400 cursor-move" />
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
-                        Field Label
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={field.name}
-                        onChange={(e) => {
-                          const n = e.target.value;
-                          const k = n
-                            .toLowerCase()
-                            .replace(/[^a-z0-9]+/g, "_")
-                            .replace(/^_+|_+$/g, "");
-                          handleUpdateField(idx, { name: n, key: field.key || k });
-                        }}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
-                      />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddField}
+            className="gap-1.5 text-xs shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Field
+          </Button>
+        </CardHeader>
+
+        <CardContent className="p-5">
+          {fields.length === 0 ? (
+            <EmptyState
+              icon={<Sparkles className="h-5 w-5 text-primary" />}
+              title="No Fields Defined Yet"
+              description="Click 'Add Field' above to build your structured content schema."
+              className="p-8 sm:p-10"
+            />
+          ) : (
+            <div className="space-y-3.5">
+              {fields.map((field, idx) => (
+                <div
+                  key={field.id || idx}
+                  className="rounded-xl border border-border/70 bg-card p-4 space-y-3.5 shadow-2xs hover:border-border transition-colors"
+                >
+                  {/* Field Header / Main Row */}
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    {/* Move and Drag Order Controls */}
+                    <div className="flex items-center gap-0.5 shrink-0 pt-1 sm:pt-0">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveField(idx, "up")}
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 cursor-pointer"
+                          title="Move field up"
+                          aria-label={`Move ${field.name} up`}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === fields.length - 1}
+                          onClick={() => handleMoveField(idx, "down")}
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-20 cursor-pointer"
+                          title="Move field down"
+                          aria-label={`Move ${field.name} down`}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <GripVertical className="h-4 w-4 text-muted-foreground/40 cursor-grab shrink-0" />
+                      <span className="text-[10px] font-mono text-muted-foreground/60 w-4 text-center">
+                        #{idx + 1}
+                      </span>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
-                        Field Key (API identifier)
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={field.key}
-                        onChange={(e) => handleUpdateField(idx, { key: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 font-mono text-xs"
-                      />
+
+                    {/* Inputs Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-1 min-w-0">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-medium text-muted-foreground">
+                          Field Label
+                        </label>
+                        <Input
+                          type="text"
+                          required
+                          value={field.name}
+                          onChange={(e) => {
+                            const n = e.target.value;
+                            const k = n
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]+/g, "_")
+                              .replace(/^_+|_+$/g, "");
+                            handleUpdateField(idx, { name: n, key: field.key || k });
+                          }}
+                          className="h-8 text-xs bg-background"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-medium text-muted-foreground">
+                          Field Key (API identifier)
+                        </label>
+                        <Input
+                          type="text"
+                          required
+                          value={field.key}
+                          onChange={(e) => handleUpdateField(idx, { key: e.target.value })}
+                          className="h-8 font-mono text-xs bg-background"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-medium text-muted-foreground">
+                          Field Type
+                        </label>
+                        <select
+                          value={field.type}
+                          onChange={(e) => handleUpdateField(idx, { type: e.target.value })}
+                          className="h-8 w-full rounded-md border border-border/70 bg-background px-2.5 text-xs text-foreground shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
+                        >
+                          {FIELD_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
-                        Field Type
-                      </label>
+
+                    {/* Delete Field Button */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleRemoveField(idx)}
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 mt-4 sm:mt-0"
+                      title="Remove Field"
+                      aria-label={`Remove field ${field.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Sub-configuration for Relation Fields */}
+                  {(field.type === "relation" || field.type === "relation_list") && (
+                    <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 text-xs flex flex-col sm:flex-row sm:items-center gap-2">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <LinkIcon className="h-3.5 w-3.5 text-primary" />
+                        <span>Target Related Model:</span>
+                      </div>
                       <select
-                        value={field.type}
-                        onChange={(e) => handleUpdateField(idx, { type: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
+                        value={field.relationModel || ""}
+                        onChange={(e) => handleUpdateField(idx, { relationModel: e.target.value })}
+                        className="h-8 flex-1 max-w-xs rounded-md border border-border/70 bg-background px-2.5 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                       >
-                        {FIELD_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
+                        <option value="">-- Select Target Model --</option>
+                        {availableModels.map((m) => (
+                          <option key={m.id} value={m.slug}>
+                            {m.name} ({m.slug})
                           </option>
                         ))}
                       </select>
+                      {field.type === "relation_list" && (
+                        <span className="text-[11px] text-muted-foreground font-medium ms-auto">
+                          Supports multi-selection &amp; ordering (max 100)
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sub-configuration for Select / Multi-Select */}
+                  {(field.type === "select" || field.type === "multi_select") && (
+                    <div className="p-3 rounded-lg border border-border/60 bg-muted/20 text-xs space-y-1.5">
+                      <label className="block font-medium text-foreground">
+                        Options (comma-separated Label:Value or Value):
+                      </label>
+                      <Input
+                        type="text"
+                        value={field.optionsRaw || ""}
+                        onChange={(e) => handleUpdateField(idx, { optionsRaw: e.target.value })}
+                        placeholder="e.g. In Stock:in_stock, Out of Stock:out_of_stock"
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  )}
+
+                  {/* Field Flags Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-border/50 text-xs">
+                    <div className="flex items-center gap-5">
+                      <label className="inline-flex items-center gap-2 cursor-pointer text-foreground select-none">
+                        <Switch
+                          checked={field.required}
+                          onCheckedChange={(checked) => handleUpdateField(idx, { required: checked })}
+                        />
+                        <span className="font-medium">Required</span>
+                      </label>
+
+                      <label className="inline-flex items-center gap-2 cursor-pointer text-foreground select-none">
+                        <Switch
+                          checked={field.localizable}
+                          onCheckedChange={(checked) => handleUpdateField(idx, { localizable: checked })}
+                        />
+                        <span className="inline-flex items-center gap-1 font-medium">
+                          <Globe className="h-3 w-3 text-muted-foreground" />
+                          Localizable (i18n)
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 text-muted-foreground ms-auto">
+                      <Eye className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      <span className="font-medium text-[11px]">API Visibility:</span>
+                      <select
+                        value={field.apiVisibility || "public"}
+                        onChange={(e) =>
+                          handleUpdateField(idx, {
+                            apiVisibility: e.target.value as "public" | "authenticated" | "private",
+                          })
+                        }
+                        className="h-7 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-foreground shadow-2xs focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                      >
+                        <option value="public">Public (Default)</option>
+                        <option value="authenticated">Authenticated Only</option>
+                        <option value="private">Private / Staff Only</option>
+                      </select>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveField(idx)}
-                    className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded"
-                    title="Remove Field"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
-
-                {/* Conditional Sub-editors for specific field types */}
-                {(field.type === "relation" || field.type === "relation_list") && (
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs flex items-center gap-2">
-                    <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-slate-600 dark:text-slate-400 font-medium">
-                      Target Related Model:
-                    </span>
-                    <select
-                      value={field.relationModel || ""}
-                      onChange={(e) => handleUpdateField(idx, { relationModel: e.target.value })}
-                      className="px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
-                    >
-                      <option value="">-- Select Target Model --</option>
-                      {availableModels.map((m) => (
-                        <option key={m.id} value={m.slug}>
-                          {m.name} ({m.slug})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {(field.type === "select" || field.type === "multi_select") && (
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                    <label className="block font-medium text-slate-600 dark:text-slate-400">
-                      Options (comma-separated Label:Value or Value):
-                    </label>
-                    <input
-                      type="text"
-                      value={field.optionsRaw || ""}
-                      onChange={(e) => handleUpdateField(idx, { optionsRaw: e.target.value })}
-                      placeholder="e.g. In Stock:in_stock, Out of Stock:out_of_stock"
-                      className="w-full px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
-                    />
-                  </div>
-                )}
-
-                {/* Field Flags & API Visibility */}
-                <div className="flex flex-wrap items-center gap-5 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={field.required}
-                      onChange={(e) => handleUpdateField(idx, { required: e.target.checked })}
-                      className="rounded border-slate-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                    />
-                    Required
-                  </label>
-
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
-                    <Globe className="w-3.5 h-3.5 text-slate-400" />
-                    <input
-                      type="checkbox"
-                      checked={field.localizable}
-                      onChange={(e) => handleUpdateField(idx, { localizable: e.target.checked })}
-                      className="rounded border-slate-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                    />
-                    Localizable (i18n)
-                  </label>
-
-                  <div className="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-300 ml-auto">
-                    <Eye className="w-3.5 h-3.5 text-slate-400" />
-                    <span>API Visibility:</span>
-                    <select
-                      value={field.apiVisibility || "public"}
-                      onChange={(e) =>
-                        handleUpdateField(idx, {
-                          apiVisibility: e.target.value as "public" | "authenticated" | "private",
-                        })
-                      }
-                      className="px-2 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
-                    >
-                      <option value="public">Public (Default)</option>
-                      <option value="authenticated">Authenticated Only</option>
-                      <option value="private">Private / Staff Only</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </form>
   );
 }
