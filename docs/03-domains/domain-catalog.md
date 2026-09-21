@@ -28,7 +28,6 @@ packages/domains/
 ├── search/
 ├── integrations/
 ├── webhooks/
-├── automations/
 ├── themes/
 ├── settings/
 ├── audit/

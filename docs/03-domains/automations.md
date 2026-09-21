@@ -1,6 +1,11 @@
-# Automations
+# Automations (Extracted as External Plugin)
 
-## Model
+> **ARCHITECTURAL STATUS: EXTRACTED OUT OF CORE**  
+> Visual Automations has been removed from Vibress Core and extracted to the standalone repository:  
+> `/Users/abdullahzaher/vibress-automations/` (`Vibress Automations`).  
+> This document remains for historical architectural reference only.
+
+## Historical Model
 
 Durable definitions + immutable versions + run history:
 
