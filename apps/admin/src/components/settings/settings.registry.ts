@@ -493,6 +493,28 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
         iconName: "FileJson",
       },
       {
+        id: "content-modeler",
+        title: "Content Modeler",
+        description:
+          "Design custom structured content models, fields, relations, and collection APIs.",
+        keywords: [
+          "content",
+          "modeler",
+          "models",
+          "schema",
+          "structured",
+          "collections",
+          "fields",
+          "relations",
+          "types",
+        ],
+        pillarId: "advanced",
+        anchor: "advanced-content-modeler",
+        editorMode: "inline",
+        requiredPermission: "settings.manage",
+        iconName: "Database",
+      },
+      {
         id: "audit-logs",
         title: "Audit & activity log",
         description:

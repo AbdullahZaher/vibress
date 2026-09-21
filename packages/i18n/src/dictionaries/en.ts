@@ -241,5 +241,10 @@ export const enDictionary: Record<string, string> = {
   "portal.english": "English",
   "portal.arabic": "العربية",
   "portal.portal_name": "Member Portal",
+
+  // Settings - Advanced
+  "settings.advanced.content_modeler.title": "Content Modeler",
+  "settings.advanced.content_modeler.desc": "Design custom structured content models, fields, relations, and collection APIs.",
+  "settings.advanced.content_modeler.action": "Manage models",
 };
 

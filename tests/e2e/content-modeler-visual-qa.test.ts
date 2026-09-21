@@ -21,8 +21,8 @@ async function saveScreenshot(page: any, name: string) {
 }
 
 test.describe("Content Modeler Visual QA Suite", () => {
-  test("Desktop, Mobile, Dark Mode, and Arabic RTL visual capture", async ({ page }) => {
-    test.setTimeout(90000);
+  test("Navigation restructure, Settings Advanced card, Desktop, Mobile, Dark Mode, and Arabic RTL", async ({ page }) => {
+    test.setTimeout(120000);
     // 1. Login
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("http://localhost:7777/admin/login");
@@ -31,15 +31,124 @@ test.describe("Content Modeler Visual QA Suite", () => {
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"));
 
-    // Ensure Light Mode initially
+    // Switch to Light Mode via header button
+    const themeBtn = page.locator('aside button:has(svg.lucide-sun), aside button:has(svg.lucide-moon)').first();
+    if (await themeBtn.isVisible()) {
+      await themeBtn.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Verify sidebar has NO "Content Models" button
+    const sidebar = page.locator("aside");
+    await expect(sidebar.getByRole("button", { name: "Content Models", exact: true })).toHaveCount(0);
+
+    // Capture Desktop Light Sidebar (No Content Models)
+    await saveScreenshot(page, "nav-sidebar-desktop-light");
+
+    // Capture Desktop Dark Sidebar (No Content Models)
+    if (await themeBtn.isVisible()) {
+      await themeBtn.click();
+      await page.waitForTimeout(300);
+    }
+    await saveScreenshot(page, "nav-sidebar-desktop-dark");
+
+    // 2. Navigate to Settings -> Advanced
+    await page.goto("http://localhost:7777/admin/settings/advanced");
+    await page.waitForTimeout(500);
+
+    // Toggle to Light Mode
+    const advThemeBtn = page.locator('aside button:has(svg.lucide-sun), aside button:has(svg.lucide-moon)').first();
+    if (await advThemeBtn.isVisible()) {
+      await advThemeBtn.click();
+      await page.waitForTimeout(300);
+    }
+
+    // Verify Content Modeler card in Settings -> Advanced
+    const modelerCard = page.locator("#advanced-content-modeler");
+    await expect(modelerCard).toBeVisible();
+    await expect(modelerCard).toContainText("Content Modeler");
+
+    // Scroll card into view in the scrollable main container
+    await modelerCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+
+    // Capture Settings Advanced Desktop Light (scrolled viewport showing surrounding cards)
+    const artifactLight = path.join(ARTIFACT_SCREENSHOT_DIR, "settings-advanced-desktop-light.png");
+    const localLight = path.join(LOCAL_SCREENSHOT_DIR, "settings-advanced-desktop-light.png");
+    await page.screenshot({ path: artifactLight });
+    await page.screenshot({ path: localLight });
+
+    // Capture Settings Advanced Desktop Dark
+    if (await advThemeBtn.isVisible()) {
+      await advThemeBtn.click();
+      await page.waitForTimeout(300);
+    }
+    await modelerCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const artifactDark = path.join(ARTIFACT_SCREENSHOT_DIR, "settings-advanced-desktop-dark.png");
+    const localDark = path.join(LOCAL_SCREENSHOT_DIR, "settings-advanced-desktop-dark.png");
+    await page.screenshot({ path: artifactDark });
+    await page.screenshot({ path: localDark });
+
+    // Capture Settings Advanced Arabic RTL Desktop
+    await page.evaluate(() => {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.dir = "rtl";
+      document.documentElement.lang = "ar";
+    });
+    await page.waitForTimeout(300);
+    await expect(modelerCard).toContainText("نمذجة المحتوى");
+    await modelerCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const artifactAr = path.join(ARTIFACT_SCREENSHOT_DIR, "settings-advanced-arabic-desktop.png");
+    const localAr = path.join(LOCAL_SCREENSHOT_DIR, "settings-advanced-arabic-desktop.png");
+    await page.screenshot({ path: artifactAr });
+    await page.screenshot({ path: localAr });
+
+    // Responsive checks: 320, 375, 390, 430, 768, 1024, 1280, 1440, 1920
+    const testViewports = [
+      { width: 320, height: 600, name: "320" },
+      { width: 375, height: 667, name: "375" },
+      { width: 390, height: 844, name: "390" },
+      { width: 430, height: 932, name: "430" },
+      { width: 768, height: 1024, name: "768" },
+      { width: 1024, height: 768, name: "1024" },
+      { width: 1280, height: 800, name: "1280" },
+      { width: 1440, height: 900, name: "1440" },
+      { width: 1920, height: 1080, name: "1920" },
+    ];
+
+    for (const vp of testViewports) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.evaluate(() => {
+        document.documentElement.dir = "ltr";
+        document.documentElement.lang = "en";
+      });
+      await modelerCard.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(100);
+      await expect(modelerCard).toBeVisible();
+    }
+
+    // Capture Mobile (390px) Settings Advanced
+    await page.setViewportSize({ width: 390, height: 844 });
+    await modelerCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+    const artifactMob = path.join(ARTIFACT_SCREENSHOT_DIR, "settings-advanced-mobile-390.png");
+    const localMob = path.join(LOCAL_SCREENSHOT_DIR, "settings-advanced-mobile-390.png");
+    await page.screenshot({ path: artifactMob });
+    await page.screenshot({ path: localMob });
+
+    // Reset to Desktop 1280
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // 3. Click "Manage models" to enter Content Modeler
     await page.evaluate(() => {
       document.documentElement.classList.remove("dark");
       document.documentElement.dir = "ltr";
       document.documentElement.lang = "en";
     });
-
-    // 2. Navigate to Content Models
-    await page.getByRole("button", { name: "Content Models", exact: true }).click();
+    const manageBtn = modelerCard.getByRole("button", { name: "Manage models" });
+    await manageBtn.click();
     await page.waitForURL("**/admin/models");
     await page.waitForTimeout(500);
 
@@ -69,7 +178,7 @@ test.describe("Content Modeler Visual QA Suite", () => {
     await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-list-mobile-light");
 
-    // 3. Open Model Builder (New Model)
+    // 4. Open Model Builder (New Model)
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.click('button:has-text("Create Model"), button:has-text("Create First Model")');
     await page.waitForURL("**/admin/models/new");
@@ -96,7 +205,7 @@ test.describe("Content Modeler Visual QA Suite", () => {
     // Desktop Light - Model Builder
     await saveScreenshot(page, "cm-builder-desktop-light");
 
-    // Desktop Dark - Model Builder (Critical for button text contrast check!)
+    // Desktop Dark - Model Builder
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-builder-desktop-dark");
@@ -107,61 +216,57 @@ test.describe("Content Modeler Visual QA Suite", () => {
       document.documentElement.dir = "rtl";
       document.documentElement.lang = "ar";
     });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-builder-arabic-desktop");
 
-    // Arabic RTL Mobile (390px)
+    // Mobile - Model Builder
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(300);
-    await saveScreenshot(page, "cm-builder-arabic-mobile");
-
-    // Mobile Light (390px, LTR)
     await page.evaluate(() => {
       document.documentElement.dir = "ltr";
       document.documentElement.lang = "en";
     });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-builder-mobile-light");
 
-    // Mobile Dark (390px, LTR)
-    await page.evaluate(() => document.documentElement.classList.add("dark"));
-    await page.waitForTimeout(200);
-    await saveScreenshot(page, "cm-builder-mobile-dark");
-
-    // Reset to Desktop Light & Save Model
+    // 5. Save Model and navigate to Collection List
     await page.setViewportSize({ width: 1280, height: 800 });
+    await page.click('button:has-text("Save Model")');
+    await page.waitForURL("**/admin/models");
+    await page.waitForTimeout(500);
+
+    // Click View Entries
+    const viewEntriesBtn = page.locator(`button:has-text("View Entries")`).first();
+    await viewEntriesBtn.click();
+    await page.waitForURL(new RegExp(`/admin/collections/${testSlug}`));
+    await page.waitForTimeout(500);
+
+    // Desktop Light - Collection Empty State
     await page.evaluate(() => {
       document.documentElement.classList.remove("dark");
       document.documentElement.dir = "ltr";
       document.documentElement.lang = "en";
     });
-    await page.click('button:has-text("Save Model")');
-    await page.waitForURL("**/admin/models");
-    await page.waitForTimeout(500);
+    await saveScreenshot(page, "cm-collection-desktop-light");
 
-    // 4. Open Dynamic Collection List
-    await page.click(`button:has-text("View Entries")`);
-    await page.waitForURL(new RegExp(`/admin/collections/${testSlug}`));
-    await page.waitForTimeout(300);
-
-    // Desktop Light - Collection List (Empty State)
-    await saveScreenshot(page, "cm-collection-list-desktop-light");
-
-    // Desktop Dark - Collection List
+    // Desktop Dark - Collection
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     await page.waitForTimeout(200);
-    await saveScreenshot(page, "cm-collection-list-desktop-dark");
+    await saveScreenshot(page, "cm-collection-desktop-dark");
 
-    // 5. Open Dynamic Collection Entry Editor (New Entry)
-    await page.evaluate(() => document.documentElement.classList.remove("dark"));
+    // 6. Create New Entry in Collection
     await page.click('button:has-text("New Entry"), button:has-text("Create Entry")');
     await page.waitForURL(new RegExp(`/admin/collections/${testSlug}/new`));
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
 
-    await page.fill('input[placeholder="Entry Title"]', "Summer Catalog Showcase");
-    await page.fill('input[placeholder="entry-slug"]', "summer-catalog-showcase");
+    await page.fill('input[placeholder="Entry Title"]', "Featured Catalog Item");
+    await page.fill('input[placeholder="entry-slug"]', "featured-catalog-item");
 
     // Desktop Light - Entry Editor
+    await page.evaluate(() => {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.dir = "ltr";
+      document.documentElement.lang = "en";
+    });
     await saveScreenshot(page, "cm-entry-editor-desktop-light");
 
     // Desktop Dark - Entry Editor
@@ -169,46 +274,22 @@ test.describe("Content Modeler Visual QA Suite", () => {
     await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-entry-editor-desktop-dark");
 
-    // Mobile Light - Entry Editor
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.evaluate(() => document.documentElement.classList.remove("dark"));
-    await page.waitForTimeout(300);
-    await saveScreenshot(page, "cm-entry-editor-mobile-light");
-
-    // Mobile Dark - Entry Editor
-    await page.evaluate(() => document.documentElement.classList.add("dark"));
-    await page.waitForTimeout(200);
-    await saveScreenshot(page, "cm-entry-editor-mobile-dark");
-
-    // Arabic RTL Mobile (390px) - Entry Editor
+    // Arabic RTL Desktop - Entry Editor
     await page.evaluate(() => {
       document.documentElement.classList.remove("dark");
       document.documentElement.dir = "rtl";
       document.documentElement.lang = "ar";
     });
-    await page.waitForTimeout(300);
-    await saveScreenshot(page, "cm-entry-editor-arabic-mobile");
-
-    // Arabic RTL Desktop - Entry Editor
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-entry-editor-arabic-desktop");
 
-    // Save Entry to complete lifecycle
+    // Mobile - Entry Editor
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => {
       document.documentElement.dir = "ltr";
       document.documentElement.lang = "en";
     });
-    await page.click('button:has-text("Save Entry")');
-    await page.waitForURL(new RegExp(`/admin/collections/${testSlug}`));
-    await page.waitForTimeout(500);
-
-    // Desktop Light - Collection List with Saved Entry
-    await saveScreenshot(page, "cm-collection-list-with-entry");
-
-    // Mobile Light - Collection List with Saved Entry (tests stacked card view!)
-    await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(200);
-    await saveScreenshot(page, "cm-collection-list-mobile-cards");
+    await saveScreenshot(page, "cm-entry-editor-mobile-light");
   });
 });

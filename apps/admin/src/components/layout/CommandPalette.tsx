@@ -20,6 +20,7 @@ import {
   Activity,
   Plus,
   X,
+  Database,
 } from "lucide-react";
 
 export interface CommandItem {
@@ -322,6 +323,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         ],
         action: () => onNavigate("/admin/settings/advanced"),
       },
+      {
+        id: "settings-content-modeler",
+        title: "Content Modeler",
+        description:
+          "Design custom structured content models, fields, and relations",
+        category: "Settings" as const,
+        icon: <Database className="h-4 w-4 text-sky-400" />,
+        keywords: [
+          "content",
+          "modeler",
+          "models",
+          "schema",
+          "structured",
+          "collections",
+          "fields",
+          "relations",
+          "types",
+        ],
+        action: () => onNavigate("/admin/models"),
+      },
 
       // Auth Action
       {
@@ -352,7 +373,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     });
   }, [items, query]);
 
-  // Keyboard navigation
+  // Keyboard navigation & global Escape listener
   useEffect(() => {
     if (!isOpen) {
       setQuery("");
@@ -360,9 +381,20 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       return;
     }
 
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKey);
+
     const timer = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(timer);
-  }, [isOpen]);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKey);
+      clearTimeout(timer);
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     setSelectedIndex(0);

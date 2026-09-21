@@ -21,7 +21,9 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 }) => {
   const isSettingsActive =
     currentPath.startsWith("/admin/settings") ||
-    currentPath.startsWith("/admin/newsletters");
+    currentPath.startsWith("/admin/newsletters") ||
+    currentPath.startsWith("/admin/models") ||
+    currentPath.startsWith("/admin/collections");
 
   const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);
 
@@ -75,7 +77,9 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
       active:
         currentPath.startsWith("/admin/settings/advanced") ||
         currentPath.startsWith("/admin/settings/platform") ||
-        currentPath.startsWith("/admin/settings/operations"),
+        currentPath.startsWith("/admin/settings/operations") ||
+        currentPath.startsWith("/admin/models") ||
+        currentPath.startsWith("/admin/collections"),
     },
   ];
 

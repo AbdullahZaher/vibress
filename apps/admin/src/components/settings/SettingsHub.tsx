@@ -37,6 +37,7 @@ import { CodeInjectionCard } from "./advanced/CodeInjectionCard";
 import { IntegrationsPlatformCard } from "./advanced/IntegrationsPlatformCard";
 import { SystemDiagnosticsCard } from "./advanced/SystemDiagnosticsCard";
 import { ImportExportCard } from "./advanced/ImportExportCard";
+import { ContentModelerCard } from "./advanced/ContentModelerCard";
 import { AuditLogsCard } from "./advanced/AuditLogsCard";
 import { DangerZoneCard } from "./advanced/DangerZoneCard";
 
@@ -53,6 +54,7 @@ import {
 interface SettingsHubProps {
   initialSection?: string | undefined;
   can?: ((perm: string) => boolean) | undefined;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
@@ -77,6 +79,7 @@ const getPillarIcon = (iconName: string) => {
 export const SettingsHub: React.FC<SettingsHubProps> = ({
   initialSection,
   can,
+  onNavigate,
 }) => {
   const {
     general,
@@ -455,6 +458,15 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             <SettingsPermissionGate permission="imports.manage" can={can}>
               <ImportExportCard
                 isHighlighted={highlightedCardId === "import-export"}
+              />
+            </SettingsPermissionGate>
+          )}
+
+          {isCardVisible("content-modeler") && (
+            <SettingsPermissionGate permission="settings.manage" can={can}>
+              <ContentModelerCard
+                onNavigate={onNavigate}
+                isHighlighted={highlightedCardId === "content-modeler"}
               />
             </SettingsPermissionGate>
           )}

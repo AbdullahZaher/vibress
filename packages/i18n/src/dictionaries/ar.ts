@@ -241,5 +241,10 @@ export const arDictionary: Record<string, string> = {
   "portal.english": "English",
   "portal.arabic": "العربية",
   "portal.portal_name": "بوابة الأعضاء",
+
+  // Settings - Advanced
+  "settings.advanced.content_modeler.title": "نمذجة المحتوى",
+  "settings.advanced.content_modeler.desc": "صمّم نماذج محتوى منظمة وحقولًا وعلاقات وواجهات للمجموعات.",
+  "settings.advanced.content_modeler.action": "إدارة النماذج",
 };
 

@@ -373,57 +373,79 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/settings",
     exact: true,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/general",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/site",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/themes",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/storage",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/membership",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/billing",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/subscriptions",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/growth",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/newsletters",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/analytics",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />
+    ),
   },
   // 7. Comments & Community Moderation Queue
   {
@@ -441,42 +463,56 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/settings/advanced",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/platform",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/operations",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/localization",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/language",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/locales",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/i18n",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => (
+      <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />
+    ),
   },
   {
     pattern: "/admin/settings/:section",
     exact: false,
-    render: ({ match, can }) => (
+    render: ({ match, can, onNavigate }) => (
       <SettingsHub
         initialSection={
           ["general", "site", "membership", "growth", "advanced"].includes(
@@ -486,6 +522,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
             : "general"
         }
         can={can}
+        onNavigate={onNavigate}
       />
     ),
   },
