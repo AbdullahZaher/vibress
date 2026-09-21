@@ -30,18 +30,3 @@ Errors: `QUERY_TOO_LONG`, `EMPTY_QUERY`, `INVALID_QUERY` (wildcard-only),
 Query params: `from` (YYYY-MM-DD), `to`, `metricName`. Response:
 `{ metrics: [{date, name, count}], from, to, timezone: 'UTC' }`.
 
-## Automations Admin
-
-| Method | Path                                       | Permission           |
-| ------ | ------------------------------------------ | -------------------- |
-| GET    | `/api/admin/v1/automations`                | `automations.read`   |
-| POST   | `/api/admin/v1/automations`                | `automations.manage` |
-| PATCH  | `/api/admin/v1/automations/:id`            | `automations.manage` |
-| POST   | `/api/admin/v1/automations/:id/activate`   | `automations.manage` |
-| POST   | `/api/admin/v1/automations/:id/deactivate` | `automations.manage` |
-| POST   | `/api/admin/v1/automations/:id/run`        | `automations.run`    |
-| GET    | `/api/admin/v1/automation-runs`            | `automations.read`   |
-| GET    | `/api/admin/v1/automation-runs/:id/steps`  | `automations.read`   |
-
-Errors: `INVALID_TRIGGER`, `AUTOMATION_NOT_FOUND`, `AUTOMATION_NOT_ACTIVE`,
-`VALIDATION_ERROR`.
