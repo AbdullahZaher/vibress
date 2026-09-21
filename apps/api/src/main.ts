@@ -271,7 +271,7 @@ const start = async () => {
 
     // Bridge domain events to outbound webhooks
     startWebhookEventBridge();
-    // Bridge domain events to analytics, search indexing, and automations
+    // Bridge domain events to analytics and search indexing
     startAsyncBridge();
     // Event-loop lag + process metrics (only if METRICS_ENABLED)
     const observabilityMonitors = startObservabilityMonitors();

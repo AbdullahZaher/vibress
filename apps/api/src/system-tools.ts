@@ -174,31 +174,6 @@ export async function runIntegrityChecks(): Promise<
     });
   }
 
-  // 6. Stuck automation runs (running for > 1 hour)
-  try {
-    const pool = getDbPool();
-    const res = await pool.query(
-      `SELECT count(*)::int AS total FROM automation_runs WHERE status = 'running' AND started_at < now() - interval '1 hour'`,
-    );
-    const stuck = Number(
-      (res as { rows: Array<{ total?: number }> }).rows[0]?.total || 0,
-    );
-    results.push({
-      check: "automation_runs",
-      status: stuck === 0 ? "ok" : "warning",
-      detail:
-        stuck === 0
-          ? "No stuck automation runs"
-          : `${stuck} automation run(s) running > 1 hour`,
-    });
-  } catch (err: unknown) {
-    results.push({
-      check: "automation_runs",
-      status: "error",
-      detail: (err as Error).message,
-    });
-  }
-
   return results;
 }
 

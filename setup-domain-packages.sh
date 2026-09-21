@@ -11,7 +11,7 @@ DOMAINS=(
   "products" "plans" "offers" "subscriptions" "billing"
   "newsletters" "email"
   "analytics" "recommendations" "search"
-  "integrations" "webhooks" "automations"
+  "integrations" "webhooks"
   "themes" "settings" "audit" "notifications"
 )
 
