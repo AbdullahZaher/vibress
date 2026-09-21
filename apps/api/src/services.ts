@@ -123,11 +123,6 @@ import {
 } from "@vibress/analytics";
 import { AnalyticsOverviewService } from "@vibress/analytics";
 import { DrizzleSearchRepository, SearchService } from "@vibress/search";
-import {
-  DrizzleAutomationRepository,
-  AutomationsService,
-  AutomationAction,
-} from "@vibress/automations";
 import { DrizzleSettingRepository, SettingsService } from "@vibress/settings";
 import {
   DrizzleRedirectRepository,
@@ -347,7 +342,7 @@ export const pluginsService = new PluginsService(
   new BundledPluginHost(),
 );
 
-// ---------------- Intelligence: Analytics, Search, Automations ----------------
+// ---------------- Intelligence: Analytics, Search ----------------
 export const analyticsService = new AnalyticsService(
   new DrizzleAnalyticsRepository(),
 );
@@ -355,75 +350,6 @@ export const analyticsOverviewService = new AnalyticsOverviewService(
   new DrizzleAnalyticsRepository(),
 );
 export const searchService = new SearchService(new DrizzleSearchRepository());
-
-const automationRunQueueName = QUEUE_NAMES.AUTOMATIONS_RUN;
-const automationRunQueue = new Queue(automationRunQueueName, {
-  connection: getBullMqRedisConnection(),
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 5000 },
-    removeOnComplete: 1000,
-    removeOnFail: 2000,
-  },
-});
-const automationDelayedQueueName = QUEUE_NAMES.AUTOMATIONS_DELAYED;
-const automationDelayedQueue = new Queue(automationDelayedQueueName, {
-  connection: getBullMqRedisConnection(),
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 5000 },
-    removeOnComplete: 1000,
-    removeOnFail: 2000,
-  },
-});
-
-export const automationsService = new AutomationsService(
-  new DrizzleAutomationRepository(),
-  {
-    enqueueRun: async (runId: string, publicationId?: string) => {
-      const pubId = publicationId || "pub_default";
-      await enqueueTraced(
-        automationRunQueue,
-        "run",
-        {
-          scope: "publication",
-          publicationId: pubId,
-          runId,
-        },
-        { jobId: `run-${runId}` },
-      );
-    },
-    enqueueDelayedStep: async (
-      runId: string,
-      stepIndex: number,
-      delayMs: number,
-      publicationId?: string,
-    ) => {
-      const pubId = publicationId || "pub_default";
-      await enqueueTraced(
-        automationDelayedQueue,
-        "resume",
-        {
-          scope: "publication",
-          publicationId: pubId,
-          runId,
-          stepIndex,
-          resumeAt: Date.now() + delayMs,
-        },
-        {
-          delay: delayMs,
-          jobId: `resume-${runId}-${stepIndex}`,
-        },
-      );
-    },
-  },
-  {
-    execute: async (_action: AutomationAction) => {
-      // Default no-op executor for API-side validation; the worker runs real actions.
-      return { result: { dryRun: true } };
-    },
-  },
-);
 
 export const billingProvider = new StripeBillingProvider({
   secretKey: config.billing.stripeSecretKey || "sk_test_missing",

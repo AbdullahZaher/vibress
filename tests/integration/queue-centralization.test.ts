@@ -12,8 +12,6 @@ describe("Queue Centralization", () => {
     expect(QUEUE_NAMES.WEBHOOK_DELIVERY).toBe("vibress-webhook-delivery");
     expect(QUEUE_NAMES.SEARCH).toBe("vibress-search");
     expect(QUEUE_NAMES.ANALYTICS).toBe("vibress-analytics");
-    expect(QUEUE_NAMES.AUTOMATIONS_RUN).toBe("vibress-automations");
-    expect(QUEUE_NAMES.AUTOMATIONS_DELAYED).toBe("vibress-automations-delayed");
   });
 
   it("queue names are unique", () => {

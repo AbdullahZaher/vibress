@@ -1,25 +1,21 @@
 import { useEffect, useState } from "react";
 import {
   AdminMetric,
-  AdminAutomation,
   getAnalyticsMetricsApi,
   getSearchIndexCountApi,
-  listAutomationsApi,
 } from "../lib/api";
 
-import { Activity, Search, Cpu } from "lucide-react";
+import { Activity, Search } from "lucide-react";
 import { AnalyticsPanel } from "./intelligence/AnalyticsPanel";
 import { SearchIndexPanel } from "./intelligence/SearchIndexPanel";
-import { AutomationsPanel } from "./intelligence/AutomationsPanel";
 
-type Tab = "analytics" | "search" | "automations";
+type Tab = "analytics" | "search";
 
 export function IntelligenceSettings() {
   const [tab, setTab] = useState<Tab>("analytics");
   const [metrics, setMetrics] = useState<AdminMetric[]>([]);
   const [metricsRange, setMetricsRange] = useState({ from: "", to: "" });
   const [indexCount, setIndexCount] = useState(0);
-  const [automations, setAutomations] = useState<AdminAutomation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -32,16 +28,6 @@ export function IntelligenceSettings() {
       const res = await getAnalyticsMetricsApi({ from, to });
       setMetrics(res.metrics);
       setMetricsRange({ from, to });
-      setError(null);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
-  };
-
-  const refreshAutomations = async () => {
-    try {
-      const a = await listAutomationsApi();
-      setAutomations(a.automations);
       setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -63,7 +49,6 @@ export function IntelligenceSettings() {
     setMessage(null);
     if (tab === "analytics") refreshAnalytics();
     if (tab === "search") refreshSearch();
-    if (tab === "automations") refreshAutomations();
   }, [tab]);
 
   return (
@@ -109,17 +94,6 @@ export function IntelligenceSettings() {
         >
           <Search className="h-3.5 w-3.5" /> Full-Text Search
         </button>
-        <button
-          onClick={() => setTab("automations")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-            tab === "automations"
-              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Cpu className="h-3.5 w-3.5" /> Workflows & Automations (
-          {automations.length})
-        </button>
       </div>
 
       {/* Panels stay mounted so form state survives tab switches */}
@@ -132,14 +106,6 @@ export function IntelligenceSettings() {
           onError={setError}
           onMessage={setMessage}
           onChanged={refreshSearch}
-        />
-      </div>
-      <div className={tab === "automations" ? "" : "hidden"}>
-        <AutomationsPanel
-          automations={automations}
-          onError={setError}
-          onMessage={setMessage}
-          onChanged={refreshAutomations}
         />
       </div>
     </div>

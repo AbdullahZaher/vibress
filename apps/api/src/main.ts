@@ -52,7 +52,6 @@ import {
   publicSearchRoutes,
   adminAnalyticsRoutes,
   adminSearchRoutes,
-  adminAutomationRoutes,
 } from "./routes/intelligence";
 import { healthRoutes } from "./routes/health";
 import { setupRoutes, ensureSetupTokenConfigured } from "./routes/setup";
@@ -219,7 +218,6 @@ export const buildApp = () => {
   });
   fastify.register(adminAnalyticsRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminSearchRoutes, { prefix: "/api/admin/v1" });
-  fastify.register(adminAutomationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminOperationsRoutes, { prefix: "/api/admin/v1" });
   fastify.register(aiRoutes, { prefix: "/api/admin/v1" });
   fastify.register(collaborationRoutes, { prefix: "/api/admin/v1" });

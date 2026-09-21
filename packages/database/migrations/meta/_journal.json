@@ -211,6 +211,13 @@
       "when": 1786610000000,
       "tag": "0029_content_modeler_publication_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786611000000,
+      "tag": "0030_remove_visual_automations",
+      "breakpoints": true
     }
   ]
 }

@@ -24,8 +24,6 @@ export const QUEUE_NAMES = {
   WEBHOOK_DELIVERY: "vibress-webhook-delivery",
   SEARCH: "vibress-search",
   ANALYTICS: "vibress-analytics",
-  AUTOMATIONS_RUN: "vibress-automations",
-  AUTOMATIONS_DELAYED: "vibress-automations-delayed",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -128,22 +126,6 @@ export interface AnalyticsQueueJob {
     context?: Record<string, unknown> | null | undefined;
     properties?: Record<string, unknown> | null | undefined;
   };
-  traceparent?: string | undefined;
-}
-
-export interface AutomationRunQueueJob {
-  scope?: "publication" | "system" | undefined;
-  publicationId?: string | undefined;
-  runId: string;
-  traceparent?: string | undefined;
-}
-
-export interface AutomationDelayedQueueJob {
-  scope?: "publication" | "system" | undefined;
-  publicationId?: string | undefined;
-  runId: string;
-  stepIndex: number;
-  resumeAt: number;
   traceparent?: string | undefined;
 }
 

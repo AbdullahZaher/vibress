@@ -58,11 +58,6 @@ const DynamicCollectionEntryEditor = lazy(() =>
     default: m.DynamicCollectionEntryEditor,
   })),
 );
-const VisualAutomationBuilder = lazy(() =>
-  import("../components/automations/VisualAutomationBuilder").then((m) => ({
-    default: m.VisualAutomationBuilder,
-  })),
-);
 const TranslationMatrix = lazy(() =>
   import("../components/translations/TranslationMatrix").then((m) => ({
     default: m.TranslationMatrix,
@@ -346,12 +341,6 @@ export const adminRoutes: AdminRouteDefinition[] = [
         onNavigate={onNavigate}
       />
     ),
-  },
-  // 5. Automations & Growth Workflows
-  {
-    pattern: "/admin/automations",
-    exact: true,
-    render: () => <VisualAutomationBuilder />,
   },
   // 6. Content & Taxonomies
   {

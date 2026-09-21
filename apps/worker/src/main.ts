@@ -7,8 +7,6 @@ import { WebhookDeliveryWorker } from "./processors/webhook-delivery-worker";
 import { AnalyticsWorker } from "./processors/analytics-worker";
 import { AnalyticsRetentionSweeper } from "./processors/analytics-retention";
 import { SearchIndexerWorker } from "./processors/search-indexer-worker";
-import { AutomationRunnerWorker } from "./processors/automation-runner-worker";
-import { AutomationActionExecutor } from "./processors/automation-action-executor";
 import { WorkerSearchContentSource } from "./processors/search-content-source";
 import { NewsletterSendSchedulerWorker } from "./schedules/newsletter-send-scheduler";
 import { closeEmailQueue } from "./queues/email-queue";
@@ -69,13 +67,6 @@ searchIndexerWorker.start().catch((err) => {
   appLogger.error("[SearchIndexer] Failed to start", {}, err as Error);
 });
 
-const automationRunnerWorker = new AutomationRunnerWorker(
-  new AutomationActionExecutor(),
-);
-automationRunnerWorker.start().catch((err) => {
-  appLogger.error("[AutomationRunner] Failed to start", {}, err as Error);
-});
-
 const port = config.ports.workerHealth;
 
 const server = http.createServer((req, res) => {
@@ -134,7 +125,6 @@ const shutdown = async (signal: string) => {
     await webhookDeliveryWorker.stop();
     await analyticsWorker.stop();
     await searchIndexerWorker.stop();
-    await automationRunnerWorker.stop();
     await closeEmailQueue();
     await new Promise<void>((resolve, reject) => {
       server.close((err) => {

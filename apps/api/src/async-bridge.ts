@@ -14,7 +14,6 @@ import { DrizzlePageRepository } from "@vibress/pages";
 import { DrizzleTagRepository } from "@vibress/tags";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { getSiteUrl } from "./helpers/public-content-helpers";
-import { automationsService } from "./services";
 import { getConfig } from "@vibress/config";
 
 const ANALYTICS_QUEUE = QUEUE_NAMES.ANALYTICS;
@@ -141,26 +140,6 @@ export function startAsyncBridge(): void {
           entityId: postId,
         }).catch(() => undefined);
       }
-    });
-  }
-
-  // ---------------- Automations ----------------
-  for (const trigger of [
-    "member.created",
-    "subscription.activated",
-    "subscription.cancelled",
-    "newsletter.sent",
-    "comment.created",
-  ]) {
-    domainEvents.on(trigger, (event: DomainEvent) => {
-      automationsService
-        .handleEvent(trigger, (event.payload || {}) as Record<string, unknown>)
-        .catch((err: unknown) =>
-          console.error(
-            `[AutomationBridge] ${trigger} dispatch failed:`,
-            err instanceof Error ? err.message : String(err),
-          ),
-        );
     });
   }
 }

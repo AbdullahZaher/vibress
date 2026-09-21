@@ -32,7 +32,6 @@
     "@vibress/webhooks": "workspace:*",
     "@vibress/analytics": "workspace:*",
     "@vibress/search": "workspace:*",
-    "@vibress/automations": "workspace:*",
     "@vibress/security": "workspace:*",
     "@vibress/tags": "workspace:*",
     "@vibress/studio-renderer": "workspace:*"

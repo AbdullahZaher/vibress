@@ -77,7 +77,7 @@ export async function truncateAllTestTables(
   pool: PoolQueryClient,
 ): Promise<void> {
   await pool.query(`
-    TRUNCATE TABLE outbox_events, automations, automation_runs, search_documents,
+    TRUNCATE TABLE outbox_events, search_documents,
     comments, comment_likes, comment_reports, notifications, recommendations,
     newsletters, newsletter_preferences, newsletter_sends, email_recipients,
     email_events, email_suppressions, member_sessions, member_auth_tokens, members,

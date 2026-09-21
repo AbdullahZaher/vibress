@@ -18,7 +18,6 @@ import {
   newsletters,
   searchDocuments,
   contentTranslations,
-  automations,
   installedThemes,
   webhookEndpoints,
   analyticsEvents,
@@ -850,29 +849,6 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       expect(betaList.statusCode).toBe(200);
       const newslettersList = betaList.json().newsletters || [];
       expect(newslettersList.some((n: any) => n.id === alphaNewsId)).toBe(false);
-    });
-
-    it("automations: isolates automation workflows between publications", async () => {
-      const db = getDb();
-      const alphaAutoId = crypto.randomUUID();
-      await db.insert(automations).values({
-        id: alphaAutoId,
-        publicationId: PUB_ALPHA_ID,
-        key: `on-signup-${runId}`,
-        name: "Welcome Automation",
-        triggerEvent: "member.created",
-        status: "active",
-      });
-
-      // Beta staff queries automations -> does not see Alpha automation
-      const betaAutoRes = await app.inject({
-        method: "GET",
-        url: "/api/admin/v1/automations",
-        headers: { cookie: betaCookie, "x-publication-id": PUB_BETA_ID },
-      });
-      expect(betaAutoRes.statusCode).toBe(200);
-      const automationsList = betaAutoRes.json().automations || [];
-      expect(automationsList.some((a: any) => a.id === alphaAutoId)).toBe(false);
     });
 
     it("installed_themes: isolates installed themes per publication", async () => {

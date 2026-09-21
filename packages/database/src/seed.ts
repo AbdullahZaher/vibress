@@ -102,11 +102,6 @@ export const SYSTEM_PERMISSIONS = [
   { key: "offers.read", description: "Read discounts and offers" },
   { key: "offers.manage", description: "Create and edit offers" },
   {
-    key: "automations.manage",
-    description: "Manage event automation workflows",
-  },
-  { key: "automations.run", description: "Trigger manual automation runs" },
-  {
     key: "settings.read",
     description: "Read site and system settings (masked)",
   },
@@ -295,8 +290,6 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
     "imports.manage",
     "exports.manage",
     "offers.manage",
-    "automations.manage",
-    "automations.run",
   ]);
 
   for (const roleId of targetRoleIds) {
