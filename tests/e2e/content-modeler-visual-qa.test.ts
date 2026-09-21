@@ -22,7 +22,7 @@ async function saveScreenshot(page: any, name: string) {
 
 test.describe("Content Modeler Visual QA Suite", () => {
   test("Desktop, Mobile, Dark Mode, and Arabic RTL visual capture", async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(90000);
     // 1. Login
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("http://localhost:7777/admin/login");
@@ -51,8 +51,26 @@ test.describe("Content Modeler Visual QA Suite", () => {
     await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-list-desktop-dark");
 
+    // Arabic RTL Desktop - Model List
+    await page.evaluate(() => {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.dir = "rtl";
+      document.documentElement.lang = "ar";
+    });
+    await page.waitForTimeout(200);
+    await saveScreenshot(page, "cm-list-arabic-desktop");
+
+    // Mobile Light - Model List (390px)
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      document.documentElement.dir = "ltr";
+      document.documentElement.lang = "en";
+    });
+    await page.waitForTimeout(200);
+    await saveScreenshot(page, "cm-list-mobile-light");
+
     // 3. Open Model Builder (New Model)
-    await page.evaluate(() => document.documentElement.classList.remove("dark"));
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.click('button:has-text("Create Model"), button:has-text("Create First Model")');
     await page.waitForURL("**/admin/models/new");
     await page.waitForTimeout(300);
@@ -162,13 +180,17 @@ test.describe("Content Modeler Visual QA Suite", () => {
     await page.waitForTimeout(200);
     await saveScreenshot(page, "cm-entry-editor-mobile-dark");
 
-    // Arabic RTL Desktop - Entry Editor
-    await page.setViewportSize({ width: 1280, height: 800 });
+    // Arabic RTL Mobile (390px) - Entry Editor
     await page.evaluate(() => {
       document.documentElement.classList.remove("dark");
       document.documentElement.dir = "rtl";
       document.documentElement.lang = "ar";
     });
+    await page.waitForTimeout(300);
+    await saveScreenshot(page, "cm-entry-editor-arabic-mobile");
+
+    // Arabic RTL Desktop - Entry Editor
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.waitForTimeout(300);
     await saveScreenshot(page, "cm-entry-editor-arabic-desktop");
 
@@ -183,5 +205,10 @@ test.describe("Content Modeler Visual QA Suite", () => {
 
     // Desktop Light - Collection List with Saved Entry
     await saveScreenshot(page, "cm-collection-list-with-entry");
+
+    // Mobile Light - Collection List with Saved Entry (tests stacked card view!)
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(200);
+    await saveScreenshot(page, "cm-collection-list-mobile-cards");
   });
 });

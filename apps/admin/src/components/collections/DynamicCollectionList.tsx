@@ -255,73 +255,131 @@ export function DynamicCollectionList({
           </Button>
         </div>
       ) : (
-        <Card className="p-0 overflow-hidden shadow-2xs">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="ps-5">Title</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Updated</TableHead>
-                <TableHead className="text-end pe-5">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEntries.map((entry) => (
-                <TableRow key={entry.id} className="cursor-pointer">
-                  <TableCell
-                    className="ps-5 font-medium text-foreground hover:text-primary"
-                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                  >
-                    {entry.title}
-                  </TableCell>
-                  <TableCell
-                    className="font-mono text-xs text-muted-foreground"
-                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                  >
-                    {entry.slug}
-                  </TableCell>
-                  <TableCell onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}>
-                    {getStatusBadge(entry.status)}
-                  </TableCell>
-                  <TableCell
-                    className="text-xs text-muted-foreground"
-                    onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                  >
-                    <div className="inline-flex items-center gap-1.5">
-                      <Calendar className="h-3 w-3 text-muted-foreground/60" />
-                      <span>{new Date(entry.updatedAt).toLocaleDateString()}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-end pe-5">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Edit Entry"
-                        aria-label={`Edit ${entry.title}`}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setDeleteTarget(entry)}
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        title="Delete Entry"
-                        aria-label={`Delete ${entry.title}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+        <>
+          {/* 1. Desktop & Tablet Table View */}
+          <div className="hidden sm:block rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="ps-5">Title</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Updated</TableHead>
+                  <TableHead className="text-end pe-5">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHeader>
+              <TableBody>
+                {filteredEntries.map((entry) => (
+                  <TableRow key={entry.id} className="cursor-pointer">
+                    <TableCell
+                      className="ps-5 font-medium text-foreground hover:text-primary"
+                      onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                    >
+                      {entry.title}
+                    </TableCell>
+                    <TableCell
+                      className="font-mono text-xs text-muted-foreground"
+                      onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                    >
+                      {entry.slug}
+                    </TableCell>
+                    <TableCell onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}>
+                      {getStatusBadge(entry.status)}
+                    </TableCell>
+                    <TableCell
+                      className="text-xs text-muted-foreground"
+                      onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 text-muted-foreground/60" />
+                        <span>{new Date(entry.updatedAt).toLocaleDateString()}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-end pe-5">
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                          className="text-muted-foreground hover:text-foreground"
+                          title="Edit Entry"
+                          aria-label={`Edit ${entry.title}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setDeleteTarget(entry)}
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Delete Entry"
+                          aria-label={`Delete ${entry.title}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* 2. Mobile Responsive Stacked Card View (<640px) */}
+          <div className="sm:hidden space-y-3">
+            {filteredEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1 min-w-0 text-start">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                      className="font-semibold text-xs text-foreground hover:text-primary transition-colors cursor-pointer text-start line-clamp-2"
+                    >
+                      {entry.title}
+                    </button>
+                    <span className="text-[11px] text-muted-foreground font-mono block truncate">
+                      /{entry.slug}
+                    </span>
+                  </div>
+                  <div className="shrink-0">{getStatusBadge(entry.status)}</div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-2 border-t border-border/40">
+                  <div className="inline-flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3 text-muted-foreground/60" />
+                    <span>{new Date(entry.updatedAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Edit Entry"
+                      aria-label={`Edit ${entry.title}`}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDeleteTarget(entry)}
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title="Delete Entry"
+                      aria-label={`Delete ${entry.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Accessible Confirmation Modal Dialog */}

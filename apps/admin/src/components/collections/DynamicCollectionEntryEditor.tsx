@@ -21,6 +21,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../ui
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Switch } from "../ui/switch";
+import { Checkbox } from "../ui/checkbox";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Spinner } from "../ui/spinner";
 
@@ -499,11 +500,10 @@ export function DynamicCollectionEntryEditor({
                               key={String(opt.value)}
                               className="flex items-center gap-2 text-xs text-foreground hover:text-primary cursor-pointer select-none p-1 rounded hover:bg-muted/40 transition-colors"
                             >
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
                                     onFieldValChange([...selectedList, String(opt.value)]);
                                   } else {
                                     onFieldValChange(
@@ -511,7 +511,6 @@ export function DynamicCollectionEntryEditor({
                                     );
                                   }
                                 }}
-                                className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
                               />
                               <span className="truncate">{opt.label}</span>
                             </label>
@@ -834,11 +833,10 @@ export function DynamicCollectionEntryEditor({
                                       : "hover:bg-muted text-foreground"
                                   }`}
                                 >
-                                  <input
-                                    type="checkbox"
+                                  <Checkbox
                                     checked={isChecked}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
                                         if (selectedIds.length < 100) {
                                           onFieldValChange([...selectedIds, item.id]);
                                         }
@@ -848,7 +846,6 @@ export function DynamicCollectionEntryEditor({
                                         );
                                       }
                                     }}
-                                    className="rounded border-border text-primary h-3.5 w-3.5"
                                   />
                                   <span className="truncate">{item.title}</span>
                                   <span className="text-muted-foreground font-mono text-[10px] truncate ms-auto">
@@ -879,7 +876,7 @@ export function DynamicCollectionEntryEditor({
                         <Code className="h-3.5 w-3.5 text-muted-foreground" />
                         <span>{field.name} {field.required && <span className="text-destructive">*</span>} (JSON)</span>
                       </label>
-                      <textarea
+                      <Textarea
                         rows={5}
                         required={field.required}
                         value={jsonString}
@@ -891,7 +888,7 @@ export function DynamicCollectionEntryEditor({
                             onFieldValChange(e.target.value);
                           }
                         }}
-                        className="w-full px-3 py-2 border border-border/80 rounded-lg bg-slate-950 text-slate-100 dark:bg-black/60 font-mono text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="font-mono text-xs bg-muted/30 text-foreground"
                         placeholder='{ "key": "value" }'
                       />
                     </div>
