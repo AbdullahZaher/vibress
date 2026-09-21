@@ -94,15 +94,17 @@ test.describe("Phase 1-10: Member Portal End-to-End Certification Flow", () => {
     // ----------------------------------------------------
     // 3. Portal Localization: Arabic RTL Switch
     // ----------------------------------------------------
-    // Switch to Arabic
-    await page.click('button:has-text("العربية")');
+    // Switch to Arabic via modern select menu
+    await page.click("#portal-language-selector");
+    await page.click("#portal-lang-ar");
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
     await expect(page.locator("html")).toHaveAttribute("lang", "ar");
     await expect(page.locator("h1")).toContainText("حسابك");
     await expect(page.locator("body")).toContainText("معلومات الملف الشخصي");
 
-    // Switch back to English
-    await page.click('button:has-text("English")');
+    // Switch back to English via modern select menu
+    await page.click("#portal-language-selector");
+    await page.click("#portal-lang-en");
     await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.locator("h1")).toContainText("Your account");

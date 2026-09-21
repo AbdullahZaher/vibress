@@ -175,7 +175,7 @@ export function PlansPage() {
                           onClick={() => startCheckout(plan)}
                           disabled={isProcessing}
                           loading={isProcessing}
-                          className="w-full"
+                          className="w-full h-11 sm:h-12 text-sm sm:text-base font-bold rounded-xl shadow-xs"
                           variant="primary"
                         >
                           {isProcessing
@@ -193,13 +193,13 @@ export function PlansPage() {
         {/* Back to Account CTA */}
         <div className="pt-6 border-t border-border/60 flex items-center justify-start">
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
+            size="default"
             onClick={() => navigate("/account")}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground h-10 px-4 text-sm font-medium rounded-xl border-border/80 shadow-2xs gap-2"
           >
-            <ArrowLeft className="size-4 rtl:rotate-180 me-1.5" />
-            {t("portal.account_title")}
+            <ArrowLeft className="size-4 rtl:rotate-180" />
+            <span>{t("portal.account_title")}</span>
           </Button>
         </div>
       </main>

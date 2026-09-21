@@ -9,7 +9,6 @@ import { useTranslation } from "../lib/i18n";
 import {
   Card,
   CardHeader,
-  CardTitle,
   CardDescription,
   CardContent,
   Button,
@@ -98,8 +97,8 @@ export function AccountPage() {
       setMessage(t("portal.profile_saved"));
       broadcastAuthEvent("REFRESH");
     } catch (err) {
-      if (err instanceof MemberApiError && err.status === 401) {
-        setAuthError(true);
+      if (err instanceof MemberApiError) {
+        setSaveError(err.message);
       } else {
         setSaveError(t("common.error"));
       }
@@ -112,12 +111,11 @@ export function AccountPage() {
     e.preventDefault();
     if (!newEmail.trim()) return;
     setRequestingEmailChange(true);
-    setEmailChangeError(null);
     setEmailChangeStatus(null);
+    setEmailChangeError(null);
     try {
       await memberApi.requestEmailChange(newEmail.trim());
       setEmailChangeStatus(t("portal.change_link_sent"));
-      setNewEmail("");
     } catch (err) {
       if (err instanceof MemberApiError) {
         setEmailChangeError(err.message);
@@ -185,8 +183,9 @@ export function AccountPage() {
           <CardContent className="pt-2">
             <Button
               id="account-signin-redirect"
+              size="default"
               onClick={() => navigate("/sign-in")}
-              className="w-full h-9 text-xs sm:text-sm font-semibold shadow-2xs"
+              className="w-full h-11 text-sm font-bold shadow-2xs rounded-xl"
             >
               {t("portal.return_signin")}
             </Button>
@@ -219,21 +218,21 @@ export function AccountPage() {
         </div>
 
         {/* Profile Card */}
-        <Card className="border border-border/80 shadow-sm overflow-hidden text-start">
+        <Card className="border border-border/80 shadow-sm overflow-hidden text-start rounded-2xl">
           <CardHeader className="p-5 sm:p-6 border-b border-border/60 bg-muted/15">
-            <div className="flex items-center gap-3.5">
+            <div className="flex items-center gap-4">
               <Avatar
                 fallback={member.name || member.email}
                 size="lg"
-                className="border-2 border-border shadow-2xs"
+                className="size-14 text-base font-bold border-2 border-border shadow-2xs"
               />
-              <div className="space-y-0.5 min-w-0">
+              <div className="space-y-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground truncate">
                   {member.name || "Vibress Member"}
                 </h2>
                 <p
                   id="member-email-display"
-                  className="text-xs text-muted-foreground font-mono truncate"
+                  className="text-xs sm:text-sm text-muted-foreground font-mono truncate"
                 >
                   {member.email}
                 </p>
@@ -244,38 +243,38 @@ export function AccountPage() {
           <CardContent className="p-5 sm:p-6 space-y-6">
             {/* Account Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl bg-card border border-border/70 shadow-2xs space-y-2">
-                <div className="flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-card border border-border/70 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <Mail className="size-3.5" />
+                    <Mail className="size-4" />
                     <span>{t("portal.email")}</span>
                   </span>
                   <Button
                     type="button"
                     id="btn-open-change-email"
                     variant="outline"
-                    size="xs"
+                    size="sm"
                     onClick={() => {
                       setShowEmailModal(true);
                       setEmailChangeStatus(null);
                       setEmailChangeError(null);
                     }}
-                    className="h-6 text-[11px] px-2 border-border/80"
+                    className="h-8.5 px-3 text-xs font-semibold rounded-lg border-border/80 shadow-2xs"
                   >
                     {t("portal.change_email")}
                   </Button>
                 </div>
-                <p className="text-xs font-mono font-medium text-foreground truncate">
+                <p className="text-xs sm:text-sm font-mono font-medium text-foreground truncate">
                   {member.email}
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-card border border-border/70 shadow-2xs space-y-1">
+              <div className="p-4 rounded-xl bg-card border border-border/70 shadow-2xs space-y-1.5">
                 <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Calendar className="size-3.5" />
+                  <Calendar className="size-4" />
                   <span>{t("nav.members") || "Member Since"}</span>
                 </span>
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-xs sm:text-sm font-medium text-foreground">
                   {formatDate(new Date(member.createdAt), {
                     year: "numeric",
                     month: "long",
@@ -286,15 +285,17 @@ export function AccountPage() {
             </div>
 
             {/* Edit Name Form */}
-            <div className="space-y-3 pt-2">
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <div className="space-y-3.5 pt-2">
+              <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
                 <User className="size-4 text-primary" />
                 <span>{t("portal.profile")}</span>
               </h3>
 
-              <form onSubmit={handleSave} className="space-y-3">
+              <form onSubmit={handleSave} className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">{t("portal.name")}</Label>
+                  <Label htmlFor="name" className="text-xs sm:text-sm font-medium">
+                    {t("portal.name")}
+                  </Label>
                   <Input
                     id="name"
                     type="text"
@@ -302,7 +303,7 @@ export function AccountPage() {
                     placeholder={t("portal.name_placeholder")}
                     onChange={(e) => setName(e.target.value)}
                     maxLength={200}
-                    className="h-9 text-xs sm:text-sm"
+                    className="h-10 sm:h-11 text-sm rounded-xl"
                   />
                 </div>
 
@@ -312,11 +313,11 @@ export function AccountPage() {
                 <Button
                   id="btn-save-profile"
                   type="submit"
-                  size="sm"
+                  size="default"
                   loading={saving}
-                  className="font-semibold shadow-2xs gap-1.5"
+                  className="font-bold shadow-2xs gap-2 rounded-xl h-10 sm:h-11 px-5 text-sm"
                 >
-                  <Save className="size-3.5" />
+                  <Save className="size-4" />
                   <span>
                     {saving ? t("portal.saving") : t("portal.save_profile")}
                   </span>
@@ -334,9 +335,9 @@ export function AccountPage() {
             <NotificationsSection authLost={() => setAuthError(true)} />
 
             {/* Danger Zone: Account Deletion & Logout */}
-            <div className="pt-6 border-t border-red-500/20 space-y-3">
+            <div className="pt-6 border-t border-red-500/20 space-y-4">
               <div className="space-y-0.5">
-                <h3 className="text-sm font-bold text-destructive flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-destructive flex items-center gap-2">
                   <AlertTriangle className="size-4" />
                   <span>Account Actions</span>
                 </h3>
@@ -350,11 +351,11 @@ export function AccountPage() {
                   id="btn-open-delete-account"
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={() => setShowDeleteModal(true)}
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-red-500/30 gap-1.5 text-xs font-semibold"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-red-500/40 gap-2 text-xs sm:text-sm font-bold rounded-xl h-10 sm:h-11 px-5 shadow-2xs"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-4" />
                   <span>{t("portal.delete_account")}</span>
                 </Button>
 
@@ -362,11 +363,11 @@ export function AccountPage() {
                   id="btn-sign-out"
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="default"
                   onClick={handleLogout}
-                  className="text-muted-foreground hover:text-foreground gap-1.5 text-xs font-semibold"
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted/70 gap-2 text-xs sm:text-sm font-semibold rounded-xl h-10 sm:h-11 px-5"
                 >
-                  <LogOut className="size-3.5 rtl:rotate-180" />
+                  <LogOut className="size-4 rtl:rotate-180" />
                   <span>{t("portal.sign_out")}</span>
                 </Button>
               </div>
@@ -386,11 +387,11 @@ export function AccountPage() {
         >
           <form onSubmit={handleRequestEmailChange} className="space-y-4">
             <div className="space-y-1.5 text-start">
-              <Label htmlFor="new-email" required>
+              <Label htmlFor="new-email" required className="text-xs sm:text-sm font-medium">
                 {t("portal.new_email")}
               </Label>
               <div className="relative">
-                <Mail className="absolute start-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+                <Mail className="absolute start-3.5 top-3.5 size-4 text-muted-foreground pointer-events-none" />
                 <Input
                   id="new-email"
                   type="email"
@@ -398,7 +399,7 @@ export function AccountPage() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder={t("portal.new_email_placeholder")}
-                  className="ps-9 h-9 text-xs sm:text-sm"
+                  className="ps-10 h-11 text-sm rounded-xl"
                 />
               </div>
             </div>
@@ -413,21 +414,22 @@ export function AccountPage() {
               </Alert>
             )}
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/60">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 pt-4 border-t border-border/60">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={() => setShowEmailModal(false)}
+                className="w-full sm:w-auto h-10 sm:h-11 px-4 text-sm font-medium rounded-xl"
               >
                 {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
                 id="btn-confirm-email-change"
-                size="sm"
+                size="default"
                 loading={requestingEmailChange}
-                className="font-semibold shadow-2xs"
+                className="w-full sm:w-auto font-bold shadow-2xs h-10 sm:h-11 px-5 text-sm rounded-xl"
               >
                 {requestingEmailChange
                   ? t("portal.saving")
@@ -448,7 +450,7 @@ export function AccountPage() {
           description={t("portal.delete_confirm_desc")}
         >
           <div className="space-y-4 text-start">
-            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs leading-relaxed flex items-start gap-2.5">
+            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm leading-relaxed flex items-start gap-2.5">
               <AlertTriangle className="size-4 shrink-0 mt-0.5" />
               <span>
                 This will permanently delete your member account, active
@@ -461,12 +463,13 @@ export function AccountPage() {
               <Alert variant="destructive">{deleteError}</Alert>
             )}
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border/60">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 pt-4 border-t border-border/60">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={() => setShowDeleteModal(false)}
+                className="w-full sm:w-auto h-10 sm:h-11 px-4 text-sm font-medium rounded-xl"
               >
                 {t("common.cancel")}
               </Button>
@@ -474,10 +477,10 @@ export function AccountPage() {
                 type="button"
                 id="btn-confirm-delete-account"
                 variant="destructive"
-                size="sm"
+                size="default"
                 loading={deleting}
                 onClick={handleDeleteAccount}
-                className="font-semibold shadow-2xs"
+                className="w-full sm:w-auto font-bold shadow-2xs h-10 sm:h-11 px-5 text-sm rounded-xl"
               >
                 {deleting
                   ? t("portal.deleting")

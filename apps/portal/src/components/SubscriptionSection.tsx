@@ -119,7 +119,7 @@ export function SubscriptionSection({ authLost }: Props) {
   };
 
   return (
-    <div className="space-y-3 pt-6 border-t border-border/80">
+    <div className="space-y-4 pt-6 border-t border-border/80">
       <div className="flex items-center justify-between">
         <div className="space-y-0.5 text-start">
           <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -135,11 +135,11 @@ export function SubscriptionSection({ authLost }: Props) {
       {error && <Alert variant="destructive">{error}</Alert>}
 
       {subscriptions.length === 0 ? (
-        <Card className="border border-border/80 bg-muted/20 p-5 text-start">
+        <Card className="border border-border/80 bg-muted/20 p-5 text-start rounded-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-semibold text-foreground">
+                <h4 className="text-sm sm:text-base font-bold text-foreground">
                   {t("portal.free_plan")}
                 </h4>
                 <Badge variant="secondary">Current</Badge>
@@ -150,12 +150,12 @@ export function SubscriptionSection({ authLost }: Props) {
             </div>
             <Button
               id="btn-view-plans"
-              size="sm"
+              size="default"
               onClick={() => navigate("/plans")}
-              className="gap-1.5 shrink-0 shadow-2xs font-semibold"
+              className="gap-2 shrink-0 shadow-2xs font-bold rounded-xl h-10 sm:h-11 px-5"
             >
               <span>{t("portal.upgrade_plan")}</span>
-              <ArrowUpRight className="size-3.5" />
+              <ArrowUpRight className="size-4" />
             </Button>
           </div>
         </Card>
@@ -164,18 +164,18 @@ export function SubscriptionSection({ authLost }: Props) {
           {subscriptions.map((sub) => (
             <Card
               key={sub.id}
-              className="border border-border/80 shadow-2xs overflow-hidden text-start"
+              className="border border-border/80 shadow-2xs overflow-hidden text-start rounded-xl"
             >
-              <CardHeader className="p-4 sm:p-5 pb-3">
+              <CardHeader className="p-5 pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <CardTitle className="text-base font-bold text-foreground">
+                      <CardTitle className="text-base sm:text-lg font-bold text-foreground">
                         {sub.planName}
                       </CardTitle>
                       {getStatusBadge(sub.status)}
                     </div>
-                    <CardDescription className="text-xs text-muted-foreground font-mono">
+                    <CardDescription className="text-xs sm:text-sm text-muted-foreground font-mono">
                       {sub.status !== "free" && (
                         <>
                           {formatCurrency(sub.amountMinor / 100, sub.currency)}
@@ -189,18 +189,18 @@ export function SubscriptionSection({ authLost }: Props) {
                 </div>
               </CardHeader>
 
-              <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
+              <CardContent className="p-5 pt-0 space-y-3">
                 {sub.trialEnd && sub.status === "trialing" && (
-                  <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-400 text-xs flex items-center gap-2">
-                    <Calendar className="size-3.5 shrink-0" />
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-400 text-xs flex items-center gap-2">
+                    <Calendar className="size-4 shrink-0" />
                     <span>Trial ends {formatDate(new Date(sub.trialEnd))}</span>
                   </div>
                 )}
 
                 {sub.currentPeriodEnd &&
                   ["active", "past_due", "unpaid"].includes(sub.status) && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Calendar className="size-3.5 text-muted-foreground" />
+                    <div className="text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                      <Calendar className="size-4 text-muted-foreground" />
                       <span>
                         {sub.status === "past_due" || sub.status === "unpaid"
                           ? "Payment failed — update your payment method to keep access."
@@ -210,8 +210,8 @@ export function SubscriptionSection({ authLost }: Props) {
                   )}
 
                 {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                  <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                    <AlertTriangle className="size-3.5 shrink-0" />
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                    <AlertTriangle className="size-4 shrink-0" />
                     <span>
                       Cancellation scheduled for period end
                       {sub.currentPeriodEnd
@@ -222,17 +222,17 @@ export function SubscriptionSection({ authLost }: Props) {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-2.5 pt-2 flex-wrap border-t border-border/40">
+                <div className="flex items-center gap-3 pt-3 flex-wrap border-t border-border/60">
                   {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
                     <Button
-                      size="sm"
+                      size="default"
                       onClick={() =>
                         runAction("resume", () =>
                           memberApi.resumeSubscription(sub.id),
                         )
                       }
                       loading={action === "resume"}
-                      className="font-semibold shadow-2xs"
+                      className="font-bold shadow-2xs rounded-xl h-10 px-4"
                     >
                       {action === "resume" ? t("portal.saving") : "Resume membership"}
                     </Button>
@@ -241,7 +241,7 @@ export function SubscriptionSection({ authLost }: Props) {
                   {!sub.cancelAtPeriodEnd &&
                     ["active", "trialing", "past_due"].includes(sub.status) && (
                       <Button
-                        size="sm"
+                        size="default"
                         variant="outline"
                         onClick={() =>
                           runAction("cancel", () =>
@@ -249,7 +249,7 @@ export function SubscriptionSection({ authLost }: Props) {
                           )
                         }
                         loading={action === "cancel"}
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive border-border/80 text-xs"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive border-border/80 text-xs sm:text-sm font-semibold rounded-xl h-10 px-4"
                       >
                         {action === "cancel"
                           ? t("portal.saving")
@@ -259,16 +259,16 @@ export function SubscriptionSection({ authLost }: Props) {
 
                   {["active", "past_due", "unpaid"].includes(sub.status) && (
                     <Button
-                      size="sm"
+                      size="default"
                       variant="outline"
                       onClick={openBillingPortal}
                       loading={action === "portal"}
-                      className="text-xs border-border/80 shadow-2xs gap-1.5"
+                      className="text-xs sm:text-sm font-semibold border-border/80 shadow-2xs gap-1.5 rounded-xl h-10 px-4"
                     >
                       <span>
                         {action === "portal" ? t("portal.saving") : t("portal.manage_sub")}
                       </span>
-                      <ArrowUpRight className="size-3.5" />
+                      <ArrowUpRight className="size-4" />
                     </Button>
                   )}
                 </div>

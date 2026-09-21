@@ -54,6 +54,16 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
     throw new Error(`could not extract token from email to ${to}`);
   }
 
+  async function selectLanguage(page: any, lang: "en" | "ar") {
+    const selector = page.locator("#portal-language-selector");
+    if (await selector.isVisible()) {
+      await selector.click();
+      await page.waitForTimeout(60);
+    }
+    await page.click(lang === "en" ? "#portal-lang-en" : "#portal-lang-ar");
+    await page.waitForTimeout(100);
+  }
+
   // 1. Sign In Page: Viewport & Locale Matrix
   test("1. Sign In Page Visual & Responsive Matrix (EN/AR, Light/Dark, 320/390/768/1280/1920)", async ({
     page,
@@ -71,8 +81,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
 
       // English Light
       await page.goto(`${API}/portal/#/sign-in`);
-      await page.click('button:has-text("English")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "en");
       await expect(page.locator("h1")).toContainText("Vibress");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `signin-en-light-${vp.name}.png`),
@@ -86,8 +95,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
       expect(hasOverflow).toBe(false);
 
       // Arabic RTL
-      await page.click('button:has-text("العربية")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "ar");
       await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `signin-ar-light-${vp.name}.png`),
@@ -103,8 +111,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
       });
 
       // English Dark Mode
-      await page.click('button:has-text("English")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "en");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `signin-en-dark-${vp.name}.png`),
         fullPage: true,
@@ -132,8 +139,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
     });
 
     // AR Light
-    await page.click('button:has-text("العربية")');
-    await page.waitForTimeout(100);
+    await selectLanguage(page, "ar");
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, "check-email-ar-light-mobile.png"),
       fullPage: true,
@@ -148,7 +154,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
 
     // Desktop View
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.click('button:has-text("English")');
+    await selectLanguage(page, "en");
     await page.evaluate(() => document.documentElement.classList.remove("dark"));
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, "check-email-en-light-desktop.png"),
@@ -169,8 +175,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
     });
 
     // AR Light
-    await page.click('button:has-text("العربية")');
-    await page.waitForTimeout(100);
+    await selectLanguage(page, "ar");
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, "verify-error-ar-light-mobile.png"),
       fullPage: true,
@@ -213,15 +218,14 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
 
       // EN Light Account
-      await page.click('button:has-text("English")');
+      await selectLanguage(page, "en");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `account-en-light-${vp.name}.png`),
         fullPage: true,
       });
 
       // AR Light Account
-      await page.click('button:has-text("العربية")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "ar");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `account-ar-light-${vp.name}.png`),
         fullPage: true,
@@ -237,6 +241,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
 
       // Reset dark mode
       await page.evaluate(() => document.documentElement.classList.remove("dark"));
+      await page.waitForTimeout(100);
     }
 
     // Modal Visual QA
@@ -254,7 +259,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
     await expect(page.locator("#modal-change-email")).toBeHidden();
 
     // Open Delete Account Modal in EN
-    await page.click('button:has-text("English")');
+    await selectLanguage(page, "en");
     await page.click("#btn-open-delete-account");
     await expect(page.locator("#modal-delete-account")).toBeVisible();
     await page.screenshot({
@@ -277,8 +282,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
       await page.goto(`${API}/portal/#/plans`);
 
       // EN Light
-      await page.click('button:has-text("English")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "en");
       await expect(page.locator("h1")).toContainText("Membership Plans");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `plans-en-light-${vp.name}.png`),
@@ -286,8 +290,7 @@ test.describe("Portal Visual Redesign & Responsiveness QA Suite", () => {
       });
 
       // AR Light
-      await page.click('button:has-text("العربية")');
-      await page.waitForTimeout(100);
+      await selectLanguage(page, "ar");
       await page.screenshot({
         path: path.join(SCREENSHOT_DIR, `plans-ar-light-${vp.name}.png`),
         fullPage: true,

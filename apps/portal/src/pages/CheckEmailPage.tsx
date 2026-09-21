@@ -5,7 +5,6 @@ import { useTranslation, LanguageSwitcher } from "../lib/i18n";
 import {
   Card,
   CardHeader,
-  CardTitle,
   CardDescription,
   CardContent,
   CardFooter,
@@ -87,19 +86,20 @@ export function CheckEmailPage() {
             {error && <Alert variant="destructive">{error}</Alert>}
 
             <div className="space-y-2 text-start pt-1">
-              <Label htmlFor="resend-email">
+              <Label htmlFor="resend-email" className="text-xs sm:text-sm font-medium">
                 {t("portal.email_label")} (resend to another email)
               </Label>
               <div className="relative">
-                <Mail className="absolute start-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+                <Mail className="absolute start-3.5 top-3.5 size-4 text-muted-foreground pointer-events-none" />
                 <Input
                   id="resend-email"
                   type="email"
                   autoComplete="email"
+                  inputMode="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t("portal.email_placeholder")}
-                  className="ps-9 h-9 text-xs sm:text-sm"
+                  className="ps-10 h-11 sm:h-12 text-sm sm:text-base rounded-xl"
                 />
               </div>
             </div>
@@ -110,31 +110,31 @@ export function CheckEmailPage() {
               onClick={handleResend}
               disabled={cooldown > 0 || !email.trim() || sending}
               loading={sending}
-              className="w-full h-9 text-xs sm:text-sm font-semibold gap-2 border-border/80 shadow-2xs"
+              className="w-full h-11 sm:h-12 text-sm sm:text-base font-bold gap-2 border-border/80 shadow-2xs rounded-xl"
             >
               {cooldown > 0 ? (
                 <>
-                  <RefreshCw className="size-3.5 animate-spin" />
+                  <RefreshCw className="size-4 animate-spin" />
                   <span>
                     {t("portal.send_magic_link")} ({cooldown}s)
                   </span>
                 </>
               ) : (
                 <>
-                  <Send className="size-3.5" />
+                  <Send className="size-4" />
                   <span>{t("portal.send_magic_link")}</span>
                 </>
               )}
             </Button>
           </CardContent>
 
-          <CardFooter className="border-t border-border/60 pt-3.5 pb-4 text-center justify-center">
+          <CardFooter className="border-t border-border/60 pt-4 pb-5 text-center justify-center">
             <Button
               variant="link"
               onClick={() => navigate("/sign-in")}
-              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
+              className="text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-2"
             >
-              <ArrowLeft className="size-3.5 rtl:rotate-180" />
+              <ArrowLeft className="size-4 rtl:rotate-180" />
               <span>{t("portal.return_signin")}</span>
             </Button>
           </CardFooter>

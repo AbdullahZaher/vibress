@@ -5,7 +5,6 @@ import { useTranslation, LanguageSwitcher } from "../lib/i18n";
 import {
   Card,
   CardHeader,
-  CardTitle,
   CardDescription,
   CardContent,
   Button,
@@ -184,9 +183,9 @@ export function VerifyPage({ token }: { token: string }) {
                 <Button
                   id="verify-return-signin"
                   onClick={() => navigate("/sign-in")}
-                  className="w-full h-9 text-xs sm:text-sm font-semibold gap-2 shadow-2xs"
+                  className="w-full h-11 sm:h-12 text-sm sm:text-base font-bold gap-2.5 shadow-xs rounded-xl"
                 >
-                  <ArrowLeft className="size-3.5 rtl:rotate-180" />
+                  <ArrowLeft className="size-4 rtl:rotate-180" />
                   <span>{t("portal.return_signin")}</span>
                 </Button>
               </CardContent>
