@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { getConfig } from "@vibress/config";
 
 export interface StaffInvitationEmail {
@@ -16,7 +16,7 @@ export interface StaffPasswordResetEmail {
 }
 
 export class SmtpStaffAuthMailer {
-  private transporter: nodemailer.Transporter;
+  private transporter: Transporter;
   private from: string;
 
   constructor() {
