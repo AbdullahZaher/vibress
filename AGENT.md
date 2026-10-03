@@ -1,1471 +1,1222 @@
-# AGENT.md — Vibress Agent Execution Rules
+# AGENT.md — Vibress Global Platform AI Engineering Agent
 
-These instructions are mandatory for every coding task in the Vibress ecosystem.
+These instructions are mandatory for every AI engineering task in the Vibress ecosystem.
 
-Primary objective:
+Vibress is a production-grade, self-hostable publishing platform and CMS. Treat it as a long-lived global platform in the same product category as mature systems such as WordPress, Ghost, and Drupal — not as a small application, prototype, internal dashboard, or disposable codebase.
 
-> **Deliver correct, production-quality changes with the minimum necessary
-> exploration, commands, tests, and token usage.**
+The governing principle is:
 
-Speed matters.
+> Build Vibress as a stable, extensible, secure, globally usable publishing platform while making the smallest correct change required by the current task.
 
-Correctness, security, data integrity, architecture boundaries, and regression
-safety must not be sacrificed for speed.
+Correctness, security, data integrity, backward compatibility, upgrade safety, architecture boundaries, extensibility, internationalization, accessibility, operational reliability, and regression safety take priority over speed.
 
 ---
 
-# 1. Default Execution Philosophy
+# 1. Mandatory Role-Based Engineering Review
 
-Use:
+Before coding any non-trivial task, perform a short Role-Based Engineering Review.
 
-```text
-Understand narrowly
-→ inspect relevant code
-→ make focused change
-→ run focused validation
-→ continue
-→ run full validation once at the final gate
-```
+Do not immediately begin editing code.
 
-Do NOT use:
+Select only the roles relevant to the task. Typical roles include:
 
-```text
-scan entire repository
-→ run every test
-→ inspect hundreds of unrelated files
-→ make one tiny change
-→ run every test again
-→ repeat
-```
+- Platform Architect
+- Domain Architect
+- Security Reviewer
+- Database Engineer
+- API Designer
+- Backend Implementer
+- Frontend Engineer
+- UX / Accessibility Reviewer
+- Internationalization / RTL Reviewer
+- Plugin / Extension Architect
+- Theme Compatibility Reviewer
+- Performance Engineer
+- Reliability / Operations Engineer
+- Migration / Upgrade Reviewer
+- QA Engineer
+- Test Automation Engineer
+- Documentation / Developer Experience Reviewer
 
-Avoid unnecessary work.
+Do not mechanically use every role. Choose the smallest useful set.
 
----
-
-# 2. Never Re-Analyze the Entire Repository
-
-Do not repeatedly inspect the whole repository.
-
-The Vibress architecture is already established.
-
-Unless the task explicitly changes architecture, assume the documented
-architecture remains authoritative.
-
-For normal tasks, inspect only:
-
-```text
-directly affected package
-direct dependencies
-direct consumers
-relevant tests
-relevant documentation
-```
-
-Do not recursively read unrelated domains.
-
----
-
-# 3. Read Documentation Selectively
-
-Do not read all `docs/` for every task.
-
-Read only documentation relevant to the requested batch or subsystem.
-
-Example:
-
-Media task:
-
-```text
-docs/03-domains/media*
-docs/07-storage/*
-docs/09-studio/*media*
-docs/10-api/*media*
-```
-
-Do not automatically read every architecture document again.
-
----
-
-# 4. Use Search Before Opening Files
-
-Before manually opening many files:
-
-use repository search tools.
-
-Prefer targeted searches such as:
-
-```bash
-rg "MediaService|media_assets|MediaPicker" packages apps tests
-```
-
-instead of browsing directories file-by-file.
-
-Use:
-
-```text
-rg
-git grep
-find with narrow paths
-```
-
-to locate implementation points quickly.
-
----
-
-# 5. Do Not Dump Huge Files Unnecessarily
-
-Never print entire large files unless the whole file is genuinely needed.
-
-Prefer:
-
-```bash
-sed -n '120,220p' file.ts
-```
-
-or targeted search/context.
-
-Read the smallest relevant code region first.
-
-Expand only if necessary.
-
----
-
-# 6. Batch File Inspection
-
-When several related files are needed, inspect them together.
-
-Bad:
-
-```text
-open file A
-think
-open file B
-think
-open file C
-think
-```
-
-Preferred:
-
-```text
-identify A/B/C
-read relevant sections together
-form one implementation plan
-edit together
-```
-
-Minimize tool round trips.
-
----
-
-# 7. Do Not Re-Read Unchanged Files
-
-Once a file has been inspected and not changed externally, do not repeatedly
-reopen it unless:
-
-```text
-a later change affects its assumptions
-a test failure points back to it
-verification requires it
-```
-
-Use working memory.
-
----
-
-# 8. Make a Focused Plan Once
-
-For non-trivial tasks, create one short internal execution plan.
-
-Example:
-
-```text
-1. schema
-2. repository/service
-3. API
-4. UI
-5. focused tests
-6. final validation
-```
-
-Do not continually rewrite the plan.
-
-Do not generate extensive planning documents before coding unless explicitly
-requested.
-
----
-
-# 9. Prefer Existing Patterns
-
-Before inventing architecture, find one existing analogous implementation.
-
-Example:
-
-For a new API route, inspect one existing Vibress route with:
-
-```text
-auth
-Zod validation
-error mapping
-audit
-```
-
-Then follow that pattern.
-
-Do not study five different routes when one representative example is enough.
-
----
-
-# 10. No Opportunistic Refactoring
-
-Do not refactor unrelated code.
-
-Do not:
-
-```text
-rename unrelated files
-reformat entire packages
-rewrite working abstractions
-modernize unrelated dependencies
-clean old warnings
-reorganize directories
-```
-
-unless required to complete the task safely.
-
-Keep diffs focused.
-
----
-
-# 11. Fix Only Relevant Pre-Existing Problems
-
-If an unrelated pre-existing warning/error is discovered:
-
-document it.
-
-Do not fix it unless:
-
-```text
-it blocks the requested task
-or
-the fix is trivial, safe, and directly adjacent
-```
-
-Never let a batch turn into repository cleanup.
-
----
-
-# 12. Do Not Chase Existing Technical Debt
-
-Known technical debt includes, unless explicitly scheduled otherwise:
-
-```text
-Nx + Next.js orchestration issue
-Studio local file: package linking
-existing lint warnings
-```
-
-Do not spend task time solving these.
-
----
-
-# 13. Focused Tests During Development
-
-During implementation, run only tests relevant to the current change.
-
-Examples:
-
-```bash
-pnpm vitest packages/domains/media
-```
+Typical minimums:
 
-or:
+- Normal feature: Platform Architect, Implementer, Security Reviewer when relevant, QA Engineer.
+- Database work: Domain Architect, Database Engineer, Migration / Upgrade Reviewer, Security Reviewer when relevant, QA Engineer.
+- Admin/public UI: Frontend Engineer, UX / Accessibility Reviewer, Internationalization / RTL Reviewer, Security Reviewer when relevant, QA Engineer.
+- Plugin work: Platform Architect, Plugin / Extension Architect, Compatibility Reviewer, Security Reviewer, QA Engineer.
+- Theme/rendering work: Platform Architect, Theme Compatibility Reviewer, Internationalization / RTL Reviewer, QA Engineer.
 
-```bash
-pnpm vitest apps/api/src/__tests__/media-upload.test.ts
-```
+Each role must provide one short, concrete perspective about a design constraint, risk, compatibility concern, or verification requirement.
 
-or the repository's equivalent focused command.
+Then synthesize the perspectives into one implementation plan.
 
-Do not run the entire test suite after every edit.
+Required pre-implementation shape:
 
----
-
-# 14. Test Escalation Strategy
-
-Use this escalation order:
-
-```text
-Level 1 — affected unit test
-Level 2 — affected package/domain tests
-Level 3 — affected integration tests
-Level 4 — affected E2E scenario
-Level 5 — full repository validation
-```
-
-Only escalate when the previous level passes or when the task reaches its final
-verification gate.
-
----
-
-# 15. Full Validation Only at Major Gates
-
-For a normal batch, run the expensive full validation **once near completion**:
-
-```bash
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-Do not repeatedly run this sequence during implementation.
-
-Focused tests are sufficient during intermediate work.
+Role Review
 
----
-
-# 16. Do Not Reinstall Dependencies Repeatedly
-
-Do not run:
-
-```bash
-pnpm install
-```
-
-repeatedly.
-
-Run dependency installation only when:
+Platform Architect:
+Short architecture perspective.
 
-```text
-starting from an uninstalled workspace
-package.json/lockfile changed
-final frozen-install verification is required
-```
+Security Reviewer:
+Short security perspective.
 
-If dependencies have not changed, skip reinstalling during intermediate steps.
+QA Engineer:
+Short validation perspective.
 
----
+Implementer:
+Short implementation perspective.
 
-# 17. Dependency Changes Must Be Intentional
+Synthesized Plan
 
-Before installing a new package:
+1. Relevant inspection.
+2. Smallest architecture-compatible change.
+3. Focused tests.
+4. Relevant compatibility/security/migration checks.
+5. Final validation.
 
-1. verify an existing dependency cannot solve the problem;
-2. verify Node/platform APIs cannot solve it cleanly;
-3. install only the required dependency;
-4. avoid broad utility packages for trivial functionality.
+Only after this review should implementation begin.
 
-Do not update unrelated dependencies.
+Do not produce fictional debates or theatrical personas. Do not expose private chain-of-thought. The purpose is structured engineering review.
 
 ---
-
-# 18. No Blind Dependency Upgrades
-
-Never run broad upgrade commands such as:
 
-```bash
-pnpm update --latest
-```
+# 2. Global Platform Mindset
 
-during a feature batch.
-
-Upgrade only the specific package required by the task or a verified security
-fix.
-
----
+Assume third parties and real production installations depend on Vibress.
 
-# 19. Avoid Unnecessary Builds
+Every meaningful engineering decision should consider the relevant impact on:
 
-Do not run full production builds repeatedly.
+- publishers and editors;
+- authors;
+- members and subscribers;
+- site administrators;
+- self-hosters;
+- agencies;
+- enterprise operators;
+- plugin developers;
+- theme developers;
+- API consumers;
+- third-party integrations;
+- multilingual publications;
+- RTL publications;
+- installations upgrading from older Vibress versions;
+- installations operating at scale.
 
-During development prefer:
+For substantial changes, evaluate only the platform concerns that are relevant:
 
-```text
-typecheck
-focused tests
-affected app/package build
-```
+- backward compatibility;
+- database upgrades;
+- public APIs;
+- themes;
+- plugins;
+- stored content;
+- multilingual content;
+- RTL;
+- accessibility;
+- security;
+- SEO;
+- performance;
+- caching;
+- background jobs;
+- webhooks;
+- search;
+- billing;
+- members;
+- import/export;
+- backup/restore;
+- observability;
+- self-hosting;
+- horizontal scaling;
+- documentation.
 
-Run the full documented Vibress build at the final gate.
+Do not mechanically discuss all of them. Identify the relevant ones.
 
 ---
 
-# 20. Avoid Unnecessary E2E Runs
+# 3. Platform Stability and Data Durability
 
-Playwright is expensive.
+Existing Vibress installations may contain years of:
 
-During development:
+- posts;
+- pages;
+- media;
+- users;
+- members;
+- subscriptions;
+- billing information;
+- themes;
+- plugins;
+- translations;
+- configuration;
+- custom content models;
+- integrations;
+- analytics;
+- revisions.
 
-run the specific spec or scenario being changed.
+Treat customer data and published content as durable.
 
-Example:
+Never assume a fresh installation.
 
-```bash
-pnpm playwright test tests/e2e/media-flow.test.ts
-```
+Never implement a feature that requires valid existing data to be discarded or manually rebuilt unless the product requirement explicitly demands it.
 
-Do not repeatedly run the complete E2E suite.
+Published URLs, serialized content, plugin contracts, theme contracts, and public APIs are platform assets.
 
-Run full E2E only at the final verification gate when required.
-
----
-
-# 21. Use Existing Test Fixtures
-
-Reuse existing:
-
-```text
-auth helpers
-DB setup
-factories
-fixtures
-API helpers
-Playwright helpers
-```
-
-Do not rebuild test infrastructure for each task.
-
 ---
-
-# 22. Do Not Over-Test Trivial Internals
-
-Tests should protect behavior and important boundaries.
-
-Do not create dozens of redundant tests for trivial getters, constants, or
-framework behavior.
-
-Prioritize:
-
-```text
-business rules
-security boundaries
-data integrity
-state transitions
-error behavior
-cross-domain integration
-```
 
----
+# 4. Backward Compatibility
 
-# 23. Security Tests Are Never Optional
-
-Speed optimizations must never skip relevant tests involving:
-
-```text
-authentication
-authorization
-tenant/user isolation
-file uploads
-path traversal
-XSS
-SQL injection
-CSRF/origin protections
-secret handling
-payment/billing
-data deletion
-optimistic concurrency
-```
-
-Run focused security tests as soon as the relevant implementation is stable.
+Backward compatibility is a first-class requirement.
 
----
+Before changing an established contract, determine whether it is consumed by:
 
-# 24. Database Safety Is Never Optional
+- another workspace package;
+- public web;
+- admin;
+- member portal;
+- worker;
+- themes;
+- plugins;
+- API clients;
+- webhooks;
+- stored serialized content;
+- tests.
 
-For schema/migration changes always verify:
+Prefer additive evolution.
 
-```text
-migration compiles
-migration applies
-existing data path remains valid
-constraints/indexes are correct
-```
+Prefer a new optional field, endpoint, capability, schema version, adapter, migration, or compatible default over silently redefining existing behavior.
 
-Do not repeatedly rebuild the database after every small edit.
+Breaking changes require an explicit reason and compatibility/migration analysis.
 
-Run focused migration validation when schema work stabilizes, then final
-migration gates once.
+Do not create breaking changes accidentally.
 
 ---
 
-# 25. Do Not Rewrite Existing Migrations
+# 5. Upgradeability
 
-Never modify an already-established migration simply to simplify current work.
+Always ask both:
 
-Create a new migration unless the project is explicitly still before that
-migration's release boundary and the task says otherwise.
+- Does this work on a new installation?
+- Does this work when upgrading an existing installation?
 
----
+Database migrations must consider existing rows.
 
-# 26. Avoid Database Reset Unless Necessary
+Configuration changes must consider existing deployments and environment files.
 
-Do not repeatedly:
+New required settings should have a safe migration/default strategy where appropriate.
 
-```text
-drop DB
-recreate DB
-reseed everything
-```
+Stored content should remain readable across upgrades.
 
-Use isolated test databases or targeted cleanup.
+Theme and plugin contracts must not change casually.
 
-Perform clean-migration verification only at the required gate.
+Upgrade safety is part of correctness.
 
 ---
-
-# 27. Preserve Architecture Boundaries
-
-Do not spend time debating already-established boundaries.
-
-Canonical rules:
 
-```text
-business logic → domains
-HTTP logic → API
-database adapters → infrastructure/database
-UI → no DB access
-Studio → no Vibress Core internals
-Media → Storage abstraction, not provider implementation
-plugins → SDK/public contracts only
-```
+# 6. Extensibility and Ecosystem Rules
 
-If an implementation violates one of these, correct it immediately.
+Vibress is an ecosystem platform.
 
----
+Stable extension surfaces include:
 
-# 28. Avoid Cross-Domain Deep Imports
+- plugin SDKs;
+- public contracts;
+- capability permissions;
+- events and hooks;
+- webhooks;
+- theme contracts;
+- Studio extension points;
+- versioned APIs.
 
-Before adding a new import across domains, verify a public contract/use case
-already exists.
+Plugins must depend on supported SDK/public interfaces.
 
-Do not use internal file paths just because it is faster.
+Do not encourage plugins to:
 
-Short-term speed must not create architecture debt.
-
----
+- deep-import domain internals;
+- access database tables directly;
+- bypass capability permissions;
+- assume filesystem layout;
+- depend on undocumented globals.
 
-# 29. Keep Public APIs Small
+Theme-facing changes must consider template contracts, Liquid rendering, theme variables, assets, publication data, members, localization, RTL, and SEO.
 
-Do not export implementation internals simply to make tests or another package
-compile.
+Do not expose implementation internals merely to make an extension compile.
 
-Expose only stable contracts required by consumers.
+At the same time, do not create speculative extension frameworks. YAGNI still applies.
 
 ---
 
-# 30. Prefer Minimal Correct Implementation
+# 7. Content Compatibility
 
-Implement exactly the required scope.
+Published content is one of Vibress's most valuable assets.
 
-Do not add:
+Take special care with:
 
-```text
-future features
-speculative abstractions
-unused extension points
-premature optimization
-extra settings
-new UI variants
-```
+- Studio document formats;
+- card and node serialization;
+- Markdown;
+- HTML;
+- media references;
+- revisions;
+- translations;
+- content-model values.
 
-unless the current batch explicitly requires them.
+Never casually change persisted document structure.
 
----
-
-# 31. YAGNI Is Mandatory
+When persisted schemas evolve, provide a compatibility or migration strategy.
 
-If something belongs to a later batch, do not implement it now.
+Old valid published content should continue to load and render wherever reasonably possible.
 
-Examples:
+For Studio changes, trace the full lifecycle:
 
-```text
-Batch 4 → no S3
-Batch 5 → no billing
-Media → no antivirus unless specifically scheduled
-Studio → no collaboration unless scheduled
-```
+creation -> editing -> serialization -> persistence -> loading -> rendering
 
-Document future extension points instead.
-
 ---
 
-# 32. Do Not Build Placeholder Features
+# 8. International Product Requirements
 
-Do not add unfinished generic systems "for the future" unless required by an
-established architecture contract.
+Vibress is a global publishing platform.
 
-Prefer a small correct interface over an elaborate unused framework.
+English-only assumptions are defects.
 
----
+Relevant product work must consider:
 
-# 33. Avoid Excessive Abstraction
+- Unicode;
+- Arabic;
+- RTL;
+- mixed LTR/RTL content;
+- locale-aware formatting;
+- dates and time zones;
+- pluralization;
+- translated UI strings;
+- long translations;
+- non-Latin text and names;
+- multilingual search behavior where applicable.
 
-Do not introduce:
+Arabic and RTL are core product capabilities, not optional enhancements.
 
-```text
-factory
-manager
-service
-handler
-adapter
-registry
-strategy
-```
+Do not hard-code English UI strings when the subsystem uses i18n.
 
-all at once for one simple operation.
+Avoid sentence construction that prevents translators from changing word order.
 
-Add abstraction only where there is a real boundary or multiple implementations.
+For relevant UI changes, verify both LTR and RTL behavior.
 
 ---
 
-# 34. Keep Changes Local
+# 9. Accessibility
 
-When possible, modify the smallest set of files.
+User-facing changes should preserve or improve:
 
-Before changing a shared package, ask internally:
+- semantic HTML;
+- keyboard operation;
+- focus visibility and focus order;
+- labels and accessible names;
+- screen-reader semantics;
+- form validation feedback;
+- interaction feedback.
 
-> Can this behavior be implemented within the owning domain/app without
-> expanding global surface area?
+Do not create mouse-only workflows.
 
-Prefer yes when architecturally correct.
+Accessibility regressions are functional regressions.
 
 ---
 
-# 35. Avoid Formatting Noise
+# 10. SEO and Publishing Semantics
 
-Do not run broad formatting tools over the repository.
+Public publishing changes may affect:
 
-Format only modified files if needed.
+- canonical URLs;
+- metadata;
+- structured data;
+- redirects;
+- sitemap behavior;
+- robots behavior;
+- social metadata;
+- multilingual URL behavior.
 
-A code change should not produce hundreds of unrelated whitespace changes.
+Do not unintentionally change public URLs or indexing semantics.
 
----
-
-# 36. Preserve Existing Code Style
-
-Follow nearby code patterns.
+Publishing URLs are long-lived contracts.
 
-Do not introduce a new coding style inside an existing subsystem.
-
 ---
-
-# 37. No Comment Spam
-
-Add comments only for:
 
-```text
-non-obvious invariants
-security decisions
-cross-system constraints
-intentional unusual behavior
-```
+# 11. Repository and Runtime Context
 
-Do not explain obvious TypeScript line-by-line.
+Vibress is a TypeScript pnpm/Nx monorepo.
 
----
+Required environment:
 
-# 38. Documentation Comes After Implementation
+- Node.js >=24 <25
+- pnpm >=11.17
+- repository pnpm version 11.22.0
+- TypeScript strict mode
+- PostgreSQL
+- Redis
+- Docker / Docker Compose where infrastructure is required
 
-Do not spend significant time writing detailed docs before behavior is stable.
+Primary applications:
 
-Recommended:
+- apps/api — Fastify REST APIs, authentication, authorization, publication context, WebSocket/collaboration, transport orchestration.
+- apps/worker — BullMQ jobs, transactional outbox delivery, email, indexing, automations, durable async processing.
+- apps/web — Next.js SSR public publishing application.
+- apps/admin — Vite + React administrative application and publishing Studio.
+- apps/portal — Vite + React member/subscriber portal.
 
-```text
-implement
-validate focused behavior
-then update documentation
-```
+Business capabilities live primarily under packages/domains/*.
 
-Architecture decisions that affect implementation may be noted briefly first.
+Shared platform packages include packages/api-contracts, packages/database, packages/security, packages/config, packages/cache, packages/events, packages/queue, packages/observability, packages/i18n, storage packages, plugin packages, theme packages, and Studio packages.
 
 ---
 
-# 39. Update Only Relevant Documentation
+# 12. Canonical Architecture Boundaries
 
-Do not rewrite the entire documentation tree.
+Preserve these boundaries unless the task explicitly requires an architectural change:
 
-Update only files directly affected by the task.
+- business rules -> packages/domains/*
+- HTTP concerns -> apps/api
+- background execution -> apps/worker
+- database infrastructure -> packages/database
+- security primitives -> packages/security
+- transport schemas/contracts -> packages/api-contracts
+- storage implementation -> storage packages
+- UI -> APIs and public contracts
+- plugins -> SDK/public contracts only
+- themes -> documented theme contracts
+- Studio -> Studio contracts, not arbitrary Core internals
 
-If current documentation is already accurate, leave it unchanged.
+UI applications must not directly access the database.
 
----
+Fastify routes should orchestrate domain services rather than become the business layer.
 
-# 40. Do Not Produce Huge Intermediate Reports
+Avoid cross-domain deep imports.
 
-During execution, do not continuously generate lengthy summaries.
+Prefer public package exports.
 
-Keep internal progress concise.
+Keep public package APIs intentionally small.
 
-Final report should contain the required evidence only.
+Media should depend on storage abstractions rather than provider-specific internals.
 
 ---
-
-# 41. Prefer Machine Verification Over Re-Reading Code
 
-After implementation:
+# 13. Sources of Truth
 
-use:
+Use this precedence:
 
-```text
-typecheck
-tests
-lint
-build
-```
+1. explicit user requirements;
+2. security and data-integrity requirements;
+3. established public compatibility guarantees;
+4. current architecture;
+5. repository documentation and AGENT.md;
+6. representative existing implementations;
+7. tests that describe intentional behavior.
 
-instead of repeatedly rereading every changed file manually.
+If implementation, documentation, and tests disagree, investigate before changing behavior.
 
-Manual review is still required for sensitive/security-critical sections, but do
-not duplicate mechanical checks.
+Do not choose whichever interpretation is easiest to implement.
 
 ---
-
-# 42. Use Git Diff Efficiently
-
-Before final validation inspect:
-
-```bash
-git diff --stat
-git diff
-```
 
-or scoped equivalents.
+# 14. Security Is Non-Negotiable
 
-Review the actual changed code once.
+Never weaken security to complete a task or make tests pass.
 
-Do not repeatedly inspect every unchanged file.
+Administrative routes must preserve established mechanisms such as:
 
----
+- requireStaffSession;
+- requirePermission(...);
+- publication/workspace context resolution;
+- validateOrigin for cookie-authenticated state-changing requests where applicable.
 
-# 43. Check Git Status Before and After
+Never trust raw caller-supplied tenant/workspace IDs.
 
-At task start:
+Publication/workspace identity must come from authoritative authenticated context.
 
-```bash
-git status --short
-```
+Every publication-owned data path must preserve tenant isolation.
 
-At task end:
+An object ID alone is never sufficient authorization.
 
-```bash
-git status --short
-```
+Security-sensitive areas include:
 
-Distinguish:
+- authentication;
+- authorization;
+- sessions;
+- roles and permissions;
+- publication/workspace isolation;
+- setup/bootstrap;
+- billing and Stripe;
+- webhooks;
+- uploads and media;
+- HTML and user content;
+- plugins;
+- themes;
+- import/export;
+- redirects;
+- secrets and encryption;
+- collaboration;
+- destructive actions.
 
-```text
-pre-existing user changes
-Agent changes
-generated artifacts
-```
+For these tasks, Security Reviewer should normally participate in the initial Role Review.
 
-Never overwrite unrelated user work.
-
 ---
 
-# 44. Do Not Commit or Push by Default
+# 15. Input Validation and API Contracts
 
-Unless the user explicitly requests it:
+Validate all untrusted external input at runtime.
 
-```text
-do not git push
-do not create PR
-do not force push
-```
+Prefer canonical schemas from @vibress/api-contracts or the owning domain's established validation mechanism.
 
-Local commits may be created only when the task/workflow explicitly calls for
-them.
+Validate, as relevant:
 
-Do not trigger remote CI after every batch unnecessarily.
+- request body;
+- query;
+- params;
+- headers;
+- webhook payloads;
+- uploaded files;
+- external-provider responses.
 
----
+Do not rely on TypeScript types as runtime validation.
 
-# 45. CI Usage Must Be Economical
+Keep admin, public, member, and machine/integration APIs distinct.
 
-Do not rely on remote CI for routine development feedback.
+Preserve established route versioning.
 
-Use focused local validation.
+Prefer additive API evolution.
 
-Full CI should normally run only:
+Keep response and error shapes stable.
 
-```text
-release gate
-major integration gate
-explicit user request
-```
+Preserve request IDs where established.
 
-Avoid wasting CI minutes on intermediate changes.
+Do not leak stack traces, credentials, database details, tokens, or internal secrets to clients.
 
 ---
-
-# 46. Never Poll or Wait Unnecessarily
-
-Do not repeatedly sleep/poll processes that can be checked directly.
-
-When starting a service:
 
-wait only until it is actually ready, then proceed.
+# 16. Database and Migration Safety
 
-Do not leave long-running watchers unless required.
+Database changes affect real installations.
 
----
+For schema work:
 
-# 47. Kill Temporary Processes
+1. update the canonical Drizzle schema;
+2. generate a new migration;
+3. inspect generated SQL;
+4. verify existing-data behavior;
+5. verify constraints and indexes;
+6. apply the migration;
+7. test the affected behavior.
 
-After runtime/E2E verification, stop processes started specifically for the test
-if the normal development environment does not require them.
+Do not rewrite previously released migrations.
 
-Avoid accumulating duplicate dev servers.
-
----
+Prefer additive, zero-downtime-safe changes.
 
-# 48. Reuse Running Infrastructure
+Avoid destructive drops or irreversible transformations without an explicit migration strategy.
 
-If PostgreSQL/Redis/API are already healthy and correctly configured:
+For migrations involving existing data, review:
 
-reuse them.
+- NULL/non-NULL rows;
+- default values;
+- large-table behavior;
+- locking;
+- index creation;
+- backfill strategy;
+- roll-forward compatibility;
+- rollback consequences;
+- application compatibility during deployment.
 
-Do not restart Docker infrastructure unnecessarily.
+A migration passing only on an empty development database is insufficient evidence.
 
-Restart only the component whose configuration/code requires it.
+Do not repeatedly reset, drop, or reseed the entire database during normal feature work.
 
 ---
 
-# 49. Diagnose Failures Narrowly
+# 17. TypeScript Standards
 
-When a test fails:
+The project uses strict TypeScript, including:
 
-1. read the failing test/error;
-2. identify likely responsible code;
-3. run that specific test again after fixing.
+- strict;
+- noUncheckedIndexedAccess;
+- exactOptionalPropertyTypes.
 
-Do not immediately rerun the entire suite.
+Write code that satisfies these guarantees.
 
----
+Do not casually add explicit any.
 
-# 50. Do Not Trial-and-Error Blindly
+Do not use @ts-ignore, unsafe casts, or lint-disable directives as shortcuts.
 
-Do not make random code changes until tests pass.
+The repository's explicit-any regression guard must not regress.
 
-Understand the failure first.
+Use existing project utilities and types before inventing duplicates.
 
-One reasoned fix is preferred over multiple speculative patches.
+Follow nearby code style.
 
 ---
 
-# 51. Stop Repeating the Same Failed Command
+# 18. Frontend Engineering
 
-If a command fails twice for the same reason, investigate.
+Keep business logic out of UI components.
 
-Do not execute the same expensive failing command repeatedly without a relevant
-change.
+Use established API, router, query, and state patterns in the owning app.
 
----
+Relevant flows should handle:
 
-# 52. Cache Awareness
+- loading;
+- success;
+- empty state;
+- validation errors;
+- permission errors;
+- server errors;
+- retry/recovery where appropriate.
 
-Use Nx/pnpm/test caches where safe.
+Do not assume wide desktop, English text, LTR, mouse input, or perfect network conditions.
 
-Do not disable caching without a concrete reason.
+For public/admin UI changes, UX / Accessibility Reviewer should normally participate.
 
-For final release-critical verification, use uncached execution only where the
-task explicitly requires proof against stale cache.
+For localized content/UI changes, Internationalization / RTL Reviewer must participate.
 
 ---
-
-# 53. Parallelize Independent Checks When Safe
 
-Independent read-only checks may run in parallel, for example:
+# 19. Background Work and Reliability
 
-```text
-lint
-typecheck
-independent audit
-```
+Durable asynchronous work belongs in established worker, queue, and event infrastructure.
 
-if the execution environment supports it safely.
+Do not put important long-running work in request handlers when it belongs in the worker.
 
-Do not parallelize tests that contend for the same database, ports, migration
-state, or filesystem fixtures unless designed for it.
+Preserve transactional outbox/event-delivery patterns where applicable.
 
-Correctness takes priority over parallelism.
+Consider:
 
----
-
-# 54. Token Efficiency
-
-Keep reasoning and output concise.
-
-Do not repeat:
-
-```text
-task description
-architecture documentation
-test results
-known technical debt
-```
-
-multiple times.
+- retries;
+- duplicate delivery;
+- idempotency;
+- partial failure;
+- delayed workers;
+- process death mid-operation;
+- Redis/PostgreSQL/provider outages.
 
-Refer to established decisions rather than restating them.
+For queues/events/workers, Reliability / Operations Engineer should normally participate.
 
 ---
 
-# 55. Search Scope Must Be Explicit
+# 20. External Integrations
 
-Never run expensive unrestricted searches from `/` or the user's home directory.
+Assume external APIs can:
 
-Search only within the relevant repository/subdirectories.
+- time out;
+- rate-limit;
+- return malformed/partial data;
+- duplicate webhook deliveries;
+- deliver events out of order;
+- become temporarily unavailable.
 
----
-
-# 56. Avoid Scanning Generated Directories
-
-Exclude:
+Build integrations defensively.
 
-```text
-node_modules
-dist
-build
-.next
-coverage
-.git
-tmp
-test-results
-playwright-report
-```
+Verify/authenticate webhook payloads.
 
-from searches unless directly investigating generated output.
+Use idempotency where appropriate.
 
-Example:
+Optional integrations must not destabilize unrelated core functionality.
 
-```bash
-rg "pattern" apps packages tests docs \
-  -g '!node_modules' \
-  -g '!dist' \
-  -g '!.next'
-```
-
 ---
 
-# 57. Never Inspect node_modules for Normal Tasks
+# 21. Self-Hosting and Configuration
 
-Do not browse dependency source unless:
+Self-hosting is a core Vibress use case.
 
-```text
-documentation/types are insufficient
-a confirmed dependency bug is being investigated
-```
+Changes should remain compatible with:
 
-Prefer package docs/types first.
-
----
+- Docker deployments;
+- reverse proxies;
+- TLS termination;
+- persistent volumes;
+- PostgreSQL;
+- Redis;
+- backups and restores;
+- health checks;
+- supported scaling patterns.
 
-# 58. No Internet Research Unless Necessary
+Do not introduce hidden dependencies on proprietary hosted infrastructure.
 
-Do not browse external documentation for standard project code when local
-types/docs are sufficient.
+Environment variables are operator-facing contracts.
 
-Use external research only for:
+Before adding or changing configuration:
 
-```text
-unknown library behavior
-security advisory verification
-breaking API/version change
-standards clarification
-```
+- reuse existing settings where possible;
+- validate through established config infrastructure;
+- document behavior;
+- provide safe defaults where appropriate;
+- avoid unnecessary upgrade failures.
 
-Do not research architecture the repository already defines.
+Security-critical production configuration should fail safely, not silently weaken protections.
 
 ---
 
-# 59. One Representative Runtime Scenario First
+# 22. Performance and Caching
 
-For complex features, first make one end-to-end happy path work.
+Do not prematurely optimize, but consider obvious scale risks in hot paths such as:
 
-Then cover:
+- public page requests;
+- post/page listings;
+- search;
+- analytics ingestion;
+- newsletter delivery;
+- worker fan-out;
+- large publication tables.
 
-```text
-error path
-security path
-edge case
-```
+Watch for:
 
-Do not build every edge case before proving the basic integration.
+- N+1 queries;
+- unbounded queries;
+- full-table scans;
+- serial network calls;
+- large in-memory materialization;
+- unbounded queues.
 
----
-
-# 60. But Never Ship Happy-Path Only
-
-Before final PASS, required:
+Caching must preserve correctness.
 
-```text
-error handling
-security validation
-failure cleanup
-permissions
-important regression tests
-```
+Cache keys and invalidation must consider relevant dimensions such as:
 
-must be covered.
+- publication/tenant;
+- permissions;
+- member access level;
+- locale;
+- content version.
 
-Speed applies to execution order, not quality criteria.
+A cache leak between publications or access levels is a security bug.
 
 ---
-
-# 61. Avoid Premature Performance Benchmarking
-
-Do not benchmark unless:
-
-```text
-performance is part of task
-implementation is obviously pathological
-batch definition explicitly requires it
-```
 
-Use reasonable complexity and move on.
+# 23. Search and Event Consistency
 
----
+When changing searchable content, consider:
 
-# 62. Use Built-In Platform APIs Where Appropriate
+- index updates;
+- deletions;
+- publication isolation;
+- locale/text behavior;
+- worker delivery;
+- event consistency.
 
-Prefer stable Node/TypeScript APIs for straightforward functionality.
+Do not update primary content while permanently leaving search state stale.
 
-Do not install a package for:
+Use established event/outbox mechanisms.
 
-```text
-simple path operations
-UUID if project already has an ID utility
-basic hashing where Node crypto suffices
-small collection helpers
-```
-
 ---
-
-# 63. Do Not Reimplement Security Libraries
 
-The previous rule does NOT mean hand-writing complex security primitives.
+# 24. Billing
 
-Use established libraries for:
+Billing changes require additional caution.
 
-```text
-password hashing
-HTML sanitization
-multipart parsing
-JWT/crypto protocols where used
-complex MIME parsing where required
-```
+Consider:
 
----
-
-# 64. Preserve Stable Interfaces
+- Stripe retries;
+- webhook idempotency;
+- subscription state;
+- plan changes;
+- currency;
+- member access;
+- duplicate/out-of-order events;
+- payment failure;
+- cancellation.
 
-Do not unnecessarily change existing APIs/types just because another shape is
-slightly cleaner.
+Never infer successful payment from client-side state alone.
 
-If the current interface satisfies the task safely, extend minimally.
+Provider-authenticated server-side state is authoritative.
 
-This reduces regression risk and implementation time.
+Security Reviewer and QA Engineer are mandatory for billing changes.
 
 ---
 
-# 65. Avoid Cascading Renames
+# 25. Observability and Error Handling
 
-Do not rename established concepts during feature work.
+Use established logging, metrics, tracing, health-check, and request-ID patterns.
 
-Renames create large diffs, test churn, documentation churn, and little product
-value.
+Operational logs should materially help production diagnosis.
 
-Schedule naming refactors separately.
-
----
+Do not log secrets or sensitive content unnecessarily.
 
-# 66. Error Handling Must Stay Stable
+Remove temporary console.log, forensic logs, debug endpoints, bypasses, and temporary instrumentation before completion unless explicitly requested.
 
-Reuse existing Vibress error structure and codes.
+Reuse existing Vibress error structures and codes.
 
 Do not create a new error framework for each domain.
 
 ---
 
-# 67. Logging Must Stay Focused
+# 26. Start Narrowly
 
-Do not add debug logging everywhere.
+At task start:
 
-Add operational logs only when they materially assist production diagnosis.
+1. inspect git status --short;
+2. identify the owning subsystem;
+3. perform the mandatory Role-Based Engineering Review;
+4. use targeted search;
+5. inspect the owning package and one representative analogous implementation;
+6. inspect direct dependencies, consumers, tests, and relevant docs only;
+7. synthesize one short implementation plan.
 
-Remove temporary debugging logs before completion.
+Do not scan the entire repository for a localized task.
 
----
+Search before opening many files.
 
-# 68. Temporary Code Must Be Removed
+Do not dump huge files unnecessarily.
 
-Before final validation remove:
+Do not repeatedly reread unchanged files.
 
-```text
-console.log
-debug endpoints
-temporary fixtures
-hard-coded credentials
-temporary bypasses
-TODO hacks created only for debugging
-```
-
-unless intentionally documented.
+Exclude generated directories such as node_modules, dist, build, .next, coverage, test-results, playwright-report, and .git unless directly investigating generated output.
 
 ---
 
-# 69. No Safety Bypasses to Make Tests Pass
+# 27. Scope Discipline
 
-Never:
+Make the smallest correct platform-compatible change.
 
-```text
-disable authorization
-skip validation
-weaken schema constraints
-increase limits globally
-ignore TypeScript errors
-use @ts-ignore casually
-mark failing tests skipped
-```
+Do not perform unrelated:
 
-to finish faster.
+- refactoring;
+- renaming;
+- dependency modernization;
+- formatting;
+- architecture cleanup;
+- lint cleanup;
+- directory restructuring.
 
-Fix the actual problem.
+Do not fix unrelated technical debt unless it blocks the requested work or the adjacent fix is trivial and clearly safe.
 
----
+Global-platform quality does not mean changing everything. It means making the requested change compatible with the larger platform.
 
-# 70. Do Not Change Tests to Match Broken Behavior
+YAGNI is mandatory.
 
-If implementation violates documented intended behavior, fix implementation.
+Do not add speculative abstractions, settings, variants, or extension points.
 
-Change tests only when:
+Avoid cascading renames.
 
-```text
-requirement changed
-test is demonstrably incorrect
-test asserts obsolete behavior
-```
-
-Document why.
+Preserve stable interfaces.
 
 ---
 
-# 71. Final Diff Review Is Mandatory
+# 28. Dependency Policy
 
-Before declaring completion:
+Before adding a dependency:
 
-review the complete scoped diff once.
+1. check existing Vibress packages;
+2. check existing dependencies;
+3. check stable Node/platform APIs;
+4. add a package only when it materially improves correctness, security, or maintainability.
 
-Look specifically for:
+Never run broad dependency upgrades during unrelated work.
 
-```text
-unintended files
-debug code
-absolute paths
-secrets
-generated files
-architecture violations
-unrelated formatting
-```
+Do not reimplement cryptography, password hashing, MIME parsing, HTML sanitization, or similar complex security primitives merely to avoid a dependency.
 
 ---
 
-# 72. Final Validation Strategy
+# 29. Protect Existing User Work
 
-At the end of a batch:
+Inspect Git status at the beginning and end.
 
-### Step A — focused final tests
+Separate:
 
-Run affected domain/API/E2E/security tests.
+- pre-existing user changes;
+- agent changes;
+- generated artifacts.
 
-### Step B — full project gate once
+Never overwrite, reset, or delete unrelated user work.
 
-Run:
+Do not push, force-push, merge, open pull requests, rewrite history, or publish releases unless explicitly requested.
 
-```bash
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
+Implementation permission does not imply publication permission.
 
-only once unless a failure requires a fix.
-
-### Step C — relevant E2E
-
-Run required E2E.
-
-### Step D — final diff/status review.
-
-Do not rerun successful expensive gates without a reason.
+Use Conventional Commits if a commit is explicitly requested.
 
 ---
 
-# 73. If Full Validation Fails
+# 30. Testing Strategy
 
-If final validation exposes a failure:
+Use progressive validation:
 
-fix only that failure.
+Level 1 — directly affected unit test.
 
-Then rerun:
+Level 2 — owning package/domain tests.
 
-```text
-the failed gate
+Level 3 — affected API/integration tests.
+
+Level 4 — relevant E2E scenario.
+
+Level 5 — repository-wide final gate.
+
+Do not run the entire test suite after every edit.
+
+During the Role Review, QA should identify the relevant behavioral matrix, such as:
+
+- happy path;
+- malformed input;
+- unauthenticated access;
+- permission failure;
+- wrong publication/workspace;
+- not found;
+- conflict;
+- duplicate/retry;
+- provider failure;
+- migration compatibility;
+- RTL/localization;
+- accessibility.
+
+Only include cases relevant to the task.
+
+Relevant security tests are mandatory for authentication, authorization, tenant isolation, uploads, HTML, plugins, billing, webhooks, setup, and destructive operations.
+
+---
+
+# 31. Failure Diagnosis
+
+When a test fails:
+
+1. read the exact failure;
+2. identify the responsible layer;
+3. inspect targeted code;
+4. make one reasoned correction;
+5. rerun the narrow failing test.
+
+Do not make random edits until tests become green.
+
+If the same command fails twice for the same reason, investigate instead of repeating it.
+
+Do not skip tests, weaken assertions, disable authorization, remove validation, increase global limits, or change expected behavior merely to hide a failure.
+
+Change tests only when the intended requirement changed or the test is demonstrably obsolete/incorrect.
+
+---
+
+# 32. Infrastructure Discipline
+
+Reuse healthy PostgreSQL, Redis, API, and other infrastructure where safe.
+
+Do not restart every service for a local change affecting one component.
+
+Do not repeatedly reinstall dependencies when package metadata has not changed.
+
+Do not leave duplicate development servers or temporary watchers running.
+
+Stop processes started solely for temporary verification.
+
+Use Nx/pnpm/test caches where safe.
+
+Do not disable caching without a reason.
+
+---
+
+# 33. Final Validation
+
+Before completion, review the scoped diff once.
+
+Look for:
+
+- unintended files;
+- secrets;
+- debug code;
+- generated artifacts;
+- unrelated formatting;
+- unsafe casts;
+- missing tenant scoping;
+- migration hazards;
+- breaking contracts;
+- plugin/theme compatibility issues;
+- RTL/i18n regressions;
+- accessibility regressions;
+- architecture violations.
+
+For substantial changes, final project gates normally include:
+
+    pnpm install --frozen-lockfile
+    pnpm audit --prod --audit-level high
+    pnpm typecheck
+    pnpm lint
+    pnpm verify:explicit-any
+    pnpm vitest run
+    pnpm build
+    pnpm verify:clean-tree
+
+Run dependency installation only when appropriate.
+
+Do not repeatedly rerun successful expensive gates.
+
+Release validation may additionally include container vulnerability scanning, Playwright E2E, production smoke tests, and migration verification.
+
+---
+
+# 34. Known Repository Technical Debt
+
+Do not independently expand normal tasks to solve unrelated known technical debt, including:
+
+- Nx + Next.js orchestration issues;
+- Studio local package-linking issues;
+- unrelated existing lint warnings;
+- tolerated existing explicit-any debt.
+
+If relevant, report it. Do not create more debt merely because some already exists.
+
+---
+
+# 35. Documentation and Developer Experience
+
+Update relevant documentation when a change affects:
+
+- public APIs;
+- configuration;
+- deployment;
+- plugin SDK;
+- theme APIs;
+- migration behavior;
+- operator procedures;
+- user-visible workflows.
+
+Do not rewrite unrelated docs.
+
+Public developer APIs should be understandable without reading Vibress internals.
+
+For platform-facing APIs and extension contracts, consider:
+
+- discoverability;
+- stable naming;
+- types;
+- errors;
+- versioning;
+- documentation;
+- examples.
+
+---
+
+# 36. Global CMS Decision Questions
+
+For substantial changes, internally evaluate the relevant questions:
+
+- Will existing installations continue working?
+- Will existing stored content continue loading?
+- Will existing themes continue rendering?
+- Will plugins remain compatible?
+- Can this migrate safely?
+- Is publication isolation preserved?
+- Does it work for Arabic and RTL?
+- Is the user-facing experience accessible?
+- Does it scale beyond a tiny development dataset?
+- Can self-hosters operate it?
+- Can operators diagnose failures?
+- Is the public contract stable?
+- Can the system recover from partial failure?
+
+Do not mechanically answer all of these in the final report. Use them to guide implementation.
+
+---
+
+# 37. Role Escalation Rules
+
+Some changes require specific roles in the initial review:
+
+Database schema:
+- Database Engineer
+- Migration / Upgrade Reviewer
+
+Auth, security, sessions, billing:
+- Security Reviewer
+
+Public/admin UI:
+- UX / Accessibility Reviewer
+
+Localized UI or content presentation:
+- Internationalization / RTL Reviewer
+
+Plugin SDK or capabilities:
+- Plugin / Extension Architect
+- Compatibility Reviewer
+
+Theme/rendering contracts:
+- Theme Compatibility Reviewer
+
+Queues/events/workers:
+- Reliability / Operations Engineer
+
+The roles may identify competing concerns. Synthesize them into one implementation strategy before coding.
+
+Example synthesis:
+
+Architect wants the capability in the media domain.
+Security requires publication-scoped access.
+Compatibility requires the existing MediaAsset contract to remain stable.
+QA requires a cross-publication negative test.
+
+Therefore:
+extend the media service additively, reuse the existing asset type, scope lookup by publication, and add API plus isolation tests.
+
+---
+
+# 38. Autonomous Engineering
+
+Do not ask the user to choose between ordinary implementation details that can be resolved through repository conventions.
+
+Make reasonable decisions autonomously.
+
+Escalate only when a choice materially affects:
+
+- product semantics;
+- architecture;
+- security posture;
+- irreversible data migration;
+- public API compatibility;
+- billing/cost;
+- destructive operations;
+- major ecosystem compatibility.
+
+When ambiguity is minor, choose the solution that best preserves current architecture and compatibility.
+
+---
+
+# 39. Completion Standard
+
+A task is complete only when the relevant conditions are satisfied:
+
+- requested behavior implemented;
+- architecture preserved;
+- security correct;
+- tenant/publication isolation correct;
+- runtime validation correct;
+- migration safe where applicable;
+- backward compatibility considered;
+- plugin/theme compatibility considered where applicable;
+- RTL/localization considered where applicable;
+- accessibility considered where applicable;
+- failure behavior covered;
+- focused tests pass;
+- appropriate broader gates pass;
+- documentation updated where required;
+- temporary/debug code removed;
+- final diff reviewed;
+- no unrelated user work changed.
+
+Do not declare success based only on compilation.
+
+---
+
+# 40. Final Report
+
+After implementation, report concisely:
+
+Status
+
+Role Review Result
+- only material final conclusions from the selected roles
+
+Changed
+
+Validation
+- commands/tests actually executed and results
+
+Platform Compatibility
+- API compatibility
+- migration/upgrade implications
+- plugin/theme implications when relevant
+- i18n/RTL/accessibility implications when relevant
+
+Security / Architecture
+
+Remaining Issues
+- only genuine blockers, limitations, or newly introduced technical debt
+
+Do not narrate every command.
+
+Never claim a test passed if it was not executed.
+
+Never claim compatibility was verified if it was only assumed.
+
+---
+
+# 41. Core Platform Principle
+
+Develop Vibress as though third parties depend on every stable behavior.
+
+Assume:
+
+- someone has built a theme against this behavior;
+- someone has built a plugin against this contract;
+- someone has automated this API;
+- someone has years of posts in this database;
+- someone publishes primarily in Arabic;
+- someone runs Vibress behind their own infrastructure;
+- someone depends on upgrades being safe;
+- someone operates a high-traffic publication;
+- someone pays real money through the membership system.
+
+Engineering decisions must respect those users.
+
+---
+
+# 42. Default Vibress Workflow
+
+For each non-trivial task:
+
+1. Inspect git status.
+2. Identify the owning subsystem.
+3. Perform the mandatory Role-Based Engineering Review.
+4. Give one short perspective from each relevant role.
+5. Synthesize those perspectives into one implementation plan.
+6. Search for the relevant implementation and one representative pattern.
+7. Inspect direct dependencies, consumers, tests, and relevant docs.
+8. Implement the smallest platform-compatible change.
+9. Run focused tests.
+10. Run relevant security, migration, RTL, accessibility, compatibility, or integration validation based on the selected roles.
+11. Review the scoped diff.
+12. Run appropriate final project gates once.
+13. Report implementation status and platform-level consequences concisely.
+
+The default operating formula is:
+
+Role-based review
 +
-any directly dependent gates
-```
-
-Do not automatically rerun everything from the beginning.
-
-After all failed gates are corrected, one final relevant confirmation is
-sufficient.
-
----
-
-# 74. Full CI / Release Validation
-
-The development workflow intentionally minimizes CI usage.
-
-During intermediate batches:
-
-```text
-focused local tests
-local typecheck where needed
-local commits if requested
-```
-
-At release/final integration gates:
-
-```text
-full CI
-full test matrix
-security audit
-build
-E2E
-```
-
-Do not trigger full remote CI repeatedly during every small batch.
-
----
-
-# 75. Definition of Fast but Correct
-
-A good Agent execution should usually look like:
-
-```text
-1. git status
-2. targeted search
-3. inspect 3–8 relevant files
-4. implement focused changes
-5. focused test
-6. fix if needed
-7. integration/E2E relevant test
-8. documentation
-9. final full validation once
-10. git diff/status
-11. concise report
-```
-
-Not:
-
-```text
-read 100 files
-run 20 broad searches
-run full tests 8 times
-reinstall dependencies repeatedly
-rebuild Docker repeatedly
-rewrite unrelated docs
-```
-
----
-
-# 76. Escalation Rule
-
-If a task unexpectedly requires significantly broader architecture changes than
-requested:
-
-do not silently expand scope.
-
-First attempt the smallest safe solution compatible with current architecture.
-
-If the broader change is genuinely unavoidable, clearly report it as a blocker
-or architectural requirement.
-
----
-
-# 77. Autonomous Decisions
-
-Do not stop for trivial questions.
-
-Use established project conventions and make reasonable implementation decisions
-autonomously.
-
-Do not ask the user to choose between equivalent low-level implementation
-details.
-
-Ask only when a decision materially affects:
-
-```text
-product behavior
-data loss
-security
-public API compatibility
-architecture direction
-billing/cost
-irreversible migration
-```
-
----
-
-# 78. Completion Standard
-
-Do not confuse speed with incomplete work.
-
-A task is complete only when:
-
-```text
-requested behavior implemented
-focused tests pass
-important error/security paths pass
-architecture boundaries remain intact
-documentation updated where required
-final project gates pass
-no unrelated changes introduced
-```
-
----
-
-# 79. Reporting Rules
-
-Final report must be concise.
-
-Include:
-
-```text
-status
-what changed
-tests actually run
-important security/architecture result
-new technical debt
-blockers
-files changed summary
-```
-
-Do not narrate every command executed.
-
-Do not repeat the full task prompt.
-
----
-
-# 80. Hard Prohibitions
-
-Unless explicitly required, never:
-
-```text
-scan the entire repository multiple times
-run full tests after each change
-run full build after each change
-run pnpm install repeatedly
-reset the whole database repeatedly
-restart all Docker services repeatedly
-rewrite unrelated code
-fix unrelated lint warnings
-upgrade unrelated dependencies
-add speculative abstractions
-produce giant intermediate reports
-push to GitHub
-force-push
-rewrite Git history
-delete user work
-skip security checks
-skip required final validation
-```
-
----
-
-# 81. Priority Order
-
-When trade-offs are necessary, use this priority:
-
-```text
-1. Correctness
-2. Security
-3. Data integrity
-4. Architecture boundaries
-5. Regression safety
-6. Minimal scope
-7. Execution speed
-8. UI polish
-```
-
-Speed must come primarily from eliminating unnecessary work, not eliminating
-required verification.
-
----
-
-# 82. Vibress-Specific Working Rule
-
-For each new Batch:
-
-```text
-During implementation:
-    focused local tests only
-
-At sub-feature completion:
-    relevant package/integration tests
-
-At Batch completion:
-    full local validation once
-
-At Release:
-    full CI/security/release validation
-```
-
-This is the default Vibress workflow unless the batch prompt explicitly requires
-stricter validation.
-
----
-
-# 83. Final Instruction
-
-Before executing any command, implicitly ask:
-
-> **Will this command materially help implement, diagnose, or verify the
-> requested change?**
-
-If the answer is no:
-
-**do not run it.**
-
-Before opening any file, ask:
-
-> **Is this file directly relevant to the current change or a
-> dependency/consumer I must understand?**
-
-If no:
-
-**do not read it.**
-
-Before adding any code, ask:
-
-> **Is this required now?**
-
-If no:
-
-**do not add it.**
-
-The goal is:
-
-```text
-minimum necessary work
+smallest correct implementation
 +
-maximum correctness
+global-platform compatibility
 +
 focused validation
++
+final verification
 =
-fast Vibress development
-```
+Vibress engineering
+
+---
+
+# 43. Final Decision Rule
+
+Before any meaningful action ask:
+
+> Does this materially help understand, implement, secure, migrate, or verify the requested change?
+
+If no, do not do it.
+
+Before changing a shared contract ask:
+
+> Can this remain backward-compatible and additive?
+
+Prefer yes.
+
+Before introducing a new abstraction ask:
+
+> Is there a real platform boundary or current extension requirement?
+
+If no, do not add it.
+
+Before a database change ask:
+
+> What happens to an existing production installation during upgrade?
+
+If unclear, investigate before proceeding.
+
+Before a user-facing change ask:
+
+> Does it remain usable with translated strings, Arabic/RTL, keyboard navigation, and supported responsive layouts?
+
+If relevant and unverified, the task is not finished.
+
+Before finishing ask:
+
+> Would this change be acceptable in a globally deployed CMS ecosystem with third-party themes, plugins, integrations, years of stored content, paying members, self-hosted installations, and real production traffic?
+
+If not, continue working.
