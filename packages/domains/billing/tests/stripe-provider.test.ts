@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Stripe from "stripe";
 import { StripeBillingProvider } from "../src/infrastructure/stripe/stripe-provider";
 
@@ -95,8 +95,6 @@ describe("StripeBillingProvider webhook contract", () => {
   });
 
   it("maps provider errors to stable Vibress error codes", async () => {
-    // Invalid request (missing price) should map to BILLING_CONFIGURATION_ERROR
-    // A network failure is represented by the StripeConnectionError class directly.
     const connError = new Stripe.errors.StripeConnectionError({
       message: "timeout",
       headers: {},
@@ -105,8 +103,20 @@ describe("StripeBillingProvider webhook contract", () => {
       statusCode: 502,
       requestId: "req_1",
     });
+    const stripe = new Stripe("sk_test_dummy");
+    vi.spyOn(stripe.customers, "create").mockImplementation(() =>
+      Promise.reject(connError),
+    );
+    const errorProvider = new StripeBillingProvider(
+      {
+        secretKey: "sk_test_dummy",
+        webhookSecret: WEBHOOK_SECRET,
+      },
+      stripe,
+    );
+
     await expect(
-      provider.createCustomer({ email: "a@b.com" }),
+      errorProvider.createCustomer({ email: "a@b.com" }),
     ).rejects.toMatchObject({ code: "BILLING_PROVIDER_UNAVAILABLE" });
   });
 });
