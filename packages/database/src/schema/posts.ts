@@ -84,7 +84,7 @@ export const posts = pgTable(
           publicationMemberships.userId,
         ],
         name: "posts_primary_author_publication_fk",
-      }).onDelete("restrict"),
+      }).onDelete("no action"),
       postsFeatureImagePublicationFk: foreignKey({
         columns: [table.featureImageId, table.publicationId],
         foreignColumns: [mediaAssets.id, mediaAssets.publicationId],
