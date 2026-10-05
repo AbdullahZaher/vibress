@@ -71,7 +71,7 @@ export const pages = pgTable(
           publicationMemberships.userId,
         ],
         name: "pages_primary_author_publication_fk",
-      }).onDelete("restrict"),
+      }).onDelete("no action"),
       publicationSlugActiveIdx: uniqueIndex("pages_publication_slug_active_idx")
         .on(table.publicationId, table.slug)
         .where(sql`"deleted_at" IS NULL`),
