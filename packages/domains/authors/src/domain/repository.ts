@@ -21,13 +21,16 @@ export interface AuthorRepository {
   ): Promise<void>;
   findAuthorBySlug(
     slug: string,
+    publicationId?: string,
   ): Promise<{
     id: string;
     name: string;
     slug: string;
     bio: string | null;
   } | null>;
-  listAuthors(): Promise<
+  listAuthors(
+    publicationId?: string,
+  ): Promise<
     Array<{ id: string; name: string; slug: string; bio: string | null }>
   >;
 }
