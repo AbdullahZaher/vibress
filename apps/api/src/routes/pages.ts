@@ -105,6 +105,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
               : null,
           },
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
 
         const authors = await authorsService.getPageAuthors(page.id);
