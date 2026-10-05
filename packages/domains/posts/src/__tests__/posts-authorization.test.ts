@@ -49,6 +49,7 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
         Promise.resolve({ ...mockPost, ...data, version: (mockPost.version || 1) + 1 }),
       ),
       delete: vi.fn().mockResolvedValue(undefined),
+      findMissingTagIdsForPublication: vi.fn().mockResolvedValue([]),
       setPostTagIds: vi.fn().mockResolvedValue(undefined),
       getPostTagIds: vi.fn().mockResolvedValue([]),
     };
@@ -72,6 +73,7 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
       getPostAuthors: vi.fn().mockResolvedValue([
         { authorId: "author-a", isPrimary: true },
       ]),
+      findMissingPublicationAuthorIds: vi.fn().mockResolvedValue([]),
       setPostAuthors: vi.fn().mockResolvedValue(undefined),
     };
 
