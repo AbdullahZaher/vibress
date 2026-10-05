@@ -54,6 +54,24 @@ export class PagesService {
     });
 
     const content = data.content || { version: 1, root: {} };
+    const authorIds =
+      data.authorIds && data.authorIds.length > 0
+        ? data.authorIds
+        : [data.primaryAuthorId];
+    const requestedAuthorIds = Array.from(
+      new Set([data.primaryAuthorId, ...authorIds]),
+    );
+    const missingAuthorIds =
+      await this.authorRepo.findMissingPublicationAuthorIds(
+        pubId,
+        requestedAuthorIds,
+      );
+    if (missingAuthorIds.length > 0) {
+      throw new PageDomainError(
+        "INVALID_AUTHOR_PUBLICATION",
+        "One or more authors do not belong to this publication",
+      );
+    }
 
     const page = await this.pageRepo.create({
       ...data,
@@ -63,14 +81,11 @@ export class PagesService {
       createdBy: data.createdBy || actorId,
     });
 
-    const authorIds =
-      data.authorIds && data.authorIds.length > 0
-        ? data.authorIds
-        : [data.primaryAuthorId];
     await this.authorRepo.setPageAuthors(
       page.id,
       authorIds,
       data.primaryAuthorId,
+      pubId,
     );
 
     if (this.mediaService) {
@@ -124,6 +139,25 @@ export class PagesService {
       throw new PageDomainError("PAGE_NOT_FOUND", "Page not found");
     }
 
+    const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
+    const authorIds = data.authorIds || [primaryAuthorId];
+    if (data.primaryAuthorId || data.authorIds) {
+      const requestedAuthorIds = Array.from(
+        new Set([primaryAuthorId, ...authorIds]),
+      );
+      const missingAuthorIds =
+        await this.authorRepo.findMissingPublicationAuthorIds(
+          current.publicationId,
+          requestedAuthorIds,
+        );
+      if (missingAuthorIds.length > 0) {
+        throw new PageDomainError(
+          "INVALID_AUTHOR_PUBLICATION",
+          "One or more authors do not belong to this publication",
+        );
+      }
+    }
+
     const expectedVersion =
       data.expectedVersion !== undefined
         ? data.expectedVersion
@@ -156,9 +190,12 @@ export class PagesService {
     }, publicationId);
 
     if (data.primaryAuthorId || data.authorIds) {
-      const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
-      const authorIds = data.authorIds || [primaryAuthorId];
-      await this.authorRepo.setPageAuthors(id, authorIds, primaryAuthorId);
+      await this.authorRepo.setPageAuthors(
+        id,
+        authorIds,
+        primaryAuthorId,
+        current.publicationId,
+      );
     }
 
     if (this.mediaService && data.content !== undefined) {
