@@ -489,7 +489,24 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
   console.log("Database seeding complete.");
 };
 
-if (require.main === module) {
+const isCliExecution = () => {
+  try {
+    if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+      return true;
+    }
+  } catch {
+    // ESM scope
+  }
+  if (process.argv[1]) {
+    const script = process.argv[1];
+    if (script.endsWith("seed.ts") || script.endsWith("seed.js") || script.endsWith("seed.mjs")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+if (isCliExecution()) {
   seedDatabase()
     .then(() => closeDbPool())
     .catch(async (err) => {

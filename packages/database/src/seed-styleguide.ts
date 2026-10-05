@@ -234,7 +234,24 @@ export const seedStyleGuide = async () => {
   console.log("Style Guide page created successfully!");
 };
 
-if (require.main === module) {
+const isCliExecution = () => {
+  try {
+    if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+      return true;
+    }
+  } catch {
+    // ESM scope
+  }
+  if (process.argv[1]) {
+    const script = process.argv[1];
+    if (script.endsWith("seed-styleguide.ts") || script.endsWith("seed-styleguide.js") || script.endsWith("seed-styleguide.mjs")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+if (isCliExecution()) {
   seedStyleGuide()
     .then(() => closeDbPool())
     .catch(async (err) => {

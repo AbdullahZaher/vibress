@@ -342,6 +342,23 @@ const start = async () => {
   }
 };
 
-if (require.main === module) {
+const isDirectExecution = () => {
+  try {
+    if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+      return true;
+    }
+  } catch {
+    // ESM scope
+  }
+  if (process.argv[1]) {
+    const script = process.argv[1];
+    if (script.endsWith("main.js") || script.endsWith("main.ts") || script.endsWith("main.mjs") || script.includes("/apps/api/")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+if (isDirectExecution()) {
   start();
 }

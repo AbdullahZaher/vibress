@@ -1,9 +1,9 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { MemberAuthMailer, MemberMagicLinkEmail } from "@vibress/members";
 import { getConfig } from "@vibress/config";
 
 export class SmtpMemberAuthMailer implements MemberAuthMailer {
-  private transporter: nodemailer.Transporter;
+  private transporter: Transporter;
   private from: string;
 
   constructor() {

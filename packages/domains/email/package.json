@@ -13,8 +13,7 @@
     "@vibress/database": "workspace:*",
     "@vibress/events": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "nodemailer": "^9.1.1",
-    "@types/nodemailer": "^6.4.15"
+    "nodemailer": "^10.0.13"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
