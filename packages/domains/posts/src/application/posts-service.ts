@@ -66,7 +66,8 @@ export class PostsService {
   ): Promise<Post> {
     const actorId = typeof actor === "string" ? actor : actor.userId;
     const actorPublicationId = typeof actor === "object" ? actor.publicationId : publicationId;
-    const targetPublicationId = data.publicationId || actorPublicationId || "pub_default";
+    const targetPublicationId =
+      actorPublicationId || publicationId || data.publicationId || "pub_default";
     const rawSlug = data.slug || data.title;
     const finalSlug = await generateUniqueSlug(rawSlug, async (candidate) => {
       const existing = await this.postRepo.findBySlug(candidate, targetPublicationId);
