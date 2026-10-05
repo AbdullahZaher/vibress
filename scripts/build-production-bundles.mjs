@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-import { createRequire } from 'node:module';
-import path from 'node:path';
+import * as esbuild from 'esbuild';
 import fs from 'node:fs';
-
-const req = createRequire(import.meta.url);
-const esbuildPath = req.resolve('esbuild', { paths: [req.resolve('tsx')] });
-const esbuild = req(esbuildPath);
 
 const BANNER = {
   js: `import { createRequire as __createRequire } from "node:module";
