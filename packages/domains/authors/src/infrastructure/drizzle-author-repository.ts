@@ -140,6 +140,7 @@ export class DrizzleAuthorRepository implements AuthorRepository {
 
   async findAuthorBySlug(
     slug: string,
+    publicationId?: string,
   ): Promise<{
     id: string;
     name: string;
@@ -147,15 +148,35 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     bio: string | null;
   } | null> {
     const db = getDb();
-    const rows = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        slug: users.slug,
-        bio: users.bio,
-      })
-      .from(users)
-      .where(and(isNull(users.deletedAt), eq(users.status, "active")));
+    const rows = publicationId
+      ? await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .innerJoin(
+            publicationMemberships,
+            eq(publicationMemberships.userId, users.id),
+          )
+          .where(
+            and(
+              eq(publicationMemberships.publicationId, publicationId),
+              isNull(users.deletedAt),
+              eq(users.status, "active"),
+            ),
+          )
+      : await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .where(and(isNull(users.deletedAt), eq(users.status, "active")));
 
     const matched = rows.find(
       (r) => r.slug === slug || slugify(r.name) === slug || r.id === slug,
@@ -170,19 +191,41 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     };
   }
 
-  async listAuthors(): Promise<
+  async listAuthors(
+    publicationId?: string,
+  ): Promise<
     Array<{ id: string; name: string; slug: string; bio: string | null }>
   > {
     const db = getDb();
-    const rows = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        slug: users.slug,
-        bio: users.bio,
-      })
-      .from(users)
-      .where(and(isNull(users.deletedAt), eq(users.status, "active")));
+    const rows = publicationId
+      ? await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .innerJoin(
+            publicationMemberships,
+            eq(publicationMemberships.userId, users.id),
+          )
+          .where(
+            and(
+              eq(publicationMemberships.publicationId, publicationId),
+              isNull(users.deletedAt),
+              eq(users.status, "active"),
+            ),
+          )
+      : await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .where(and(isNull(users.deletedAt), eq(users.status, "active")));
 
     return rows.map((r) => ({
       id: r.id,
