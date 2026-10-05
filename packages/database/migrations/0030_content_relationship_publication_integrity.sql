@@ -8,9 +8,11 @@
 
 BEGIN;
 
--- 1. Materialize the legacy implicit pub_default staff-access fallback.
--- These users already receive pub_default access from WorkspaceService today; this makes that
--- existing authorization explicit so new author membership FKs do not break single-publication upgrades.
+-- 1. Materialize access that the current authorization model already treats as valid.
+-- 1a. Legacy/default publication fallback: users with an assigned global role can already
+-- resolve pub_default without an explicit publication membership. Persist that existing
+-- access so author FKs do not break upgrades. Disabled/soft-deleted historical authors
+-- are included because membership rows do not bypass authentication/user-status checks.
 INSERT INTO "publication_memberships" (
   "id",
   "publication_id",
@@ -49,19 +51,47 @@ SELECT
   NOW(),
   NOW()
 FROM "users" u
-WHERE u."status" = 'active'
-  AND u."deleted_at" IS NULL
-  AND EXISTS (
-    SELECT 1 FROM "user_roles" ur
-    JOIN "roles" r ON r."id" = ur."role_id"
+WHERE EXISTS (
+    SELECT 1
+    FROM "user_roles" ur
     WHERE ur."user_id" = u."id"
-      AND r."key" IN ('owner', 'administrator', 'editor', 'author', 'contributor')
+  )
+  AND EXISTS (
+    SELECT 1 FROM "publications" p WHERE p."id" = 'pub_default'
   )
   AND NOT EXISTS (
     SELECT 1
     FROM "publication_memberships" pm
     WHERE pm."publication_id" = 'pub_default'
       AND pm."user_id" = u."id"
+  );
+
+-- 1b. Workspace owners/admins already have access to every publication in their
+-- workspace. Materialize only that existing broad access; lower workspace roles
+-- are intentionally not inferred across publications.
+INSERT INTO "publication_memberships" (
+  "id",
+  "publication_id",
+  "user_id",
+  "role",
+  "created_at",
+  "updated_at"
+)
+SELECT
+  'pm_ws_' || md5(p."id" || ':' || wm."user_id"),
+  p."id",
+  wm."user_id",
+  CASE WHEN wm."role" = 'owner' THEN 'owner' ELSE 'admin' END,
+  NOW(),
+  NOW()
+FROM "workspace_members" wm
+JOIN "publications" p ON p."workspace_id" = wm."workspace_id"
+WHERE wm."role" IN ('owner', 'admin')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "publication_memberships" pm
+    WHERE pm."publication_id" = p."id"
+      AND pm."user_id" = wm."user_id"
   );
 
 -- 2. Composite uniqueness required by publication-aware foreign keys.
