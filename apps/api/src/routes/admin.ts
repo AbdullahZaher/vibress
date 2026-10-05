@@ -1,7 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { usersService, rolesService } from "../services";
 import { requireStaffSession, requirePermission } from "../middleware/auth";
-import { getDb, userInvitations } from "@vibress/database";
+import {
+  getDb,
+  publicationMemberships,
+  userInvitations,
+} from "@vibress/database";
 import { eq, and } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashToken } from "@vibress/security";
@@ -118,6 +122,40 @@ export async function adminRoutes(fastify: FastifyInstance) {
         userId = newUser.id;
         await rolesService.assignRoleToUser(userId, role.id);
       }
+
+      const publicationId =
+        req.publicationContext?.publicationId || "pub_default";
+      const publicationRole =
+        role.key === "owner"
+          ? "owner"
+          : role.key === "administrator"
+            ? "admin"
+            : role.key === "author"
+              ? "author"
+              : role.key === "contributor"
+                ? "contributor"
+                : "editor";
+
+      await db
+        .insert(publicationMemberships)
+        .values({
+          id: crypto.randomUUID(),
+          publicationId,
+          userId,
+          role: publicationRole,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [
+            publicationMemberships.publicationId,
+            publicationMemberships.userId,
+          ],
+          set: {
+            role: publicationRole,
+            updatedAt: new Date(),
+          },
+        });
 
       // Generate 32-byte secure random token and store SHA-256 hash
       const rawToken = crypto.randomBytes(32).toString("hex");
