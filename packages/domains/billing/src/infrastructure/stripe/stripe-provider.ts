@@ -28,8 +28,11 @@ export class StripeBillingProvider implements BillingProvider {
   private stripe: Stripe;
   private webhookSecret: string;
 
-  constructor(options: StripeAdapterOptions) {
-    this.stripe = new Stripe(options.secretKey);
+  constructor(
+    options: StripeAdapterOptions,
+    stripe: Stripe = new Stripe(options.secretKey),
+  ) {
+    this.stripe = stripe;
     this.webhookSecret = options.webhookSecret;
   }
 
