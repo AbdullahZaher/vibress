@@ -74,6 +74,38 @@ export class PostsService {
     });
 
     const content = data.content || { version: 1, root: {} };
+    const authorIds =
+      data.authorIds && data.authorIds.length > 0
+        ? data.authorIds
+        : [data.primaryAuthorId];
+    const requestedAuthorIds = Array.from(
+      new Set([data.primaryAuthorId, ...authorIds]),
+    );
+    const missingAuthorIds =
+      await this.authorRepo.findMissingPublicationAuthorIds(
+        targetPublicationId,
+        requestedAuthorIds,
+      );
+    if (missingAuthorIds.length > 0) {
+      throw new PostDomainError(
+        "INVALID_AUTHOR_PUBLICATION",
+        "One or more authors do not belong to this publication",
+      );
+    }
+
+    if (data.tagIds) {
+      const missingTagIds =
+        await this.postRepo.findMissingTagIdsForPublication(
+          targetPublicationId,
+          data.tagIds,
+        );
+      if (missingTagIds.length > 0) {
+        throw new PostDomainError(
+          "INVALID_TAG_PUBLICATION",
+          "One or more tags do not belong to this publication",
+        );
+      }
+    }
 
     if (data.featureImageId && this.mediaService) {
       try {
@@ -101,19 +133,20 @@ export class PostsService {
     });
 
     // Set authors
-    const authorIds =
-      data.authorIds && data.authorIds.length > 0
-        ? data.authorIds
-        : [data.primaryAuthorId];
     await this.authorRepo.setPostAuthors(
       post.id,
       authorIds,
       data.primaryAuthorId,
+      targetPublicationId,
     );
 
     // Set tags
     if (data.tagIds) {
-      await this.postRepo.setPostTagIds(post.id, data.tagIds);
+      await this.postRepo.setPostTagIds(
+        post.id,
+        data.tagIds,
+        targetPublicationId,
+      );
     }
 
     // Update media references
@@ -193,6 +226,39 @@ export class PostsService {
       throw new PostDomainError("FORBIDDEN", "Forbidden: You do not have permission to modify another author's post");
     }
 
+    const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
+    const authorIds = data.authorIds || [primaryAuthorId];
+    if (data.primaryAuthorId || data.authorIds) {
+      const requestedAuthorIds = Array.from(
+        new Set([primaryAuthorId, ...authorIds]),
+      );
+      const missingAuthorIds =
+        await this.authorRepo.findMissingPublicationAuthorIds(
+          current.publicationId,
+          requestedAuthorIds,
+        );
+      if (missingAuthorIds.length > 0) {
+        throw new PostDomainError(
+          "INVALID_AUTHOR_PUBLICATION",
+          "One or more authors do not belong to this publication",
+        );
+      }
+    }
+
+    if (data.tagIds) {
+      const missingTagIds =
+        await this.postRepo.findMissingTagIdsForPublication(
+          current.publicationId,
+          data.tagIds,
+        );
+      if (missingTagIds.length > 0) {
+        throw new PostDomainError(
+          "INVALID_TAG_PUBLICATION",
+          "One or more tags do not belong to this publication",
+        );
+      }
+    }
+
     const expectedVersion =
       data.expectedVersion !== undefined
         ? data.expectedVersion
@@ -237,6 +303,8 @@ export class PostsService {
     }
     if (data.featureImageAlt !== undefined) updatePayload.featureImageAlt = data.featureImageAlt;
     if (data.featureImageCaption !== undefined) updatePayload.featureImageCaption = data.featureImageCaption;
+    if (data.primaryAuthorId !== undefined)
+      updatePayload.primaryAuthorId = data.primaryAuthorId;
 
     const updated = await this.postRepo.update(id, {
       ...updatePayload,
@@ -244,13 +312,20 @@ export class PostsService {
     }, current.publicationId);
 
     if (data.primaryAuthorId || data.authorIds) {
-      const primaryAuthorId = data.primaryAuthorId || current.primaryAuthorId;
-      const authorIds = data.authorIds || [primaryAuthorId];
-      await this.authorRepo.setPostAuthors(id, authorIds, primaryAuthorId);
+      await this.authorRepo.setPostAuthors(
+        id,
+        authorIds,
+        primaryAuthorId,
+        current.publicationId,
+      );
     }
 
     if (data.tagIds) {
-      await this.postRepo.setPostTagIds(id, data.tagIds);
+      await this.postRepo.setPostTagIds(
+        id,
+        data.tagIds,
+        current.publicationId,
+      );
     }
 
     if (this.mediaService && (data.content !== undefined || data.featureImageId !== undefined)) {
