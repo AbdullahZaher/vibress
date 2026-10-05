@@ -11,6 +11,9 @@ import {
   posts,
   pages,
   tags,
+  postTags,
+  postAuthors,
+  pageAuthors,
   mediaAssets,
   members,
   products,
@@ -47,6 +50,10 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
   const USER_ALPHA_EMAIL = `staff.alpha.${runId}@example.com`;
   const USER_BETA_EMAIL = `staff.beta.${runId}@example.com`;
   const COMMON_PASSWORD = "Password123!Secure";
+  const TICKET1_ALPHA_TAG_ID = crypto.randomUUID();
+  const TICKET1_BETA_TAG_ID = crypto.randomUUID();
+  const TICKET1_ALPHA_POST_ID = crypto.randomUUID();
+  const TICKET1_ALPHA_PAGE_ID = crypto.randomUUID();
 
   let userAlphaId: string;
   let userBetaId: string;
@@ -145,6 +152,52 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
         role: "owner",
       },
     ]);
+
+    // Ticket 1 fixtures: valid publication-owned content and tags for direct FK tests.
+    await db.insert(tags).values([
+      {
+        id: TICKET1_ALPHA_TAG_ID,
+        publicationId: PUB_ALPHA_ID,
+        name: "Ticket 1 Alpha Tag",
+        slug: `ticket1-alpha-${runId}`,
+      },
+      {
+        id: TICKET1_BETA_TAG_ID,
+        publicationId: PUB_BETA_ID,
+        name: "Ticket 1 Beta Tag",
+        slug: `ticket1-beta-${runId}`,
+      },
+    ]);
+
+    await db.insert(posts).values({
+      id: TICKET1_ALPHA_POST_ID,
+      publicationId: PUB_ALPHA_ID,
+      title: "Ticket 1 Alpha Post",
+      slug: `ticket1-alpha-post-${runId}`,
+      content: {
+        schema: "vibress-studio",
+        version: 1,
+        root: { type: "root", children: [] },
+      },
+      primaryAuthorId: userAlphaId,
+      createdBy: userAlphaId,
+      updatedBy: userAlphaId,
+    });
+
+    await db.insert(pages).values({
+      id: TICKET1_ALPHA_PAGE_ID,
+      publicationId: PUB_ALPHA_ID,
+      title: "Ticket 1 Alpha Page",
+      slug: `ticket1-alpha-page-${runId}`,
+      content: {
+        schema: "vibress-studio",
+        version: 1,
+        root: { type: "root", children: [] },
+      },
+      primaryAuthorId: userAlphaId,
+      createdBy: userAlphaId,
+      updatedBy: userAlphaId,
+    });
 
     // 5. Authenticate both users to obtain staff session cookies
     const loginAlpha = await app.inject({
@@ -434,7 +487,159 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
     });
   });
 
-  describe("5. Search Isolation Across Publications", () => {
+  describe("5. Content Relationship Publication Integrity", () => {
+    it("accepts same-publication authors and tags through the admin API", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/posts",
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          title: `Ticket 1 valid post ${runId}`,
+          primaryAuthorId: userAlphaId,
+          authorIds: [userAlphaId],
+          tagIds: [TICKET1_ALPHA_TAG_ID],
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().post.primaryAuthorId).toBe(userAlphaId);
+      expect(res.json().post.tagIds).toEqual([TICKET1_ALPHA_TAG_ID]);
+    });
+
+    it("rejects a tag from another publication with a stable 400 error", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/posts",
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          title: `Ticket 1 invalid tag ${runId}`,
+          primaryAuthorId: userAlphaId,
+          tagIds: [TICKET1_BETA_TAG_ID],
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe("INVALID_TAG_PUBLICATION");
+    });
+
+    it("rejects a post author from another publication with a stable 400 error", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/posts",
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          title: `Ticket 1 invalid author ${runId}`,
+          primaryAuthorId: userBetaId,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe(
+        "INVALID_AUTHOR_PUBLICATION",
+      );
+    });
+
+    it("rejects a page author from another publication with a stable 400 error", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/pages",
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          title: `Ticket 1 invalid page author ${runId}`,
+          primaryAuthorId: userBetaId,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe(
+        "INVALID_AUTHOR_PUBLICATION",
+      );
+    });
+
+    it("rejects cross-publication post tags at the database layer", async () => {
+      const db = getDb();
+      await expect(
+        db.insert(postTags).values({
+          publicationId: PUB_ALPHA_ID,
+          postId: TICKET1_ALPHA_POST_ID,
+          tagId: TICKET1_BETA_TAG_ID,
+          sortOrder: 0,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects post and page authors without publication membership at the database layer", async () => {
+      const db = getDb();
+
+      await expect(
+        db.insert(postAuthors).values({
+          publicationId: PUB_ALPHA_ID,
+          postId: TICKET1_ALPHA_POST_ID,
+          userId: userBetaId,
+          sortOrder: 0,
+          isPrimary: false,
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        db.insert(pageAuthors).values({
+          publicationId: PUB_ALPHA_ID,
+          pageId: TICKET1_ALPHA_PAGE_ID,
+          userId: userBetaId,
+          sortOrder: 0,
+          isPrimary: false,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects cross-publication primary authors at the database layer", async () => {
+      const db = getDb();
+
+      await expect(
+        db.insert(posts).values({
+          id: crypto.randomUUID(),
+          publicationId: PUB_ALPHA_ID,
+          title: "Invalid primary author post",
+          slug: `invalid-primary-post-${runId}`,
+          content: { version: 1, root: {} },
+          primaryAuthorId: userBetaId,
+          createdBy: userAlphaId,
+          updatedBy: userAlphaId,
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        db.insert(pages).values({
+          id: crypto.randomUUID(),
+          publicationId: PUB_ALPHA_ID,
+          title: "Invalid primary author page",
+          slug: `invalid-primary-page-${runId}`,
+          content: { version: 1, root: {} },
+          primaryAuthorId: userBetaId,
+          createdBy: userAlphaId,
+          updatedBy: userAlphaId,
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("6. Search Isolation Across Publications", () => {
     it("indexes unique documents and isolates search queries per publication", async () => {
       const searchTerm = `quantumcrypt-${runId}`;
 
@@ -492,7 +697,7 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
     });
   });
 
-  describe("6. Queue & Worker Job Scope Validation", () => {
+  describe("7. Queue & Worker Job Scope Validation", () => {
     it("validates publication job scope correctly", () => {
       const validJob = {
         scope: "publication" as const,
