@@ -272,7 +272,7 @@ BEGIN
       ADD CONSTRAINT "post_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE RESTRICT;
+      ON DELETE NO ACTION;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_page_publication_fk') THEN
@@ -288,7 +288,7 @@ BEGIN
       ADD CONSTRAINT "page_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE RESTRICT;
+      ON DELETE NO ACTION;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_primary_author_publication_fk') THEN
@@ -296,7 +296,7 @@ BEGIN
       ADD CONSTRAINT "posts_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE RESTRICT;
+      ON DELETE NO ACTION;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_primary_author_publication_fk') THEN
@@ -304,7 +304,7 @@ BEGIN
       ADD CONSTRAINT "pages_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE RESTRICT;
+      ON DELETE NO ACTION;
   END IF;
 END $$;
 
