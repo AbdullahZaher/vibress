@@ -8,6 +8,7 @@ import {
   products,
   plans,
   newsletters,
+  publicationMemberships,
 } from "./schema";
 import { eq, sql } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -348,6 +349,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Owner",
           slug: "owner-local",
           roleId: ownerRole.id,
+          publicationRole: "owner",
           hash: devPassHash,
         },
         {
@@ -355,6 +357,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Owner",
           slug: "owner-example",
           roleId: ownerRole.id,
+          publicationRole: "owner",
           hash: ownerPassHash,
         },
         {
@@ -362,6 +365,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Admin",
           slug: "admin-local",
           roleId: adminRole?.id || ownerRole.id,
+          publicationRole: "admin",
           hash: devPassHash,
         },
         {
@@ -376,6 +380,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Editor",
           slug: "editor-local",
           roleId: editorRole?.id || ownerRole.id,
+          publicationRole: "editor",
           hash: devPassHash,
         },
         {
@@ -383,6 +388,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Author",
           slug: "author-local",
           roleId: authorRole?.id || ownerRole.id,
+          publicationRole: "author",
           hash: devPassHash,
         },
       ];
@@ -393,8 +399,8 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           .from(users)
           .where(eq(users.email, devUser.email))
           .limit(1);
-        let userId: string;
-        if (existingUser.length === 0) {
+        let userId = existingUser[0]?.id;
+        if (!userId) {
           userId = crypto.randomUUID();
           await db.insert(users).values({
             id: userId,
@@ -415,6 +421,18 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
             })
             .onConflictDoNothing();
         }
+
+        await db
+          .insert(publicationMemberships)
+          .values({
+            id: crypto.randomUUID(),
+            publicationId: "pub_default",
+            userId,
+            role: devUser.publicationRole,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing();
       }
     }
   }
