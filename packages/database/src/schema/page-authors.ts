@@ -50,7 +50,7 @@ export const pageAuthors = pgTable(
           publicationMemberships.userId,
         ],
         name: "page_authors_membership_fk",
-      }).onDelete("restrict"),
+      }).onDelete("no action"),
       pageIdIdx: index("page_authors_page_id_idx").on(table.pageId),
       userIdIdx: index("page_authors_user_id_idx").on(table.userId),
     };
