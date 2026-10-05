@@ -384,11 +384,38 @@ export class DrizzlePostRepository implements PostRepository {
     return rows.map((r) => r.tagId);
   }
 
-  async setPostTagIds(postId: string, tagIds: string[]): Promise<void> {
+  async findMissingTagIdsForPublication(
+    publicationId: string,
+    tagIds: string[],
+  ): Promise<string[]> {
+    const uniqueTagIds = Array.from(new Set(tagIds));
+    if (uniqueTagIds.length === 0) return [];
+
+    const db = getDb();
+    const rows = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(
+        and(
+          eq(tags.publicationId, publicationId),
+          inArray(tags.id, uniqueTagIds),
+        ),
+      );
+
+    const found = new Set(rows.map((row) => row.id));
+    return uniqueTagIds.filter((tagId) => !found.has(tagId));
+  }
+
+  async setPostTagIds(
+    postId: string,
+    tagIds: string[],
+    publicationId: string,
+  ): Promise<void> {
     const db = getDb();
     await db.delete(postTags).where(eq(postTags.postId, postId));
     const uniqueTagIds = Array.from(new Set(tagIds));
     const insertValues = uniqueTagIds.map((tagId, idx) => ({
+      publicationId,
       postId,
       tagId,
       sortOrder: idx,
