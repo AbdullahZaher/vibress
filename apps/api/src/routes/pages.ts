@@ -95,21 +95,39 @@ export async function pageRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const page = await pagesService.createPage(
-        {
-          ...parseResult.data,
-          publicationId: req.publicationContext?.publicationId,
-          scheduledAt: parseResult.data.scheduledAt
-            ? new Date(parseResult.data.scheduledAt)
-            : null,
-        },
-        req.user!.id,
-      );
+      try {
+        const page = await pagesService.createPage(
+          {
+            ...parseResult.data,
+            publicationId: req.publicationContext?.publicationId,
+            scheduledAt: parseResult.data.scheduledAt
+              ? new Date(parseResult.data.scheduledAt)
+              : null,
+          },
+          req.user!.id,
+        );
 
-      const authors = await authorsService.getPageAuthors(page.id);
-      return reply.status(201).send({
-        page: { ...page, authors },
-      });
+        const authors = await authorsService.getPageAuthors(page.id);
+        return reply.status(201).send({
+          page: { ...page, authors },
+        });
+      } catch (err: unknown) {
+        if (
+          err instanceof PageDomainError &&
+          err.code === "INVALID_AUTHOR_PUBLICATION"
+        ) {
+          return reply.status(400).send({
+            errors: [
+              {
+                code: err.code,
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        throw err;
+      }
     },
   });
 
@@ -148,6 +166,17 @@ export async function pageRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof PageDomainError) {
+          if (err.code === "INVALID_AUTHOR_PUBLICATION") {
+            return reply.status(400).send({
+              errors: [
+                {
+                  code: err.code,
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
           if (err.code === "CONTENT_CONFLICT") {
             return reply.status(409).send({
               errors: [
