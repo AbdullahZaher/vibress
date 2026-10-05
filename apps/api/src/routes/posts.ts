@@ -149,6 +149,7 @@ export async function postRoutes(fastify: FastifyInstance) {
               : null,
           },
           req.user!.id,
+          req.publicationContext?.publicationId,
         );
 
         const authors = await authorsService.getPostAuthors(post.id);
