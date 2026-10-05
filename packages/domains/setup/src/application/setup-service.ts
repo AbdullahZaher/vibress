@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
-import { runInTransaction, getDb } from "@vibress/database";
+import {
+  runInTransaction,
+  getDb,
+  publicationMemberships,
+} from "@vibress/database";
 import { sql } from "drizzle-orm";
 import { UsersService, DrizzleUserRepository, User } from "@vibress/users";
 import { RolesService, DrizzleRoleRepository } from "@vibress/roles";
@@ -266,6 +270,17 @@ export class SetupService {
         );
       }
       await this.rolesService.assignRoleToUser(user.id, ownerRole.id);
+      await getDb()
+        .insert(publicationMemberships)
+        .values({
+          id: crypto.randomUUID(),
+          publicationId: "pub_default",
+          userId: user.id,
+          role: "owner",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .onConflictDoNothing();
 
       await this.writeSiteSettings(user.id, input.site);
 
