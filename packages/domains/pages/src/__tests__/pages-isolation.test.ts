@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, beforeAll } from "vitest";
-import { getDb, publications, users } from "@vibress/database";
+import {
+  getDb,
+  publications,
+  publicationMemberships,
+  users,
+} from "@vibress/database";
 import { DrizzlePageRepository } from "../infrastructure/drizzle-page-repository";
 import { PagesService } from "../application/pages-service";
 import { PageDomainError } from "../domain/page";
@@ -15,6 +20,7 @@ describe("Pages Multi-Publication Isolation", () => {
   } as any;
 
   const mockAuthorRepo = {
+    findMissingPublicationAuthorIds: async () => [],
     setPageAuthors: async () => {},
   } as any;
 
@@ -47,6 +53,24 @@ describe("Pages Multi-Publication Isolation", () => {
 
     const userRows = await db.select().from(users).limit(1);
     testUserId = userRows[0]!.id;
+
+    await db
+      .insert(publicationMemberships)
+      .values([
+        {
+          id: `pages-test-alpha-${testUserId}`,
+          publicationId: "pub_alpha",
+          userId: testUserId,
+          role: "editor",
+        },
+        {
+          id: `pages-test-beta-${testUserId}`,
+          publicationId: "pub_beta",
+          userId: testUserId,
+          role: "editor",
+        },
+      ])
+      .onConflictDoNothing();
   });
 
   beforeEach(() => {
