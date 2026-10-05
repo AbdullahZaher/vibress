@@ -148,7 +148,7 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment: *app-environment
-    command: ["sh", "-c", "pnpm --filter @vibress/database run db:migrate"]
+    command: ["node", "dist/migrate.js"]
     networks: [backend]
     depends_on:
       postgres:

@@ -27,30 +27,35 @@ function shouldIgnore(filePath) {
   return false;
 }
 
+for (const root of roots) {
+  if (!fs.existsSync(root)) {
+    console.error(`Error: source root '${root}' does not exist.`);
+    process.exit(1);
+  }
+}
+
 function findFiles(dir) {
-  let results = [];
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      const fullPath = path.join(dir, entry.name);
-      if (shouldIgnore(fullPath)) continue;
-      if (entry.isDirectory()) {
-        results = results.concat(findFiles(fullPath));
-      } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
-        results.push(fullPath);
-      }
+  const results = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const fullPath = path.join(dir, entry.name);
+    if (shouldIgnore(fullPath)) continue;
+    if (entry.isDirectory()) {
+      results.push(...findFiles(fullPath));
+    } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+      results.push(fullPath);
     }
-  } catch {
-    // Directory unreadable or does not exist
   }
   return results;
 }
 
 let total = 0;
+let totalFilesScanned = 0;
 const perFile = [];
 for (const root of roots) {
   const files = findFiles(root);
+  totalFilesScanned += files.length;
   for (const file of files) {
     const content = fs.readFileSync(file, 'utf8');
     const matches = content.match(PATTERN);
@@ -59,6 +64,11 @@ for (const root of roots) {
       perFile.push({ file, count: matches.length });
     }
   }
+}
+
+if (totalFilesScanned === 0) {
+  console.error('Error: No source files were found to scan. Failing closed.');
+  process.exit(1);
 }
 
 if (report) {
