@@ -2,11 +2,8 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { getDb, closeDbPool } from "./connection";
 import path from "node:path";
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-
-const currentDir = typeof __dirname !== "undefined"
-  ? __dirname
-  : path.dirname(fileURLToPath(import.meta.url));
+const currentDir =
+  typeof __dirname !== "undefined" ? __dirname : process.cwd();
 
 export const findMigrationsFolder = (): string => {
   if (process.env.MIGRATIONS_FOLDER && fs.existsSync(process.env.MIGRATIONS_FOLDER)) {
