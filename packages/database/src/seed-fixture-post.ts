@@ -1,5 +1,12 @@
 import { getDb } from "./connection";
-import { publications, users, posts, postAuthors, revisions } from "./schema";
+import {
+  publications,
+  publicationMemberships,
+  users,
+  posts,
+  postAuthors,
+  revisions,
+} from "./schema";
 import { eq, and } from "drizzle-orm";
 import crypto from "node:crypto";
 
@@ -664,7 +671,12 @@ export async function seedFixturePost(): Promise<void> {
     return;
   }
 
-  const [author] = await db.select().from(users).limit(1);
+  const [author] = await db
+    .select({ user: users })
+    .from(publicationMemberships)
+    .innerJoin(users, eq(publicationMemberships.userId, users.id))
+    .where(eq(publicationMemberships.publicationId, PUBLICATION_ID))
+    .limit(1);
   if (!author) {
     return;
   }
@@ -700,10 +712,10 @@ export async function seedFixturePost(): Promise<void> {
       status: "published",
       visibility: "public",
       version: 1,
-      primaryAuthorId: author.id,
-      createdBy: author.id,
-      updatedBy: author.id,
-      publishedBy: author.id,
+      primaryAuthorId: author.user.id,
+      createdBy: author.user.id,
+      updatedBy: author.user.id,
+      publishedBy: author.user.id,
       publishedAt: now,
       metaTitle: FIXTURE_POST_TITLE,
       metaDescription: FIXTURE_POST_EXCERPT,
@@ -714,8 +726,9 @@ export async function seedFixturePost(): Promise<void> {
     await db
       .insert(postAuthors)
       .values({
+        publicationId: PUBLICATION_ID,
         postId: TARGET_POST_ID,
-        userId: author.id,
+        userId: author.user.id,
         sortOrder: 0,
         createdAt: now,
       })
@@ -745,7 +758,7 @@ export async function seedFixturePost(): Promise<void> {
       excerpt: FIXTURE_POST_EXCERPT,
       content: lexicalContent,
       contentVersion: 1,
-      createdBy: author.id,
+      createdBy: author.user.id,
       createdAt: now,
     });
   }
