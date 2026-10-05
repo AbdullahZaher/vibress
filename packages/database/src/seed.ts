@@ -373,6 +373,7 @@ export const seedDatabase = async (options?: SeedOptions): Promise<void> => {
           name: "Admin",
           slug: "admin-example",
           roleId: adminRole?.id || ownerRole.id,
+          publicationRole: "admin",
           hash: devPassHash,
         },
         {
