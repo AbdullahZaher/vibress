@@ -1,0 +1,44 @@
+name: Sharp Lock Refresh
+
+on:
+  push:
+    branches:
+      - fix/sharp-cve-2026-96889
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/sharp-cve-2026-96889
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Refresh lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+
+      - name: Verify production audit
+        run: pnpm audit --prod --audit-level high
+
+      - name: Commit generated lockfile and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/sharp-lock-refresh.yml
+          git add pnpm-lock.yaml
+          git commit -m "fix(deps): refresh sharp security lock"
+          git push origin HEAD:fix/sharp-cve-2026-96889
