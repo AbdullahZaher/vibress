@@ -78,6 +78,7 @@ describe("Migration 0030 content relationship publication integrity", () => {
       DELETE FROM "user_roles"
         WHERE "user_id" IN ('${userId}', '${invalidUserId}');
       DELETE FROM "users" WHERE "id" IN ('${userId}', '${invalidUserId}');
+      DELETE FROM "roles" WHERE "id" = 'm0030_author_role';
       DELETE FROM "publications" WHERE "id" = '${publicationB}';
     `);
   };
