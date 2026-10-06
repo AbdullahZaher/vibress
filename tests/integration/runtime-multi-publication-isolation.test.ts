@@ -801,6 +801,17 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       });
 
       await expect(
+        db
+          .delete(publicationMemberships)
+          .where(
+            and(
+              eq(publicationMemberships.publicationId, publicationId),
+              eq(publicationMemberships.userId, userAlphaId),
+            ),
+          ),
+      ).rejects.toThrow();
+
+      await expect(
         db.delete(publications).where(eq(publications.id, publicationId)),
       ).resolves.toBeDefined();
 
