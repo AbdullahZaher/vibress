@@ -36,8 +36,8 @@ export const userInvitations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    publicationId: text("publication_id").notNull().default("pub_default"),
-    publicationRole: text("publication_role").notNull().default("contributor"),
+    publicationId: text("publication_id").notNull(),
+    publicationRole: text("publication_role").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     status: text("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
