@@ -261,7 +261,7 @@ describe("Migration 0030 content relationship publication integrity", () => {
           "publication_id", "post_id", "tag_id", "sort_order", "created_at"
         )
         VALUES ('pub_default', '${postA}', '${tagB}', 1, NOW())
-      `)),
+      `),
     ).rejects.toThrow();
 
     await cleanupFixtures();
