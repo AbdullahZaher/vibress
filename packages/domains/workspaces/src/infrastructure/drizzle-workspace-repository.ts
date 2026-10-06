@@ -4,9 +4,11 @@ import {
   workspaceMembers,
   publications,
   publicationMemberships,
+  runInTransaction,
   eq,
   and,
 } from "@vibress/database";
+import { inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 
 import {
@@ -95,28 +97,54 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
   async addMember(
     member: Omit<WorkspaceMember, "createdAt" | "updatedAt">,
   ): Promise<WorkspaceMember> {
-    const db = getDb();
-    const now = new Date();
-    const [row] = await db
-      .insert(workspaceMembers)
-      .values({
-        id: member.id || crypto.randomUUID(),
-        workspaceId: member.workspaceId,
-        userId: member.userId,
-        role: member.role,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    if (!row) throw new Error("Failed to add workspace member");
-    return {
-      id: row.id,
-      workspaceId: row.workspaceId,
-      userId: row.userId,
-      role: row.role as WorkspaceRole,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return runInTransaction(async () => {
+      const db = getDb();
+      const now = new Date();
+      const [row] = await db
+        .insert(workspaceMembers)
+        .values({
+          id: member.id || crypto.randomUUID(),
+          workspaceId: member.workspaceId,
+          userId: member.userId,
+          role: member.role,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!row) throw new Error("Failed to add workspace member");
+
+      if (member.role === "owner" || member.role === "admin") {
+        const workspacePublications = await db
+          .select({ id: publications.id })
+          .from(publications)
+          .where(eq(publications.workspaceId, member.workspaceId));
+
+        if (workspacePublications.length > 0) {
+          await db
+            .insert(publicationMemberships)
+            .values(
+              workspacePublications.map((publication) => ({
+                id: crypto.randomUUID(),
+                publicationId: publication.id,
+                userId: member.userId,
+                role: member.role,
+                createdAt: now,
+                updatedAt: now,
+              })),
+            )
+            .onConflictDoNothing();
+        }
+      }
+
+      return {
+        id: row.id,
+        workspaceId: row.workspaceId,
+        userId: row.userId,
+        role: row.role as WorkspaceRole,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
   }
 
   async getMembership(
@@ -292,36 +320,68 @@ export class DrizzlePublicationRepository implements PublicationRepository {
   async create(
     publication: Omit<Publication, "createdAt" | "updatedAt">,
   ): Promise<Publication> {
-    const db = getDb();
-    const now = new Date();
-    const [row] = await db
-      .insert(publications)
-      .values({
-        id: publication.id || crypto.randomUUID(),
-        workspaceId: publication.workspaceId,
-        name: publication.name,
-        slug: publication.slug,
-        description: publication.description || null,
-        domain: publication.domain || null,
-        primaryLocale: publication.primaryLocale || "en",
-        settings: publication.settings || {},
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    if (!row) throw new Error("Failed to insert publication");
-    return {
-      id: row.id,
-      workspaceId: row.workspaceId,
-      name: row.name,
-      slug: row.slug,
-      description: row.description,
-      domain: row.domain,
-      primaryLocale: row.primaryLocale,
-      settings: (row.settings as Record<string, unknown>) || {},
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return runInTransaction(async () => {
+      const db = getDb();
+      const now = new Date();
+      const [row] = await db
+        .insert(publications)
+        .values({
+          id: publication.id || crypto.randomUUID(),
+          workspaceId: publication.workspaceId,
+          name: publication.name,
+          slug: publication.slug,
+          description: publication.description || null,
+          domain: publication.domain || null,
+          primaryLocale: publication.primaryLocale || "en",
+          settings: publication.settings || {},
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!row) throw new Error("Failed to insert publication");
+
+      const privilegedWorkspaceMembers = await db
+        .select({
+          userId: workspaceMembers.userId,
+          role: workspaceMembers.role,
+        })
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, publication.workspaceId),
+            inArray(workspaceMembers.role, ["owner", "admin"]),
+          ),
+        );
+
+      if (privilegedWorkspaceMembers.length > 0) {
+        await db
+          .insert(publicationMemberships)
+          .values(
+            privilegedWorkspaceMembers.map((member) => ({
+              id: crypto.randomUUID(),
+              publicationId: row.id,
+              userId: member.userId,
+              role: member.role,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
+      return {
+        id: row.id,
+        workspaceId: row.workspaceId,
+        name: row.name,
+        slug: row.slug,
+        description: row.description,
+        domain: row.domain,
+        primaryLocale: row.primaryLocale,
+        settings: (row.settings as Record<string, unknown>) || {},
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
   }
 
   async addMember(
