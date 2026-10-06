@@ -69,6 +69,13 @@ describe("Transaction Infrastructure", () => {
     });
     const ownerRole = await rolesService.findByKey("owner");
     await rolesService.assignRoleToUser(testUser.id, ownerRole!.id);
+    await pool.query(
+      `INSERT INTO publication_memberships
+        (id, publication_id, user_id, role, created_at, updated_at)
+       VALUES ($1, 'pub_default', $2, 'owner', NOW(), NOW())
+       ON CONFLICT (publication_id, user_id) DO NOTHING`,
+      ["pm_transactions_author", testUser.id],
+    );
 
     const tag = await tagsService.createTag({ name: "Tx Tag", slug: "tx-tag" });
     testTagId = tag.id;
@@ -113,9 +120,13 @@ describe("Transaction Infrastructure", () => {
 
     const failingPostRepo = new DrizzlePostRepository();
     const originalSetTags = failingPostRepo.setPostTagIds.bind(failingPostRepo);
-    failingPostRepo.setPostTagIds = async (postId, tagIds) => {
+    failingPostRepo.setPostTagIds = async (
+      postId,
+      tagIds,
+      publicationId,
+    ) => {
       if (overrides.failTags) throw new Error("injected: tag insert failure");
-      return originalSetTags(postId, tagIds);
+      return originalSetTags(postId, tagIds, publicationId);
     };
 
     const failingMediaRepo = new DrizzleMediaRepository();
