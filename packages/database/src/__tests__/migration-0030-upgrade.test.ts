@@ -219,12 +219,18 @@ describe("migration 0030 publication content integrity upgrade", () => {
       }>(`
         SELECT conname, condeferrable, condeferred
         FROM pg_constraint
-        WHERE conname IN (
-          'post_authors_membership_fk',
-          'page_authors_membership_fk',
-          'posts_primary_author_publication_fk',
-          'pages_primary_author_publication_fk'
+        WHERE conrelid IN (
+          'post_authors'::regclass,
+          'page_authors'::regclass,
+          'posts'::regclass,
+          'pages'::regclass
         )
+          AND conname IN (
+            'post_authors_membership_fk',
+            'page_authors_membership_fk',
+            'posts_primary_author_publication_fk',
+            'pages_primary_author_publication_fk'
+          )
         ORDER BY conname
       `);
       expect(deferredMembershipConstraints.rows).toHaveLength(4);
