@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
+import { getDb, publicationMemberships } from "@vibress/database";
+import { and, eq } from "drizzle-orm";
 
 describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite", () => {
   let app: FastifyInstance;
@@ -33,6 +35,7 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
   describe("AUTH-01: Staff Invitation Lifecycle", () => {
     const inviteEmail = `new-editor-${Date.now()}@example.com`;
     let invitationToken: string;
+    let invitedUserId: string;
 
     it("allows owner/admin to invite a new staff member with a secure token", async () => {
       const res = await app.inject({
@@ -56,6 +59,18 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(body.invitation.status).toBe("pending");
       expect(body.invitation.token).toBeDefined();
       invitationToken = body.invitation.token;
+      invitedUserId = body.user.id;
+
+      const memberships = await getDb()
+        .select()
+        .from(publicationMemberships)
+        .where(
+          and(
+            eq(publicationMemberships.publicationId, "pub_default"),
+            eq(publicationMemberships.userId, invitedUserId),
+          ),
+        );
+      expect(memberships).toHaveLength(0);
     });
 
     it("rejects inviting an already active user with HTTP 409", async () => {
@@ -133,6 +148,18 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.success).toBe(true);
+
+      const memberships = await getDb()
+        .select()
+        .from(publicationMemberships)
+        .where(
+          and(
+            eq(publicationMemberships.publicationId, "pub_default"),
+            eq(publicationMemberships.userId, invitedUserId),
+          ),
+        );
+      expect(memberships).toHaveLength(1);
+      expect(memberships[0]?.role).toBe("editor");
     });
 
     it("allows newly activated staff user to log in with their password", async () => {
@@ -150,6 +177,63 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(body.user.email).toBe(inviteEmail);
       expect(body.user.status).toBe("active");
       expect(body.user.roles).toContain("editor");
+    });
+
+    it("does not grant publication access for a revoked invitation", async () => {
+      const revokedEmail = `revoked-${Date.now()}@example.com`;
+      const inviteRes = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/users/invite",
+        headers: {
+          cookie: ownerCookie,
+          origin: "http://localhost:7779",
+        },
+        payload: {
+          email: revokedEmail,
+          name: "Revoked Author",
+          roleKey: "author",
+        },
+      });
+      expect(inviteRes.statusCode).toBe(201);
+      const inviteBody = JSON.parse(inviteRes.body);
+      const revokedUserId = inviteBody.user.id as string;
+      const revokedToken = inviteBody.invitation.token as string;
+
+      const revokeRes = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/users/invite/revoke",
+        headers: {
+          cookie: ownerCookie,
+          origin: "http://localhost:7779",
+        },
+        payload: { email: revokedEmail },
+      });
+      expect(revokeRes.statusCode).toBe(200);
+
+      const acceptRes = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/invitation/accept",
+        headers: { origin: "http://localhost:7779" },
+        payload: {
+          token: revokedToken,
+          password: "NeverActivated123!",
+        },
+      });
+      expect(acceptRes.statusCode).toBe(400);
+      expect(JSON.parse(acceptRes.body).errors[0].code).toBe(
+        "INVITATION_REVOKED",
+      );
+
+      const memberships = await getDb()
+        .select()
+        .from(publicationMemberships)
+        .where(
+          and(
+            eq(publicationMemberships.publicationId, "pub_default"),
+            eq(publicationMemberships.userId, revokedUserId),
+          ),
+        );
+      expect(memberships).toHaveLength(0);
     });
 
     it("rejects re-use of an already accepted invitation token (single-use)", async () => {
