@@ -59,6 +59,18 @@ async function createLegacySchema(
       UNIQUE ("publication_id", "user_id")
     );
 
+    CREATE TABLE "user_invitations" (
+      "id" text PRIMARY KEY,
+      "user_id" text NOT NULL,
+      "email" text NOT NULL,
+      "token_hash" text NOT NULL UNIQUE,
+      "status" text NOT NULL DEFAULT 'pending',
+      "expires_at" timestamptz NOT NULL,
+      "accepted_at" timestamptz,
+      "invited_by" text,
+      "created_at" timestamptz NOT NULL DEFAULT NOW(),
+      "updated_at" timestamptz NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE "posts" (
       "id" text PRIMARY KEY,
       "publication_id" text NOT NULL,
@@ -99,10 +111,18 @@ async function createLegacySchema(
 async function seedValidLegacyData(client: PoolClient): Promise<void> {
   await client.query(`
     INSERT INTO "publications" ("id", "workspace_id")
-    VALUES ('pub_a', 'ws_a'), ('pub_b', 'ws_a');
+    VALUES
+      ('pub_default', 'ws_a'),
+      ('pub_a', 'ws_a'),
+      ('pub_b', 'ws_a');
 
     INSERT INTO "users" ("id")
     VALUES ('user_a'), ('user_b');
+    INSERT INTO "roles" ("id", "key")
+    VALUES ('role_author', 'author');
+
+    INSERT INTO "user_roles" ("user_id", "role_id")
+    VALUES ('user_a', 'role_author');
 
     INSERT INTO "publication_memberships"
       ("id", "publication_id", "user_id", "role")
@@ -127,6 +147,18 @@ async function seedValidLegacyData(client: PoolClient): Promise<void> {
 
     INSERT INTO "page_authors" ("page_id", "user_id")
     VALUES ('page_a', 'user_a');
+
+    INSERT INTO "user_invitations" (
+      "id", "user_id", "email", "token_hash", "status", "expires_at"
+    )
+    VALUES (
+      'invite_a',
+      'user_a',
+      'user-a@example.test',
+      'invite_token_hash_a',
+      'pending',
+      NOW() + INTERVAL '1 day'
+    );
   `);
 }
 
@@ -159,6 +191,26 @@ describe("migration 0030 publication content integrity upgrade", () => {
       expect(postTags.rows[0]?.publication_id).toBe("pub_a");
       expect(postAuthors.rows[0]?.publication_id).toBe("pub_a");
       expect(pageAuthors.rows[0]?.publication_id).toBe("pub_a");
+      const invitation = await client.query<{
+        publication_id: string;
+        publication_role: string;
+      }>(`
+        SELECT "publication_id", "publication_role"
+        FROM "user_invitations"
+        WHERE "id" = 'invite_a'
+      `);
+      const defaultMembership = await client.query<{ role: string }>(`
+        SELECT "role"
+        FROM "publication_memberships"
+        WHERE "publication_id" = 'pub_default'
+          AND "user_id" = 'user_a'
+      `);
+
+      expect(invitation.rows[0]).toMatchObject({
+        publication_id: "pub_default",
+        publication_role: "author",
+      });
+      expect(defaultMembership.rows[0]?.role).toBe("author");
 
       await expect(
         client.query(`
