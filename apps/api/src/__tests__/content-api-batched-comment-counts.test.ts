@@ -3,6 +3,8 @@ import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import { commentsService, postsService, usersService } from "../services";
 import { hashPassword } from "@vibress/security";
+import { getDb, publicationMemberships } from "@vibress/database";
+import { randomUUID } from "node:crypto";
 
 describe("Content API Batched Comment Counts & Zero N+1 Verification", () => {
   let app: FastifyInstance;
@@ -24,6 +26,12 @@ describe("Content API Batched Comment Counts & Zero N+1 Verification", () => {
       status: "active",
     });
     authorId = author.id;
+    await getDb().insert(publicationMemberships).values({
+      id: randomUUID(),
+      publicationId: pubId,
+      userId: authorId,
+      role: "author",
+    });
 
     // Create 50 posts fixture
     for (let i = 1; i <= 50; i++) {
