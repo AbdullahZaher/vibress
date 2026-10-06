@@ -212,6 +212,28 @@ describe("migration 0030 publication content integrity upgrade", () => {
       });
       expect(defaultMembership.rows[0]?.role).toBe("author");
 
+      const deferredMembershipConstraints = await client.query<{
+        conname: string;
+        condeferrable: boolean;
+        condeferred: boolean;
+      }>(`
+        SELECT conname, condeferrable, condeferred
+        FROM pg_constraint
+        WHERE conname IN (
+          'post_authors_membership_fk',
+          'page_authors_membership_fk',
+          'posts_primary_author_publication_fk',
+          'pages_primary_author_publication_fk'
+        )
+        ORDER BY conname
+      `);
+      expect(deferredMembershipConstraints.rows).toHaveLength(4);
+      expect(
+        deferredMembershipConstraints.rows.every(
+          (row) => row.condeferrable && row.condeferred,
+        ),
+      ).toBe(true);
+
       await expect(
         client.query(`
           INSERT INTO "post_tags" ("publication_id", "post_id", "tag_id")
