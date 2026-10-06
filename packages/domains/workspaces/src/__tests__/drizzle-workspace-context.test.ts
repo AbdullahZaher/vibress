@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { getDb, users, eq } from "@vibress/database";
+import { getDb, users, workspaces, eq } from "@vibress/database";
 import crypto from "node:crypto";
 import {
   DrizzleWorkspaceRepository,
@@ -98,6 +98,7 @@ describe("Drizzle Workspace & Publication Context Resolution", () => {
       expect(adminFirst?.role).toBe("admin");
       expect(adminSecond?.role).toBe("admin");
     } finally {
+      await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
       await db.delete(users).where(eq(users.id, ownerId));
       await db.delete(users).where(eq(users.id, adminId));
     }
