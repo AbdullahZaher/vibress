@@ -320,7 +320,8 @@ BEGIN
       ADD CONSTRAINT "post_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE NO ACTION;
+      ON DELETE NO ACTION
+      DEFERRABLE INITIALLY DEFERRED;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_page_publication_fk' AND conrelid = 'page_authors'::regclass) THEN
@@ -336,7 +337,8 @@ BEGIN
       ADD CONSTRAINT "page_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE NO ACTION;
+      ON DELETE NO ACTION
+      DEFERRABLE INITIALLY DEFERRED;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_primary_author_publication_fk' AND conrelid = 'posts'::regclass) THEN
@@ -344,7 +346,8 @@ BEGIN
       ADD CONSTRAINT "posts_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE NO ACTION;
+      ON DELETE NO ACTION
+      DEFERRABLE INITIALLY DEFERRED;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_primary_author_publication_fk' AND conrelid = 'pages'::regclass) THEN
@@ -352,7 +355,8 @@ BEGIN
       ADD CONSTRAINT "pages_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
       REFERENCES "publication_memberships"("publication_id", "user_id")
-      ON DELETE NO ACTION;
+      ON DELETE NO ACTION
+      DEFERRABLE INITIALLY DEFERRED;
   END IF;
 END $$;
 
