@@ -178,6 +178,8 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       const tokenHash = hashToken(body.token);
+      const invitationPassword = body.password;
+      const invitationName = body.name;
 
       try {
         await runInTransaction(async () => {
@@ -234,7 +236,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             );
           }
 
-          const newPasswordHash = await hashPassword(body.password);
+          const newPasswordHash = await hashPassword(invitationPassword);
           const now = new Date();
 
           await db
@@ -242,7 +244,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             .set({
               passwordHash: newPasswordHash,
               status: "active",
-              ...(body.name ? { name: body.name.trim() } : {}),
+              ...(invitationName ? { name: invitationName.trim() } : {}),
               updatedAt: now,
             })
             .where(eq(users.id, invitation.userId));
