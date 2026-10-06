@@ -94,29 +94,12 @@ WHERE wm."role" IN ('owner', 'admin')
       AND pm."user_id" = wm."user_id"
   );
 
--- 2. Composite uniqueness required by publication-aware foreign keys.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_id_publication_unique') THEN
-    ALTER TABLE "posts"
-      ADD CONSTRAINT "posts_id_publication_unique" UNIQUE ("id", "publication_id");
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_id_publication_unique') THEN
-    ALTER TABLE "pages"
-      ADD CONSTRAINT "pages_id_publication_unique" UNIQUE ("id", "publication_id");
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tags_id_publication_unique') THEN
-    ALTER TABLE "tags"
-      ADD CONSTRAINT "tags_id_publication_unique" UNIQUE ("id", "publication_id");
-  END IF;
-END $$;
-
--- 3. Add publication_id to relationship tables as nullable for deterministic backfill.
+-- 2. Add publication_id to relationship tables as nullable for deterministic backfill.
 ALTER TABLE "post_tags" ADD COLUMN IF NOT EXISTS "publication_id" text;
 ALTER TABLE "post_authors" ADD COLUMN IF NOT EXISTS "publication_id" text;
 ALTER TABLE "page_authors" ADD COLUMN IF NOT EXISTS "publication_id" text;
 
--- 4. Backfill only from authoritative parent content ownership.
+-- 3. Backfill only from authoritative parent content ownership.
 UPDATE "post_tags" pt
 SET "publication_id" = p."publication_id"
 FROM "posts" p
@@ -135,7 +118,7 @@ FROM "pages" p
 WHERE pa."page_id" = p."id"
   AND pa."publication_id" IS NULL;
 
--- 5. Assert backfill completeness.
+-- 4. Assert backfill completeness.
 DO $$
 DECLARE
   null_post_tags integer;
@@ -153,7 +136,7 @@ BEGIN
   END IF;
 END $$;
 
--- 6. Fail closed on historical cross-publication tag links.
+-- 5. Fail closed on historical cross-publication tag links.
 DO $$
 DECLARE
   invalid_count integer;
@@ -171,7 +154,7 @@ BEGIN
   END IF;
 END $$;
 
--- 7. Fail closed when historical authors do not belong to the content publication.
+-- 6. Fail closed when historical authors do not belong to the content publication.
 DO $$
 DECLARE
   invalid_post_authors integer;
@@ -219,6 +202,25 @@ BEGIN
       invalid_post_authors, invalid_page_authors, invalid_post_primary, invalid_page_primary;
   END IF;
 END $$;
+
+-- 7. Composite uniqueness required by publication-aware foreign keys.
+-- Run this only after historical data preflight succeeds so invalid upgrades fail
+-- before building redundant composite indexes on potentially large content tables.
+DO $
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_id_publication_unique') THEN
+    ALTER TABLE "posts"
+      ADD CONSTRAINT "posts_id_publication_unique" UNIQUE ("id", "publication_id");
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_id_publication_unique') THEN
+    ALTER TABLE "pages"
+      ADD CONSTRAINT "pages_id_publication_unique" UNIQUE ("id", "publication_id");
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tags_id_publication_unique') THEN
+    ALTER TABLE "tags"
+      ADD CONSTRAINT "tags_id_publication_unique" UNIQUE ("id", "publication_id");
+  END IF;
+END $;
 
 -- 8. Relationship publication ownership is now mandatory.
 ALTER TABLE "post_tags" ALTER COLUMN "publication_id" SET NOT NULL;
