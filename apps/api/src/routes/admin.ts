@@ -66,6 +66,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const roleKey = body.roleKey || "editor";
 
       const db = getDb();
+      const publicationId = req.publicationContext!.publicationId;
       const existing = await usersService.findByEmail(email);
 
       if (existing) {
@@ -103,7 +104,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
         await db
           .update(userInvitations)
           .set({ status: "revoked", updatedAt: new Date() })
-          .where(and(eq(userInvitations.userId, userId), eq(userInvitations.status, "pending")));
+          .where(
+            and(
+              eq(userInvitations.userId, userId),
+              eq(userInvitations.publicationId, publicationId),
+              eq(userInvitations.status, "pending"),
+            ),
+          );
 
         // Update role if changed
         await rolesService.assignRoleToUser(userId, role.id);
@@ -119,7 +126,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
         await rolesService.assignRoleToUser(userId, role.id);
       }
 
-      const publicationId = req.publicationContext!.publicationId;
       const publicationRole =
         role.key === "owner"
           ? "owner"
