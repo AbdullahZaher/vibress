@@ -572,6 +572,23 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       );
     });
 
+    it("does not disclose an author through another publication's public route", async () => {
+      const alphaRes = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/authors/${userBetaId}`,
+        headers: { host: ALPHA_HOST },
+      });
+      expect(alphaRes.statusCode).toBe(404);
+      expect(alphaRes.json().errors[0]?.code).toBe("AUTHOR_NOT_FOUND");
+
+      const betaRes = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/authors/${userBetaId}`,
+        headers: { host: BETA_HOST },
+      });
+      expect(betaRes.statusCode).toBe(200);
+    });
+
     it("rejects cross-publication post tags at the database layer", async () => {
       const db = getDb();
       await expect(
@@ -636,6 +653,76 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
           updatedBy: userAlphaId,
         }),
       ).rejects.toThrow();
+    });
+
+    it("allows publication deletion to cascade through author relationships", async () => {
+      const db = getDb();
+      const publicationId = `pub_ticket1_delete_${runId}`;
+      const postId = crypto.randomUUID();
+      const pageId = crypto.randomUUID();
+
+      await db.insert(publications).values({
+        id: publicationId,
+        workspaceId: WS_ID,
+        name: `Ticket 1 Delete ${runId}`,
+        slug: `ticket1-delete-${runId}`,
+        primaryLocale: "en",
+      });
+      await db.insert(publicationMemberships).values({
+        id: crypto.randomUUID(),
+        publicationId,
+        userId: userAlphaId,
+        role: "owner",
+      });
+      await db.insert(posts).values({
+        id: postId,
+        publicationId,
+        title: "Cascade post",
+        slug: `cascade-post-${runId}`,
+        content: { version: 1, root: {} },
+        primaryAuthorId: userAlphaId,
+        createdBy: userAlphaId,
+        updatedBy: userAlphaId,
+      });
+      await db.insert(pages).values({
+        id: pageId,
+        publicationId,
+        title: "Cascade page",
+        slug: `cascade-page-${runId}`,
+        content: { version: 1, root: {} },
+        primaryAuthorId: userAlphaId,
+        createdBy: userAlphaId,
+        updatedBy: userAlphaId,
+      });
+      await db.insert(postAuthors).values({
+        publicationId,
+        postId,
+        userId: userAlphaId,
+        sortOrder: 0,
+        isPrimary: true,
+      });
+      await db.insert(pageAuthors).values({
+        publicationId,
+        pageId,
+        userId: userAlphaId,
+        sortOrder: 0,
+        isPrimary: true,
+      });
+
+      await expect(
+        db.delete(publications).where(eq(publications.id, publicationId)),
+      ).resolves.toBeDefined();
+
+      const [remainingPost] = await db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(eq(posts.id, postId));
+      const [remainingPage] = await db
+        .select({ id: pages.id })
+        .from(pages)
+        .where(eq(pages.id, pageId));
+      expect(remainingPost).toBeUndefined();
+      expect(remainingPage).toBeUndefined();
     });
   });
 
