@@ -94,6 +94,52 @@ WHERE wm."role" IN ('owner', 'admin')
       AND pm."user_id" = wm."user_id"
   );
 
+-- 1c. Persist publication intent on existing invitations. Legacy invitations
+-- predate multi-publication targeting, so pub_default is the only deterministic
+-- publication backfill. Unknown/custom global roles map to least-privilege contributor.
+ALTER TABLE "user_invitations"
+  ADD COLUMN IF NOT EXISTS "publication_id" text;
+ALTER TABLE "user_invitations"
+  ADD COLUMN IF NOT EXISTS "publication_role" text;
+
+UPDATE "user_invitations"
+SET "publication_id" = 'pub_default'
+WHERE "publication_id" IS NULL;
+
+UPDATE "user_invitations" ui
+SET "publication_role" = CASE
+  WHEN EXISTS (
+    SELECT 1 FROM "user_roles" ur
+    JOIN "roles" r ON r."id" = ur."role_id"
+    WHERE ur."user_id" = ui."user_id" AND r."key" = 'owner'
+  ) THEN 'owner'
+  WHEN EXISTS (
+    SELECT 1 FROM "user_roles" ur
+    JOIN "roles" r ON r."id" = ur."role_id"
+    WHERE ur."user_id" = ui."user_id" AND r."key" = 'administrator'
+  ) THEN 'admin'
+  WHEN EXISTS (
+    SELECT 1 FROM "user_roles" ur
+    JOIN "roles" r ON r."id" = ur."role_id"
+    WHERE ur."user_id" = ui."user_id" AND r."key" = 'editor'
+  ) THEN 'editor'
+  WHEN EXISTS (
+    SELECT 1 FROM "user_roles" ur
+    JOIN "roles" r ON r."id" = ur."role_id"
+    WHERE ur."user_id" = ui."user_id" AND r."key" = 'author'
+  ) THEN 'author'
+  ELSE 'contributor'
+END
+WHERE ui."publication_role" IS NULL;
+
+ALTER TABLE "user_invitations"
+  ALTER COLUMN "publication_id" SET NOT NULL;
+ALTER TABLE "user_invitations"
+  ALTER COLUMN "publication_role" SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS "user_invitations_publication_id_idx"
+  ON "user_invitations" ("publication_id");
+
 -- 2. Add publication_id to relationship tables as nullable for deterministic backfill.
 ALTER TABLE "post_tags" ADD COLUMN IF NOT EXISTS "publication_id" text;
 ALTER TABLE "post_authors" ADD COLUMN IF NOT EXISTS "publication_id" text;
