@@ -572,6 +572,97 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       );
     });
 
+    it("rejects cross-publication tag assignment on post update without mutating the post", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/admin/v1/posts/${TICKET1_ALPHA_POST_ID}`,
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          tagIds: [TICKET1_BETA_TAG_ID],
+          expectedVersion: 1,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe("INVALID_TAG_PUBLICATION");
+
+      const db = getDb();
+      const [post] = await db
+        .select({ primaryAuthorId: posts.primaryAuthorId, version: posts.version })
+        .from(posts)
+        .where(eq(posts.id, TICKET1_ALPHA_POST_ID));
+      const linkedTags = await db
+        .select({ tagId: postTags.tagId })
+        .from(postTags)
+        .where(eq(postTags.postId, TICKET1_ALPHA_POST_ID));
+
+      expect(post?.primaryAuthorId).toBe(userAlphaId);
+      expect(post?.version).toBe(1);
+      expect(linkedTags).toEqual([]);
+    });
+
+    it("rejects cross-publication primary author on post update without mutation", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/admin/v1/posts/${TICKET1_ALPHA_POST_ID}`,
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          primaryAuthorId: userBetaId,
+          expectedVersion: 1,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe(
+        "INVALID_AUTHOR_PUBLICATION",
+      );
+
+      const db = getDb();
+      const [post] = await db
+        .select({ primaryAuthorId: posts.primaryAuthorId, version: posts.version })
+        .from(posts)
+        .where(eq(posts.id, TICKET1_ALPHA_POST_ID));
+      expect(post?.primaryAuthorId).toBe(userAlphaId);
+      expect(post?.version).toBe(1);
+    });
+
+    it("rejects cross-publication primary author on page update without mutation", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: `/api/admin/v1/pages/${TICKET1_ALPHA_PAGE_ID}`,
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: {
+          primaryAuthorId: userBetaId,
+          expectedVersion: 1,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0]?.code).toBe(
+        "INVALID_AUTHOR_PUBLICATION",
+      );
+
+      const db = getDb();
+      const [page] = await db
+        .select({ primaryAuthorId: pages.primaryAuthorId, version: pages.version })
+        .from(pages)
+        .where(eq(pages.id, TICKET1_ALPHA_PAGE_ID));
+      expect(page?.primaryAuthorId).toBe(userAlphaId);
+      expect(page?.version).toBe(1);
+    });
+
     it("does not disclose an author through another publication's public route", async () => {
       const alphaRes = await app.inject({
         method: "GET",
