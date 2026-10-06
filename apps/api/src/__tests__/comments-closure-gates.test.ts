@@ -12,6 +12,7 @@ import {
   comments,
   commentLikes,
   commentModerationEvents,
+  publicationMemberships,
 } from "@vibress/database";
 import { eq, and, sql } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
@@ -71,30 +72,47 @@ async function ensureOwner(): Promise<string> {
     .from(users)
     .where(eq(users.email, "owner@example.com"))
     .limit(1);
-  if (rows[0]) return rows[0].id;
-  const hash = await hashPassword("OwnerPass123!");
-  const ownerId = crypto.randomUUID();
+
+  let ownerId: string;
+  if (rows[0]) {
+    ownerId = rows[0].id;
+  } else {
+    const hash = await hashPassword("OwnerPass123!");
+    ownerId = crypto.randomUUID();
+    await db
+      .insert(users)
+      .values({
+        id: ownerId,
+        email: "owner@example.com",
+        name: "Owner",
+        slug: "e2e-owner",
+        passwordHash: hash,
+        status: "active",
+      })
+      .onConflictDoNothing();
+    const ownerRole = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.key, "owner"))
+      .limit(1);
+    if (ownerRole[0]) {
+      await db
+        .insert(userRoles)
+        .values({ userId: ownerId, roleId: ownerRole[0].id })
+        .onConflictDoNothing();
+    }
+  }
+
   await db
-    .insert(users)
+    .insert(publicationMemberships)
     .values({
-      id: ownerId,
-      email: "owner@example.com",
-      name: "Owner",
-      slug: "e2e-owner",
-      passwordHash: hash,
-      status: "active",
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId: ownerId,
+      role: "owner",
     })
     .onConflictDoNothing();
-  const ownerRole = await db
-    .select({ id: roles.id })
-    .from(roles)
-    .where(eq(roles.key, "owner"))
-    .limit(1);
-  if (ownerRole[0])
-    await db
-      .insert(userRoles)
-      .values({ userId: ownerId, roleId: ownerRole[0].id })
-      .onConflictDoNothing();
+
   return ownerId;
 }
 
