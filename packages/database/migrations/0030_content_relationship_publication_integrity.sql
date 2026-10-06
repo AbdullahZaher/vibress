@@ -208,15 +208,15 @@ END $$;
 -- before building redundant composite indexes on potentially large content tables.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_id_publication_unique') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_id_publication_unique' AND conrelid = 'posts'::regclass) THEN
     ALTER TABLE "posts"
       ADD CONSTRAINT "posts_id_publication_unique" UNIQUE ("id", "publication_id");
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_id_publication_unique') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_id_publication_unique' AND conrelid = 'pages'::regclass) THEN
     ALTER TABLE "pages"
       ADD CONSTRAINT "pages_id_publication_unique" UNIQUE ("id", "publication_id");
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tags_id_publication_unique') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tags_id_publication_unique' AND conrelid = 'tags'::regclass) THEN
     ALTER TABLE "tags"
       ADD CONSTRAINT "tags_id_publication_unique" UNIQUE ("id", "publication_id");
   END IF;
@@ -245,7 +245,7 @@ CREATE INDEX IF NOT EXISTS "pages_primary_author_publication_idx"
 -- 9. Add publication-aware relationship and membership constraints.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_tags_post_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_tags_post_publication_fk' AND conrelid = 'post_tags'::regclass) THEN
     ALTER TABLE "post_tags"
       ADD CONSTRAINT "post_tags_post_publication_fk"
       FOREIGN KEY ("post_id", "publication_id")
@@ -253,7 +253,7 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_tags_tag_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_tags_tag_publication_fk' AND conrelid = 'post_tags'::regclass) THEN
     ALTER TABLE "post_tags"
       ADD CONSTRAINT "post_tags_tag_publication_fk"
       FOREIGN KEY ("tag_id", "publication_id")
@@ -261,7 +261,7 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_authors_post_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_authors_post_publication_fk' AND conrelid = 'post_authors'::regclass) THEN
     ALTER TABLE "post_authors"
       ADD CONSTRAINT "post_authors_post_publication_fk"
       FOREIGN KEY ("post_id", "publication_id")
@@ -269,7 +269,7 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_authors_membership_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'post_authors_membership_fk' AND conrelid = 'post_authors'::regclass) THEN
     ALTER TABLE "post_authors"
       ADD CONSTRAINT "post_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
@@ -277,7 +277,7 @@ BEGIN
       ON DELETE NO ACTION;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_page_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_page_publication_fk' AND conrelid = 'page_authors'::regclass) THEN
     ALTER TABLE "page_authors"
       ADD CONSTRAINT "page_authors_page_publication_fk"
       FOREIGN KEY ("page_id", "publication_id")
@@ -285,7 +285,7 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_membership_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'page_authors_membership_fk' AND conrelid = 'page_authors'::regclass) THEN
     ALTER TABLE "page_authors"
       ADD CONSTRAINT "page_authors_membership_fk"
       FOREIGN KEY ("publication_id", "user_id")
@@ -293,7 +293,7 @@ BEGIN
       ON DELETE NO ACTION;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_primary_author_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_primary_author_publication_fk' AND conrelid = 'posts'::regclass) THEN
     ALTER TABLE "posts"
       ADD CONSTRAINT "posts_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
@@ -301,7 +301,7 @@ BEGIN
       ON DELETE NO ACTION;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_primary_author_publication_fk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pages_primary_author_publication_fk' AND conrelid = 'pages'::regclass) THEN
     ALTER TABLE "pages"
       ADD CONSTRAINT "pages_primary_author_publication_fk"
       FOREIGN KEY ("publication_id", "primary_author_id")
