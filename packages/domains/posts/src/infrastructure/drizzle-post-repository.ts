@@ -5,6 +5,7 @@ import {
   postAuthors,
   tags,
   users,
+  runInTransaction,
 } from "@vibress/database";
 import {
   eq,
@@ -411,20 +412,22 @@ export class DrizzlePostRepository implements PostRepository {
     tagIds: string[],
     publicationId: string,
   ): Promise<void> {
-    const db = getDb();
-    await db.delete(postTags).where(eq(postTags.postId, postId));
-    const uniqueTagIds = Array.from(new Set(tagIds));
-    const insertValues = uniqueTagIds.map((tagId, idx) => ({
-      publicationId,
-      postId,
-      tagId,
-      sortOrder: idx,
-      createdAt: new Date(),
-    }));
+    await runInTransaction(async () => {
+      const db = getDb();
+      await db.delete(postTags).where(eq(postTags.postId, postId));
+      const uniqueTagIds = Array.from(new Set(tagIds));
+      const insertValues = uniqueTagIds.map((tagId, idx) => ({
+        publicationId,
+        postId,
+        tagId,
+        sortOrder: idx,
+        createdAt: new Date(),
+      }));
 
-    if (insertValues.length > 0) {
-      await db.insert(postTags).values(insertValues);
-    }
+      if (insertValues.length > 0) {
+        await db.insert(postTags).values(insertValues);
+      }
+    });
   }
 
   private mapToDomain(row: typeof posts.$inferSelect): Post {
