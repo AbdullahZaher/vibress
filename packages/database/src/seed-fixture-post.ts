@@ -672,7 +672,7 @@ export async function seedFixturePost(): Promise<void> {
   }
 
   const [author] = await db
-    .select({ user: users })
+    .select({ id: users.id })
     .from(publicationMemberships)
     .innerJoin(users, eq(publicationMemberships.userId, users.id))
     .where(eq(publicationMemberships.publicationId, PUBLICATION_ID))
@@ -712,10 +712,10 @@ export async function seedFixturePost(): Promise<void> {
       status: "published",
       visibility: "public",
       version: 1,
-      primaryAuthorId: author.user.id,
-      createdBy: author.user.id,
-      updatedBy: author.user.id,
-      publishedBy: author.user.id,
+      primaryAuthorId: author.id,
+      createdBy: author.id,
+      updatedBy: author.id,
+      publishedBy: author.id,
       publishedAt: now,
       metaTitle: FIXTURE_POST_TITLE,
       metaDescription: FIXTURE_POST_EXCERPT,
@@ -728,7 +728,7 @@ export async function seedFixturePost(): Promise<void> {
       .values({
         publicationId: PUBLICATION_ID,
         postId: TARGET_POST_ID,
-        userId: author.user.id,
+        userId: author.id,
         sortOrder: 0,
         createdAt: now,
       })
@@ -758,7 +758,7 @@ export async function seedFixturePost(): Promise<void> {
       excerpt: FIXTURE_POST_EXCERPT,
       content: lexicalContent,
       contentVersion: 1,
-      createdBy: author.user.id,
+      createdBy: author.id,
       createdAt: now,
     });
   }
