@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getDb, runMigrations } from "../index";
-import { sql } from "drizzle-orm";
+import { getDbPool, runMigrations } from "../index";
+import type { PoolClient } from "pg";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
 describe("Migration 0030 content relationship publication integrity", () => {
+  let client: PoolClient;
   const migrationsDir = path.resolve(__dirname, "../../migrations");
   const migrationSql = fs.readFileSync(
     path.join(
@@ -26,11 +27,11 @@ describe("Migration 0030 content relationship publication integrity", () => {
   const invitationId = `m0030_invite_${suffix}`;
 
   const applyMigration = async () => {
-    await getDb().execute(sql.raw(migrationSql));
+    await client.query(migrationSql);
   };
 
   const rollback0030Schema = async () => {
-    await getDb().execute(sql.raw(`
+    await client.query(`
       ALTER TABLE "post_tags" DROP CONSTRAINT IF EXISTS "post_tags_post_publication_fk";
       ALTER TABLE "post_tags" DROP CONSTRAINT IF EXISTS "post_tags_tag_publication_fk";
       ALTER TABLE "post_authors" DROP CONSTRAINT IF EXISTS "post_authors_post_publication_fk";
@@ -58,11 +59,11 @@ describe("Migration 0030 content relationship publication integrity", () => {
       ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_id_publication_unique";
       ALTER TABLE "pages" DROP CONSTRAINT IF EXISTS "pages_id_publication_unique";
       ALTER TABLE "tags" DROP CONSTRAINT IF EXISTS "tags_id_publication_unique";
-    `));
+    `);
   };
 
   const cleanupFixtures = async () => {
-    await getDb().execute(sql.raw(`
+    await client.query(`
       DELETE FROM "user_invitations" WHERE "id" = '${invitationId}';
       DELETE FROM "post_tags"
         WHERE "post_id" IN ('${postA}', '${invalidPost}');
@@ -78,17 +79,19 @@ describe("Migration 0030 content relationship publication integrity", () => {
         WHERE "user_id" IN ('${userId}', '${invalidUserId}');
       DELETE FROM "users" WHERE "id" IN ('${userId}', '${invalidUserId}');
       DELETE FROM "publications" WHERE "id" = '${publicationB}';
-    `));
+    `);
   };
 
   beforeAll(async () => {
     await runMigrations();
+    client = await getDbPool().connect();
     await cleanupFixtures();
   }, 30_000);
 
   afterAll(async () => {
     try {
-      const columns = await getDb().execute(sql`
+      await client.query("ROLLBACK");
+      const columns = await client.query(`
         SELECT column_name
         FROM information_schema.columns
         WHERE table_name = 'post_tags'
@@ -100,15 +103,15 @@ describe("Migration 0030 content relationship publication integrity", () => {
       } else {
         await cleanupFixtures();
       }
-    } catch {
-      // Best-effort restoration is followed by the regular migration gate in CI.
+    } finally {
+      client.release();
     }
   }, 30_000);
 
   it("backfills valid legacy relationships and invitation intent without data loss", async () => {
     await rollback0030Schema();
 
-    await getDb().execute(sql.raw(`
+    await client.query(`
       INSERT INTO "roles" (
         "id", "key", "name", "is_system", "created_at", "updated_at"
       )
@@ -217,11 +220,11 @@ describe("Migration 0030 content relationship publication integrity", () => {
         NOW(),
         NOW()
       );
-    `));
+    `);
 
     await applyMigration();
 
-    const relations = await getDb().execute(sql.raw(`
+    const relations = await client.query(`
       SELECT
         (SELECT "publication_id" FROM "post_tags"
           WHERE "post_id" = '${postA}' AND "tag_id" = '${tagA}') AS post_tag_pub,
@@ -233,7 +236,7 @@ describe("Migration 0030 content relationship publication integrity", () => {
           WHERE "id" = '${invitationId}') AS invitation_pub,
         (SELECT "publication_role" FROM "user_invitations"
           WHERE "id" = '${invitationId}') AS invitation_role
-    `));
+    `);
 
     expect(relations.rows[0]).toMatchObject({
       post_tag_pub: "pub_default",
@@ -243,16 +246,16 @@ describe("Migration 0030 content relationship publication integrity", () => {
       invitation_role: "author",
     });
 
-    const membership = await getDb().execute(sql.raw(`
+    const membership = await client.query(`
       SELECT "role"
       FROM "publication_memberships"
       WHERE "publication_id" = 'pub_default'
         AND "user_id" = '${userId}'
-    `));
+    `);
     expect(membership.rows[0]).toMatchObject({ role: "author" });
 
     await expect(
-      getDb().execute(sql.raw(`
+      client.query(`
         INSERT INTO "post_tags" (
           "publication_id", "post_id", "tag_id", "sort_order", "created_at"
         )
@@ -266,7 +269,7 @@ describe("Migration 0030 content relationship publication integrity", () => {
   it("fails closed on a legacy cross-publication post-tag relationship", async () => {
     await rollback0030Schema();
 
-    await getDb().execute(sql.raw(`
+    await client.query(`
       INSERT INTO "users" (
         "id", "email", "name", "password_hash", "status", "created_at", "updated_at"
       )
@@ -331,9 +334,17 @@ describe("Migration 0030 content relationship publication integrity", () => {
 
       INSERT INTO "post_tags" ("post_id", "tag_id", "sort_order", "created_at")
       VALUES ('${invalidPost}', '${tagB}', 0, NOW());
-    `));
+    `);
 
-    await expect(applyMigration()).rejects.toThrow(/another publication/i);
+    let migrationError: unknown;
+    try {
+      await applyMigration();
+    } catch (err: unknown) {
+      migrationError = err;
+      await client.query("ROLLBACK");
+    }
+    expect(migrationError).toBeInstanceOf(Error);
+    expect((migrationError as Error).message).toMatch(/another publication/i);
 
     await cleanupFixtures();
     await applyMigration();
