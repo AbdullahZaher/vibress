@@ -206,7 +206,7 @@ END $$;
 -- 7. Composite uniqueness required by publication-aware foreign keys.
 -- Run this only after historical data preflight succeeds so invalid upgrades fail
 -- before building redundant composite indexes on potentially large content tables.
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'posts_id_publication_unique') THEN
     ALTER TABLE "posts"
@@ -220,7 +220,7 @@ BEGIN
     ALTER TABLE "tags"
       ADD CONSTRAINT "tags_id_publication_unique" UNIQUE ("id", "publication_id");
   END IF;
-END $;
+END $$;
 
 -- 8. Relationship publication ownership is now mandatory.
 ALTER TABLE "post_tags" ALTER COLUMN "publication_id" SET NOT NULL;
