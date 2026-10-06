@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getDb, posts, contentTranslations, users, publications } from "@vibress/database";
+import {
+  getDb,
+  posts,
+  contentTranslations,
+  users,
+  publications,
+  publicationMemberships,
+} from "@vibress/database";
 import { inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { TranslationService } from "../translation-service.js";
@@ -38,8 +45,27 @@ describe("Content Translations Runtime Multi-Publication Isolation", () => {
       .onConflictDoNothing();
 
     const [user] = await db.select().from(users).limit(1);
-    authorId = user?.id || randomUUID();
+    if (!user) throw new Error("Expected seeded staff user");
+    authorId = user.id;
     const now = new Date();
+
+    await db
+      .insert(publicationMemberships)
+      .values([
+        {
+          id: randomUUID(),
+          publicationId: "pub_alpha",
+          userId: authorId,
+          role: "author",
+        },
+        {
+          id: randomUUID(),
+          publicationId: "pub_beta",
+          userId: authorId,
+          role: "author",
+        },
+      ])
+      .onConflictDoNothing();
 
     // Create post in pub_alpha
     await db.insert(posts).values({
