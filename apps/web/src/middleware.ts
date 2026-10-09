@@ -194,9 +194,9 @@ export async function middleware(request: NextRequest) {
         `${API_BASE}/api/admin/v1/themes/preview/${token}`,
         {
           cache: "no-store",
-          headers: hostHeader
-            ? { "x-forwarded-host": hostHeader }
-            : undefined,
+          ...(hostHeader
+            ? { headers: { "x-forwarded-host": hostHeader } }
+            : {}),
         },
       );
       if (!res.ok) {
