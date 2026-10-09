@@ -25,7 +25,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
   fastify.get("/themes", {
     preHandler: [requireStaffSession, requirePermission("themes.read")],
     handler: async (req, reply) => {
-      const themes = await themeService.listThemes(req.publicationContext?.publicationId);
+      const themes = await themeService.listThemes(req.publicationContext!.publicationId);
       return reply.status(200).send({ themes });
     },
   });
@@ -53,7 +53,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
       const theme = await themeService.getTheme(
         id,
         undefined,
-        req.publicationContext?.publicationId,
+        req.publicationContext!.publicationId,
       );
       if (!theme) {
         return reply.status(404).send({
@@ -84,7 +84,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
   fastify.get("/themes/active", {
     preHandler: [requireStaffSession, requirePermission("themes.read")],
     handler: async (req, reply) => {
-      const active = await themeService.getActiveTheme(req.publicationContext?.publicationId);
+      const active = await themeService.getActiveTheme(req.publicationContext!.publicationId);
       if (!active) {
         return reply.status(200).send({
           themeId: "vibress-default",
@@ -159,7 +159,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
         const installed = await themeInstaller.installFromZip(
           zipBuffer,
           req.user!.id,
-          req.publicationContext?.publicationId,
+          req.publicationContext!.publicationId,
         );
 
         await auditService.record({
@@ -221,7 +221,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
           id,
           req.user!.id,
           version,
-          req.publicationContext?.publicationId,
+          req.publicationContext!.publicationId,
         );
 
         await auditService.record({
@@ -325,7 +325,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
           id,
           settingsInput,
           req.user!.id,
-          req.publicationContext?.publicationId,
+          req.publicationContext!.publicationId,
         );
 
         await auditService.record({
@@ -391,7 +391,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
           id,
           req.user!.id,
           undefined,
-          req.publicationContext?.publicationId,
+          req.publicationContext!.publicationId,
         );
 
         await auditService.record({
@@ -452,7 +452,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
       const theme = await themeService.getTheme(
         id,
         undefined,
-        req.publicationContext?.publicationId,
+        req.publicationContext!.publicationId,
       );
       if (!theme) {
         return reply.status(404).send({
