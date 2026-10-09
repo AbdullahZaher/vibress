@@ -53,8 +53,8 @@ export class ThemeService {
     this.previewStore = previewStore || new MemoryPreviewTokenStore();
   }
 
-  async listThemes(publicationId?: string): Promise<UnifiedThemeSummary[]> {
-    const active = await this.repo.getActive();
+  async listThemes(publicationId = "pub_default"): Promise<UnifiedThemeSummary[]> {
+    const active = await this.repo.getActive(publicationId);
     const activeThemeId = active?.themeId || "vibress-default";
 
     const results: UnifiedThemeSummary[] = [];
@@ -98,7 +98,7 @@ export class ThemeService {
   async getTheme(
     themeId: string,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<{
     manifest: ThemeManifest;
     settingsSchema: ThemeSettingsSchema;
@@ -132,12 +132,12 @@ export class ThemeService {
     return null;
   }
 
-  async getActiveThemeConfiguration(): Promise<ThemeConfiguration | null> {
-    return this.repo.getActive();
+  async getActiveThemeConfiguration(publicationId?: string): Promise<ThemeConfiguration | null> {
+    return this.repo.getActive(publicationId);
   }
 
-  async getActiveTheme(publicationId?: string): Promise<ActiveThemeResult | null> {
-    const config = await this.repo.getActive();
+  async getActiveTheme(publicationId = "pub_default"): Promise<ActiveThemeResult | null> {
+    const config = await this.repo.getActive(publicationId);
     const activeThemeId = config?.themeId || "vibress-default";
 
     const definition = await this.getTheme(activeThemeId, config?.themeVersion, publicationId);
@@ -160,7 +160,7 @@ export class ThemeService {
     themeId: string,
     actorId: string | null,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<ThemeConfiguration> {
     const definition = await this.getTheme(themeId, version, publicationId);
     if (!definition) {
@@ -194,7 +194,7 @@ export class ThemeService {
       updatedAt: new Date(),
     };
 
-    const saved = await this.repo.setActive(config);
+    const saved = await this.repo.setActive(config, publicationId);
 
     // Update statuses in installed repo
     if (this.installedRepo) {
@@ -236,13 +236,13 @@ export class ThemeService {
       await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
-    const config = await this.repo.getActive();
+    const config = await this.repo.getActive(publicationId);
     if (config && config.themeId === themeId) {
       return this.repo.setActive({
         ...config,
         settings,
         updatedAt: new Date(),
-      });
+      }, publicationId);
     }
 
     return {
@@ -261,9 +261,9 @@ export class ThemeService {
     themeId: string,
     _actorId: string | null,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<{ success: boolean; themeId: string; version?: string }> {
-    const active = await this.repo.getActive();
+    const active = await this.repo.getActive(publicationId);
     if (active?.themeId === themeId && (!version || active.themeVersion === version)) {
       throw new ThemeError(
         "THEME_ACTIVE_CANNOT_BE_DELETED",

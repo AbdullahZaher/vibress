@@ -67,7 +67,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const active = await themeService.getActiveThemeConfiguration();
+      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
       return reply.status(200).send({
         manifest: theme.manifest,
         settingsSchema: theme.settingsSchema,

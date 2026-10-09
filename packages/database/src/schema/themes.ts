@@ -15,6 +15,9 @@ export const themeConfigurations = pgTable(
   "theme_configurations",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     themeId: text("theme_id").notNull(),
     themeVersion: text("theme_version").notNull(),
     settingsJson: jsonb("settings_json").notNull().default({}),
@@ -33,6 +36,7 @@ export const themeConfigurations = pgTable(
   },
   (table) => {
     return {
+      publicationUniqueIdx: uniqueIndex("theme_configurations_publication_unique_idx").on(table.publicationId),
       themeIdIdx: index("theme_configurations_theme_id_idx").on(table.themeId),
     };
   },
@@ -45,7 +49,10 @@ export const themeSettings = pgTable(
   "theme_settings",
   {
     id: text("id").primaryKey(),
-    themeId: text("theme_id").notNull().unique(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    themeId: text("theme_id").notNull(),
     settingsJson: jsonb("settings_json").notNull().default({}),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -53,6 +60,10 @@ export const themeSettings = pgTable(
   },
   (table) => {
     return {
+      pubThemeUniqueIdx: uniqueIndex("theme_settings_pub_theme_unique_idx").on(
+        table.publicationId,
+        table.themeId,
+      ),
       themeSettingsThemeIdIdx: index("theme_settings_theme_id_idx").on(
         table.themeId,
       ),

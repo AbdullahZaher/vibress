@@ -125,7 +125,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get("/site", {
     handler: async (req, reply) => {
       const site = await buildPublicSiteIdentity();
-      const active = await themeService.getActiveTheme();
+      const active = await themeService.getActiveTheme(req.publicationContext!.publicationId);
 
       return reply.status(200).send({
         site: {

@@ -165,36 +165,57 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
     return this.mapToDomain(row);
   }
 
-  async delete(themeId: string, publicationId?: string): Promise<void> {
+  async delete(themeId: string, publicationId = "pub_default"): Promise<void> {
     const db = getDb();
-    const conditions = [eq(installedThemes.themeId, themeId)];
-    if (publicationId) conditions.push(eq(installedThemes.publicationId, publicationId));
     await db
       .delete(installedThemes)
-      .where(and(...conditions));
+      .where(
+        and(
+          eq(installedThemes.themeId, themeId),
+          eq(installedThemes.publicationId, publicationId),
+        ),
+      );
     await db
       .delete(themeSettings)
-      .where(eq(themeSettings.themeId, themeId));
+      .where(
+        and(
+          eq(themeSettings.themeId, themeId),
+          eq(themeSettings.publicationId, publicationId),
+        ),
+      );
   }
 
-  async deleteVersion(themeId: string, version: string, publicationId?: string): Promise<void> {
+  async deleteVersion(
+    themeId: string,
+    version: string,
+    publicationId = "pub_default",
+  ): Promise<void> {
     const db = getDb();
-    const conditions = [
-      eq(installedThemes.themeId, themeId),
-      eq(installedThemes.version, version),
-    ];
-    if (publicationId) conditions.push(eq(installedThemes.publicationId, publicationId));
     await db
       .delete(installedThemes)
-      .where(and(...conditions));
+      .where(
+        and(
+          eq(installedThemes.themeId, themeId),
+          eq(installedThemes.version, version),
+          eq(installedThemes.publicationId, publicationId),
+        ),
+      );
   }
 
-  async getThemeSettings(themeId: string, _publicationId?: string): Promise<Record<string, unknown> | null> {
+  async getThemeSettings(
+    themeId: string,
+    publicationId = "pub_default",
+  ): Promise<Record<string, unknown> | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(themeSettings)
-      .where(eq(themeSettings.themeId, themeId))
+      .where(
+        and(
+          eq(themeSettings.themeId, themeId),
+          eq(themeSettings.publicationId, publicationId),
+        ),
+      )
       .limit(1);
     if (!rows[0]) return null;
     return rows[0].settingsJson as Record<string, unknown>;
@@ -203,25 +224,24 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
   async saveThemeSettings(
     themeId: string,
     settings: Record<string, unknown>,
-    _publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<void> {
     const db = getDb();
-    const existing = await this.getThemeSettings(themeId);
-    if (existing) {
-      await db
-        .update(themeSettings)
-        .set({
-          settingsJson: settings,
-          updatedAt: new Date(),
-        })
-        .where(eq(themeSettings.themeId, themeId));
-    } else {
-      await db.insert(themeSettings).values({
+    await db
+      .insert(themeSettings)
+      .values({
         id: crypto.randomUUID(),
+        publicationId,
         themeId,
         settingsJson: settings,
         updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [themeSettings.publicationId, themeSettings.themeId],
+        set: {
+          settingsJson: settings,
+          updatedAt: new Date(),
+        },
       });
-    }
   }
 }
