@@ -318,19 +318,17 @@ export async function renderThemeTemplate(
   }
 
   // External Liquid Theme Branch
-  const publicationId = site.publicationId || "pub_default";
-  const cacheKey = `${publicationId}:${themeId}@${themeVersion}`;
+  const publicationId = site.publicationId;
+  const cacheKey = `${publicationId || "unresolved"}:${themeId}@${themeVersion}`;
   let fileMap: Map<string, string>;
 
   const cached = themeFilesCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
     fileMap = cached.files;
   } else {
-    const themeDir = findThemeDirectory(
-      themeId,
-      themeVersion,
-      publicationId,
-    );
+    const themeDir = publicationId
+      ? findThemeDirectory(themeId, themeVersion, publicationId)
+      : null;
     if (themeDir) {
       fileMap = loadThemeFilesMap(themeDir);
     } else {
