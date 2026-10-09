@@ -17,8 +17,12 @@ export interface ThemeConfiguration {
 }
 
 export interface ThemeConfigurationRepository {
-  getActive(): Promise<ThemeConfiguration | null>;
-  setActive(config: ThemeConfiguration): Promise<ThemeConfiguration>;
+  /** Omitted publication is the legacy pub_default context, never a global lookup. */
+  getActive(publicationId?: string): Promise<ThemeConfiguration | null>;
+  setActive(
+    config: ThemeConfiguration,
+    publicationId?: string,
+  ): Promise<ThemeConfiguration>;
 }
 
 export interface ThemeDefinitionRegistry {
