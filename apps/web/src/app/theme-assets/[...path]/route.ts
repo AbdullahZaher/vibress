@@ -4,6 +4,55 @@ import path from "path";
 
 export const dynamic = "force-dynamic";
 
+const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
+const PUBLICATION_SCOPE_TTL_MS = 60_000;
+const publicationScopeCache = new Map<
+  string,
+  { publicationId: string; expiresAt: number }
+>();
+
+async function resolveRequestPublicationId(
+  request: NextRequest,
+): Promise<string | null> {
+  const hostHeader =
+    request.headers.get("x-forwarded-host") ||
+    request.headers.get("host") ||
+    "";
+  if (!hostHeader) return null;
+
+  const cached = publicationScopeCache.get(hostHeader);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.publicationId;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/content/v1/site`, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "x-forwarded-host": hostHeader,
+      },
+    });
+    if (!response.ok) return null;
+
+    const publicationId = response.headers.get("x-vibress-publication-id");
+    if (
+      !publicationId ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(publicationId)
+    ) {
+      return null;
+    }
+
+    publicationScopeCache.set(hostHeader, {
+      publicationId,
+      expiresAt: Date.now() + PUBLICATION_SCOPE_TTL_MS,
+    });
+    return publicationId;
+  } catch {
+    return null;
+  }
+}
+
 function getMimeType(fileName: string): string {
   if (fileName.endsWith(".css")) return "text/css; charset=utf-8";
   if (fileName.endsWith(".js") || fileName.endsWith(".mjs"))
@@ -22,6 +71,7 @@ function resolveThemeAssetPath(
   themeId: string,
   version: string,
   relativePath: string,
+  publicationId: string | null,
 ): string | null {
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
   const cleanVersion = version.replace(/[^0-9.]/g, "");
@@ -29,35 +79,151 @@ function resolveThemeAssetPath(
 
   const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
   const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
+  const cleanPublicationId =
+    publicationId?.replace(/[^a-zA-Z0-9_-]/g, "") || "";
 
-  // 1. External theme storage paths (e.g. content/themes/{themeId}/{version}/...)
-  const externalThemeRoots = [
-    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion), path.join(explicitRoot, cleanId)] : []),
-    path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "content", cleanId),
-    path.join(process.cwd(), "..", "..", "content", cleanId),
-    path.join(process.cwd(), "..", "api", "content", cleanId),
-    path.join(process.cwd(), "apps", "api", "content", cleanId),
-  ];
+  const scopedExternalRoots =
+    publicationId && publicationId !== "pub_default"
+      ? [
+          ...(explicitRoot
+            ? [
+                path.join(
+                  explicitRoot,
+                  "publications",
+                  cleanPublicationId,
+                  cleanId,
+                  cleanVersion,
+                ),
+                path.join(
+                  explicitRoot,
+                  "themes",
+                  "publications",
+                  cleanPublicationId,
+                  cleanId,
+                  cleanVersion,
+                ),
+              ]
+            : []),
+          path.join(
+            process.cwd(),
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "apps",
+            "api",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "..",
+            "api",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "..",
+            "..",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+        ]
+      : [];
 
-  for (const themeRoot of externalThemeRoots) {
+  // Legacy global roots are only considered after the request host has been
+  // resolved to a publication. This preserves old installs without allowing
+  // an unresolved host to probe another tenant's external theme files.
+  const legacyExternalRoots = publicationId
+    ? [
+        ...(explicitRoot
+          ? [
+              path.join(explicitRoot, cleanId, cleanVersion),
+              path.join(explicitRoot, "themes", cleanId, cleanVersion),
+              path.join(explicitRoot, cleanId),
+            ]
+          : []),
+        path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
+        path.join(
+          process.cwd(),
+          "apps",
+          "api",
+          "content",
+          "themes",
+          cleanId,
+          cleanVersion,
+        ),
+        path.join(
+          process.cwd(),
+          "..",
+          "api",
+          "content",
+          "themes",
+          cleanId,
+          cleanVersion,
+        ),
+        path.join(
+          process.cwd(),
+          "..",
+          "..",
+          "content",
+          "themes",
+          cleanId,
+          cleanVersion,
+        ),
+        path.join(
+          process.cwd(),
+          "..",
+          "..",
+          "apps",
+          "api",
+          "content",
+          "themes",
+          cleanId,
+          cleanVersion,
+        ),
+        path.join(process.cwd(), "content", cleanId),
+        path.join(process.cwd(), "..", "..", "content", cleanId),
+        path.join(process.cwd(), "..", "api", "content", cleanId),
+        path.join(process.cwd(), "apps", "api", "content", cleanId),
+      ]
+    : [];
+
+  for (const themeRoot of [
+    ...scopedExternalRoots,
+    ...legacyExternalRoots,
+  ]) {
     const candidates = [
       path.join(themeRoot, cleanRel),
       path.join(themeRoot, "assets", cleanRel),
       path.join(themeRoot, fileName),
     ];
-    for (const p of candidates) {
-      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-        return p;
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        return candidate;
       }
     }
   }
 
-  // 2. Built-in legacy theme paths
+  // Built-in themes are system-wide and do not contain tenant-owned files.
   const themeFolder = cleanId.replace(/^vibress-/, "");
   let resolvedFile = fileName;
   if (
@@ -118,9 +284,9 @@ function resolveThemeAssetPath(
     ),
   ];
 
-  for (const p of builtinPaths) {
-    if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-      return p;
+  for (const candidate of builtinPaths) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
     }
   }
 
@@ -128,7 +294,7 @@ function resolveThemeAssetPath(
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const { path: segments } = await params;
@@ -158,7 +324,13 @@ export async function GET(
   }
 
   try {
-    const assetPath = resolveThemeAssetPath(themeId, version, relativePath);
+    const publicationId = await resolveRequestPublicationId(request);
+    const assetPath = resolveThemeAssetPath(
+      themeId,
+      version,
+      relativePath,
+      publicationId,
+    );
     if (!assetPath) {
       return new NextResponse("Asset Not Found", { 
         status: 404,
