@@ -296,6 +296,7 @@ export class ThemeService {
       await this.storageAdapter.deleteThemeFiles(
         installed.themeId,
         installed.version,
+        publicationId,
       );
     }
 
