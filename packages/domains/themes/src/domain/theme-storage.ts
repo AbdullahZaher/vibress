@@ -8,20 +8,39 @@ export interface ThemeStorageAdapter {
     themeId: string,
     version: string,
     files: Map<string, Buffer>,
+    publicationId?: string,
   ): Promise<string>;
   getThemeFile(
     themeId: string,
     version: string,
     relativePath: string,
+    publicationId?: string,
   ): Promise<Buffer | null>;
-  listThemeFiles(themeId: string, version: string): Promise<string[]>;
+  listThemeFiles(
+    themeId: string,
+    version: string,
+    publicationId?: string,
+  ): Promise<string[]>;
   getThemeFilesMap(
     themeId: string,
     version: string,
+    publicationId?: string,
   ): Promise<Map<string, string>>;
-  deleteThemeFiles(themeId: string, version: string): Promise<void>;
-  themeExists(themeId: string, version: string): Promise<boolean>;
-  getThemeRootPath(themeId: string, version: string): string;
+  deleteThemeFiles(
+    themeId: string,
+    version: string,
+    publicationId?: string,
+  ): Promise<void>;
+  themeExists(
+    themeId: string,
+    version: string,
+    publicationId?: string,
+  ): Promise<boolean>;
+  getThemeRootPath(
+    themeId: string,
+    version: string,
+    publicationId?: string,
+  ): string;
 }
 
 export interface FileSystemThemeStorageOptions {
@@ -37,18 +56,53 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     );
   }
 
-  getThemeRootPath(themeId: string, version: string): string {
+  getThemeRootPath(
+    themeId: string,
+    version: string,
+    publicationId = "pub_default",
+  ): string {
+    const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
+    const cleanVersion = version.replace(/[^0-9.]/g, "");
+    const cleanPublicationId = publicationId.replace(/[^a-zA-Z0-9_-]/g, "");
+    if (publicationId === "pub_default") {
+      return path.join(this.storageRoot, cleanId, cleanVersion);
+    }
+    return path.join(
+      this.storageRoot,
+      "publications",
+      cleanPublicationId,
+      cleanId,
+      cleanVersion,
+    );
+  }
+
+  private getLegacyThemeRootPath(themeId: string, version: string): string {
     const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
     const cleanVersion = version.replace(/[^0-9.]/g, "");
     return path.join(this.storageRoot, cleanId, cleanVersion);
+  }
+
+  private resolveReadableThemeRoot(
+    themeId: string,
+    version: string,
+    publicationId: string,
+  ): string {
+    const scoped = this.getThemeRootPath(themeId, version, publicationId);
+    if (fs.existsSync(scoped)) return scoped;
+    if (publicationId !== "pub_default") {
+      const legacy = this.getLegacyThemeRootPath(themeId, version);
+      if (fs.existsSync(legacy)) return legacy;
+    }
+    return scoped;
   }
 
   async saveThemeFiles(
     themeId: string,
     version: string,
     files: Map<string, Buffer>,
+    publicationId = "pub_default",
   ): Promise<string> {
-    const themeDir = this.getThemeRootPath(themeId, version);
+    const themeDir = this.getThemeRootPath(themeId, version, publicationId);
     await fs.promises.mkdir(themeDir, { recursive: true });
 
     for (const [relPath, buffer] of files.entries()) {
@@ -65,8 +119,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     relativePath: string,
+    publicationId = "pub_default",
   ): Promise<Buffer | null> {
-    const themeDir = this.getThemeRootPath(themeId, version);
+    const themeDir = this.resolveReadableThemeRoot(
+      themeId,
+      version,
+      publicationId,
+    );
     const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
     const fullPath = path.join(themeDir, cleanRel);
 
@@ -85,8 +144,16 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     }
   }
 
-  async listThemeFiles(themeId: string, version: string): Promise<string[]> {
-    const themeDir = this.getThemeRootPath(themeId, version);
+  async listThemeFiles(
+    themeId: string,
+    version: string,
+    publicationId = "pub_default",
+  ): Promise<string[]> {
+    const themeDir = this.resolveReadableThemeRoot(
+      themeId,
+      version,
+      publicationId,
+    );
     if (!fs.existsSync(themeDir)) return [];
 
     const fileList: string[] = [];
@@ -109,12 +176,21 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
   async getThemeFilesMap(
     themeId: string,
     version: string,
+    publicationId = "pub_default",
   ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
-    const themeDir = this.getThemeRootPath(themeId, version);
+    const themeDir = this.resolveReadableThemeRoot(
+      themeId,
+      version,
+      publicationId,
+    );
     if (!fs.existsSync(themeDir)) return map;
 
-    const files = await this.listThemeFiles(themeId, version);
+    const files = await this.listThemeFiles(
+      themeId,
+      version,
+      publicationId,
+    );
     for (const f of files) {
       const fullPath = path.join(themeDir, f);
       try {
@@ -128,8 +204,12 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     return map;
   }
 
-  async deleteThemeFiles(themeId: string, version: string): Promise<void> {
-    const themeDir = this.getThemeRootPath(themeId, version);
+  async deleteThemeFiles(
+    themeId: string,
+    version: string,
+    publicationId = "pub_default",
+  ): Promise<void> {
+    const themeDir = this.getThemeRootPath(themeId, version, publicationId);
     if (fs.existsSync(themeDir)) {
       await fs.promises.rm(themeDir, { recursive: true, force: true });
     }
@@ -147,8 +227,16 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     }
   }
 
-  async themeExists(themeId: string, version: string): Promise<boolean> {
-    const themeDir = this.getThemeRootPath(themeId, version);
+  async themeExists(
+    themeId: string,
+    version: string,
+    publicationId = "pub_default",
+  ): Promise<boolean> {
+    const themeDir = this.resolveReadableThemeRoot(
+      themeId,
+      version,
+      publicationId,
+    );
     return fs.existsSync(themeDir);
   }
 }
