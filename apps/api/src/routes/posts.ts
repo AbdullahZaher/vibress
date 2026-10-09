@@ -139,23 +139,43 @@ export async function postRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const post = await postsService.createPost(
-        {
-          ...parseResult.data,
-          publicationId: req.publicationContext?.publicationId,
-          scheduledAt: parseResult.data.scheduledAt
-            ? new Date(parseResult.data.scheduledAt)
-            : null,
-        },
-        req.user!.id,
-      );
+      try {
+        const post = await postsService.createPost(
+          {
+            ...parseResult.data,
+            publicationId: req.publicationContext?.publicationId,
+            scheduledAt: parseResult.data.scheduledAt
+              ? new Date(parseResult.data.scheduledAt)
+              : null,
+          },
+          req.user!.id,
+          req.publicationContext?.publicationId,
+        );
 
-      const authors = await authorsService.getPostAuthors(post.id);
-      const tagIds = await postsService.getPostTagIds(post.id);
+        const authors = await authorsService.getPostAuthors(post.id);
+        const tagIds = await postsService.getPostTagIds(post.id);
 
-      return reply.status(201).send({
-        post: { ...post, authors, tagIds },
-      });
+        return reply.status(201).send({
+          post: { ...post, authors, tagIds },
+        });
+      } catch (err: unknown) {
+        if (
+          err instanceof PostDomainError &&
+          (err.code === "INVALID_AUTHOR_PUBLICATION" ||
+            err.code === "INVALID_TAG_PUBLICATION")
+        ) {
+          return reply.status(400).send({
+            errors: [
+              {
+                code: err.code,
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        throw err;
+      }
     },
   });
 
@@ -226,6 +246,20 @@ export async function postRoutes(fastify: FastifyInstance) {
               errors: [
                 {
                   code: "FORBIDDEN",
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          if (
+            err.code === "INVALID_AUTHOR_PUBLICATION" ||
+            err.code === "INVALID_TAG_PUBLICATION"
+          ) {
+            return reply.status(400).send({
+              errors: [
+                {
+                  code: err.code,
                   message: err.message,
                   requestId: req.id,
                 },

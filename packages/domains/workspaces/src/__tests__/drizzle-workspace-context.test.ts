@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { getDb, users, workspaces, eq } from "@vibress/database";
+import crypto from "node:crypto";
 import {
   DrizzleWorkspaceRepository,
   DrizzlePublicationRepository,
@@ -10,6 +12,97 @@ describe("Drizzle Workspace & Publication Context Resolution", () => {
   const wsRepo = new DrizzleWorkspaceRepository();
   const pubRepo = new DrizzlePublicationRepository();
   const service = new WorkspaceService(wsRepo, pubRepo);
+
+  it("keeps workspace owner/admin access authorable through explicit publication memberships", async () => {
+    const db = getDb();
+    const runId = crypto.randomUUID().slice(0, 8);
+    const workspaceId = `ws-membership-${runId}`;
+    const ownerId = crypto.randomUUID();
+    const adminId = crypto.randomUUID();
+
+    await db.insert(users).values([
+      {
+        id: ownerId,
+        email: `workspace-owner-${runId}@example.test`,
+        name: "Workspace Owner",
+        passwordHash: "test-only-placeholder",
+        status: "active",
+      },
+      {
+        id: adminId,
+        email: `workspace-admin-${runId}@example.test`,
+        name: "Workspace Admin",
+        passwordHash: "test-only-placeholder",
+        status: "active",
+      },
+    ]);
+
+    try {
+      await wsRepo.create({
+        id: workspaceId,
+        name: `Membership Test ${runId}`,
+        slug: `membership-test-${runId}`,
+        settings: {},
+      });
+
+      await wsRepo.addMember({
+        id: crypto.randomUUID(),
+        workspaceId,
+        userId: ownerId,
+        role: "owner",
+      });
+
+      const firstPublication = await pubRepo.create({
+        id: `pub-membership-a-${runId}`,
+        workspaceId,
+        name: "Membership A",
+        slug: `membership-a-${runId}`,
+        primaryLocale: "en",
+        settings: {},
+      });
+      const secondPublication = await pubRepo.create({
+        id: `pub-membership-b-${runId}`,
+        workspaceId,
+        name: "Membership B",
+        slug: `membership-b-${runId}`,
+        primaryLocale: "en",
+        settings: {},
+      });
+
+      const ownerFirst = await pubRepo.getMembership(
+        firstPublication.id,
+        ownerId,
+      );
+      const ownerSecond = await pubRepo.getMembership(
+        secondPublication.id,
+        ownerId,
+      );
+      expect(ownerFirst?.role).toBe("owner");
+      expect(ownerSecond?.role).toBe("owner");
+
+      await wsRepo.addMember({
+        id: crypto.randomUUID(),
+        workspaceId,
+        userId: adminId,
+        role: "admin",
+      });
+
+      const adminFirst = await pubRepo.getMembership(
+        firstPublication.id,
+        adminId,
+      );
+      const adminSecond = await pubRepo.getMembership(
+        secondPublication.id,
+        adminId,
+      );
+      expect(adminFirst?.role).toBe("admin");
+      expect(adminSecond?.role).toBe("admin");
+    } finally {
+      await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+      await db.delete(users).where(eq(users.id, ownerId));
+      await db.delete(users).where(eq(users.id, adminId));
+    }
+  });
 
   it("resolves default publication for system owner when unassigned", async () => {
     const ctx = await service.resolveStaffPublicationContext(

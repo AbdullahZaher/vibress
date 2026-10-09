@@ -6,10 +6,12 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  unique,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { users } from "./users";
-import { publications } from "./publications";
+import { publications, publicationMemberships } from "./publications";
 
 export const pages = pgTable(
   "pages",
@@ -53,7 +55,23 @@ export const pages = pgTable(
   },
   (table) => {
     return {
+      idPublicationUnique: unique("pages_id_publication_unique").on(
+        table.id,
+        table.publicationId,
+      ),
       publicationIdIdx: index("pages_publication_id_idx").on(table.publicationId),
+      primaryAuthorPublicationIdx: index("pages_primary_author_publication_idx").on(
+        table.publicationId,
+        table.primaryAuthorId,
+      ),
+      pagesPrimaryAuthorPublicationFk: foreignKey({
+        columns: [table.publicationId, table.primaryAuthorId],
+        foreignColumns: [
+          publicationMemberships.publicationId,
+          publicationMemberships.userId,
+        ],
+        name: "pages_primary_author_publication_fk",
+      }).onDelete("no action"),
       publicationSlugActiveIdx: uniqueIndex("pages_publication_slug_active_idx")
         .on(table.publicationId, table.slug)
         .where(sql`"deleted_at" IS NULL`),

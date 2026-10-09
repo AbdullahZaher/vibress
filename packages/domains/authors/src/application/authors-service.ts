@@ -12,8 +12,14 @@ export class AuthorsService {
     postId: string,
     authorIds: string[],
     primaryAuthorId: string,
+    publicationId: string,
   ): Promise<void> {
-    await this.authorRepo.setPostAuthors(postId, authorIds, primaryAuthorId);
+    await this.authorRepo.setPostAuthors(
+      postId,
+      authorIds,
+      primaryAuthorId,
+      publicationId,
+    );
   }
 
   async getPageAuthors(pageId: string): Promise<Author[]> {
@@ -24,7 +30,33 @@ export class AuthorsService {
     pageId: string,
     authorIds: string[],
     primaryAuthorId: string,
+    publicationId: string,
   ): Promise<void> {
-    await this.authorRepo.setPageAuthors(pageId, authorIds, primaryAuthorId);
+    await this.authorRepo.setPageAuthors(
+      pageId,
+      authorIds,
+      primaryAuthorId,
+      publicationId,
+    );
+  }
+
+  async findAuthorBySlug(
+    slug: string,
+    publicationId?: string,
+  ): Promise<{
+    id: string;
+    name: string;
+    slug: string;
+    bio: string | null;
+  } | null> {
+    return this.authorRepo.findAuthorBySlug(slug, publicationId);
+  }
+
+  async listAuthors(
+    publicationId?: string,
+  ): Promise<
+    Array<{ id: string; name: string; slug: string; bio: string | null }>
+  > {
+    return this.authorRepo.listAuthors(publicationId);
   }
 }

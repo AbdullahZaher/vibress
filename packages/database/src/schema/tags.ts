@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, index, uniqueIndex, unique } from "drizzle-orm/pg-core";
 import { publications } from "./publications";
 
 export const tags = pgTable(
@@ -20,6 +20,10 @@ export const tags = pgTable(
   },
   (table) => {
     return {
+      idPublicationUnique: unique("tags_id_publication_unique").on(
+        table.id,
+        table.publicationId,
+      ),
       publicationIdIdx: index("tags_publication_id_idx").on(table.publicationId),
       publicationSlugUnique: uniqueIndex("tags_publication_slug_unique").on(
         table.publicationId,

@@ -68,6 +68,13 @@ describe("Worker Scheduled Publishing & Downtime Recovery", () => {
     });
     const ownerRole = await rolesService.findByKey("owner");
     await rolesService.assignRoleToUser(testUser.id, ownerRole!.id);
+    await pool.query(
+      `INSERT INTO publication_memberships
+        (id, publication_id, user_id, role, created_at, updated_at)
+       VALUES ($1, 'pub_default', $2, 'owner', NOW(), NOW())
+       ON CONFLICT (publication_id, user_id) DO NOTHING`,
+      ["pm_worker_scheduling_author", testUser.id],
+    );
 
     schedulerWorker = new ContentSchedulerWorker();
   }, 30000);

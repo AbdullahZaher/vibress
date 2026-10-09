@@ -3,7 +3,12 @@ import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import { postsService, mediaService, usersService } from "../services";
 import { hashPassword } from "@vibress/security";
-import { getDb, publications } from "@vibress/database";
+import {
+  getDb,
+  publications,
+  publicationMemberships,
+} from "@vibress/database";
+import { randomUUID } from "node:crypto";
 
 describe("API: Post Feature Image & Unsplash Integration", () => {
   let app: FastifyInstance;
@@ -53,6 +58,12 @@ describe("API: Post Feature Image & Unsplash Integration", () => {
       status: "active",
     });
     testUserId = user.id;
+    await db.insert(publicationMemberships).values({
+      id: randomUUID(),
+      publicationId: "pub_default",
+      userId: testUserId,
+      role: "author",
+    });
 
     // Create 1x1 png buffer for media tests
     const pngBuffer = Buffer.from(

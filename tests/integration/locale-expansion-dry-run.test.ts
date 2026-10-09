@@ -16,6 +16,7 @@ import {
   pages,
   systemSettings,
   users,
+  publicationMemberships,
 } from "@vibress/database";
 import { createLiquidThemeEngine } from "@vibress/theme-core";
 import { buildPublicPostSummaryDto } from "../../apps/api/src/helpers/public-content-helpers";
@@ -53,6 +54,12 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
       status: "active",
       createdAt: now,
       updatedAt: now,
+    });
+    await db.insert(publicationMemberships).values({
+      id: randomUUID(),
+      publicationId: "pub_default",
+      userId: authorId,
+      role: "author",
     });
 
     // 2. Seed English source post

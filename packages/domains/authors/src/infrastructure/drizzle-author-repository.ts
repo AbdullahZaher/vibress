@@ -3,9 +3,10 @@ import {
   postAuthors,
   pageAuthors,
   users,
+  publicationMemberships,
   runInTransaction,
 } from "@vibress/database";
-import { eq, asc, and, isNull } from "drizzle-orm";
+import { eq, asc, and, isNull, inArray } from "drizzle-orm";
 import { AuthorRepository } from "../domain/repository";
 import { Author } from "../domain/author";
 import { slugify } from "@vibress/utils";
@@ -35,10 +36,33 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     }));
   }
 
+  async findMissingPublicationAuthorIds(
+    publicationId: string,
+    authorIds: string[],
+  ): Promise<string[]> {
+    const uniqueAuthorIds = Array.from(new Set(authorIds));
+    if (uniqueAuthorIds.length === 0) return [];
+
+    const db = getDb();
+    const rows = await db
+      .select({ userId: publicationMemberships.userId })
+      .from(publicationMemberships)
+      .where(
+        and(
+          eq(publicationMemberships.publicationId, publicationId),
+          inArray(publicationMemberships.userId, uniqueAuthorIds),
+        ),
+      );
+
+    const found = new Set(rows.map((row) => row.userId));
+    return uniqueAuthorIds.filter((userId) => !found.has(userId));
+  }
+
   async setPostAuthors(
     postId: string,
     authorIds: string[],
     primaryAuthorId: string,
+    publicationId: string,
   ): Promise<void> {
     await runInTransaction(async () => {
       const db = getDb();
@@ -48,6 +72,7 @@ export class DrizzleAuthorRepository implements AuthorRepository {
         new Set([primaryAuthorId, ...authorIds]),
       );
       const insertValues = uniqueAuthorIds.map((userId, index) => ({
+        publicationId,
         postId,
         userId,
         sortOrder: index,
@@ -89,6 +114,7 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     pageId: string,
     authorIds: string[],
     primaryAuthorId: string,
+    publicationId: string,
   ): Promise<void> {
     await runInTransaction(async () => {
       const db = getDb();
@@ -98,6 +124,7 @@ export class DrizzleAuthorRepository implements AuthorRepository {
         new Set([primaryAuthorId, ...authorIds]),
       );
       const insertValues = uniqueAuthorIds.map((userId, index) => ({
+        publicationId,
         pageId,
         userId,
         sortOrder: index,
@@ -113,6 +140,7 @@ export class DrizzleAuthorRepository implements AuthorRepository {
 
   async findAuthorBySlug(
     slug: string,
+    publicationId?: string,
   ): Promise<{
     id: string;
     name: string;
@@ -120,15 +148,35 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     bio: string | null;
   } | null> {
     const db = getDb();
-    const rows = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        slug: users.slug,
-        bio: users.bio,
-      })
-      .from(users)
-      .where(and(isNull(users.deletedAt), eq(users.status, "active")));
+    const rows = publicationId
+      ? await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .innerJoin(
+            publicationMemberships,
+            eq(publicationMemberships.userId, users.id),
+          )
+          .where(
+            and(
+              eq(publicationMemberships.publicationId, publicationId),
+              isNull(users.deletedAt),
+              eq(users.status, "active"),
+            ),
+          )
+      : await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .where(and(isNull(users.deletedAt), eq(users.status, "active")));
 
     const matched = rows.find(
       (r) => r.slug === slug || slugify(r.name) === slug || r.id === slug,
@@ -143,19 +191,41 @@ export class DrizzleAuthorRepository implements AuthorRepository {
     };
   }
 
-  async listAuthors(): Promise<
+  async listAuthors(
+    publicationId?: string,
+  ): Promise<
     Array<{ id: string; name: string; slug: string; bio: string | null }>
   > {
     const db = getDb();
-    const rows = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        slug: users.slug,
-        bio: users.bio,
-      })
-      .from(users)
-      .where(and(isNull(users.deletedAt), eq(users.status, "active")));
+    const rows = publicationId
+      ? await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .innerJoin(
+            publicationMemberships,
+            eq(publicationMemberships.userId, users.id),
+          )
+          .where(
+            and(
+              eq(publicationMemberships.publicationId, publicationId),
+              isNull(users.deletedAt),
+              eq(users.status, "active"),
+            ),
+          )
+      : await db
+          .select({
+            id: users.id,
+            name: users.name,
+            slug: users.slug,
+            bio: users.bio,
+          })
+          .from(users)
+          .where(and(isNull(users.deletedAt), eq(users.status, "active")));
 
     return rows.map((r) => ({
       id: r.id,

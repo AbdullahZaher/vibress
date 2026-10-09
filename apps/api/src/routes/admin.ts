@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { usersService, rolesService } from "../services";
 import { requireStaffSession, requirePermission } from "../middleware/auth";
 import { getDb, userInvitations } from "@vibress/database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashToken } from "@vibress/security";
 import { getConfig } from "@vibress/config";
@@ -66,6 +66,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const roleKey = body.roleKey || "editor";
 
       const db = getDb();
+      const publicationId = req.publicationContext!.publicationId;
       const existing = await usersService.findByEmail(email);
 
       if (existing) {
@@ -103,7 +104,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
         await db
           .update(userInvitations)
           .set({ status: "revoked", updatedAt: new Date() })
-          .where(and(eq(userInvitations.userId, userId), eq(userInvitations.status, "pending")));
+          .where(
+            and(
+              eq(userInvitations.userId, userId),
+              eq(userInvitations.publicationId, publicationId),
+              eq(userInvitations.status, "pending"),
+            ),
+          );
 
         // Update role if changed
         await rolesService.assignRoleToUser(userId, role.id);
@@ -119,6 +126,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
         await rolesService.assignRoleToUser(userId, role.id);
       }
 
+      const publicationRole =
+        role.key === "owner"
+          ? "owner"
+          : role.key === "administrator"
+            ? "admin"
+            : role.key === "editor"
+              ? "editor"
+              : role.key === "author"
+                ? "author"
+                : role.key === "contributor"
+                  ? "contributor"
+                  : "contributor";
+
       // Generate 32-byte secure random token and store SHA-256 hash
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashToken(rawToken);
@@ -129,6 +149,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         id: invitationId,
         userId,
         email,
+        publicationId,
+        publicationRole,
         tokenHash,
         status: "pending",
         expiresAt,
@@ -201,11 +223,42 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       const db = getDb();
-      // Revoke prior pending invitations
+      const publicationId = req.publicationContext!.publicationId;
+      const pendingInvitations = await db
+        .select()
+        .from(userInvitations)
+        .where(
+          and(
+            eq(userInvitations.userId, user.id),
+            eq(userInvitations.publicationId, publicationId),
+            eq(userInvitations.status, "pending"),
+          ),
+        )
+        .orderBy(desc(userInvitations.createdAt))
+        .limit(1);
+      const pendingInvitation = pendingInvitations[0];
+      if (!pendingInvitation) {
+        return reply.status(404).send({
+          errors: [
+            {
+              code: "INVITATION_NOT_FOUND",
+              message: "No pending invitation found for this publication",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       await db
         .update(userInvitations)
         .set({ status: "revoked", updatedAt: new Date() })
-        .where(and(eq(userInvitations.userId, user.id), eq(userInvitations.status, "pending")));
+        .where(
+          and(
+            eq(userInvitations.userId, user.id),
+            eq(userInvitations.publicationId, publicationId),
+            eq(userInvitations.status, "pending"),
+          ),
+        );
 
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashToken(rawToken);
@@ -216,6 +269,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         id: invitationId,
         userId: user.id,
         email,
+        publicationId: pendingInvitation.publicationId,
+        publicationRole: pendingInvitation.publicationRole,
         tokenHash,
         status: "pending",
         expiresAt,
@@ -277,7 +332,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
       await db
         .update(userInvitations)
         .set({ status: "revoked", updatedAt: new Date() })
-        .where(and(eq(userInvitations.userId, targetUserId), eq(userInvitations.status, "pending")));
+        .where(
+          and(
+            eq(userInvitations.userId, targetUserId),
+            eq(
+              userInvitations.publicationId,
+              req.publicationContext!.publicationId,
+            ),
+            eq(userInvitations.status, "pending"),
+          ),
+        );
 
       return reply.status(200).send({ success: true });
     },

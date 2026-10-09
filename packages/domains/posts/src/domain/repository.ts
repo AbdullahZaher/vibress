@@ -28,5 +28,13 @@ export interface PostRepository {
 
   // Tag relations
   getPostTagIds(postId: string): Promise<string[]>;
-  setPostTagIds(postId: string, tagIds: string[]): Promise<void>;
+  findMissingTagIdsForPublication(
+    publicationId: string,
+    tagIds: string[],
+  ): Promise<string[]>;
+  setPostTagIds(
+    postId: string,
+    tagIds: string[],
+    publicationId: string,
+  ): Promise<void>;
 }

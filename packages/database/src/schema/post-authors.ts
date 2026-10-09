@@ -6,13 +6,16 @@ import {
   timestamp,
   primaryKey,
   index,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { posts } from "./posts";
 import { users } from "./users";
+import { publicationMemberships } from "./publications";
 
 export const postAuthors = pgTable(
   "post_authors",
   {
+    publicationId: text("publication_id").notNull(),
     postId: text("post_id")
       .notNull()
       .references(() => posts.id, { onDelete: "cascade" }),
@@ -28,6 +31,26 @@ export const postAuthors = pgTable(
   (table) => {
     return {
       pk: primaryKey({ columns: [table.postId, table.userId] }),
+      publicationIdIdx: index("post_authors_publication_id_idx").on(
+        table.publicationId,
+      ),
+      publicationUserIdx: index("post_authors_publication_user_idx").on(
+        table.publicationId,
+        table.userId,
+      ),
+      postPublicationFk: foreignKey({
+        columns: [table.postId, table.publicationId],
+        foreignColumns: [posts.id, posts.publicationId],
+        name: "post_authors_post_publication_fk",
+      }).onDelete("cascade"),
+      membershipFk: foreignKey({
+        columns: [table.publicationId, table.userId],
+        foreignColumns: [
+          publicationMemberships.publicationId,
+          publicationMemberships.userId,
+        ],
+        name: "post_authors_membership_fk",
+      }).onDelete("no action"),
       postIdIdx: index("post_authors_post_id_idx").on(table.postId),
       userIdIdx: index("post_authors_user_id_idx").on(table.userId),
     };

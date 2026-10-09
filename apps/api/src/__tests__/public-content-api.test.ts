@@ -7,7 +7,9 @@ import {
   tagsService,
   usersService,
 } from "../services";
+import { getDb, publicationMemberships } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
+import crypto from "node:crypto";
 
 describe("Batch 6 — Public Content API & Visibility Security Integration", () => {
   let app: FastifyInstance;
@@ -38,6 +40,16 @@ describe("Batch 6 — Public Content API & Visibility Security Integration", () 
     });
     testAuthorId = author.id;
     testAuthorSlug = author.slug!;
+
+    await getDb()
+      .insert(publicationMemberships)
+      .values({
+        id: crypto.randomUUID(),
+        publicationId: "pub_default",
+        userId: testAuthorId,
+        role: "author",
+      })
+      .onConflictDoNothing();
 
     // Create a test tag
     const tag = await tagsService.createTag({

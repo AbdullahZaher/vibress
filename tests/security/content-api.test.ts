@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
+  getDb,
   getDbPool,
   closeDbPool,
+  publicationMemberships,
   seedDatabase,
   runMigrations,
 } from "@vibress/database";
@@ -80,6 +82,25 @@ describe("Admin Content API & Permissions Security", () => {
       status: "active",
     });
     await rolesService.assignRoleToUser(authorUser.id, limitedRole.id);
+
+    const db = getDb();
+    await db
+      .insert(publicationMemberships)
+      .values([
+        {
+          id: `content-api-editor-${editorUser.id}`,
+          publicationId: "pub_default",
+          userId: editorUser.id,
+          role: "editor",
+        },
+        {
+          id: `content-api-author-${authorUser.id}`,
+          publicationId: "pub_default",
+          userId: authorUser.id,
+          role: "editor",
+        },
+      ])
+      .onConflictDoNothing();
 
     app = buildApp();
     await app.ready();

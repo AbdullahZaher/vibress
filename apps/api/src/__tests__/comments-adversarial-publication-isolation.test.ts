@@ -7,7 +7,15 @@ import {
   DrizzleMemberSessionRepository,
   MemberAuthService,
 } from "@vibress/members";
-import { getDb, posts, users, userRoles, roles, publications } from "@vibress/database";
+import {
+  getDb,
+  posts,
+  users,
+  userRoles,
+  roles,
+  publications,
+  publicationMemberships,
+} from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
@@ -91,6 +99,22 @@ async function createStaffUserForPub(
       });
     }
   }
+
+  await db
+    .insert(publicationMemberships)
+    .values({
+      id: crypto.randomUUID(),
+      publicationId,
+      userId,
+      role: roleKey === "owner" ? "owner" : "admin",
+    })
+    .onConflictDoUpdate({
+      target: [
+        publicationMemberships.publicationId,
+        publicationMemberships.userId,
+      ],
+      set: { role: roleKey === "owner" ? "owner" : "admin" },
+    });
 
   const res = await app.inject({
     method: "POST",

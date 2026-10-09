@@ -6,11 +6,12 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  unique,
   foreignKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { users } from "./users";
-import { publications } from "./publications";
+import { publications, publicationMemberships } from "./publications";
 import { mediaAssets } from "./media";
 
 export const posts = pgTable(
@@ -58,7 +59,15 @@ export const posts = pgTable(
   },
   (table) => {
     return {
+      idPublicationUnique: unique("posts_id_publication_unique").on(
+        table.id,
+        table.publicationId,
+      ),
       publicationIdIdx: index("posts_publication_id_idx").on(table.publicationId),
+      primaryAuthorPublicationIdx: index("posts_primary_author_publication_idx").on(
+        table.publicationId,
+        table.primaryAuthorId,
+      ),
       publicationSlugActiveIdx: uniqueIndex("posts_publication_slug_active_idx")
         .on(table.publicationId, table.slug)
         .where(sql`"deleted_at" IS NULL`),
@@ -68,6 +77,14 @@ export const posts = pgTable(
       scheduledAtIdx: index("posts_scheduled_at_idx").on(table.scheduledAt),
       updatedAtIdx: index("posts_updated_at_idx").on(table.updatedAt),
       featureImageIdIdx: index("posts_feature_image_id_idx").on(table.featureImageId),
+      postsPrimaryAuthorPublicationFk: foreignKey({
+        columns: [table.publicationId, table.primaryAuthorId],
+        foreignColumns: [
+          publicationMemberships.publicationId,
+          publicationMemberships.userId,
+        ],
+        name: "posts_primary_author_publication_fk",
+      }).onDelete("no action"),
       postsFeatureImagePublicationFk: foreignKey({
         columns: [table.featureImageId, table.publicationId],
         foreignColumns: [mediaAssets.id, mediaAssets.publicationId],

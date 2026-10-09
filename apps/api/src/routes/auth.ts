@@ -8,12 +8,30 @@ import {
 } from "../middleware/auth";
 import { getConfig } from "@vibress/config";
 import { AuthDomainError } from "@vibress/auth";
-import { getDb, userInvitations, passwordResetTokens, users } from "@vibress/database";
+import {
+  getDb,
+  publicationMemberships,
+  publications,
+  runInTransaction,
+  userInvitations,
+  passwordResetTokens,
+  users,
+} from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashToken, hashPassword, dummyVerifyPassword } from "@vibress/security";
 import { normalizeEmail } from "@vibress/users";
 import { staffAuthMailer } from "../mailer/staff-auth-mailer";
+
+class InvitationAcceptanceError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InvitationAcceptanceError";
+  }
+}
 
 export async function authRoutes(fastify: FastifyInstance) {
   // Login
@@ -160,88 +178,121 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       const tokenHash = hashToken(body.token);
-      const db = getDb();
+      const invitationPassword = body.password;
+      const invitationName = body.name;
 
-      const invitations = await db
-        .select()
-        .from(userInvitations)
-        .where(eq(userInvitations.tokenHash, tokenHash))
-        .limit(1);
+      try {
+        await runInTransaction(async () => {
+          const db = getDb();
+          const invitations = await db
+            .select()
+            .from(userInvitations)
+            .where(eq(userInvitations.tokenHash, tokenHash))
+            .limit(1)
+            .for("update");
 
-      if (invitations.length === 0) {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "INVALID_OR_EXPIRED_TOKEN",
-              message: "Invitation token is invalid or does not exist",
-              requestId: req.id,
-            },
-          ],
+          if (invitations.length === 0) {
+            throw new InvitationAcceptanceError(
+              "INVALID_OR_EXPIRED_TOKEN",
+              "Invitation token is invalid or does not exist",
+            );
+          }
+
+          const invitation = invitations[0]!;
+
+          if (
+            invitation.status === "accepted" ||
+            invitation.acceptedAt !== null
+          ) {
+            throw new InvitationAcceptanceError(
+              "TOKEN_ALREADY_USED",
+              "This invitation token has already been accepted",
+            );
+          }
+
+          if (invitation.status === "revoked") {
+            throw new InvitationAcceptanceError(
+              "INVITATION_REVOKED",
+              "This invitation has been revoked by an administrator",
+            );
+          }
+
+          if (new Date(invitation.expiresAt).getTime() < Date.now()) {
+            throw new InvitationAcceptanceError(
+              "TOKEN_EXPIRED",
+              "This invitation token has expired",
+            );
+          }
+
+          const targetPublications = await db
+            .select({ id: publications.id })
+            .from(publications)
+            .where(eq(publications.id, invitation.publicationId))
+            .limit(1);
+          if (targetPublications.length === 0) {
+            throw new InvitationAcceptanceError(
+              "INVITATION_PUBLICATION_UNAVAILABLE",
+              "The publication for this invitation is no longer available",
+            );
+          }
+
+          const newPasswordHash = await hashPassword(invitationPassword);
+          const now = new Date();
+
+          await db
+            .update(users)
+            .set({
+              passwordHash: newPasswordHash,
+              status: "active",
+              ...(invitationName ? { name: invitationName.trim() } : {}),
+              updatedAt: now,
+            })
+            .where(eq(users.id, invitation.userId));
+
+          await db
+            .insert(publicationMemberships)
+            .values({
+              id: crypto.randomUUID(),
+              publicationId: invitation.publicationId,
+              userId: invitation.userId,
+              role: invitation.publicationRole,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: [
+                publicationMemberships.publicationId,
+                publicationMemberships.userId,
+              ],
+              set: {
+                role: invitation.publicationRole,
+                updatedAt: now,
+              },
+            });
+
+          await db
+            .update(userInvitations)
+            .set({
+              status: "accepted",
+              acceptedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(userInvitations.id, invitation.id));
         });
+      } catch (err: unknown) {
+        if (err instanceof InvitationAcceptanceError) {
+          return reply.status(400).send({
+            errors: [
+              {
+                code: err.code,
+                message: err.message,
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        throw err;
       }
-
-      const invitation = invitations[0]!;
-
-      if (invitation.status === "accepted" || invitation.acceptedAt !== null) {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "TOKEN_ALREADY_USED",
-              message: "This invitation token has already been accepted",
-              requestId: req.id,
-            },
-          ],
-        });
-      }
-
-      if (invitation.status === "revoked") {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "INVITATION_REVOKED",
-              message: "This invitation has been revoked by an administrator",
-              requestId: req.id,
-            },
-          ],
-        });
-      }
-
-      if (new Date(invitation.expiresAt).getTime() < Date.now()) {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "TOKEN_EXPIRED",
-              message: "This invitation token has expired",
-              requestId: req.id,
-            },
-          ],
-        });
-      }
-
-      // Hash new password using Argon2id
-      const newPasswordHash = await hashPassword(body.password);
-      const now = new Date();
-
-      // Update user password and activate status
-      await db
-        .update(users)
-        .set({
-          passwordHash: newPasswordHash,
-          status: "active",
-          ...(body.name ? { name: body.name.trim() } : {}),
-          updatedAt: now,
-        })
-        .where(eq(users.id, invitation.userId));
-
-      // Mark invitation accepted
-      await db
-        .update(userInvitations)
-        .set({
-          status: "accepted",
-          acceptedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(userInvitations.id, invitation.id));
 
       return reply.status(200).send({
         success: true,

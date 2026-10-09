@@ -203,6 +203,13 @@ describe("Studio public content (Posts + Pages)", () => {
     });
     const role = await rolesService.findByKey("owner");
     if (role) await rolesService.assignRoleToUser(user.id, role.id);
+    await pool.query(
+      `INSERT INTO publication_memberships
+        (id, publication_id, user_id, role, created_at, updated_at)
+       VALUES ($1, 'pub_default', $2, 'owner', NOW(), NOW())
+       ON CONFLICT (publication_id, user_id) DO NOTHING`,
+      ["pm_studio_public_owner", user.id],
+    );
 
     // Seed media assets so resolveDocumentMedia can produce durable URLs.
     const now = new Date().toISOString();

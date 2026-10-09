@@ -1,5 +1,12 @@
 import { getDb } from "./connection";
-import { publications, users, posts, postAuthors, revisions } from "./schema";
+import {
+  publications,
+  publicationMemberships,
+  users,
+  posts,
+  postAuthors,
+  revisions,
+} from "./schema";
 import { eq, and } from "drizzle-orm";
 import crypto from "node:crypto";
 
@@ -664,7 +671,12 @@ export async function seedFixturePost(): Promise<void> {
     return;
   }
 
-  const [author] = await db.select().from(users).limit(1);
+  const [author] = await db
+    .select({ id: users.id })
+    .from(publicationMemberships)
+    .innerJoin(users, eq(publicationMemberships.userId, users.id))
+    .where(eq(publicationMemberships.publicationId, PUBLICATION_ID))
+    .limit(1);
   if (!author) {
     return;
   }
@@ -714,6 +726,7 @@ export async function seedFixturePost(): Promise<void> {
     await db
       .insert(postAuthors)
       .values({
+        publicationId: PUBLICATION_ID,
         postId: TARGET_POST_ID,
         userId: author.id,
         sortOrder: 0,

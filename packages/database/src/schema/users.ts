@@ -36,6 +36,8 @@ export const userInvitations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
+    publicationId: text("publication_id").notNull(),
+    publicationRole: text("publication_role").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     status: text("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -53,6 +55,9 @@ export const userInvitations = pgTable(
       tokenHashIdx: index("user_invitations_token_hash_idx").on(table.tokenHash),
       userIdIdx: index("user_invitations_user_id_idx").on(table.userId),
       emailIdx: index("user_invitations_email_idx").on(table.email),
+      publicationIdIdx: index("user_invitations_publication_id_idx").on(
+        table.publicationId,
+      ),
       statusIdx: index("user_invitations_status_idx").on(table.status),
     };
   },

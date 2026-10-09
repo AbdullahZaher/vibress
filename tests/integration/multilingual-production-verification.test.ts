@@ -6,6 +6,7 @@ import {
   pages,
   users,
   contentTranslations,
+  publicationMemberships,
   seedDatabase,
   runMigrations,
 } from "@vibress/database";
@@ -57,7 +58,17 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     const now = new Date();
 
     const [adminUser] = await db.select().from(users).limit(1);
-    const authorId = adminUser?.id || randomUUID();
+    if (!adminUser) throw new Error("Expected seeded staff user");
+    const authorId = adminUser.id;
+    await db
+      .insert(publicationMemberships)
+      .values({
+        id: randomUUID(),
+        publicationId: "pub_default",
+        userId: authorId,
+        role: "author",
+      })
+      .onConflictDoNothing();
 
     // 1. Seed a test source post in English
     await db.insert(posts).values({

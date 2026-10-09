@@ -90,6 +90,7 @@ describe("Post Feature Image - Publication Isolation & Media Reference Lifecycle
         }),
       ),
       delete: vi.fn().mockResolvedValue(undefined),
+      findMissingTagIdsForPublication: vi.fn().mockResolvedValue([]),
       setPostTagIds: vi.fn().mockResolvedValue(undefined),
       getPostTagIds: vi.fn().mockResolvedValue([]),
     };
@@ -102,6 +103,7 @@ describe("Post Feature Image - Publication Isolation & Media Reference Lifecycle
       getPostAuthors: vi.fn().mockResolvedValue([
         { authorId: "author-1", isPrimary: true },
       ]),
+      findMissingPublicationAuthorIds: vi.fn().mockResolvedValue([]),
       setPostAuthors: vi.fn().mockResolvedValue(undefined),
     };
 

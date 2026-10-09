@@ -708,30 +708,10 @@ function extractRequestedLocale(req: any): string | null {
 
   // Public Authors List
   fastify.get("/authors", {
-    handler: async (_req, reply) => {
-      const authorRepo = (
-        authorsService as unknown as {
-          authorRepo: {
-            listAuthors: () => Promise<
-              Array<{
-                id: string;
-                name: string;
-                slug: string;
-                bio: string | null;
-              }>
-            >;
-            findAuthorBySlug: (
-              slug: string,
-            ) => Promise<{
-              id: string;
-              name: string;
-              slug: string;
-              bio: string | null;
-            } | null>;
-          };
-        }
-      ).authorRepo;
-      const authorList = await authorRepo.listAuthors();
+    handler: async (req, reply) => {
+      const authorList = await authorsService.listAuthors(
+        req.publicationContext?.publicationId,
+      );
       const formatted = authorList.map((a) => formatPublicAuthor(a as Author));
       return reply.status(200).send({ authors: formatted });
     },
@@ -741,29 +721,10 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/authors/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (
-        authorsService as unknown as {
-          authorRepo: {
-            listAuthors: () => Promise<
-              Array<{
-                id: string;
-                name: string;
-                slug: string;
-                bio: string | null;
-              }>
-            >;
-            findAuthorBySlug: (
-              slug: string,
-            ) => Promise<{
-              id: string;
-              name: string;
-              slug: string;
-              bio: string | null;
-            } | null>;
-          };
-        }
-      ).authorRepo;
-      const author = await authorRepo.findAuthorBySlug(slug);
+      const author = await authorsService.findAuthorBySlug(
+        slug,
+        req.publicationContext?.publicationId,
+      );
 
       if (!author) {
         return reply.status(404).send({
@@ -787,29 +748,10 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/authors/:slug/posts", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const authorRepo = (
-        authorsService as unknown as {
-          authorRepo: {
-            listAuthors: () => Promise<
-              Array<{
-                id: string;
-                name: string;
-                slug: string;
-                bio: string | null;
-              }>
-            >;
-            findAuthorBySlug: (
-              slug: string,
-            ) => Promise<{
-              id: string;
-              name: string;
-              slug: string;
-              bio: string | null;
-            } | null>;
-          };
-        }
-      ).authorRepo;
-      const author = await authorRepo.findAuthorBySlug(slug);
+      const author = await authorsService.findAuthorBySlug(
+        slug,
+        req.publicationContext?.publicationId,
+      );
 
       if (!author) {
         return reply.status(404).send({
