@@ -314,7 +314,10 @@ export class ThemeService {
     };
   }
 
-  async createPreviewToken(themeId: string): Promise<{
+  async createPreviewToken(
+    themeId: string,
+    publicationId = "pub_default",
+  ): Promise<{
     previewToken: string;
     expiresAt: string;
     themeId: string;
@@ -322,7 +325,11 @@ export class ThemeService {
     const token = crypto.randomBytes(32).toString("hex");
     const ttlSeconds = Math.floor(PREVIEW_TOKEN_TTL_MS / 1000);
     const expiresAt = Date.now() + PREVIEW_TOKEN_TTL_MS;
-    await this.previewStore.set(token, themeId, ttlSeconds);
+    await this.previewStore.set(
+      token,
+      JSON.stringify({ themeId, publicationId }),
+      ttlSeconds,
+    );
     return {
       previewToken: token,
       expiresAt: new Date(expiresAt).toISOString(),
@@ -330,7 +337,36 @@ export class ThemeService {
     };
   }
 
+  async resolvePreviewTarget(
+    token: string,
+  ): Promise<{ themeId: string; publicationId: string } | null> {
+    const stored = await this.previewStore.get(token);
+    if (!stored) return null;
+
+    try {
+      const parsed = JSON.parse(stored) as {
+        themeId?: unknown;
+        publicationId?: unknown;
+      };
+      if (
+        typeof parsed.themeId === "string" &&
+        typeof parsed.publicationId === "string"
+      ) {
+        return {
+          themeId: parsed.themeId,
+          publicationId: parsed.publicationId,
+        };
+      }
+    } catch {
+      // Legacy preview tokens stored only the theme ID. They remain valid for
+      // their short TTL and are scoped to the legacy default publication.
+    }
+
+    return { themeId: stored, publicationId: "pub_default" };
+  }
+
   async resolvePreviewToken(token: string): Promise<string | null> {
-    return (await this.previewStore.get(token)) ?? null;
+    const target = await this.resolvePreviewTarget(token);
+    return target?.themeId ?? null;
   }
 }
