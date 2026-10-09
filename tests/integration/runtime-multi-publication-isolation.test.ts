@@ -1302,6 +1302,39 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       expect(betaThemesRes.statusCode).toBe(200);
       const betaThemes = betaThemesRes.json().themes;
       expect(betaThemes.some((t: any) => t.manifest.id === themeId)).toBe(false);
+
+      // Preview tokens are capabilities, but they are still bound to the
+      // publication that created them. The same token must not resolve on
+      // another publication's public host.
+      const previewCreate = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/themes/${themeId}/preview`,
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+      });
+      expect(previewCreate.statusCode).toBe(200);
+      const previewToken = previewCreate.json().previewToken as string;
+
+      const alphaPreview = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/themes/preview/${previewToken}`,
+        headers: { host: ALPHA_HOST },
+      });
+      expect(alphaPreview.statusCode).toBe(200);
+      expect(alphaPreview.json().themeId).toBe(themeId);
+
+      const betaPreview = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/themes/preview/${previewToken}`,
+        headers: { host: BETA_HOST },
+      });
+      expect(betaPreview.statusCode).toBe(404);
+      expect(betaPreview.json().errors[0]?.code).toBe(
+        "THEME_PREVIEW_INVALID",
+      );
     });
 
     it("webhook_endpoints: isolates webhook endpoints and dispatch targets", async () => {
