@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   createThemeStorageAdapter,
   ThemeStorageConfigurationError,
@@ -77,5 +80,84 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
         requireDurableStorage: true,
       });
     }).toThrow(ThemeStorageConfigurationError);
+  });
+
+  it("keeps identical theme versions physically isolated by publication", async () => {
+    const root = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "vibress-theme-isolation-"),
+    );
+    try {
+      const adapter = new FileSystemThemeStorageAdapter({
+        storageRoot: root,
+      });
+      const themeId = "shared-theme";
+      const version = "1.0.0";
+
+      await adapter.saveThemeFiles(
+        themeId,
+        version,
+        new Map([["templates/home.liquid", Buffer.from("alpha")]]),
+        "pub_alpha",
+      );
+      await adapter.saveThemeFiles(
+        themeId,
+        version,
+        new Map([["templates/home.liquid", Buffer.from("beta")]]),
+        "pub_beta",
+      );
+
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_alpha",
+          )
+        )?.toString("utf-8"),
+      ).toBe("alpha");
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_beta",
+          )
+        )?.toString("utf-8"),
+      ).toBe("beta");
+
+      await adapter.deleteThemeFiles(themeId, version, "pub_alpha");
+
+      expect(
+        await adapter.getThemeFile(
+          themeId,
+          version,
+          "templates/home.liquid",
+          "pub_alpha",
+        ),
+      ).toBeNull();
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_beta",
+          )
+        )?.toString("utf-8"),
+      ).toBe("beta");
+    } finally {
+      await fs.promises.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the pub_default filesystem path backward compatible", () => {
+    const adapter = new FileSystemThemeStorageAdapter({
+      storageRoot: "/tmp/vibress-theme-root",
+    });
+    expect(
+      adapter.getThemeRootPath("legacy-theme", "1.0.0", "pub_default"),
+    ).toBe(path.join("/tmp/vibress-theme-root", "legacy-theme", "1.0.0"));
   });
 });

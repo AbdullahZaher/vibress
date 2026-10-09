@@ -186,10 +186,17 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
+      const hostHeader =
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        undefined;
       const res = await fetch(
         `${API_BASE}/api/admin/v1/themes/preview/${token}`,
         {
           cache: "no-store",
+          ...(hostHeader
+            ? { headers: { "x-forwarded-host": hostHeader } }
+            : {}),
         },
       );
       if (!res.ok) {

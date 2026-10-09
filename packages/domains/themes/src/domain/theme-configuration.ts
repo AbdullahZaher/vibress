@@ -17,8 +17,8 @@ export interface ThemeConfiguration {
 }
 
 export interface ThemeConfigurationRepository {
-  getActive(): Promise<ThemeConfiguration | null>;
-  setActive(config: ThemeConfiguration): Promise<ThemeConfiguration>;
+  getActive(publicationId?: string): Promise<ThemeConfiguration | null>;
+  setActive(config: ThemeConfiguration, publicationId?: string): Promise<ThemeConfiguration>;
 }
 
 export interface ThemeDefinitionRegistry {

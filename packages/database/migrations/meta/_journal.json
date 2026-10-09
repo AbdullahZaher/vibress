@@ -218,6 +218,13 @@
       "when": 1786611000000,
       "tag": "0030_content_relationship_publication_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786612000000,
+      "tag": "0031_theme_publication_isolation",
+      "breakpoints": true
     }
   ]
 }

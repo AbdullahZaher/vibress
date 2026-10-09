@@ -96,6 +96,7 @@ export async function resolveThemeHostState(
 }
 
 export interface ThemeSiteSettings {
+  publicationId?: string | undefined;
   title: string;
   description: string;
   url: string;
@@ -175,6 +176,8 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       },
     });
     if (!res.ok) return fallback;
+    const publicationId =
+      res.headers.get("x-vibress-publication-id") || undefined;
     const data = (await res.json()) as {
       site?: Record<string, unknown>;
       security?: { isPrivate: boolean };
@@ -191,6 +194,7 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     const commentsEnabled = commentAccess !== "disabled";
 
     return {
+      publicationId,
       title: site.title as string,
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,

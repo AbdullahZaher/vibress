@@ -4,7 +4,12 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { themeService, themeInstaller, auditService } from "../services";
+import {
+  themeService,
+  themeInstaller,
+  auditService,
+  workspaceService,
+} from "../services";
 import { ThemeSettingsUpdateSchema } from "@vibress/api-contracts";
 import {
   ThemeNotFoundError,
@@ -19,6 +24,7 @@ import {
   ThemeZipError,
 } from "@vibress/theme-core";
 import { asCodedError, errorMessage } from "../helpers/errors";
+import { getConfig } from "@vibress/config";
 
 export async function themeRoutes(fastify: FastifyInstance) {
   // List all themes (built-in + installed external)
@@ -67,7 +73,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const active = await themeService.getActiveThemeConfiguration();
+      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
       return reply.status(200).send({
         manifest: theme.manifest,
         settingsSchema: theme.settingsSchema,
@@ -464,7 +470,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const previewInfo = await themeService.createPreviewToken(id);
+      const previewInfo = await themeService.createPreviewToken(
+        id,
+        req.publicationContext!.publicationId,
+      );
       return reply.status(200).send(previewInfo);
     },
   });
@@ -473,8 +482,8 @@ export async function themeRoutes(fastify: FastifyInstance) {
   fastify.get("/themes/preview/:token", {
     handler: async (req, reply) => {
       const { token } = req.params as { token: string };
-      const themeId = await themeService.resolvePreviewToken(token);
-      if (!themeId) {
+      const target = await themeService.resolvePreviewTarget(token);
+      if (!target) {
         return reply.status(404).send({
           errors: [
             {
@@ -485,7 +494,46 @@ export async function themeRoutes(fastify: FastifyInstance) {
           ],
         });
       }
-      return reply.status(200).send({ themeId });
+
+      const host =
+        (req.headers["x-forwarded-host"] as string | undefined) ||
+        req.hostname ||
+        (req.headers.host as string | undefined) ||
+        null;
+      const isDevFallbackAllowed =
+        !getConfig().isProduction &&
+        req.headers["x-dev-fallback"] !== "false";
+
+      try {
+        const publication =
+          await workspaceService.resolvePublicPublicationContext({
+            host,
+            isDevFallbackAllowed,
+          });
+        if (publication.publicationId !== target.publicationId) {
+          return reply.status(404).send({
+            errors: [
+              {
+                code: "THEME_PREVIEW_INVALID",
+                message: "Preview token expired or invalid",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+      } catch {
+        return reply.status(404).send({
+          errors: [
+            {
+              code: "THEME_PREVIEW_INVALID",
+              message: "Preview token expired or invalid",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      return reply.status(200).send({ themeId: target.themeId });
     },
   });
 }

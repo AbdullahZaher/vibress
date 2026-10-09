@@ -53,8 +53,8 @@ export class ThemeService {
     this.previewStore = previewStore || new MemoryPreviewTokenStore();
   }
 
-  async listThemes(publicationId?: string): Promise<UnifiedThemeSummary[]> {
-    const active = await this.repo.getActive();
+  async listThemes(publicationId = "pub_default"): Promise<UnifiedThemeSummary[]> {
+    const active = await this.repo.getActive(publicationId);
     const activeThemeId = active?.themeId || "vibress-default";
 
     const results: UnifiedThemeSummary[] = [];
@@ -98,7 +98,7 @@ export class ThemeService {
   async getTheme(
     themeId: string,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<{
     manifest: ThemeManifest;
     settingsSchema: ThemeSettingsSchema;
@@ -132,12 +132,12 @@ export class ThemeService {
     return null;
   }
 
-  async getActiveThemeConfiguration(): Promise<ThemeConfiguration | null> {
-    return this.repo.getActive();
+  async getActiveThemeConfiguration(publicationId?: string): Promise<ThemeConfiguration | null> {
+    return this.repo.getActive(publicationId);
   }
 
-  async getActiveTheme(publicationId?: string): Promise<ActiveThemeResult | null> {
-    const config = await this.repo.getActive();
+  async getActiveTheme(publicationId = "pub_default"): Promise<ActiveThemeResult | null> {
+    const config = await this.repo.getActive(publicationId);
     const activeThemeId = config?.themeId || "vibress-default";
 
     const definition = await this.getTheme(activeThemeId, config?.themeVersion, publicationId);
@@ -160,7 +160,7 @@ export class ThemeService {
     themeId: string,
     actorId: string | null,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<ThemeConfiguration> {
     const definition = await this.getTheme(themeId, version, publicationId);
     if (!definition) {
@@ -194,7 +194,7 @@ export class ThemeService {
       updatedAt: new Date(),
     };
 
-    const saved = await this.repo.setActive(config);
+    const saved = await this.repo.setActive(config, publicationId);
 
     // Update statuses in installed repo
     if (this.installedRepo) {
@@ -236,13 +236,13 @@ export class ThemeService {
       await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
-    const config = await this.repo.getActive();
+    const config = await this.repo.getActive(publicationId);
     if (config && config.themeId === themeId) {
       return this.repo.setActive({
         ...config,
         settings,
         updatedAt: new Date(),
-      });
+      }, publicationId);
     }
 
     return {
@@ -261,9 +261,9 @@ export class ThemeService {
     themeId: string,
     _actorId: string | null,
     version?: string,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<{ success: boolean; themeId: string; version?: string }> {
-    const active = await this.repo.getActive();
+    const active = await this.repo.getActive(publicationId);
     if (active?.themeId === themeId && (!version || active.themeVersion === version)) {
       throw new ThemeError(
         "THEME_ACTIVE_CANNOT_BE_DELETED",
@@ -296,6 +296,7 @@ export class ThemeService {
       await this.storageAdapter.deleteThemeFiles(
         installed.themeId,
         installed.version,
+        publicationId,
       );
     }
 
@@ -313,7 +314,10 @@ export class ThemeService {
     };
   }
 
-  async createPreviewToken(themeId: string): Promise<{
+  async createPreviewToken(
+    themeId: string,
+    publicationId = "pub_default",
+  ): Promise<{
     previewToken: string;
     expiresAt: string;
     themeId: string;
@@ -321,7 +325,11 @@ export class ThemeService {
     const token = crypto.randomBytes(32).toString("hex");
     const ttlSeconds = Math.floor(PREVIEW_TOKEN_TTL_MS / 1000);
     const expiresAt = Date.now() + PREVIEW_TOKEN_TTL_MS;
-    await this.previewStore.set(token, themeId, ttlSeconds);
+    await this.previewStore.set(
+      token,
+      JSON.stringify({ themeId, publicationId }),
+      ttlSeconds,
+    );
     return {
       previewToken: token,
       expiresAt: new Date(expiresAt).toISOString(),
@@ -329,7 +337,36 @@ export class ThemeService {
     };
   }
 
+  async resolvePreviewTarget(
+    token: string,
+  ): Promise<{ themeId: string; publicationId: string } | null> {
+    const stored = await this.previewStore.get(token);
+    if (!stored) return null;
+
+    try {
+      const parsed = JSON.parse(stored) as {
+        themeId?: unknown;
+        publicationId?: unknown;
+      };
+      if (
+        typeof parsed.themeId === "string" &&
+        typeof parsed.publicationId === "string"
+      ) {
+        return {
+          themeId: parsed.themeId,
+          publicationId: parsed.publicationId,
+        };
+      }
+    } catch {
+      // Legacy preview tokens stored only the theme ID. They remain valid for
+      // their short TTL and are scoped to the legacy default publication.
+    }
+
+    return { themeId: stored, publicationId: "pub_default" };
+  }
+
   async resolvePreviewToken(token: string): Promise<string | null> {
-    return (await this.previewStore.get(token)) ?? null;
+    const target = await this.resolvePreviewTarget(token);
+    return target?.themeId ?? null;
   }
 }

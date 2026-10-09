@@ -14,19 +14,132 @@ import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHyd
 const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
 const CACHE_TTL_MS = process.env.NODE_ENV === "production" ? 60 * 1000 : 0;
 
-function findThemeDirectory(themeId: string, version: string): string | null {
+function findThemeDirectory(
+  themeId: string,
+  version: string,
+  publicationId = "pub_default",
+): string | null {
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
   const cleanVersion = version.replace(/[^0-9.]/g, "");
+  const cleanPublicationId = publicationId.replace(/[^a-zA-Z0-9_-]/g, "");
 
   const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
 
-  const candidates = [
-    ...(explicitRoot ? [path.join(explicitRoot, cleanId, cleanVersion), path.join(explicitRoot, "themes", cleanId, cleanVersion), path.join(explicitRoot, cleanId)] : []),
+  const scopedRoots =
+    publicationId === "pub_default"
+      ? []
+      : [
+          ...(explicitRoot
+            ? [
+                path.join(
+                  explicitRoot,
+                  "publications",
+                  cleanPublicationId,
+                  cleanId,
+                  cleanVersion,
+                ),
+                path.join(
+                  explicitRoot,
+                  "themes",
+                  "publications",
+                  cleanPublicationId,
+                  cleanId,
+                  cleanVersion,
+                ),
+              ]
+            : []),
+          path.join(
+            process.cwd(),
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "apps",
+            "api",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "..",
+            "api",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+          path.join(
+            process.cwd(),
+            "..",
+            "..",
+            "content",
+            "themes",
+            "publications",
+            cleanPublicationId,
+            cleanId,
+            cleanVersion,
+          ),
+        ];
+
+  // Legacy global roots remain read-only fallbacks for pre-isolation installs.
+  const legacyRoots = [
+    ...(explicitRoot
+      ? [
+          path.join(explicitRoot, cleanId, cleanVersion),
+          path.join(explicitRoot, "themes", cleanId, cleanVersion),
+          path.join(explicitRoot, cleanId),
+        ]
+      : []),
     path.join(process.cwd(), "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "apps", "api", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "api", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "..", "content", "themes", cleanId, cleanVersion),
-    path.join(process.cwd(), "..", "..", "apps", "api", "content", "themes", cleanId, cleanVersion),
+    path.join(
+      process.cwd(),
+      "apps",
+      "api",
+      "content",
+      "themes",
+      cleanId,
+      cleanVersion,
+    ),
+    path.join(
+      process.cwd(),
+      "..",
+      "api",
+      "content",
+      "themes",
+      cleanId,
+      cleanVersion,
+    ),
+    path.join(
+      process.cwd(),
+      "..",
+      "..",
+      "content",
+      "themes",
+      cleanId,
+      cleanVersion,
+    ),
+    path.join(
+      process.cwd(),
+      "..",
+      "..",
+      "apps",
+      "api",
+      "content",
+      "themes",
+      cleanId,
+      cleanVersion,
+    ),
     path.join(process.cwd(), "content", cleanId),
     path.join(process.cwd(), "..", "..", "content", cleanId),
     path.join(process.cwd(), "..", "api", "content", cleanId),
@@ -37,9 +150,9 @@ function findThemeDirectory(themeId: string, version: string): string | null {
     path.join(process.cwd(), "apps", "api", "content", "theme-starter"),
   ];
 
-  for (const p of candidates) {
-    if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-      return p;
+  for (const candidate of [...scopedRoots, ...legacyRoots]) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
     }
   }
   return null;
@@ -205,14 +318,17 @@ export async function renderThemeTemplate(
   }
 
   // External Liquid Theme Branch
-  const cacheKey = `${themeId}@${themeVersion}`;
+  const publicationId = site.publicationId;
+  const cacheKey = `${publicationId || "unresolved"}:${themeId}@${themeVersion}`;
   let fileMap: Map<string, string>;
 
   const cached = themeFilesCache.get(cacheKey);
   if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
     fileMap = cached.files;
   } else {
-    const themeDir = findThemeDirectory(themeId, themeVersion);
+    const themeDir = publicationId
+      ? findThemeDirectory(themeId, themeVersion, publicationId)
+      : null;
     if (themeDir) {
       fileMap = loadThemeFilesMap(themeDir);
     } else {
