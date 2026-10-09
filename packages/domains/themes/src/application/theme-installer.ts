@@ -27,6 +27,7 @@ export class ThemeInstaller {
       manifest.id,
       manifest.version,
       files,
+      pubId,
     );
 
     // Format author string for display
