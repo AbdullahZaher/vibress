@@ -1,6 +1,8 @@
 -- Migration 0031: isolate theme activation and saved settings by publication.
--- Existing global theme state belongs only to pub_default. Never copy private settings
--- to other publications or discard historical configuration rows.
+-- Existing theme state was global before this migration, so every publication could
+-- observe the same active configuration and saved settings. Preserve that exact
+-- pre-upgrade behavior by cloning legacy state to every existing publication, then
+-- isolate all future reads and writes by publication.
 ALTER TABLE "theme_configurations" ADD COLUMN "publication_id" text;
 ALTER TABLE "theme_settings" ADD COLUMN "publication_id" text;
 
@@ -11,6 +13,52 @@ WHERE "publication_id" IS NULL;
 UPDATE "theme_settings"
 SET "publication_id" = 'pub_default'
 WHERE "publication_id" IS NULL;
+
+-- Preserve pre-upgrade global behavior for every existing publication.
+-- Keep original row IDs for pub_default and generate deterministic clone IDs elsewhere.
+INSERT INTO "theme_configurations" (
+  "id",
+  "publication_id",
+  "theme_id",
+  "theme_version",
+  "settings_json",
+  "settings_schema_version",
+  "activated_by",
+  "activated_at",
+  "updated_at"
+)
+SELECT
+  'theme_config_' || md5(tc."id" || ':' || p."id"),
+  p."id",
+  tc."theme_id",
+  tc."theme_version",
+  tc."settings_json",
+  tc."settings_schema_version",
+  tc."activated_by",
+  tc."activated_at",
+  tc."updated_at"
+FROM "theme_configurations" tc
+CROSS JOIN "publications" p
+WHERE tc."publication_id" = 'pub_default'
+  AND p."id" <> 'pub_default';
+
+INSERT INTO "theme_settings" (
+  "id",
+  "publication_id",
+  "theme_id",
+  "settings_json",
+  "updated_at"
+)
+SELECT
+  'theme_setting_' || md5(ts."id" || ':' || p."id"),
+  p."id",
+  ts."theme_id",
+  ts."settings_json",
+  ts."updated_at"
+FROM "theme_settings" ts
+CROSS JOIN "publications" p
+WHERE ts."publication_id" = 'pub_default'
+  AND p."id" <> 'pub_default';
 
 DO $$
 DECLARE
