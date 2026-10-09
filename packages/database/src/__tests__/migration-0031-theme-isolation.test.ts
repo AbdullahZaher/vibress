@@ -56,7 +56,7 @@ async function cleanup(client: PoolClient, schema: string) {
 }
 
 describe("migration 0031 theme publication isolation upgrade", () => {
-  it("preserves legacy settings and supports identical theme IDs in another publication", async () => {
+  it("preserves legacy global state for every existing publication, then isolates future writes", async () => {
     const client = await getDbPool().connect();
     const schema = `theme_upgrade_${randomUUID().replaceAll("-", "")}`;
     try {
@@ -73,38 +73,75 @@ describe("migration 0031 theme publication isolation upgrade", () => {
         settings_json: { accentColor: string };
       }>('SELECT "publication_id", "settings_json" FROM "theme_settings"');
 
-      expect(configuration.rows[0]).toMatchObject({
-        publication_id: "pub_default",
-        theme_id: "vibress-default",
-        settings_json: { accentColor: "#123456" },
-      });
-      expect(settings.rows[0]).toMatchObject({
-        publication_id: "pub_default",
-        settings_json: { accentColor: "#654321" },
-      });
+      expect(configuration.rows).toHaveLength(2);
+      expect(settings.rows).toHaveLength(2);
 
-      await client.query(`
-        INSERT INTO "theme_settings" (
-          "id", "publication_id", "theme_id", "settings_json"
-        ) VALUES (
-          'settings_2', 'pub_b', 'vibress-default',
-          '{"accentColor":"#abcdef"}'
-        )
-      `);
-      await client.query(`
-        INSERT INTO "theme_configurations" (
-          "id", "publication_id", "theme_id", "theme_version", "settings_json"
-        ) VALUES (
-          'active_b', 'pub_b', 'vibress-default', '1.0.0',
-          '{"accentColor":"#abcdef"}'
-        )
-      `);
-
-      const settingsB = await client.query<{ settings_json: { accentColor: string } }>(
-        'SELECT "settings_json" FROM "theme_settings" WHERE "publication_id" = $1',
-        ["pub_b"],
+      expect(configuration.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            publication_id: "pub_default",
+            theme_id: "vibress-default",
+            settings_json: { accentColor: "#123456" },
+          }),
+          expect.objectContaining({
+            publication_id: "pub_b",
+            theme_id: "vibress-default",
+            settings_json: { accentColor: "#123456" },
+          }),
+        ]),
       );
-      expect(settingsB.rows[0]?.settings_json.accentColor).toBe("#abcdef");
+      expect(settings.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            publication_id: "pub_default",
+            settings_json: { accentColor: "#654321" },
+          }),
+          expect.objectContaining({
+            publication_id: "pub_b",
+            settings_json: { accentColor: "#654321" },
+          }),
+        ]),
+      );
+
+      await client.query(
+        'UPDATE "theme_settings" SET "settings_json" = $1::jsonb WHERE "publication_id" = $2',
+        [JSON.stringify({ accentColor: "#abcdef" }), "pub_b"],
+      );
+      await client.query(
+        'UPDATE "theme_configurations" SET "settings_json" = $1::jsonb WHERE "publication_id" = $2',
+        [JSON.stringify({ accentColor: "#fedcba" }), "pub_b"],
+      );
+
+      const isolatedSettings = await client.query<{
+        publication_id: string;
+        settings_json: { accentColor: string };
+      }>(
+        'SELECT "publication_id", "settings_json" FROM "theme_settings" ORDER BY "publication_id"',
+      );
+      const isolatedConfigurations = await client.query<{
+        publication_id: string;
+        settings_json: { accentColor: string };
+      }>(
+        'SELECT "publication_id", "settings_json" FROM "theme_configurations" ORDER BY "publication_id"',
+      );
+
+      expect(
+        isolatedSettings.rows.find((row) => row.publication_id === "pub_default")
+          ?.settings_json.accentColor,
+      ).toBe("#654321");
+      expect(
+        isolatedSettings.rows.find((row) => row.publication_id === "pub_b")
+          ?.settings_json.accentColor,
+      ).toBe("#abcdef");
+      expect(
+        isolatedConfigurations.rows.find(
+          (row) => row.publication_id === "pub_default",
+        )?.settings_json.accentColor,
+      ).toBe("#123456");
+      expect(
+        isolatedConfigurations.rows.find((row) => row.publication_id === "pub_b")
+          ?.settings_json.accentColor,
+      ).toBe("#fedcba");
     } finally {
       await cleanup(client, schema);
       client.release();
