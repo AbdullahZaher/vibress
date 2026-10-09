@@ -141,7 +141,6 @@ export interface ThemeSiteSettings {
  */
 export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
   const fallback: ThemeSiteSettings = {
-    publicationId: "pub_default",
     title: process.env.SITE_NAME || "Vibress",
     description: process.env.SITE_DESCRIPTION || "Publishing Platform",
     url: getPublicSiteUrl(),
@@ -178,7 +177,7 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     });
     if (!res.ok) return fallback;
     const publicationId =
-      res.headers.get("x-vibress-publication-id") || "pub_default";
+      res.headers.get("x-vibress-publication-id") || undefined;
     const data = (await res.json()) as {
       site?: Record<string, unknown>;
       security?: { isPrivate: boolean };
