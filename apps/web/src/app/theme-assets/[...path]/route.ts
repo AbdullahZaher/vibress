@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import {
+  isPublicExternalThemeAssetPath,
+  shouldAllowLegacyThemeFallback,
+  type PublicationThemeScope,
+} from "../../../lib/theme-asset-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -8,12 +13,12 @@ const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
 const PUBLICATION_SCOPE_TTL_MS = 60_000;
 const publicationScopeCache = new Map<
   string,
-  { publicationId: string; expiresAt: number }
+  { scope: PublicationThemeScope; expiresAt: number }
 >();
 
-async function resolveRequestPublicationId(
+async function resolveRequestPublicationScope(
   request: NextRequest,
-): Promise<string | null> {
+): Promise<PublicationThemeScope | null> {
   const hostHeader =
     request.headers.get("x-forwarded-host") ||
     request.headers.get("host") ||
@@ -22,7 +27,7 @@ async function resolveRequestPublicationId(
 
   const cached = publicationScopeCache.get(hostHeader);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.publicationId;
+    return cached.scope;
   }
 
   try {
@@ -43,11 +48,31 @@ async function resolveRequestPublicationId(
       return null;
     }
 
-    publicationScopeCache.set(hostHeader, {
+    const payload = (await response.json()) as {
+      theme?: {
+        themeId?: unknown;
+        themeVersion?: unknown;
+      };
+    };
+    const activeThemeId =
+      typeof payload.theme?.themeId === "string"
+        ? payload.theme.themeId
+        : "vibress-default";
+    const activeThemeVersion =
+      typeof payload.theme?.themeVersion === "string"
+        ? payload.theme.themeVersion
+        : "1.0.0";
+
+    const scope: PublicationThemeScope = {
       publicationId,
+      activeThemeId,
+      activeThemeVersion,
+    };
+    publicationScopeCache.set(hostHeader, {
+      scope,
       expiresAt: Date.now() + PUBLICATION_SCOPE_TTL_MS,
     });
-    return publicationId;
+    return scope;
   } catch {
     return null;
   }
@@ -71,8 +96,9 @@ function resolveThemeAssetPath(
   themeId: string,
   version: string,
   relativePath: string,
-  publicationId: string | null,
+  scope: PublicationThemeScope | null,
 ): string | null {
+  const publicationId = scope?.publicationId ?? null;
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
   const cleanVersion = version.replace(/[^0-9.]/g, "");
   const fileName = path.basename(relativePath);
@@ -152,8 +178,10 @@ function resolveThemeAssetPath(
   // Legacy global roots are only considered after the request host has been
   // resolved to a publication. This preserves old installs without allowing
   // an unresolved host to probe another tenant's external theme files.
-  const legacyExternalRoots = publicationId
-    ? [
+  const legacyExternalRoots =
+    isPublicExternalThemeAssetPath(relativePath) &&
+    shouldAllowLegacyThemeFallback(scope, themeId, version)
+      ? [
         ...(explicitRoot
           ? [
               path.join(explicitRoot, cleanId, cleanVersion),
@@ -207,10 +235,10 @@ function resolveThemeAssetPath(
       ]
     : [];
 
-  for (const themeRoot of [
-    ...scopedExternalRoots,
-    ...legacyExternalRoots,
-  ]) {
+  const publicExternalAsset = isPublicExternalThemeAssetPath(relativePath);
+  for (const themeRoot of publicExternalAsset
+    ? [...scopedExternalRoots, ...legacyExternalRoots]
+    : []) {
     const candidates = [
       path.join(themeRoot, cleanRel),
       path.join(themeRoot, "assets", cleanRel),
@@ -324,12 +352,12 @@ export async function GET(
   }
 
   try {
-    const publicationId = await resolveRequestPublicationId(request);
+    const publicationScope = await resolveRequestPublicationScope(request);
     const assetPath = resolveThemeAssetPath(
       themeId,
       version,
       relativePath,
-      publicationId,
+      publicationScope,
     );
     if (!assetPath) {
       return new NextResponse("Asset Not Found", { 
