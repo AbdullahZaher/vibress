@@ -124,9 +124,11 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   // Public Site Metadata + Active Theme
   fastify.get("/site", {
     handler: async (req, reply) => {
+      const publicationId = req.publicationContext!.publicationId;
       const site = await buildPublicSiteIdentity();
-      const active = await themeService.getActiveTheme(req.publicationContext!.publicationId);
+      const active = await themeService.getActiveTheme(publicationId);
 
+      reply.header("x-vibress-publication-id", publicationId);
       return reply.status(200).send({
         site: {
           title: site.title,
