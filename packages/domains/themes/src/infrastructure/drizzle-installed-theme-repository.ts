@@ -8,6 +8,7 @@ import {
   installedThemes,
   themeSettings,
   InstalledThemeRow,
+  runInTransaction,
 } from "@vibress/database";
 import { ThemeManifest, ThemeSettingsSchema } from "@vibress/theme-core";
 import { eq, and, desc } from "drizzle-orm";
@@ -166,15 +167,26 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
   }
 
   async delete(themeId: string, publicationId?: string): Promise<void> {
-    const db = getDb();
-    const conditions = [eq(installedThemes.themeId, themeId)];
-    if (publicationId) conditions.push(eq(installedThemes.publicationId, publicationId));
-    await db
-      .delete(installedThemes)
-      .where(and(...conditions));
-    await db
-      .delete(themeSettings)
-      .where(eq(themeSettings.themeId, themeId));
+    const pubId = publicationId ?? "pub_default";
+    await runInTransaction(async () => {
+      const db = getDb();
+      await db
+        .delete(installedThemes)
+        .where(
+          and(
+            eq(installedThemes.themeId, themeId),
+            eq(installedThemes.publicationId, pubId),
+          ),
+        );
+      await db
+        .delete(themeSettings)
+        .where(
+          and(
+            eq(themeSettings.themeId, themeId),
+            eq(themeSettings.publicationId, pubId),
+          ),
+        );
+    });
   }
 
   async deleteVersion(themeId: string, version: string, publicationId?: string): Promise<void> {
@@ -189,39 +201,49 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
       .where(and(...conditions));
   }
 
-  async getThemeSettings(themeId: string, _publicationId?: string): Promise<Record<string, unknown> | null> {
+  async getThemeSettings(
+    themeId: string,
+    publicationId?: string,
+  ): Promise<Record<string, unknown> | null> {
     const db = getDb();
+    const pubId = publicationId ?? "pub_default";
     const rows = await db
       .select()
       .from(themeSettings)
-      .where(eq(themeSettings.themeId, themeId))
+      .where(
+        and(
+          eq(themeSettings.themeId, themeId),
+          eq(themeSettings.publicationId, pubId),
+        ),
+      )
       .limit(1);
-    if (!rows[0]) return null;
-    return rows[0].settingsJson as Record<string, unknown>;
+    return rows[0]
+      ? (rows[0].settingsJson as Record<string, unknown>)
+      : null;
   }
 
   async saveThemeSettings(
     themeId: string,
     settings: Record<string, unknown>,
-    _publicationId?: string,
+    publicationId?: string,
   ): Promise<void> {
     const db = getDb();
-    const existing = await this.getThemeSettings(themeId);
-    if (existing) {
-      await db
-        .update(themeSettings)
-        .set({
-          settingsJson: settings,
-          updatedAt: new Date(),
-        })
-        .where(eq(themeSettings.themeId, themeId));
-    } else {
-      await db.insert(themeSettings).values({
+    const pubId = publicationId ?? "pub_default";
+    await db
+      .insert(themeSettings)
+      .values({
         id: crypto.randomUUID(),
+        publicationId: pubId,
         themeId,
         settingsJson: settings,
         updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [themeSettings.publicationId, themeSettings.themeId],
+        set: {
+          settingsJson: settings,
+          updatedAt: new Date(),
+        },
       });
-    }
   }
 }
