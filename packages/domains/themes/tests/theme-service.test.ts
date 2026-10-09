@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ThemeService } from "../src/application/theme-service";
 import {
   ThemeConfiguration,
@@ -236,6 +236,38 @@ describe("Theme Domain — Activation & Management", () => {
     const activeNordic = await service.getActiveTheme();
     expect(activeNordic?.manifest.id).toBe("custom-nordic");
     expect(activeNordic?.settings.accentColor).toBe("#bf616a");
+  });
+
+  it("passes the resolved publication through activation and settings", async () => {
+    const getActive = vi.spyOn(themeRepo, "getActive");
+    const setActive = vi.spyOn(themeRepo, "setActive");
+    const saveSettings = vi.spyOn(installedRepo, "saveThemeSettings");
+
+    await service.activateTheme(
+      "custom-nordic",
+      "user-1",
+      undefined,
+      "pub_beta",
+    );
+    expect(setActive).toHaveBeenCalledWith(
+      expect.objectContaining({ themeId: "custom-nordic" }),
+      "pub_beta",
+    );
+
+    await service.getActiveTheme("pub_beta");
+    expect(getActive).toHaveBeenCalledWith("pub_beta");
+
+    await service.updateThemeSettings(
+      "custom-nordic",
+      { accentColor: "#123456" },
+      "user-1",
+      "pub_beta",
+    );
+    expect(saveSettings).toHaveBeenCalledWith(
+      "custom-nordic",
+      { accentColor: "#123456" },
+      "pub_beta",
+    );
   });
 
   it("uninstalls an external theme when not active", async () => {

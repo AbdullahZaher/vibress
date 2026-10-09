@@ -54,7 +54,8 @@ export class ThemeService {
   }
 
   async listThemes(publicationId?: string): Promise<UnifiedThemeSummary[]> {
-    const active = await this.repo.getActive();
+    const pubId = publicationId ?? "pub_default";
+    const active = await this.repo.getActive(pubId);
     const activeThemeId = active?.themeId || "vibress-default";
 
     const results: UnifiedThemeSummary[] = [];
@@ -62,7 +63,7 @@ export class ThemeService {
 
     // 1. Installed external themes (scoped to publication)
     if (this.installedRepo) {
-      const installed = await this.installedRepo.listAll(publicationId);
+      const installed = await this.installedRepo.listAll(pubId);
       for (const t of installed) {
         if (!seenIds.has(t.themeId)) {
           seenIds.add(t.themeId);
@@ -105,10 +106,11 @@ export class ThemeService {
     isBuiltIn: boolean;
     previewImage?: string | null | undefined;
   } | null> {
+    const pubId = publicationId ?? "pub_default";
     if (this.installedRepo) {
       const installed = version
-        ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, publicationId)
-        : await this.installedRepo.findByThemeId(themeId, publicationId);
+        ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, pubId)
+        : await this.installedRepo.findByThemeId(themeId, pubId);
       if (installed) {
         return {
           manifest: installed.manifest,
@@ -132,15 +134,18 @@ export class ThemeService {
     return null;
   }
 
-  async getActiveThemeConfiguration(): Promise<ThemeConfiguration | null> {
-    return this.repo.getActive();
+  async getActiveThemeConfiguration(
+    publicationId?: string,
+  ): Promise<ThemeConfiguration | null> {
+    return this.repo.getActive(publicationId ?? "pub_default");
   }
 
   async getActiveTheme(publicationId?: string): Promise<ActiveThemeResult | null> {
-    const config = await this.repo.getActive();
+    const pubId = publicationId ?? "pub_default";
+    const config = await this.repo.getActive(pubId);
     const activeThemeId = config?.themeId || "vibress-default";
 
-    const definition = await this.getTheme(activeThemeId, config?.themeVersion, publicationId);
+    const definition = await this.getTheme(activeThemeId, config?.themeVersion, pubId);
     if (!definition) return null;
 
     const settings = mergeThemeSettings(
@@ -162,7 +167,8 @@ export class ThemeService {
     version?: string,
     publicationId?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId, version, publicationId);
+    const pubId = publicationId ?? "pub_default";
+    const definition = await this.getTheme(themeId, version, pubId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -173,7 +179,7 @@ export class ThemeService {
     // Retrieve any previously saved settings for this theme identity
     let savedSettings: Record<string, unknown> | null = null;
     if (this.installedRepo) {
-      savedSettings = await this.installedRepo.getThemeSettings(themeId, publicationId);
+      savedSettings = await this.installedRepo.getThemeSettings(themeId, pubId);
     }
 
     let settings: Record<string, unknown>;
@@ -194,18 +200,18 @@ export class ThemeService {
       updatedAt: new Date(),
     };
 
-    const saved = await this.repo.setActive(config);
+    const saved = await this.repo.setActive(config, pubId);
 
     // Update statuses in installed repo
     if (this.installedRepo) {
-      const allInstalled = await this.installedRepo.listAll(publicationId);
+      const allInstalled = await this.installedRepo.listAll(pubId);
       for (const inst of allInstalled) {
         const shouldBeActive =
           inst.themeId === themeId && inst.version === manifest.version;
         if (shouldBeActive && inst.status !== "active") {
-          await this.installedRepo.update({ ...inst, status: "active" }, publicationId);
+          await this.installedRepo.update({ ...inst, status: "active" }, pubId);
         } else if (!shouldBeActive && inst.status === "active") {
-          await this.installedRepo.update({ ...inst, status: "installed" }, publicationId);
+          await this.installedRepo.update({ ...inst, status: "installed" }, pubId);
         }
       }
     }
@@ -219,7 +225,8 @@ export class ThemeService {
     _actorId: string | null,
     publicationId?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId, undefined, publicationId);
+    const pubId = publicationId ?? "pub_default";
+    const definition = await this.getTheme(themeId, undefined, pubId);
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -233,16 +240,16 @@ export class ThemeService {
 
     // Persist settings per theme identity
     if (this.installedRepo) {
-      await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
+      await this.installedRepo.saveThemeSettings(themeId, settings, pubId);
     }
 
-    const config = await this.repo.getActive();
+    const config = await this.repo.getActive(pubId);
     if (config && config.themeId === themeId) {
       return this.repo.setActive({
         ...config,
         settings,
         updatedAt: new Date(),
-      });
+      }, pubId);
     }
 
     return {
@@ -263,7 +270,8 @@ export class ThemeService {
     version?: string,
     publicationId?: string,
   ): Promise<{ success: boolean; themeId: string; version?: string }> {
-    const active = await this.repo.getActive();
+    const pubId = publicationId ?? "pub_default";
+    const active = await this.repo.getActive(pubId);
     if (active?.themeId === themeId && (!version || active.themeVersion === version)) {
       throw new ThemeError(
         "THEME_ACTIVE_CANNOT_BE_DELETED",
@@ -284,8 +292,8 @@ export class ThemeService {
     }
 
     const installed = version
-      ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, publicationId)
-      : await this.installedRepo.findByThemeId(themeId, publicationId);
+      ? await this.installedRepo.findByThemeIdAndVersion(themeId, version, pubId)
+      : await this.installedRepo.findByThemeId(themeId, pubId);
 
     if (!installed) {
       throw new ThemeNotFoundError(themeId);
@@ -301,9 +309,9 @@ export class ThemeService {
 
     // Delete from DB
     if (version) {
-      await this.installedRepo.deleteVersion(themeId, version, publicationId);
+      await this.installedRepo.deleteVersion(themeId, version, pubId);
     } else {
-      await this.installedRepo.delete(themeId, publicationId);
+      await this.installedRepo.delete(themeId, pubId);
     }
 
     return {

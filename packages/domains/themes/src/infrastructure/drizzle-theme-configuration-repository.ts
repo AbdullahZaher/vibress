@@ -24,39 +24,30 @@ export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRe
     };
   }
 
-  async getActive(): Promise<ThemeConfiguration | null> {
+  async getActive(
+    publicationId = "pub_default",
+  ): Promise<ThemeConfiguration | null> {
     const db = getDb();
-    const rows = await db.select().from(themeConfigurations).limit(1);
-    if (!rows[0]) return null;
-    return this.mapToDomain(rows[0]);
+    const rows = await db
+      .select()
+      .from(themeConfigurations)
+      .where(eq(themeConfigurations.publicationId, publicationId))
+      .limit(1);
+    return rows[0] ? this.mapToDomain(rows[0]) : null;
   }
 
-  async setActive(config: ThemeConfiguration): Promise<ThemeConfiguration> {
+  async setActive(
+    config: ThemeConfiguration,
+    publicationId = "pub_default",
+  ): Promise<ThemeConfiguration> {
     const db = getDb();
-    const existing = await db.select().from(themeConfigurations).limit(1);
-
-    if (existing[0]) {
-      const [row] = await db
-        .update(themeConfigurations)
-        .set({
-          themeId: config.themeId,
-          themeVersion: config.themeVersion,
-          settingsJson: config.settings,
-          settingsSchemaVersion: config.settingsSchemaVersion,
-          activatedBy: config.activatedBy,
-          activatedAt: config.activatedAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(themeConfigurations.id, existing[0].id))
-        .returning();
-      if (!row) throw new Error("Failed to update active theme configuration");
-      return this.mapToDomain(row);
-    }
-
+    // Publication uniqueness makes this atomic under concurrent activations.
+    // Keep the historical "active" ID only in the legacy default publication.
     const [row] = await db
       .insert(themeConfigurations)
       .values({
-        id: config.id || crypto.randomUUID(),
+        id: publicationId === "pub_default" ? config.id || "active" : crypto.randomUUID(),
+        publicationId,
         themeId: config.themeId,
         themeVersion: config.themeVersion,
         settingsJson: config.settings,
@@ -65,8 +56,20 @@ export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRe
         activatedAt: config.activatedAt,
         updatedAt: new Date(),
       })
+      .onConflictDoUpdate({
+        target: themeConfigurations.publicationId,
+        set: {
+          themeId: config.themeId,
+          themeVersion: config.themeVersion,
+          settingsJson: config.settings,
+          settingsSchemaVersion: config.settingsSchemaVersion,
+          activatedBy: config.activatedBy,
+          activatedAt: config.activatedAt,
+          updatedAt: new Date(),
+        },
+      })
       .returning();
-    if (!row) throw new Error("Failed to insert active theme configuration");
+    if (!row) throw new Error("Failed to save active theme configuration");
     return this.mapToDomain(row);
   }
 }
