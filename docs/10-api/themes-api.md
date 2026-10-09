@@ -31,6 +31,12 @@ Returns site metadata and the active theme identity + safe presentation settings
 
 No authentication required. Contains only presentation-safe settings — never secrets.
 
+## Publication isolation
+
+Public theme metadata and presentation settings are selected using the publication resolved from the incoming host, not a caller-supplied publication ID. Every authenticated admin theme operation is similarly scoped to the session's authorized publication. Activating or configuring a theme for one publication does not change another publication's active theme or settings.
+
+The existing request bodies and response fields are unchanged. Legacy single-publication settings are retained for `pub_default` during upgrade.
+
 ## Admin (`/api/admin/v1/themes`)
 
 All admin theme endpoints require a staff session. `themes.read` for reads; `themes.manage` for activate/settings/preview. Unauthenticated → 401; lacking permission → 403.
