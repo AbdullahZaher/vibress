@@ -45,8 +45,10 @@ Both provide: Layout, Home, Post, Page, TagArchive, AuthorArchive. Studio card C
 
 ## Persistence (`packages/domains/themes`)
 
-- Table `theme_configurations` stores: theme_id, theme_version, settings_json, settings_schema_version, activated_by, activated_at, updated_at.
-- Singleton: exactly one active row; `setActive` upserts the single row atomically.
+- Table `theme_configurations` stores one active configuration per publication: publication_id, theme_id, theme_version, settings_json, settings_schema_version, activated_by, activated_at, updated_at.
+- Table `theme_settings` stores independent settings per `(publication_id, theme_id)`, so a publication's saved settings survive activation changes without leaking to another publication.
+- `setActive` atomically upserts on the unique publication key; read, activation, update, and uninstall operations use the authoritative publication context.
+- Migration 0031 preserves existing singleton theme configuration and settings by assigning legacy rows to `pub_default`. Other publications start with their own defaults; ambiguous historical duplicate active rows stop the upgrade for review, with no silent data loss.
 - `ThemeService.activateTheme` validates the registered theme (manifest, compatibility, settings defaults) **before** persisting — a failed activation leaves the current theme intact.
 - `ThemeService.updateThemeSettings` validates server-side (types, enum options, hex color format, bounds, string length, unknown keys) before persisting.
 - Invalid persisted settings fall back to schema defaults with logging; they never crash the site.
