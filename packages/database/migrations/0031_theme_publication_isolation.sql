@@ -15,7 +15,7 @@ SET "publication_id" = 'pub_default'
 WHERE "publication_id" IS NULL;
 
 -- Fail closed before cloning if the legacy global active state is ambiguous.
-DO $
+DO $$
 DECLARE
   duplicate_configurations integer;
 BEGIN
@@ -31,7 +31,7 @@ BEGIN
     RAISE EXCEPTION
       'Theme isolation migration 0031: multiple legacy active theme configurations exist. Reconcile without deleting settings, then retry.';
   END IF;
-END $;
+END $$;
 
 -- Remove the old global theme-settings uniqueness before cloning the previously
 -- global rows into multiple publication-owned rows.
