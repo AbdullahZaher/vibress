@@ -354,8 +354,21 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const parsed = CreateRedirectInputSchema.safeParse(req.body);
-      if (!parsed.success)
-        return sendError(reply, "VALIDATION_ERROR", "Invalid redirect input", req.id);
+      if (!parsed.success) {
+        // Preserve the established domain error code for unsupported status
+        // values while rejecting them at the shared-schema boundary.
+        const invalidStatusCode = parsed.error.issues.every(
+          (issue) => issue.path[0] === "statusCode",
+        );
+        return sendError(
+          reply,
+          invalidStatusCode ? "INVALID_STATUS_CODE" : "VALIDATION_ERROR",
+          invalidStatusCode
+            ? "Only 301, 302, 307, and 308 are allowed"
+            : "Invalid redirect input",
+          req.id,
+        );
+      }
       const body = parsed.data;
       try {
         const redirect = await redirectsService.createRedirect(
@@ -386,8 +399,21 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const parsed = UpdateRedirectInputSchema.safeParse(req.body);
-      if (!parsed.success)
-        return sendError(reply, "VALIDATION_ERROR", "Invalid redirect input", req.id);
+      if (!parsed.success) {
+        // Preserve the established domain error code for unsupported status
+        // values while rejecting them at the shared-schema boundary.
+        const invalidStatusCode = parsed.error.issues.every(
+          (issue) => issue.path[0] === "statusCode",
+        );
+        return sendError(
+          reply,
+          invalidStatusCode ? "INVALID_STATUS_CODE" : "VALIDATION_ERROR",
+          invalidStatusCode
+            ? "Only 301, 302, 307, and 308 are allowed"
+            : "Invalid redirect input",
+          req.id,
+        );
+      }
       // Zod's partial input permits explicit undefined, but the domain
       // update contract only accepts fields with concrete values.
       const updates: Partial<CreateRedirectData> = {};
