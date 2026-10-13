@@ -180,8 +180,10 @@ export class RedirectsService {
       }
       return;
     }
-    // Internal destination: relative path
-    if (!destination.startsWith("/") || destination.startsWith("//")) {
+    // Internal destination: relative path. WHATWG URL parsing treats backslashes
+    // like slashes for special schemes, which could turn /\\evil into an
+    // unexpected external host.
+    if (!destination.startsWith("/") || destination.startsWith("//") || destination.includes("\\")) {
       throw new RedirectDomainError(
         "INVALID_DESTINATION",
         "Internal destinations must start with /",
