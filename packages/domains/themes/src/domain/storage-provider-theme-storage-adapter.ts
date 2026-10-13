@@ -93,10 +93,16 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     );
     let exists = await this.storageProvider.exists(key);
     if (!exists && publicationId !== "pub_default") {
-      const legacyRoot = this.getLegacyThemeRootPath(themeId, version);
-      const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-      key = `${legacyRoot}/${cleanRel}`;
-      exists = await this.storageProvider.exists(key);
+      // A scoped package is authoritative once installed. Falling back for
+      // individual missing files could serve another publication's templates
+      // or assets when theme IDs and versions happen to match.
+      const scopedIndex = `${this.getThemeRootPath(themeId, version, publicationId)}/__files.json`;
+      if (!(await this.storageProvider.exists(scopedIndex))) {
+        const legacyRoot = this.getLegacyThemeRootPath(themeId, version);
+        const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+        key = `${legacyRoot}/${cleanRel}`;
+        exists = await this.storageProvider.exists(key);
+      }
     }
     if (!exists) return null;
 
@@ -199,6 +205,8 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     );
     if (await this.storageProvider.exists(key)) return true;
     if (publicationId !== "pub_default") {
+      const scopedIndex = `${this.getThemeRootPath(themeId, version, publicationId)}/__files.json`;
+      if (await this.storageProvider.exists(scopedIndex)) return false;
       const legacyKey = `${this.getLegacyThemeRootPath(themeId, version)}/theme.json`;
       return this.storageProvider.exists(legacyKey);
     }
