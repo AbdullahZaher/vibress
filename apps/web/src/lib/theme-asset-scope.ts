@@ -2,6 +2,8 @@ export interface PublicationThemeScope {
   publicationId: string;
   activeThemeId: string;
   activeThemeVersion: string;
+  /** Derived from the current publication’s installed-theme storage reference. */
+  legacyStorage?: boolean;
 }
 
 const PUBLIC_EXTERNAL_THEME_ASSET_EXTENSIONS = new Set([
@@ -40,7 +42,7 @@ export function shouldAllowLegacyThemeFallback(
   if (scope.publicationId === "pub_default") return true;
   // Missing files from an installed publication-owned package must never
   // resolve to the shared legacy package with the same theme ID/version.
-  if (hasScopedPackage) return false;
+  if (hasScopedPackage || scope.legacyStorage !== true) return false;
   return (
     scope.activeThemeId === themeId &&
     scope.activeThemeVersion === version
