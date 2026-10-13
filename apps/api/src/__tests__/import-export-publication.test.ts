@@ -35,12 +35,12 @@ describe("publication-scoped native import/export processors", () => {
     const deps = fixtures();
     const importer = new NativeImportProcessor(deps);
     const result = await importer.process({
-      redirects: [{ source: "/moved", destination: "/alpha" }],
+      redirects: [{ source: "/moved", destination: "/alpha", enabled: false }],
       settings: { site: { title: "Changed" } },
     }, "pub_alpha");
     expect(result.redirects).toBe(1);
     expect(deps.redirectsService.createRedirect).toHaveBeenCalledWith(
-      { source: "/moved", destination: "/alpha", statusCode: 301 },
+      { source: "/moved", destination: "/alpha", statusCode: 301, enabled: false },
       null, "pub_alpha",
     );
     expect(deps.settingsService.updateSetting).toHaveBeenCalledWith(
