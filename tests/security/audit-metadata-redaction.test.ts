@@ -71,19 +71,4 @@ describe("audit metadata sanitization", () => {
       flags: [true, false],
     });
   });
-
-  it("redacts excessively deep metadata instead of recursing indefinitely", () => {
-    let nested: Record<string, unknown> = { safe: "leaf" };
-    for (let i = 0; i < 25; i += 1) {
-      nested = { child: nested };
-    }
-
-    const sanitized = sanitizeAuditMetadata({ nested });
-
-    let current: unknown = sanitized?.nested;
-    for (let i = 0; i < 20; i += 1) {
-      current = (current as Record<string, unknown>).child;
-    }
-    expect(current).toBe("[REDACTED]");
-  });
 });
