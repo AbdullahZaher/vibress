@@ -285,18 +285,25 @@ export class WebhooksService {
    * Idempotent: retries reuse the same event identity.
    */
   async retryFailedDeliveries(publicationId?: string): Promise<number> {
-    const { deliveries } = await this.repo.listDeliveries({
+    const deliveryFilter: {
+      status: string;
+      publicationId?: string;
+      limit: number;
+    } = {
       status: "failed",
-      publicationId,
       limit: 100,
-    });
+    };
+    if (publicationId) {
+      deliveryFilter.publicationId = publicationId;
+    }
+
+    const { deliveries } = await this.repo.listDeliveries(deliveryFilter);
     let retried = 0;
     for (const delivery of deliveries) {
       if (delivery.attemptCount < MAX_RETRIES) {
-        const endpoint = await this.repo.findEndpointById(
-          delivery.endpointId,
-          publicationId,
-        );
+        const endpoint = publicationId
+          ? await this.repo.findEndpointById(delivery.endpointId, publicationId)
+          : await this.repo.findEndpointById(delivery.endpointId);
         if (!endpoint) {
           await this.repo.markDeadLetter(delivery.id, "webhook endpoint not found");
           continue;

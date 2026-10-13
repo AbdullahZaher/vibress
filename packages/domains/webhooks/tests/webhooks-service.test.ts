@@ -21,6 +21,7 @@ function makeEndpoint(
 ): WebhookEndpoint {
   return {
     id: "e1",
+    publicationId: "pub_default",
     name: "Test hook",
     url: "https://receiver.example.com/hook",
     secretEncrypted: encryptSecret("whsec_123"),
@@ -53,8 +54,13 @@ function makeDelivery(
 
 describe("WebhooksService", () => {
   const repo: WebhookRepository = {
-    createEndpoint: vi.fn(async (d) =>
-      makeEndpoint({ name: d.name, url: d.url, eventTypes: d.eventTypes }),
+    createEndpoint: vi.fn(async (d, publicationId) =>
+      makeEndpoint({
+        publicationId,
+        name: d.name,
+        url: d.url,
+        eventTypes: d.eventTypes,
+      }),
     ),
     findEndpointById: vi.fn(async () => makeEndpoint()),
     listEndpoints: vi.fn(async () => [makeEndpoint()]),
@@ -125,6 +131,7 @@ describe("WebhooksService", () => {
         eventTypes: ["comment.created"],
       },
       "u1",
+      "pub_default",
     );
     expect(endpoint.secretEncrypted).toBeTruthy();
     expect(endpoint.secretEncrypted).not.toContain("plain-secret");
@@ -144,7 +151,10 @@ describe("WebhooksService", () => {
     };
     const service = makeService({ repo: repoWith } as any);
     // First dispatch creates a delivery
-    await service.dispatchEvent("comment.created", { commentId: "c1" });
+    await service.dispatchEvent("comment.created", {
+      commentId: "c1",
+      publicationId: "pub_default",
+    });
     const created = repoWith.createDelivery as ReturnType<typeof vi.fn>;
     expect(created).toHaveBeenCalledTimes(1);
     expect(dispatcher.enqueue).toHaveBeenCalled();
