@@ -18,13 +18,12 @@ Active Theme
 
 ## Security Model
 
-**Batch 7 themes are TRUSTED, BUILD-TIME REGISTERED CODE.**
+Built-in React themes are trusted, build-time registered code. External themes may be installed from validated ZIP packages as data/templates; uploaded packages do not grant access to server-side JavaScript execution, database internals, or private APIs.
 
-- Theme packages are source-controlled and registered explicitly in `packages/themes-registry`.
-- Theme selection from the database may choose only an existing registered Theme ID.
-- Vibress does NOT execute arbitrary uploaded JavaScript/React code at runtime.
-- Dynamic third-party theme installation (marketplace, ZIP upload, remote npm install) is **out of scope** for Batch 7.
-- Theme IDs are validated with a strict lowercase-alphanumeric-hyphen regex; path injection (`../../`, `file:///`, `node:fs`) is rejected with `THEME_NOT_FOUND`.
+- Theme selection is restricted to the built-in registry and packages installed for the authorized publication.
+- Theme IDs and archive paths are validated; public external asset serving allows presentation assets rather than template/config/source files.
+- External theme storage is namespaced by publication for new installations. A legacy unscoped read fallback supports pre-isolation packages only when scoped package storage is absent.
+- Public asset resolution uses an authoritative host-derived publication; staff theme operations use permission-checked publication context.
 
 ## Theme Contract (`@vibress/theme-core`)
 
@@ -45,15 +44,18 @@ Both provide: Layout, Home, Post, Page, TagArchive, AuthorArchive. Studio card C
 
 ## Persistence (`packages/domains/themes`)
 
-- Table `theme_configurations` stores: theme_id, theme_version, settings_json, settings_schema_version, activated_by, activated_at, updated_at.
-- Singleton: exactly one active row; `setActive` upserts the single row atomically.
+- Table `theme_configurations` stores one active row **per publication**, including publication_id, theme_id, theme_version, settings_json, settings_schema_version, activated_by, activated_at, updated_at.
+- Table `theme_settings` stores independent settings keyed by `(publication_id, theme_id)`.
+- `setActive` upserts on the unique publication key; theme settings, installation and removal operations are publication-scoped.
+- Migration `0031_theme_publication_isolation` clones legacy global activation and saved settings to every existing publication, preserving JSON and original default-publication row IDs. Ambiguous legacy activation fails the upgrade instead of silently choosing a row.
+- Schema migration 0031 does not duplicate external theme binaries. Operators must keep legacy theme storage accessible for upgraded installations and review external theme ownership when migrating multi-publication sites.
 - `ThemeService.activateTheme` validates the registered theme (manifest, compatibility, settings defaults) **before** persisting — a failed activation leaves the current theme intact.
 - `ThemeService.updateThemeSettings` validates server-side (types, enum options, hex color format, bounds, string length, unknown keys) before persisting.
 - Invalid persisted settings fall back to schema defaults with logging; they never crash the site.
 
 ## Public Endpoints
 
-- `GET /api/content/v1/site` — site metadata + active theme id + safe presentation settings (used by Web Theme Host).
+- `GET /api/content/v1/site` — host-resolved publication metadata + active theme id + safe presentation settings (used by Web Theme Host); the internal `x-vibress-publication-id` response header conveys the resolved scope to the renderer.
 
 ## Admin Endpoints (`/api/admin/v1/themes`)
 
@@ -63,7 +65,7 @@ Both provide: Layout, Home, Post, Page, TagArchive, AuthorArchive. Studio card C
 - `POST /themes/:id/activate` — activate (permission `themes.manage`). Atomic; invalid/incompatible themes rejected with stable codes.
 - `PATCH /themes/:id/settings` — update settings (permission `themes.manage`). Validated server-side.
 - `POST /themes/:id/preview` — create short-lived preview token (permission `themes.manage`).
-- `GET /themes/preview/:token` — resolve preview token → theme id (public-safe, token-bound).
+- `GET /themes/preview/:token` — resolve a 15-minute preview token to a theme id only for the token's publication host (response shape remains `{ themeId }`).
 
 Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `THEME_SETTINGS_INVALID`, `THEME_ACTIVATION_FAILED`.
 
@@ -78,7 +80,7 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 - `src/themes/{default,minimal}/` — theme definitions + components.
 - `src/lib/theme-host.ts` — resolves active theme + settings from `/api/content/v1/site`, merges defaults over persisted values.
 - Routes fetch public content then delegate to `theme.components.X`; routing remains owned by `apps/web`.
-- Theme CSS served at `/theme-assets/<theme-id>/<version>/<file>.css` from a Web route handler with a strict allowlist (no arbitrary file serving).
+- Theme presentation assets served at `/theme-assets/<theme-id>/<version>/<file>` from a host-publication-scoped Web handler. External theme source/config files are not public assets.
 - Preview: `/preview/:token/...` — middleware resolves the token server-side, sets an internal header, and rewrites to the canonical public path. Visitors cannot select arbitrary themes via query params.
 
 ## Admin UI
@@ -87,5 +89,5 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 
 ## Cache Freshness
 
-- Web fetches active theme + settings per request with `no-store`; activation and settings changes appear immediately on the next public request.
-- No rebuild, restart, or deployment is required for theme activation or settings changes.
+- Web fetches active theme + settings per request with `no-store`; theme activation and saved settings do not require a rebuild.
+- External renderer file maps have a 60-second production cache; asset responses can be cached longer by clients. Plan asset versioning for changes to installed theme files.
