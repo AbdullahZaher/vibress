@@ -39,11 +39,7 @@ export const MAX_REDIRECT_CHAIN = 10;
 function decodedSafeSource(path: string): string | null {
   if (/%2f|%5c/i.test(path) || path.includes("\\")) return null;
   try {
-    const decoded = decodeURI(path);
-    if (PROTECTED_ROUTE_PREFIXES.some((prefix) => decoded.startsWith(prefix))) {
-      return null;
-    }
-    return decoded;
+    return decodeURI(path);
   } catch {
     return null;
   }
@@ -131,7 +127,8 @@ export class RedirectsService {
     publicationId = "pub_default",
   ): Promise<{ destination: string; statusCode: number } | null> {
     const seen = new Set<string>();
-    if (decodedSafeSource(path) === null) return null;
+    const safePath = decodedSafeSource(path);
+    if (!safePath || PROTECTED_ROUTE_PREFIXES.some((prefix) => safePath.startsWith(prefix))) return null;
     let current = path;
     let lastStatusCode = 301;
 
@@ -171,6 +168,11 @@ export class RedirectsService {
     const decoded = decodedSafeSource(source);
     if (decoded === null) {
       throw new RedirectDomainError("INVALID_SOURCE", "Invalid encoded redirect source");
+    }
+    for (const prefix of PROTECTED_ROUTE_PREFIXES) {
+      if (decoded.startsWith(prefix)) {
+        throw new RedirectDomainError("PROTECTED_ROUTE", `Cannot redirect protected route prefix: ${prefix}`);
+      }
     }
   }
 
