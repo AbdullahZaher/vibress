@@ -30,8 +30,8 @@ export interface SettingRecord {
 }
 
 export interface SettingRepository {
-  get(namespace: string, key: string): Promise<SettingRecord | null>;
-  getMany(namespace: string): Promise<SettingRecord[]>;
+  get(namespace: string, key: string, publicationId?: string): Promise<SettingRecord | null>;
+  getMany(namespace: string, publicationId?: string): Promise<SettingRecord[]>;
   set(record: {
     namespace: string;
     key: string;
@@ -39,8 +39,9 @@ export interface SettingRepository {
     valueType: SettingValueType;
     classification: SettingClassification;
     updatedBy: string | null;
+    publicationId?: string;
   }): Promise<SettingRecord>;
-  delete(namespace: string, key: string): Promise<void>;
+  delete(namespace: string, key: string, publicationId?: string): Promise<void>;
 }
 
 export interface AuditRecorder {
