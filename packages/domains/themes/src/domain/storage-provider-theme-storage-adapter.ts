@@ -108,7 +108,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
     allowLegacyFallback = false,
   ): Promise<Buffer | null> {
-    const cleanRel = relativePath.replace(/\\\\/g, "/").replace(/^\\/+/, "");
+    const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
     const scopedRoot = this.getThemeRootPath(themeId, version, publicationId);
     const scopedIndex = `${scopedRoot}/__files.json`;
     const hasScopedIndex = await this.storageProvider.exists(scopedIndex);
