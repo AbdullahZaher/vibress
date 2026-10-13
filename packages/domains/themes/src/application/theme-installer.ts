@@ -1,4 +1,4 @@
-import { validateAndExtractThemeZip } from "@vibress/theme-core";
+import { validateAndExtractThemeZip, ThemeError } from "@vibress/theme-core";
 import { ThemeStorageAdapter } from "../domain/theme-storage";
 import {
   InstalledTheme,
@@ -21,6 +21,30 @@ export class ThemeInstaller {
     // 1. Validate archive, manifest, settings, and templates
     const extracted = await validateAndExtractThemeZip(zipBuffer);
     const { manifest, settingsSchema, files } = extracted;
+
+    // Legacy 0031 upgrades still reference pub_default's physical package
+    // from other publications until they install their own scoped copy.
+    // Do not overwrite shared files, even for an identical theme version.
+    const existingVersion = await this.repository.findByThemeIdAndVersion(
+      manifest.id,
+      manifest.version,
+      pubId,
+    );
+    if (
+      pubId === "pub_default" &&
+      existingVersion &&
+      (await this.repository.hasOtherPublicationStorageReferences(
+        manifest.id,
+        manifest.version,
+        existingVersion.storagePath,
+        pubId,
+      ))
+    ) {
+      throw new ThemeError(
+        "THEME_SHARED_LEGACY_STORAGE",
+        "This legacy theme version is still used by other publications. Install their own scoped copies before replacing it.",
+      );
+    }
 
     // 2. Atomically persist files into theme storage adapter
     const storagePath = await this.storage.saveThemeFiles(
@@ -49,14 +73,6 @@ export class ThemeInstaller {
     } else if (files.has("preview.jpg")) {
       previewImage = `/theme-assets/${manifest.id}/${manifest.version}/preview.jpg`;
     }
-
-    // Check if this specific version is already installed
-    const existingVersion =
-      await this.repository.findByThemeIdAndVersion(
-        manifest.id,
-        manifest.version,
-        pubId,
-      );
 
     if (existingVersion) {
       const updated: InstalledTheme = {
