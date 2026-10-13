@@ -250,8 +250,9 @@ export async function middleware(request: NextRequest) {
         if (
           rule &&
           typeof rule.destination === "string" &&
-          (rule.destination.startsWith("/") && !rule.destination.startsWith("//") ||
-            /^https?:\\/\\//.test(rule.destination)) &&
+          ((
+            rule.destination.startsWith("/") && !rule.destination.startsWith("//")
+          ) || rule.destination.startsWith("http://") || rule.destination.startsWith("https://")) &&
           [301, 302, 307, 308].includes(rule.statusCode)
         ) {
           const target = new URL(rule.destination, request.url);
