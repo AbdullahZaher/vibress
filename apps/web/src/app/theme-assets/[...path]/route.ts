@@ -175,12 +175,18 @@ function resolveThemeAssetPath(
         ]
       : [];
 
+  // Once a publication owns an installed package, missing files must fail
+  // closed rather than being served from the old global installation.
+  const hasScopedPackage = scopedExternalRoots.some(
+    (root) => fs.existsSync(root) && fs.statSync(root).isDirectory(),
+  );
+
   // Legacy global roots are only considered after the request host has been
   // resolved to a publication. This preserves old installs without allowing
   // an unresolved host to probe another tenant's external theme files.
   const legacyExternalRoots =
     isPublicExternalThemeAssetPath(relativePath) &&
-    shouldAllowLegacyThemeFallback(scope, themeId, version)
+    shouldAllowLegacyThemeFallback(scope, themeId, version, hasScopedPackage)
       ? [
         ...(explicitRoot
           ? [
