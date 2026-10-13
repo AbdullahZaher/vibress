@@ -7,6 +7,7 @@ export interface ImportExportJob {
   type: ImportExportJobType;
   status: ImportExportJobStatus;
   requestedBy: string | null;
+  publicationId: string;
   progress: number;
   errorSummary: string | null;
   artifactKey: string | null;
@@ -21,9 +22,11 @@ export interface JobRepository {
   create(data: {
     type: ImportExportJobType;
     requestedBy: string | null;
+    publicationId?: string;
   }): Promise<ImportExportJob>;
-  findById(id: string): Promise<ImportExportJob | null>;
+  findById(id: string, publicationId?: string): Promise<ImportExportJob | null>;
   list(filter?: {
+    publicationId?: string;
     type?: string;
     status?: string;
     limit?: number;
@@ -33,6 +36,7 @@ export interface JobRepository {
     id: string,
     status: ImportExportJobStatus,
     patch?: Partial<ImportExportJob>,
+    publicationId?: string,
   ): Promise<void>;
 }
 
