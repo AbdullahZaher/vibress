@@ -9,11 +9,13 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { publications } from "./publications";
 
 export const settings = pgTable(
   "settings",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
     namespace: text("namespace").notNull(),
     key: text("key").notNull(),
     value: jsonb("value"),
@@ -31,7 +33,8 @@ export const settings = pgTable(
   },
   (table) => {
     return {
-      uniqueNsKeyIdx: uniqueIndex("settings_namespace_key_idx").on(
+      uniquePubNsKeyIdx: uniqueIndex("settings_publication_namespace_key_idx").on(
+        table.publicationId,
         table.namespace,
         table.key,
       ),

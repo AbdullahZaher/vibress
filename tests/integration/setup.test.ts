@@ -493,7 +493,7 @@ describe("First-run setup", () => {
       await pool.query(`DELETE FROM users CASCADE;`);
       await pool.query(`DELETE FROM settings;`);
       await pool.query(
-        `INSERT INTO settings (id, namespace, key, value, value_type, classification) VALUES ('site.title','site','title','"Legacy"'::jsonb,'string','public');`,
+        `INSERT INTO settings (id, publication_id, namespace, key, value, value_type, classification) VALUES ('site.title','pub_default','site','title','"Legacy"'::jsonb,'string','public');`,
       );
 
       const service = new SetupService(new DrizzleInstallationRepository());

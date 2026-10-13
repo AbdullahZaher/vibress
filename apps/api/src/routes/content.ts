@@ -36,7 +36,7 @@ const translationService = new TranslationService();
  * RSS, sitemap, cookies, CORS all depend on it) and is never overridden by
  * the database.
  */
-async function buildPublicSiteIdentity(): Promise<{
+async function buildPublicSiteIdentity(publicationId: string): Promise<{
   title: string;
   description: string;
   url: string;
@@ -59,7 +59,7 @@ async function buildPublicSiteIdentity(): Promise<{
   comments: Record<string, unknown>;
 }> {
   const config = getConfig();
-  const stored = await settingsService.getPublicSettings();
+  const stored = await settingsService.getPublicSettings(publicationId);
   const site = (stored.site ?? {}) as Record<string, unknown>;
 
   const str = (v: unknown, fallback: string): string =>
@@ -125,7 +125,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
   fastify.get("/site", {
     handler: async (req, reply) => {
       const publicationId = req.publicationContext!.publicationId;
-      const site = await buildPublicSiteIdentity();
+      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
       const active = await themeService.getActiveTheme(publicationId);
 
       reply.header("x-vibress-publication-id", publicationId);
@@ -180,22 +180,21 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
             ],
           });
       }
-      const publicSettings = await settingsService.getPublicSettings();
+      const publicSettings = await settingsService.getPublicSettings(
+        req.publicationContext!.publicationId,
+      );
       const isPrivate = Boolean(publicSettings.security?.isPrivate);
       if (!isPrivate) {
         return reply.status(200).send({ valid: true, private: false });
       }
-      const stored = await (
-        settingsService as unknown as {
-          repo: {
-            get: (ns: string, k: string) => Promise<{ value: unknown } | null>;
-          };
-        }
-      ).repo.get("security", "passwordHash");
-      if (!stored || !stored.value) {
+      const securitySettings = await settingsService.getRawSettings(
+        "security",
+        req.publicationContext!.publicationId,
+      );
+      if (!securitySettings.passwordHash) {
         return reply.status(200).send({ valid: true, private: false });
       }
-      const valid = await verifyPassword(String(stored.value), body.password);
+      const valid = await verifyPassword(String(securitySettings.passwordHash), body.password);
       if (valid) {
         const secret =
           getConfig().secrets.encryptionKey ||
@@ -246,7 +245,7 @@ function extractRequestedLocale(req: any): string | null {
       const requestedLocale = extractRequestedLocale(req);
       
       const pubId = req.publicationContext?.publicationId;
-      const site = await buildPublicSiteIdentity();
+      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
@@ -333,7 +332,7 @@ function extractRequestedLocale(req: any): string | null {
       const requestedLocale = extractRequestedLocale(req);
       const pubId = req.publicationContext?.publicationId;
       
-      const site = await buildPublicSiteIdentity();
+      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
@@ -450,7 +449,7 @@ function extractRequestedLocale(req: any): string | null {
       const requestedLocale = extractRequestedLocale(req);
       
       const pubId = req.publicationContext?.publicationId;
-      const site = await buildPublicSiteIdentity();
+      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
@@ -510,7 +509,7 @@ function extractRequestedLocale(req: any): string | null {
       const requestedLocale = extractRequestedLocale(req);
       const pubId = req.publicationContext?.publicationId;
       
-      const site = await buildPublicSiteIdentity();
+      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
       const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
       const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
 
