@@ -160,7 +160,7 @@ export class ThemeService {
           publicationId,
         )
       : null;
-    const storedPath = installed?.storagePath.replace(/\\\\/g, "/").replace(/\\/+$/, "") ?? "";
+    const storedPath = installed?.storagePath.replace(/\\/g, "/").replace(/\/+$/, "") ?? "";
     const legacyStorage = publicationId !== "pub_default" &&
       storedPath.endsWith(`/${activeThemeId}/${definition.manifest.version}`) &&
       !storedPath.split("/").includes("publications");
