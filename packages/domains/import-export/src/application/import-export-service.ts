@@ -213,7 +213,7 @@ export class ImportExportService {
         exportedAt: new Date().toISOString(),
         data,
       };
-      const artifactKey = `exports/${job.publicationId}/${jobId}.json`;
+      const artifactKey = `exports/${jobId}.json`;
       const expiresAt = new Date(Date.now() + 24 * 3600 * 1000); // 24h retention
       await this.jobRepo.updateStatus(jobId, "completed", {
         progress: 100,
