@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   createThemeStorageAdapter,
   ThemeStorageConfigurationError,
@@ -45,6 +48,43 @@ class MockLocalStorageProvider implements StorageProvider {
   async getUrl(key: string): Promise<string> { return `/content/${key}`; }
 }
 
+class MemoryThemeStorageProvider implements StorageProvider {
+  readonly name = "s3";
+  private readonly objects = new Map<string, Buffer>();
+
+  getCapabilities(): StorageCapabilities {
+    return {
+      signedUrls: true,
+      directUpload: true,
+      multipartUpload: true,
+      privateObjects: true,
+      publicObjects: true,
+    };
+  }
+
+  async put(input: PutObjectInput): Promise<StoredObject> {
+    const body = Buffer.from(input.body);
+    this.objects.set(input.key, body);
+    return { key: input.key, url: `memory://${input.key}`, size: body.length };
+  }
+
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    return this.objects.has(key);
+  }
+
+  async getUrl(key: string): Promise<string> {
+    return `memory://${key}`;
+  }
+
+  async getObjectBuffer(key: string): Promise<Buffer | null> {
+    return this.objects.get(key) ?? null;
+  }
+}
+
 describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
   it("creates FileSystemThemeStorageAdapter in development when no provider is given", () => {
     const adapter = createThemeStorageAdapter({
@@ -77,5 +117,153 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
         requireDurableStorage: true,
       });
     }).toThrow(ThemeStorageConfigurationError);
+  });
+
+  it("keeps identical theme versions physically isolated by publication", async () => {
+    const root = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "vibress-theme-isolation-"),
+    );
+    try {
+      const adapter = new FileSystemThemeStorageAdapter({
+        storageRoot: root,
+      });
+      const themeId = "shared-theme";
+      const version = "1.0.0";
+
+      await adapter.saveThemeFiles(
+        themeId,
+        version,
+        new Map([["templates/home.liquid", Buffer.from("alpha")]]),
+        "pub_alpha",
+      );
+      await adapter.saveThemeFiles(
+        themeId,
+        version,
+        new Map([["templates/home.liquid", Buffer.from("beta")]]),
+        "pub_beta",
+      );
+
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_alpha",
+          )
+        )?.toString("utf-8"),
+      ).toBe("alpha");
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_beta",
+          )
+        )?.toString("utf-8"),
+      ).toBe("beta");
+
+      await adapter.deleteThemeFiles(themeId, version, "pub_alpha");
+
+      expect(
+        await adapter.getThemeFile(
+          themeId,
+          version,
+          "templates/home.liquid",
+          "pub_alpha",
+        ),
+      ).toBeNull();
+      expect(
+        (
+          await adapter.getThemeFile(
+            themeId,
+            version,
+            "templates/home.liquid",
+            "pub_beta",
+          )
+        )?.toString("utf-8"),
+      ).toBe("beta");
+    } finally {
+      await fs.promises.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not read legacy cloud files after installing a scoped theme package", async () => {
+    const provider = new MemoryThemeStorageProvider();
+    const adapter = new StorageProviderThemeStorageAdapter(provider);
+    const themeId = "shared-theme";
+    const version = "1.0.0";
+
+    await adapter.saveThemeFiles(
+      themeId,
+      version,
+      new Map([
+        ["theme.json", Buffer.from("{}")],
+        ["templates/legacy.liquid", Buffer.from("legacy")],
+      ]),
+      "pub_default",
+    );
+
+    // Existing installations may still need the old unscoped package.
+    expect(
+      (
+        await adapter.getThemeFile(
+          themeId,
+          version,
+          "templates/legacy.liquid",
+          "pub_alpha",
+        )
+      )?.toString("utf8"),
+    ).toBe("legacy");
+
+    await adapter.saveThemeFiles(
+      themeId,
+      version,
+      new Map([
+        ["theme.json", Buffer.from("{}")],
+        ["templates/home.liquid", Buffer.from("alpha")],
+      ]),
+      "pub_alpha",
+    );
+
+    expect(
+      (
+        await adapter.getThemeFile(
+          themeId,
+          version,
+          "templates/home.liquid",
+          "pub_alpha",
+        )
+      )?.toString("utf8"),
+    ).toBe("alpha");
+    expect(
+      await adapter.getThemeFile(
+        themeId,
+        version,
+        "templates/legacy.liquid",
+        "pub_alpha",
+      ),
+    ).toBeNull();
+    expect(await adapter.themeExists(themeId, version, "pub_alpha")).toBe(true);
+
+    // A scoped package missing its manifest must not be rescued by the
+    // legacy global theme's manifest.
+    await adapter.saveThemeFiles(
+      themeId,
+      version,
+      new Map([["templates/home.liquid", Buffer.from("beta")]]),
+      "pub_beta",
+    );
+    expect(await adapter.themeExists(themeId, version, "pub_beta")).toBe(false);
+  });
+
+  it("keeps the pub_default filesystem path backward compatible", () => {
+    const adapter = new FileSystemThemeStorageAdapter({
+      storageRoot: "/tmp/vibress-theme-root",
+    });
+    expect(
+      adapter.getThemeRootPath("legacy-theme", "1.0.0", "pub_default"),
+    ).toBe(path.join("/tmp/vibress-theme-root", "legacy-theme", "1.0.0"));
   });
 });

@@ -258,11 +258,21 @@ describe("Theme Domain — Activation & Management", () => {
     ).rejects.toThrow(/Built-in system themes cannot be uninstalled/i);
   });
 
-  it("creates and resolves preview tokens", async () => {
-    const { previewToken, themeId } = await service.createPreviewToken("custom-nordic");
+  it("creates and resolves publication-bound preview tokens", async () => {
+    const { previewToken, themeId } = await service.createPreviewToken(
+      "custom-nordic",
+      "pub_alpha",
+    );
     expect(previewToken).toBeDefined();
     expect(themeId).toBe("custom-nordic");
 
+    const target = await service.resolvePreviewTarget(previewToken);
+    expect(target).toEqual({
+      themeId: "custom-nordic",
+      publicationId: "pub_alpha",
+    });
+
+    // Preserve the existing domain contract for callers that need only themeId.
     const resolved = await service.resolvePreviewToken(previewToken);
     expect(resolved).toBe("custom-nordic");
   });

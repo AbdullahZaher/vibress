@@ -31,6 +31,12 @@ Returns site metadata and the active theme identity + safe presentation settings
 
 No authentication required. Contains only presentation-safe settings — never secrets.
 
+The active theme is resolved from the request host's authoritative publication context. The response carries an internal `x-vibress-publication-id` header for the Web theme renderer; callers cannot select a publication by providing a raw publication ID. The JSON response shape is unchanged.
+
+## Publication isolation
+
+Admin routes require a staff session and the corresponding publication permission. Activations, saved settings, external theme installation, and deletion affect only that publication. Built-in themes remain shared, while newly installed external theme packages are stored in publication-scoped namespaces. Migration 0031 clones the old global active configuration and theme settings for existing publications; it does not physically duplicate legacy external theme packages.
+
 ## Admin (`/api/admin/v1/themes`)
 
 All admin theme endpoints require a staff session. `themes.read` for reads; `themes.manage` for activate/settings/preview. Unauthenticated → 401; lacking permission → 403.
@@ -59,15 +65,15 @@ Responses:
 
 ### `PATCH /themes/:id/settings`
 
-Updates settings for the **active** theme. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
+Updates saved settings for a theme in the authorized publication. If the theme is currently active, the active configuration is updated too. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
 
 - 200 `{ theme: { ... } }`
-- 404 `THEME_NOT_FOUND` (theme not active/unknown)
+- 404 `THEME_NOT_FOUND` (theme not installed or unknown)
 - 400 `THEME_SETTINGS_INVALID` / `VALIDATION_ERROR`
 
 ### `POST /themes/:id/preview`
 
-Creates a short-lived preview token (10 minutes) bound to the theme ID.
+Creates a 15-minute preview token bound to the theme ID and the authenticated publication.
 
 ```json
 { "previewToken": "...", "expiresAt": "ISO", "themeId": "vibress-minimal" }
@@ -75,7 +81,7 @@ Creates a short-lived preview token (10 minutes) bound to the theme ID.
 
 ### `GET /themes/preview/:token`
 
-Public-safe token resolution. Returns `{ themeId }` or 404 when expired/invalid. Used by the Web preview middleware.
+Public-safe token resolution. Returns `{ themeId }` only when the request host resolves to the same publication as the token, or 404 when expired, invalid, or resolved for a different publication. Used by the Web preview middleware; the response shape is unchanged.
 
 ## Error Semantics
 

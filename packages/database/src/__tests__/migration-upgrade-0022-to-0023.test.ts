@@ -39,6 +39,26 @@ describe("Database Migration 0022 -> 0023 Canonical Upgrade Verification", () =>
         ON "installed_themes" ("publication_id", "theme_id", "version");
       ALTER TABLE "installed_themes" ALTER COLUMN "publication_id" SET NOT NULL;
     `);
+
+    // Restore the current 0031 publication-scoped theme_settings shape.
+    await db.execute(sql`
+      ALTER TABLE "theme_settings" ADD COLUMN IF NOT EXISTS "publication_id" text;
+      UPDATE "theme_settings"
+        SET "publication_id" = 'pub_default'
+        WHERE "publication_id" IS NULL;
+      ALTER TABLE "theme_settings" ALTER COLUMN "publication_id" SET NOT NULL;
+      ALTER TABLE "theme_settings"
+        DROP CONSTRAINT IF EXISTS "theme_settings_publication_fk";
+      ALTER TABLE "theme_settings"
+        ADD CONSTRAINT "theme_settings_publication_fk"
+        FOREIGN KEY ("publication_id") REFERENCES "publications"("id")
+        ON DELETE CASCADE;
+      ALTER TABLE "theme_settings"
+        DROP CONSTRAINT IF EXISTS "theme_settings_theme_id_unique";
+      DROP INDEX IF EXISTS "theme_settings_theme_id_unique_idx";
+      CREATE UNIQUE INDEX IF NOT EXISTS "theme_settings_pub_theme_unique_idx"
+        ON "theme_settings" ("publication_id", "theme_id");
+    `);
   });
 
   it("applies 0022_external_themes.sql schema cleanly", async () => {
