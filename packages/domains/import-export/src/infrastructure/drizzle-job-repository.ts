@@ -31,12 +31,12 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string, publicationId?: string): Promise<ImportExportJob | null> {
+  async findById(id: string, publicationId = "pub_default"): Promise<ImportExportJob | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(importExportJobs)
-      .where(publicationId ? and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)) : eq(importExportJobs.id, id))
+      .where(and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -55,8 +55,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     const db = getDb();
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
-    const conditions = [];
-    if (filter.publicationId) conditions.push(eq(importExportJobs.publicationId, filter.publicationId));
+    const conditions = [eq(importExportJobs.publicationId, filter.publicationId ?? "pub_default")];
     if (filter.type) conditions.push(eq(importExportJobs.type, filter.type));
     if (filter.status)
       conditions.push(eq(importExportJobs.status, filter.status));
@@ -83,7 +82,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     id: string,
     status: ImportExportJobStatus,
     patch?: Partial<ImportExportJob>,
-    publicationId?: string,
+    publicationId = "pub_default",
   ): Promise<void> {
     const db = getDb();
     const payload: Record<string, unknown> = { status };
@@ -101,7 +100,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     await db
       .update(importExportJobs)
       .set(payload)
-      .where(publicationId ? and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)) : eq(importExportJobs.id, id));
+      .where(and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)));
   }
 
   private mapToDomain(row: ImportExportJobRow): ImportExportJob {
