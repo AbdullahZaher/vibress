@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
@@ -33,6 +33,8 @@ import {
   SubscriptionStatus,
   Subscription,
 } from "@vibress/subscriptions";
+import { getDb, members } from "@vibress/database";
+import { and, eq } from "drizzle-orm";
 
 type ProductListQuery = { includeArchived?: string };
 type PlanListQuery = { productId?: string; includeArchived?: string };
@@ -44,6 +46,45 @@ const sendError = (
   requestId: string,
   status = 400,
 ) => reply.status(status).send({ errors: [{ code, message, requestId }] });
+
+function getRequiredPublicationId(req: FastifyRequest): string {
+  return req.publicationContext!.publicationId;
+}
+
+async function memberBelongsToPublication(
+  memberId: string,
+  publicationId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: members.id })
+    .from(members)
+    .where(and(eq(members.id, memberId), eq(members.publicationId, publicationId)))
+    .limit(1);
+  return Boolean(rows[0]);
+}
+
+async function subscriptionBelongsToPublication(
+  subscription: Subscription,
+  publicationId: string,
+): Promise<boolean> {
+  return memberBelongsToPublication(subscription.memberId, publicationId);
+}
+
+async function filterSubscriptionsByPublication(
+  subscriptions: Subscription[],
+  publicationId: string,
+): Promise<Subscription[]> {
+  const checks = await Promise.all(
+    subscriptions.map(async (subscription) => ({
+      subscription,
+      belongs: await subscriptionBelongsToPublication(subscription, publicationId),
+    })),
+  );
+  return checks
+    .filter((check) => check.belongs)
+    .map((check) => check.subscription);
+}
 
 export async function adminBillingRoutes(fastify: FastifyInstance) {
   // ---------------- Products ----------------
@@ -353,6 +394,7 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
       const parsed = AdminSubscriptionFilterSchema.safeParse(req.query);
       if (!parsed.success)
         return sendError(reply, "VALIDATION_ERROR", "Invalid filter", req.id);
+      const publicationId = getRequiredPublicationId(req);
       const result = await subscriptionsService.listSubscriptions({
         status: parsed.data.status as SubscriptionStatus | undefined,
         productId: parsed.data.productId,
@@ -361,9 +403,13 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
         limit: parsed.data.limit,
         offset: parsed.data.offset,
       });
+      const scopedSubscriptions = await filterSubscriptionsByPublication(
+        result.subscriptions,
+        publicationId,
+      );
       return reply.status(200).send({
-        subscriptions: result.subscriptions.map(toAdminSubscriptionDto),
-        total: result.total,
+        subscriptions: scopedSubscriptions.map(toAdminSubscriptionDto),
+        total: scopedSubscriptions.length,
       });
     },
   });
@@ -372,8 +418,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("subscriptions.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
+      const publicationId = getRequiredPublicationId(req);
       const sub = await subscriptionsService.getSubscription(id);
-      if (!sub)
+      if (!sub || !(await subscriptionBelongsToPublication(sub, publicationId)))
         return sendError(
           reply,
           "SUBSCRIPTION_NOT_FOUND",
@@ -397,8 +444,9 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
+      const publicationId = getRequiredPublicationId(req);
       const sub = await subscriptionsService.getSubscription(id);
-      if (!sub)
+      if (!sub || !(await subscriptionBelongsToPublication(sub, publicationId)))
         return sendError(
           reply,
           "SUBSCRIPTION_NOT_FOUND",
@@ -430,13 +478,27 @@ export async function adminBillingRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("subscriptions.read")],
     handler: async (req, reply) => {
       const { memberId } = req.params as { memberId: string };
+      const publicationId = getRequiredPublicationId(req);
+      if (!(await memberBelongsToPublication(memberId, publicationId))) {
+        return sendError(
+          reply,
+          "MEMBER_NOT_FOUND",
+          "Member not found",
+          req.id,
+          404,
+        );
+      }
       const result = await subscriptionsService.listSubscriptions({
         memberId,
         limit: 50,
       });
+      const scopedSubscriptions = await filterSubscriptionsByPublication(
+        result.subscriptions,
+        publicationId,
+      );
       return reply.status(200).send({
-        subscriptions: result.subscriptions.map(toAdminSubscriptionDto),
-        total: result.total,
+        subscriptions: scopedSubscriptions.map(toAdminSubscriptionDto),
+        total: scopedSubscriptions.length,
       });
     },
   });

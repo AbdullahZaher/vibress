@@ -1,8 +1,13 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import path from "node:path";
 import fs from "node:fs";
 import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
 import { getConfig } from "@vibress/config";
+import { settingsService, workspaceService } from "../services";
+import {
+  SITE_AUTH_COOKIE_NAME,
+  verifySiteAuthToken,
+} from "@vibress/security";
 
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -106,12 +111,91 @@ function parseRangeHeader(
   return { start, end };
 }
 
+function getSitePrivacySecret(): string {
+  const config = getConfig();
+  return (
+    config.secrets.encryptionKey ||
+    process.env.VIBRESS_ENCRYPTION_KEY ||
+    "vibress-site-privacy-secret"
+  );
+}
+
+async function requirePublicMediaAccess(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const host = request.hostname || (request.headers.host as string | undefined) || null;
+  const isDevFallbackAllowed =
+    !getConfig().isProduction && request.headers["x-dev-fallback"] !== "false";
+
+  let publicationId: string;
+  try {
+    const pubCtx = await workspaceService.resolvePublicPublicationContext({
+      host,
+      isDevFallbackAllowed,
+    });
+    publicationId = pubCtx.publicationId;
+    request.publicationContext = {
+      publicationId: pubCtx.publicationId,
+      workspaceId: pubCtx.workspaceId,
+      actorType: pubCtx.actorType,
+      isSystemOperation: pubCtx.isSystemOperation,
+    };
+  } catch {
+    return reply.status(404).send({
+      errors: [
+        {
+          code: "PUBLICATION_NOT_FOUND",
+          message: "Publication not found",
+          requestId: request.id,
+        },
+      ],
+    });
+  }
+
+  let isPrivate: boolean;
+  try {
+    const publicSettings = await settingsService.getPublicSettings(publicationId);
+    isPrivate = Boolean(publicSettings.security?.isPrivate);
+  } catch {
+    return reply.status(503).send({
+      errors: [
+        {
+          code: "PRIVACY_STATE_UNAVAILABLE",
+          message: "Site privacy state is unavailable",
+          requestId: request.id,
+        },
+      ],
+    });
+  }
+
+  if (!isPrivate) return;
+
+  const token = request.cookies?.[SITE_AUTH_COOKIE_NAME] as string | undefined;
+  const hasSiteAuth = verifySiteAuthToken(
+    token,
+    getSitePrivacySecret(),
+    publicationId,
+  );
+  if (!hasSiteAuth) {
+    return reply.status(403).send({
+      errors: [
+        {
+          code: "PRIVATE_SITE_AUTH_REQUIRED",
+          message: "Private site authentication required",
+          requestId: request.id,
+        },
+      ],
+    });
+  }
+}
+
 export async function mediaStreamRoutes(fastify: FastifyInstance) {
   const canonicalMediaRoot =
     getConfig().system.storageLocalRoot || resolveCanonicalStorageRoot();
 
   // Stream-based media serving route with Range request (206) support
-  fastify.get("/content/media/*", async (request, reply) => {
+  fastify.get("/content/media/*", { preHandler: requirePublicMediaAccess }, async (request, reply) => {
     const rawKey = (request.params as Record<string, string>)["*"];
     if (!rawKey || typeof rawKey !== "string") return reply.status(404).send();
     if (
