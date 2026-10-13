@@ -68,6 +68,11 @@ class MemoryThemeRepo implements ThemeConfigurationRepository {
 class MemoryInstalledThemeRepository implements InstalledThemeRepository {
   themes = new Map<string, InstalledTheme>();
   private settings = new Map<string, Record<string, unknown>>();
+  sharedStorageReferences = false;
+
+  async hasOtherPublicationStorageReferences(): Promise<boolean> {
+    return this.sharedStorageReferences;
+  }
 
   async listAll(): Promise<InstalledTheme[]> {
     return Array.from(this.themes.values());
@@ -243,6 +248,17 @@ describe("Theme Domain — Activation & Management", () => {
     const result = await service.uninstallTheme("custom-nordic", "user-1");
     expect(result.success).toBe(true);
     expect(storageAdapter.deletedThemes).toContain("custom-nordic");
+  });
+
+  it("rejects removal when a migrated publication still uses legacy storage", async () => {
+    await service.activateTheme("vibress-default", "user-1");
+    installedRepo.sharedStorageReferences = true;
+
+    await expect(service.uninstallTheme("custom-nordic", "user-1")).rejects.toThrow(
+      /still used by other publications/,
+    );
+    expect(storageAdapter.deletedThemes).toEqual([]);
+    expect(await installedRepo.findByThemeId("custom-nordic")).not.toBeNull();
   });
 
   it("rejects uninstalling active theme", async () => {
