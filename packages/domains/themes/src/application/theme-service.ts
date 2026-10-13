@@ -291,6 +291,24 @@ export class ThemeService {
       throw new ThemeNotFoundError(themeId);
     }
 
+    // Legacy packages remain the source of truth for publications migrated
+    // from the pre-isolation global theme registry. Never delete their files
+    // while another publication still references that same storage path.
+    if (
+      publicationId === "pub_default" &&
+      (await this.installedRepo.hasOtherPublicationStorageReferences(
+        installed.themeId,
+        installed.version,
+        installed.storagePath,
+        publicationId,
+      ))
+    ) {
+      throw new ThemeError(
+        "THEME_SHARED_LEGACY_STORAGE",
+        "This legacy theme version is still used by other publications. Install their own scoped copies before uninstalling it.",
+      );
+    }
+
     // Delete files from storage
     if (this.storageAdapter) {
       await this.storageAdapter.deleteThemeFiles(
