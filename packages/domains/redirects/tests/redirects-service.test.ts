@@ -155,7 +155,7 @@ describe("RedirectsService", () => {
     ];
     const repoWith: RedirectRepository = {
       ...repo,
-      listEnabled: vi.fn(async () => redirects),
+      findBySource: vi.fn(async (source) => redirects.find((r) => r.source === source) ?? null),
     };
     const service = makeService({ repo: repoWith });
     const resolved = await service.resolve("/a");
@@ -169,7 +169,7 @@ describe("RedirectsService", () => {
     ];
     const repoWith: RedirectRepository = {
       ...repo,
-      listEnabled: vi.fn(async () => redirects),
+      findBySource: vi.fn(async (source) => redirects.find((r) => r.source === source) ?? null),
     };
     const service = makeService({ repo: repoWith });
     const resolved = await service.resolve("/a");
@@ -206,10 +206,11 @@ describe("RedirectsService", () => {
   it("passes publication ownership into the public enabled-rules lookup", async () => {
     const scopedRepo: RedirectRepository = {
       ...repo,
-      listEnabled: vi.fn(async publicationId =>
-        publicationId === "pub_alpha"
-          ? [makeRedirect({source: "/shared", destination: "/alpha", publicationId: "pub_alpha"})]
-          : [makeRedirect({source: "/shared", destination: "/beta", publicationId: "pub_beta"})],
+      findBySource: vi.fn(async (source, publicationId) =>
+        source === "/shared" ? makeRedirect({
+          source, destination: publicationId === "pub_alpha" ? "/alpha" : "/beta",
+          publicationId: publicationId ?? "pub_default",
+        }) : null,
       ),
     };
     const service = makeService({repo: scopedRepo});
