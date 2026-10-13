@@ -18,7 +18,7 @@ import {
   runMaintenanceOperation,
 } from "../system-tools";
 import { SettingsDomainError } from "@vibress/settings";
-import { RedirectDomainError } from "@vibress/redirects";
+import { RedirectDomainError, type CreateRedirectData } from "@vibress/redirects";
 import { CreateRedirectInputSchema, UpdateRedirectInputSchema } from "@vibress/api-contracts";
 import {
   ImportExportDomainError,
@@ -388,10 +388,21 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       const parsed = UpdateRedirectInputSchema.safeParse(req.body);
       if (!parsed.success)
         return sendError(reply, "VALIDATION_ERROR", "Invalid redirect input", req.id);
+      // Zod's partial input permits explicit undefined, but the domain
+      // update contract only accepts fields with concrete values.
+      const updates: Partial<CreateRedirectData> = {};
+      if (parsed.data.source !== undefined) updates.source = parsed.data.source;
+      if (parsed.data.destination !== undefined)
+        updates.destination = parsed.data.destination;
+      if (parsed.data.statusCode !== undefined)
+        updates.statusCode = parsed.data.statusCode;
+      if (parsed.data.enabled !== undefined) updates.enabled = parsed.data.enabled;
+      if (parsed.data.sortOrder !== undefined)
+        updates.sortOrder = parsed.data.sortOrder;
       try {
         const redirect = await redirectsService.updateRedirect(
           id,
-          parsed.data,
+          updates,
           req.user!.id,
           req.publicationContext!.publicationId,
         );
