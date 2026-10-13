@@ -39,6 +39,7 @@ export class RedirectsService {
   async createRedirect(
     data: CreateRedirectData,
     actorId: string | null,
+    publicationId = "pub_default",
   ): Promise<Redirect> {
     this.validateSource(data.source);
     this.validateDestination(data.destination);
@@ -51,15 +52,15 @@ export class RedirectsService {
         "Only 301, 302, 307, and 308 are allowed",
       );
     }
-    const existing = await this.repo.findBySource(data.source);
+    const existing = await this.repo.findBySource(data.source, publicationId);
     if (existing)
       throw new RedirectDomainError(
         "SOURCE_EXISTS",
         "A redirect with this source already exists",
       );
 
-    const redirect = await this.repo.create(data);
-    domainEvents.emit("redirect.created", { redirectId: redirect.id, actorId });
+    const redirect = await this.repo.create(data, publicationId);
+    domainEvents.emit("redirect.created", { redirectId: redirect.id, actorId, publicationId });
     return redirect;
   }
 
@@ -67,8 +68,9 @@ export class RedirectsService {
     id: string,
     data: Partial<CreateRedirectData>,
     actorId: string | null,
+    publicationId = "pub_default",
   ): Promise<Redirect> {
-    const existing = await this.repo.findById(id);
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new RedirectDomainError("REDIRECT_NOT_FOUND", "Redirect not found");
     if (data.source !== undefined) this.validateSource(data.source);
@@ -83,18 +85,24 @@ export class RedirectsService {
         "Only 301, 302, 307, and 308 are allowed",
       );
     }
-    const updated = await this.repo.update(id, data);
-    domainEvents.emit("redirect.updated", { redirectId: id, actorId });
+    if (data.source && data.source !== existing.source && await this.repo.findBySource(data.source, publicationId)) {
+      throw new RedirectDomainError("SOURCE_EXISTS", "A redirect with this source already exists");
+    }
+    const updated = await this.repo.update(id, data, publicationId);
+    domainEvents.emit("redirect.updated", { redirectId: id, actorId, publicationId });
     return updated;
   }
 
-  async deleteRedirect(id: string, actorId: string | null): Promise<void> {
-    await this.repo.delete(id);
-    domainEvents.emit("redirect.deleted", { redirectId: id, actorId });
+  async deleteRedirect(id: string, actorId: string | null, publicationId = "pub_default"): Promise<void> {
+    if (!await this.repo.findById(id, publicationId)) {
+      throw new RedirectDomainError("REDIRECT_NOT_FOUND", "Redirect not found");
+    }
+    await this.repo.delete(id, publicationId);
+    domainEvents.emit("redirect.deleted", { redirectId: id, actorId, publicationId });
   }
 
-  async listRedirects(): Promise<Redirect[]> {
-    return this.repo.list();
+  async listRedirects(publicationId = "pub_default"): Promise<Redirect[]> {
+    return this.repo.list(publicationId);
   }
 
   /**
@@ -103,8 +111,9 @@ export class RedirectsService {
    */
   async resolve(
     path: string,
+    publicationId = "pub_default",
   ): Promise<{ destination: string; statusCode: number } | null> {
-    const redirects = await this.repo.listEnabled();
+    const redirects = await this.repo.listEnabled(publicationId);
     const map = new Map(redirects.map((r) => [r.source, r]));
     let current = path;
     const seen = new Set<string>();
