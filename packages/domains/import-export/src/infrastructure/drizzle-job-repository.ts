@@ -12,6 +12,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
   async create(data: {
     type: ImportExportJobType;
     requestedBy: string | null;
+    publicationId?: string;
   }): Promise<ImportExportJob> {
     const db = getDb();
     const [row] = await db
@@ -21,6 +22,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
         type: data.type,
         status: "pending",
         requestedBy: data.requestedBy,
+        publicationId: data.publicationId ?? "pub_default",
         progress: 0,
         createdAt: new Date(),
       })
@@ -29,12 +31,12 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string): Promise<ImportExportJob | null> {
+  async findById(id: string, publicationId?: string): Promise<ImportExportJob | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(importExportJobs)
-      .where(eq(importExportJobs.id, id))
+      .where(publicationId ? and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)) : eq(importExportJobs.id, id))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -43,6 +45,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
 
   async list(
     filter: {
+      publicationId?: string;
       type?: string;
       status?: string;
       limit?: number;
@@ -53,6 +56,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     const limit = Math.min(filter.limit || 20, 100);
     const offset = filter.offset || 0;
     const conditions = [];
+    if (filter.publicationId) conditions.push(eq(importExportJobs.publicationId, filter.publicationId));
     if (filter.type) conditions.push(eq(importExportJobs.type, filter.type));
     if (filter.status)
       conditions.push(eq(importExportJobs.status, filter.status));
@@ -79,6 +83,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     id: string,
     status: ImportExportJobStatus,
     patch?: Partial<ImportExportJob>,
+    publicationId?: string,
   ): Promise<void> {
     const db = getDb();
     const payload: Record<string, unknown> = { status };
@@ -96,7 +101,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
     await db
       .update(importExportJobs)
       .set(payload)
-      .where(eq(importExportJobs.id, id));
+      .where(publicationId ? and(eq(importExportJobs.id, id), eq(importExportJobs.publicationId, publicationId)) : eq(importExportJobs.id, id));
   }
 
   private mapToDomain(row: ImportExportJobRow): ImportExportJob {
@@ -105,6 +110,7 @@ export class DrizzleImportExportJobRepository implements JobRepository {
       type: row.type as ImportExportJobType,
       status: row.status as ImportExportJobStatus,
       requestedBy: row.requestedBy || null,
+      publicationId: row.publicationId,
       progress: row.progress,
       errorSummary: row.errorSummary || null,
       artifactKey: row.artifactKey || null,
