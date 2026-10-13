@@ -47,8 +47,8 @@ publication-scoped. Cross-publication artifact IDs return 404.
 The job's persisted publication travels into import/export processors. Settings
 are written/read only for that publication, with no caller-supplied tenant ID in
 the import/export envelope. Public response envelopes and the version 1 file
-format are unchanged. New export artifact keys are namespaced by publication,
-while existing job IDs and legacy artifact metadata remain stored.
+format are unchanged. Export artifact keys retain the historical `exports/<jobId>.json` format;
+publication authorization is enforced on job and artifact lookups.
 
 Redirects are currently global rather than publication-owned. To avoid
 cross-publication side effects, only `pub_default` can import or export them;
