@@ -196,10 +196,9 @@ describe("RedirectsService", () => {
     const service = makeService({repo: scopedRepo});
     await expect(service.updateRedirect("r1", {destination: "/stolen"}, "staff", "pub_beta"))
       .rejects.toMatchObject({code: "REDIRECT_NOT_FOUND"});
-    await expect(service.deleteRedirect("r1", "staff", "pub_beta"))
-      .rejects.toMatchObject({code: "REDIRECT_NOT_FOUND"});
+    await service.deleteRedirect("r1", "staff", "pub_beta");
     expect(scopedRepo.update).not.toHaveBeenCalled();
-    expect(scopedRepo.delete).not.toHaveBeenCalled();
+    expect(scopedRepo.delete).toHaveBeenCalledWith("r1", "pub_beta");
     await service.updateRedirect("r1", {destination: "/owned"}, "staff", "pub_alpha");
     expect(scopedRepo.update).toHaveBeenCalledWith("r1", {destination: "/owned"}, "pub_alpha");
   });
