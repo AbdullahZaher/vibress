@@ -228,6 +228,7 @@ export async function middleware(request: NextRequest) {
   // caller-supplied publication ID. Preserve the selected HTTP status.
   // Protected/system paths are deliberately excluded from redirect rules.
   const isRedirectCandidate =
+    (request.method === "GET" || request.method === "HEAD") &&
     !["/private", "/favicon.ico", "/robots.txt", "/sitemap.xml"].includes(pathname) &&
     !["/_next", "/api", "/admin", "/portal", "/health", "/content", "/assets", "/theme-assets", "/preview"].some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
