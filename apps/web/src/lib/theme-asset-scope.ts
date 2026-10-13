@@ -34,9 +34,13 @@ export function shouldAllowLegacyThemeFallback(
   scope: PublicationThemeScope | null,
   themeId: string,
   version: string,
+  hasScopedPackage = false,
 ): boolean {
   if (!scope) return false;
   if (scope.publicationId === "pub_default") return true;
+  // Missing files from an installed publication-owned package must never
+  // resolve to the shared legacy package with the same theme ID/version.
+  if (hasScopedPackage) return false;
   return (
     scope.activeThemeId === themeId &&
     scope.activeThemeVersion === version
