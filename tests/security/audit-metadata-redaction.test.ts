@@ -79,12 +79,15 @@ describe("audit metadata sanitization", () => {
     }
 
     const sanitized = sanitizeAuditMetadata({ nested });
-
     let current: unknown = sanitized?.nested;
+
     for (let i = 0; i < 20; i += 1) {
-      expect(current).toEqual(expect.any(Object));
-      current = (current as { child?: unknown }).child;
+      expect(typeof current).toBe("object");
+      expect(current).not.toBeNull();
+      expect(Array.isArray(current)).toBe(false);
+      current = (current as Record<string, unknown>).child;
     }
+
     expect(current).toBe("[REDACTED]");
   });
 });
