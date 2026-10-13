@@ -333,7 +333,14 @@ export async function renderThemeTemplate(
     fileMap = cached.files;
   } else {
     const themeDir = publicationId
-      ? findThemeDirectory(themeId, themeVersion, publicationId, site.legacyThemeStorage === true)
+      ? findThemeDirectory(
+          themeId,
+          themeVersion,
+          publicationId,
+          site.legacyThemeStorage === true &&
+            site.legacyThemeId === themeId &&
+            site.legacyThemeVersion === themeVersion,
+        )
       : null;
     if (themeDir) {
       fileMap = loadThemeFilesMap(themeDir);
