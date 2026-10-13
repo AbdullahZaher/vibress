@@ -19,6 +19,7 @@ import {
 } from "../system-tools";
 import { SettingsDomainError } from "@vibress/settings";
 import { RedirectDomainError } from "@vibress/redirects";
+import { CreateRedirectInputSchema, UpdateRedirectInputSchema } from "@vibress/api-contracts";
 import {
   ImportExportDomainError,
   validateImportEnvelope,
@@ -45,13 +46,6 @@ type AuditListQuery = {
   to?: string;
   limit?: string;
   offset?: string;
-};
-
-type RedirectBody = {
-  source?: string;
-  destination?: string;
-  statusCode?: number;
-  enabled?: boolean;
 };
 
 type ImportExportJobQuery = {
@@ -346,8 +340,8 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   // ---------------- Redirects ----------------
   fastify.get("/redirects", {
     preHandler: [requireStaffSession, requirePermission("redirects.read")],
-    handler: async (_req, reply) => {
-      const redirects = await redirectsService.listRedirects();
+    handler: async (req, reply) => {
+      const redirects = await redirectsService.listRedirects(req.publicationContext!.publicationId);
       return reply.status(200).send({ redirects });
     },
   });
@@ -359,14 +353,10 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       validateOrigin,
     ],
     handler: async (req, reply) => {
-      const body = req.body as RedirectBody | undefined;
-      if (!body?.source || !body?.destination)
-        return sendError(
-          reply,
-          "VALIDATION_ERROR",
-          "source and destination are required",
-          req.id,
-        );
+      const parsed = CreateRedirectInputSchema.safeParse(req.body);
+      if (!parsed.success)
+        return sendError(reply, "VALIDATION_ERROR", "Invalid redirect input", req.id);
+      const body = parsed.data;
       try {
         const redirect = await redirectsService.createRedirect(
           {
@@ -376,6 +366,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
             enabled: body.enabled,
           },
           req.user!.id,
+          req.publicationContext!.publicationId,
         );
         return reply.status(201).send({ redirect });
       } catch (err) {
@@ -394,12 +385,15 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as Record<string, unknown> | undefined;
+      const parsed = UpdateRedirectInputSchema.safeParse(req.body);
+      if (!parsed.success)
+        return sendError(reply, "VALIDATION_ERROR", "Invalid redirect input", req.id);
       try {
         const redirect = await redirectsService.updateRedirect(
           id,
-          body ?? {},
+          parsed.data,
           req.user!.id,
+          req.publicationContext!.publicationId,
         );
         return reply.status(200).send({ redirect });
       } catch (err) {
@@ -425,8 +419,15 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await redirectsService.deleteRedirect(id, req.user!.id);
-      return reply.status(200).send({ success: true });
+      try {
+        await redirectsService.deleteRedirect(id, req.user!.id, req.publicationContext!.publicationId);
+        return reply.status(200).send({ success: true });
+      } catch (err) {
+        if (err instanceof RedirectDomainError && err.code === "REDIRECT_NOT_FOUND") {
+          return sendError(reply, err.code, err.message, req.id, 404);
+        }
+        throw err;
+      }
     },
   });
 
