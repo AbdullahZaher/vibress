@@ -33,6 +33,23 @@ export const ALLOWED_REDIRECT_CODES = [301, 302, 307, 308];
 
 export const MAX_REDIRECT_CHAIN = 10;
 
+// WHATWG URL pathnames percent-encode Unicode. Allow matching stored readable
+// paths without permitting encoded slashes/backslashes or protected route
+// prefixes to bypass the same validation.
+function decodedSafeSource(path: string): string | null {
+  if (/%2f|%5c/i.test(path) || path.includes("\\")) return null;
+  try {
+    const decoded = decodeURI(path);
+    if (PROTECTED_ROUTE_PREFIXES.some((prefix) => decoded.startsWith(prefix))) {
+      return null;
+    }
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+
 export class RedirectsService {
   constructor(private repo: RedirectRepository) {}
 
@@ -114,6 +131,7 @@ export class RedirectsService {
     publicationId = "pub_default",
   ): Promise<{ destination: string; statusCode: number } | null> {
     const seen = new Set<string>();
+    if (decodedSafeSource(path) === null) return null;
     let current = path;
     let lastStatusCode = 301;
 
@@ -123,7 +141,11 @@ export class RedirectsService {
       if (seen.has(current)) return null;
       seen.add(current);
 
-      const rule = await this.repo.findBySource(current, publicationId);
+      const decoded = decodedSafeSource(current);
+      const rule = await this.repo.findBySource(current, publicationId) ??
+        (decoded && decoded !== current
+          ? await this.repo.findBySource(decoded, publicationId)
+          : null);
       if (!rule || !rule.enabled) {
         return hops === 0
           ? null
@@ -146,13 +168,9 @@ export class RedirectsService {
     }
     if (source.length > 500)
       throw new RedirectDomainError("INVALID_SOURCE", "Source is too long");
-    for (const prefix of PROTECTED_ROUTE_PREFIXES) {
-      if (source.startsWith(prefix)) {
-        throw new RedirectDomainError(
-          "PROTECTED_ROUTE",
-          `Cannot redirect protected route prefix: ${prefix}`,
-        );
-      }
+    const decoded = decodedSafeSource(source);
+    if (decoded === null) {
+      throw new RedirectDomainError("INVALID_SOURCE", "Invalid encoded redirect source");
     }
   }
 
