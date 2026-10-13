@@ -53,5 +53,3 @@ ALTER TABLE "settings"
 CREATE UNIQUE INDEX "settings_publication_namespace_key_idx"
   ON "settings" ("publication_id", "namespace", "key");
 
-CREATE INDEX "settings_publication_namespace_idx"
-  ON "settings" ("publication_id", "namespace");
