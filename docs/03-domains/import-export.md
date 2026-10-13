@@ -50,13 +50,13 @@ the import/export envelope. Public response envelopes and the version 1 file
 format are unchanged. Export artifact keys retain the historical `exports/<jobId>.json` format;
 publication authorization is enforced on job and artifact lookups.
 
-Redirects are currently global rather than publication-owned. To avoid
-cross-publication side effects, only `pub_default` can import or export them;
-secondary-publication exports include an empty `redirects` array, and jobs
-trying to import non-empty global redirects from secondary publications fail.
+After migration 0035, redirects are publication-owned. Imports write
+redirects only to the job's publication, and exports collect redirects only
+from that publication; secondary publications can safely round-trip their
+own rules. Version-1 envelopes and job artifact keys remain unchanged.
 Imported secret/internal settings and executable `code` settings are rejected
 by the processor rather than bypassing permission restrictions.
 
 The HTTP API continues to require staff sessions, permission checks and origin
-validation on mutating endpoints. In a future release, fully publication-owned
-redirects would require their own additive migration and service scoping.
+validation on mutating endpoints. Publication-owned redirect rules are enforced by migration 0035 and the
+redirects domain.
