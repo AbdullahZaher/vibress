@@ -205,7 +205,17 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
       "pub_default",
     );
 
-    // Existing installations may still need the old unscoped package.
+    // An unverified publication cannot borrow an unscoped package.
+    expect(
+      await adapter.getThemeFile(
+        themeId,
+        version,
+        "templates/legacy.liquid",
+        "pub_alpha",
+      ),
+    ).toBeNull();
+
+    // Migration-backed installations may explicitly authorize the legacy read.
     expect(
       (
         await adapter.getThemeFile(
@@ -213,6 +223,7 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
           version,
           "templates/legacy.liquid",
           "pub_alpha",
+          true,
         )
       )?.toString("utf8"),
     ).toBe("legacy");
@@ -243,6 +254,7 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
         version,
         "templates/legacy.liquid",
         "pub_alpha",
+        true,
       ),
     ).toBeNull();
     expect(await adapter.themeExists(themeId, version, "pub_alpha")).toBe(true);
