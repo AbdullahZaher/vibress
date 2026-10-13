@@ -1,5 +1,6 @@
 export interface AuditEvent {
   id: string;
+  publicationId: string | null;
   actorUserId: string | null;
   action: string;
   targetType: string | null;
@@ -13,6 +14,7 @@ export interface AuditEvent {
 
 export interface CreateAuditEventData {
   id?: string | undefined;
+  publicationId?: string | null | undefined;
   actorUserId?: string | null | undefined;
   action: string;
   targetType?: string | null | undefined;

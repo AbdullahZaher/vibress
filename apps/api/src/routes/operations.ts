@@ -310,7 +310,9 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("audit.read")],
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as AuditListQuery;
+      const publicationId = req.publicationContext!.publicationId;
       const result = await auditService.list({
+        publicationId,
         actorUserId: query.actorUserId,
         action: query.action,
         targetType: query.targetType,
@@ -324,6 +326,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({
         events: result.events.map((e) => ({
           id: e.id,
+          publicationId: e.publicationId,
           actorUserId: e.actorUserId,
           action: e.action,
           targetType: e.targetType,

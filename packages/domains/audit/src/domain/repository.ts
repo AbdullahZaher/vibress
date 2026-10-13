@@ -1,6 +1,7 @@
 import { AuditEvent, CreateAuditEventData } from "./audit-event";
 
 export interface AuditListFilter {
+  publicationId?: string | undefined;
   actorUserId?: string | undefined;
   action?: string | undefined;
   targetType?: string | undefined;

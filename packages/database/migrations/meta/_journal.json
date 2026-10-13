@@ -253,6 +253,13 @@
       "when": 1786616000000,
       "tag": "0035_redirect_publication_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786617000000,
+      "tag": "0036_audit_publication_ownership",
+      "breakpoints": true
     }
   ]
 }
