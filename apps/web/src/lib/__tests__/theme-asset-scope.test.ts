@@ -47,7 +47,7 @@ describe("theme asset publication scope", () => {
     ).toBe(false);
     expect(
       shouldAllowLegacyThemeFallback(
-        { ...scope, legacyStorage: undefined },
+        { publicationId: scope.publicationId, activeThemeId: scope.activeThemeId, activeThemeVersion: scope.activeThemeVersion },
         "theme-a",
         "1.0.0",
       ),
