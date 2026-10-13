@@ -94,7 +94,9 @@ export class RedirectsService {
   }
 
   async deleteRedirect(id: string, actorId: string | null, publicationId = "pub_default"): Promise<void> {
-    // Preserve idempotent DELETE semantics while enforcing tenant scope.
+    // Preserve idempotent DELETE semantics. Missing/foreign IDs must not
+    // mutate data or emit a misleading cross-publication domain event.
+    if (!await this.repo.findById(id, publicationId)) return;
     await this.repo.delete(id, publicationId);
     domainEvents.emit("redirect.deleted", { redirectId: id, actorId, publicationId });
   }
