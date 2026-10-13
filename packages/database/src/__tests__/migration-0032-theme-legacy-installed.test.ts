@@ -22,7 +22,8 @@ async function setup(client: PoolClient, schema: string): Promise<void> {
       id text PRIMARY KEY,
       publication_id text NOT NULL REFERENCES publications(id),
       theme_id text NOT NULL,
-      theme_version text NOT NULL
+      theme_version text NOT NULL,
+      activated_at timestamptz NOT NULL DEFAULT '2026-01-02T00:00:00Z'
     );
     CREATE TABLE installed_themes (
       id text PRIMARY KEY,
@@ -39,21 +40,23 @@ async function setup(client: PoolClient, schema: string): Promise<void> {
       storage_path text NOT NULL,
       status text NOT NULL DEFAULT 'installed',
       is_built_in boolean NOT NULL DEFAULT false,
-      installed_at timestamptz NOT NULL DEFAULT NOW(),
+      installed_at timestamptz NOT NULL DEFAULT '2026-01-01T00:00:00Z',
       updated_at timestamptz NOT NULL DEFAULT NOW()
     );
     CREATE UNIQUE INDEX installed_themes_pub_version_unique_idx
       ON installed_themes (publication_id, theme_id, version);
 
     INSERT INTO publications (id) VALUES
-      ('pub_default'), ('pub_inherited'), ('pub_new'), ('pub_independent');
+      ('pub_default'), ('pub_inherited'), ('pub_new'), ('pub_independent'), ('pub_recent');
     INSERT INTO theme_configurations (id, publication_id, theme_id, theme_version)
     VALUES
       ('legacy_active', 'pub_default', 'editorial-pro', '1.0.0'),
       ('theme_config_' || md5('legacy_active:pub_inherited'),
        'pub_inherited', 'editorial-pro', '1.0.0'),
       ('newly_activated', 'pub_new', 'vibress-default', '1.0.0'),
-      ('independent', 'pub_independent', 'other-theme', '1.0.0');
+      ('independent', 'pub_independent', 'other-theme', '1.0.0'),
+      ('theme_config_' || md5('legacy_active:pub_recent'),
+       'pub_recent', 'late-theme', '1.0.0');
 
     INSERT INTO installed_themes
       (id, publication_id, theme_id, name, version, manifest_json, storage_path)
@@ -65,9 +68,16 @@ async function setup(client: PoolClient, schema: string): Promise<void> {
       ('src_inactive', 'pub_default', 'new-default-theme', 'Default Only', '1.0.0',
        '{"id":"new-default-theme","version":"1.0.0"}',
        'themes/new-default-theme/1.0.0'),
+      ('src_late', 'pub_default', 'late-theme', 'Late Theme', '1.0.0',
+       '{"id":"late-theme","version":"1.0.0"}',
+       'themes/late-theme/1.0.0'),
       ('already_installed', 'pub_inherited', 'other-theme', 'Local Version',
        '1.0.0', '{"id":"other-theme","version":"1.0.0"}',
        'themes/publications/pub_inherited/other-theme/1.0.0');
+
+    UPDATE installed_themes
+    SET installed_at = '2026-01-03T00:00:00Z'
+    WHERE id = 'src_late';
   `);
 }
 
@@ -122,6 +132,10 @@ describe("migration 0032 legacy installed themes upgrade", () => {
       );
       expect(newlyCreated.rows).toHaveLength(0);
       expect(independent.rows).toHaveLength(0);
+      const recentlyInstalled = await client.query(
+        "SELECT id FROM installed_themes WHERE publication_id = 'pub_recent'",
+      );
+      expect(recentlyInstalled.rows).toHaveLength(0);
 
       // The migration is additive and repeat-safe: it neither duplicates
       // inherited rows nor overwrites independently installed packages.
