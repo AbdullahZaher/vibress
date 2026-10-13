@@ -26,8 +26,9 @@ interface RedirectsServiceLike {
       enabled?: boolean;
     },
     actorId: string | null,
+    publicationId?: string,
   ): Promise<unknown>;
-  listRedirects(): Promise<
+  listRedirects(publicationId?: string): Promise<
     Array<{
       source: string;
       destination: string;
@@ -72,10 +73,6 @@ export class NativeImportProcessor implements ImportProcessor {
     const pages = 0;
     const tags = 0;
 
-    // Redirects remain global. Secondary publications must not mutate them.
-    if (publicationId !== "pub_default" && Array.isArray(data.redirects) && data.redirects.length > 0) {
-      throw new Error("Global redirects cannot be imported into a secondary publication");
-    }
     // Redirects: validated by the redirects domain (source/destination/scheme)
     if (Array.isArray(data.redirects)) {
       for (const item of data.redirects) {
@@ -90,6 +87,7 @@ export class NativeImportProcessor implements ImportProcessor {
               statusCode: Number(r.statusCode) || 301,
             },
             null,
+            publicationId,
           );
           redirectCount++;
         } catch {
@@ -154,9 +152,7 @@ export class NativeExportCollector implements ExportCollector {
       safeSettings[ns.namespace] = safe;
     }
 
-    const redirects = publicationId === "pub_default"
-      ? await this.redirectsService.listRedirects()
-      : [];
+    const redirects = await this.redirectsService.listRedirects(publicationId);
 
     return {
       settings: safeSettings,
