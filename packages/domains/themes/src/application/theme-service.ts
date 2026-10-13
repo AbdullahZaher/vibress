@@ -31,6 +31,8 @@ export interface ActiveThemeResult {
   settings: Record<string, unknown>;
   isBuiltIn: boolean;
   previewImage?: string | null | undefined;
+  /** True only for a publication with an installed legacy package reference. */
+  legacyStorage: boolean;
 }
 
 const PREVIEW_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -148,11 +150,27 @@ export class ThemeService {
       config?.settings,
     );
 
+    // Migration 0032 copied installed-theme rows with their original legacy
+    // storage paths. Only such a publication-owned row may authorize reading
+    // files from the pre-isolation global directory.
+    const installed = !definition.isBuiltIn && this.installedRepo
+      ? await this.installedRepo.findByThemeIdAndVersion(
+          activeThemeId,
+          definition.manifest.version,
+          publicationId,
+        )
+      : null;
+    const storedPath = installed?.storagePath.replace(/\\\\/g, "/").replace(/\\/+$/, "") ?? "";
+    const legacyStorage = publicationId !== "pub_default" &&
+      storedPath.endsWith(`/${activeThemeId}/${definition.manifest.version}`) &&
+      !storedPath.split("/").includes("publications");
+
     return {
       manifest: definition.manifest,
       settings,
       isBuiltIn: definition.isBuiltIn,
       previewImage: definition.previewImage,
+      legacyStorage,
     };
   }
 
