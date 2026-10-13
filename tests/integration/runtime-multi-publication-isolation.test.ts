@@ -438,7 +438,124 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
         },
       });
       expect(deniedRedirect.statusCode).toBe(202);
-      expect(deniedRedirect.json().job.status).toBe("failed");
+      expect(deniedRedirect.json().job.status).toBe("completed");
+    });
+  });
+
+  describe("Ticket 5: Publication-owned redirects", () => {
+    const headers = (cookie: string, publicationId: string) => ({
+      cookie,
+      "x-publication-id": publicationId,
+      origin: "http://127.0.0.1:7780",
+    });
+
+    it("allows the same source on two publications but keeps admin and public routes isolated", async () => {
+      const source = `/relocate-${runId}`;
+      const alpha = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/redirects",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+        payload: { source, destination: "/alpha-only", statusCode: 301 },
+      });
+      const beta = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/redirects",
+        headers: headers(betaCookie, PUB_BETA_ID),
+        payload: { source, destination: "/beta-only", statusCode: 308 },
+      });
+      expect(alpha.statusCode).toBe(201);
+      expect(beta.statusCode).toBe(201);
+      const alphaId = alpha.json().redirect.id;
+      const betaId = beta.json().redirect.id;
+      expect(alpha.json().redirect.publicationId).toBe(PUB_ALPHA_ID);
+      expect(beta.json().redirect.publicationId).toBe(PUB_BETA_ID);
+
+      const alphaList = await app.inject({
+        method: "GET", url: "/api/admin/v1/redirects",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      const betaList = await app.inject({
+        method: "GET", url: "/api/admin/v1/redirects",
+        headers: headers(betaCookie, PUB_BETA_ID),
+      });
+      expect(alphaList.statusCode).toBe(200);
+      expect(betaList.statusCode).toBe(200);
+      expect(alphaList.json().redirects.some((r: {id: string}) => r.id === betaId)).toBe(false);
+      expect(betaList.json().redirects.some((r: {id: string}) => r.id === alphaId)).toBe(false);
+
+      const wrongUpdate = await app.inject({
+        method: "PATCH",
+        url: `/api/admin/v1/redirects/${alphaId}`,
+        headers: headers(betaCookie, PUB_BETA_ID),
+        payload: {destination: "/hijacked"},
+      });
+      const wrongDelete = await app.inject({
+        method: "DELETE",
+        url: `/api/admin/v1/redirects/${alphaId}`,
+        headers: headers(betaCookie, PUB_BETA_ID),
+      });
+      expect(wrongUpdate.statusCode).toBe(404);
+      expect(wrongDelete.statusCode).toBe(404);
+
+      const publicAlpha = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/redirects/resolve?path=${encodeURIComponent(source)}`,
+        headers: {host: ALPHA_HOST},
+      });
+      const publicBeta = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/redirects/resolve?path=${encodeURIComponent(source)}`,
+        headers: {host: BETA_HOST},
+      });
+      expect(publicAlpha.statusCode).toBe(200);
+      expect(publicAlpha.json().redirect).toEqual({destination: "/alpha-only", statusCode: 301});
+      expect(publicBeta.statusCode).toBe(200);
+      expect(publicBeta.json().redirect).toEqual({destination: "/beta-only", statusCode: 308});
+
+      const unknownHost = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/redirects/resolve?path=${encodeURIComponent(source)}`,
+        headers: {host: UNMAPPED_HOST, "x-dev-fallback": "false"},
+      });
+      expect(unknownHost.statusCode).toBe(404);
+
+      const disabled = await app.inject({
+        method: "PATCH",
+        url: `/api/admin/v1/redirects/${betaId}`,
+        headers: headers(betaCookie, PUB_BETA_ID),
+        payload: {enabled: false},
+      });
+      expect(disabled.statusCode).toBe(200);
+      const betaDisabled = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/redirects/resolve?path=${encodeURIComponent(source)}`,
+        headers: {host: BETA_HOST},
+      });
+      expect(betaDisabled.json().redirect).toBeNull();
+
+      const alphaExport = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/exports",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      expect(alphaExport.statusCode).toBe(202);
+      const artifact = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/import-export-jobs/${alphaExport.json().job.id}/artifact`,
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      expect(artifact.statusCode).toBe(200);
+      expect(artifact.json().data.redirects.some((r: {source: string; destination: string}) =>
+        r.source === source && r.destination === "/alpha-only")).toBe(true);
+      expect(artifact.json().data.redirects.some((r: {destination: string}) =>
+        r.destination === "/beta-only")).toBe(false);
+
+      const wrongInput = await app.inject({
+        method: "POST", url: "/api/admin/v1/redirects",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+        payload: {source: "javascript:bad", destination: "/oops"},
+      });
+      expect(wrongInput.statusCode).toBe(400);
     });
   });
 
