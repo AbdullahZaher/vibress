@@ -36,7 +36,7 @@ The active theme is resolved from the request host's authoritative publication c
 ## Publication isolation
 
 Admin routes require a staff session and the corresponding publication permission. Activations, saved settings, external theme installation, and deletion affect only that publication. Built-in themes remain shared, while newly installed external theme packages are stored in publication-scoped namespaces. Migration 0031 clones the old global active configuration and theme settings for existing publications; it does not physically duplicate legacy external theme packages.
-Migration 0032 restores installed-theme metadata for publications with an inherited configuration, without granting packages to new publications. Legacy files remain shared and read-only until each publication installs a scoped copy. Replacing or deleting a default-publication theme version still referenced by another publication returns `THEME_SHARED_LEGACY_STORAGE` using the standard error envelope.
+Migration 0032 restores an inherited publication's active external-theme version where that legacy package still exists; it does not grant inactive or newly installed default-publication themes to other tenants. Legacy files remain shared and read-only until each publication installs a scoped copy. Replacing or deleting a default-publication theme version still referenced by another publication returns `THEME_SHARED_LEGACY_STORAGE` using the standard error envelope.
 
 ## Admin (`/api/admin/v1/themes`)
 
