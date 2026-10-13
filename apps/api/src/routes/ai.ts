@@ -19,7 +19,7 @@ export async function aiRoutes(fastify: FastifyInstance) {
   fastify.get("/ai/status", {
     preHandler: [requireStaffSession],
     handler: async (req, reply) => {
-      const ai = await getAiGatewayService();
+      const ai = await getAiGatewayService(req.publicationContext!.publicationId);
       const providers = ai.getAvailableProviders();
       const enabled = ai.isEnabled();
 
@@ -58,7 +58,7 @@ export async function aiRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const ai = await getAiGatewayService();
+        const ai = await getAiGatewayService(req.publicationContext!.publicationId);
         const result = await ai.generate({
           task: task || "completion",
           prompt: prompt || "",
@@ -98,7 +98,7 @@ export async function aiRoutes(fastify: FastifyInstance) {
       const { prompt, context, task, model } = req.body || {};
 
       try {
-        const ai = await getAiGatewayService();
+        const ai = await getAiGatewayService(req.publicationContext!.publicationId);
 
         reply.raw.setHeader("Content-Type", "text/event-stream");
         reply.raw.setHeader("Cache-Control", "no-cache");
@@ -136,7 +136,7 @@ export async function aiRoutes(fastify: FastifyInstance) {
   fastify.get("/ai/metrics", {
     preHandler: [requireStaffSession, requirePermission("settings.edit")],
     handler: async (req, reply) => {
-      const ai = await getAiGatewayService();
+      const ai = await getAiGatewayService(req.publicationContext!.publicationId);
       const metrics = await ai.getMetrics();
       return reply.send({
         data: metrics,
