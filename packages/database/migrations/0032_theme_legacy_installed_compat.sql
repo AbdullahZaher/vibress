@@ -55,4 +55,7 @@ WHERE src."publication_id" = 'pub_default'
   -- Global themes installed after 0031 must not be granted to other tenants.
   AND src."theme_id" = active."theme_id"
   AND src."version" = active."theme_version"
+  -- An inherited configuration cannot authorize a package first installed
+  -- after its activation. Reject ambiguous later default-publication uploads.
+  AND src."installed_at" <= active."activated_at"
 ON CONFLICT ("publication_id", "theme_id", "version") DO NOTHING;
