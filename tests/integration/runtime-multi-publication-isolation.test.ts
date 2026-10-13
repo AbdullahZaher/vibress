@@ -278,6 +278,71 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
     });
   });
 
+  describe("Ticket 3: Publication-owned site settings", () => {
+    it("persists staff changes only within the session-authorized publication and renders independent sites", async () => {
+      const updateAlpha = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/site/title",
+        headers: {
+          cookie: alphaCookie,
+          "x-publication-id": PUB_ALPHA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: { value: `Alpha Identity ${runId}` },
+      });
+      expect(updateAlpha.statusCode).toBe(200);
+
+      const updateBeta = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/site/title",
+        headers: {
+          cookie: betaCookie,
+          "x-publication-id": PUB_BETA_ID,
+          origin: "http://127.0.0.1:7780",
+        },
+        payload: { value: `Beta Identity ${runId}` },
+      });
+      expect(updateBeta.statusCode).toBe(200);
+
+      const alpha = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/site",
+        headers: { host: ALPHA_HOST },
+      });
+      const beta = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/site",
+        headers: { host: BETA_HOST },
+      });
+      expect(alpha.statusCode).toBe(200);
+      expect(beta.statusCode).toBe(200);
+      expect(alpha.json().site.title).toBe(`Alpha Identity ${runId}`);
+      expect(beta.json().site.title).toBe(`Beta Identity ${runId}`);
+
+      const alphaPublic = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/settings/public",
+        headers: { host: ALPHA_HOST },
+      });
+      const betaPublic = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/settings/public",
+        headers: { host: BETA_HOST },
+      });
+      expect(alphaPublic.statusCode).toBe(200);
+      expect(betaPublic.statusCode).toBe(200);
+      expect(alphaPublic.json().settings.site.title).toBe(`Alpha Identity ${runId}`);
+      expect(betaPublic.json().settings.site.title).toBe(`Beta Identity ${runId}`);
+
+      const unknownPublic = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/settings/public",
+        headers: { host: UNMAPPED_HOST, "x-dev-fallback": "false" },
+      });
+      expect(unknownPublic.statusCode).toBe(404);
+    });
+  });
+
   describe("2. Same-Slug / Same-Key Coexistence Across Publications", () => {
     it("creates identically slugged posts in Alpha and Beta without constraint collision", async () => {
       const db = getDb();
