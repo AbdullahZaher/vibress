@@ -200,13 +200,6 @@ export const buildApp = () => {
       return;
     }
 
-    // Production and development enforce private-site access. Test suites share
-    // pub_default state across integration files, so bypass this global gate in
-    // test mode and let route-level publication isolation assertions run.
-    if (getConfig().isTest) {
-      return;
-    }
-
     const host = request.hostname || (request.headers["host"] as string | undefined) || null;
     const isDevFallbackAllowed =
       !getConfig().isProduction && request.headers["x-dev-fallback"] !== "false";
@@ -234,6 +227,13 @@ export const buildApp = () => {
           },
         ],
       });
+    }
+
+    // Test suites share pub_default state across integration files. Keep
+    // publication context resolution active, but skip only the private-site
+    // password gate in tests so route-level isolation assertions still run.
+    if (getConfig().isTest) {
+      return;
     }
 
     let isPrivate: boolean;
