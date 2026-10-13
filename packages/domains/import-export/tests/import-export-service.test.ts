@@ -260,7 +260,7 @@ describe("ImportExportService", () => {
       code: "JOB_NOT_FOUND",
     });
     const { artifactKey } = await service.runExport("j1", "pub_beta");
-    expect(artifactKey).toBe("exports/pub_beta/j1.json");
+    expect(artifactKey).toBe("exports/j1.json");
     expect(exporter.collect).toHaveBeenCalledWith("pub_beta");
   });
 
