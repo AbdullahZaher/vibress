@@ -425,10 +425,10 @@ export class SettingsService {
   /**
    * Public-safe settings: only 'public' classification values.
    */
-  async getPublicSettings(): Promise<Record<string, Record<string, unknown>>> {
+  async getPublicSettings(publicationId = "pub_default"): Promise<Record<string, Record<string, unknown>>> {
     const result: Record<string, Record<string, unknown>> = {};
     for (const ns of SETTING_NAMESPACES) {
-      const stored = await this.repo.getMany(ns.namespace);
+      const stored = await this.repo.getMany(ns.namespace, publicationId);
       const publicValues: Record<string, unknown> = {};
       for (const def of ns.settings) {
         if (def.classification !== "public") continue;
@@ -447,7 +447,7 @@ export class SettingsService {
    * Staff-visible settings (masked secrets/internal). Values for missing
    * settings fall back to defaults.
    */
-  async getStaffSettings(): Promise<
+  async getStaffSettings(publicationId = "pub_default"): Promise<
     Array<{
       namespace: string;
       settings: Array<{ key: string; value: unknown; classification: string }>;
@@ -458,7 +458,7 @@ export class SettingsService {
       settings: Array<{ key: string; value: unknown; classification: string }>;
     }> = [];
     for (const ns of SETTING_NAMESPACES) {
-      const stored = await this.repo.getMany(ns.namespace);
+      const stored = await this.repo.getMany(ns.namespace, publicationId);
       const values = ns.settings.map((def) => {
         const storedSetting = stored.find((s) => s.key === def.key);
         const raw = storedSetting ? storedSetting.value : def.default;
@@ -477,10 +477,10 @@ export class SettingsService {
    * Internal server-side access: returns unmasked settings for a namespace
    * with schema defaults applied.
    */
-  async getRawSettings(namespace: string): Promise<Record<string, unknown>> {
+  async getRawSettings(namespace: string, publicationId = "pub_default"): Promise<Record<string, unknown>> {
     const ns = NAMESPACE_MAP.get(namespace);
     if (!ns) return {};
-    const stored = await this.repo.getMany(namespace);
+    const stored = await this.repo.getMany(namespace, publicationId);
     const result: Record<string, unknown> = {};
     for (const def of ns.settings) {
       const found = stored.find((s) => s.key === def.key);
@@ -499,9 +499,10 @@ export class SettingsService {
     key: string,
     value: unknown,
     actorId: string | null,
+    publicationId = "pub_default",
   ): Promise<SettingRecord> {
     return runInTransaction(() =>
-      this.updateSettingTx(namespace, key, value, actorId),
+      this.updateSettingTx(namespace, key, value, actorId, publicationId),
     );
   }
 
@@ -510,6 +511,7 @@ export class SettingsService {
     key: string,
     value: unknown,
     actorId: string | null,
+    publicationId: string,
   ): Promise<SettingRecord> {
     const ns = NAMESPACE_MAP.get(namespace);
     if (!ns)
@@ -534,6 +536,7 @@ export class SettingsService {
     const record = await this.repo.set({
       namespace,
       key,
+      publicationId,
       value: coerced,
       valueType: def.type,
       classification: def.classification,
@@ -548,6 +551,7 @@ export class SettingsService {
       targetId: `${namespace}.${key}`,
       metadata: {
         classification: def.classification,
+        publicationId,
         changed: true,
       },
     });
