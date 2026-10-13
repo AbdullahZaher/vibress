@@ -138,6 +138,29 @@ describe("RedirectsService", () => {
     ).rejects.toMatchObject({ code: "SOURCE_EXISTS" });
   });
 
+  it("resolves Arabic and other Unicode source paths in their browser-encoded form", async () => {
+    const readable = "/مرحبا";
+    const rule = makeRedirect({source: readable, destination: "/أهلا"});
+    const repoWith: RedirectRepository = {
+      ...repo,
+      findBySource: vi.fn(async (source) => source === readable ? rule : null),
+    };
+    const service = makeService({repo: repoWith});
+    expect(await service.resolve(encodeURI(readable), "pub_default"))
+      .toEqual({destination: "/أهلا", statusCode: 301});
+  });
+
+  it("rejects percent-encoded protected redirect sources and public resolution", async () => {
+    const service = makeService();
+    await expect(service.createRedirect({
+      source: "/%61pi/private", destination: "/hijack",
+    }, null)).rejects.toMatchObject({code: "PROTECTED_ROUTE"});
+    expect(await service.resolve("/%61pi/private", "pub_default")).toBeNull();
+    await expect(service.createRedirect({
+      source: "/%2Fapi", destination: "/hijack",
+    }, null)).rejects.toMatchObject({code: "INVALID_SOURCE"});
+  });
+
   it("resolves a redirect chain with loop protection", async () => {
     const redirects = [
       makeRedirect({
