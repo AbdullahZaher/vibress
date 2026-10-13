@@ -291,31 +291,40 @@ export class ThemeService {
       throw new ThemeNotFoundError(themeId);
     }
 
-    // Legacy packages remain the source of truth for publications migrated
-    // from the pre-isolation global theme registry. Never delete their files
-    // while another publication still references that same storage path.
-    if (
-      publicationId === "pub_default" &&
-      (await this.installedRepo.hasOtherPublicationStorageReferences(
-        installed.themeId,
-        installed.version,
-        installed.storagePath,
-        publicationId,
-      ))
-    ) {
-      throw new ThemeError(
-        "THEME_SHARED_LEGACY_STORAGE",
-        "This legacy theme version is still used by other publications. Install their own scoped copies before uninstalling it.",
-      );
+    // Deleting without a version removes all installed versions from the DB.
+    // Validate every affected physical package before deleting any of them.
+    const versionsToDelete = version
+      ? [installed]
+      : await this.installedRepo.listVersions(themeId, publicationId);
+
+    if (publicationId === "pub_default") {
+      for (const candidate of versionsToDelete) {
+        if (
+          await this.installedRepo.hasOtherPublicationStorageReferences(
+            candidate.themeId,
+            candidate.version,
+            candidate.storagePath,
+            publicationId,
+          )
+        ) {
+          throw new ThemeError(
+            "THEME_SHARED_LEGACY_STORAGE",
+            "This legacy theme version is still used by other publications. Install their own scoped copies before uninstalling it.",
+          );
+        }
+      }
     }
 
-    // Delete files from storage
+    // Remove only the files owned by the requested publication. A default
+    // uninstall without a version removes all versions, matching its DB write.
     if (this.storageAdapter) {
-      await this.storageAdapter.deleteThemeFiles(
-        installed.themeId,
-        installed.version,
-        publicationId,
-      );
+      for (const candidate of versionsToDelete) {
+        await this.storageAdapter.deleteThemeFiles(
+          candidate.themeId,
+          candidate.version,
+          publicationId,
+        );
+      }
     }
 
     // Delete from DB
