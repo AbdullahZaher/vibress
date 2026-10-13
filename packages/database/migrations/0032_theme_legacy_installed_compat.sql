@@ -10,7 +10,7 @@
 -- that inherited the old global state; do NOT copy legacy themes into newly
 -- created publications, which have no such inheritance marker.
 --
--- This migration copies metadata only. Legacy storage_path is deliberately
+-- This migration copies only the inherited active external theme version's metadata. Legacy storage_path is deliberately
 -- retained so existing files continue to load via the read-only compatibility
 -- fallback until a publication installs its own scoped copy. Runtime writes to
 -- a shared legacy path must remain blocked while any copies reference it.
@@ -51,4 +51,8 @@ JOIN "theme_configurations" AS active
   ON active."publication_id" = p."id"
  AND active."id" = 'theme_config_' || md5(legacy."id" || ':' || p."id")
 WHERE src."publication_id" = 'pub_default'
+  -- Only restore the inherited publication's currently configured version.
+  -- Global themes installed after 0031 must not be granted to other tenants.
+  AND src."theme_id" = active."theme_id"
+  AND src."version" = active."theme_version"
 ON CONFLICT ("publication_id", "theme_id", "version") DO NOTHING;
