@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { PublicListFilterSchema } from "@vibress/api-contracts";
+import { PublicListFilterSchema, PublicRedirectResolveQuerySchema } from "@vibress/api-contracts";
 import {
   postsService,
   pagesService,
@@ -10,6 +10,7 @@ import {
   settingsService,
   workspaceService,
   commentsService,
+  redirectsService,
 } from "../services";
 import {
   buildPublicPostSummaryDto,
@@ -119,6 +120,24 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         ],
       });
     }
+  });
+
+  // Host-authoritative public redirect resolution. Never accept a tenant ID
+  // from a URL or request header as authorization.
+  fastify.get("/redirects/resolve", {
+    handler: async (req, reply) => {
+      const parsed = PublicRedirectResolveQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          errors: [{ code: "VALIDATION_ERROR", message: "Invalid redirect path", requestId: req.id }],
+        });
+      }
+      const redirect = await redirectsService.resolve(
+        parsed.data.path,
+        req.publicationContext!.publicationId,
+      );
+      return reply.status(200).send({ redirect });
+    },
   });
 
   // Public Site Metadata + Active Theme
