@@ -67,7 +67,7 @@ describe("Documentation Truth & Product Claims Consistency Guard", () => {
     }
   });
 
-  it("verifies database migrations end at authoritative migration 0031", () => {
+  it("verifies database migrations end at authoritative migration 0032", () => {
     const journalPath = path.join(
       rootDir,
       "packages/database/migrations/meta/_journal.json",
@@ -75,17 +75,17 @@ describe("Documentation Truth & Product Claims Consistency Guard", () => {
     const journal = JSON.parse(fs.readFileSync(journalPath, "utf-8"));
     const lastEntry = journal.entries[journal.entries.length - 1];
 
-    expect(lastEntry.idx).toBe(31);
-    expect(lastEntry.tag).toBe("0031_theme_publication_isolation");
+    expect(lastEntry.idx).toBe(32);
+    expect(lastEntry.tag).toBe("0032_theme_legacy_installed_compat");
 
-    // Assert no migration files beyond 0031 exist
+    // Assert no migration files beyond 0032 exist
     const migrationsDir = path.join(rootDir, "packages/database/migrations");
     const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql"));
     for (const f of files) {
       const match = f.match(/^(\d{4})_/);
       if (match) {
         const num = parseInt(match[1], 10);
-        expect(num).toBeLessThanOrEqual(31);
+        expect(num).toBeLessThanOrEqual(32);
       }
     }
   });
