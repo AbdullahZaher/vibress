@@ -252,7 +252,7 @@ export async function middleware(request: NextRequest) {
           rule &&
           typeof rule.destination === "string" &&
           ((
-            rule.destination.startsWith("/") && !rule.destination.startsWith("//")
+            rule.destination.startsWith("/") && !rule.destination.startsWith("//") && !rule.destination.includes("\\")
           ) || rule.destination.startsWith("http://") || rule.destination.startsWith("https://")) &&
           [301, 302, 307, 308].includes(rule.statusCode)
         ) {
