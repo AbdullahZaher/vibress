@@ -343,6 +343,105 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
     });
   });
 
+  describe("Ticket 4: Import and export job isolation", () => {
+    const headers = (cookie: string, publicationId: string) => ({
+      cookie,
+      "x-publication-id": publicationId,
+      origin: "http://127.0.0.1:7780",
+    });
+
+    it("scopes import/export jobs, listings, artifacts and imported settings", async () => {
+      const alphaExport = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/exports",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      const betaExport = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/exports",
+        headers: headers(betaCookie, PUB_BETA_ID),
+      });
+      expect(alphaExport.statusCode).toBe(202);
+      expect(betaExport.statusCode).toBe(202);
+      const alphaJob = alphaExport.json().job;
+      const betaJob = betaExport.json().job;
+      expect(alphaJob.publicationId).toBe(PUB_ALPHA_ID);
+      expect(betaJob.publicationId).toBe(PUB_BETA_ID);
+
+      const alphaList = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/import-export-jobs",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      const betaList = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/import-export-jobs",
+        headers: headers(betaCookie, PUB_BETA_ID),
+      });
+      expect(alphaList.statusCode).toBe(200);
+      expect(betaList.statusCode).toBe(200);
+      expect(alphaList.json().jobs.some((j: {id: string}) => j.id === alphaJob.id)).toBe(true);
+      expect(alphaList.json().jobs.some((j: {id: string}) => j.id === betaJob.id)).toBe(false);
+      expect(betaList.json().jobs.some((j: {id: string}) => j.id === betaJob.id)).toBe(true);
+      expect(betaList.json().jobs.some((j: {id: string}) => j.id === alphaJob.id)).toBe(false);
+
+      const wrongArtifact = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/import-export-jobs/${alphaJob.id}/artifact`,
+        headers: headers(betaCookie, PUB_BETA_ID),
+      });
+      expect(wrongArtifact.statusCode).toBe(404);
+      const correctArtifact = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/import-export-jobs/${alphaJob.id}/artifact`,
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+      });
+      expect(correctArtifact.statusCode).toBe(200);
+      expect(correctArtifact.json().format).toBe("vibress");
+      expect(correctArtifact.json().data.redirects).toEqual([]);
+
+      const alphaImport = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/imports",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+        payload: {
+          format: "vibress",
+          version: 1,
+          data: { settings: { site: { tagline: `Alpha Import ${runId}` } } },
+        },
+      });
+      expect(alphaImport.statusCode).toBe(202);
+      expect(alphaImport.json().job.status).toBe("completed");
+      expect(alphaImport.json().job.publicationId).toBe(PUB_ALPHA_ID);
+
+      const alphaSite = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/site",
+        headers: { host: ALPHA_HOST },
+      });
+      const betaSite = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/site",
+        headers: { host: BETA_HOST },
+      });
+      expect(alphaSite.json().site.tagline).toBe(`Alpha Import ${runId}`);
+      expect(betaSite.json().site.tagline).not.toBe(`Alpha Import ${runId}`);
+
+      const deniedRedirect = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/imports",
+        headers: headers(alphaCookie, PUB_ALPHA_ID),
+        payload: {
+          format: "vibress",
+          version: 1,
+          data: { redirects: [{ source: "/public", destination: "/secret" }] },
+        },
+      });
+      expect(deniedRedirect.statusCode).toBe(202);
+      expect(deniedRedirect.json().job.status).toBe("failed");
+    });
+  });
+
   describe("2. Same-Slug / Same-Key Coexistence Across Publications", () => {
     it("creates identically slugged posts in Alpha and Beta without constraint collision", async () => {
       const db = getDb();
