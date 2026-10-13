@@ -1,5 +1,6 @@
 export interface Redirect {
   id: string;
+  publicationId: string;
   source: string;
   destination: string;
   statusCode: number;
@@ -19,11 +20,11 @@ export interface CreateRedirectData {
 }
 
 export interface RedirectRepository {
-  create(data: CreateRedirectData): Promise<Redirect>;
-  findById(id: string): Promise<Redirect | null>;
-  findBySource(source: string): Promise<Redirect | null>;
-  update(id: string, data: Partial<CreateRedirectData>): Promise<Redirect>;
-  delete(id: string): Promise<void>;
-  list(): Promise<Redirect[]>;
-  listEnabled(): Promise<Redirect[]>;
+  create(data: CreateRedirectData, publicationId?: string): Promise<Redirect>;
+  findById(id: string, publicationId?: string): Promise<Redirect | null>;
+  findBySource(source: string, publicationId?: string): Promise<Redirect | null>;
+  update(id: string, data: Partial<CreateRedirectData>, publicationId?: string): Promise<Redirect>;
+  delete(id: string, publicationId?: string): Promise<void>;
+  list(publicationId?: string): Promise<Redirect[]>;
+  listEnabled(publicationId?: string): Promise<Redirect[]>;
 }
