@@ -42,10 +42,12 @@ async function fetchContentApi<T>(
   }
 
   let hostHeader: string | undefined;
+  let cookieHeader: string | undefined;
   try {
     const { headers } = await import("next/headers");
     const h = await headers();
     hostHeader = h.get("x-forwarded-host") || h.get("host") || undefined;
+    cookieHeader = h.get("cookie") || undefined;
   } catch {
     // Outside server component request context
   }
@@ -57,6 +59,7 @@ async function fetchContentApi<T>(
       headers: {
         Accept: "application/json",
         ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
       },
     });
   } catch (error) {

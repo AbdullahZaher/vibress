@@ -74,7 +74,7 @@ export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", async (req, reply) => {
     try {
       const pubCtx = await workspaceService.resolvePublicPublicationContext({
-        host: req.headers.host || "",
+        host: req.hostname || (req.headers.host as string | undefined) || "",
         isDevFallbackAllowed: !isProduction,
       });
       req.publicationContext = pubCtx;
@@ -135,7 +135,7 @@ export async function analyticsCollectorRoutes(fastify: FastifyInstance) {
       const isBot = classifyBot(userAgent);
       if (isBot) metrics.counter("analytics.events.bot", 1);
 
-      const pubId = req.publicationContext?.publicationId || "pub_default";
+      const pubId = req.publicationContext!.publicationId;
 
       const event: IngestEventData = {
         // Client-supplied eventId is the idempotency key; the server must not

@@ -58,7 +58,7 @@ import { healthRoutes } from "./routes/health";
 import { setupRoutes, ensureSetupTokenConfigured } from "./routes/setup";
 import { analyticsRoutes } from "./routes/analytics";
 import { analyticsCollectorRoutes } from "./routes/analytics-public";
-import { setupService } from "./services";
+import { setupService, settingsService, workspaceService } from "./services";
 import { mediaStreamRoutes } from "./routes/media-stream";
 import { adminOperationsRoutes } from "./routes/operations";
 import { aiRoutes } from "./routes/ai";
@@ -76,12 +76,44 @@ import { openApiDocsRoutes } from "./routes/docs";
 import { storageService, themeService } from "./services";
 import { getConfig } from "@vibress/config";
 import {
+  SITE_AUTH_COOKIE_NAME,
+  signSiteAuthToken,
+  verifySiteAuthToken,
+} from "@vibress/security";
+import {
   appLogger,
   recordHttpError,
   registerMetricsRoutes,
   registerTraceHooks,
   startObservabilityMonitors,
 } from "./observability";
+
+const PUBLIC_CONTENT_PREFIX = "/api/content/v1";
+const PUBLIC_CONTENT_PRIVATE_ACCESS_EXEMPT_PATHS = new Set([
+  "/site",
+  "/verify-site-password",
+]);
+
+function getSitePrivacySecret(): string {
+  const config = getConfig();
+  return (
+    config.secrets.encryptionKey ||
+    process.env.VIBRESS_ENCRYPTION_KEY ||
+    "vibress-site-privacy-secret"
+  );
+}
+
+function normalizePublicContentRoutePath(url: string): string {
+  const pathname = url.split("?")[0] || "/";
+  if (!pathname.startsWith(PUBLIC_CONTENT_PREFIX)) return pathname;
+  return pathname.slice(PUBLIC_CONTENT_PREFIX.length) || "/";
+}
+
+function isPublicContentPrivacyExempt(url: string): boolean {
+  return PUBLIC_CONTENT_PRIVATE_ACCESS_EXEMPT_PATHS.has(
+    normalizePublicContentRoutePath(url),
+  );
+}
 
 export const buildApp = () => {
   const config = getConfig();
@@ -158,6 +190,118 @@ export const buildApp = () => {
     if (request.headers["x-tenant-id"]) {
       delete request.headers["x-tenant-id"];
     }
+  });
+
+  fastify.addHook("preHandler", async (request, reply) => {
+    if (!request.url.startsWith(`${PUBLIC_CONTENT_PREFIX}/`)) {
+      return;
+    }
+    if (isPublicContentPrivacyExempt(request.url)) {
+      return;
+    }
+
+    const host = request.hostname || (request.headers["host"] as string | undefined) || null;
+    const isDevFallbackAllowed =
+      !getConfig().isProduction && request.headers["x-dev-fallback"] !== "false";
+
+    let publicationId: string;
+    try {
+      const pubCtx = await workspaceService.resolvePublicPublicationContext({
+        host,
+        isDevFallbackAllowed,
+      });
+      publicationId = pubCtx.publicationId;
+      request.publicationContext = {
+        publicationId: pubCtx.publicationId,
+        workspaceId: pubCtx.workspaceId,
+        actorType: pubCtx.actorType,
+        isSystemOperation: pubCtx.isSystemOperation,
+      };
+    } catch {
+      return reply.status(404).send({
+        errors: [
+          {
+            code: "PUBLICATION_NOT_FOUND",
+            message: "Publication not found",
+            requestId: request.id,
+          },
+        ],
+      });
+    }
+
+    let isPrivate: boolean;
+    try {
+      const publicSettings = await settingsService.getPublicSettings(publicationId);
+      isPrivate = Boolean(publicSettings.security?.isPrivate);
+    } catch {
+      return reply.status(503).send({
+        errors: [
+          {
+            code: "PRIVACY_STATE_UNAVAILABLE",
+            message: "Site privacy state is unavailable",
+            requestId: request.id,
+          },
+        ],
+      });
+    }
+
+    if (!isPrivate) return;
+
+    const token = request.cookies?.[SITE_AUTH_COOKIE_NAME] as string | undefined;
+    const hasSiteAuth = verifySiteAuthToken(
+      token,
+      getSitePrivacySecret(),
+      publicationId,
+    );
+    if (!hasSiteAuth) {
+      return reply.status(403).send({
+        errors: [
+          {
+            code: "PRIVATE_SITE_AUTH_REQUIRED",
+            message: "Private site authentication required",
+            requestId: request.id,
+          },
+        ],
+      });
+    }
+  });
+
+  fastify.addHook("onSend", async (request, reply, payload) => {
+    if (
+      request.method !== "POST" ||
+      normalizePublicContentRoutePath(request.url) !== "/verify-site-password" ||
+      reply.statusCode !== 200 ||
+      !request.publicationContext?.publicationId
+    ) {
+      return payload;
+    }
+
+    const payloadText = Buffer.isBuffer(payload)
+      ? payload.toString("utf8")
+      : typeof payload === "string"
+        ? payload
+        : "";
+
+    try {
+      const body = JSON.parse(payloadText) as { valid?: unknown; private?: unknown };
+      if (body.valid === true && body.private === true) {
+        const token = signSiteAuthToken(
+          getSitePrivacySecret(),
+          request.publicationContext.publicationId,
+        );
+        reply.setCookie(SITE_AUTH_COOKIE_NAME, token, {
+          path: "/",
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: 30 * 24 * 60 * 60,
+        });
+      }
+    } catch {
+      // Non-JSON response: leave payload untouched.
+    }
+
+    return payload;
   });
 
   // Central error handler

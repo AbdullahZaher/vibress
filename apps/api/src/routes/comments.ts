@@ -65,6 +65,13 @@ function adminCommentDto(comment: Comment) {
 export async function publicCommentRoutes(fastify: FastifyInstance) {
   // Public: List comments for a post
   fastify.get("/posts/:id/comments", async (req, reply) => {
+    const publicationId = req.publicationContext?.publicationId;
+    if (!publicationId) {
+      return reply.status(404).send({
+        errors: [{ code: "PUBLICATION_NOT_FOUND", message: "Publication not found", requestId: req.id }],
+      });
+    }
+
     const { id: postId } = req.params as { id: string };
     const query = req.query as {
       limit?: string;
@@ -78,7 +85,7 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
     const postRows = await db
       .select({ id: posts.id, publicationId: posts.publicationId })
       .from(posts)
-      .where(eq(posts.id, postId))
+      .where(and(eq(posts.id, postId), eq(posts.publicationId, publicationId)))
       .limit(1);
 
     if (!postRows[0]) {
@@ -86,8 +93,6 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
         errors: [{ code: "POST_NOT_FOUND", message: "Post not found", requestId: req.id }],
       });
     }
-
-    const publicationId = postRows[0].publicationId;
 
     const result = await commentsService.listPublicCommentsForPost(
       publicationId,
@@ -106,7 +111,14 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
 
   // Public: Batch comment counts for posts (zero N+1 query)
   fastify.get("/posts/comments/counts", async (req, reply) => {
-    const query = req.query as { postIds?: string; publicationId?: string };
+    const publicationId = req.publicationContext?.publicationId;
+    if (!publicationId) {
+      return reply.status(404).send({
+        errors: [{ code: "PUBLICATION_NOT_FOUND", message: "Publication not found", requestId: req.id }],
+      });
+    }
+
+    const query = req.query as { postIds?: string };
     if (!query.postIds) {
       return reply.status(400).send({
         errors: [
@@ -133,17 +145,6 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
           },
         ],
       });
-    }
-
-    let publicationId = query.publicationId;
-    if (!publicationId) {
-      const db = getDb();
-      const postRows = await db
-        .select({ publicationId: posts.publicationId })
-        .from(posts)
-        .where(eq(posts.id, postIds[0]!))
-        .limit(1);
-      publicationId = postRows[0]?.publicationId || "pub_default";
     }
 
     const countsMap = await commentsService.countCommentsForPosts(publicationId, postIds);
@@ -176,7 +177,7 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
       const member = req.member!;
       const publicationId = member.publicationId;
 
-      const publicSettings = await settingsService.getPublicSettings();
+      const publicSettings = await settingsService.getPublicSettings(publicationId);
       const commentAccess =
         (publicSettings.comments?.commentAccess as string) || "all";
       if (commentAccess === "disabled") {
@@ -440,10 +441,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req as any).user?.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const limit = parsed.data.limit || 50;
       const offset = parsed.data.offset || 0;
@@ -471,11 +469,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const parsed = ModerateCommentSchema.safeParse(req.body || {});
       const reason = parsed.success ? parsed.data.reason : undefined;
@@ -509,11 +503,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const parsed = ModerateCommentSchema.safeParse(req.body || {});
       const reason = parsed.success ? parsed.data.reason : undefined;
@@ -547,11 +537,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const parsed = ModerateCommentSchema.safeParse(req.body || {});
       const reason = parsed.success ? parsed.data.reason : undefined;
@@ -585,11 +571,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const parsed = ModerateCommentSchema.safeParse(req.body || {});
       const reason = parsed.success ? parsed.data.reason : undefined;
@@ -623,11 +605,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const parsed = ModerateCommentSchema.safeParse(req.body || {});
       const reason = parsed.success ? parsed.data.reason : undefined;
@@ -660,12 +638,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("comments.moderate")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const staffUser = (req as any).user!;
-      const publicationId =
-        (req.query as any)?.publicationId ||
-        (req.headers["x-publication-id"] as string) ||
-        staffUser.publicationId ||
-        "pub_default";
+      const publicationId = req.publicationContext!.publicationId;
 
       const history = await commentsService.listModerationEvents(
         publicationId,
@@ -677,11 +650,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: list reports handler
   const listReportsHandler = async (req: any, reply: any) => {
-    const staffUser = (req as any).user!;
-    const publicationId =
-      (req.query as any)?.publicationId ||
-      staffUser.publicationId ||
-      "pub_default";
+    const publicationId = req.publicationContext!.publicationId;
 
     const query = req.query as {
       status?: string;
@@ -723,10 +692,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
   const resolveReportHandler = async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const staffUser = (req as any).user!;
-    const publicationId =
-      (req.query as any)?.publicationId ||
-      staffUser.publicationId ||
-      "pub_default";
+    const publicationId = req.publicationContext!.publicationId;
 
     const bodyAction = (req.body as any)?.action || "resolved";
 
@@ -763,10 +729,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
   const dismissReportHandler = async (req: any, reply: any) => {
     const { id } = req.params as { id: string };
     const staffUser = (req as any).user!;
-    const publicationId =
-      (req.query as any)?.publicationId ||
-      staffUser.publicationId ||
-      "pub_default";
+    const publicationId = req.publicationContext!.publicationId;
 
     try {
       await commentsService.resolveReport(

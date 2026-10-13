@@ -83,6 +83,20 @@ function createCspResponse(
   return response;
 }
 
+function privateSiteRedirect(
+  request: NextRequest,
+  reason?: string,
+): NextResponse {
+  const privateUrl = new URL("/private", request.url);
+  privateUrl.searchParams.set("r", request.nextUrl.pathname);
+  if (reason) privateUrl.searchParams.set("error", reason);
+  return createCspResponse(request, { redirectUrl: privateUrl });
+}
+
+function encodeSiteAuthScope(publicationId: string): string {
+  return Buffer.from(publicationId, "utf8").toString("base64url");
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -99,14 +113,16 @@ export async function middleware(request: NextRequest) {
 
   async function verifySiteAuth(
     token: string | undefined | null,
+    publicationId: string,
   ): Promise<boolean> {
     if (!token || typeof token !== "string") return false;
     const parts = token.split(".");
-    if (parts.length !== 3 || parts[0] !== "v1") return false;
+    if (parts.length !== 4 || parts[0] !== "v2") return false;
 
     const timestampStr = parts[1];
-    const signature = parts[2];
-    if (!timestampStr || !signature || !/^[a-f0-9]{64}$/i.test(signature))
+    const scope = parts[2];
+    const signature = parts[3];
+    if (!timestampStr || !scope || !signature || !/^[a-f0-9]{64}$/i.test(signature))
       return false;
 
     const timestamp = parseInt(timestampStr, 10);
@@ -119,6 +135,9 @@ export async function middleware(request: NextRequest) {
     ) {
       return false;
     }
+
+    const expectedScope = encodeSiteAuthScope(publicationId);
+    if (scope !== expectedScope) return false;
 
     try {
       const secret =
@@ -134,7 +153,7 @@ export async function middleware(request: NextRequest) {
       const sigBuffer = await crypto.subtle.sign(
         "HMAC",
         key,
-        enc.encode(`v1:${timestampStr}`),
+        enc.encode(`v2:${timestampStr}:${scope}`),
       );
       const expectedHex = Array.from(new Uint8Array(sigBuffer))
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -147,30 +166,35 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isProtectedPath) {
-    const hasSiteAuth = await verifySiteAuth(
-      request.cookies.get("vb_site_auth")?.value,
-    );
-    if (!hasSiteAuth) {
-      try {
-        const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
-        const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
-          cache: "no-store",
-          headers: {
-            Accept: "application/json",
-            ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
-          },
-        });
-        if (siteRes.ok) {
-          const siteData = await siteRes.json();
-          if (siteData.security?.isPrivate) {
-            const privateUrl = new URL("/private", request.url);
-            privateUrl.searchParams.set("r", pathname);
-            return createCspResponse(request, { redirectUrl: privateUrl });
-          }
-        }
-      } catch {
-        // fail-open if API is unreachable
+    try {
+      const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
+      const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+        },
+      });
+
+      if (!siteRes.ok) {
+        return privateSiteRedirect(request, "privacy_unavailable");
       }
+
+      const siteData = await siteRes.json();
+      if (siteData.security?.isPrivate) {
+        const publicationId = siteRes.headers.get("x-vibress-publication-id");
+        const hasSiteAuth = publicationId
+          ? await verifySiteAuth(
+              request.cookies.get("vb_site_auth")?.value,
+              publicationId,
+            )
+          : false;
+        if (!hasSiteAuth) {
+          return privateSiteRedirect(request);
+        }
+      }
+    } catch {
+      return privateSiteRedirect(request, "privacy_unavailable");
     }
   }
 

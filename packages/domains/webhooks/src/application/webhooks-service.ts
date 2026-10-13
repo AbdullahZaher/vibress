@@ -22,6 +22,14 @@ export interface DeliveryDispatcher {
 
 const MAX_RETRIES = 5;
 
+function extractPublicationId(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object" || !("publicationId" in payload)) {
+    return undefined;
+  }
+  const value = (payload as { publicationId?: unknown }).publicationId;
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 export class WebhooksService {
   constructor(
     private repo: WebhookRepository,
@@ -54,7 +62,13 @@ export class WebhooksService {
         "At least one event type is required",
       );
     }
-    const pubId = publicationId || "pub_default";
+    const pubId = publicationId?.trim();
+    if (!pubId) {
+      throw new WebhookDomainError(
+        "PUBLICATION_REQUIRED",
+        "Webhook endpoints must be created in an authorized publication context",
+      );
+    }
     const endpoint = await this.repo.createEndpoint(
       {
         name: data.name,
@@ -147,11 +161,9 @@ export class WebhooksService {
    * duplicate deliveries.
    */
   async dispatchEvent(eventName: string, payload: unknown, publicationId?: string): Promise<number> {
-    const pubId =
-      publicationId ||
-      (payload && typeof payload === "object" && "publicationId" in payload
-        ? (payload as any).publicationId
-        : undefined);
+    const pubId = publicationId || extractPublicationId(payload);
+    if (!pubId) return 0;
+
     const endpoints = await this.repo.findActiveEndpointsForEvent(eventName, pubId);
     if (endpoints.length === 0) return 0;
 
