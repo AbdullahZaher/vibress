@@ -52,6 +52,7 @@ async function resolveRequestPublicationScope(
       theme?: {
         themeId?: unknown;
         themeVersion?: unknown;
+        legacyStorage?: unknown;
       };
     };
     const activeThemeId =
@@ -67,6 +68,7 @@ async function resolveRequestPublicationScope(
       publicationId,
       activeThemeId,
       activeThemeVersion,
+      legacyStorage: payload.theme?.legacyStorage === true,
     };
     publicationScopeCache.set(hostHeader, {
       scope,
