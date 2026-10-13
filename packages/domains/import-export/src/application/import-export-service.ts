@@ -96,11 +96,12 @@ export function assertSafeArchivePath(entryPath: string): string {
 export interface ImportProcessor {
   process(
     data: Record<string, unknown>,
+    publicationId?: string,
   ): Promise<{ posts: number; pages: number; tags: number; redirects: number }>;
 }
 
 export interface ExportCollector {
-  collect(): Promise<Record<string, unknown>>;
+  collect(publicationId?: string): Promise<Record<string, unknown>>;
 }
 
 export class ImportExportService {
@@ -110,23 +111,24 @@ export class ImportExportService {
     private exporter: ExportCollector,
   ) {}
 
-  async createImportJob(requestedBy: string | null): Promise<ImportExportJob> {
-    const job = await this.jobRepo.create({ type: "import", requestedBy });
-    domainEvents.emit("import.job_created", { jobId: job.id, requestedBy });
+  async createImportJob(requestedBy: string | null, publicationId = "pub_default"): Promise<ImportExportJob> {
+    const job = await this.jobRepo.create({ type: "import", requestedBy, publicationId });
+    domainEvents.emit("import.job_created", { jobId: job.id, requestedBy, publicationId });
     return job;
   }
 
-  async createExportJob(requestedBy: string | null): Promise<ImportExportJob> {
-    const job = await this.jobRepo.create({ type: "export", requestedBy });
-    domainEvents.emit("export.job_created", { jobId: job.id, requestedBy });
+  async createExportJob(requestedBy: string | null, publicationId = "pub_default"): Promise<ImportExportJob> {
+    const job = await this.jobRepo.create({ type: "export", requestedBy, publicationId });
+    domainEvents.emit("export.job_created", { jobId: job.id, requestedBy, publicationId });
     return job;
   }
 
-  async getJob(id: string): Promise<ImportExportJob | null> {
-    return this.jobRepo.findById(id);
+  async getJob(id: string, publicationId?: string): Promise<ImportExportJob | null> {
+    return this.jobRepo.findById(id, publicationId);
   }
 
   async listJobs(filter?: {
+    publicationId?: string;
     type?: string;
     status?: string;
     limit?: number;
@@ -135,12 +137,12 @@ export class ImportExportService {
     return this.jobRepo.list(filter);
   }
 
-  async cancelJob(id: string): Promise<void> {
-    const job = await this.jobRepo.findById(id);
+  async cancelJob(id: string, publicationId?: string): Promise<void> {
+    const job = await this.jobRepo.findById(id, publicationId);
     if (!job)
       throw new ImportExportDomainError("JOB_NOT_FOUND", "Job not found");
     if (job.status === "pending") {
-      await this.jobRepo.updateStatus(id, "cancelled");
+      await this.jobRepo.updateStatus(id, "cancelled", undefined, job.publicationId);
     }
   }
 
@@ -151,37 +153,38 @@ export class ImportExportService {
   async runImport(
     jobId: string,
     envelope: unknown,
+    publicationId?: string,
   ): Promise<{
     posts: number;
     pages: number;
     tags: number;
     redirects: number;
   }> {
-    const job = await this.jobRepo.findById(jobId);
-    if (!job)
+    const job = await this.jobRepo.findById(jobId, publicationId);
+    if (!job || (publicationId && job.publicationId !== publicationId))
       throw new ImportExportDomainError("JOB_NOT_FOUND", "Job not found");
 
     const parsed = validateImportEnvelope(envelope);
     await this.jobRepo.updateStatus(jobId, "running", {
       startedAt: new Date(),
-    });
+    }, job.publicationId);
 
     try {
-      const result = await this.importer.process(parsed.data);
+      const result = await this.importer.process(parsed.data, job.publicationId);
       await this.jobRepo.updateStatus(jobId, "completed", {
         progress: 100,
         completedAt: new Date(),
         summary: result as Record<string, unknown>,
-      });
-      domainEvents.emit("import.job_completed", { jobId, result });
+      }, job.publicationId);
+      domainEvents.emit("import.job_completed", { jobId, publicationId: job.publicationId, result });
       return result;
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       await this.jobRepo.updateStatus(jobId, "failed", {
         errorSummary: errMsg.slice(0, 500) || "Import failed",
         completedAt: new Date(),
-      });
-      domainEvents.emit("import.job_failed", { jobId, error: errMsg });
+      }, job.publicationId);
+      domainEvents.emit("import.job_failed", { jobId, publicationId: job.publicationId, error: errMsg });
       throw err;
     }
   }
@@ -192,17 +195,18 @@ export class ImportExportService {
    */
   async runExport(
     jobId: string,
+    publicationId?: string,
   ): Promise<{ envelope: unknown; artifactKey: string }> {
-    const job = await this.jobRepo.findById(jobId);
-    if (!job)
+    const job = await this.jobRepo.findById(jobId, publicationId);
+    if (!job || (publicationId && job.publicationId !== publicationId))
       throw new ImportExportDomainError("JOB_NOT_FOUND", "Job not found");
 
     await this.jobRepo.updateStatus(jobId, "running", {
       startedAt: new Date(),
-    });
+    }, job.publicationId);
 
     try {
-      const data = await this.exporter.collect();
+      const data = await this.exporter.collect(job.publicationId);
       const envelope = {
         format: "vibress",
         version: EXPORT_FORMAT_VERSION,
@@ -216,15 +220,15 @@ export class ImportExportService {
         artifactKey,
         artifactExpiresAt: expiresAt,
         completedAt: new Date(),
-      });
-      domainEvents.emit("export.job_completed", { jobId });
+      }, job.publicationId);
+      domainEvents.emit("export.job_completed", { jobId, publicationId: job.publicationId });
       return { envelope, artifactKey };
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       await this.jobRepo.updateStatus(jobId, "failed", {
         errorSummary: errMsg.slice(0, 500) || "Export failed",
         completedAt: new Date(),
-      });
+      }, job.publicationId);
       throw err;
     }
   }

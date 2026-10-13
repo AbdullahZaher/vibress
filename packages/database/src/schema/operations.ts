@@ -68,6 +68,7 @@ export const importExportJobs = pgTable(
   "import_export_jobs",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id").notNull().default("pub_default").references(() => publications.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
     status: text("status").notNull().default("pending"),
     requestedBy: text("requested_by").references(() => users.id, {
@@ -88,6 +89,7 @@ export const importExportJobs = pgTable(
     return {
       statusIdx: index("import_export_jobs_status_idx").on(table.status),
       typeIdx: index("import_export_jobs_type_idx").on(table.type),
+      publicationCreatedIdx: index("import_export_jobs_publication_created_idx").on(table.publicationId, table.createdAt),
     };
   },
 );

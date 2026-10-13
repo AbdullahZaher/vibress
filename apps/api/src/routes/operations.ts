@@ -480,14 +480,15 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
           return sendError(reply, err.code, err.message, req.id, 400);
         throw err;
       }
-      const job = await importExportService.createImportJob(req.user!.id);
+      const publicationId = req.publicationContext!.publicationId;
+      const job = await importExportService.createImportJob(req.user!.id, publicationId);
       // Process synchronously in v1 (bounded, small data); stored in job record
       try {
-        await importExportService.runImport(job.id, raw);
+        await importExportService.runImport(job.id, raw, publicationId);
       } catch {
         // Job marked failed; still report 202 with the job id
       }
-      const finalJob = await importExportService.getJob(job.id);
+      const finalJob = await importExportService.getJob(job.id, publicationId);
       return reply.status(202).send({ job: finalJob });
     },
   });
@@ -499,13 +500,14 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       validateOrigin,
     ],
     handler: async (req, reply) => {
-      const job = await importExportService.createExportJob(req.user!.id);
+      const publicationId = req.publicationContext!.publicationId;
+      const job = await importExportService.createExportJob(req.user!.id, publicationId);
       try {
-        await importExportService.runExport(job.id);
+        await importExportService.runExport(job.id, publicationId);
       } catch {
         // Job marked failed; report job id
       }
-      const finalJob = await importExportService.getJob(job.id);
+      const finalJob = await importExportService.getJob(job.id, publicationId);
       return reply.status(202).send({ job: finalJob });
     },
   });
@@ -515,11 +517,13 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as ImportExportJobQuery;
       const params: {
+        publicationId: string;
         type?: string;
         status?: string;
         limit?: number;
         offset?: number;
       } = {
+        publicationId: req.publicationContext!.publicationId,
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
       };
@@ -534,7 +538,8 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("exports.manage")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const job = await importExportService.getJob(id);
+      const publicationId = req.publicationContext!.publicationId;
+      const job = await importExportService.getJob(id, publicationId);
       if (!job || job.status !== "completed" || !job.artifactKey) {
         return sendError(
           reply,
@@ -563,7 +568,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
         settingsService,
         redirectsService,
       });
-      const data = await collector.collect();
+      const data = await collector.collect(publicationId);
       const envelope = {
         format: "vibress",
         version: 1,

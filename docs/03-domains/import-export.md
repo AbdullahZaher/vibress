@@ -35,3 +35,28 @@ secrets, S3 secrets, email/webhook secrets, and `VIBRESS_ENCRYPTION_KEY`.
 failed/cancelled), `progress`, `errorSummary`, `artifactKey`,
 `artifactExpiresAt` (24h retention). Artifact download requires
 `exports.manage` and enforces expiry.
+
+## Publication isolation (migration 0034)
+
+Import/export jobs are owned by a non-nullable `publication_id` foreign key;
+existing jobs are attributed to `pub_default` on upgrade. The authenticated
+staff publication determines ownership when a job is created; job ID alone does
+not authorize access. Job lists, artifact retrieval, and status updates are
+publication-scoped. Cross-publication artifact IDs return 404.
+
+The job's persisted publication travels into import/export processors. Settings
+are written/read only for that publication, with no caller-supplied tenant ID in
+the import/export envelope. Public response envelopes and the version 1 file
+format are unchanged. Export artifact keys retain the historical `exports/<jobId>.json` format;
+publication authorization is enforced on job and artifact lookups.
+
+Redirects are currently global rather than publication-owned. To avoid
+cross-publication side effects, only `pub_default` can import or export them;
+secondary-publication exports include an empty `redirects` array, and jobs
+trying to import non-empty global redirects from secondary publications fail.
+Imported secret/internal settings and executable `code` settings are rejected
+by the processor rather than bypassing permission restrictions.
+
+The HTTP API continues to require staff sessions, permission checks and origin
+validation on mutating endpoints. In a future release, fully publication-owned
+redirects would require their own additive migration and service scoping.

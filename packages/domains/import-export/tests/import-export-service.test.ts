@@ -20,6 +20,7 @@ function makeJob(overrides: Partial<ImportExportJob> = {}): ImportExportJob {
     type: "import",
     status: "pending",
     requestedBy: null,
+    publicationId: "pub_default",
     progress: 0,
     errorSummary: null,
     artifactKey: null,
@@ -152,6 +153,7 @@ describe("ImportExportService", () => {
       "j1",
       "completed",
       expect.anything(),
+      "pub_default",
     );
   });
 
@@ -187,6 +189,7 @@ describe("ImportExportService", () => {
       "j1",
       "failed",
       expect.objectContaining({ errorSummary: "boom" }),
+      "pub_default",
     );
   });
 
@@ -203,8 +206,62 @@ describe("ImportExportService", () => {
       "j1",
       "completed",
       expect.objectContaining({ artifactKey: expect.any(String) }),
+      "pub_default",
     );
     const patch = (jobRepoWith.updateStatus as any).mock.calls.at(-1)[2];
     expect(patch.artifactExpiresAt.getTime()).toBeGreaterThan(Date.now());
   });
+  it("creates jobs with explicit publication ownership", async () => {
+    const service = makeService();
+    await service.createImportJob("staff", "pub_alpha");
+    expect(jobRepo.create).toHaveBeenCalledWith({
+      type: "import",
+      requestedBy: "staff",
+      publicationId: "pub_alpha",
+    });
+  });
+
+  it("passes stored job ownership to the importer and rejects wrong publication", async () => {
+    const jobRepoWith: JobRepository = {
+      ...jobRepo,
+      findById: vi.fn(async (_id, publicationId) =>
+        publicationId && publicationId !== "pub_alpha"
+          ? null
+          : makeJob({ publicationId: "pub_alpha" }),
+      ),
+    };
+    const service = makeService({ jobRepo: jobRepoWith });
+    const envelope = { format: "vibress", version: 1, data: { settings: {} } };
+    await expect(service.runImport("j1", envelope, "pub_beta")).rejects.toMatchObject({
+      code: "JOB_NOT_FOUND",
+    });
+    expect(importer.process).not.toHaveBeenCalledWith(envelope.data, "pub_beta");
+    await service.runImport("j1", envelope, "pub_alpha");
+    expect(importer.process).toHaveBeenCalledWith(envelope.data, "pub_alpha");
+    expect(jobRepoWith.updateStatus).toHaveBeenCalledWith(
+      "j1",
+      "completed",
+      expect.anything(),
+      "pub_alpha",
+    );
+  });
+
+  it("scopes exports and artifact paths to the stored job publication", async () => {
+    const jobRepoWith: JobRepository = {
+      ...jobRepo,
+      findById: vi.fn(async (_id, publicationId) =>
+        publicationId && publicationId !== "pub_beta"
+          ? null
+          : makeJob({ type: "export", publicationId: "pub_beta" }),
+      ),
+    };
+    const service = makeService({ jobRepo: jobRepoWith });
+    await expect(service.runExport("j1", "pub_alpha")).rejects.toMatchObject({
+      code: "JOB_NOT_FOUND",
+    });
+    const { artifactKey } = await service.runExport("j1", "pub_beta");
+    expect(artifactKey).toBe("exports/j1.json");
+    expect(exporter.collect).toHaveBeenCalledWith("pub_beta");
+  });
+
 });
