@@ -232,6 +232,13 @@
       "when": 1786613000000,
       "tag": "0032_theme_legacy_installed_compat",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786614000000,
+      "tag": "0033_publication_settings_isolation",
+      "breakpoints": true
     }
   ]
 }
