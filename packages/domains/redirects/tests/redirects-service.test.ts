@@ -198,7 +198,7 @@ describe("RedirectsService", () => {
       .rejects.toMatchObject({code: "REDIRECT_NOT_FOUND"});
     await service.deleteRedirect("r1", "staff", "pub_beta");
     expect(scopedRepo.update).not.toHaveBeenCalled();
-    expect(scopedRepo.delete).toHaveBeenCalledWith("r1", "pub_beta");
+    expect(scopedRepo.delete).not.toHaveBeenCalled();
     await service.updateRedirect("r1", {destination: "/owned"}, "staff", "pub_alpha");
     expect(scopedRepo.update).toHaveBeenCalledWith("r1", {destination: "/owned"}, "pub_alpha");
   });
