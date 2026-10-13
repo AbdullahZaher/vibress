@@ -269,17 +269,22 @@ export class WebhooksService {
 
   /**
    * Re-enqueues failed deliveries for retry (bounded maintenance op).
+   * When provided, publicationId scopes the maintenance scan to one publication.
    * Idempotent: retries reuse the same event identity.
    */
-  async retryFailedDeliveries(): Promise<number> {
+  async retryFailedDeliveries(publicationId?: string): Promise<number> {
     const { deliveries } = await this.repo.listDeliveries({
       status: "failed",
+      publicationId,
       limit: 100,
     });
     let retried = 0;
     for (const delivery of deliveries) {
       if (delivery.attemptCount < MAX_RETRIES) {
-        const endpoint = await this.repo.findEndpointById(delivery.endpointId);
+        const endpoint = await this.repo.findEndpointById(
+          delivery.endpointId,
+          publicationId,
+        );
         if (!endpoint) {
           await this.repo.markDeadLetter(delivery.id, "webhook endpoint not found");
           continue;
