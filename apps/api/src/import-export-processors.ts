@@ -1,4 +1,5 @@
 import { ImportProcessor, ExportCollector } from "@vibress/import-export";
+import { SETTING_NAMESPACES } from "@vibress/settings";
 
 interface SettingsServiceLike {
   updateSetting(
@@ -6,8 +7,9 @@ interface SettingsServiceLike {
     key: string,
     value: unknown,
     actorId: string | null,
+    publicationId?: string,
   ): Promise<unknown>;
-  getStaffSettings(): Promise<
+  getStaffSettings(publicationId?: string): Promise<
     Array<{
       namespace: string;
       settings: Array<{ key: string; value: unknown; classification: string }>;
@@ -58,6 +60,7 @@ export class NativeImportProcessor implements ImportProcessor {
 
   async process(
     data: Record<string, unknown>,
+    publicationId = "pub_default",
   ): Promise<{
     posts: number;
     pages: number;
@@ -69,6 +72,10 @@ export class NativeImportProcessor implements ImportProcessor {
     const pages = 0;
     const tags = 0;
 
+    // Redirects remain global. Secondary publications must not mutate them.
+    if (publicationId !== "pub_default" && Array.isArray(data.redirects) && data.redirects.length > 0) {
+      throw new Error("Global redirects cannot be imported into a secondary publication");
+    }
     // Redirects: validated by the redirects domain (source/destination/scheme)
     if (Array.isArray(data.redirects)) {
       for (const item of data.redirects) {
@@ -97,12 +104,16 @@ export class NativeImportProcessor implements ImportProcessor {
         data.settings as Record<string, Record<string, unknown>>,
       )) {
         for (const [key, value] of Object.entries(values || {})) {
+          // Imported settings cannot bypass code-injection and credential controls.
+          const definition = SETTING_NAMESPACES.find((n) => n.namespace === namespace)?.settings.find((s) => s.key === key);
+          if (!definition || definition.classification === "secret" || definition.classification === "internal" || namespace === "code") continue;
           try {
             await this.settingsService.updateSetting(
               namespace,
               key,
               value,
               null,
+              publicationId,
             );
           } catch {
             // Unknown namespace/setting or secret — skip silently
@@ -129,8 +140,8 @@ export class NativeExportCollector implements ExportCollector {
     this.redirectsService = deps.redirectsService;
   }
 
-  async collect(): Promise<Record<string, unknown>> {
-    const settings = await this.settingsService.getStaffSettings();
+  async collect(publicationId = "pub_default"): Promise<Record<string, unknown>> {
+    const settings = await this.settingsService.getStaffSettings(publicationId);
     // Exclude secret/internal classifications from the export
     const safeSettings: Record<string, Record<string, unknown>> = {};
     for (const ns of settings) {
@@ -143,7 +154,9 @@ export class NativeExportCollector implements ExportCollector {
       safeSettings[ns.namespace] = safe;
     }
 
-    const redirects = await this.redirectsService.listRedirects();
+    const redirects = publicationId === "pub_default"
+      ? await this.redirectsService.listRedirects()
+      : [];
 
     return {
       settings: safeSettings,
