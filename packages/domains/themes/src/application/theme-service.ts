@@ -162,6 +162,7 @@ export class ThemeService {
       : null;
     const storedPath = installed?.storagePath.replace(/\\/g, "/").replace(/\/+$/, "") ?? "";
     const legacyStorage = publicationId !== "pub_default" &&
+      /^legacy_theme_[a-f0-9]{32}$/.test(installed?.id ?? "") &&
       storedPath.endsWith(`/${activeThemeId}/${definition.manifest.version}`) &&
       !storedPath.split("/").includes("publications");
 
