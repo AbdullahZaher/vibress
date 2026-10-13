@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply } from "fastify";
+import { FastifyInstance, FastifyReply, type FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
@@ -6,6 +6,7 @@ import {
 } from "../middleware/auth";
 import {
   settingsService,
+  workspaceService,
   auditService,
   redirectsService,
   importExportService,
@@ -70,12 +71,31 @@ const sendError = (
   status = 400,
 ) => reply.status(status).send({ errors: [{ code, message, requestId }] });
 
+async function resolvePublicSettingsPublicationId(
+  req: FastifyRequest,
+): Promise<string | null> {
+  const host = req.hostname || (typeof req.headers.host === "string" ? req.headers.host : null);
+  const isDevFallbackAllowed =
+    !getConfig().isProduction && req.headers["x-dev-fallback"] !== "false";
+  try {
+    const context = await workspaceService.resolvePublicPublicationContext({
+      host,
+      isDevFallbackAllowed,
+    });
+    return context.publicationId;
+  } catch {
+    return null;
+  }
+}
+
 export async function adminOperationsRoutes(fastify: FastifyInstance) {
   // ---------------- Settings ----------------
   fastify.get("/settings", {
     preHandler: [requireStaffSession, requirePermission("settings.read")],
-    handler: async (_req, reply) => {
-      const settings = await settingsService.getStaffSettings();
+    handler: async (req, reply) => {
+      const settings = await settingsService.getStaffSettings(
+        req.publicationContext!.publicationId,
+      );
       return reply
         .status(200)
         .send({
@@ -143,6 +163,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
               "passwordHash",
               hash,
               req.user!.id,
+              req.publicationContext!.publicationId,
             );
           }
           return reply
@@ -162,6 +183,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
           key,
           body.value,
           req.user!.id,
+          req.publicationContext!.publicationId,
         );
         return reply
           .status(200)
@@ -194,8 +216,11 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/settings/public", {
-    handler: async (_req, reply) => {
-      const settings = await settingsService.getPublicSettings();
+    handler: async (req, reply) => {
+      const publicationId = await resolvePublicSettingsPublicationId(req);
+      if (!publicationId)
+        return sendError(reply, "PUBLICATION_NOT_FOUND", "Publication not found", req.id, 404);
+      const settings = await settingsService.getPublicSettings(publicationId);
       return reply.status(200).send({ settings });
     },
   });
@@ -211,23 +236,22 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
           req.id,
         );
       }
-      const publicSettings = await settingsService.getPublicSettings();
+      const publicationId = await resolvePublicSettingsPublicationId(req);
+      if (!publicationId)
+        return sendError(reply, "PUBLICATION_NOT_FOUND", "Publication not found", req.id, 404);
+      const publicSettings = await settingsService.getPublicSettings(publicationId);
       const isPrivate = Boolean(publicSettings.security?.isPrivate);
       if (!isPrivate) {
         return reply.status(200).send({ valid: true, private: false });
       }
-      // Query raw stored hash from repo
-      const stored = await (
-        settingsService as unknown as {
-          repo: {
-            get: (ns: string, k: string) => Promise<{ value: unknown } | null>;
-          };
-        }
-      ).repo.get("security", "passwordHash");
-      if (!stored || !stored.value) {
+      const securitySettings = await settingsService.getRawSettings(
+        "security",
+        publicationId,
+      );
+      if (!securitySettings.passwordHash) {
         return reply.status(200).send({ valid: true, private: false });
       }
-      const valid = await verifyPassword(String(stored.value), body.password);
+      const valid = await verifyPassword(String(securitySettings.passwordHash), body.password);
       return reply.status(valid ? 200 : 401).send({ valid, private: true });
     },
   });
@@ -244,7 +268,9 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       const recipient =
         body?.targetEmail || body?.to || req.user?.email || "admin@vibress.org";
       try {
-        const staffSettings = await settingsService.getStaffSettings();
+        const staffSettings = await settingsService.getStaffSettings(
+          req.publicationContext!.publicationId,
+        );
         const emailNs = staffSettings.find((n) => n.namespace === "email");
         const fromName = String(
           emailNs?.settings.find((s) => s.key === "fromName")?.value ||
