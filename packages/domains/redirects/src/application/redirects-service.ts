@@ -111,22 +111,26 @@ export class RedirectsService {
     path: string,
     publicationId = "pub_default",
   ): Promise<{ destination: string; statusCode: number } | null> {
-    const redirects = await this.repo.listEnabled(publicationId);
-    const map = new Map(redirects.map((r) => [r.source, r]));
-    let current = path;
     const seen = new Set<string>();
-    let hops = 0;
+    let current = path;
+    let lastStatusCode = 301;
 
-    while (hops < MAX_REDIRECT_CHAIN) {
-      if (seen.has(current)) break; // loop
+    // One indexed publication/source lookup per hop; never load all site
+    // redirects into memory on the public request path.
+    for (let hops = 0; hops <= MAX_REDIRECT_CHAIN; hops++) {
+      if (seen.has(current)) return null;
       seen.add(current);
-      const rule = map.get(current);
-      if (!rule) break;
-      current = rule.destination;
-      hops++;
-      if (!map.has(current)) {
-        return { destination: current, statusCode: rule.statusCode };
+
+      const rule = await this.repo.findBySource(current, publicationId);
+      if (!rule || !rule.enabled) {
+        return hops === 0
+          ? null
+          : { destination: current, statusCode: lastStatusCode };
       }
+      if (hops === MAX_REDIRECT_CHAIN) return null;
+
+      current = rule.destination;
+      lastStatusCode = rule.statusCode;
     }
     return null;
   }
