@@ -44,7 +44,7 @@ function isSensitiveAuditMetadataKey(key: string): boolean {
 }
 
 function sanitizeAuditMetadataRecord(
-  metadata: Record<string, unknown>,
+  metadata: object,
   depth: number,
 ): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
@@ -68,7 +68,7 @@ function sanitizeAuditMetadataValue(value: unknown, depth: number): unknown {
   }
 
   if (typeof value === "object" && value !== null) {
-    return sanitizeAuditMetadataRecord(value as Record<string, unknown>, depth);
+    return sanitizeAuditMetadataRecord(value, depth);
   }
 
   return value;
