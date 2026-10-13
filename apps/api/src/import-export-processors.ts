@@ -76,6 +76,8 @@ export class NativeImportProcessor implements ImportProcessor {
     // Redirects: validated by the redirects domain (source/destination/scheme)
     if (Array.isArray(data.redirects)) {
       for (const item of data.redirects) {
+        if (!item || typeof item !== "object" || Array.isArray(item))
+          continue;
         const r = item as Record<string, unknown>;
         if (typeof r.source !== "string" || typeof r.destination !== "string")
           continue;
@@ -85,6 +87,7 @@ export class NativeImportProcessor implements ImportProcessor {
               source: r.source,
               destination: r.destination,
               statusCode: Number(r.statusCode) || 301,
+              enabled: typeof r.enabled === "boolean" ? r.enabled : true,
             },
             null,
             publicationId,
