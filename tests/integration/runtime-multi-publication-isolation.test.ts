@@ -1316,7 +1316,16 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
         },
       });
       expect(previewCreate.statusCode).toBe(200);
-      const previewToken = previewCreate.json().previewToken as string;
+      const previewPayload: unknown = previewCreate.json();
+      if (
+        typeof previewPayload !== "object" ||
+        previewPayload === null ||
+        !("previewToken" in previewPayload) ||
+        typeof previewPayload.previewToken !== "string"
+      ) {
+        throw new Error("Preview response missing a token");
+      }
+      const previewToken = previewPayload.previewToken;
 
       const alphaPreview = await app.inject({
         method: "GET",
