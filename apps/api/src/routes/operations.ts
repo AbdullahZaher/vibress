@@ -419,15 +419,8 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      try {
-        await redirectsService.deleteRedirect(id, req.user!.id, req.publicationContext!.publicationId);
-        return reply.status(200).send({ success: true });
-      } catch (err) {
-        if (err instanceof RedirectDomainError && err.code === "REDIRECT_NOT_FOUND") {
-          return sendError(reply, err.code, err.message, req.id, 404);
-        }
-        throw err;
-      }
+      await redirectsService.deleteRedirect(id, req.user!.id, req.publicationContext!.publicationId);
+      return reply.status(200).send({ success: true });
     },
   });
 
