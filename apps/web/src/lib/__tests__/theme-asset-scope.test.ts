@@ -39,5 +39,13 @@ describe("theme asset publication scope", () => {
     expect(shouldAllowLegacyThemeFallback(scope, "theme-a", "1.0.0")).toBe(true);
     expect(shouldAllowLegacyThemeFallback(scope, "theme-b", "1.0.0")).toBe(false);
     expect(shouldAllowLegacyThemeFallback(scope, "theme-a", "2.0.0")).toBe(false);
+    // A missing asset in an installed scoped package must not borrow the
+    // same path from the legacy global theme directory.
+    expect(
+      shouldAllowLegacyThemeFallback(scope, "theme-a", "1.0.0", true),
+    ).toBe(false);
+    expect(
+      shouldAllowLegacyThemeFallback(scope, "theme-a", "1.0.0", false),
+    ).toBe(true);
   });
 });
