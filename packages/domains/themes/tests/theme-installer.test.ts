@@ -72,6 +72,11 @@ class MemoryThemeStorageAdapter implements ThemeStorageAdapter {
 class MemoryInstalledThemeRepository implements InstalledThemeRepository {
   private themes = new Map<string, InstalledTheme>();
   private settings = new Map<string, Record<string, unknown>>();
+  sharedStorageReferences = false;
+
+  async hasOtherPublicationStorageReferences(): Promise<boolean> {
+    return this.sharedStorageReferences;
+  }
 
   async listAll(): Promise<InstalledTheme[]> {
     return Array.from(this.themes.values());
@@ -199,6 +204,17 @@ describe("Themes Domain — ThemeInstaller", () => {
     const fromRepo = await repository.findByThemeId("editorial-pro");
     expect(fromRepo).not.toBeNull();
     expect(fromRepo?.name).toBe("Editorial Pro");
+  });
+
+  it("rejects overwriting a legacy package still referenced by other publications", async () => {
+    const zip = await createValidZip("1.0.0");
+    await installer.installFromZip(zip, "user-1");
+    repository.sharedStorageReferences = true;
+
+    await expect(installer.installFromZip(zip, "user-1")).rejects.toThrow(
+      /still used by other publications/,
+    );
+    expect(await repository.listVersions("editorial-pro")).toHaveLength(1);
   });
 
   it("updates existing installed theme when uploading a new version", async () => {

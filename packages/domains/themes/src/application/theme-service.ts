@@ -291,13 +291,40 @@ export class ThemeService {
       throw new ThemeNotFoundError(themeId);
     }
 
-    // Delete files from storage
+    // Deleting without a version removes all installed versions from the DB.
+    // Validate every affected physical package before deleting any of them.
+    const versionsToDelete = version
+      ? [installed]
+      : await this.installedRepo.listVersions(themeId, publicationId);
+
+    if (publicationId === "pub_default") {
+      for (const candidate of versionsToDelete) {
+        if (
+          await this.installedRepo.hasOtherPublicationStorageReferences(
+            candidate.themeId,
+            candidate.version,
+            candidate.storagePath,
+            publicationId,
+          )
+        ) {
+          throw new ThemeError(
+            "THEME_SHARED_LEGACY_STORAGE",
+            "This legacy theme version is still used by other publications. Install their own scoped copies before uninstalling it.",
+          );
+        }
+      }
+    }
+
+    // Remove only the files owned by the requested publication. A default
+    // uninstall without a version removes all versions, matching its DB write.
     if (this.storageAdapter) {
-      await this.storageAdapter.deleteThemeFiles(
-        installed.themeId,
-        installed.version,
-        publicationId,
-      );
+      for (const candidate of versionsToDelete) {
+        await this.storageAdapter.deleteThemeFiles(
+          candidate.themeId,
+          candidate.version,
+          publicationId,
+        );
+      }
     }
 
     // Delete from DB

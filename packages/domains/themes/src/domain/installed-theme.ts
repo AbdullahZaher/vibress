@@ -35,6 +35,13 @@ export interface InstalledThemeRepository {
   update(theme: InstalledTheme, publicationId?: string): Promise<InstalledTheme>;
   delete(themeId: string, publicationId?: string): Promise<void>;
   deleteVersion(themeId: string, version: string, publicationId?: string): Promise<void>;
+  /** True when another publication still depends on this physical package. */
+  hasOtherPublicationStorageReferences(
+    themeId: string,
+    version: string,
+    storagePath: string,
+    publicationId: string,
+  ): Promise<boolean>;
   getThemeSettings(themeId: string, publicationId?: string): Promise<Record<string, unknown> | null>;
   saveThemeSettings(
     themeId: string,

@@ -10,7 +10,7 @@ import {
   InstalledThemeRow,
 } from "@vibress/database";
 import { ThemeManifest, ThemeSettingsSchema } from "@vibress/theme-core";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import crypto from "node:crypto";
 
 export class DrizzleInstalledThemeRepository implements InstalledThemeRepository {
@@ -204,6 +204,28 @@ export class DrizzleInstalledThemeRepository implements InstalledThemeRepository
           eq(installedThemes.publicationId, publicationId),
         ),
       );
+  }
+
+  async hasOtherPublicationStorageReferences(
+    themeId: string,
+    version: string,
+    storagePath: string,
+    publicationId: string,
+  ): Promise<boolean> {
+    const db = getDb();
+    const rows = await db
+      .select({ id: installedThemes.id })
+      .from(installedThemes)
+      .where(
+        and(
+          eq(installedThemes.themeId, themeId),
+          eq(installedThemes.version, version),
+          eq(installedThemes.storagePath, storagePath),
+          ne(installedThemes.publicationId, publicationId),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   async getThemeSettings(

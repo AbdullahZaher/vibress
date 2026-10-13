@@ -68,6 +68,15 @@ class MemoryThemeRepo implements ThemeConfigurationRepository {
 class MemoryInstalledThemeRepository implements InstalledThemeRepository {
   themes = new Map<string, InstalledTheme>();
   private settings = new Map<string, Record<string, unknown>>();
+  sharedStorageReferences = false;
+  sharedVersions = new Set<string>();
+
+  async hasOtherPublicationStorageReferences(
+    _themeId: string,
+    version: string,
+  ): Promise<boolean> {
+    return this.sharedStorageReferences || this.sharedVersions.has(version);
+  }
 
   async listAll(): Promise<InstalledTheme[]> {
     return Array.from(this.themes.values());
@@ -243,6 +252,39 @@ describe("Theme Domain — Activation & Management", () => {
     const result = await service.uninstallTheme("custom-nordic", "user-1");
     expect(result.success).toBe(true);
     expect(storageAdapter.deletedThemes).toContain("custom-nordic");
+  });
+
+  it("rejects removal when a migrated publication still uses legacy storage", async () => {
+    await service.activateTheme("vibress-default", "user-1");
+    installedRepo.sharedStorageReferences = true;
+
+    await expect(service.uninstallTheme("custom-nordic", "user-1")).rejects.toThrow(
+      /still used by other publications/,
+    );
+    expect(storageAdapter.deletedThemes).toEqual([]);
+    expect(await installedRepo.findByThemeId("custom-nordic")).not.toBeNull();
+  });
+
+  it("checks every version before deleting an entire theme", async () => {
+    await service.activateTheme("vibress-default", "user-1");
+    const first = await installedRepo.findByThemeId("custom-nordic");
+    if (!first) throw new Error("Missing installed theme fixture");
+    await installedRepo.create({
+      ...first,
+      id: "installed-2",
+      version: "2.0.0",
+      storagePath: "content/themes/custom-nordic/2.0.0",
+    });
+
+    // Version 1 is safe, but version 2 is still shared with an upgraded
+    // publication. Deleting without a version must inspect both.
+    installedRepo.sharedVersions.add("2.0.0");
+    await expect(service.uninstallTheme("custom-nordic", "user-1")).rejects.toThrow(
+      /still used by other publications/,
+    );
+
+    expect(storageAdapter.deletedThemes).toEqual([]);
+    expect(await installedRepo.listVersions("custom-nordic")).toHaveLength(2);
   });
 
   it("rejects uninstalling active theme", async () => {
