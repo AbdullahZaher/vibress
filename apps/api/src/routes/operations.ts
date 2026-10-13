@@ -18,7 +18,8 @@ import {
   runMaintenanceOperation,
 } from "../system-tools";
 import { SettingsDomainError } from "@vibress/settings";
-import { RedirectDomainError } from "@vibress/redirects";
+import { RedirectDomainError, type CreateRedirectData } from "@vibress/redirects";
+import { CreateRedirectInputSchema, UpdateRedirectInputSchema } from "@vibress/api-contracts";
 import {
   ImportExportDomainError,
   validateImportEnvelope,
@@ -45,13 +46,6 @@ type AuditListQuery = {
   to?: string;
   limit?: string;
   offset?: string;
-};
-
-type RedirectBody = {
-  source?: string;
-  destination?: string;
-  statusCode?: number;
-  enabled?: boolean;
 };
 
 type ImportExportJobQuery = {
@@ -346,8 +340,8 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   // ---------------- Redirects ----------------
   fastify.get("/redirects", {
     preHandler: [requireStaffSession, requirePermission("redirects.read")],
-    handler: async (_req, reply) => {
-      const redirects = await redirectsService.listRedirects();
+    handler: async (req, reply) => {
+      const redirects = await redirectsService.listRedirects(req.publicationContext!.publicationId);
       return reply.status(200).send({ redirects });
     },
   });
@@ -359,14 +353,23 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
       validateOrigin,
     ],
     handler: async (req, reply) => {
-      const body = req.body as RedirectBody | undefined;
-      if (!body?.source || !body?.destination)
+      const parsed = CreateRedirectInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        // Preserve the established domain error code for unsupported status
+        // values while rejecting them at the shared-schema boundary.
+        const invalidStatusCode = parsed.error.issues.every(
+          (issue) => issue.path[0] === "statusCode",
+        );
         return sendError(
           reply,
-          "VALIDATION_ERROR",
-          "source and destination are required",
+          invalidStatusCode ? "INVALID_STATUS_CODE" : "VALIDATION_ERROR",
+          invalidStatusCode
+            ? "Only 301, 302, 307, and 308 are allowed"
+            : "Invalid redirect input",
           req.id,
         );
+      }
+      const body = parsed.data;
       try {
         const redirect = await redirectsService.createRedirect(
           {
@@ -376,6 +379,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
             enabled: body.enabled,
           },
           req.user!.id,
+          req.publicationContext!.publicationId,
         );
         return reply.status(201).send({ redirect });
       } catch (err) {
@@ -394,12 +398,39 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const body = req.body as Record<string, unknown> | undefined;
+      const parsed = UpdateRedirectInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        // Preserve the established domain error code for unsupported status
+        // values while rejecting them at the shared-schema boundary.
+        const invalidStatusCode = parsed.error.issues.every(
+          (issue) => issue.path[0] === "statusCode",
+        );
+        return sendError(
+          reply,
+          invalidStatusCode ? "INVALID_STATUS_CODE" : "VALIDATION_ERROR",
+          invalidStatusCode
+            ? "Only 301, 302, 307, and 308 are allowed"
+            : "Invalid redirect input",
+          req.id,
+        );
+      }
+      // Zod's partial input permits explicit undefined, but the domain
+      // update contract only accepts fields with concrete values.
+      const updates: Partial<CreateRedirectData> = {};
+      if (parsed.data.source !== undefined) updates.source = parsed.data.source;
+      if (parsed.data.destination !== undefined)
+        updates.destination = parsed.data.destination;
+      if (parsed.data.statusCode !== undefined)
+        updates.statusCode = parsed.data.statusCode;
+      if (parsed.data.enabled !== undefined) updates.enabled = parsed.data.enabled;
+      if (parsed.data.sortOrder !== undefined)
+        updates.sortOrder = parsed.data.sortOrder;
       try {
         const redirect = await redirectsService.updateRedirect(
           id,
-          body ?? {},
+          updates,
           req.user!.id,
+          req.publicationContext!.publicationId,
         );
         return reply.status(200).send({ redirect });
       } catch (err) {
@@ -425,7 +456,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await redirectsService.deleteRedirect(id, req.user!.id);
+      await redirectsService.deleteRedirect(id, req.user!.id, req.publicationContext!.publicationId);
       return reply.status(200).send({ success: true });
     },
   });

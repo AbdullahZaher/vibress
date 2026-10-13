@@ -31,15 +31,21 @@ describe("publication-scoped native import/export processors", () => {
     );
   });
 
-  it("rejects secondary-publication global redirect imports before any writes", async () => {
+  it("imports redirects into the job publication", async () => {
     const deps = fixtures();
     const importer = new NativeImportProcessor(deps);
-    await expect(importer.process({
-      redirects: [{ source: "/global", destination: "/hijacked" }],
+    const result = await importer.process({
+      redirects: [{ source: "/moved", destination: "/alpha", enabled: false }],
       settings: { site: { title: "Changed" } },
-    }, "pub_alpha")).rejects.toThrow(/Global redirects/);
-    expect(deps.redirectsService.createRedirect).not.toHaveBeenCalled();
-    expect(deps.settingsService.updateSetting).not.toHaveBeenCalled();
+    }, "pub_alpha");
+    expect(result.redirects).toBe(1);
+    expect(deps.redirectsService.createRedirect).toHaveBeenCalledWith(
+      { source: "/moved", destination: "/alpha", statusCode: 301, enabled: false },
+      null, "pub_alpha",
+    );
+    expect(deps.settingsService.updateSetting).toHaveBeenCalledWith(
+      "site", "title", "Changed", null, "pub_alpha",
+    );
   });
 
   it("does not import credentials or executable public code", async () => {
@@ -54,7 +60,7 @@ describe("publication-scoped native import/export processors", () => {
     expect(deps.settingsService.updateSetting).toHaveBeenCalledWith("site", "title", "Safe", null, "pub_alpha");
   });
 
-  it("exports only the job publication's masked settings, never global redirects", async () => {
+  it("exports job-owned redirects without exposing credentials", async () => {
     const deps = fixtures();
     const collector = new NativeExportCollector(deps);
     const alpha = await collector.collect("pub_alpha");
@@ -64,12 +70,13 @@ describe("publication-scoped native import/export processors", () => {
         site: { title: "Publication Title" },
         security: {},
       },
-      redirects: [],
+      redirects: [{ source: "/secret", destination: "/global", statusCode: 301, enabled: true }],
     });
-    expect(deps.redirectsService.listRedirects).not.toHaveBeenCalled();
+    expect(deps.redirectsService.listRedirects).toHaveBeenCalledWith("pub_alpha");
 
     const legacy = await collector.collect("pub_default");
-    expect(deps.redirectsService.listRedirects).toHaveBeenCalledTimes(1);
+    expect(deps.redirectsService.listRedirects).toHaveBeenCalledWith("pub_default");
+    expect(deps.redirectsService.listRedirects).toHaveBeenCalledTimes(2);
     expect(Array.isArray(legacy.redirects)).toBe(true);
   });
 });

@@ -229,6 +229,22 @@ describe("Batch 14 — Operations Integration & Security", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().errors[0].code).toBe("INVALID_STATUS_CODE");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/redirects",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { source: `/x-code-patch-${Date.now()}`, destination: "/new" },
+    });
+    expect(created.statusCode).toBe(201);
+    const invalidUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/v1/redirects/${created.json().redirect.id}`,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { statusCode: 200 },
+    });
+    expect(invalidUpdate.statusCode).toBe(400);
+    expect(invalidUpdate.json().errors[0].code).toBe("INVALID_STATUS_CODE");
   });
 
   // ---------------- Import ----------------

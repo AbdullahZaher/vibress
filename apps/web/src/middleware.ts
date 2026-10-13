@@ -224,6 +224,49 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Redirects are resolved by the API using the public hostname, never a
+  // caller-supplied publication ID. Preserve the selected HTTP status.
+  // Protected/system paths are deliberately excluded from redirect rules.
+  const isRedirectCandidate =
+    (request.method === "GET" || request.method === "HEAD") &&
+    !["/private", "/favicon.ico", "/robots.txt", "/sitemap.xml"].includes(pathname) &&
+    !["/_next", "/api", "/admin", "/portal", "/health", "/content", "/assets", "/theme-assets", "/preview"].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
+  if (isRedirectCandidate) {
+    try {
+      const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host");
+      const apiUrl = new URL(`${API_BASE}/api/content/v1/redirects/resolve`);
+      apiUrl.searchParams.set("path", pathname);
+      const response = await fetch(apiUrl.toString(), {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+        },
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const rule = payload?.redirect;
+        if (
+          rule &&
+          typeof rule.destination === "string" &&
+          ((
+            rule.destination.startsWith("/") && !rule.destination.startsWith("//") && !rule.destination.includes("\\")
+          ) || rule.destination.startsWith("http://") || rule.destination.startsWith("https://")) &&
+          [301, 302, 307, 308].includes(rule.statusCode)
+        ) {
+          const target = new URL(rule.destination, request.url);
+          // Preserve the source query string if the destination has none.
+          if (!target.search) target.search = request.nextUrl.search;
+          return NextResponse.redirect(target, { status: rule.statusCode });
+        }
+      }
+    } catch {
+      // A temporarily unavailable API must not take down public rendering.
+    }
+  }
+
   // Locale detection & routing
   const segments = pathname.split("/").filter(Boolean);
   const firstSegment = segments[0]?.toLowerCase();

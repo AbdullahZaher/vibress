@@ -9,3 +9,4 @@ export * from "./newsletters";
 export * from "./community";
 export * from "./setup";
 export * from "./whats-new";
+export * from "./redirects";

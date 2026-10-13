@@ -46,20 +46,28 @@ export const settings = pgTable(
 export type SettingRow = typeof settings.$inferSelect;
 export type NewSettingRow = typeof settings.$inferInsert;
 
-export const redirects = pgTable("redirects", {
-  id: text("id").primaryKey(),
-  source: text("source").notNull().unique(),
-  destination: text("destination").notNull(),
-  statusCode: integer("status_code").notNull().default(301),
-  enabled: boolean("enabled").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const redirects = pgTable(
+  "redirects",
+  {
+    id: text("id").primaryKey(),
+    publicationId: text("publication_id").notNull().default("pub_default").references(() => publications.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    destination: text("destination").notNull(),
+    statusCode: integer("status_code").notNull().default(301),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    publicationSourceIdx: uniqueIndex("redirects_publication_source_idx").on(table.publicationId, table.source),
+    publicationEnabledIdx: index("redirects_publication_enabled_idx").on(table.publicationId, table.enabled),
+  }),
+);
 
 export type RedirectRow = typeof redirects.$inferSelect;
 export type NewRedirectRow = typeof redirects.$inferInsert;

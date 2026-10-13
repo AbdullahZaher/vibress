@@ -33,12 +33,26 @@ export const ALLOWED_REDIRECT_CODES = [301, 302, 307, 308];
 
 export const MAX_REDIRECT_CHAIN = 10;
 
+// WHATWG URL pathnames percent-encode Unicode. Allow matching stored readable
+// paths without permitting encoded slashes/backslashes or protected route
+// prefixes to bypass the same validation.
+function decodedSafeSource(path: string): string | null {
+  if (/%2f|%5c/i.test(path) || path.includes("\\")) return null;
+  try {
+    return decodeURI(path);
+  } catch {
+    return null;
+  }
+}
+
+
 export class RedirectsService {
   constructor(private repo: RedirectRepository) {}
 
   async createRedirect(
     data: CreateRedirectData,
     actorId: string | null,
+    publicationId = "pub_default",
   ): Promise<Redirect> {
     this.validateSource(data.source);
     this.validateDestination(data.destination);
@@ -51,15 +65,15 @@ export class RedirectsService {
         "Only 301, 302, 307, and 308 are allowed",
       );
     }
-    const existing = await this.repo.findBySource(data.source);
+    const existing = await this.repo.findBySource(data.source, publicationId);
     if (existing)
       throw new RedirectDomainError(
         "SOURCE_EXISTS",
         "A redirect with this source already exists",
       );
 
-    const redirect = await this.repo.create(data);
-    domainEvents.emit("redirect.created", { redirectId: redirect.id, actorId });
+    const redirect = await this.repo.create(data, publicationId);
+    domainEvents.emit("redirect.created", { redirectId: redirect.id, actorId, publicationId });
     return redirect;
   }
 
@@ -67,8 +81,9 @@ export class RedirectsService {
     id: string,
     data: Partial<CreateRedirectData>,
     actorId: string | null,
+    publicationId = "pub_default",
   ): Promise<Redirect> {
-    const existing = await this.repo.findById(id);
+    const existing = await this.repo.findById(id, publicationId);
     if (!existing)
       throw new RedirectDomainError("REDIRECT_NOT_FOUND", "Redirect not found");
     if (data.source !== undefined) this.validateSource(data.source);
@@ -83,18 +98,24 @@ export class RedirectsService {
         "Only 301, 302, 307, and 308 are allowed",
       );
     }
-    const updated = await this.repo.update(id, data);
-    domainEvents.emit("redirect.updated", { redirectId: id, actorId });
+    if (data.source && data.source !== existing.source && await this.repo.findBySource(data.source, publicationId)) {
+      throw new RedirectDomainError("SOURCE_EXISTS", "A redirect with this source already exists");
+    }
+    const updated = await this.repo.update(id, data, publicationId);
+    domainEvents.emit("redirect.updated", { redirectId: id, actorId, publicationId });
     return updated;
   }
 
-  async deleteRedirect(id: string, actorId: string | null): Promise<void> {
-    await this.repo.delete(id);
-    domainEvents.emit("redirect.deleted", { redirectId: id, actorId });
+  async deleteRedirect(id: string, actorId: string | null, publicationId = "pub_default"): Promise<void> {
+    // Preserve idempotent DELETE semantics. Missing/foreign IDs must not
+    // mutate data or emit a misleading cross-publication domain event.
+    if (!await this.repo.findById(id, publicationId)) return;
+    await this.repo.delete(id, publicationId);
+    domainEvents.emit("redirect.deleted", { redirectId: id, actorId, publicationId });
   }
 
-  async listRedirects(): Promise<Redirect[]> {
-    return this.repo.list();
+  async listRedirects(publicationId = "pub_default"): Promise<Redirect[]> {
+    return this.repo.list(publicationId);
   }
 
   /**
@@ -103,23 +124,34 @@ export class RedirectsService {
    */
   async resolve(
     path: string,
+    publicationId = "pub_default",
   ): Promise<{ destination: string; statusCode: number } | null> {
-    const redirects = await this.repo.listEnabled();
-    const map = new Map(redirects.map((r) => [r.source, r]));
-    let current = path;
     const seen = new Set<string>();
-    let hops = 0;
+    const safePath = decodedSafeSource(path);
+    if (!safePath || PROTECTED_ROUTE_PREFIXES.some((prefix) => safePath.startsWith(prefix))) return null;
+    let current = path;
+    let lastStatusCode = 301;
 
-    while (hops < MAX_REDIRECT_CHAIN) {
-      if (seen.has(current)) break; // loop
+    // One indexed publication/source lookup per hop; never load all site
+    // redirects into memory on the public request path.
+    for (let hops = 0; hops <= MAX_REDIRECT_CHAIN; hops++) {
+      if (seen.has(current)) return null;
       seen.add(current);
-      const rule = map.get(current);
-      if (!rule) break;
-      current = rule.destination;
-      hops++;
-      if (!map.has(current)) {
-        return { destination: current, statusCode: rule.statusCode };
+
+      const decoded = decodedSafeSource(current);
+      const rule = await this.repo.findBySource(current, publicationId) ??
+        (decoded && decoded !== current
+          ? await this.repo.findBySource(decoded, publicationId)
+          : null);
+      if (!rule || !rule.enabled) {
+        return hops === 0
+          ? null
+          : { destination: current, statusCode: lastStatusCode };
       }
+      if (hops === MAX_REDIRECT_CHAIN) return null;
+
+      current = rule.destination;
+      lastStatusCode = rule.statusCode;
     }
     return null;
   }
@@ -133,12 +165,13 @@ export class RedirectsService {
     }
     if (source.length > 500)
       throw new RedirectDomainError("INVALID_SOURCE", "Source is too long");
+    const decoded = decodedSafeSource(source);
+    if (decoded === null) {
+      throw new RedirectDomainError("INVALID_SOURCE", "Invalid encoded redirect source");
+    }
     for (const prefix of PROTECTED_ROUTE_PREFIXES) {
-      if (source.startsWith(prefix)) {
-        throw new RedirectDomainError(
-          "PROTECTED_ROUTE",
-          `Cannot redirect protected route prefix: ${prefix}`,
-        );
+      if (decoded.startsWith(prefix)) {
+        throw new RedirectDomainError("PROTECTED_ROUTE", `Cannot redirect protected route prefix: ${prefix}`);
       }
     }
   }
@@ -171,8 +204,10 @@ export class RedirectsService {
       }
       return;
     }
-    // Internal destination: relative path
-    if (!destination.startsWith("/") || destination.startsWith("//")) {
+    // Internal destination: relative path. WHATWG URL parsing treats backslashes
+    // like slashes for special schemes, which could turn /\\evil into an
+    // unexpected external host.
+    if (!destination.startsWith("/") || destination.startsWith("//") || destination.includes("\\")) {
       throw new RedirectDomainError(
         "INVALID_DESTINATION",
         "Internal destinations must start with /",
