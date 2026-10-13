@@ -13,6 +13,7 @@ import {
 function makeRedirect(overrides: Partial<Redirect> = {}): Redirect {
   return {
     id: "r1",
+    publicationId: "pub_default",
     source: "/old-path",
     destination: "/new-path",
     statusCode: 301,
@@ -167,4 +168,47 @@ describe("RedirectsService", () => {
     const resolved = await service.resolve("/a");
     expect(resolved).toBeNull(); // loop broken
   });
+  it("scopes duplicate checks and creation to the authorized publication", async () => {
+    const service = makeService();
+    await service.createRedirect({ source: "/shared", destination: "/alpha" }, "staff", "pub_alpha");
+    expect(repo.findBySource).toHaveBeenCalledWith("/shared", "pub_alpha");
+    expect(repo.create).toHaveBeenCalledWith(
+      { source: "/shared", destination: "/alpha" }, "pub_alpha",
+    );
+  });
+
+  it("prevents modification or deletion of redirects outside the requested publication", async () => {
+    const scopedRepo: RedirectRepository = {
+      ...repo,
+      findById: vi.fn(async (_id, publicationId) =>
+        publicationId === "pub_alpha" ? makeRedirect({publicationId: "pub_alpha"}) : null,
+      ),
+      update: vi.fn(async (_id, data, publicationId) => makeRedirect({...data, publicationId})),
+      delete: vi.fn(async () => undefined),
+    };
+    const service = makeService({repo: scopedRepo});
+    await expect(service.updateRedirect("r1", {destination: "/stolen"}, "staff", "pub_beta"))
+      .rejects.toMatchObject({code: "REDIRECT_NOT_FOUND"});
+    await expect(service.deleteRedirect("r1", "staff", "pub_beta"))
+      .rejects.toMatchObject({code: "REDIRECT_NOT_FOUND"});
+    expect(scopedRepo.update).not.toHaveBeenCalled();
+    expect(scopedRepo.delete).not.toHaveBeenCalled();
+    await service.updateRedirect("r1", {destination: "/owned"}, "staff", "pub_alpha");
+    expect(scopedRepo.update).toHaveBeenCalledWith("r1", {destination: "/owned"}, "pub_alpha");
+  });
+
+  it("passes publication ownership into the public enabled-rules lookup", async () => {
+    const scopedRepo: RedirectRepository = {
+      ...repo,
+      listEnabled: vi.fn(async publicationId =>
+        publicationId === "pub_alpha"
+          ? [makeRedirect({source: "/shared", destination: "/alpha", publicationId: "pub_alpha"})]
+          : [makeRedirect({source: "/shared", destination: "/beta", publicationId: "pub_beta"})],
+      ),
+    };
+    const service = makeService({repo: scopedRepo});
+    expect(await service.resolve("/shared", "pub_alpha")).toEqual({destination: "/alpha", statusCode: 301});
+    expect(await service.resolve("/shared", "pub_beta")).toEqual({destination: "/beta", statusCode: 301});
+  });
+
 });
