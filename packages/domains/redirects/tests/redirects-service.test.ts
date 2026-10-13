@@ -98,6 +98,13 @@ describe("RedirectsService", () => {
     ).rejects.toMatchObject({ code: "INVALID_DESTINATION" });
   });
 
+  it("rejects backslash-relative destinations that URL parsers may treat as external hosts", async () => {
+    const service = makeService();
+    await expect(
+      service.createRedirect({source: "/unsafe", destination: "/\\\\evil.example"}, null),
+    ).rejects.toMatchObject({code: "INVALID_DESTINATION"});
+  });
+
   it("allows http/https external destinations", async () => {
     const service = makeService();
     const redirect = await service.createRedirect(
