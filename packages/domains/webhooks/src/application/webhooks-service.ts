@@ -205,10 +205,11 @@ export class WebhooksService {
     const secret = endpoint.secretEncrypted
       ? decryptSecret(endpoint.secretEncrypted)
       : "";
+    const timestamp = new Date().toISOString();
     const eventPayload = JSON.stringify({
       id: deliveryRow.eventId,
       type: deliveryRow.eventType,
-      timestamp: new Date().toISOString(),
+      timestamp,
     });
     const signature = crypto
       .createHmac("sha256", secret)
@@ -225,8 +226,9 @@ export class WebhooksService {
           "X-Vibress-Event-Id": deliveryRow.eventId,
           "X-Vibress-Event-Type": deliveryRow.eventType,
           "X-Vibress-Signature": `sha256=${signature}`,
-          "X-Vibress-Timestamp": new Date().toISOString(),
+          "X-Vibress-Timestamp": timestamp,
         },
+        body: eventPayload,
       });
       // Workaround: safeFetch currently returns body on GET; for POST we
       // inspect status only. Any 2xx counts as delivered.
@@ -246,7 +248,11 @@ export class WebhooksService {
         return { status: "dead_letter", responseStatus: null };
       }
       await this.repo.markFailed(deliveryRow.id, errMsg, attempt);
-      await this.dispatcher.enqueue(deliveryRow.id, endpoint.id);
+      await this.dispatcher.enqueue(
+        deliveryRow.id,
+        endpoint.id,
+        endpoint.publicationId,
+      );
       return { status: "failed", responseStatus: null };
     }
   }
@@ -273,7 +279,16 @@ export class WebhooksService {
     let retried = 0;
     for (const delivery of deliveries) {
       if (delivery.attemptCount < MAX_RETRIES) {
-        await this.dispatcher.enqueue(delivery.id, delivery.endpointId);
+        const endpoint = await this.repo.findEndpointById(delivery.endpointId);
+        if (!endpoint) {
+          await this.repo.markDeadLetter(delivery.id, "webhook endpoint not found");
+          continue;
+        }
+        await this.dispatcher.enqueue(
+          delivery.id,
+          delivery.endpointId,
+          endpoint.publicationId,
+        );
         retried++;
       }
     }
