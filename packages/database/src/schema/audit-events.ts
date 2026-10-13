@@ -4,6 +4,7 @@ export const auditEvents = pgTable(
   "audit_events",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id"),
     actorUserId: text("actor_user_id"),
     action: text("action").notNull(),
     targetType: text("target_type"),
@@ -18,6 +19,9 @@ export const auditEvents = pgTable(
   },
   (table) => {
     return {
+      publicationCreatedAtIdx: index(
+        "audit_events_publication_id_created_at_idx",
+      ).on(table.publicationId, table.createdAt),
       actorUserIdIdx: index("audit_events_actor_user_id_idx").on(
         table.actorUserId,
       ),
