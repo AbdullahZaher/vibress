@@ -213,11 +213,11 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       await anonPage.waitForURL(`${BASE_URL}/`, { timeout: 10000 });
       expect(anonPage.url()).toBe(`${BASE_URL}/`);
 
-      // 4b. Verify the generated cookie is HMAC-signed (v1.<timestamp>.<hmac>)
+      // 4b. Verify the publication-scoped v2 cookie has a timestamp and HMAC.
       const cookies = await anonContext.cookies();
       const authCookie = cookies.find((c) => c.name === "vb_site_auth");
       expect(authCookie).toBeDefined();
-      expect(authCookie?.value).toMatch(/^v1\.\d+\.[a-f0-9]{64}$/);
+      expect(authCookie?.value).toMatch(/^v2\.\d+\.[A-Za-z0-9_-]+\.[a-f0-9]{64}$/);
     } finally {
       // 5. Disable privacy again
       await request.put(
