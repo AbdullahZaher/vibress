@@ -122,6 +122,35 @@ describe("Themes Multi-Publication Isolation", () => {
     expect(betaMatch?.id).toBe(betaThemeDbId);
   });
 
+  it("detects shared legacy package references before storage mutation", async () => {
+    const alpha = await repo.findById(alphaThemeDbId, "pub_alpha");
+    const beta = await repo.findById(betaThemeDbId, "pub_beta");
+    if (!alpha || !beta) throw new Error("Missing fixture themes");
+
+    expect(
+      await repo.hasOtherPublicationStorageReferences(
+        sharedThemeId,
+        sharedVersion,
+        alpha.storagePath,
+        "pub_alpha",
+      ),
+    ).toBe(false);
+
+    try {
+      await repo.update({ ...beta, storagePath: alpha.storagePath }, "pub_beta");
+      expect(
+        await repo.hasOtherPublicationStorageReferences(
+          sharedThemeId,
+          sharedVersion,
+          alpha.storagePath,
+          "pub_alpha",
+        ),
+      ).toBe(true);
+    } finally {
+      await repo.update(beta, "pub_beta");
+    }
+  });
+
   it("rejects cross-publication deletion", async () => {
     // Adversarial: pub_beta tries to delete alpha's theme
     await repo.delete(sharedThemeId, "pub_beta");
