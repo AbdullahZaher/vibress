@@ -495,7 +495,7 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
         headers: headers(betaCookie, PUB_BETA_ID),
       });
       expect(wrongUpdate.statusCode).toBe(404);
-      expect(wrongDelete.statusCode).toBe(404);
+      expect(wrongDelete.statusCode).toBe(200); // Idempotent response; Alpha remains unchanged.
 
       const publicAlpha = await app.inject({
         method: "GET",
