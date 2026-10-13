@@ -45,6 +45,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
   ): Promise<string> {
     const root = this.getThemeRootPath(themeId, version, publicationId);
+    const previousFiles = await this.listThemeFiles(themeId, version, publicationId);
     const fileList: string[] = [];
 
     for (const [relPath, buffer] of files.entries()) {
@@ -76,7 +77,28 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       contentType: "application/json",
     });
 
+    // The new index is authoritative: removed files must not survive a
+    // same-version replacement. A failed cleanup cannot unpublish the index.
+    for (const staleFile of previousFiles) {
+      if (!files.has(staleFile)) {
+        await this.storageProvider.delete(this.getObjectKey(themeId, version, staleFile, publicationId)).catch(() => {});
+      }
+    }
+
     return root;
+  }
+
+  private async readObject(key: string): Promise<Buffer | null> {
+    try {
+      if (typeof (this.storageProvider as any).getObjectBuffer === "function") {
+        return await (this.storageProvider as any).getObjectBuffer(key);
+      }
+      const url = await this.storageProvider.getUrl(key);
+      const response = await fetch(url);
+      return response.ok ? Buffer.from(await response.arrayBuffer()) : null;
+    } catch {
+      return null;
+    }
   }
 
   async getThemeFile(
@@ -84,48 +106,45 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     version: string,
     relativePath: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<Buffer | null> {
-    let key = this.getObjectKey(
-      themeId,
-      version,
-      relativePath,
-      publicationId,
-    );
-    let exists = await this.storageProvider.exists(key);
-    if (!exists && publicationId !== "pub_default") {
-      // A scoped package is authoritative once installed. Falling back for
-      // individual missing files could serve another publication's templates
-      // or assets when theme IDs and versions happen to match.
-      const scopedIndex = `${this.getThemeRootPath(themeId, version, publicationId)}/__files.json`;
-      if (!(await this.storageProvider.exists(scopedIndex))) {
-        const legacyRoot = this.getLegacyThemeRootPath(themeId, version);
-        const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-        key = `${legacyRoot}/${cleanRel}`;
-        exists = await this.storageProvider.exists(key);
-      }
-    }
-    if (!exists) return null;
+    const cleanRel = relativePath.replace(/\\\\/g, "/").replace(/^\\/+/, "");
+    const scopedRoot = this.getThemeRootPath(themeId, version, publicationId);
+    const scopedIndex = `${scopedRoot}/__files.json`;
+    const hasScopedIndex = await this.storageProvider.exists(scopedIndex);
+    // A legacy package is readable only after its installed-theme row has
+    // authorized the fallback. Never borrow individual missing scoped files.
+    const root = !hasScopedIndex && publicationId !== "pub_default" && allowLegacyFallback
+      ? this.getLegacyThemeRootPath(themeId, version)
+      : scopedRoot;
+    const key = `${root}/${cleanRel}`;
+    if (!(await this.storageProvider.exists(key))) return null;
 
-    try {
-      if (typeof (this.storageProvider as any).getObjectBuffer === "function") {
-        return await (this.storageProvider as any).getObjectBuffer(key);
+    // Packages written by this adapter publish their manifest last. Enforce
+    // its allowlist so stale objects cannot be read after a replacement.
+    const indexKey = `${root}/__files.json`;
+    if (cleanRel !== "__files.json" && await this.storageProvider.exists(indexKey)) {
+      const index = await this.readObject(indexKey);
+      if (!index) return null;
+      try {
+        const files: unknown = JSON.parse(index.toString("utf-8"));
+        if (!Array.isArray(files) || !files.every((file) => typeof file === "string") ||
+            !files.includes(cleanRel)) {
+          return null;
+        }
+      } catch {
+        return null;
       }
-      const url = await this.storageProvider.getUrl(key);
-      const res = await fetch(url);
-      if (res.ok) {
-        const arr = await res.arrayBuffer();
-        return Buffer.from(arr);
-      }
-      return null;
-    } catch {
-      return null;
     }
+
+    return this.readObject(key);
   }
 
   async listThemeFiles(
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<string[]> {
     try {
       const fileBuffer = await this.getThemeFile(
@@ -133,6 +152,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
         version,
         "__files.json",
         publicationId,
+        allowLegacyFallback,
       );
       if (fileBuffer) {
         return JSON.parse(fileBuffer.toString("utf-8"));
@@ -148,8 +168,9 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<Map<string, string>> {
-    const files = await this.listThemeFiles(themeId, version, publicationId);
+    const files = await this.listThemeFiles(themeId, version, publicationId, allowLegacyFallback);
     const map = new Map<string, string>();
 
     for (const f of files) {
@@ -166,6 +187,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
           version,
           f,
           publicationId,
+          allowLegacyFallback,
         );
         if (buf) {
           map.set(f, buf.toString("utf-8"));
@@ -196,6 +218,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<boolean> {
     const key = this.getObjectKey(
       themeId,
@@ -204,7 +227,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       publicationId,
     );
     if (await this.storageProvider.exists(key)) return true;
-    if (publicationId !== "pub_default") {
+    if (publicationId !== "pub_default" && allowLegacyFallback) {
       const scopedIndex = `${this.getThemeRootPath(themeId, version, publicationId)}/__files.json`;
       if (await this.storageProvider.exists(scopedIndex)) return false;
       const legacyKey = `${this.getLegacyThemeRootPath(themeId, version)}/theme.json`;
