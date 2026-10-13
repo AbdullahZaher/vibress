@@ -94,9 +94,7 @@ export class RedirectsService {
   }
 
   async deleteRedirect(id: string, actorId: string | null, publicationId = "pub_default"): Promise<void> {
-    if (!await this.repo.findById(id, publicationId)) {
-      throw new RedirectDomainError("REDIRECT_NOT_FOUND", "Redirect not found");
-    }
+    // Preserve idempotent DELETE semantics while enforcing tenant scope.
     await this.repo.delete(id, publicationId);
     domainEvents.emit("redirect.deleted", { redirectId: id, actorId, publicationId });
   }
