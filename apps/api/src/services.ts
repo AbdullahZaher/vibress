@@ -517,9 +517,11 @@ export const importExportService = new ImportExportService(
 // ---------------- AI Gateway Subsystem ----------------
 import { AiGatewayService, AiGatewayConfig, AiProviderType } from "@vibress/ai";
 
-export async function getAiGatewayService(): Promise<AiGatewayService> {
+export async function getAiGatewayService(
+  publicationId = "pub_default",
+): Promise<AiGatewayService> {
   const aiSettings = await settingsService
-    .getRawSettings("ai")
+    .getRawSettings("ai", publicationId)
     .catch(() => ({} as Record<string, unknown>));
 
   const providers: AiGatewayConfig["providers"] = {};
