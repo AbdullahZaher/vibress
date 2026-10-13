@@ -62,6 +62,9 @@ async function setup(client: PoolClient, schema: string): Promise<void> {
        '{"id":"editorial-pro","version":"1.0.0"}', 'themes/editorial-pro/1.0.0'),
       ('src_b', 'pub_default', 'other-theme', 'Other Theme', '1.0.0',
        '{"id":"other-theme","version":"1.0.0"}', 'themes/other-theme/1.0.0'),
+      ('src_inactive', 'pub_default', 'new-default-theme', 'Default Only', '1.0.0',
+       '{"id":"new-default-theme","version":"1.0.0"}',
+       'themes/new-default-theme/1.0.0'),
       ('already_installed', 'pub_inherited', 'other-theme', 'Local Version',
        '1.0.0', '{"id":"other-theme","version":"1.0.0"}',
        'themes/publications/pub_inherited/other-theme/1.0.0');
@@ -96,6 +99,8 @@ describe("migration 0032 legacy installed themes upgrade", () => {
         ORDER BY theme_id
       `);
 
+      // Do not copy an unrelated theme installed by pub_default, even
+      // though it appears in the global legacy inventory.
       expect(inherited.rows).toHaveLength(2);
       expect(inherited.rows[0]).toMatchObject({
         theme_id: "editorial-pro",
