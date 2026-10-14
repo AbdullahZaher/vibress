@@ -17,6 +17,7 @@ export interface ThemeStorageAdapter {
     relativePath: string,
     publicationId?: string,
     allowLegacyFallback?: boolean,
+    generation?: string,
   ): Promise<Buffer | null>;
   listThemeFiles(
     themeId: string,
@@ -52,6 +53,98 @@ export interface FileSystemThemeStorageOptions {
   storageRoot?: string | undefined;
 }
 
+export function validateStorageThemeId(themeId: string): string {
+  if (
+    !themeId ||
+    typeof themeId !== "string" ||
+    !/^[a-z0-9-]{1,64}$/.test(themeId) ||
+    themeId === "." ||
+    themeId === ".."
+  ) {
+    throw new Error(`Invalid theme ID: ${themeId}`);
+  }
+  return themeId;
+}
+
+export function validateStorageVersion(version: string): string {
+  if (
+    !version ||
+    typeof version !== "string" ||
+    !/^\d+(\.\d+)*(-[a-zA-Z0-9.]+)?$/.test(version) ||
+    version.split(".").some((part) => part === "" || part === ".." || part === ".")
+  ) {
+    throw new Error(`Invalid theme version: ${version}`);
+  }
+  return version;
+}
+
+export function validateStoragePublicationId(publicationId: string): string {
+  if (
+    !publicationId ||
+    typeof publicationId !== "string" ||
+    !/^[a-zA-Z0-9_-]{1,128}$/.test(publicationId) ||
+    publicationId === "." ||
+    publicationId === ".."
+  ) {
+    throw new Error(`Invalid publication ID: ${publicationId}`);
+  }
+  return publicationId;
+}
+
+export function validateThemeRelativePath(relativePath: string): string {
+  if (!relativePath || typeof relativePath !== "string") {
+    throw new Error("Invalid theme file path");
+  }
+  if (relativePath.includes("\0")) {
+    throw new Error("Invalid theme file path");
+  }
+
+  // URL-encoded traversal check (%2e%2e, %2f, %5c, %00, etc.)
+  if (/%[0-9a-fA-F]{2}/.test(relativePath)) {
+    try {
+      const decoded = decodeURIComponent(relativePath);
+      if (
+        decoded.includes("\0") ||
+        decoded.includes("..") ||
+        decoded.startsWith("/") ||
+        decoded.startsWith("\\")
+      ) {
+        throw new Error("Invalid theme file path");
+      }
+    } catch {
+      throw new Error("Invalid theme file path");
+    }
+  }
+
+  // Standardize backslashes
+  const normalized = relativePath.replace(/\\/g, "/");
+
+  // Reject absolute paths
+  if (normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized)) {
+    throw new Error("Invalid theme file path");
+  }
+
+  const segments = normalized.split("/");
+  for (const seg of segments) {
+    if (seg === "" || seg === "." || seg === "..") {
+      throw new Error("Invalid theme file path");
+    }
+  }
+
+  // Prevent reserved internal files
+  const baseName = segments[segments.length - 1];
+  if (
+    !baseName ||
+    baseName === "__files.json" ||
+    baseName === "__package.json" ||
+    baseName.startsWith("__vibress_")
+  ) {
+    throw new Error("Invalid theme file path");
+  }
+
+  return segments.join("/");
+}
+
 export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
   private storageRoot: string;
 
@@ -66,25 +159,42 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     version: string,
     publicationId = "pub_default",
   ): string {
-    const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
-    const cleanVersion = version.replace(/[^0-9.]/g, "");
-    const cleanPublicationId = publicationId.replace(/[^a-zA-Z0-9_-]/g, "");
-    if (publicationId === "pub_default") {
-      return path.join(this.storageRoot, cleanId, cleanVersion);
+    const cleanId = validateStorageThemeId(themeId);
+    const cleanVersion = validateStorageVersion(version);
+    const cleanPublicationId = validateStoragePublicationId(publicationId);
+
+    let targetDir: string;
+    if (cleanPublicationId === "pub_default") {
+      targetDir = path.join(this.storageRoot, cleanId, cleanVersion);
+    } else {
+      targetDir = path.join(
+        this.storageRoot,
+        "publications",
+        cleanPublicationId,
+        cleanId,
+        cleanVersion,
+      );
     }
-    return path.join(
-      this.storageRoot,
-      "publications",
-      cleanPublicationId,
-      cleanId,
-      cleanVersion,
-    );
+
+    const resolved = path.resolve(targetDir);
+    const relative = path.relative(this.storageRoot, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error("Invalid theme file path");
+    }
+
+    return targetDir;
   }
 
   private getLegacyThemeRootPath(themeId: string, version: string): string {
-    const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
-    const cleanVersion = version.replace(/[^0-9.]/g, "");
-    return path.join(this.storageRoot, cleanId, cleanVersion);
+    const cleanId = validateStorageThemeId(themeId);
+    const cleanVersion = validateStorageVersion(version);
+    const targetDir = path.join(this.storageRoot, cleanId, cleanVersion);
+    const resolved = path.resolve(targetDir);
+    const relative = path.relative(this.storageRoot, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error("Invalid theme file path");
+    }
+    return targetDir;
   }
 
   private resolveReadableThemeRoot(
@@ -108,7 +218,16 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     files: Map<string, Buffer>,
     publicationId = "pub_default",
   ): Promise<string> {
-    const themeDir = this.getThemeRootPath(themeId, version, publicationId);
+    const cleanId = validateStorageThemeId(themeId);
+    const cleanVersion = validateStorageVersion(version);
+    const cleanPublicationId = validateStoragePublicationId(publicationId);
+
+    // Validate all file paths before any filesystem modifications
+    for (const relPath of files.keys()) {
+      validateThemeRelativePath(relPath);
+    }
+
+    const themeDir = this.getThemeRootPath(cleanId, cleanVersion, cleanPublicationId);
     const stagingDir = `${themeDir}.staging-${randomUUID()}`;
     const backupDir = `${themeDir}.backup-${randomUUID()}`;
     await fs.promises.mkdir(stagingDir, { recursive: true });
@@ -116,7 +235,8 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     try {
       // Assemble a complete replacement before touching the installed package.
       for (const [relPath, buffer] of files.entries()) {
-        const fullPath = path.resolve(stagingDir, relPath);
+        const cleanRel = validateThemeRelativePath(relPath);
+        const fullPath = path.resolve(stagingDir, cleanRel);
         const relative = path.relative(stagingDir, fullPath);
         if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
           throw new Error("Invalid theme file path");
@@ -149,14 +269,24 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     relativePath: string,
     publicationId = "pub_default",
     allowLegacyFallback = false,
+    _generation?: string,
   ): Promise<Buffer | null> {
+    let cleanRel: string;
+    try {
+      cleanRel = validateThemeRelativePath(relativePath);
+      validateStorageThemeId(themeId);
+      validateStorageVersion(version);
+      validateStoragePublicationId(publicationId);
+    } catch {
+      return null;
+    }
+
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
       publicationId,
       allowLegacyFallback,
     );
-    const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
     const fullPath = path.join(themeDir, cleanRel);
 
     const relativeToTheme = path.relative(themeDir, fullPath);
@@ -180,6 +310,14 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
     allowLegacyFallback = false,
   ): Promise<string[]> {
+    try {
+      validateStorageThemeId(themeId);
+      validateStorageVersion(version);
+      validateStoragePublicationId(publicationId);
+    } catch {
+      return [];
+    }
+
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
@@ -192,6 +330,7 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     async function scan(dir: string, prefix = "") {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
+        if (entry.name.startsWith("__")) continue;
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
           await scan(path.join(dir, entry.name), rel);
@@ -202,7 +341,7 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     }
 
     await scan(themeDir);
-    return fileList;
+    return fileList.sort();
   }
 
   async getThemeFilesMap(
@@ -244,6 +383,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     version: string,
     publicationId = "pub_default",
   ): Promise<void> {
+    try {
+      validateStorageThemeId(themeId);
+      validateStorageVersion(version);
+      validateStoragePublicationId(publicationId);
+    } catch {
+      return;
+    }
     const themeDir = this.getThemeRootPath(themeId, version, publicationId);
     if (fs.existsSync(themeDir)) {
       await fs.promises.rm(themeDir, { recursive: true, force: true });
@@ -268,6 +414,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
     allowLegacyFallback = false,
   ): Promise<boolean> {
+    try {
+      validateStorageThemeId(themeId);
+      validateStorageVersion(version);
+      validateStoragePublicationId(publicationId);
+    } catch {
+      return false;
+    }
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
@@ -325,4 +478,9 @@ export function createThemeStorageAdapter(
   );
 }
 
-export { StorageProviderThemeStorageAdapter };
+export {
+  StorageProviderThemeStorageAdapter,
+  isSafeSignedUrl,
+  isPrivateOrRestrictedIP,
+  type ThemePackageManifest,
+} from "./storage-provider-theme-storage-adapter";

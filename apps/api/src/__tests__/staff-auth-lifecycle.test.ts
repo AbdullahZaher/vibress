@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb, publicationMemberships } from "@vibress/database";
+import { getDb, publicationMemberships, seedDatabase } from "@vibress/database";
 import { and, eq } from "drizzle-orm";
 
 describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite", () => {
@@ -9,6 +9,7 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
   let ownerCookie: string;
 
   beforeAll(async () => {
+    await seedDatabase();
     app = buildApp();
     await app.ready();
 

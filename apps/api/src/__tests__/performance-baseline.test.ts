@@ -26,42 +26,56 @@ function calculatePercentiles(latencies: number[]): LatencyStats {
   };
 }
 
-import { getDb, users, userRoles, roles, eq } from "@vibress/database";
+import { getDb, users, userRoles, roles, eq, publicationMemberships } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import crypto from "node:crypto";
 
 async function ensureOwner(): Promise<void> {
   const db = getDb();
+  let ownerId: string;
   const rows = await db
     .select()
     .from(users)
     .where(eq(users.email, "owner@example.com"))
     .limit(1);
-  if (rows.length > 0) return;
-  const hash = await hashPassword("OwnerPass123!");
-  const ownerId = crypto.randomUUID();
+  if (rows.length === 0) {
+    const hash = await hashPassword("OwnerPass123!");
+    ownerId = crypto.randomUUID();
+    await db
+      .insert(users)
+      .values({
+        id: ownerId,
+        email: "owner@example.com",
+        name: "Owner",
+        slug: "perf-owner",
+        passwordHash: hash,
+        status: "active",
+      })
+      .onConflictDoNothing();
+    const ownerRole = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.key, "owner"))
+      .limit(1);
+    if (ownerRole[0]) {
+      await db
+        .insert(userRoles)
+        .values({ userId: ownerId, roleId: ownerRole[0].id })
+        .onConflictDoNothing();
+    }
+  } else {
+    ownerId = rows[0]!.id;
+  }
+
   await db
-    .insert(users)
+    .insert(publicationMemberships)
     .values({
-      id: ownerId,
-      email: "owner@example.com",
-      name: "Owner",
-      slug: "perf-owner",
-      passwordHash: hash,
-      status: "active",
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId: ownerId,
+      role: "owner",
     })
     .onConflictDoNothing();
-  const ownerRole = await db
-    .select({ id: roles.id })
-    .from(roles)
-    .where(eq(roles.name, "owner"))
-    .limit(1);
-  if (ownerRole[0]) {
-    await db
-      .insert(userRoles)
-      .values({ userId: ownerId, roleId: ownerRole[0].id })
-      .onConflictDoNothing();
-  }
 }
 
 describe("Latency percentile calculation", () => {

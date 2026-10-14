@@ -20,9 +20,23 @@ function findThemeDirectory(
   publicationId = "pub_default",
   legacyStorage = false,
 ): string | null {
-  const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
-  const cleanVersion = version.replace(/[^0-9.]/g, "");
-  const cleanPublicationId = publicationId.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (
+    !themeId ||
+    !/^[a-z0-9-]{1,64}$/.test(themeId) ||
+    !version ||
+    !/^\d+(\.\d+)*(-[a-zA-Z0-9.]+)?$/.test(version) ||
+    version.includes("..") ||
+    !publicationId ||
+    !/^[a-zA-Z0-9_-]{1,128}$/.test(publicationId) ||
+    publicationId === ".." ||
+    publicationId === "."
+  ) {
+    return null;
+  }
+
+  const cleanId = themeId;
+  const cleanVersion = version;
+  const cleanPublicationId = publicationId;
 
   const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
 

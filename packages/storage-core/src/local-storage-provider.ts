@@ -221,4 +221,16 @@ export class LocalStorageProvider implements StorageProvider {
     const cleanKey = key.replace(/\\/g, "/").replace(/^\/+/, "");
     return `${this.baseUrl}/${cleanKey}`;
   }
+
+  async getObjectBuffer(key: string): Promise<Buffer | null> {
+    const targetPath = this.resolveKeyPath(key);
+    try {
+      if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+        return await fs.promises.readFile(targetPath);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }

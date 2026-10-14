@@ -159,6 +159,31 @@ export class S3StorageProvider implements StorageProvider {
     }
   }
 
+  async getObjectBuffer(key: string): Promise<Buffer | null> {
+    const normalizedKey = this.normalizeKey(key);
+    try {
+      const command = new GetObjectCommand({
+        Bucket: this.resolvedConfig.bucket,
+        Key: normalizedKey,
+      });
+      const response = await this.client.send(command);
+      if (!response.Body) {
+        return null;
+      }
+      const bytes = await response.Body.transformToByteArray();
+      return Buffer.from(bytes);
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        ((err as { name?: string }).name === "NoSuchKey" ||
+          (err as { name?: string }).name === "NotFound")
+      ) {
+        return null;
+      }
+      return null;
+    }
+  }
+
   async getUrl(key: string): Promise<string> {
     const normalizedKey = this.normalizeKey(key);
 

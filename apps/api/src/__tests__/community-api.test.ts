@@ -103,13 +103,36 @@ async function ensurePost(): Promise<string> {
     .where(eq(posts.slug, "community-test-post"))
     .limit(1);
   if (existing[0]) return existing[0].id;
-  const { users } = await import("@vibress/database");
-  const ownerRows = await db
+  const { users, publicationMemberships, seedDatabase } = await import("@vibress/database");
+  let ownerRows = await db
     .select()
     .from(users)
     .where(eq(users.email, "owner@example.com"))
     .limit(1);
+
+  if (!ownerRows[0]) {
+    await seedDatabase();
+    ownerRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "owner@example.com"))
+      .limit(1);
+  }
+
   const ownerId = ownerRows[0]?.id || "unknown";
+
+  if (ownerRows[0]) {
+    await db
+      .insert(publicationMemberships)
+      .values({
+        id: crypto.randomUUID(),
+        publicationId: "pub_default",
+        userId: ownerId,
+        role: "owner",
+      })
+      .onConflictDoNothing();
+  }
+
   const [row] = await db
     .insert(posts)
     .values({
