@@ -53,7 +53,8 @@ if [ -f "scripts/backup.sh" ]; then
   ./scripts/backup.sh ./backups
   echo "✓ Pre-deployment backup verified."
 else
-  echo "Warning: scripts/backup.sh not found, skipping automated backup."
+  echo "Error: scripts/backup.sh not found. Mandatory pre-deployment backup cannot be skipped." >&2
+  exit 1
 fi
 
 # --- Phase 3: Database Migrations ---
@@ -96,13 +97,29 @@ done
 echo "✓ API readiness verified."
 
 # --- Phase 6: Production Smoke Tests ---
-echo -e "\n[Phase 6/6] Executing production smoke tests..."
+echo -e "\n[Phase 6/6] Executing mandatory production smoke tests..."
+SMOKE_EXECUTED=0
+
 if command -v pnpm >/dev/null 2>&1; then
+  echo "Running smoke tests via pnpm..."
   pnpm production:smoke
-  echo "✓ Production smoke tests passed."
-else
-  echo "Note: pnpm not found in host environment; verify smoke tests via container."
+  SMOKE_EXECUTED=1
+elif command -v node >/dev/null 2>&1 && [ -f "scripts/production-smoke-tests.mjs" ]; then
+  echo "Running smoke tests via host Node.js runner..."
+  node scripts/production-smoke-tests.mjs
+  SMOKE_EXECUTED=1
+elif docker compose -f "${COMPOSE_FILE}" ps -q api 2>/dev/null | grep -q .; then
+  echo "Running smoke tests via API container..."
+  docker compose -f "${COMPOSE_FILE}" exec -T -e SITE_URL="${GATEWAY_URL}" api node scripts/production-smoke-tests.mjs
+  SMOKE_EXECUTED=1
 fi
+
+if [ "${SMOKE_EXECUTED}" -ne 1 ]; then
+  echo "Error: Mandatory production smoke tests could not be executed." >&2
+  echo "Deployment cannot be certified as successful without passing smoke tests." >&2
+  exit 1
+fi
+echo "✓ Production smoke tests passed."
 
 echo -e "\n================================================================================"
 echo " VIBRESS PRODUCTION DEPLOYMENT COMPLETED SUCCESSFULLY"

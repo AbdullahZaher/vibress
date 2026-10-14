@@ -63,7 +63,7 @@ All production settings are validated at boot by `@vibress/config`. If any requi
 ## 3. Database Deployment & Migration Safety
 
 * **Database Version:** PostgreSQL 16+ with extensions: `pg_trgm`, `btree_gin`, `uuid-ossp`.
-* **Migration Strategy:** All 26 schema migrations are strictly additive. Rolling container replacement does not cause schema lock conflicts.
+* **Migration Strategy:** All 37 schema migrations (0000 to 0036) are strictly additive and backwards-compatible. Rolling container replacement does not cause schema lock conflicts.
 * **Execution:**
   ```bash
   docker compose -f compose.prod.yml run --rm migrate
@@ -73,20 +73,42 @@ All production settings are validated at boot by `@vibress/config`. If any requi
 
 ## 4. Disaster Recovery & Backup Runbook
 
-### Physical Database Backup
-Backups produce compressed SQL archives with SHA-256 integrity checksums:
+### Physical Database & Content Backup
+Backups produce compressed, structurally validated SQL archives with SHA-256 integrity checksums and optional content directory archives:
 ```bash
+# Database backup only
 ./scripts/backup.sh /path/to/backup/storage
+
+# Database + persistent media & themes content backup
+./scripts/backup.sh /path/to/backup/storage --with-content
 ```
 
 ### Physical Database Restore
+Database restore requires explicit confirmation gate (`--confirm` or interactive confirmation) and executes with `ON_ERROR_STOP=1`:
 ```bash
+# Restore to production database (interactive prompt)
 ./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz
+
+# Automated restore to target database with non-interactive confirmation
+./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz target_db --confirm
 ```
 
+### Automated Disaster Recovery Drills
+Execute automated end-to-end backup, restore, checksum verification, and entity parity assertion against an isolated disposable database:
+```bash
+./scripts/disaster-recovery-drill.sh
+```
+
+### Theme Storage & Generation Retention
+Theme packages in object storage follow the **N-1 Bounded Generation Retention** contract:
+* **Active Generation ($G_n$)**: Preserved in storage and referenced by `manifest.generation`.
+* **Immediate Previous Generation ($G_{n-1}$)**: Explicitly retained for in-flight readers and referenced by `manifest.previousGeneration`.
+* **Generations Older than $G_{n-1}$**: Cleaned up during package replacement once $G_n$ is authoritative.
+* Details: See [`packages/domains/themes/THEME_STORAGE_LIFECYCLE.md`](file:///Users/abdullahzaher/vibress/packages/domains/themes/THEME_STORAGE_LIFECYCLE.md).
+
 ### Recovery Targets
-* **Recovery Point Objective (RPO Target):** < 15 minutes (with continuous WAL archiving).
-* **Recovery Time Objective (RTO Target):** < 10 minutes.
+* **Recovery Point Objective (RPO Target):** < 15 minutes (with automated backups & WAL archiving).
+* **Recovery Time Objective (RTO Target):** < 10 minutes (Drill certified: ~2s automated recovery).
 
 ---
 

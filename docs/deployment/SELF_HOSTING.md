@@ -128,9 +128,12 @@ server {
 ## 5. Maintenance, Backups & Upgrades
 
 ### Database Backups
-Run a database backup at any time:
+Run a database backup at any time (produces verified compressed archive and SHA-256 checksum):
 ```bash
 ./scripts/backup.sh /opt/vibress/backups
+
+# Or include persistent media and themes:
+./scripts/backup.sh /opt/vibress/backups --with-content
 ```
 
 To schedule daily backups via cron:
@@ -141,8 +144,19 @@ crontab -e
 ```
 
 ### Restoring Backups
+Database restores require confirmation before proceeding and execute with strict error handling (`ON_ERROR_STOP=1`):
 ```bash
+# Interactive restore (prompts operator for confirmation)
 ./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz
+
+# Automated / non-interactive restore
+./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz --confirm
+```
+
+### Disaster Recovery Drills
+Verify backup integrity, checksum, and restore execution on an isolated disposable database:
+```bash
+./scripts/disaster-recovery-drill.sh
 ```
 
 ### Media Storage Backups & Restore
