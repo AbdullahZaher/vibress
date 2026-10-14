@@ -35,6 +35,7 @@ export class WorkspaceService {
   constructor(
     private repo: WorkspaceRepository,
     private pubRepo?: PublicationRepository,
+    private defaultPrimaryDomain?: string | null,
   ) {}
 
   async getWorkspaceForUser(
@@ -251,6 +252,7 @@ export class WorkspaceService {
   async resolvePublicPublicationContext(params: {
     host?: string | null;
     isDevFallbackAllowed?: boolean;
+    primaryDomain?: string | null;
   }): Promise<{
     publicationId: string;
     workspaceId: string;
@@ -266,9 +268,37 @@ export class WorkspaceService {
       };
     }
 
+    const primary =
+      params.primaryDomain !== undefined
+        ? params.primaryDomain
+        : this.defaultPrimaryDomain;
+    const cleanPrimary = primary
+      ? primary.split(":")[0]?.toLowerCase().trim()
+      : null;
+
     if (params.host) {
       // Strip port (e.g., example.com:3000 -> example.com)
       const cleanHost = params.host.split(":")[0]?.toLowerCase().trim() || "";
+
+      // 1. If cleanHost matches primary instance domain (or both are local loopback), resolve to default publication
+      if (
+        cleanPrimary &&
+        (cleanHost === cleanPrimary ||
+          ((cleanPrimary === "localhost" || cleanPrimary === "127.0.0.1") &&
+            (cleanHost === "localhost" || cleanHost === "127.0.0.1")))
+      ) {
+        const defaultPub = await this.pubRepo.findById("pub_default");
+        if (defaultPub) {
+          return {
+            publicationId: defaultPub.id,
+            workspaceId: defaultPub.workspaceId,
+            actorType: "public",
+            isSystemOperation: false,
+          };
+        }
+      }
+
+      // 2. Query tenant publications for mapped custom domain
       if (cleanHost && cleanHost !== "localhost" && cleanHost !== "127.0.0.1") {
         const pub = await this.pubRepo.findByDomain(cleanHost);
         if (pub) {

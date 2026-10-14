@@ -139,27 +139,43 @@ POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 BACKUP_MODE=""
 CONTAINER_ID=""
 
+# If POSTGRES_HOST is not explicitly set, check if DATABASE_URL points to an external host
+if [ -z "${POSTGRES_HOST:-}" ] && [ -n "${DATABASE_URL:-}" ]; then
+  if [[ "${DATABASE_URL}" =~ @([^:/]+) ]]; then
+    EXTRACTED_HOST="${BASH_REMATCH[1]}"
+    if [ "${EXTRACTED_HOST}" != "postgres" ] && [ "${EXTRACTED_HOST}" != "localhost" ] && [ "${EXTRACTED_HOST}" != "127.0.0.1" ]; then
+      POSTGRES_HOST="${EXTRACTED_HOST}"
+    fi
+  fi
+fi
+
 if [ -n "${POSTGRES_HOST:-}" ]; then
   # Explicit host provided (e.g. AWS RDS / Google Cloud SQL / remote database)
   PG_PORT="${POSTGRES_PORT:-5432}"
   echo "Targeting explicit PostgreSQL host: ${POSTGRES_HOST}:${PG_PORT} (DB: ${PG_DB})"
   BACKUP_MODE="host"
 elif [ -n "${RESOLVED_COMPOSE}" ]; then
+  COMPOSE_ARGS=()
+  if [ -n "${ENV_FILE:-}" ] && [ -f "${ENV_FILE}" ]; then
+    COMPOSE_ARGS+=(--env-file "${ENV_FILE}")
+  fi
+  COMPOSE_ARGS+=(-f "${RESOLVED_COMPOSE}")
+
   # Target strictly within the resolved Compose file; refuse to fallback across compose files
-  if docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
-    CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+  if docker compose "${COMPOSE_ARGS[@]}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
+    CONTAINER_ID=$(docker compose "${COMPOSE_ARGS[@]}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
     BACKUP_MODE="compose"
-  elif docker compose -f "${RESOLVED_COMPOSE}" ps --all -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
+  elif docker compose "${COMPOSE_ARGS[@]}" ps --all -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
     echo "PostgreSQL container in '${RESOLVED_COMPOSE}' is stopped. Starting '${POSTGRES_SERVICE}'..."
-    docker compose -f "${RESOLVED_COMPOSE}" up -d "${POSTGRES_SERVICE}"
+    docker compose "${COMPOSE_ARGS[@]}" up -d "${POSTGRES_SERVICE}"
     MAX_WAIT=30
     WAIT_COUNT=0
-    until docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; do
+    until docker compose "${COMPOSE_ARGS[@]}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; do
       WAIT_COUNT=$((WAIT_COUNT + 1))
       [ "${WAIT_COUNT}" -ge "${MAX_WAIT}" ] && break
       sleep 1
     done
-    CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+    CONTAINER_ID=$(docker compose "${COMPOSE_ARGS[@]}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
     BACKUP_MODE="compose"
   else
     echo "Error: PostgreSQL service '${POSTGRES_SERVICE}' not found in target '${RESOLVED_COMPOSE}'." >&2
@@ -196,23 +212,32 @@ echo "Executing pg_dump stream with compression..."
 
 if [ "${BACKUP_MODE}" = "compose" ]; then
   # Execute pg_dump inside the identified compose container
-  docker compose -f "${RESOLVED_COMPOSE}" exec -T \
+  docker compose "${COMPOSE_ARGS[@]}" exec -T \
     -e PGPASSWORD="${PG_PASSWORD}" \
     "${POSTGRES_SERVICE}" \
     pg_dump -U "${PG_USER}" -d "${PG_DB}" --clean --if-exists --no-owner --no-privileges \
     | gzip -c > "${TARGET_FILE_TMP}"
 elif [ "${BACKUP_MODE}" = "host" ]; then
-  if ! command -v pg_dump >/dev/null 2>&1; then
+  if command -v pg_dump >/dev/null 2>&1; then
+    PGPASSWORD="${PG_PASSWORD}" pg_dump \
+      -h "${POSTGRES_HOST:-localhost}" \
+      -p "${PG_PORT:-5432}" \
+      -U "${PG_USER}" \
+      -d "${PG_DB}" \
+      --clean --if-exists --no-owner --no-privileges \
+      | gzip -c > "${TARGET_FILE_TMP}"
+  elif command -v docker >/dev/null 2>&1; then
+    echo "Running pg_dump via ephemeral postgres container targeting ${POSTGRES_HOST}..."
+    docker run --rm --network host \
+      -e PGPASSWORD="${PG_PASSWORD}" \
+      postgres:16-alpine \
+      pg_dump -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "${PG_DB}" \
+      --clean --if-exists --no-owner --no-privileges \
+      | gzip -c > "${TARGET_FILE_TMP}"
+  else
     echo "Error: pg_dump client is required for host backup mode but was not found in PATH." >&2
     exit 1
   fi
-  PGPASSWORD="${PG_PASSWORD}" pg_dump \
-    -h "${POSTGRES_HOST:-localhost}" \
-    -p "${PG_PORT:-5432}" \
-    -U "${PG_USER}" \
-    -d "${PG_DB}" \
-    --clean --if-exists --no-owner --no-privileges \
-    | gzip -c > "${TARGET_FILE_TMP}"
 fi
 
 # --- Structural and Data Integrity Validation ---
@@ -273,8 +298,14 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
   elif command -v docker >/dev/null 2>&1; then
     # 1. Try to detect volume from running compose service (api, web, worker)
     if [ -n "${RESOLVED_COMPOSE}" ]; then
+      COMPOSE_ARGS=()
+      if [ -n "${ENV_FILE:-}" ] && [ -f "${ENV_FILE}" ]; then
+        COMPOSE_ARGS+=(--env-file "${ENV_FILE}")
+      fi
+      COMPOSE_ARGS+=(-f "${RESOLVED_COMPOSE}")
+
       for svc in api web worker; do
-        CID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
+        CID=$(docker compose "${COMPOSE_ARGS[@]}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
         if [ -n "${CID}" ]; then
           DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' 2>/dev/null || true)
           if [ -n "${DETECTED_VOL}" ]; then
@@ -288,7 +319,7 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
 
     # 2. Check candidate project volume name (e.g. vibress-prod_vibress_content)
     if [ -z "${RESOLVED_VOLUME}" ] && [ -n "${RESOLVED_COMPOSE}" ]; then
-      PROJECT_NAME=$(docker compose -f "${RESOLVED_COMPOSE}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
+      PROJECT_NAME=$(docker compose "${COMPOSE_ARGS[@]}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
       PROJECT_NAME="${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-vibress-prod}}"
       CANDIDATE_VOL="${PROJECT_NAME}_vibress_content"
       if docker volume inspect "${CANDIDATE_VOL}" >/dev/null 2>&1; then

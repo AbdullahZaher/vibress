@@ -156,6 +156,25 @@ describe("Drizzle Workspace & Publication Context Resolution", () => {
     expect(ctx.actorType).toBe("public");
   });
 
+  it("resolves primary instance host (including loopback) to pub_default even when isDevFallbackAllowed is false", async () => {
+    const prodService = new WorkspaceService(wsRepo, pubRepo, "localhost:7777");
+    const ctx = await prodService.resolvePublicPublicationContext({
+      host: "127.0.0.1:7777",
+      isDevFallbackAllowed: false,
+    });
+    expect(ctx.publicationId).toBe("pub_default");
+    expect(ctx.workspaceId).toBe("ws_default");
+
+    // Also supports explicit parameter override
+    const customService = new WorkspaceService(wsRepo, pubRepo);
+    const ctxCustom = await customService.resolvePublicPublicationContext({
+      host: "my-publication.com:443",
+      primaryDomain: "my-publication.com",
+      isDevFallbackAllowed: false,
+    });
+    expect(ctxCustom.publicationId).toBe("pub_default");
+  });
+
   it("enforces explicit worker scope for jobs", async () => {
     // System scope
     const sysCtx = await service.resolveWorkerPublicationContext({

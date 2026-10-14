@@ -11,12 +11,12 @@ echo " Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo "================================================================================"
 
 PASSED=0
-TOTAL=4
+TOTAL=5
 
 # ------------------------------------------------------------------------------
 # Test 1: Production backup rejects development compose file (Environment mismatch)
 # ------------------------------------------------------------------------------
-echo -e "\n[Guard 1/4] Verifying backup rejects dev compose in production mode..."
+echo -e "\n[Guard 1/5] Verifying backup rejects dev compose in production mode..."
 TEST_OUTPUT=$(NODE_ENV=production COMPOSE_FILE=compose.dev.yml ./scripts/backup.sh /tmp/test-backup-dir 2>&1 || true)
 if echo "${TEST_OUTPUT}" | grep -q "Environment mismatch detected"; then
   echo "✓ PASS: backup.sh rejected targeting dev compose when NODE_ENV=production."
@@ -30,7 +30,7 @@ fi
 # ------------------------------------------------------------------------------
 # Test 2: Backup strictly enforces target Compose file and refuses fallback
 # ------------------------------------------------------------------------------
-echo -e "\n[Guard 2/4] Verifying backup fails cleanly when target service not in compose file (no fallback)..."
+echo -e "\n[Guard 2/5] Verifying backup fails cleanly when target service not in compose file (no fallback)..."
 # Create a dummy compose file with no postgres service
 DUMMY_COMPOSE="/tmp/dummy-compose-$$.yml"
 cat << 'EOF' > "${DUMMY_COMPOSE}"
@@ -55,7 +55,7 @@ fi
 # ------------------------------------------------------------------------------
 # Test 3: Fresh install auto-detection in deploy-production.sh
 # ------------------------------------------------------------------------------
-echo -e "\n[Guard 3/4] Verifying deploy-production.sh identifies fresh install and safely skips backup..."
+echo -e "\n[Guard 3/5] Verifying deploy-production.sh identifies fresh install and safely skips backup..."
 # Test with a mock non-existent compose project
 TEST_FRESH_COMPOSE="/tmp/fresh-compose-$$.yml"
 cat << 'EOF' > "${TEST_FRESH_COMPOSE}"
@@ -97,7 +97,7 @@ fi
 # ------------------------------------------------------------------------------
 # Test 4: Existing installation detection and mandatory upgrade backup
 # ------------------------------------------------------------------------------
-echo -e "\n[Guard 4/4] Verifying existing installation triggers mandatory backup requirement..."
+echo -e "\n[Guard 4/5] Verifying existing installation triggers mandatory backup requirement..."
 EXISTING_RESULT=$(bash -c '
   eval "$(awk "/^is_existing_installation\(\)/,/^}/" scripts/deploy-production.sh)"
   FORCE_FRESH=0
@@ -114,6 +114,39 @@ if [ "${EXISTING_RESULT}" = "EXISTING" ]; then
   PASSED=$((PASSED + 1))
 else
   echo "✗ FAIL: Expected EXISTING but got ${EXISTING_RESULT}."
+  exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# Test 5: External Database Safeguard (Missing Docker volumes cannot bypass backup)
+# ------------------------------------------------------------------------------
+echo -e "\n[Guard 5/5] Verifying external database cannot be mistaken for fresh install when volumes are missing..."
+TEST_EXT_ENV="/tmp/test-ext-env-$$"
+cat << 'EOF' > "${TEST_EXT_ENV}"
+POSTGRES_HOST=rds-prod.vibress.internal
+POSTGRES_USER=vibress
+POSTGRES_DB=vibress_prod
+POSTGRES_PASSWORD=mock_secret
+EOF
+
+EXT_RESULT=$(ENV_FILE="${TEST_EXT_ENV}" bash -c '
+  eval "$(awk "/^is_existing_installation\(\)/,/^}/" scripts/deploy-production.sh)"
+  FORCE_FRESH=0
+  FORCE_UPGRADE=0
+  # No local Docker containers or volumes exist for this project
+  if is_existing_installation; then
+    echo "EXISTING"
+  else
+    echo "FRESH"
+  fi
+')
+rm -f "${TEST_EXT_ENV}"
+
+if [ "${EXT_RESULT}" = "EXISTING" ]; then
+  echo "✓ PASS: External database safeguard triggered. Missing local Docker volumes did NOT bypass backup requirement."
+  PASSED=$((PASSED + 1))
+else
+  echo "✗ FAIL: External database was mistakenly treated as FRESH! Output was: ${EXT_RESULT}"
   exit 1
 fi
 

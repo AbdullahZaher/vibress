@@ -576,7 +576,21 @@ import {
 
 export const workspaceRepo = new DrizzleWorkspaceRepository();
 export const publicationRepo = new DrizzlePublicationRepository();
-export const workspaceService = new WorkspaceService(workspaceRepo, publicationRepo);
+
+function getPrimarySiteHost(): string | null {
+  try {
+    const siteUrl = getConfig().site?.url;
+    return siteUrl ? new URL(siteUrl).host : null;
+  } catch {
+    return null;
+  }
+}
+
+export const workspaceService = new WorkspaceService(
+  workspaceRepo,
+  publicationRepo,
+  getPrimarySiteHost(),
+);
 
 
 
