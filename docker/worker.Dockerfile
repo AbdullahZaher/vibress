@@ -7,7 +7,7 @@ WORKDIR /repo
 
 # ---- Dependencies + build ----
 FROM base AS builder
-ARG VIBRESS_VERSION=1.0.0
+ARG VIBRESS_VERSION=1.2.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
 
@@ -24,7 +24,7 @@ RUN mkdir -p /repo/runtime_node_modules && \
 
 # ---- Runtime: non-root, minimal immutable runtime, hardened container ----
 FROM node:24-alpine AS runtime
-ARG VIBRESS_VERSION=1.0.0
+ARG VIBRESS_VERSION=1.2.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
 

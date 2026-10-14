@@ -8,14 +8,17 @@ set -Eeuo pipefail
 #   ./scripts/backup.sh [target_directory] [--with-content]
 #
 # Environment Overrides:
+#   ENV_FILE            Path to environment file to source (default: .env if present)
 #   COMPOSE_FILE        Docker compose file to target (default: compose.prod.yml if exists, else compose.dev.yml)
 #   POSTGRES_SERVICE    Docker compose postgres service name (default: postgres)
 #   POSTGRES_HOST       Explicit PostgreSQL host (if set, host pg_dump is preferred)
 #   POSTGRES_PORT       Explicit PostgreSQL port
-#   POSTGRES_USER       PostgreSQL username (default: vibress)
-#   POSTGRES_DB         PostgreSQL database name (default: vibress)
-#   POSTGRES_PASSWORD   PostgreSQL password (default: vibress)
-#   BACKUP_CONTENT      If set to 1, also backs up local media and themes directory
+#   POSTGRES_USER       PostgreSQL username (default: from .env or vibress)
+#   POSTGRES_DB         PostgreSQL database name (default: from .env or vibress)
+#   POSTGRES_PASSWORD   PostgreSQL password (default: from .env or vibress)
+#   CONTENT_VOLUME      Docker named volume to back up (default: detected vibress_content volume)
+#   STORAGE_LOCAL_ROOT  Local storage root path
+#   BACKUP_CONTENT      If set to 1, also backs up persistent media and themes
 # ==============================================================================
 
 BACKUP_DIR="${1:-${BACKUP_DIR:-./backups}}"
@@ -29,6 +32,24 @@ done
 
 if [ "${BACKUP_CONTENT:-0}" = "1" ]; then
   WITH_CONTENT=1
+fi
+
+# Load environment configuration from .env if present (aligning with Docker Compose)
+ENV_FILE="${ENV_FILE:-.env}"
+if [ -f "${ENV_FILE}" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=$(echo "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    [[ "$line" =~ ^#.*$ ]] && continue
+    [[ -z "$line" ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      val=$(echo "$val" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+      if [ -z "${!key+x}" ]; then
+        export "${key}=${val}"
+      fi
+    fi
+  done < "${ENV_FILE}"
 fi
 
 TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
@@ -83,6 +104,12 @@ if [ -n "${POSTGRES_HOST:-}" ]; then
 elif [ -n "${RESOLVED_COMPOSE}" ] && docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
   # Verified Docker Compose service is running
   CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+  C_PASS=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_PASSWORD=' | cut -d= -f2- || true)
+  [ -n "${C_PASS}" ] && PG_PASSWORD="${C_PASS}"
+  C_USER=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_USER=' | cut -d= -f2- || true)
+  [ -n "${C_USER}" ] && PG_USER="${C_USER}"
+  C_DB=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_DB=' | cut -d= -f2- || true)
+  [ -n "${C_DB}" ] && PG_DB="${C_DB}"
   echo "Targeting Docker Compose service '${POSTGRES_SERVICE}' in '${RESOLVED_COMPOSE}' (Container: ${CONTAINER_ID})"
   BACKUP_MODE="compose"
 elif [ -n "${RESOLVED_COMPOSE}" ] && docker compose -f "${RESOLVED_COMPOSE}" ps --all -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
@@ -178,30 +205,140 @@ echo "✓ Checksum created: ${CHECKSUM_FILE}"
 
 # --- Optional Persistent Content (Media & Themes) Backup ---
 if [ "${WITH_CONTENT}" -eq 1 ]; then
-  CONTENT_DIR=""
-  for candidate in "./content" "/repo/content" "${STORAGE_LOCAL_ROOT:-}"; do
-    if [ -n "${candidate}" ] && [ -d "${candidate}" ]; then
-      CONTENT_DIR="${candidate}"
-      break
+  echo -e "\n--- Processing Persistent Content Backup ---"
+  RESOLVED_VOLUME=""
+  if [ -n "${CONTENT_VOLUME:-}" ]; then
+    RESOLVED_VOLUME="${CONTENT_VOLUME}"
+    echo "Using explicitly configured content volume: ${RESOLVED_VOLUME}"
+  elif command -v docker >/dev/null 2>&1; then
+    # 1. Try to detect volume from running compose service (api, web, worker)
+    if [ -n "${RESOLVED_COMPOSE}" ]; then
+      for svc in api web worker; do
+        CID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
+        if [ -n "${CID}" ]; then
+          DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' 2>/dev/null || true)
+          if [ -n "${DETECTED_VOL}" ]; then
+            RESOLVED_VOLUME="${DETECTED_VOL}"
+            echo "Detected Docker content volume '${RESOLVED_VOLUME}' from running service '${svc}'."
+            break
+          fi
+        fi
+      done
     fi
-  done
 
-  if [ -n "${CONTENT_DIR}" ]; then
-    CONTENT_FILENAME="vibress_content_${TIMESTAMP}.tar.gz"
-    CONTENT_TARGET="${BACKUP_DIR}/${CONTENT_FILENAME}"
-    echo "Backing up persistent content from '${CONTENT_DIR}'..."
-    tar -czf "${CONTENT_TARGET}" -C "$(dirname "${CONTENT_DIR}")" "$(basename "${CONTENT_DIR}")"
+    # 2. Check candidate project volume name (e.g. vibress-prod_vibress_content)
+    if [ -z "${RESOLVED_VOLUME}" ] && [ -n "${RESOLVED_COMPOSE}" ]; then
+      PROJECT_NAME=$(docker compose -f "${RESOLVED_COMPOSE}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
+      PROJECT_NAME="${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-vibress-prod}}"
+      CANDIDATE_VOL="${PROJECT_NAME}_vibress_content"
+      if docker volume inspect "${CANDIDATE_VOL}" >/dev/null 2>&1; then
+        RESOLVED_VOLUME="${CANDIDATE_VOL}"
+        echo "Found Docker content volume '${RESOLVED_VOLUME}' for project '${PROJECT_NAME}'."
+      fi
+    fi
+
+    # 3. Check for any existing volume matching vibress_content
+    if [ -z "${RESOLVED_VOLUME}" ]; then
+      MATCHING_VOL=$(docker volume ls -q --filter "name=vibress_content" | head -n 1 || true)
+      if [ -n "${MATCHING_VOL}" ]; then
+        RESOLVED_VOLUME="${MATCHING_VOL}"
+        echo "Found existing Docker content volume '${RESOLVED_VOLUME}'."
+      fi
+    fi
+  fi
+
+  CONTENT_BACKED_UP=0
+  CONTENT_FILENAME="vibress_content_${TIMESTAMP}.tar.gz"
+  CONTENT_TARGET="${BACKUP_DIR}/${CONTENT_FILENAME}"
+  CONTENT_TARGET_TMP="${CONTENT_TARGET}.tmp.$$"
+  BACKUP_DIR_ABS=$(cd "${BACKUP_DIR}" && pwd)
+
+  if [ -n "${RESOLVED_VOLUME}" ]; then
+    echo "Backing up Docker named volume '${RESOLVED_VOLUME}' into '${CONTENT_TARGET}'..."
+    docker run --rm \
+      -v "${RESOLVED_VOLUME}:/volume:ro" \
+      -v "${BACKUP_DIR_ABS}:/backup" \
+      alpine:latest tar -czf "/backup/${CONTENT_FILENAME}.tmp.$$" -C /volume .
+
+    if [ -f "${CONTENT_TARGET_TMP}" ]; then
+      mv "${CONTENT_TARGET_TMP}" "${CONTENT_TARGET}"
+      CONTENT_BACKED_UP=1
+    fi
+  else
+    # Fallback to local host directory if volume is not present
+    CONTENT_DIR=""
+    for candidate in "./content" "/repo/content" "${STORAGE_LOCAL_ROOT:-}"; do
+      if [ -n "${candidate}" ] && [ -d "${candidate}" ]; then
+        CONTENT_DIR="${candidate}"
+        break
+      fi
+    done
+
+    if [ -n "${CONTENT_DIR}" ]; then
+      echo "Backing up host content directory '${CONTENT_DIR}' into '${CONTENT_TARGET}'..."
+      tar -czf "${CONTENT_TARGET_TMP}" -C "${CONTENT_DIR}" .
+      if [ -f "${CONTENT_TARGET_TMP}" ]; then
+        mv "${CONTENT_TARGET_TMP}" "${CONTENT_TARGET}"
+        CONTENT_BACKED_UP=1
+      fi
+    fi
+  fi
+
+  if [ "${CONTENT_BACKED_UP}" -eq 1 ]; then
+    # Validate content archive integrity
+    if ! gzip -t "${CONTENT_TARGET}"; then
+      echo "Error: Content backup archive ${CONTENT_TARGET} is corrupted (gzip check failed)." >&2
+      rm -f "${CONTENT_TARGET}"
+      exit 1
+    fi
+    if ! tar -tzf "${CONTENT_TARGET}" >/dev/null 2>&1; then
+      echo "Error: Content backup archive ${CONTENT_TARGET} is not a valid tar archive." >&2
+      rm -f "${CONTENT_TARGET}"
+      exit 1
+    fi
+
     chmod 600 "${CONTENT_TARGET}"
+    CONTENT_CHECKSUM="${CONTENT_TARGET}.sha256"
     if command -v sha256sum >/dev/null 2>&1; then
       (cd "${BACKUP_DIR}" && sha256sum "${CONTENT_FILENAME}" > "${CONTENT_FILENAME}.sha256")
     elif command -v shasum >/dev/null 2>&1; then
       (cd "${BACKUP_DIR}" && shasum -a 256 "${CONTENT_FILENAME}" > "${CONTENT_FILENAME}.sha256")
     fi
-    chmod 600 "${CONTENT_TARGET}.sha256"
+    chmod 600 "${CONTENT_CHECKSUM}"
     CONTENT_SIZE=$(ls -lh "${CONTENT_TARGET}" | awk '{print $5}')
-    echo "✓ Persistent content backup created: ${CONTENT_TARGET} (${CONTENT_SIZE})"
+    echo "✓ Persistent content backup created and verified: ${CONTENT_TARGET} (${CONTENT_SIZE})"
+    echo "✓ Content Checksum created: ${CONTENT_CHECKSUM}"
   else
-    echo "Note: No local content directory found to back up; skipping content archive."
+    echo "Note: Neither Docker named volume ('vibress_content') nor local directory ('./content') found."
+  fi
+
+  # Check S3 object backup if S3 is configured
+  S3_BUCKET_NAME="${S3_BUCKET:-${AWS_S3_BUCKET:-}}"
+  STORAGE_PROV="${STORAGE_PROVIDER:-local}"
+  if [ "${STORAGE_PROV}" = "s3" ] || [ -n "${S3_BUCKET_NAME}" ]; then
+    if [ -n "${S3_BUCKET_NAME}" ]; then
+      echo "S3 object storage configured (Bucket: ${S3_BUCKET_NAME})."
+      if command -v aws >/dev/null 2>&1; then
+        S3_TARGET_DIR="${BACKUP_DIR}/s3_${S3_BUCKET_NAME}_${TIMESTAMP}"
+        echo "Syncing S3 bucket 's3://${S3_BUCKET_NAME}' to '${S3_TARGET_DIR}'..."
+        if aws s3 sync "s3://${S3_BUCKET_NAME}" "${S3_TARGET_DIR}" --only-show-errors; then
+          S3_TAR="${BACKUP_DIR}/vibress_s3_${TIMESTAMP}.tar.gz"
+          tar -czf "${S3_TAR}" -C "${BACKUP_DIR}" "s3_${S3_BUCKET_NAME}_${TIMESTAMP}"
+          rm -rf "${S3_TARGET_DIR}"
+          chmod 600 "${S3_TAR}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd "${BACKUP_DIR}" && sha256sum "vibress_s3_${TIMESTAMP}.tar.gz" > "vibress_s3_${TIMESTAMP}.tar.gz.sha256")
+          elif command -v shasum >/dev/null 2>&1; then
+            (cd "${BACKUP_DIR}" && shasum -a 256 "vibress_s3_${TIMESTAMP}.tar.gz" > "vibress_s3_${TIMESTAMP}.tar.gz.sha256")
+          fi
+          echo "✓ S3 bucket backup created: ${S3_TAR}"
+        else
+          echo "Warning: aws s3 sync encountered an error; ensure AWS credentials have s3:GetObject and s3:ListBucket." >&2
+        fi
+      else
+        echo "Notice: aws CLI not found on host. S3 bucket 's3://${S3_BUCKET_NAME}' should be protected via cloud replication / versioning or synced via 'aws s3 sync s3://${S3_BUCKET_NAME} ...'."
+      fi
+    fi
   fi
 fi
 

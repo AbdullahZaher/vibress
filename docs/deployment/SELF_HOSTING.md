@@ -132,50 +132,40 @@ Run a database backup at any time (produces verified compressed archive and SHA-
 ```bash
 ./scripts/backup.sh /opt/vibress/backups
 
-# Or include persistent media and themes:
+# Or include persistent media and themes (Docker named volume vibress_content or ./content):
 ./scripts/backup.sh /opt/vibress/backups --with-content
 ```
 
-To schedule daily backups via cron:
+To schedule automated production backups via cron:
 ```bash
 crontab -e
-# Add the following line to run backups every day at 02:00 UTC:
-0 2 * * * /opt/vibress/scripts/backup.sh /opt/vibress/backups >/dev/null 2>&1
+# Add the following lines:
+# 1. Every 15 minutes: Incremental snapshot (satisfies RPO < 15 min)
+*/15 * * * * /opt/vibress/scripts/backup.sh /opt/vibress/backups >> /var/log/vibress-backup.log 2>&1
+# 2. Daily at 02:00 UTC: Full database + persistent volume backup (media, themes, manifests)
+0 2 * * * /opt/vibress/scripts/backup.sh /opt/vibress/backups --with-content >> /var/log/vibress-backup.log 2>&1
 ```
 
 ### Restoring Backups
-Database restores require confirmation before proceeding and execute with strict error handling (`ON_ERROR_STOP=1`):
+Restores require confirmation before proceeding and execute with strict error handling (`ON_ERROR_STOP=1`):
 ```bash
-# Interactive restore (prompts operator for confirmation)
+# Interactive database restore (prompts operator for confirmation)
 ./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz
 
-# Automated / non-interactive restore
-./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz --confirm
+# Full-site restore (Database + Persistent Volume Media/Themes)
+./scripts/restore.sh /opt/vibress/backups/vibress_backup_YYYYMMDD_HHMMSS.sql.gz --with-content --confirm
 ```
 
-### Disaster Recovery Drills
-Verify backup integrity, checksum, and restore execution on an isolated disposable database:
+### Full-Site Disaster Recovery Drills
+Verify full-site recovery execution, SHA-256 checksums, data entity parity, storage asset parity, and application boot readiness on isolated disposable targets:
 ```bash
 ./scripts/disaster-recovery-drill.sh
 ```
 
-### Media Storage Backups & Restore
-Media assets uploaded to Vibress reside in the canonical storage directory (`content/media`). Back up the media directory alongside database snapshots:
-```bash
-# Backup media storage to a compressed archive
-tar -czf /opt/vibress/backups/vibress_media_$(date +%Y%m%d_%H%M%S).tar.gz -C /opt/vibress content/media
-```
-
-To restore media from an archive:
-```bash
-# Restore media into /opt/vibress/content/media
-tar -xzf /opt/vibress/backups/vibress_media_YYYYMMDD_HHMMSS.tar.gz -C /opt/vibress
-```
-
 ### Upgrading to New Releases
 ```bash
-./scripts/backup.sh /opt/vibress/backups
+./scripts/backup.sh /opt/vibress/backups --with-content
 git pull origin main --tags
-git checkout v1.0.0
+git checkout v1.2.0
 ./scripts/deploy-production.sh
 ```
