@@ -979,5 +979,138 @@ describe("PRIORITY 0: Cloud Theme Package Atomicity Under Failure Injection", ()
       expect(getSignedUrlCalled).toBe(false);
       expect(file?.toString("utf-8")).toBe("native-content");
     });
+
+    it("concurrent generation cleanup: superseded generation referenced as previousGeneration is preserved", async () => {
+      const themeId = "concurrent-cleanup-theme";
+      const version = "1.0.0";
+      const pubId = "pub_alpha";
+
+      const g1Files = new Map<string, Buffer>();
+      g1Files.set("theme.json", Buffer.from(JSON.stringify({ name: "Generation 1" })));
+      g1Files.set("assets/app.js", Buffer.from("console.log('G1');"));
+
+      const g2Files = new Map<string, Buffer>();
+      g2Files.set("theme.json", Buffer.from(JSON.stringify({ name: "Generation 2" })));
+      g2Files.set("assets/app.js", Buffer.from("console.log('G2');"));
+
+      // Interleave:
+      // When Writer A puts its manifest (G1), immediately execute Writer B's write (G2)
+      // BEFORE Writer A proceeds to post-activation verification!
+      let writerBExecuted = false;
+      let g1GenerationId: string | undefined;
+
+      const originalPut = provider.put.bind(provider);
+      provider.put = async (input) => {
+        const result = await originalPut(input);
+        if (
+          !writerBExecuted &&
+          input.key.includes(themeId) &&
+          input.key.endsWith("__files.json")
+        ) {
+          writerBExecuted = true;
+          // Extract G1's generation from A's committed manifest
+          const manifestA = JSON.parse(input.body.toString());
+          g1GenerationId = manifestA.generation;
+
+          // Now Writer B reads the manifest (sees G1) and publishes G2 (retaining G1 as previousGeneration)
+          // We call adapter.saveThemeFiles for G2 right here
+          await adapter.saveThemeFiles(themeId, version, g2Files, pubId);
+        }
+        return result;
+      };
+
+      // Writer A executes
+      await adapter.saveThemeFiles(themeId, version, g1Files, pubId);
+
+      // Restore provider.put
+      provider.put = originalPut;
+
+      expect(writerBExecuted).toBe(true);
+      expect(g1GenerationId).toBeDefined();
+
+      // Check authoritative manifest: G2 is active, previousGeneration is G1
+      const root = adapter.getThemeRootPath(themeId, version, pubId);
+      const manifestBuf = provider.objects.get(`${root}/__files.json`);
+      expect(manifestBuf).toBeDefined();
+      const manifest = JSON.parse(manifestBuf!.toString("utf-8"));
+      expect(manifest.previousGeneration).toBe(g1GenerationId);
+
+      // CRITICAL ASSERTION:
+      // G1's files MUST NOT have been deleted by Writer A's post-activation cleanup!
+      const g1FileKey = `${root}/generations/${g1GenerationId}/assets/app.js`;
+      expect(provider.objects.has(g1FileKey)).toBe(true);
+
+      // An in-flight reader pinned to G1 can still read G1 assets
+      const g1File = await adapter.getThemeFile(themeId, version, "assets/app.js", pubId, false, g1GenerationId);
+      expect(g1File?.toString("utf-8")).toBe("console.log('G1');");
+
+      // Active reader reads latest G2 assets
+      const activeFile = await adapter.getThemeFile(themeId, version, "assets/app.js", pubId);
+      expect(activeFile?.toString("utf-8")).toBe("console.log('G2');");
+    });
+
+    it("resolves v2 legacy-root packages consistently in getThemeFilesMap and getThemeFile when authorized", async () => {
+      const themeId = "legacy-v2-theme";
+      const version = "1.0.0";
+      const subPubId = "pub_subscriber_custom";
+      const legacyGen = "gen_legacy_v2_xyz";
+
+      // Seed a v2 package at legacy root: themes/{themeId}/{version}/
+      const legacyRoot = `themes/${themeId}/${version}`;
+      const legacyGenPrefix = `${legacyRoot}/generations/${legacyGen}`;
+
+      await provider.put({
+        key: `${legacyGenPrefix}/theme.json`,
+        body: Buffer.from(JSON.stringify({ name: "Legacy V2 Theme", version: "1.0.0" })),
+        contentType: "application/json",
+      });
+      await provider.put({
+        key: `${legacyGenPrefix}/templates/index.liquid`,
+        body: Buffer.from("<h1>Legacy V2 Template</h1>"),
+        contentType: "text/html",
+      });
+      await provider.put({
+        key: `${legacyGenPrefix}/assets/style.css`,
+        body: Buffer.from("body { background: #fafafa; }"),
+        contentType: "text/css",
+      });
+      await provider.put({
+        key: `${legacyRoot}/__files.json`,
+        body: Buffer.from(
+          JSON.stringify({
+            format: "v2",
+            generation: legacyGen,
+            files: ["assets/style.css", "templates/index.liquid", "theme.json"],
+            createdAt: new Date().toISOString(),
+          }),
+        ),
+        contentType: "application/json",
+      });
+
+      // 1. Without allowLegacyFallback (or default false), subscriber pub cannot access legacy package
+      const deniedMap = await adapter.getThemeFilesMap(themeId, version, subPubId, false);
+      expect(deniedMap.size).toBe(0);
+
+      const deniedFile = await adapter.getThemeFile(themeId, version, "theme.json", subPubId, false, legacyGen);
+      expect(deniedFile).toBeNull();
+
+      // 2. With allowLegacyFallback = true, getThemeFilesMap resolves all files using manifest.root
+      const filesMap = await adapter.getThemeFilesMap(themeId, version, subPubId, true);
+      expect(filesMap.size).toBe(3);
+      expect(filesMap.get("theme.json")).toContain('"Legacy V2 Theme"');
+      expect(filesMap.get("templates/index.liquid")).toBe("<h1>Legacy V2 Template</h1>");
+      expect(filesMap.get("assets/style.css")).toBe("body { background: #fafafa; }");
+
+      // 3. getThemeFile with pinned generation also resolves via legacy root fallback when authorized
+      const pinnedFile = await adapter.getThemeFile(
+        themeId,
+        version,
+        "templates/index.liquid",
+        subPubId,
+        true,
+        legacyGen,
+      );
+      expect(pinnedFile?.toString("utf-8")).toBe("<h1>Legacy V2 Template</h1>");
+    });
   });
 });

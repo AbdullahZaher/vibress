@@ -654,26 +654,36 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
 
       if (
         recoveryState.recoveryReadSuccess &&
-        recoveryState.activeManifest &&
-        recoveryState.activeManifest.generation === generationId
+        recoveryState.activeManifest
       ) {
-        // The manifest successfully committed and is active despite the client error/timeout!
-        // Never delete the active generation's staged files.
-        return root;
-      }
-
-      if (
-        recoveryState.recoveryReadSuccess &&
-        recoveryState.activeManifest &&
-        recoveryState.activeManifest.generation &&
-        recoveryState.activeManifest.generation !== generationId
-      ) {
-        // The manifest was successfully read and confirmed to point to another generation.
-        // Our staged files are definitely orphaned and safe to clean up.
-        for (const stagedKey of stagedKeys) {
-          await this.storageProvider.delete(stagedKey).catch(() => {});
+        if (recoveryState.activeManifest.generation === generationId) {
+          // The manifest successfully committed and is active despite the client error/timeout!
+          // Never delete the active generation's staged files.
+          return root;
         }
-        throw error;
+
+        if (recoveryState.activeManifest.previousGeneration === generationId) {
+          // A concurrent installer committed after us and became authoritative,
+          // but explicitly recorded our generation as its previousGeneration!
+          // Our generation is actively referenced and retained for in-flight readers.
+          // Never delete our staged files.
+          return root;
+        }
+
+        if (
+          recoveryState.activeManifest.generation &&
+          recoveryState.activeManifest.generation !== generationId &&
+          recoveryState.activeManifest.previousGeneration !== generationId
+        ) {
+          // The active manifest was successfully read and positively confirmed to NOT reference
+          // our generation as either current or retained previousGeneration.
+          // Because manifest write threw on the client AND our generation is completely unreferenced,
+          // it is an orphaned staging write and safe to clean up.
+          for (const stagedKey of stagedKeys) {
+            await this.storageProvider.delete(stagedKey).catch(() => {});
+          }
+          throw error;
+        }
       }
 
       // Ambiguous/indeterminate failure:
@@ -700,38 +710,41 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
 
     if (
       verificationState.verificationReadSuccess &&
-      verificationState.activeManifest &&
-      verificationState.activeManifest.generation === generationId
+      verificationState.activeManifest
     ) {
-      // Our generation is confirmed active.
-      // DEFERRED RETENTION: Retain the immediate previous generation (previousManifest.generation)
-      // to avoid breaking in-flight readers that already resolved it.
-      // Only prune generations older than the previous generation.
-      if (previousManifest) {
-        if (previousManifest.previousGeneration && previousManifest.previousFiles) {
-          for (const staleFile of previousManifest.previousFiles) {
-            const oldKey = `${root}/generations/${previousManifest.previousGeneration}/${staleFile}`;
-            await this.storageProvider.delete(oldKey).catch(() => {});
-          }
-        } else if (!previousManifest.generation) {
-          // Legacy flat package upgrade cleanup
-          for (const staleFile of previousManifest.files) {
-            const oldKey = `${root}/${staleFile}`;
-            await this.storageProvider.delete(oldKey).catch(() => {});
+      const activeGen = verificationState.activeManifest.generation;
+      const prevGen = verificationState.activeManifest.previousGeneration;
+
+      if (activeGen === generationId) {
+        // Our generation is confirmed active.
+        // DEFERRED RETENTION: Retain the immediate previous generation (previousManifest.generation)
+        // to avoid breaking in-flight readers that already resolved it.
+        // Only prune generations older than the previous generation.
+        if (previousManifest) {
+          if (previousManifest.previousGeneration && previousManifest.previousFiles) {
+            for (const staleFile of previousManifest.previousFiles) {
+              const oldKey = `${root}/generations/${previousManifest.previousGeneration}/${staleFile}`;
+              await this.storageProvider.delete(oldKey).catch(() => {});
+            }
+          } else if (!previousManifest.generation) {
+            // Legacy flat package upgrade cleanup
+            for (const staleFile of previousManifest.files) {
+              const oldKey = `${root}/${staleFile}`;
+              await this.storageProvider.delete(oldKey).catch(() => {});
+            }
           }
         }
-      }
-    } else if (
-      verificationState.verificationReadSuccess &&
-      verificationState.activeManifest &&
-      verificationState.activeManifest.generation &&
-      verificationState.activeManifest.generation !== generationId
-    ) {
-      // A concurrent installer committed after us and became authoritative.
-      // Do NOT clean up previousManifest (it might be what is active or needed by the other write).
-      // Clean up our unreferenced staged generation to avoid orphaned storage objects.
-      for (const stagedKey of stagedKeys) {
-        await this.storageProvider.delete(stagedKey).catch(() => {});
+      } else if (prevGen === generationId) {
+        // A concurrent installer committed after us and became authoritative,
+        // BUT explicitly recorded our generation as its previousGeneration!
+        // Our generation is retained by the authoritative active manifest for in-flight readers.
+        // NEVER delete our files, as they are actively referenced.
+      } else {
+        // A concurrent installer committed after us and became authoritative,
+        // and the active manifest does not directly reference our generation.
+        // To preserve in-flight readers that may have observed our generation
+        // during the transition, do NOT delete our staged files synchronously.
+        // Deferred GC (or subsequent generation writes) will prune older generations.
       }
     } else {
       // Indeterminate state: verification read threw or active manifest state could not be confirmed.
@@ -767,7 +780,16 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
         return null;
       }
       const specificKey = `${root}/generations/${generation}/${cleanRel}`;
-      return this.readObject(specificKey).catch(() => null);
+      const buf = await this.readObject(specificKey).catch(() => null);
+      if (buf) {
+        return buf;
+      }
+      if (publicationId !== "pub_default" && allowLegacyFallback) {
+        const legacyRoot = this.getLegacyThemeRootPath(themeId, version);
+        const legacyKey = `${legacyRoot}/generations/${generation}/${cleanRel}`;
+        return this.readObject(legacyKey).catch(() => null);
+      }
+      return null;
     }
 
     const manifest = await this.readIndexManifest(
@@ -871,16 +893,10 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
         f.endsWith(".md") ||
         f.endsWith(".txt")
       ) {
-        const buf = pinnedGeneration
-          ? await this.getThemeFile(
-              themeId,
-              version,
-              f,
-              publicationId,
-              allowLegacyFallback,
-              pinnedGeneration,
-            ).catch(() => null)
-          : await this.readObject(`${targetRoot}/${f}`).catch(() => null);
+        const key = pinnedGeneration
+          ? `${targetRoot}/generations/${pinnedGeneration}/${f}`
+          : `${targetRoot}/${f}`;
+        const buf = await this.readObject(key).catch(() => null);
 
         if (buf) {
           map.set(f, buf.toString("utf-8"));
