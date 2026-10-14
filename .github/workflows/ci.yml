@@ -112,15 +112,13 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-  # End-to-end Playwright suite (existing 66 tests + First-Run Setup Wizard).
-  # Release gate on pushes to main; the dev stack (seeded -> installed) covers
-  # the existing suite and compose.setup-e2e.yml provides a fresh instance for
-  # the wizard spec on :8899.
+  # PR gate: gateway smoke + media streaming, image picker, and traversal checks.
+  # Main release gate: full Playwright suite including fresh-install wizard.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -194,18 +192,35 @@ jobs:
           done
           curl -sf http://127.0.0.1:7777/ >/dev/null || { echo 'gateway -> web round-trip failed'; tail -40 /tmp/web.log; tail -40 /tmp/api.log; exit 1; }
 
-          # --- Fresh-install stack (setup wizard E2E, :8899) ---
-          # No `--wait`: the one-shot migrate service exits (0) and
-          # `up --wait` treats any exited container as a failure.
-          docker compose -f compose.setup-e2e.yml up -d --build
-          for i in $(seq 1 60); do
-            if curl -sf -o /dev/null http://127.0.0.1:8899/nginx-health; then
-              curl -sf http://127.0.0.1:8899/api/setup/v1/status && break
-            fi
-            sleep 5
-          done
-          curl -sf http://127.0.0.1:8899/api/setup/v1/status || { echo 'setup-e2e stack failed to become ready'; docker compose -f compose.setup-e2e.yml logs --tail=40; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # --- Fresh-install stack (setup wizard E2E, :8899) ---
+            # No `--wait`: the one-shot migrate service exits (0) and
+            # `up --wait` treats any exited container as a failure.
+            docker compose -f compose.setup-e2e.yml up -d --build
+            for i in $(seq 1 60); do
+              if curl -sf -o /dev/null http://127.0.0.1:8899/nginx-health; then
+                curl -sf http://127.0.0.1:8899/api/setup/v1/status && break
+              fi
+              sleep 5
+            done
+            curl -sf http://127.0.0.1:8899/api/setup/v1/status || { echo 'setup-e2e stack failed to become ready'; docker compose -f compose.setup-e2e.yml logs --tail=40; exit 1; }
+          fi
 
           # --- Browser + tests ---
           npx playwright install chromium --with-deps
-          npx playwright test
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # Tests B/C/J use isolated fixtures, unlike media tests that rely
+            # on assets created elsewhere in the full E2E run.
+            npx playwright test tests/e2e/smoke.test.ts tests/e2e/media-library-storage-integrity.test.ts --grep 'Vibress Foundation Smoke Tests|TEST (B|C|J):'
+          else
+            npx playwright test
+          fi
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ github.run_id }}-${{ github.job }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
