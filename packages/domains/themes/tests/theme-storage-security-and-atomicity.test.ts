@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import dns from "node:dns";
 import {
   StorageProvider,
   StorageCapabilities,
@@ -17,6 +18,8 @@ import {
   validateThemeRelativePath,
   isSafeSignedUrl,
   isPrivateOrRestrictedIP,
+  isTrustedStorageDestination,
+  fetchSignedUrlSafely,
 } from "../src";
 
 class DeterministicFailingStorageProvider implements StorageProvider {
@@ -26,6 +29,9 @@ class DeterministicFailingStorageProvider implements StorageProvider {
   public failOnPutPattern?: RegExp;
   public failAfterNthPut?: number;
   public failOnDeleteKeys = new Set<string>();
+  public failOnGetBufferKeys = new Set<string>();
+  public failOnExistsKeys = new Set<string>();
+  public onGetBufferHook?: (key: string) => Promise<void> | void;
   public putCount = 0;
 
   getCapabilities(): StorageCapabilities {
@@ -62,6 +68,9 @@ class DeterministicFailingStorageProvider implements StorageProvider {
   }
 
   async exists(key: string): Promise<boolean> {
+    if (this.failOnExistsKeys.has(key)) {
+      throw new Error(`Simulated exists failure for key: ${key}`);
+    }
     return this.objects.has(key);
   }
 
@@ -70,6 +79,12 @@ class DeterministicFailingStorageProvider implements StorageProvider {
   }
 
   async getObjectBuffer(key: string): Promise<Buffer | null> {
+    if (this.failOnGetBufferKeys.has(key)) {
+      throw new Error(`Simulated read failure for key: ${key}`);
+    }
+    if (this.onGetBufferHook) {
+      await this.onGetBufferHook(key);
+    }
     return this.objects.get(key) ?? null;
   }
 }
@@ -764,6 +779,205 @@ describe("PRIORITY 0: Cloud Theme Package Atomicity Under Failure Injection", ()
           delete process.env.STORAGE_S3_ENDPOINT;
         }
       }
+    });
+
+    it("rejects untrusted storage destinations before establishing connection", async () => {
+      const untrustedUrls = [
+        "https://attacker-controlled.com/theme.json",
+        "https://evil.internal.corp/steal",
+        "https://s3.evil-domain.com/theme.json",
+        "https://mybucket.s3.attacker.com/theme.json",
+        "http://169.254.169.254/latest/meta-data",
+      ];
+
+      for (const rawUrl of untrustedUrls) {
+        expect(isTrustedStorageDestination(new URL(rawUrl))).toBe(false);
+        await expect(fetchSignedUrlSafely(rawUrl)).rejects.toThrow(/Untrusted storage destination/);
+      }
+
+      // Valid cloud storage domains are recognized as trusted destinations
+      expect(isTrustedStorageDestination(new URL("https://mybucket.s3.amazonaws.com/theme.json"))).toBe(true);
+      expect(isTrustedStorageDestination(new URL("https://s3.us-west-2.amazonaws.com/theme.json"))).toBe(true);
+      expect(isTrustedStorageDestination(new URL("https://mybucket.r2.cloudflarestorage.com/theme.json"))).toBe(true);
+      expect(isTrustedStorageDestination(new URL("https://storage.googleapis.com/mybucket/theme.json"))).toBe(true);
+      expect(isTrustedStorageDestination(new URL("https://myaccount.blob.core.windows.net/mycontainer/theme.json"))).toBe(true);
+    });
+
+    it("prevents DNS rebinding by validating resolved IP at connection time", async () => {
+      const origLookup = dns.lookup;
+      try {
+        // Mock dns.lookup to simulate DNS rebinding: trusted domain resolves to restricted IP
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dns as any).lookup = (
+          _hostname: string,
+          options: unknown,
+          callback: (err: Error | null, address: unknown, family?: number) => void,
+        ) => {
+          let cb = callback;
+          if (typeof options === "function") {
+            cb = options as typeof callback;
+          }
+          cb(null, "127.0.0.1", 4);
+        };
+
+        await expect(
+          fetchSignedUrlSafely("https://s3.amazonaws.com/mybucket/theme.json"),
+        ).rejects.toThrow(/Connection-time SSRF blocked/);
+      } finally {
+        dns.lookup = origLookup;
+      }
+    });
+  });
+
+  describe("PRIORITY 1 Review Regressions: Manifest Recovery, Pinned Reads & Native Storage Preference", () => {
+    it("Post-activation verification storage read failure does not delete staged generation", async () => {
+      const themeId = "post-activation-fail-theme";
+      const version = "1.0.0";
+      const pubId = "pub_alpha";
+
+      const files = new Map<string, Buffer>();
+      files.set("theme.json", Buffer.from(JSON.stringify({ name: "Safe Theme" })));
+      files.set("templates/index.liquid", Buffer.from("<h1>Hello Safe</h1>"));
+
+      // Configure provider to fail when reading the manifest (__files.json) during post-activation check
+      const manifestKey = adapter.getThemeRootPath(themeId, version, pubId) + "/__files.json";
+      provider.failOnGetBufferKeys.add(manifestKey);
+
+      // saveThemeFiles should complete without deleting the staged files
+      const root = await adapter.saveThemeFiles(themeId, version, files, pubId);
+      expect(root).toBeDefined();
+
+      // Clear the failure so we can inspect storage
+      provider.failOnGetBufferKeys.clear();
+
+      // Verify that the manifest exists and points to our generation
+      const manifestBuffer = await provider.getObjectBuffer(manifestKey);
+      expect(manifestBuffer).not.toBeNull();
+      const manifest = JSON.parse(manifestBuffer!.toString("utf-8"));
+      expect(manifest.generation).toBeDefined();
+
+      // Verify that our staged files were NOT deleted and remain intact in storage
+      const genFileKey = `${root}/generations/${manifest.generation}/templates/index.liquid`;
+      const fileBuffer = await provider.getObjectBuffer(genFileKey);
+      expect(fileBuffer).not.toBeNull();
+      expect(fileBuffer!.toString("utf-8")).toBe("<h1>Hello Safe</h1>");
+    });
+
+    it("Ambiguous write recovery read failure preserves staged files without deleting them", async () => {
+      const themeId = "ambiguous-fail-theme";
+      const version = "1.0.0";
+      const pubId = "pub_alpha";
+
+      const files = new Map<string, Buffer>();
+      files.set("theme.json", Buffer.from(JSON.stringify({ name: "Ambiguous Theme" })));
+      files.set("assets/app.js", Buffer.from("console.log('staged');"));
+
+      const root = adapter.getThemeRootPath(themeId, version, pubId);
+      const manifestKey = `${root}/__files.json`;
+
+      // Fail manifest put AND fail recovery read
+      provider.failOnPutKeys.add(manifestKey);
+      provider.failOnGetBufferKeys.add(manifestKey);
+
+      // saveThemeFiles should throw the write error
+      await expect(
+        adapter.saveThemeFiles(themeId, version, files, pubId),
+      ).rejects.toThrow();
+
+      // Staged files should NOT have been deleted because authoritative state was indeterminate!
+      const stagedKeys = Array.from(provider.objects.keys()).filter((k) =>
+        k.includes("generations") && k.endsWith("assets/app.js"),
+      );
+      expect(stagedKeys.length).toBe(1);
+      const stagedContent = provider.objects.get(stagedKeys[0]!);
+      expect(stagedContent?.toString("utf-8")).toBe("console.log('staged');");
+    });
+
+    it("getThemeFilesMap pins generation snapshot and prevents torn reads during concurrent replacement", async () => {
+      const themeId = "concurrent-read-theme";
+      const version = "1.0.0";
+      const pubId = "pub_alpha";
+
+      // 1. Install Generation 1
+      const v1Files = new Map<string, Buffer>();
+      v1Files.set("theme.json", Buffer.from(JSON.stringify({ name: "Theme Gen 1" })));
+      v1Files.set("assets/style.css", Buffer.from("/* Gen 1 CSS */"));
+      v1Files.set("templates/index.liquid", Buffer.from("<h1>Gen 1 HTML</h1>"));
+      await adapter.saveThemeFiles(themeId, version, v1Files, pubId);
+
+      // Verify Gen 1 is installed
+      const initialMap = await adapter.getThemeFilesMap(themeId, version, pubId);
+      expect(initialMap.get("assets/style.css")).toBe("/* Gen 1 CSS */");
+      expect(initialMap.get("templates/index.liquid")).toBe("<h1>Gen 1 HTML</h1>");
+
+      // 2. Set up hook: during getThemeFilesMap, after the first file is read, simulate concurrent theme replacement to Gen 2!
+      let concurrentReplacementDone = false;
+      provider.onGetBufferHook = async (key: string) => {
+        // Trigger replacement when reading the first theme file inside getThemeFilesMap
+        if (!concurrentReplacementDone && key.includes("assets/style.css")) {
+          concurrentReplacementDone = true;
+          const v2Files = new Map<string, Buffer>();
+          v2Files.set("theme.json", Buffer.from(JSON.stringify({ name: "Theme Gen 2" })));
+          v2Files.set("assets/style.css", Buffer.from("/* Gen 2 CSS */"));
+          v2Files.set("templates/index.liquid", Buffer.from("<h1>Gen 2 HTML</h1>"));
+          await adapter.saveThemeFiles(themeId, version, v2Files, pubId);
+        }
+      };
+
+      // 3. Read theme files map while replacement happens mid-operation
+      const filesMap = await adapter.getThemeFilesMap(themeId, version, pubId);
+      expect(concurrentReplacementDone).toBe(true);
+
+      // Crucial assertion: filesMap MUST NOT be torn!
+      // All files returned by getThemeFilesMap must come exclusively from Gen 1
+      expect(filesMap.get("assets/style.css")).toBe("/* Gen 1 CSS */");
+      expect(filesMap.get("templates/index.liquid")).toBe("<h1>Gen 1 HTML</h1>");
+
+      // Clear the hook
+      provider.onGetBufferHook = undefined;
+
+      // Subsequent read after completion should consistently see Gen 2
+      const subsequentMap = await adapter.getThemeFilesMap(themeId, version, pubId);
+      expect(subsequentMap.get("assets/style.css")).toBe("/* Gen 2 CSS */");
+      expect(subsequentMap.get("templates/index.liquid")).toBe("<h1>Gen 2 HTML</h1>");
+    });
+
+    it("prefers native getObjectBuffer over signed URLs when available", async () => {
+      let getObjectBufferCalled = false;
+      let getSignedUrlCalled = false;
+
+      const hybridProvider: StorageProvider = {
+        name: "s3",
+        getCapabilities: () => ({
+          signedUrls: true,
+          directUpload: true,
+          multipartUpload: true,
+          privateObjects: true,
+          publicObjects: true,
+        }),
+        put: async (input) => ({ key: input.key, url: `fake://${input.key}`, size: 10 }),
+        delete: async () => {},
+        exists: async () => true,
+        getUrl: async (k) => `fake://${k}`,
+        getObjectBuffer: async (k) => {
+          getObjectBufferCalled = true;
+          if (k.endsWith("__files.json")) {
+            return Buffer.from(JSON.stringify({ files: ["theme.json"], generation: "g1" }));
+          }
+          return Buffer.from("native-content");
+        },
+        getSignedUrl: async () => {
+          getSignedUrlCalled = true;
+          return "https://s3.amazonaws.com/bucket/key";
+        },
+      };
+
+      const adapter = new StorageProviderThemeStorageAdapter(hybridProvider);
+      const file = await adapter.getThemeFile("test", "1.0.0", "theme.json", "pub_alpha");
+
+      expect(getObjectBufferCalled).toBe(true);
+      expect(getSignedUrlCalled).toBe(false);
+      expect(file?.toString("utf-8")).toBe("native-content");
     });
   });
 });

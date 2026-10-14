@@ -482,5 +482,7 @@ export {
   StorageProviderThemeStorageAdapter,
   isSafeSignedUrl,
   isPrivateOrRestrictedIP,
+  isTrustedStorageDestination,
+  fetchSignedUrlSafely,
   type ThemePackageManifest,
 } from "./storage-provider-theme-storage-adapter";

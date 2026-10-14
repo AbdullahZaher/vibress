@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import net from "node:net";
 import dns from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import { StorageProvider } from "@vibress/storage-core";
 import {
   ThemeStorageAdapter,
@@ -92,25 +94,264 @@ export function isPrivateOrRestrictedIP(ip: string): boolean {
   return true;
 }
 
+export function isTrustedStorageDestination(parsed: URL): boolean {
+  const host = parsed.hostname.toLowerCase();
+
+  // 1. Check against explicitly configured storage endpoints in environment
+  const configuredEndpoints = [
+    process.env.STORAGE_S3_ENDPOINT,
+    process.env.MINIO_ENDPOINT,
+  ].filter((e): e is string => typeof e === "string" && e.length > 0);
+
+  for (const endpoint of configuredEndpoints) {
+    try {
+      const parsedEndpoint = new URL(endpoint);
+      const confHost = parsedEndpoint.hostname.toLowerCase();
+      // If the endpoint matches origin exactly (protocol, hostname, port), trust it
+      if (parsed.origin === parsedEndpoint.origin) {
+        return true;
+      }
+      // For domain names, allow virtual-hosted bucket subdomains only if port and protocol match
+      if (
+        !net.isIP(confHost) &&
+        confHost !== "localhost" &&
+        parsed.port === parsedEndpoint.port &&
+        parsed.protocol === parsedEndpoint.protocol &&
+        host.endsWith("." + confHost)
+      ) {
+        return true;
+      }
+    } catch {
+      // Ignore invalid configured endpoint URL
+    }
+  }
+
+  // 2. AWS S3 host patterns
+  if (
+    host === "s3.amazonaws.com" ||
+    /^([a-z0-9.-]+\.)?s3([.-][a-z0-9-]+)?\.amazonaws\.com$/.test(host)
+  ) {
+    return true;
+  }
+
+  // 3. Cloudflare R2
+  if (/^[a-z0-9.-]+\.r2\.cloudflarestorage\.com$/.test(host)) {
+    return true;
+  }
+
+  // 4. Google Cloud Storage
+  if (
+    host === "storage.googleapis.com" ||
+    /^[a-z0-9.-]+\.storage\.googleapis\.com$/.test(host)
+  ) {
+    return true;
+  }
+
+  // 5. Azure Blob Storage
+  if (/^[a-z0-9.-]+\.blob\.core\.windows\.net$/.test(host)) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function fetchSignedUrlSafely(
+  rawUrl: string,
+  timeoutMs = 5000,
+): Promise<{ buffer: Buffer | null; status: number }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error("Invalid signed URL");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Unsupported protocol in signed URL: ${parsed.protocol}`);
+  }
+
+  // 1. Enforce trusted storage destination
+  if (!isTrustedStorageDestination(parsed)) {
+    throw new Error(`Untrusted storage destination in signed URL: ${parsed.hostname}`);
+  }
+
+  // Check if this destination is an explicitly configured local endpoint
+  const isExplicitConfiguredEndpoint = (() => {
+    const configured = [
+      process.env.STORAGE_S3_ENDPOINT,
+      process.env.MINIO_ENDPOINT,
+    ].filter((e): e is string => typeof e === "string" && e.length > 0);
+    for (const ep of configured) {
+      try {
+        const epUrl = new URL(ep);
+        if (parsed.origin === epUrl.origin) {
+          return true;
+        }
+        if (
+          !net.isIP(epUrl.hostname) &&
+          epUrl.hostname !== "localhost" &&
+          parsed.port === epUrl.port &&
+          parsed.protocol === epUrl.protocol &&
+          parsed.hostname.toLowerCase().endsWith("." + epUrl.hostname.toLowerCase())
+        ) {
+          return true;
+        }
+      } catch {
+        // Ignore invalid configured endpoint URL
+      }
+    }
+    return false;
+  })();
+
+  const cleanHost = parsed.hostname.replace(/^\[|\]$/g, "").trim().toLowerCase();
+
+  // If not an explicit local development endpoint, block local/metadata hostnames
+  if (!isExplicitConfiguredEndpoint) {
+    if (
+      cleanHost === "169.254.169.254" ||
+      cleanHost.startsWith("169.254.") ||
+      cleanHost === "metadata.google.internal" ||
+      cleanHost === "instance-data" ||
+      cleanHost === "localhost" ||
+      cleanHost.endsWith(".internal") ||
+      cleanHost.endsWith(".local") ||
+      cleanHost.endsWith(".localhost") ||
+      (net.isIP(cleanHost) && isPrivateOrRestrictedIP(cleanHost))
+    ) {
+      throw new Error(`Restricted hostname or IP in signed URL: ${cleanHost}`);
+    }
+  }
+
+  // 2. Perform HTTP request with connection-time DNS validation (eliminating DNS rebinding TOCTOU gap)
+  return new Promise<{ buffer: Buffer | null; status: number }>((resolve, reject) => {
+    const client = parsed.protocol === "https:" ? https : http;
+
+    const req = client.request(
+      parsed,
+      {
+        method: "GET",
+        headers: {
+          Accept: "*/*",
+        },
+        lookup: (hostname, options, callback) => {
+          dns.lookup(hostname, options, (err, address, family) => {
+            if (err) {
+              return callback(err, address, family);
+            }
+            if (!isExplicitConfiguredEndpoint) {
+              if (Array.isArray(address)) {
+                for (const item of address) {
+                  if (isPrivateOrRestrictedIP(item.address)) {
+                    return callback(
+                      new Error(
+                        `Connection-time SSRF blocked: ${hostname} resolved to restricted IP ${item.address}`,
+                      ),
+                      address,
+                      family,
+                    );
+                  }
+                }
+              } else if (typeof address === "string") {
+                if (isPrivateOrRestrictedIP(address)) {
+                  return callback(
+                    new Error(
+                      `Connection-time SSRF blocked: ${hostname} resolved to restricted IP ${address}`,
+                    ),
+                    address,
+                    family,
+                  );
+                }
+              }
+            }
+            callback(null, address, family);
+          });
+        },
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        // Never follow redirects on signed URLs
+        if (status >= 300 && status < 400) {
+          res.resume();
+          return reject(new Error(`Redirects are not permitted for signed URLs (status ${status})`));
+        }
+
+        if (status === 404) {
+          res.resume();
+          return resolve({ buffer: null, status: 404 });
+        }
+
+        if (status < 200 || status >= 300) {
+          res.resume();
+          return reject(new Error(`Storage provider returned HTTP ${status}`));
+        }
+
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        res.on("end", () => {
+          resolve({ buffer: Buffer.concat(chunks), status });
+        });
+        res.on("error", (err) => {
+          reject(err);
+        });
+      },
+    );
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Signed URL request timed out after ${timeoutMs}ms`));
+    });
+
+    req.on("error", (err) => {
+      reject(err);
+    });
+
+    req.end();
+  });
+}
+
 export async function isSafeSignedUrl(rawUrl: string): Promise<boolean> {
   try {
     const parsed = new URL(rawUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return false;
     }
+    if (!isTrustedStorageDestination(parsed)) {
+      return false;
+    }
+
     const cleanHost = parsed.hostname.replace(/^\[|\]$/g, "").trim().toLowerCase();
 
     // Check if this matches explicitly configured S3/storage endpoint
-    const s3Endpoint = process.env.STORAGE_S3_ENDPOINT || process.env.MINIO_ENDPOINT;
-    if (s3Endpoint) {
-      try {
-        const parsedEndpoint = new URL(s3Endpoint);
-        if (parsed.origin === parsedEndpoint.origin) {
-          return true;
+    const isExplicitConfiguredEndpoint = (() => {
+      const configured = [
+        process.env.STORAGE_S3_ENDPOINT,
+        process.env.MINIO_ENDPOINT,
+      ].filter((e): e is string => typeof e === "string" && e.length > 0);
+      for (const ep of configured) {
+        try {
+          const epUrl = new URL(ep);
+          if (parsed.origin === epUrl.origin) {
+            return true;
+          }
+          if (
+            !net.isIP(epUrl.hostname) &&
+            epUrl.hostname !== "localhost" &&
+            parsed.port === epUrl.port &&
+            parsed.protocol === epUrl.protocol &&
+            parsed.hostname.toLowerCase().endsWith("." + epUrl.hostname.toLowerCase())
+          ) {
+            return true;
+          }
+        } catch {
+          // Ignore invalid configured endpoint URL
         }
-      } catch {
-        // Ignore invalid configured endpoint URL
       }
+      return false;
+    })();
+
+    if (isExplicitConfiguredEndpoint) {
+      return true;
     }
 
     // Block cloud metadata services and link-local hostnames
@@ -138,7 +379,7 @@ export async function isSafeSignedUrl(rawUrl: string): Promise<boolean> {
       return !isPrivateOrRestrictedIP(cleanHost);
     }
 
-    // Hostname is a domain: perform DNS resolution to prevent DNS rebinding
+    // Hostname is a domain: perform DNS resolution
     try {
       const addresses = await dns.promises.lookup(cleanHost, { all: true });
       if (!addresses || addresses.length === 0) {
@@ -186,32 +427,17 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
   }
 
   private async readObject(key: string): Promise<Buffer | null> {
-    try {
-      if (typeof this.storageProvider.getObjectBuffer === "function") {
-        return await this.storageProvider.getObjectBuffer(key);
-      }
-      if (typeof this.storageProvider.getSignedUrl === "function") {
-        const url = await this.storageProvider.getSignedUrl(key, {
-          operation: "get",
-        });
-        if (await isSafeSignedUrl(url)) {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          try {
-            const response = await fetch(url, {
-              signal: controller.signal,
-              redirect: "error",
-            });
-            return response.ok ? Buffer.from(await response.arrayBuffer()) : null;
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        }
-      }
-      return null;
-    } catch {
-      return null;
+    if (typeof this.storageProvider.getObjectBuffer === "function") {
+      return await this.storageProvider.getObjectBuffer(key);
     }
+    if (typeof this.storageProvider.getSignedUrl === "function") {
+      const url = await this.storageProvider.getSignedUrl(key, {
+        operation: "get",
+      });
+      const result = await fetchSignedUrlSafely(url, 5000);
+      return result.buffer;
+    }
+    return null;
   }
 
   private async readIndexManifest(
@@ -221,10 +447,10 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     allowLegacyFallback = false,
   ): Promise<{
     format: "v1" | "v2";
-    generation?: string;
-    previousGeneration?: string;
+    generation?: string | undefined;
+    previousGeneration?: string | undefined;
     files: string[];
-    previousFiles?: string[];
+    previousFiles?: string[] | undefined;
     isLegacy: boolean;
     root: string;
   } | null> {
@@ -272,6 +498,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
           return null;
         }
       }
+      return null;
     }
 
     if (publicationId !== "pub_default" && allowLegacyFallback) {
@@ -318,6 +545,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
             return null;
           }
         }
+        return null;
       }
     }
 
@@ -410,8 +638,53 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
 
       // Ambiguous write handling: the manifest write threw or timed out on the client.
       // We must verify whether the storage provider actually committed the manifest.
-      let recoveryReadSuccess: boolean;
-      let committedGeneration: string | null = null;
+      const recoveryState = await (async () => {
+        try {
+          const active = await this.readIndexManifest(
+            cleanId,
+            cleanVersion,
+            cleanPublicationId,
+            false,
+          );
+          return { recoveryReadSuccess: true, activeManifest: active };
+        } catch {
+          return { recoveryReadSuccess: false, activeManifest: null };
+        }
+      })();
+
+      if (
+        recoveryState.recoveryReadSuccess &&
+        recoveryState.activeManifest &&
+        recoveryState.activeManifest.generation === generationId
+      ) {
+        // The manifest successfully committed and is active despite the client error/timeout!
+        // Never delete the active generation's staged files.
+        return root;
+      }
+
+      if (
+        recoveryState.recoveryReadSuccess &&
+        recoveryState.activeManifest &&
+        recoveryState.activeManifest.generation &&
+        recoveryState.activeManifest.generation !== generationId
+      ) {
+        // The manifest was successfully read and confirmed to point to another generation.
+        // Our staged files are definitely orphaned and safe to clean up.
+        for (const stagedKey of stagedKeys) {
+          await this.storageProvider.delete(stagedKey).catch(() => {});
+        }
+        throw error;
+      }
+
+      // Ambiguous/indeterminate failure:
+      // Either recovery read threw (network/storage failure), or manifest state could not be verified.
+      // Favor data preservation: NEVER delete staged files when authoritative state cannot be verified!
+      throw error;
+    }
+
+    // 3. Post-activation verification & safe deferred concurrency cleanup
+    // Read the authoritative active manifest to confirm our generation became active.
+    const verificationState = await (async () => {
       try {
         const active = await this.readIndexManifest(
           cleanId,
@@ -419,47 +692,18 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
           cleanPublicationId,
           false,
         );
-        recoveryReadSuccess = true;
-        if (active && active.generation) {
-          committedGeneration = active.generation;
-        }
+        return { verificationReadSuccess: true, activeManifest: active };
       } catch {
-        recoveryReadSuccess = false;
-        committedGeneration = null;
+        return { verificationReadSuccess: false, activeManifest: null };
       }
+    })();
 
-      if (recoveryReadSuccess && committedGeneration === generationId) {
-        // The manifest successfully committed and is active despite the client error/timeout!
-        // Never delete the active generation's staged files.
-        return root;
-      }
-
-      if (!recoveryReadSuccess) {
-        // Ambiguous failure: manifest write threw AND recovery read failed.
-        // We cannot determine if S3 committed the manifest.
-        // Favor data preservation: DO NOT delete staged files when commit status cannot be verified.
-        throw error;
-      }
-
-      // If the manifest was readable and confirmed to point to another generation,
-      // then our staged files are definitely orphaned and safe to clean up.
-      for (const stagedKey of stagedKeys) {
-        await this.storageProvider.delete(stagedKey).catch(() => {});
-      }
-      throw error;
-    }
-
-    // 3. Post-activation verification & safe deferred concurrency cleanup
-    // Read the authoritative active manifest to confirm our generation became active.
-    const activeManifest = await this.readIndexManifest(
-      cleanId,
-      cleanVersion,
-      cleanPublicationId,
-      false,
-    );
-
-    if (activeManifest && activeManifest.generation === generationId) {
-      // Our generation is active.
+    if (
+      verificationState.verificationReadSuccess &&
+      verificationState.activeManifest &&
+      verificationState.activeManifest.generation === generationId
+    ) {
+      // Our generation is confirmed active.
       // DEFERRED RETENTION: Retain the immediate previous generation (previousManifest.generation)
       // to avoid breaking in-flight readers that already resolved it.
       // Only prune generations older than the previous generation.
@@ -477,13 +721,21 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
           }
         }
       }
-    } else {
+    } else if (
+      verificationState.verificationReadSuccess &&
+      verificationState.activeManifest &&
+      verificationState.activeManifest.generation &&
+      verificationState.activeManifest.generation !== generationId
+    ) {
       // A concurrent installer committed after us and became authoritative.
       // Do NOT clean up previousManifest (it might be what is active or needed by the other write).
       // Clean up our unreferenced staged generation to avoid orphaned storage objects.
       for (const stagedKey of stagedKeys) {
         await this.storageProvider.delete(stagedKey).catch(() => {});
       }
+    } else {
+      // Indeterminate state: verification read threw or active manifest state could not be confirmed.
+      // Never delete our staged generation when authoritative state cannot be verified!
     }
 
     return root;
@@ -515,7 +767,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
         return null;
       }
       const specificKey = `${root}/generations/${generation}/${cleanRel}`;
-      return this.readObject(specificKey);
+      return this.readObject(specificKey).catch(() => null);
     }
 
     const manifest = await this.readIndexManifest(
@@ -523,14 +775,14 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       version,
       publicationId,
       allowLegacyFallback,
-    );
+    ).catch(() => null);
 
     if (manifest) {
       if (manifest.files.includes(cleanRel)) {
         const key = manifest.generation
           ? `${manifest.root}/generations/${manifest.generation}/${cleanRel}`
           : `${manifest.root}/${cleanRel}`;
-        return this.readObject(key);
+        return this.readObject(key).catch(() => null);
       }
       return null;
     }
@@ -539,8 +791,12 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     if (publicationId !== "pub_default" && allowLegacyFallback) {
       const legacyRoot = this.getLegacyThemeRootPath(themeId, version);
       const key = `${legacyRoot}/${cleanRel}`;
-      if (await this.storageProvider.exists(key)) {
-        return this.readObject(key);
+      try {
+        if (await this.storageProvider.exists(key)) {
+          return await this.readObject(key);
+        }
+      } catch {
+        return null;
       }
     }
 
@@ -566,7 +822,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       version,
       publicationId,
       allowLegacyFallback,
-    );
+    ).catch(() => null);
 
     if (manifest) {
       return manifest.files.slice().sort();
@@ -581,15 +837,32 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
     allowLegacyFallback = false,
   ): Promise<Map<string, string>> {
-    const files = await this.listThemeFiles(
+    try {
+      validateStorageThemeId(themeId);
+      validateStorageVersion(version);
+      validateStoragePublicationId(publicationId);
+    } catch {
+      return new Map();
+    }
+
+    // Resolve authoritative manifest snapshot once for all file reads in this operation
+    const manifest = await this.readIndexManifest(
       themeId,
       version,
       publicationId,
       allowLegacyFallback,
-    );
-    const map = new Map<string, string>();
+    ).catch(() => null);
 
-    for (const f of files) {
+    const map = new Map<string, string>();
+    if (!manifest) {
+      return map;
+    }
+
+    // Pin generation snapshot to guarantee consistent, untorn reads across all files
+    const pinnedGeneration = manifest.generation;
+    const targetRoot = manifest.root;
+
+    for (const f of manifest.files) {
       if (
         f.endsWith(".liquid") ||
         f.endsWith(".html") ||
@@ -598,13 +871,17 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
         f.endsWith(".md") ||
         f.endsWith(".txt")
       ) {
-        const buf = await this.getThemeFile(
-          themeId,
-          version,
-          f,
-          publicationId,
-          allowLegacyFallback,
-        );
+        const buf = pinnedGeneration
+          ? await this.getThemeFile(
+              themeId,
+              version,
+              f,
+              publicationId,
+              allowLegacyFallback,
+              pinnedGeneration,
+            ).catch(() => null)
+          : await this.readObject(`${targetRoot}/${f}`).catch(() => null);
+
         if (buf) {
           map.set(f, buf.toString("utf-8"));
         }
@@ -633,7 +910,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       version,
       publicationId,
       false,
-    );
+    ).catch(() => null);
 
     if (manifest) {
       if (manifest.generation) {
@@ -677,7 +954,7 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
       version,
       publicationId,
       allowLegacyFallback,
-    );
+    ).catch(() => null);
 
     if (manifest) {
       if (!manifest.files.includes("theme.json")) {
