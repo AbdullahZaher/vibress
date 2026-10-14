@@ -11,7 +11,7 @@ const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 const PUBLICATION_ID = "pub_default";
 
 const SAMPLE_JPEG = Buffer.from(
-  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=",
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwApw//9k=",
   "base64",
 );
 
@@ -137,47 +137,60 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     page,
   }) => {
     test.setTimeout(60000);
-    await seedFixturePost();
-    await loginUser(page);
-    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
-    await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 15000 });
 
-    // Open post settings panel if not open
-    const settingsButton = page.locator('button[aria-label="Post settings"]');
-    if (await settingsButton.isVisible()) {
-      await settingsButton.click();
-    }
+    // Seed a decodable, publication-owned image so the assertion cannot
+    // accidentally target unrelated or unavailable media from another test.
+    const fixtureId = crypto.randomUUID();
+    const fixtureName = `e2e-picker-${fixtureId}.jpg`;
+    const fixtureKey = `media/${fixtureId}/${fixtureName}`;
+    const fixturePath = path.join(resolveCanonicalStorageRoot(), fixtureKey);
+    const pool = getDbPool();
 
-    // Locate feature image picker trigger or feature image container
-    const featureImageTrigger = page.locator(
-      'button:has-text("Add feature image"), button:has-text("Change"), [data-testid="feature-image-trigger"]',
-    ).first();
+    await fs.promises.mkdir(path.dirname(fixturePath), { recursive: true });
+    await fs.promises.writeFile(fixturePath, SAMPLE_JPEG);
+    try {
+      await pool.query(
+        `INSERT INTO media_assets (id, publication_id, storage_provider, storage_key, original_filename, display_name, mime_type, extension, size_bytes, checksum, asset_type)
+         VALUES ($1, $2, 'local', $3, $4, $4, 'image/jpeg', 'jpg', $5, $6, 'image')`,
+        [fixtureId, PUBLICATION_ID, fixtureKey, fixtureName, SAMPLE_JPEG.length, fixtureId],
+      );
 
-    if (await featureImageTrigger.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await seedFixturePost();
+      await loginUser(page);
+      await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+      await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 15000 });
+
+      const settingsButton = page.locator('button[aria-label="Post settings"]');
+      if (await settingsButton.isVisible()) {
+        await settingsButton.click();
+      }
+
+      const featureImageTrigger = page.locator(
+        'button:has-text("Add feature image"), button:has-text("Change"), [data-testid="feature-image-trigger"]',
+      ).first();
+      await expect(featureImageTrigger).toBeVisible({ timeout: 5000 });
       await featureImageTrigger.click({ force: true });
 
-      // Media picker modal should be visible
-      const modal = page.locator('[role="dialog"]');
+      const modal = page.getByRole("dialog", { name: "Select Media Asset" });
       await expect(modal).toBeVisible({ timeout: 7000 });
+      await modal.getByRole("textbox", { name: "Search media" }).fill(fixtureName);
 
-      // Verify thumbnails are rendered without broken image states
-      const firstThumb = modal.locator("img").first();
-      await expect(firstThumb).toBeVisible({ timeout: 10000 });
+      const fixtureItem = modal.getByTestId("media-picker-item").filter({ hasText: fixtureName });
+      await expect(fixtureItem).toBeVisible({ timeout: 10000 });
+      const thumbnail = fixtureItem.locator("img");
+      await expect(thumbnail).toBeVisible();
+      // Visibility alone does not mean the browser has downloaded and decoded
+      // the image. Poll its decoded width rather than sampling it immediately.
+      await expect.poll(
+        () => thumbnail.evaluate((img: HTMLImageElement) => img.naturalWidth),
+        { timeout: 10000, message: "The seeded local JPEG thumbnail must decode" },
+      ).toBeGreaterThan(0);
 
-      const thumbnails = modal.locator("img");
-      const count = await thumbnails.count();
-      expect(count).toBeGreaterThan(0);
-
-      const naturalWidth = await firstThumb.evaluate(
-        (img: HTMLImageElement) => img.naturalWidth,
-      );
-      expect(naturalWidth).toBeGreaterThan(0);
-
-      // Close modal
-      const closeBtn = modal.locator('button[aria-label="Close"], button:has-text("Cancel")').first();
-      if (await closeBtn.isVisible()) {
-        await closeBtn.click();
-      }
+      await modal.getByRole("button", { name: "Close" }).click();
+      await expect(modal).toBeHidden();
+    } finally {
+      await pool.query("DELETE FROM media_assets WHERE id = $1", [fixtureId]);
+      await fs.promises.rm(path.dirname(fixturePath), { recursive: true, force: true });
     }
   });
 
