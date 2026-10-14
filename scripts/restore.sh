@@ -43,6 +43,11 @@ WITH_CONTENT=0
 CONTENT_FILE=""
 TARGET_CONTENT_VOLUME=""
 TARGET_CONTENT_DIR=""
+WITH_S3=0
+S3_FILE=""
+TARGET_S3_BUCKET=""
+TARGET_S3_PREFIX=""
+TARGET_S3_ENDPOINT=""
 CONFIRMED=0
 SKIP_CHECKSUM=0
 
@@ -67,6 +72,25 @@ while [ $# -gt 0 ]; do
       ;;
     --content-dir)
       TARGET_CONTENT_DIR="$2"
+      shift
+      ;;
+    --with-s3)
+      WITH_S3=1
+      if [ $# -gt 1 ] && [[ "$2" != --* ]] && [[ "$2" == *.tar.gz ]]; then
+        S3_FILE="$2"
+        shift
+      fi
+      ;;
+    --s3-bucket)
+      TARGET_S3_BUCKET="$2"
+      shift
+      ;;
+    --s3-prefix)
+      TARGET_S3_PREFIX="$2"
+      shift
+      ;;
+    --s3-endpoint)
+      TARGET_S3_ENDPOINT="$2"
       shift
       ;;
     *)
@@ -134,12 +158,44 @@ if [ "${WITH_CONTENT}" -eq 1 ] && [ -z "${CONTENT_FILE}" ]; then
   fi
 fi
 
+# Auto-locate S3 archive if --with-s3 was requested without explicit file
+if [ "${WITH_S3}" -eq 1 ] && [ -z "${S3_FILE}" ]; then
+  BACKUP_DIR=$(dirname "${BACKUP_FILE}")
+  SQL_BASENAME=$(basename "${BACKUP_FILE}")
+  if [[ "${SQL_BASENAME}" =~ vibress_backup_([0-9]{8}_[0-9]{6})\.sql\.gz ]]; then
+    TS="${BASH_REMATCH[1]}"
+    if [ -f "${BACKUP_DIR}/vibress_s3_${TS}.tar.gz" ]; then
+      S3_FILE="${BACKUP_DIR}/vibress_s3_${TS}.tar.gz"
+    fi
+  fi
+  if [ -z "${S3_FILE}" ]; then
+    LATEST_S3=$(ls -t "${BACKUP_DIR}"/vibress_s3_*.tar.gz 2>/dev/null | head -n 1 || true)
+    if [ -n "${LATEST_S3}" ] && [ -f "${LATEST_S3}" ]; then
+      S3_FILE="${LATEST_S3}"
+    fi
+  fi
+  if [ -z "${S3_FILE}" ]; then
+    echo "Error: --with-s3 requested but no matching vibress_s3_*.tar.gz found in ${BACKUP_DIR}." >&2
+    exit 1
+  fi
+fi
+
+TARGET_S3_BUCKET="${TARGET_S3_BUCKET:-${S3_BUCKET:-${AWS_S3_BUCKET:-}}}"
+if [ "${WITH_S3}" -eq 1 ] && [ -z "${TARGET_S3_BUCKET}" ]; then
+  echo "Error: S3 restore requested (--with-s3) but no target bucket specified (--s3-bucket or S3_BUCKET)." >&2
+  exit 1
+fi
+
 echo "================================================================================"
 echo " Starting Vibress Production Restore"
 echo " Source DB Backup: ${BACKUP_FILE}"
 echo " Target Database:  ${TARGET_DB}"
 if [ "${WITH_CONTENT}" -eq 1 ]; then
   echo " Source Content:   ${CONTENT_FILE}"
+fi
+if [ "${WITH_S3}" -eq 1 ]; then
+  echo " Source S3 Backup: ${S3_FILE}"
+  echo " Target S3 Bucket: ${TARGET_S3_BUCKET}${TARGET_S3_PREFIX:+ (Prefix: \"${TARGET_S3_PREFIX}\")}"
 fi
 echo " Date:             $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo "================================================================================"
@@ -234,6 +290,50 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
     exit 1
   fi
   echo "✓ Content archive verified."
+fi
+
+# --- Step 3B: Validate S3 Object Archive If Requested ---
+if [ "${WITH_S3}" -eq 1 ]; then
+  echo "Validating S3 object backup archive integrity..."
+  if [ ! -f "${S3_FILE}" ]; then
+    echo "Error: S3 backup file not found: ${S3_FILE}" >&2
+    exit 1
+  fi
+
+  S3_CHECKSUM="${S3_FILE}.sha256"
+  if [ "${SKIP_CHECKSUM}" -eq 1 ]; then
+    echo "Warning: S3 checksum verification explicitly bypassed."
+  elif [ -f "${S3_CHECKSUM}" ]; then
+    S3_DIR=$(dirname "${S3_FILE}")
+    S3_BASE=$(basename "${S3_FILE}")
+    S3_CHK_BASE=$(basename "${S3_CHECKSUM}")
+    S3_PASSED=0
+    if command -v sha256sum >/dev/null 2>&1; then
+      if (cd "${S3_DIR}" && sha256sum -c "${S3_CHK_BASE}" >/dev/null 2>&1); then
+        S3_PASSED=1
+      fi
+    elif command -v shasum >/dev/null 2>&1; then
+      if (cd "${S3_DIR}" && shasum -a 256 -c "${S3_CHK_BASE}" >/dev/null 2>&1); then
+        S3_PASSED=1
+      fi
+    fi
+    if [ "${S3_PASSED}" -eq 1 ]; then
+      echo "✓ S3 archive SHA-256 checksum verified."
+    else
+      echo "Error: S3 checksum verification FAILED for ${S3_FILE}!" >&2
+      exit 1
+    fi
+  fi
+
+  if ! gzip -t "${S3_FILE}"; then
+    echo "Error: S3 archive ${S3_FILE} failed gzip integrity check." >&2
+    exit 1
+  fi
+  if ! tar -tzf "${S3_FILE}" >/dev/null 2>&1; then
+    echo "Error: S3 archive ${S3_FILE} failed tar table check." >&2
+    exit 1
+  fi
+  echo "✓ S3 object archive verified."
 fi
 
 # --- Step 4: Target Resolution ---
@@ -338,6 +438,10 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
   fi
   echo "   (Existing media and themes in content destination will be replaced)"
 fi
+if [ "${WITH_S3}" -eq 1 ]; then
+  echo " S3 Destination:       Bucket '${TARGET_S3_BUCKET}'${TARGET_S3_PREFIX:+ (Prefix: \"${TARGET_S3_PREFIX}\")}"
+  echo "   (Existing objects in target bucket/prefix may be overwritten)"
+fi
 echo "--------------------------------------------------------------------------------"
 
 if [ "${CONFIRMED}" -ne 1 ]; then
@@ -355,8 +459,32 @@ if [ "${CONFIRMED}" -ne 1 ]; then
 fi
 
 # --- Step 6: Execute Database Restore ---
-echo "Applying database restore with ON_ERROR_STOP=1..."
+echo "Ensuring target database '${TARGET_DB}' exists..."
 export PGPASSWORD="${PG_PASSWORD}"
+
+if [ "${RESTORE_MODE}" = "compose" ]; then
+  DB_EXISTS=$(docker compose -f "${RESOLVED_COMPOSE}" exec -T \
+    -e PGPASSWORD="${PG_PASSWORD}" \
+    "${POSTGRES_SERVICE}" \
+    psql -U "${PG_USER}" -d "postgres" -t -A -c "SELECT 1 FROM pg_database WHERE datname = '${TARGET_DB}';" 2>/dev/null || true)
+  if [ "${DB_EXISTS}" != "1" ]; then
+    echo "Creating target database '${TARGET_DB}'..."
+    docker compose -f "${RESOLVED_COMPOSE}" exec -T \
+      -e PGPASSWORD="${PG_PASSWORD}" \
+      "${POSTGRES_SERVICE}" \
+      psql -U "${PG_USER}" -d "postgres" -c "CREATE DATABASE \"${TARGET_DB}\";"
+  fi
+elif [ "${RESTORE_MODE}" = "host" ]; then
+  if command -v psql >/dev/null 2>&1; then
+    DB_EXISTS=$(PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "postgres" -t -A -c "SELECT 1 FROM pg_database WHERE datname = '${TARGET_DB}';" 2>/dev/null || true)
+    if [ "${DB_EXISTS}" != "1" ]; then
+      echo "Creating target database '${TARGET_DB}'..."
+      PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "postgres" -c "CREATE DATABASE \"${TARGET_DB}\";"
+    fi
+  fi
+fi
+
+echo "Applying database restore with ON_ERROR_STOP=1..."
 
 if [ "${RESTORE_MODE}" = "compose" ]; then
   gunzip -c "${BACKUP_FILE}" | docker compose -f "${RESOLVED_COMPOSE}" exec -T \
@@ -402,6 +530,37 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
       rm -rf "${RESOLVED_CONTENT_DIR}/content"
     fi
     echo "✓ Persistent content restored into host directory '${RESOLVED_CONTENT_DIR}'."
+  fi
+fi
+
+# --- Step 8: Execute S3 Object Restore If Requested ---
+if [ "${WITH_S3}" -eq 1 ]; then
+  echo -e "\nRestoring S3 objects into '${TARGET_S3_BUCKET}'..."
+  S3_RESTORE_CMD=(pnpm exec tsx scripts/s3-restore.mjs --archive "${S3_FILE}" --bucket "${TARGET_S3_BUCKET}" --confirm)
+  if [ -n "${TARGET_S3_PREFIX}" ]; then
+    S3_RESTORE_CMD+=(--prefix "${TARGET_S3_PREFIX}")
+  fi
+  if [ -n "${TARGET_S3_ENDPOINT:-${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}}" ]; then
+    S3_RESTORE_CMD+=(--endpoint "${TARGET_S3_ENDPOINT:-${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}}")
+  fi
+  if [ -n "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}" ]; then
+    S3_RESTORE_CMD+=(--region "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}")
+  fi
+  if [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ]; then
+    S3_RESTORE_CMD+=(--access-key "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
+  fi
+  if [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ]; then
+    S3_RESTORE_CMD+=(--secret-key "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
+  fi
+  if [ -n "${ENV_FILE:-}" ]; then
+    S3_RESTORE_CMD+=(--env-file "${ENV_FILE}")
+  fi
+
+  if "${S3_RESTORE_CMD[@]}"; then
+    echo "✓ S3 objects restored and verified successfully."
+  else
+    echo "Error: S3 restore failed." >&2
+    exit 1
   fi
 fi
 

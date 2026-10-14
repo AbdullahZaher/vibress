@@ -196,9 +196,6 @@ export const buildApp = () => {
     if (!request.url.startsWith(`${PUBLIC_CONTENT_PREFIX}/`)) {
       return;
     }
-    if (isPublicContentPrivacyExempt(request.url)) {
-      return;
-    }
 
     const host = request.hostname || (request.headers["host"] as string | undefined) || null;
     const isDevFallbackAllowed =
@@ -227,6 +224,10 @@ export const buildApp = () => {
           },
         ],
       });
+    }
+
+    if (isPublicContentPrivacyExempt(request.url)) {
+      return;
     }
 
     // Test suites share pub_default state across integration files. Keep

@@ -1,6 +1,8 @@
 # Vibress Production Operations & Deployment Manual
 
-This manual contains the official architecture specification, security controls, operational runbooks, and disaster recovery procedures for running **Vibress** in production.
+This manual contains the official architecture specification, security controls,
+operational runbooks, and disaster recovery procedures for running **Vibress**
+in production.
 
 ---
 
@@ -42,29 +44,34 @@ This manual contains the official architecture specification, security controls,
 
 ## 2. Configuration & Secret Management
 
-All production settings are validated at boot by `@vibress/config`. If any required variable is missing or insecure, the process halts immediately with `ConfigError`.
+All production settings are validated at boot by `@vibress/config`. If any
+required variable is missing or insecure, the process halts immediately with
+`ConfigError`.
 
-| Environment Variable | Required | Description |
-| :--- | :---: | :--- |
-| `NODE_ENV` | Yes | Must be set to `production`. |
-| `POSTGRES_PASSWORD` | Yes | Strong database password (no default). |
-| `VIBRESS_ENCRYPTION_KEY` | Yes | 32-byte hex string for AES-256-GCM field encryption. |
-| `NEWSLETTER_UNSUBSCRIBE_SECRET` | Yes | 32-byte hex secret for cryptographic unsubscribe tokens. |
-| `STRIPE_SECRET_KEY` | Optional | Live Stripe API secret key (`sk_live_...`). |
-| `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook signing secret (`whsec_...`). |
-| `SMTP_HOST` | Yes | Production SMTP relay hostname. |
-| `SMTP_PORT` | Yes | Production SMTP port (e.g. `587` or `465`). |
-| `SMTP_USER` / `SMTP_PASS` | Yes | Production SMTP relay credentials. |
-| `SMTP_FROM` | Yes | Outbound sender identity (`Vibress <no-reply@domain.com>`). |
-| `STORAGE_PROVIDER` | Yes | `local` for container volumes, or `s3` for AWS S3 / Cloudflare R2. |
+| Environment Variable            | Required | Description                                                        |
+| :------------------------------ | :------: | :----------------------------------------------------------------- |
+| `NODE_ENV`                      |   Yes    | Must be set to `production`.                                       |
+| `POSTGRES_PASSWORD`             |   Yes    | Strong database password (no default).                             |
+| `VIBRESS_ENCRYPTION_KEY`        |   Yes    | 32-byte hex string for AES-256-GCM field encryption.               |
+| `NEWSLETTER_UNSUBSCRIBE_SECRET` |   Yes    | 32-byte hex secret for cryptographic unsubscribe tokens.           |
+| `STRIPE_SECRET_KEY`             | Optional | Live Stripe API secret key (`sk_live_...`).                        |
+| `STRIPE_WEBHOOK_SECRET`         | Optional | Stripe webhook signing secret (`whsec_...`).                       |
+| `SMTP_HOST`                     |   Yes    | Production SMTP relay hostname.                                    |
+| `SMTP_PORT`                     |   Yes    | Production SMTP port (e.g. `587` or `465`).                        |
+| `SMTP_USER` / `SMTP_PASS`       |   Yes    | Production SMTP relay credentials.                                 |
+| `SMTP_FROM`                     |   Yes    | Outbound sender identity (`Vibress <no-reply@domain.com>`).        |
+| `STORAGE_PROVIDER`              |   Yes    | `local` for container volumes, or `s3` for AWS S3 / Cloudflare R2. |
 
 ---
 
 ## 3. Database Deployment & Migration Safety
 
-* **Database Version:** PostgreSQL 16+ with extensions: `pg_trgm`, `btree_gin`, `uuid-ossp`.
-* **Migration Strategy:** All 37 schema migrations (0000 to 0036) are strictly additive and backwards-compatible. Rolling container replacement does not cause schema lock conflicts.
-* **Execution:**
+- **Database Version:** PostgreSQL 16+ with extensions: `pg_trgm`, `btree_gin`,
+  `uuid-ossp`.
+- **Migration Strategy:** All 37 schema migrations (0000 to 0036) are strictly
+  additive and backwards-compatible. Rolling container replacement does not
+  cause schema lock conflicts.
+- **Execution:**
   ```bash
   docker compose -f compose.prod.yml run --rm migrate
   ```
@@ -73,89 +80,227 @@ All production settings are validated at boot by `@vibress/config`. If any requi
 
 ## 4. Disaster Recovery & Backup Runbook
 
-### Physical Database & Content Backup
-Backups produce compressed, structurally validated SQL archives with SHA-256 integrity checksums and optional content directory archives:
+### Database & Storage Backup Architecture
+
+Vibress supports both local Docker named volume storage and S3-compatible cloud
+object storage (AWS S3, MinIO, Cloudflare R2). Backups produce compressed,
+structurally validated archives with SHA-256 integrity checksums:
+
 ```bash
-# Database backup only
+# Database backup only (PostgreSQL logical snapshot)
 ./scripts/backup.sh /path/to/backup/storage
 
-# Database + persistent media & themes content backup
+# Database + persistent local Docker volume (vibress_content media & themes)
 ./scripts/backup.sh /path/to/backup/storage --with-content
+
+# Database + S3-compatible object storage (all media, themes, and manifests)
+# (Automatically triggered if STORAGE_PROVIDER=s3 or via explicit flag)
+./scripts/backup.sh /path/to/backup/storage --with-s3 --s3-bucket my-production-bucket
 ```
 
-### Physical Database Restore
-Database restore requires explicit confirmation gate (`--confirm` or interactive confirmation) and executes with `ON_ERROR_STOP=1`:
+#### S3 Backup Requirements & Fail-Closed Guarantees
+
+The S3 backup engine (`scripts/s3-backup.mjs`) connects to any standard
+S3-compatible API using `@aws-sdk/client-s3`.
+
+- **Fail-Closed Behavior:** If S3 is the active storage provider or `--with-s3`
+  is passed, the backup script aborts immediately with a non-zero exit code if
+  credentials are missing, the bucket is unreachable, or any object transfer
+  fails. A partial or corrupted S3 backup will **never** report full-site
+  success.
+- **Integrity Validation:** Every object is SHA-256 hashed and recorded in
+  `inventory.json` inside the archive. The archive itself is verified with
+  `gzip -t` and accompanied by a standalone `.sha256` checksum file.
+- **Required IAM Permissions:**
+  ```json
+  {
+     "Version": "2012-10-17",
+     "Statement": [
+        {
+           "Effect": "Allow",
+           "Action": [
+              "s3:ListBucket",
+              "s3:GetObject"
+           ],
+           "Resource": [
+              "arn:aws:s3:::my-production-bucket",
+              "arn:aws:s3:::my-production-bucket/*"
+           ]
+        }
+     ]
+  }
+  ```
+
+### Database & Storage Restoration
+
+Restoration operations enforce strict safety gates:
+
+- Database restores execute with `ON_ERROR_STOP=1` to fail immediately upon any
+  SQL error.
+- Destructive confirmation (`--confirm` or interactive operator confirmation) is
+  mandatory.
+- S3 restores validate the archive format and companion `.sha256` checksum
+  **before** modifying any destination.
+
 ```bash
-# Restore to production database (interactive prompt)
+# Interactive database restore (prompts operator for confirmation)
 ./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz
 
 # Automated restore to target database with non-interactive confirmation
 ./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz target_db --confirm
+
+# Full-site restore including local Docker named volume vibress_content
+./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz target_db --with-content --confirm
+
+# Full-site restore including S3 object storage into an isolated target bucket or staging prefix
+./scripts/restore.sh /path/to/backup/storage/vibress_backup_TIMESTAMP.sql.gz target_db \
+  --with-s3 /path/to/backup/storage/vibress_s3_TIMESTAMP.tar.gz \
+  --s3-bucket isolated-restore-bucket \
+  --s3-prefix staging/ \
+  --confirm
 ```
 
+Restored S3 objects are verified byte-for-byte against the backup's
+`inventory.json` hashes before the restore reports success.
+
 ### Automated Disaster Recovery Drills
-Execute automated end-to-end backup, restore, checksum verification, and entity parity assertion against an isolated disposable database:
+
+Execute automated end-to-end backup, restore, checksum verification, and entity
+parity assertion against an isolated disposable database:
+
 ```bash
 ./scripts/disaster-recovery-drill.sh
 ```
 
 ### Theme Storage & Generation Retention
-Theme packages in object storage follow the **N-1 Bounded Generation Retention** contract:
-* **Active Generation ($G_n$)**: Preserved in storage and referenced by `manifest.generation`.
-* **Immediate Previous Generation ($G_{n-1}$)**: Explicitly retained for in-flight readers and referenced by `manifest.previousGeneration`.
-* **Generations Older than $G_{n-1}$**: Cleaned up during package replacement once $G_n$ is authoritative.
-* Details: See [`packages/domains/themes/THEME_STORAGE_LIFECYCLE.md`](file:///Users/abdullahzaher/vibress/packages/domains/themes/THEME_STORAGE_LIFECYCLE.md).
+
+Theme packages in object storage follow the **N-1 Bounded Generation Retention**
+contract:
+
+- **Active Generation ($G_n$)**: Preserved in storage and referenced by
+  `manifest.generation`.
+- **Immediate Previous Generation ($G_{n-1}$)**: Explicitly retained for
+  in-flight readers and referenced by `manifest.previousGeneration`.
+- **Generations Older than $G_{n-1}$**: Cleaned up during package replacement
+  once $G_n$ is authoritative.
+- Details: See
+  [`packages/domains/themes/THEME_STORAGE_LIFECYCLE.md`](/vibress/packages/domains/themes/THEME_STORAGE_LIFECYCLE.md).
 
 ### Continuous WAL Archiving & Point-In-Time Recovery (PITR)
-For continuous data protection with an RPO under 15 minutes, configure PostgreSQL continuous WAL archiving:
+
+> [!IMPORTANT]
+> A logical `pg_dump` SQL snapshot is **not** a physical base backup and cannot
+> be used for PostgreSQL Write-Ahead Log (WAL) replay. For continuous
+> point-in-time recovery, physical base backups and continuous WAL archiving are
+> required.
+
+`compose.prod.yml` pre-configures PostgreSQL with continuous WAL archiving to
+the dedicated `postgres_wal` volume:
 
 ```ini
-# /var/lib/postgresql/data/postgresql.conf (or postgres custom config)
 wal_level = replica
 archive_mode = on
 archive_command = 'test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f'
-# For cloud deployments using S3:
-# archive_command = 'aws s3 cp %p s3://vibress-prod-backups/wal/%f'
 archive_timeout = 900 # Forces a WAL segment switch every 15 minutes during low activity
 ```
 
-To perform Point-In-Time Recovery to a specific timestamp:
-1. Stop the PostgreSQL service.
-2. Restore the latest base database snapshot via `scripts/restore.sh`.
-3. Create `/var/lib/postgresql/data/recovery.signal`.
-4. Configure `restore_command` and `recovery_target_time`:
+#### Production RPO Analysis by Failure Scenario
+
+Recovery Point Objectives (RPO) depend strictly on the failure scenario and
+storage durability:
+
+| Failure Scenario                                  | Recovery Mechanism                                      |    Effective RPO Guarantee     | Prerequisites & Operational Notes                                                                                                                                         |
+| :------------------------------------------------ | :------------------------------------------------------ | :----------------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **PostgreSQL Process Crash / Restart**            | Local WAL replay during container startup               |  **RPO = 0 (Zero data loss)**  | Handled automatically by PostgreSQL crash recovery using local `pg_wal`.                                                                                                  |
+| **Single-Host Disk / Host Loss (Local WAL only)** | N/A (Storage lost with host)                            |   **Unbounded / Data Loss**    | A local named volume `postgres_wal` resides on the same host and offers **no protection** against host loss.                                                              |
+| **Host Loss with Off-Host WAL Shipping**          | Replay of archived WAL segments from S3 / remote target |    **RPO $\le$ 15 minutes**    | Bounded by `archive_timeout = 900`. High write activity archives segments faster, but worst-case loss is 15 minutes unless synchronous streaming replication is deployed. |
+| **Scheduled Snapshot Restoration**                | Restore from latest off-host cron backup                |    **RPO $\le$ 15 minutes**    | For installations using 15-minute cron snapshots (`backup.sh`).                                                                                                           |
+| **Point-In-Time Replay Boundary**                 | Physical `pg_basebackup` + WAL replay to target second  | **Exact Transaction Boundary** | Valid for all transactions committed within successfully archived segments up to the target timestamp.                                                                    |
+
+> [!TIP]
+> For production cloud deployments requiring true zero-RPO failover under
+> complete host loss, configure an off-host `archive_command` (e.g. shipping WAL
+> segments directly to durable S3 storage via `aws s3 cp` or `wal-g`) and pair
+> it with PostgreSQL synchronous streaming replication to a remote standby.
+
+#### Executing Physical Base Backup & WAL PITR
+
+Vibress provides an automated PITR drill (`scripts/wal-pitr-drill.sh`)
+demonstrating point-in-time recovery using physical backups:
+
+1. **Take Physical Base Backup:**
+   ```bash
+   docker compose -f compose.prod.yml exec -T postgres pg_basebackup -U postgres -D - -Ft -z > base_backup.tar.gz
+   ```
+2. **Replay WAL to Target Timestamp:** Unpack the base backup into an isolated
+   PostgreSQL data directory, mount the `postgres_wal` archive, and configure
+   recovery signals:
+   ```bash
+   touch /path/to/isolated/data/recovery.signal
+   ```
+   Add to `postgresql.conf`:
    ```ini
    restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'
-   # Or for S3: restore_command = 'aws s3 cp s3://vibress-prod-backups/wal/%f %p'
    recovery_target_time = '2026-10-14 12:00:00 UTC'
    recovery_target_action = 'promote'
    ```
-5. Start PostgreSQL; the engine replays WAL transactions up to the target second and automatically promotes to primary.
+3. Start the isolated PostgreSQL container. The database replays transactions
+   committed up to the specified second and promotes automatically, preserving
+   transaction boundaries.
 
 ### Production Backup & Snapshot Schedule (Cron)
-Configure the following crontab entries on the production management node:
 
+Configure crontab entries on the production management node according to your storage provider:
+
+**For Local Storage Deployments (`STORAGE_PROVIDER=local`):**
 ```cron
-# Every 15 minutes: Point-in-time database snapshot (satisfies RPO < 15 min without active WAL stream)
+# Every 15 minutes: Logical database snapshot (satisfies RPO <= 15 min for scheduled snapshots)
 */15 * * * * /repo/scripts/backup.sh /var/backups/vibress >> /var/log/vibress-backup.log 2>&1
 
-# Daily at 02:00 UTC: Complete full-site backup (Database + Docker named volume vibress_content + Themes)
+# Daily at 02:00 UTC: Database + persistent media & themes volume (vibress_content)
 0 2 * * * /repo/scripts/backup.sh /var/backups/vibress --with-content >> /var/log/vibress-backup.log 2>&1
 ```
 
-### Measured Production Recovery Time (RTO) Breakdown
-The automated disaster recovery drill measures and verifies actual full-site recovery times across all infrastructure layers:
+**For S3 Cloud Storage Deployments (`STORAGE_PROVIDER=s3`):**
+```cron
+# Every 15 minutes: Logical database snapshot
+*/15 * * * * /repo/scripts/backup.sh /var/backups/vibress >> /var/log/vibress-backup.log 2>&1
 
-| Recovery Phase | Measured Drill Duration | Production Target (SLA) | Verification Mechanism |
-| :--- | :---: | :---: | :--- |
-| **Database Restore & Schema Indexing** | **2s** | < 3 minutes | `psql -v ON_ERROR_STOP=1` streaming decompressed SQL dump |
-| **Persistent Volume Unpack (Media/Themes)** | **1s** | < 2 minutes | Ephemeral Alpine container unpacking tar.gz into `vibress_content` |
-| **Data & Referential Integrity Parity** | **< 1s** | < 30 seconds | 100% match across 7 core entities + 0 orphaned references |
-| **Storage Asset Checksum Verification** | **< 1s** | < 30 seconds | Byte-for-byte SHA-256 match on media & theme manifests |
-| **Application Boot & Schema Migration Check** | **1s** | < 1 minute | Node/TypeScript harness verifying 37 migrations & 85 tables |
-| **Readiness Probes (`/health/ready`)** | **< 1s** | < 30 seconds | Live database and Redis probe verification returning 200 OK |
-| **DNS / Load Balancer Cutover** | *15 - 30s (est.)* | < 2 minutes | Edge LB health-check rerouting to restored cluster |
-| **Total Full-Site Recovery Time (RTO)** | **~35s** | **< 10 minutes** | **Meets and exceeds production RTO SLA** |
+# Daily at 02:00 UTC: Database + S3 object storage bucket
+0 2 * * * /repo/scripts/backup.sh /var/backups/vibress --with-s3 --s3-bucket my-production-bucket >> /var/log/vibress-backup.log 2>&1
+```
+
+**For Hybrid Deployments (Local cache volume + S3 cloud storage):**
+```cron
+0 2 * * * /repo/scripts/backup.sh /var/backups/vibress --with-content --with-s3 --s3-bucket my-production-bucket >> /var/log/vibress-backup.log 2>&1
+```
+
+### Recovery Time Objective (RTO): Measured Drill vs Production Target
+
+The automated disaster recovery drill (`scripts/disaster-recovery-drill.sh`)
+measures and benchmarks local recovery duration on disposable infrastructure.
+This provides a baseline for core engine performance, distinct from full-scale
+production cluster failover:
+
+| Recovery Phase                                             |  Measured Local Drill Duration  | Full Production Target (SLA) | Operational Scope & Verification Mechanism                                    |
+| :--------------------------------------------------------- | :-----------------------------: | :--------------------------: | :---------------------------------------------------------------------------- |
+| **Database Restore & Schema Indexing**                     |            **1.5s**             |         < 3 minutes          | `psql -v ON_ERROR_STOP=1` streaming decompressed SQL dump (local seed data)   |
+| **Persistent Volume Unpack (Media/Themes)**                |            **1.0s**             |         < 2 minutes          | Ephemeral Alpine container unpacking tar.gz into isolated volume              |
+| **S3 Object Storage Restoration**                          |            **1.0s**             |         < 2 minutes          | `s3-restore.mjs` uploading objects and verifying SHA-256 hashes               |
+| **Data & Referential Integrity Parity**                    |           **< 0.5s**            |         < 30 seconds         | 100% match across 7 core entities + 0 orphaned references                     |
+| **Storage Asset Checksum Verification**                    |           **< 0.5s**            |         < 30 seconds         | Byte-for-byte SHA-256 match on media, theme files, and manifests              |
+| **Application Boot & Real HTTP Readiness**                 |            **1.9s**             |          < 1 minute          | Isolated Fastify API boot, Redis connection, `/health/ready` 200 OK           |
+| **Total Measured Local Recovery Harness**                  |           **~5.98s**            |              —               | **Measured local DR drill on baseline test dataset**                          |
+| _Full Production Orchestration (Web SSR, Worker, Ingress)_ | _Pending Staging Certification_ |         < 3 minutes          | Full multi-container startup, Next.js warm-up, and background queue reconnect |
+| _Edge DNS / CDN Cutover (Estimated)_                       |        _15 - 30s (est.)_        |         < 2 minutes          | Edge LB / Anycast DNS TTL propagation to new cluster ingress                  |
+| **Total Production-Wide Target RTO**                       |                —                |       **< 10 minutes**       | **Target SLA to be certified on multi-GB staging deployment**                 |
+
+> [!NOTE]
+> The ~5.98-second benchmark certifies the speed and correctness of the
+> automated recovery scripts and core API initialization on isolated local
+> infrastructure. Full production RTO certification requires testing against
+> customer-scale data volumes and the complete multi-service Docker Compose
+> deployment.
 
 ---
 
@@ -163,11 +308,13 @@ The automated disaster recovery drill measures and verifies actual full-site rec
 
 Load balancers and monitoring systems should scrape the following health probes:
 
-* **Gateway Health:** `http://127.0.0.1:7777/nginx-health` (HTTP 200)
-* **API Liveness:** `http://127.0.0.1:7777/health/live` (HTTP 200)
-* **API Readiness:** `http://127.0.0.1:7777/health/ready` (HTTP 200 when PostgreSQL & Redis are connected; HTTP 503 if degraded)
-* **Worker Readiness:** `http://127.0.0.1:7777/worker-health/ready` (HTTP 200)
-* **Prometheus Metrics:** `http://127.0.0.1:7777/metrics` (Restricted to internal RFC1918 subnets)
+- **Gateway Health:** `http://127.0.0.1:7777/nginx-health` (HTTP 200)
+- **API Liveness:** `http://127.0.0.1:7777/health/live` (HTTP 200)
+- **API Readiness:** `http://127.0.0.1:7777/health/ready` (HTTP 200 when
+  PostgreSQL & Redis are connected; HTTP 503 if degraded)
+- **Worker Readiness:** `http://127.0.0.1:7777/worker-health/ready` (HTTP 200)
+- **Prometheus Metrics:** `http://127.0.0.1:7777/metrics` (Restricted to
+  internal RFC1918 subnets)
 
 ---
 

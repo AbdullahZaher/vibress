@@ -1,34 +1,40 @@
 # Vibress Multi-Publication Test Evidence
 
-**Document Reference:** `docs/audits/VIBRESS_MULTI_PUBLICATION_TEST_EVIDENCE.md`  
-**Sequence Step:** Step D — Master Runtime Multi-Publication Isolation Audit & Remediation  
-**Date:** 2026-09-15  
-**Evidence Status:** ALL PASS — REPRODUCIBLE ADVERSARIAL EVIDENCE RECORDED  
+**Document Reference:**
+`docs/audits/VIBRESS_MULTI_PUBLICATION_TEST_EVIDENCE.md`\
+**Sequence Step:** Step D — Master Runtime Multi-Publication Isolation Audit &
+Remediation\
+**Date:** 2026-09-15\
+**Evidence Status:** ALL PASS — REPRODUCIBLE ADVERSARIAL EVIDENCE RECORDED
 
 ---
 
 ## 1. Test Execution Summary
 
-This document records the exact, reproducible execution output of the test suites designed and executed to verify runtime multi-publication isolation across the Vibress platform.
+This document records the exact, reproducible execution output of the test
+suites designed and executed to verify runtime multi-publication isolation
+across the Vibress platform.
 
-| Test Category | Command | Target | Passed | Failed | Duration | Exit Code |
-|---|---|---|:---:|:---:|:---:|:---:|
-| **Adversarial Multi-Publication Suite** | `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` | Complete multi-tenant adversarial suite | **18** | 0 | 4.35s | **0** |
-| **All Integration Tests** | `pnpm vitest run tests/integration` | 19 integration test suites | **203** | 0 | 35.40s | **0** |
-| **API Application Suite** | `pnpm vitest run apps/api` | API routes, middleware, handlers | **289** | 0 | 9.80s | **0** |
-| **Worker Application Suite** | `pnpm vitest run apps/worker` | Queue workers, processors, scheduler | **11** | 0 | 3.20s | **0** |
-| **Themes Domain Suite** | `pnpm vitest run packages/domains/themes` | Theme service, installed themes repo | **19** | 0 | 2.10s | **0** |
-| **API Typecheck** | `pnpm --filter @vibress/api typecheck` | TypeScript compilation | Clean | 0 | 4.20s | **0** |
-| **Worker Typecheck** | `pnpm --filter @vibress/worker typecheck` | TypeScript compilation | Clean | 0 | 3.50s | **0** |
-| **Web Typecheck** | `pnpm --filter @vibress/web typecheck` | Next.js TypeScript compilation | Clean | 0 | 5.10s | **0** |
-| **Admin Typecheck** | `pnpm --filter @vibress/admin typecheck` | React / Vite TypeScript compilation | Clean | 0 | 3.80s | **0** |
+| Test Category                           | Command                                                                         | Target                                  | Passed  | Failed | Duration | Exit Code |
+| --------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------- | :-----: | :----: | :------: | :-------: |
+| **Adversarial Multi-Publication Suite** | `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` | Complete multi-tenant adversarial suite | **18**  |   0    |  4.35s   |   **0**   |
+| **All Integration Tests**               | `pnpm vitest run tests/integration`                                             | 19 integration test suites              | **203** |   0    |  35.40s  |   **0**   |
+| **API Application Suite**               | `pnpm vitest run apps/api`                                                      | API routes, middleware, handlers        | **289** |   0    |  9.80s   |   **0**   |
+| **Worker Application Suite**            | `pnpm vitest run apps/worker`                                                   | Queue workers, processors, scheduler    | **11**  |   0    |  3.20s   |   **0**   |
+| **Themes Domain Suite**                 | `pnpm vitest run packages/domains/themes`                                       | Theme service, installed themes repo    | **19**  |   0    |  2.10s   |   **0**   |
+| **API Typecheck**                       | `pnpm --filter @vibress/api typecheck`                                          | TypeScript compilation                  |  Clean  |   0    |  4.20s   |   **0**   |
+| **Worker Typecheck**                    | `pnpm --filter @vibress/worker typecheck`                                       | TypeScript compilation                  |  Clean  |   0    |  3.50s   |   **0**   |
+| **Web Typecheck**                       | `pnpm --filter @vibress/web typecheck`                                          | Next.js TypeScript compilation          |  Clean  |   0    |  5.10s   |   **0**   |
+| **Admin Typecheck**                     | `pnpm --filter @vibress/admin typecheck`                                        | React / Vite TypeScript compilation     |  Clean  |   0    |  3.80s   |   **0**   |
 
 ---
 
 ## 2. Adversarial Integration Test Evidence
 
 ### Test Target: `tests/integration/runtime-multi-publication-isolation.test.ts`
+
 Executed via:
+
 ```bash
 pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts
 ```
@@ -67,11 +73,12 @@ pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts
 ```
 
 ### Raw Output Log:
+
 ```text
- RUN  v4.1.10 /Users/abdullahzaher/vibress
+ RUN  v4.1.10 /vibress
 
 Global setup: Running database migrations...
-Running migrations from /Users/abdullahzaher/vibress/packages/database/migrations...
+Running migrations from /vibress/packages/database/migrations...
 Migrations completed successfully.
 Global setup: Seeding database with roles, permissions, and dev users...
 Seeding system roles...
@@ -94,12 +101,15 @@ Global setup: Database setup completed.
 ## 3. Full Integration Suite Evidence
 
 ### Test Target: `tests/integration/*.test.ts`
+
 Executed via:
+
 ```bash
 pnpm vitest run tests/integration
 ```
 
 ### Suite Output Log:
+
 ```text
  Test Files  19 passed (19)
       Tests  203 passed (203)
@@ -133,6 +143,7 @@ Passed Suites:
 ## 4. Verification of Specific Invariants
 
 ### 4.1 Invariant 1: Unmapped Host Resolution in Production
+
 ```typescript
 // From tests/integration/runtime-multi-publication-isolation.test.ts
 const unmappedResponse = await app.inject({
@@ -147,18 +158,23 @@ expect(unmappedResponse.statusCode).toBe(404);
 const body = JSON.parse(unmappedResponse.body);
 expect(body.code).toBe("PUBLICATION_NOT_FOUND");
 ```
-**Assertion Status:** PASSED. Response: `{"code":"PUBLICATION_NOT_FOUND","statusCode":404}`.
+
+**Assertion Status:** PASSED. Response:
+`{"code":"PUBLICATION_NOT_FOUND","statusCode":404}`.
 
 ### 4.2 Invariant 2: Zero Migrations Post-Migration 0026
+
 ```bash
 ls -1 packages/database/migrations/*.sql | tail -n 3
 # 0024_...sql
 # 0025_...sql
 # 0026_multi_publication_tenant_isolation.sql
 ```
+
 **Assertion Status:** PASSED. Zero new migrations created.
 
 ### 4.3 Invariant 3: Translation Entity Isolation
+
 ```typescript
 // From tests/integration/runtime-multi-publication-isolation.test.ts
 const alphaTransRes = await app.inject({
@@ -175,9 +191,12 @@ const betaTransRes = await app.inject({
 });
 expect(JSON.parse(betaTransRes.body).post.title).toBe("Beta Titulo Común");
 ```
-**Assertion Status:** PASSED. Localized translations for identically slugged posts resolve strictly to their own publication.
+
+**Assertion Status:** PASSED. Localized translations for identically slugged
+posts resolve strictly to their own publication.
 
 ### 4.4 Invariant 4: BullMQ Worker Scope Assertion
+
 ```typescript
 // Missing publicationId throws TenantViolationError
 expect(() =>
@@ -196,9 +215,12 @@ const validated = assertJobScope({
 } as any);
 expect(validated.publicationId).toBe("pub_alpha");
 ```
-**Assertion Status:** PASSED. Throws `TenantViolationError` on missing tenant ID.
+
+**Assertion Status:** PASSED. Throws `TenantViolationError` on missing tenant
+ID.
 
 ### 4.5 Invariant 5: Non-Disclosing 404
+
 ```typescript
 // Querying Beta post from Alpha context
 const crossTenantRes = await app.inject({
@@ -221,6 +243,10 @@ const nonExistentRes = await app.inject({
   },
 });
 expect(nonExistentRes.statusCode).toBe(404);
-expect(JSON.parse(crossTenantRes.body)).toEqual(JSON.parse(nonExistentRes.body));
+expect(JSON.parse(crossTenantRes.body)).toEqual(
+  JSON.parse(nonExistentRes.body),
+);
 ```
-**Assertion Status:** PASSED. Both responses return identical `404 RESOURCE_NOT_FOUND` payloads.
+
+**Assertion Status:** PASSED. Both responses return identical
+`404 RESOURCE_NOT_FOUND` payloads.

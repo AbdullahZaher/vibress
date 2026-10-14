@@ -3,7 +3,7 @@ import path from "path";
 
 const BASE_URL = "http://localhost:7777";
 const ARTIFACT_DIR =
-  "/Users/abdullahzaher/.gemini/antigravity-ide/brain/7e3a5649-ee18-4dd9-b68a-113e795512b1";
+  "/.gemini/antigravity-ide/brain/7e3a5649-ee18-4dd9-b68a-113e795512b1";
 
 async function capture() {
   const browser = await chromium.launch({ headless: true });

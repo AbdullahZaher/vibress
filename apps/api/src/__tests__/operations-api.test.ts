@@ -531,7 +531,7 @@ describe("Batch 14 — Operations Integration & Security", () => {
     expect(okRes.json().valid).toBe(true);
 
     const setCookie = okRes.headers["set-cookie"] as unknown as string;
-    expect(setCookie).toContain("vb_site_auth=v1.");
+    expect(setCookie).toMatch(/vb_site_auth=v[12]\./);
 
     // Extract cookie value
     const match = /vb_site_auth=([^;]+)/.exec(setCookie);
@@ -540,15 +540,15 @@ describe("Batch 14 — Operations Integration & Security", () => {
 
     const secret =
       process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
-    expect(verifySiteAuthToken(token, secret)).toBe(true);
+    expect(verifySiteAuthToken(token, secret, "pub_default")).toBe(true);
 
     // Tampered cookie must fail
-    expect(verifySiteAuthToken("1", secret)).toBe(false);
-    expect(verifySiteAuthToken("vb_site_auth=1", secret)).toBe(false);
-    expect(verifySiteAuthToken(`${token}-tampered`, secret)).toBe(false);
-    expect(verifySiteAuthToken("v1.invalid.fakehmac", secret)).toBe(false);
-    expect(verifySiteAuthToken(null, secret)).toBe(false);
-    expect(verifySiteAuthToken(undefined, secret)).toBe(false);
+    expect(verifySiteAuthToken("1", secret, "pub_default")).toBe(false);
+    expect(verifySiteAuthToken("vb_site_auth=1", secret, "pub_default")).toBe(false);
+    expect(verifySiteAuthToken(`${token}-tampered`, secret, "pub_default")).toBe(false);
+    expect(verifySiteAuthToken("v2.invalid.fakehmac.fake", secret, "pub_default")).toBe(false);
+    expect(verifySiteAuthToken(null, secret, "pub_default")).toBe(false);
+    expect(verifySiteAuthToken(undefined, secret, "pub_default")).toBe(false);
 
     // Incorrect password
     const badRes = await app.inject({

@@ -220,7 +220,10 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
           getConfig().secrets.encryptionKey ||
           process.env.VIBRESS_ENCRYPTION_KEY ||
           "vibress-site-privacy-secret";
-        const token = signSiteAuthToken(secret);
+        const token = signSiteAuthToken(
+          secret,
+          req.publicationContext!.publicationId,
+        );
         reply.setCookie(SITE_AUTH_COOKIE_NAME, token, {
           path: "/",
           httpOnly: true,

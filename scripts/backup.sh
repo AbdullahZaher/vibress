@@ -21,17 +21,50 @@ set -Eeuo pipefail
 #   BACKUP_CONTENT      If set to 1, also backs up persistent media and themes
 # ==============================================================================
 
-BACKUP_DIR="${1:-${BACKUP_DIR:-./backups}}"
+BACKUP_DIR=""
 WITH_CONTENT=0
+WITH_S3=0
 
-for arg in "$@"; do
-  if [ "$arg" = "--with-content" ]; then
-    WITH_CONTENT=1
-  fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --with-content)
+      WITH_CONTENT=1
+      ;;
+    --with-s3)
+      WITH_S3=1
+      ;;
+    --env-file)
+      ENV_FILE="$2"
+      shift
+      ;;
+    --content-volume)
+      CONTENT_VOLUME="$2"
+      shift
+      ;;
+    --s3-bucket)
+      S3_BUCKET="$2"
+      shift
+      ;;
+    --compose-file)
+      COMPOSE_FILE="$2"
+      shift
+      ;;
+    *)
+      if [ -z "${BACKUP_DIR}" ] && [[ "$1" != --* ]]; then
+        BACKUP_DIR="$1"
+      fi
+      ;;
+  esac
+  shift
 done
+
+BACKUP_DIR="${BACKUP_DIR:-${BACKUP_DIR_DEFAULT:-./backups}}"
 
 if [ "${BACKUP_CONTENT:-0}" = "1" ]; then
   WITH_CONTENT=1
+fi
+if [ "${BACKUP_S3:-0}" = "1" ]; then
+  WITH_S3=1
 fi
 
 # Load environment configuration from .env if present (aligning with Docker Compose)
@@ -76,18 +109,28 @@ PG_USER="${POSTGRES_USER:-vibress}"
 PG_DB="${POSTGRES_DB:-vibress}"
 PG_PASSWORD="${POSTGRES_PASSWORD:-vibress}"
 
-# Resolve target compose file if not explicitly set
+# Resolve target compose file with strict isolation and environment validation
 RESOLVED_COMPOSE=""
-if [ -n "${COMPOSE_FILE:-}" ] && [ -f "${COMPOSE_FILE}" ]; then
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  if [ ! -f "${COMPOSE_FILE}" ]; then
+    echo "Error: Specified COMPOSE_FILE '${COMPOSE_FILE}' not found." >&2
+    exit 1
+  fi
   RESOLVED_COMPOSE="${COMPOSE_FILE}"
-elif [ -f "compose.prod.yml" ] && docker compose -f "compose.prod.yml" ps -q "${POSTGRES_SERVICE:-postgres}" 2>/dev/null | grep -q .; then
-  RESOLVED_COMPOSE="compose.prod.yml"
-elif [ -f "compose.dev.yml" ] && docker compose -f "compose.dev.yml" ps -q "${POSTGRES_SERVICE:-postgres}" 2>/dev/null | grep -q .; then
-  RESOLVED_COMPOSE="compose.dev.yml"
-elif [ -f "compose.prod.yml" ]; then
-  RESOLVED_COMPOSE="compose.prod.yml"
-elif [ -f "compose.dev.yml" ]; then
-  RESOLVED_COMPOSE="compose.dev.yml"
+else
+  # Default strictly to production compose file if present
+  if [ -f "compose.prod.yml" ]; then
+    RESOLVED_COMPOSE="compose.prod.yml"
+  elif [ "${NODE_ENV:-}" = "development" ] && [ -f "compose.dev.yml" ]; then
+    RESOLVED_COMPOSE="compose.dev.yml"
+  fi
+fi
+
+# Reject environment mismatches (e.g. production targeting dev compose)
+if [ "${NODE_ENV:-}" = "production" ] && [ -n "${RESOLVED_COMPOSE}" ] && [[ "${RESOLVED_COMPOSE}" =~ (dev|development) ]]; then
+  echo "Error: Environment mismatch detected. NODE_ENV is 'production', but target compose file is '${RESOLVED_COMPOSE}'." >&2
+  echo "Production backups must never accidentally target a development database." >&2
+  exit 1
 fi
 
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
@@ -101,22 +144,39 @@ if [ -n "${POSTGRES_HOST:-}" ]; then
   PG_PORT="${POSTGRES_PORT:-5432}"
   echo "Targeting explicit PostgreSQL host: ${POSTGRES_HOST}:${PG_PORT} (DB: ${PG_DB})"
   BACKUP_MODE="host"
-elif [ -n "${RESOLVED_COMPOSE}" ] && docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
-  # Verified Docker Compose service is running
-  CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
-  C_PASS=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_PASSWORD=' | cut -d= -f2- || true)
-  [ -n "${C_PASS}" ] && PG_PASSWORD="${C_PASS}"
-  C_USER=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_USER=' | cut -d= -f2- || true)
-  [ -n "${C_USER}" ] && PG_USER="${C_USER}"
-  C_DB=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_DB=' | cut -d= -f2- || true)
-  [ -n "${C_DB}" ] && PG_DB="${C_DB}"
-  echo "Targeting Docker Compose service '${POSTGRES_SERVICE}' in '${RESOLVED_COMPOSE}' (Container: ${CONTAINER_ID})"
-  BACKUP_MODE="compose"
-elif [ -n "${RESOLVED_COMPOSE}" ] && docker compose -f "${RESOLVED_COMPOSE}" ps --all -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
-  # Compose service container exists but may be stopped; use docker compose exec / run
-  echo "Targeting Docker Compose service '${POSTGRES_SERVICE}' via '${RESOLVED_COMPOSE}'"
-  BACKUP_MODE="compose"
-elif command -v pg_dump >/dev/null 2>&1 && [ -z "${RESOLVED_COMPOSE}" ]; then
+elif [ -n "${RESOLVED_COMPOSE}" ]; then
+  # Target strictly within the resolved Compose file; refuse to fallback across compose files
+  if docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
+    CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+    BACKUP_MODE="compose"
+  elif docker compose -f "${RESOLVED_COMPOSE}" ps --all -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
+    echo "PostgreSQL container in '${RESOLVED_COMPOSE}' is stopped. Starting '${POSTGRES_SERVICE}'..."
+    docker compose -f "${RESOLVED_COMPOSE}" up -d "${POSTGRES_SERVICE}"
+    MAX_WAIT=30
+    WAIT_COUNT=0
+    until docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; do
+      WAIT_COUNT=$((WAIT_COUNT + 1))
+      [ "${WAIT_COUNT}" -ge "${MAX_WAIT}" ] && break
+      sleep 1
+    done
+    CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+    BACKUP_MODE="compose"
+  else
+    echo "Error: PostgreSQL service '${POSTGRES_SERVICE}' not found in target '${RESOLVED_COMPOSE}'." >&2
+    echo "Refusing to target an alternative or development compose container." >&2
+    exit 1
+  fi
+
+  if [ -n "${CONTAINER_ID}" ]; then
+    C_PASS=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_PASSWORD=' | cut -d= -f2- || true)
+    [ -n "${C_PASS}" ] && PG_PASSWORD="${C_PASS}"
+    C_USER=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_USER=' | cut -d= -f2- || true)
+    [ -n "${C_USER}" ] && PG_USER="${C_USER}"
+    C_DB=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_DB=' | cut -d= -f2- || true)
+    [ -n "${C_DB}" ] && PG_DB="${C_DB}"
+    echo "Targeting Docker Compose service '${POSTGRES_SERVICE}' in '${RESOLVED_COMPOSE}' (Container: ${CONTAINER_ID})"
+  fi
+elif command -v pg_dump >/dev/null 2>&1; then
   PG_HOST="localhost"
   PG_PORT="${POSTGRES_PORT:-5432}"
   echo "Falling back to local pg_dump on ${PG_HOST}:${PG_PORT}..."
@@ -312,31 +372,52 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
     echo "Note: Neither Docker named volume ('vibress_content') nor local directory ('./content') found."
   fi
 
-  # Check S3 object backup if S3 is configured
-  S3_BUCKET_NAME="${S3_BUCKET:-${AWS_S3_BUCKET:-}}"
-  STORAGE_PROV="${STORAGE_PROVIDER:-local}"
-  if [ "${STORAGE_PROV}" = "s3" ] || [ -n "${S3_BUCKET_NAME}" ]; then
-    if [ -n "${S3_BUCKET_NAME}" ]; then
-      echo "S3 object storage configured (Bucket: ${S3_BUCKET_NAME})."
-      if command -v aws >/dev/null 2>&1; then
-        S3_TARGET_DIR="${BACKUP_DIR}/s3_${S3_BUCKET_NAME}_${TIMESTAMP}"
-        echo "Syncing S3 bucket 's3://${S3_BUCKET_NAME}' to '${S3_TARGET_DIR}'..."
-        if aws s3 sync "s3://${S3_BUCKET_NAME}" "${S3_TARGET_DIR}" --only-show-errors; then
-          S3_TAR="${BACKUP_DIR}/vibress_s3_${TIMESTAMP}.tar.gz"
-          tar -czf "${S3_TAR}" -C "${BACKUP_DIR}" "s3_${S3_BUCKET_NAME}_${TIMESTAMP}"
-          rm -rf "${S3_TARGET_DIR}"
-          chmod 600 "${S3_TAR}"
-          if command -v sha256sum >/dev/null 2>&1; then
-            (cd "${BACKUP_DIR}" && sha256sum "vibress_s3_${TIMESTAMP}.tar.gz" > "vibress_s3_${TIMESTAMP}.tar.gz.sha256")
-          elif command -v shasum >/dev/null 2>&1; then
-            (cd "${BACKUP_DIR}" && shasum -a 256 "vibress_s3_${TIMESTAMP}.tar.gz" > "vibress_s3_${TIMESTAMP}.tar.gz.sha256")
-          fi
-          echo "✓ S3 bucket backup created: ${S3_TAR}"
-        else
-          echo "Warning: aws s3 sync encountered an error; ensure AWS credentials have s3:GetObject and s3:ListBucket." >&2
-        fi
-      else
-        echo "Notice: aws CLI not found on host. S3 bucket 's3://${S3_BUCKET_NAME}' should be protected via cloud replication / versioning or synced via 'aws s3 sync s3://${S3_BUCKET_NAME} ...'."
+fi
+
+# --- S3 / Object Storage Backup (Executed if STORAGE_PROVIDER=s3, --with-s3, or --with-content with S3 configured) ---
+S3_BUCKET_NAME="${S3_BUCKET:-${AWS_S3_BUCKET:-}}"
+STORAGE_PROV="${STORAGE_PROVIDER:-local}"
+S3_REQUIRED=0
+if [ "${STORAGE_PROV}" = "s3" ] || [ "${WITH_S3:-0}" -eq 1 ]; then
+  S3_REQUIRED=1
+fi
+
+if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUCKET_NAME}" ]; }; then
+  echo -e "\n--- Processing S3 / Object Storage Backup ---"
+  if [ -z "${S3_BUCKET_NAME}" ]; then
+    echo "Error: S3 backup requested/required but no bucket configured (S3_BUCKET / AWS_S3_BUCKET)." >&2
+    if [ "${S3_REQUIRED}" -eq 1 ]; then
+      exit 1
+    fi
+  else
+    S3_BACKUP_CMD=(pnpm exec tsx scripts/s3-backup.mjs --bucket "${S3_BUCKET_NAME}" --output "${BACKUP_DIR}")
+    if [ -n "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}" ]; then
+      S3_BACKUP_CMD+=(--endpoint "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}")
+    fi
+    if [ -n "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}" ]; then
+      S3_BACKUP_CMD+=(--region "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}")
+    fi
+    if [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ]; then
+      S3_BACKUP_CMD+=(--access-key "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
+    fi
+    if [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ]; then
+      S3_BACKUP_CMD+=(--secret-key "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
+    fi
+    if [ -n "${S3_PREFIX:-}" ]; then
+      S3_BACKUP_CMD+=(--prefix "${S3_PREFIX}")
+    fi
+    if [ -n "${ENV_FILE:-}" ]; then
+      S3_BACKUP_CMD+=(--env-file "${ENV_FILE}")
+    fi
+
+    echo "Executing S3 backup engine (Fail-Closed)..."
+    if "${S3_BACKUP_CMD[@]}"; then
+      echo "✓ S3 object storage backup completed successfully."
+    else
+      echo "Error: S3 backup failed." >&2
+      if [ "${S3_REQUIRED}" -eq 1 ]; then
+        echo "FAIL-CLOSED: S3 is active storage provider or explicitly requested; aborting backup." >&2
+        exit 1
       fi
     fi
   fi

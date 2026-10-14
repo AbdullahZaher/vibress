@@ -24,17 +24,29 @@ volumes:
   postgres_data:
   redis_data:
   vibress_content:
+  postgres_wal:
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "archive_mode=on"
+      - "-c"
+      - "archive_command=test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f"
+      - "-c"
+      - "archive_timeout=900"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vibress}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-vibress}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - postgres_wal:/var/lib/postgresql/wal_archive
     networks: [backend]
     healthcheck:
       test:

@@ -17,49 +17,55 @@ async function loginStaff(app: FastifyInstance): Promise<string> {
   return setCookie.split(";")[0] ?? "";
 }
 
-async function ensureOwner(): Promise<void> {
+async function ensureOwner(): Promise<string> {
   const db = getDb();
-  const { users, userRoles, roles } = await import("@vibress/database");
+  const { users, userRoles, roles, publicationMemberships } = await import("@vibress/database");
   const rows = await db
     .select()
     .from(users)
     .where(eq(users.email, "owner@example.com"))
     .limit(1);
-  if (rows.length > 0) return;
-  const hash = await hashPassword("OwnerPass123!");
-  const ownerId = crypto.randomUUID();
+  let ownerId = rows[0]?.id;
+  if (!ownerId) {
+    const hash = await hashPassword("OwnerPass123!");
+    ownerId = crypto.randomUUID();
+    await db
+      .insert(users)
+      .values({
+        id: ownerId,
+        email: "owner@example.com",
+        name: "Owner",
+        slug: "e2e-owner",
+        passwordHash: hash,
+        status: "active",
+      })
+      .onConflictDoNothing();
+    const ownerRole = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.key, "owner"))
+      .limit(1);
+    if (ownerRole[0])
+      await db
+        .insert(userRoles)
+        .values({ userId: ownerId, roleId: ownerRole[0].id });
+  }
   await db
-    .insert(users)
+    .insert(publicationMemberships)
     .values({
-      id: ownerId,
-      email: "owner@example.com",
-      name: "Owner",
-      slug: "e2e-owner",
-      passwordHash: hash,
-      status: "active",
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId: ownerId,
+      role: "owner",
     })
     .onConflictDoNothing();
-  const ownerRole = await db
-    .select({ id: roles.id })
-    .from(roles)
-    .where(eq(roles.key, "owner"))
-    .limit(1);
-  if (ownerRole[0])
-    await db
-      .insert(userRoles)
-      .values({ userId: ownerId, roleId: ownerRole[0].id });
+  return ownerId;
 }
 
 async function seedIndexedPost(): Promise<string> {
   const db = getDb();
-  const { users, searchDocuments } = await import("@vibress/database");
-  const ownerRows = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, "owner@example.com"))
-    .limit(1);
-  const ownerId = ownerRows[0]?.id || "unknown";
-  const { posts } = await import("@vibress/database");
+  const { searchDocuments, posts } = await import("@vibress/database");
+  const ownerId = await ensureOwner();
   const existing = await db
     .select()
     .from(posts)
@@ -109,13 +115,7 @@ async function seedIndexedPost(): Promise<string> {
 
 async function seedRestrictedPost(): Promise<string> {
   const db = getDb();
-  const { users } = await import("@vibress/database");
-  const ownerRows = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, "owner@example.com"))
-    .limit(1);
-  const ownerId = ownerRows[0]?.id || "unknown";
+  const ownerId = await ensureOwner();
   const { posts } = await import("@vibress/database");
   const [row] = await db
     .insert(posts)

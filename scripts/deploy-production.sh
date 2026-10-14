@@ -15,12 +15,72 @@ set -Eeuo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
+FORCE_FRESH=0
+FORCE_UPGRADE=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fresh)
+      FORCE_FRESH=1
+      ;;
+    --upgrade)
+      FORCE_UPGRADE=1
+      ;;
+    --compose-file)
+      COMPOSE_FILE="$2"
+      shift
+      ;;
+    --env-file)
+      ENV_FILE="$2"
+      shift
+      ;;
+    *)
+      ;;
+  esac
+  shift
+done
 
 echo "================================================================================"
 echo " VIBRESS PRODUCTION DEPLOYMENT PIPELINE — v1.0.0-GA"
 echo " Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo " Compose file: ${COMPOSE_FILE}"
 echo "================================================================================"
+
+# Helper: Detect whether this is an existing deployment requiring upgrade backup
+is_existing_installation() {
+  if [ "${FORCE_FRESH}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "1" ]; then
+    return 1 # explicitly forced fresh install
+  fi
+  if [ "${FORCE_UPGRADE}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "0" ]; then
+    return 0 # explicitly forced upgrade
+  fi
+
+  # 1. Check if postgres container already exists in this compose project
+  if docker compose -f "${COMPOSE_FILE}" ps -a -q postgres 2>/dev/null | grep -q .; then
+    return 0
+  fi
+
+  # 2. Check if the project volume exists and has PostgreSQL data
+  local project_name
+  project_name=$(docker compose -f "${COMPOSE_FILE}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
+  [ -z "${project_name}" ] && project_name="vibress-prod"
+
+  local volume_name="${project_name}_postgres_data"
+  if docker volume inspect "${volume_name}" >/dev/null 2>&1; then
+    if docker run --rm -v "${volume_name}:/vol:ro" alpine test -f /vol/PG_VERSION 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  # Also check unqualified volume name
+  if docker volume inspect "postgres_data" >/dev/null 2>&1; then
+    if docker run --rm -v "postgres_data:/vol:ro" alpine test -f /vol/PG_VERSION 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  return 1 # Verified fresh installation
+}
 
 # --- Phase 1: Preflight Validation ---
 echo -e "\n[Phase 1/6] Running preflight checks..."
@@ -40,6 +100,12 @@ if [ ! -f "${ENV_FILE}" ]; then
   exit 1
 fi
 
+# Load database credentials for health checks
+POSTGRES_USER="${POSTGRES_USER:-$(grep -E '^[[:space:]]*POSTGRES_USER=' "${ENV_FILE}" | head -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)}"
+POSTGRES_DB="${POSTGRES_DB:-$(grep -E '^[[:space:]]*POSTGRES_DB=' "${ENV_FILE}" | head -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)}"
+POSTGRES_USER="${POSTGRES_USER:-vibress}"
+POSTGRES_DB="${POSTGRES_DB:-vibress}"
+
 # Check disk space (warn if < 5GB)
 FREE_DISK_KB=$(df -k . | awk 'NR==2 {print $4}')
 if [ "${FREE_DISK_KB}" -lt 5242880 ]; then
@@ -47,18 +113,56 @@ if [ "${FREE_DISK_KB}" -lt 5242880 ]; then
 fi
 echo "✓ Preflight validation passed."
 
-# --- Phase 2: Pre-deployment Backup ---
-echo -e "\n[Phase 2/6] Performing pre-deployment database backup..."
-if [ -f "scripts/backup.sh" ]; then
-  ./scripts/backup.sh ./backups
-  echo "✓ Pre-deployment backup verified."
+# --- Phase 2: Pre-deployment Backup & Fresh-Install Bootstrapping ---
+echo -e "\n[Phase 2/6] Evaluating deployment state and backup requirements..."
+
+if is_existing_installation; then
+  echo "Existing Vibress deployment detected. Mandatory pre-upgrade database backup required."
+
+  echo "Starting PostgreSQL service to snapshot active database..."
+  docker compose -f "${COMPOSE_FILE}" up -d postgres
+
+  echo "Waiting for PostgreSQL service readiness..."
+  MAX_PG_RETRIES=30
+  PG_RETRY=0
+  until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; do
+    PG_RETRY=$((PG_RETRY + 1))
+    if [ "${PG_RETRY}" -ge "${MAX_PG_RETRIES}" ]; then
+      echo "Error: Timed out waiting for PostgreSQL to be ready for pre-upgrade backup." >&2
+      exit 1
+    fi
+    sleep 1
+  done
+
+  if [ -f "scripts/backup.sh" ]; then
+    COMPOSE_FILE="${COMPOSE_FILE}" ENV_FILE="${ENV_FILE}" ./scripts/backup.sh ./backups
+    echo "✓ Pre-deployment upgrade backup verified successfully."
+  else
+    echo "Error: scripts/backup.sh not found. Mandatory pre-upgrade backup cannot be skipped." >&2
+    exit 1
+  fi
 else
-  echo "Error: scripts/backup.sh not found. Mandatory pre-deployment backup cannot be skipped." >&2
-  exit 1
+  echo "✓ Verified fresh installation: No existing PostgreSQL container or initialized volume detected."
+  echo "  Proceeding with safe bootstrap. Pre-deployment backup skipped."
+  echo "  (Pre-deployment backups will be strictly enforced on subsequent upgrades)."
 fi
 
 # --- Phase 3: Database Migrations ---
 echo -e "\n[Phase 3/6] Applying database migrations..."
+docker compose -f "${COMPOSE_FILE}" up -d postgres redis
+
+echo "Waiting for PostgreSQL service readiness before migration..."
+MAX_PG_RETRIES=30
+PG_RETRY=0
+until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; do
+  PG_RETRY=$((PG_RETRY + 1))
+  if [ "${PG_RETRY}" -ge "${MAX_PG_RETRIES}" ]; then
+    echo "Error: Timed out waiting for PostgreSQL before migrations." >&2
+    exit 1
+  fi
+  sleep 1
+done
+
 docker compose -f "${COMPOSE_FILE}" run --rm migrate
 echo "✓ Database migrations applied successfully."
 
