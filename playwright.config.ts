@@ -12,7 +12,8 @@ export default defineConfig({
   reporter: "list",
   use: {
     actionTimeout: 0,
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   webServer: {
     command: "pnpm dev",
