@@ -400,6 +400,31 @@ export async function isSafeSignedUrl(rawUrl: string): Promise<boolean> {
   }
 }
 
+/**
+ * StorageProviderThemeStorageAdapter
+ *
+ * Cloud object storage (S3/MinIO/R2) backend for Vibress theme packages.
+ *
+ * ## N-1 Bounded Generation Retention Contract
+ * 1. **Generation Isolation**: Theme assets are written to immutable generation directories
+ *    (`generations/<generationId>/...`) before the authoritative `__files.json` manifest is updated.
+ * 2. **Bounded Retention Guarantee**: Guarantees uninterrupted access for the active generation
+ *    (`manifest.generation`) and bounded deferred retention for the immediate preceding generation
+ *    (`manifest.previousGeneration`).
+ * 3. **Concurrency & Torn Reads**:
+ *    - In-flight readers resolve a single manifest snapshot via `getThemeFilesMap` and pin `manifest.generation`,
+ *      guaranteeing untorn reads even if a replacement occurs mid-operation.
+ *    - In-flight readers pinned to generation `G` are guaranteed safe against a concurrent single
+ *      replacement (`G -> G+1`), as `G` is retained as `previousGeneration`.
+ *    - If multiple consecutive administrative replacements occur in rapid succession (`G -> G+1 -> G+2`),
+ *      generation `G` is pruned to maintain bounded object storage footprints (`O(2 * package_size)`).
+ *      Long-lived render pipelines encountering a pruned generation should re-resolve `__files.json`.
+ * 4. **Superseded Generation Protection**:
+ *    - A superseded writer whose generation is retained by the active manifest as `previousGeneration`
+ *      will never delete its files during post-activation verification or ambiguous write recovery.
+ * 5. **Legacy Fallback Compatibility**:
+ *    - Authorized legacy-root v2 packages resolve all files consistently using `manifest.root`.
+ */
 export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
   constructor(
     private storageProvider: StorageProvider,
@@ -552,6 +577,18 @@ export class StorageProviderThemeStorageAdapter implements ThemeStorageAdapter {
     return null;
   }
 
+  /**
+   * Commits theme package files into an immutable generation directory and publishes
+   * the authoritative `__files.json` manifest.
+   *
+   * ## N-1 Bounded Generation Retention
+   * - Uploads all files to `generations/<generationId>/`.
+   * - Updates `__files.json` pointing to `generationId` and retaining `previousGeneration`.
+   * - Preserves the immediate predecessor in storage so in-flight readers are never broken.
+   * - Prunes generations older than `previousGeneration` (`previousManifest.previousGeneration`).
+   * - Protects superseded generations from immediate cleanup if referenced by active manifest.
+   * - Strictly favors data preservation on indeterminate or ambiguous manifest writes.
+   */
   async saveThemeFiles(
     themeId: string,
     version: string,
