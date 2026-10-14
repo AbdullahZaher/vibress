@@ -72,10 +72,18 @@ describe("Real MinIO Protocol & Storage Integration", () => {
     expect(head).not.toBeNull();
     expect(head?.size).toBe(body.length);
 
+    const buffer = await provider.getObjectBuffer(key);
+    expect(buffer).not.toBeNull();
+    expect(buffer?.toString("utf-8")).toBe("Hello MinIO S3 Protocol");
+
+    const nonExistent = await provider.getObjectBuffer(`non-existent-${Date.now()}.txt`);
+    expect(nonExistent).toBeNull();
+
     await provider.delete(key);
 
     const existsAfter = await provider.exists(key);
     expect(existsAfter).toBe(false);
+    expect(await provider.getObjectBuffer(key)).toBeNull();
   });
 
   it("should generate valid signed GET and PUT URLs", async () => {

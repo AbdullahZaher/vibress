@@ -39,8 +39,7 @@ coverage/
 test-results/
 playwright-report/
 tests/e2e/screenshots/
-tests/e2e/visual/
-tests/e2e/baselines/
+tests/e2e/visual/screenshots/
 
 # ============================================================
 # Environment & Secrets (Never Commit)

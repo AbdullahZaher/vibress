@@ -64,6 +64,52 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     await fs.promises.writeFile(fileA, SAMPLE_JPEG);
     await fs.promises.writeFile(fileB, SAMPLE_JPEG);
     await fs.promises.writeFile(fileU, SAMPLE_JPEG);
+
+    const db = getDb();
+    await db
+      .insert(mediaAssets)
+      .values([
+        {
+          id: "fa000000-0000-4000-a000-000000000001",
+          publicationId: PUBLICATION_ID,
+          storageProvider: "local",
+          storageKey: "media/test-feature-a.jpg",
+          originalFilename: "test-feature-a.jpg",
+          displayName: "Feature Image A",
+          mimeType: "image/jpeg",
+          extension: "jpg",
+          sizeBytes: SAMPLE_JPEG.length,
+          checksum: "fakechecksum1",
+          assetType: "image",
+        },
+        {
+          id: "fa000000-0000-4000-a000-000000000002",
+          publicationId: PUBLICATION_ID,
+          storageProvider: "local",
+          storageKey: "media/test-feature-b.jpg",
+          originalFilename: "test-feature-b.jpg",
+          displayName: "Feature Image B",
+          mimeType: "image/jpeg",
+          extension: "jpg",
+          sizeBytes: SAMPLE_JPEG.length,
+          checksum: "fakechecksum2",
+          assetType: "image",
+        },
+        {
+          id: "fa000000-0000-4000-a000-000000000088",
+          publicationId: PUBLICATION_ID,
+          storageProvider: "local",
+          storageKey: "media/test-unsplash.jpg",
+          originalFilename: "test-unsplash.jpg",
+          displayName: "Dense pine forest with misty canopy",
+          mimeType: "image/jpeg",
+          extension: "jpg",
+          sizeBytes: SAMPLE_JPEG.length,
+          checksum: "fakechecksum3",
+          assetType: "image",
+        },
+      ])
+      .onConflictDoNothing();
   });
 
   // ============================================================

@@ -92,6 +92,7 @@ export interface StorageProvider {
   getUrl(key: string): Promise<string>;
   getSignedUrl?(key: string, options?: SignedUrlOptions): Promise<string>;
   headObject?(key: string): Promise<ObjectHeadResult | null>;
+  getObjectBuffer?(key: string): Promise<Buffer | null>;
   createSignedUploadUrl?(
     input: CreateSignedUploadInput,
   ): Promise<SignedUploadUrlResult>;
@@ -103,4 +104,15 @@ export interface StorageProvider {
     input: CompleteMultipartInput,
   ): Promise<StoredObject>;
   abortMultipartUpload?(input: AbortMultipartInput): Promise<void>;
+}
+
+export function hasObjectBufferSupport(
+  provider: StorageProvider,
+): provider is StorageProvider & {
+  getObjectBuffer(key: string): Promise<Buffer | null>;
+} {
+  return (
+    typeof (provider as Partial<{ getObjectBuffer: unknown }>).getObjectBuffer ===
+    "function"
+  );
 }

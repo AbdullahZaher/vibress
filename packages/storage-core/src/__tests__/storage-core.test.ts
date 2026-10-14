@@ -46,6 +46,21 @@ describe("Storage Core & LocalStorageProvider", () => {
 
     const exists = await provider.exists(key);
     expect(exists).toBe(true);
+
+    const buffer = await provider.getObjectBuffer(key);
+    expect(buffer).not.toBeNull();
+    expect(buffer?.toString("utf-8")).toBe("hello vibress media");
+  });
+
+  it("should return null from getObjectBuffer for non-existent key", async () => {
+    const buffer = await provider.getObjectBuffer("images/non-existent.txt");
+    expect(buffer).toBeNull();
+  });
+
+  it("should reject path traversal attempts in getObjectBuffer", async () => {
+    await expect(
+      provider.getObjectBuffer("../../etc/passwd"),
+    ).rejects.toThrow(StoragePathTraversalError);
   });
 
   it("should delete existing local storage object", async () => {

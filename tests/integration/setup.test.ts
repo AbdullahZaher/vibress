@@ -28,8 +28,8 @@ const BASE_ENV: Record<string, string | undefined> = {
 
 describe("First-run setup", () => {
   let app: ReturnType<typeof buildApp>;
-
   const originalEnv: Record<string, string | undefined> = {};
+  let settingsBackupRows: Record<string, unknown>[] = [];
 
   beforeAll(async () => {
     for (const key of Object.keys(BASE_ENV)) {
@@ -39,6 +39,11 @@ describe("First-run setup", () => {
 
     await runMigrations();
     const pool = getDbPool();
+    try {
+      const { rows } = await pool.query("SELECT * FROM settings");
+      settingsBackupRows = rows;
+    } catch {}
+
     await pool.query(`
       TRUNCATE TABLE audit_events, sessions, role_permissions, user_roles, permissions, roles, users, settings, installation CASCADE;
     `);
@@ -68,6 +73,17 @@ describe("First-run setup", () => {
       await new SetupService(
         new DrizzleInstallationRepository(),
       ).classifyLegacyInstallation();
+      if (settingsBackupRows.length > 0) {
+        const pool = getDbPool();
+        for (const r of settingsBackupRows) {
+          await pool.query(
+            `INSERT INTO settings (id, publication_id, namespace, key, value, value_type, classification, updated_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (publication_id, namespace, key) DO UPDATE SET value = EXCLUDED.value`,
+            [r.id, r.publication_id, r.namespace, r.key, JSON.stringify(r.value), r.value_type, r.classification, r.updated_by, r.created_at, r.updated_at],
+          ).catch(() => {});
+        }
+      }
     } catch (err) {
       // Best-effort cleanup — never mask the actual test results.
       console.error(
@@ -75,7 +91,6 @@ describe("First-run setup", () => {
         err instanceof Error ? err.message : String(err),
       );
     }
-    await closeDbPool();
   });
 
   const post = (token: string | undefined, payload: unknown, origin = ORIGIN) =>

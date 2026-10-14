@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb, posts, users, userRoles, roles } from "@vibress/database";
+import { getDb, posts, users, userRoles, roles, publicationMemberships } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
@@ -51,6 +51,16 @@ async function ensureOwnerAndTestPost(): Promise<void> {
     }
   }
 
+  await db
+    .insert(publicationMemberships)
+    .values({
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId: ownerUserId,
+      role: "owner",
+    })
+    .onConflictDoNothing();
+
   testPostId = crypto.randomUUID();
   await db
     .insert(posts)
@@ -91,7 +101,7 @@ describe("Studio Collaboration API Routes", () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   describe("Comments Lifecycle", () => {

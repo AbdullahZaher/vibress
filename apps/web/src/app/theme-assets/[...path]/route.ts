@@ -106,7 +106,31 @@ function resolveThemeAssetPath(
   relativePath: string,
   scope: PublicationThemeScope | null,
 ): string | null {
+  if (
+    !themeId ||
+    !/^[a-z0-9-]+$/.test(themeId) ||
+    !version ||
+    !/^\d+(\.\d+)*(-[a-zA-Z0-9.]+)?$/.test(version) ||
+    version.includes("..") ||
+    !relativePath ||
+    relativePath.includes("..") ||
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    relativePath.startsWith("/")
+  ) {
+    return null;
+  }
+
   const publicationId = scope?.publicationId ?? null;
+  if (
+    publicationId &&
+    (!/^[a-zA-Z0-9_-]{1,128}$/.test(publicationId) ||
+      publicationId === ".." ||
+      publicationId === ".")
+  ) {
+    return null;
+  }
+
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
   const cleanVersion = version.replace(/[^0-9.]/g, "");
   const fileName = path.basename(relativePath);
@@ -340,7 +364,7 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const { path: segments } = await params;
-  if (!segments || segments.length < 2) {
+  if (!segments || segments.length < 3) {
     return new NextResponse("Not found", { 
       status: 404,
       headers: { "Cache-Control": "no-cache, no-store, must-revalidate" }
@@ -349,15 +373,20 @@ export async function GET(
 
   const themeId = segments[0] || "";
   const version = segments[1] || "";
-  const relativePath = segments.slice(2).join("/") || segments[segments.length - 1] || "";
+  const relativePath = segments.slice(2).join("/");
   const fileName = segments[segments.length - 1] || "";
 
-  // Trusted allowlist — no path traversal
+  // Trusted allowlist — no path traversal, no reserved names
   if (
     !/^[a-z0-9-]+$/.test(themeId) ||
-    !/^\d+\.\d+\.\d+$/.test(version) ||
+    !/^\d+(\.\d+)*(-[a-zA-Z0-9.]+)?$/.test(version) ||
+    version.includes("..") ||
+    !relativePath ||
     relativePath.includes("..") ||
-    relativePath.includes("\0")
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    relativePath.startsWith("/") ||
+    fileName.startsWith("__")
   ) {
     return new NextResponse("Not found", { 
       status: 404,
