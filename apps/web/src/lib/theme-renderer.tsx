@@ -18,6 +18,7 @@ function findThemeDirectory(
   themeId: string,
   version: string,
   publicationId = "pub_default",
+  legacyStorage = false,
 ): string | null {
   const cleanId = themeId.replace(/[^a-z0-9-]/g, "");
   const cleanVersion = version.replace(/[^0-9.]/g, "");
@@ -150,7 +151,12 @@ function findThemeDirectory(
     path.join(process.cwd(), "apps", "api", "content", "theme-starter"),
   ];
 
-  for (const candidate of [...scopedRoots, ...legacyRoots]) {
+  // Never read global legacy templates without an authoritative installed-
+  // theme reference for this publication. Keep the default publication path.
+  const allowedLegacyRoots = publicationId === "pub_default" || legacyStorage
+    ? legacyRoots
+    : [];
+  for (const candidate of [...scopedRoots, ...allowedLegacyRoots]) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
       return candidate;
     }
@@ -327,7 +333,14 @@ export async function renderThemeTemplate(
     fileMap = cached.files;
   } else {
     const themeDir = publicationId
-      ? findThemeDirectory(themeId, themeVersion, publicationId)
+      ? findThemeDirectory(
+          themeId,
+          themeVersion,
+          publicationId,
+          site.legacyThemeStorage === true &&
+            site.legacyThemeId === themeId &&
+            site.legacyThemeVersion === themeVersion,
+        )
       : null;
     if (themeDir) {
       fileMap = loadThemeFilesMap(themeDir);

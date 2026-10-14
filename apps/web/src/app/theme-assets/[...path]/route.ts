@@ -26,7 +26,7 @@ async function resolveRequestPublicationScope(
   if (!hostHeader) return null;
 
   const cached = publicationScopeCache.get(hostHeader);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (cached && cached.expiresAt > Date.now() && cached.scope.legacyStorage !== true) {
     return cached.scope;
   }
 
@@ -52,6 +52,7 @@ async function resolveRequestPublicationScope(
       theme?: {
         themeId?: unknown;
         themeVersion?: unknown;
+        legacyStorage?: unknown;
       };
     };
     const activeThemeId =
@@ -67,11 +68,18 @@ async function resolveRequestPublicationScope(
       publicationId,
       activeThemeId,
       activeThemeVersion,
+      legacyStorage: payload.theme?.legacyStorage === true,
     };
-    publicationScopeCache.set(hostHeader, {
-      scope,
-      expiresAt: Date.now() + PUBLICATION_SCOPE_TTL_MS,
-    });
+    // A legacy-storage grant is authorization data; do not cache it after
+    // the publication might uninstall or replace the inherited package.
+    if (scope.legacyStorage) {
+      publicationScopeCache.delete(hostHeader);
+    } else {
+      publicationScopeCache.set(hostHeader, {
+        scope,
+        expiresAt: Date.now() + PUBLICATION_SCOPE_TTL_MS,
+      });
+    }
     return scope;
   } catch {
     return null;

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { StorageProvider } from "@vibress/storage-core";
 import { StorageProviderThemeStorageAdapter } from "./storage-provider-theme-storage-adapter";
 
@@ -15,16 +16,19 @@ export interface ThemeStorageAdapter {
     version: string,
     relativePath: string,
     publicationId?: string,
+    allowLegacyFallback?: boolean,
   ): Promise<Buffer | null>;
   listThemeFiles(
     themeId: string,
     version: string,
     publicationId?: string,
+    allowLegacyFallback?: boolean,
   ): Promise<string[]>;
   getThemeFilesMap(
     themeId: string,
     version: string,
     publicationId?: string,
+    allowLegacyFallback?: boolean,
   ): Promise<Map<string, string>>;
   deleteThemeFiles(
     themeId: string,
@@ -35,6 +39,7 @@ export interface ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId?: string,
+    allowLegacyFallback?: boolean,
   ): Promise<boolean>;
   getThemeRootPath(
     themeId: string,
@@ -86,10 +91,11 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId: string,
+    allowLegacyFallback = false,
   ): string {
     const scoped = this.getThemeRootPath(themeId, version, publicationId);
     if (fs.existsSync(scoped)) return scoped;
-    if (publicationId !== "pub_default") {
+    if (publicationId !== "pub_default" && allowLegacyFallback) {
       const legacy = this.getLegacyThemeRootPath(themeId, version);
       if (fs.existsSync(legacy)) return legacy;
     }
@@ -103,13 +109,35 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     publicationId = "pub_default",
   ): Promise<string> {
     const themeDir = this.getThemeRootPath(themeId, version, publicationId);
-    await fs.promises.mkdir(themeDir, { recursive: true });
+    const stagingDir = `${themeDir}.staging-${randomUUID()}`;
+    const backupDir = `${themeDir}.backup-${randomUUID()}`;
+    await fs.promises.mkdir(stagingDir, { recursive: true });
 
-    for (const [relPath, buffer] of files.entries()) {
-      const fullPath = path.join(themeDir, relPath);
-      const parentDir = path.dirname(fullPath);
-      await fs.promises.mkdir(parentDir, { recursive: true });
-      await fs.promises.writeFile(fullPath, buffer);
+    try {
+      // Assemble a complete replacement before touching the installed package.
+      for (const [relPath, buffer] of files.entries()) {
+        const fullPath = path.resolve(stagingDir, relPath);
+        const relative = path.relative(stagingDir, fullPath);
+        if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+          throw new Error("Invalid theme file path");
+        }
+        await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.promises.writeFile(fullPath, buffer);
+      }
+
+      const hadExisting = fs.existsSync(themeDir);
+      if (hadExisting) await fs.promises.rename(themeDir, backupDir);
+      try {
+        await fs.promises.rename(stagingDir, themeDir);
+      } catch (error) {
+        if (hadExisting) await fs.promises.rename(backupDir, themeDir);
+        throw error;
+      }
+      if (hadExisting) {
+        await fs.promises.rm(backupDir, { recursive: true, force: true });
+      }
+    } finally {
+      await fs.promises.rm(stagingDir, { recursive: true, force: true });
     }
 
     return path.relative(process.cwd(), themeDir);
@@ -120,11 +148,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     version: string,
     relativePath: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<Buffer | null> {
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
       publicationId,
+      allowLegacyFallback,
     );
     const cleanRel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
     const fullPath = path.join(themeDir, cleanRel);
@@ -148,11 +178,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<string[]> {
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
       publicationId,
+      allowLegacyFallback,
     );
     if (!fs.existsSync(themeDir)) return [];
 
@@ -177,12 +209,14 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
       publicationId,
+      allowLegacyFallback,
     );
     if (!fs.existsSync(themeDir)) return map;
 
@@ -190,6 +224,7 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
       themeId,
       version,
       publicationId,
+      allowLegacyFallback,
     );
     for (const f of files) {
       const fullPath = path.join(themeDir, f);
@@ -231,11 +266,13 @@ export class FileSystemThemeStorageAdapter implements ThemeStorageAdapter {
     themeId: string,
     version: string,
     publicationId = "pub_default",
+    allowLegacyFallback = false,
   ): Promise<boolean> {
     const themeDir = this.resolveReadableThemeRoot(
       themeId,
       version,
       publicationId,
+      allowLegacyFallback,
     );
     return fs.existsSync(themeDir);
   }

@@ -35,7 +35,23 @@ describe("theme asset publication scope", () => {
       publicationId: "pub_alpha",
       activeThemeId: "theme-a",
       activeThemeVersion: "1.0.0",
+      legacyStorage: true,
     };
+    // A matching active theme is insufficient without its DB-backed legacy reference.
+    expect(
+      shouldAllowLegacyThemeFallback(
+        { ...scope, legacyStorage: false },
+        "theme-a",
+        "1.0.0",
+      ),
+    ).toBe(false);
+    expect(
+      shouldAllowLegacyThemeFallback(
+        { publicationId: scope.publicationId, activeThemeId: scope.activeThemeId, activeThemeVersion: scope.activeThemeVersion },
+        "theme-a",
+        "1.0.0",
+      ),
+    ).toBe(false);
     expect(shouldAllowLegacyThemeFallback(scope, "theme-a", "1.0.0")).toBe(true);
     expect(shouldAllowLegacyThemeFallback(scope, "theme-b", "1.0.0")).toBe(false);
     expect(shouldAllowLegacyThemeFallback(scope, "theme-a", "2.0.0")).toBe(false);

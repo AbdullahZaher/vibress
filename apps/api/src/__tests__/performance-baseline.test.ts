@@ -12,11 +12,17 @@ interface LatencyStats {
 function calculatePercentiles(latencies: number[]): LatencyStats {
   if (latencies.length === 0) return { samples: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0 };
   const sorted = [...latencies].sort((a, b) => a - b);
+  // Nearest-rank: ceil(p * n) - 1. For 20 requests p95 is the
+  // 19th observation, not the maximum (which belongs to p99).
+  const percentile = (p: number): number => {
+    const index = Math.max(0, Math.ceil(p * sorted.length) - 1);
+    return Number((sorted[index] ?? 0).toFixed(2));
+  };
   return {
     samples: sorted.length,
-    p50Ms: Number((sorted[Math.floor(sorted.length * 0.5)] ?? 0).toFixed(2)),
-    p95Ms: Number((sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(2)),
-    p99Ms: Number((sorted[Math.min(Math.floor(sorted.length * 0.99), sorted.length - 1)] ?? 0).toFixed(2)),
+    p50Ms: percentile(0.5),
+    p95Ms: percentile(0.95),
+    p99Ms: percentile(0.99),
   };
 }
 
@@ -57,6 +63,24 @@ async function ensureOwner(): Promise<void> {
       .onConflictDoNothing();
   }
 }
+
+describe("Latency percentile calculation", () => {
+  it("uses the nearest rank, including when p95 falls below the maximum", () => {
+    const latencies = [...Array.from({ length: 19 }, (_, index) => index + 1), 450];
+    expect(calculatePercentiles(latencies)).toEqual({
+      samples: 20,
+      p50Ms: 10,
+      p95Ms: 19,
+      p99Ms: 450,
+    });
+    expect(calculatePercentiles([12.345])).toEqual({
+      samples: 1,
+      p50Ms: 12.35,
+      p95Ms: 12.35,
+      p99Ms: 12.35,
+    });
+  });
+});
 
 describe("PHASE 11: Production Performance Baseline Suite (p50/p95/p99)", () => {
   let app: FastifyInstance;

@@ -247,6 +247,31 @@ describe("Theme Domain — Activation & Management", () => {
     expect(activeNordic?.settings.accentColor).toBe("#bf616a");
   });
 
+  it("reports legacy storage only for an active external theme with an inherited path", async () => {
+    await service.activateTheme("custom-nordic", "user-1", undefined, "pub_alpha");
+    // A normal install is not authorized merely because its path looks legacy.
+    expect((await service.getActiveTheme("pub_alpha"))?.legacyStorage).toBe(false);
+
+    const installed = await installedRepo.findByThemeId("custom-nordic");
+    if (!installed) throw new Error("Missing installed theme");
+    installedRepo.themes.delete(installed.id);
+    const migrated = {
+      ...installed,
+      id: `legacy_theme_${"a".repeat(32)}`,
+      publicationId: "pub_alpha",
+    };
+    await installedRepo.create(migrated);
+    expect((await service.getActiveTheme("pub_alpha"))?.legacyStorage).toBe(true);
+    await installedRepo.update({
+      ...migrated,
+      storagePath: "content/themes/publications/pub_alpha/custom-nordic/1.0.0",
+    });
+    expect((await service.getActiveTheme("pub_alpha"))?.legacyStorage).toBe(false);
+
+    await service.activateTheme("vibress-default", "user-1", undefined, "pub_alpha");
+    expect((await service.getActiveTheme("pub_alpha"))?.legacyStorage).toBe(false);
+  });
+
   it("uninstalls an external theme when not active", async () => {
     await service.activateTheme("vibress-default", "user-1");
     const result = await service.uninstallTheme("custom-nordic", "user-1");

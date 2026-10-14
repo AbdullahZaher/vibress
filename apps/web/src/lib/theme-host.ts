@@ -97,6 +97,9 @@ export async function resolveThemeHostState(
 
 export interface ThemeSiteSettings {
   publicationId?: string | undefined;
+  legacyThemeStorage?: boolean | undefined;
+  legacyThemeId?: string | undefined;
+  legacyThemeVersion?: string | undefined;
   title: string;
   description: string;
   url: string;
@@ -184,6 +187,7 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       analytics?: Record<string, unknown>;
       code?: Record<string, unknown>;
       comments?: Record<string, unknown>;
+      theme?: { legacyStorage?: unknown; themeId?: unknown; themeVersion?: unknown };
     };
     const site = data?.site;
     if (!site || typeof site.title !== "string") return fallback;
@@ -195,6 +199,9 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
 
     return {
       publicationId,
+      legacyThemeStorage: data.theme?.legacyStorage === true,
+      legacyThemeId: typeof data.theme?.themeId === "string" ? data.theme.themeId : undefined,
+      legacyThemeVersion: typeof data.theme?.themeVersion === "string" ? data.theme.themeVersion : undefined,
       title: site.title as string,
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,

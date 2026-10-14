@@ -205,7 +205,17 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
       "pub_default",
     );
 
-    // Existing installations may still need the old unscoped package.
+    // An unverified publication cannot borrow an unscoped package.
+    expect(
+      await adapter.getThemeFile(
+        themeId,
+        version,
+        "templates/legacy.liquid",
+        "pub_alpha",
+      ),
+    ).toBeNull();
+
+    // Migration-backed installations may explicitly authorize the legacy read.
     expect(
       (
         await adapter.getThemeFile(
@@ -213,6 +223,7 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
           version,
           "templates/legacy.liquid",
           "pub_alpha",
+          true,
         )
       )?.toString("utf8"),
     ).toBe("legacy");
@@ -243,6 +254,7 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
         version,
         "templates/legacy.liquid",
         "pub_alpha",
+        true,
       ),
     ).toBeNull();
     expect(await adapter.themeExists(themeId, version, "pub_alpha")).toBe(true);
@@ -256,6 +268,77 @@ describe("Theme Storage Adapter Factory & Fail-Closed Behavior", () => {
       "pub_beta",
     );
     expect(await adapter.themeExists(themeId, version, "pub_beta")).toBe(false);
+  });
+
+  it("requires explicit authorization for legacy filesystem access", async () => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "vibress-legacy-storage-"));
+    try {
+      const adapter = new FileSystemThemeStorageAdapter({ storageRoot: root });
+      const files = new Map([["templates/home.liquid", Buffer.from("legacy")]]);
+      await adapter.saveThemeFiles("shared-theme", "1.0.0", files);
+      expect(await adapter.getThemeFile("shared-theme", "1.0.0", "templates/home.liquid", "pub_alpha")).toBeNull();
+      expect((await adapter.getThemeFile("shared-theme", "1.0.0", "templates/home.liquid", "pub_alpha", true))?.toString()).toBe("legacy");
+
+      await adapter.saveThemeFiles("shared-theme", "1.0.0",
+        new Map([["templates/new.liquid", Buffer.from("private")]]), "pub_alpha");
+      // A scoped package is authoritative, even if an authorized legacy file exists.
+      expect(await adapter.getThemeFile("shared-theme", "1.0.0", "templates/home.liquid", "pub_alpha", true)).toBeNull();
+      expect((await adapter.getThemeFile("shared-theme", "1.0.0", "templates/new.liquid", "pub_alpha"))?.toString()).toBe("private");
+    } finally {
+      await fs.promises.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces filesystem packages without retaining removed files, preserving old files on validation failure", async () => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "vibress-theme-replace-"));
+    try {
+      const adapter = new FileSystemThemeStorageAdapter({ storageRoot: root });
+      const id = "replace-theme";
+      const version = "1.0.0";
+      await adapter.saveThemeFiles(id, version, new Map([
+        ["theme.json", Buffer.from("old")],
+        ["assets/retired.css", Buffer.from("old css")],
+      ]), "pub_alpha");
+      await expect(adapter.saveThemeFiles(id, version, new Map([
+        ["../../escaped.txt", Buffer.from("unsafe")],
+      ]), "pub_alpha")).rejects.toThrow("Invalid theme file path");
+      expect((await adapter.getThemeFile(id, version, "theme.json", "pub_alpha"))?.toString()).toBe("old");
+      await adapter.saveThemeFiles(id, version, new Map([
+        ["theme.json", Buffer.from("new")],
+        ["assets/current.css", Buffer.from("new css")],
+      ]), "pub_alpha");
+      expect((await adapter.getThemeFile(id, version, "theme.json", "pub_alpha"))?.toString()).toBe("new");
+      expect(await adapter.getThemeFile(id, version, "assets/retired.css", "pub_alpha")).toBeNull();
+      expect(await adapter.listThemeFiles(id, version, "pub_alpha")).toEqual(["assets/current.css", "theme.json"].sort());
+    } finally {
+      await fs.promises.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the cloud package index to reject removed assets and unauthorized legacy reads", async () => {
+    const provider = new MemoryThemeStorageProvider();
+    const adapter = new StorageProviderThemeStorageAdapter(provider);
+    const id = "replace-theme";
+    const version = "1.0.0";
+    await adapter.saveThemeFiles(id, version, new Map([
+      ["theme.json", Buffer.from("legacy")],
+      ["assets/retired.css", Buffer.from("legacy css")],
+    ]));
+    expect(await adapter.getThemeFile(id, version, "theme.json", "pub_beta")).toBeNull();
+    expect((await adapter.getThemeFile(id, version, "theme.json", "pub_beta", true))?.toString()).toBe("legacy");
+
+    await adapter.saveThemeFiles(id, version, new Map([
+      ["theme.json", Buffer.from("initial")],
+      ["assets/retired.css", Buffer.from("private css")],
+    ]), "pub_beta");
+    await adapter.saveThemeFiles(id, version, new Map([
+      ["theme.json", Buffer.from("current")],
+    ]), "pub_beta");
+    expect((await adapter.getThemeFile(id, version, "theme.json", "pub_beta"))?.toString()).toBe("current");
+    expect(await adapter.getThemeFile(id, version, "assets/retired.css", "pub_beta", true)).toBeNull();
+    expect(await provider.exists("themes/publications/pub_beta/replace-theme/1.0.0/assets/retired.css")).toBe(false);
+    // Replacing a scoped package must not alter the legacy default publication.
+    expect((await adapter.getThemeFile(id, version, "theme.json"))?.toString()).toBe("legacy");
   });
 
   it("keeps the pub_default filesystem path backward compatible", () => {
