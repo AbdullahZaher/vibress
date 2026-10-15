@@ -45,8 +45,8 @@ export const UpdateCollectionEntrySchema = z.object({
 }).passthrough();
 export const CollectionEntriesQuerySchema = z.object({
   status: z.enum(["draft", "published", "archived"]).optional(),
-  limit: z.string().regex(/^\d+$/).optional(),
-  offset: z.string().regex(/^\d+$/).optional(),
+  limit: z.string().regex(/^\d+$/).max(3).refine((value) => Number(value) >= 1 && Number(value) <= 100).optional(),
+  offset: z.string().regex(/^\d+$/).max(10).refine((value) => Number.isSafeInteger(Number(value))).optional(),
   search: z.string().max(255).optional(),
   includeRelations: z.enum(["true", "false"]).optional(),
   sortBy: z.enum(["createdAt", "updatedAt", "publishedAt", "title", "slug"]).optional(),

@@ -251,7 +251,7 @@ export function DynamicCollectionEntryEditor({
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
-            <option value="archived">Archived</option>
+            {isEditing && <option value="archived">Archived</option>}
           </select>}
           <button
             type="submit"

@@ -86,7 +86,7 @@ describe("Content Modeler API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: "/api/admin/v1/content-models",
-        headers: { cookie: cookieHeader },
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
         payload: {
           name: "Books Catalog",
           slug: modelSlug,
@@ -110,7 +110,7 @@ describe("Content Modeler API Routes", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/content-models",
-        headers: { cookie: cookieHeader },
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -125,7 +125,7 @@ describe("Content Modeler API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/content-models/${modelSlug}/entries`,
-        headers: { cookie: cookieHeader },
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
         payload: {
           title: "Clean Architecture",
           data: {
@@ -149,7 +149,7 @@ describe("Content Modeler API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/content-models/${modelSlug}/entries`,
-        headers: { cookie: cookieHeader },
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
         payload: {
           title: "Invalid Book",
           data: {
@@ -169,7 +169,7 @@ describe("Content Modeler API Routes", () => {
       const res = await app.inject({
         method: "GET",
         url: `/api/admin/v1/content-models/${modelSlug}/entries`,
-        headers: { cookie: cookieHeader },
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -209,7 +209,7 @@ describe("Content Modeler API Routes", () => {
     const modelRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelId}`,
-      headers: { cookie: cookieHeader },
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
     });
     expect(modelRes.json().data.fields[0].type).toBe("text");
   });
@@ -225,9 +225,28 @@ describe("Content Modeler API Routes", () => {
     const entryRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelSlug}/entries/${entryId}`,
-      headers: { cookie: cookieHeader },
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
     });
     expect(entryRes.statusCode).toBe(200);
+  });
+
+  it("rejects malformed entry filters and invalid lifecycle values at runtime", async () => {
+    const malformed = await app.inject({
+      method: "GET",
+      url: `/api/admin/v1/content-models/${modelSlug}/entries?limit=nan`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+    const state = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/v1/content-models/${modelSlug}/entries/${entryId}`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      payload: { status: "invalid" },
+    });
+    expect(state.statusCode).toBe(400);
+    expect(state.json().errors[0].code).toBe("VALIDATION_ERROR");
   });
 
 });
