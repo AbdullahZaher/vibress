@@ -47,7 +47,7 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
   });
 
   it("safely handles field deprecation and removal", () => {
-    const originalFields: ContentFieldDefinition[] = [
+    const _originalFields: ContentFieldDefinition[] = [
       { id: "f1", name: "Title", key: "title", type: "text", required: true },
       { id: "f2", name: "Legacy Rating", key: "legacyRating", type: "number", required: false },
     ];

@@ -11,8 +11,10 @@ import {
   UpdateEntryInput,
   UpdateModelInput,
   ValidationError,
+  ConcurrencyConflictError,
   analyzeSchemaEvolution,
 } from "@vibress/content-modeler";
+import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import type { ContentFieldDefinition } from "@vibress/database";
 import type { ZodTypeAny } from "zod";
@@ -352,6 +354,61 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   ) => {
     const pubId = req.publicationContext?.publicationId || "pub_default";
     try {
+      const existing = await contentModelerService.getEntryById(
+        req.params.modelSlug,
+        req.params.entryId,
+        pubId,
+        false,
+      );
+      if (!existing) {
+        return sendError(
+          reply,
+          "NOT_FOUND",
+          "Content entry not found",
+          req.id,
+          404,
+        );
+      }
+
+      // Check lifecycle permissions
+      const canPublish =
+        req.permissions && req.roles
+          ? hasPermission(req.permissions, "posts.publish", req.roles)
+          : false;
+      const targetStatus = req.body?.status;
+
+      // 1. Modifying already published content requires posts.publish
+      if (existing.status === "published" && !canPublish) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "PERMISSION_DENIED",
+              message:
+                "Permission denied: posts.publish required to modify or transition published content",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // 2. Transitioning to published or archived requires posts.publish
+      if (
+        targetStatus &&
+        targetStatus !== existing.status &&
+        (targetStatus === "published" || targetStatus === "archived") &&
+        !canPublish
+      ) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "PERMISSION_DENIED",
+              message: `Permission denied: posts.publish required to transition content to ${targetStatus}`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       const entry = await contentModelerService.updateEntry(
         req.params.modelSlug,
         req.params.entryId,
@@ -361,6 +418,19 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       );
       return reply.send({ data: entry });
     } catch (err) {
+      if (err instanceof ConcurrencyConflictError) {
+        return sendError(
+          reply,
+          "CONCURRENCY_CONFLICT",
+          err.message,
+          req.id,
+          409,
+          {
+            currentVersion: err.currentVersion,
+            expectedVersion: err.expectedVersion,
+          },
+        );
+      }
       if (err instanceof ValidationError) {
         return sendError(
           reply,
@@ -480,6 +550,41 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       handler: async (req, reply) => {
         const pubId = req.publicationContext?.publicationId || "pub_default";
         try {
+          const existing = await contentModelerService.getEntryById(
+            req.params.modelSlug,
+            req.params.entryId,
+            pubId,
+            false,
+          );
+          if (!existing) {
+            return sendError(
+              reply,
+              "NOT_FOUND",
+              "Content entry not found",
+              req.id,
+              404,
+            );
+          }
+
+          if (existing.status === "published") {
+            const canPublish =
+              req.permissions && req.roles
+                ? hasPermission(req.permissions, "posts.publish", req.roles)
+                : false;
+            if (!canPublish) {
+              return reply.status(403).send({
+                errors: [
+                  {
+                    code: "PERMISSION_DENIED",
+                    message:
+                      "Permission denied: posts.publish required to delete published content",
+                    requestId: req.id,
+                  },
+                ],
+              });
+            }
+          }
+
           await contentModelerService.deleteEntry(
             req.params.modelSlug,
             req.params.entryId,

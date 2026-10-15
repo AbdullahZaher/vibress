@@ -42,6 +42,7 @@ export const UpdateCollectionEntrySchema = z.object({
   slug: z.string().max(255).optional(),
   data: z.record(z.unknown()).optional(),
   status: z.enum(["draft", "published", "archived"]).optional(),
+  expectedVersion: z.number().int().positive().optional(),
 }).passthrough();
 export const CollectionEntriesQuerySchema = z.object({
   status: z.enum(["draft", "published", "archived"]).optional(),

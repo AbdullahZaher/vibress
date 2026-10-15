@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ContentModelerService } from "../application/content-modeler-service";
 import {
   validateEntryData,
-  validateModelDefinition,
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
   MAX_RELATION_EXPANSION_DEPTH,
@@ -735,7 +734,7 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
 
   // Scenario 16: Strict depth boundary enforcement (depth = 2 vs depth = 1 vs depth = 0)
   it("Scenario 16: Strictly bounds relation expansion at depth = 2 and keeps deeper targets raw", async () => {
-    const course = await service.createEntry(
+    const _course = await service.createEntry(
       courseModelA.id,
       {
         title: "Deep Graph Course",

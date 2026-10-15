@@ -110,6 +110,7 @@ export function ContentModelEditor({
             setFields(
               (m.fields || []).map((f) => ({
                 ...f,
+                options: f.options && Array.isArray(f.options) ? [...f.options] : [],
                 optionsRaw: f.options
                   ? f.options.map((o) => `${o.label}:${o.value}`).join(", ")
                   : "",
@@ -148,6 +149,7 @@ export function ContentModelEditor({
       searchable: true,
       filterable: true,
       localizable: false,
+      options: [],
     };
     setFields([...fields, newField]);
   };
@@ -159,6 +161,55 @@ export function ContentModelEditor({
       updated[index] = { ...current, ...updates };
       setFields(updated);
     }
+  };
+
+  const handleAddOption = (fieldIndex: number) => {
+    const updated = [...fields];
+    const current = updated[fieldIndex];
+    if (!current) return;
+    const existing = current.options || [];
+    const nextIdx = existing.length + 1;
+    const newOpt = { label: `Option ${nextIdx}`, value: `option_${nextIdx}` };
+    const nextOptions = [...existing, newOpt];
+    updated[fieldIndex] = {
+      ...current,
+      options: nextOptions,
+      optionsRaw: nextOptions.map((o) => `${o.label}:${o.value}`).join(", "),
+    };
+    setFields(updated);
+  };
+
+  const handleUpdateOption = (
+    fieldIndex: number,
+    optIndex: number,
+    updates: Partial<{ label: string; value: string | number }>,
+  ) => {
+    const updated = [...fields];
+    const current = updated[fieldIndex];
+    if (!current || !current.options) return;
+    const nextOptions = [...current.options];
+    const existing = nextOptions[optIndex];
+    if (!existing) return;
+    nextOptions[optIndex] = { ...existing, ...updates };
+    updated[fieldIndex] = {
+      ...current,
+      options: nextOptions,
+      optionsRaw: nextOptions.map((o) => `${o.label}:${o.value}`).join(", "),
+    };
+    setFields(updated);
+  };
+
+  const handleRemoveOption = (fieldIndex: number, optIndex: number) => {
+    const updated = [...fields];
+    const current = updated[fieldIndex];
+    if (!current || !current.options) return;
+    const nextOptions = current.options.filter((_, i) => i !== optIndex);
+    updated[fieldIndex] = {
+      ...current,
+      options: nextOptions,
+      optionsRaw: nextOptions.map((o) => `${o.label}:${o.value}`).join(", "),
+    };
+    setFields(updated);
   };
 
   const handleMoveField = (index: number, direction: -1 | 1) => {
@@ -213,7 +264,16 @@ export function ContentModelEditor({
       const formattedFields = fields.map((f) => {
         const fieldCopy = { ...f };
         if (f.type === "select" || f.type === "multi_select") {
-          fieldCopy.options = parseOptionsRaw(f.optionsRaw);
+          if (f.options && f.options.length > 0) {
+            fieldCopy.options = f.options.map((opt) => ({
+              label: String(opt.label),
+              value: typeof opt.value === "number" ? opt.value : String(opt.value),
+            }));
+          } else if (f.optionsRaw && f.optionsRaw.trim()) {
+            fieldCopy.options = parseOptionsRaw(f.optionsRaw);
+          } else {
+            fieldCopy.options = [];
+          }
         }
         delete fieldCopy.optionsRaw;
         return fieldCopy;
@@ -517,18 +577,116 @@ export function ContentModelEditor({
                 )}
 
                 {(field.type === "select" || field.type === "multi_select") && (
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-card/70 p-3 text-xs">
-                    <label className="block font-medium text-muted-foreground">
-                      Options (comma-separated Label:Value or Value):
-                    </label>
-                    <input
-                      type="text"
-                      aria-label={`Options for ${field.name}`}
-                      value={field.optionsRaw || ""}
-                      onChange={(e) => handleUpdateField(idx, { optionsRaw: e.target.value })}
-                      placeholder="e.g. In Stock:in_stock, Out of Stock:out_of_stock"
-                      className="w-full px-2 py-1 border border-border/70 rounded bg-background text-xs text-foreground"
-                    />
+                  <div className="space-y-3 rounded-lg border border-border/60 bg-card/70 p-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-foreground">
+                        Select Options ({field.options?.length || 0})
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddOption(idx)}
+                        className="h-7 text-xs gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Option
+                      </Button>
+                    </div>
+
+                    {(!field.options || field.options.length === 0) ? (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        No options defined yet. Add structured options below or use bulk text.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {field.options.map((opt, optIdx) => (
+                          <div key={optIdx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              aria-label={`Option ${optIdx + 1} label for ${field.name}`}
+                              placeholder="Label (e.g. In Stock)"
+                              value={opt.label}
+                              onChange={(e) =>
+                                handleUpdateOption(idx, optIdx, { label: e.target.value })
+                              }
+                              className="flex-1 px-2.5 py-1 border border-border/70 rounded bg-background text-xs text-foreground"
+                            />
+                            <input
+                              type="text"
+                              dir="ltr"
+                              aria-label={`Option ${optIdx + 1} value for ${field.name}`}
+                              placeholder="Value (e.g. in_stock or 10)"
+                              value={String(opt.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const isNum = typeof opt.value === "number" && !isNaN(Number(val));
+                                handleUpdateOption(idx, optIdx, {
+                                  value: isNum ? Number(val) : val,
+                                });
+                              }}
+                              className="flex-1 px-2.5 py-1 border border-border/70 rounded bg-background font-mono text-xs text-foreground"
+                            />
+                            <select
+                              aria-label={`Option ${optIdx + 1} type for ${field.name}`}
+                              value={typeof opt.value === "number" ? "number" : "string"}
+                              onChange={(e) => {
+                                const newType = e.target.value;
+                                if (newType === "number") {
+                                  const num = Number(opt.value);
+                                  handleUpdateOption(idx, optIdx, {
+                                    value: isNaN(num) ? 0 : num,
+                                  });
+                                } else {
+                                  handleUpdateOption(idx, optIdx, {
+                                    value: String(opt.value),
+                                  });
+                                }
+                              }}
+                              className="w-20 px-1 py-1 border border-border/70 rounded bg-background text-[11px] text-muted-foreground"
+                            >
+                              <option value="string">String</option>
+                              <option value="number">Number</option>
+                            </select>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleRemoveOption(idx, optIdx)}
+                              className="text-destructive hover:bg-destructive/10"
+                              aria-label={`Remove option ${opt.label || optIdx + 1}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <details className="mt-2 text-[11px] text-muted-foreground">
+                      <summary className="cursor-pointer hover:text-foreground">
+                        Quick import / bulk edit (comma-separated)
+                      </summary>
+                      <div className="mt-2 space-y-1">
+                        <input
+                          type="text"
+                          aria-label={`Bulk options for ${field.name}`}
+                          value={field.optionsRaw || ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            handleUpdateField(idx, {
+                              optionsRaw: raw,
+                              options: parseOptionsRaw(raw),
+                            });
+                          }}
+                          placeholder="e.g. Label 1:value1, Label 2:value2"
+                          className="w-full px-2.5 py-1 border border-border/70 rounded bg-background text-xs text-foreground"
+                        />
+                        <span className="text-[10px]">
+                          Pasting or typing here automatically synchronizes with the structured list above.
+                        </span>
+                      </div>
+                    </details>
                   </div>
                 )}
 

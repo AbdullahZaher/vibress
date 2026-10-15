@@ -20,6 +20,18 @@ export class ValidationError extends Error {
   }
 }
 
+export class ConcurrencyConflictError extends Error {
+  readonly currentVersion: number;
+  readonly expectedVersion: number;
+
+  constructor(message: string, currentVersion: number, expectedVersion: number) {
+    super(message);
+    this.name = "ConcurrencyConflictError";
+    this.currentVersion = currentVersion;
+    this.expectedVersion = expectedVersion;
+  }
+}
+
 export const RESERVED_FIELD_KEYS = new Set([
   "__proto__",
   "constructor",
@@ -344,25 +356,76 @@ export function filterEntryDataForVisibility(
     }
     if (field.key in data) {
       const val = data[field.key];
-      if (userRole === "public") {
-        if (field.type === "relation" && typeof val === "object" && val !== null && !Array.isArray(val)) {
+
+      if (field.type === "relation") {
+        if (typeof val === "object" && val !== null && !Array.isArray(val)) {
           const relObj = val as Record<string, unknown>;
-          if (relObj.status && relObj.status !== "published") {
+          // Status filtering: non-staff roles cannot see draft/archived relation targets
+          if (userRole !== "staff_admin" && relObj.status && relObj.status !== "published") {
             result[field.key] = null;
             continue;
           }
-        } else if (field.type === "relation_list" && Array.isArray(val)) {
-          const filteredList = val.filter((item) => {
+          // Recursive visibility filtering on relation data
+          const subFields = (relObj._fields as ContentFieldDefinition[] | undefined) || [];
+          const subData = (relObj.data as Record<string, unknown> | undefined) || {};
+          const filteredSubData = subFields.length > 0
+            ? filterEntryDataForVisibility(subData, subFields, userRole)
+            : subData;
+
+          const cleanRel: Record<string, unknown> = {
+            id: relObj.id,
+            title: relObj.title,
+            slug: relObj.slug,
+            status: relObj.status,
+            data: filteredSubData,
+          };
+          if (relObj.cyclic) {
+            cleanRel.cyclic = true;
+          }
+          result[field.key] = cleanRel;
+          continue;
+        } else if (val === null) {
+          result[field.key] = null;
+          continue;
+        }
+      } else if (field.type === "relation_list") {
+        if (Array.isArray(val)) {
+          const filteredList: Array<Record<string, unknown>> = [];
+          for (const item of val) {
             if (typeof item === "object" && item !== null && !Array.isArray(item)) {
               const itemObj = item as Record<string, unknown>;
-              return !itemObj.status || itemObj.status === "published";
+              // Status filtering: non-staff roles cannot see draft/archived relation targets
+              if (userRole !== "staff_admin" && itemObj.status && itemObj.status !== "published") {
+                continue;
+              }
+              // Recursive visibility filtering on relation item data
+              const subFields = (itemObj._fields as ContentFieldDefinition[] | undefined) || [];
+              const subData = (itemObj.data as Record<string, unknown> | undefined) || {};
+              const filteredSubData = subFields.length > 0
+                ? filterEntryDataForVisibility(subData, subFields, userRole)
+                : subData;
+
+              const cleanItem: Record<string, unknown> = {
+                id: itemObj.id,
+                title: itemObj.title,
+                slug: itemObj.slug,
+                status: itemObj.status,
+                data: filteredSubData,
+              };
+              if (itemObj.cyclic) {
+                cleanItem.cyclic = true;
+              }
+              filteredList.push(cleanItem);
             }
-            return true;
-          });
+          }
           result[field.key] = filteredList;
+          continue;
+        } else {
+          result[field.key] = [];
           continue;
         }
       }
+
       result[field.key] = val;
     }
   }

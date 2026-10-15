@@ -462,6 +462,14 @@ describe("Batch 14 — Operations Integration & Security", () => {
     });
     expect(badVerify.statusCode).toBe(401);
     expect(badVerify.json().valid).toBe(false);
+
+    // Restore isPrivate to false so subsequent test suites aren't affected
+    await app.inject({
+      method: "PUT",
+      url: "/api/admin/v1/settings/security/isPrivate",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: false },
+    });
   });
 
   // ---------------- SMTP Test Delivery ----------------

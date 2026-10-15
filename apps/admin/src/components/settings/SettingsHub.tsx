@@ -50,6 +50,7 @@ import {
   Cpu,
   Search,
   X,
+  Database,
 } from "lucide-react";
 
 interface SettingsHubProps {
@@ -432,6 +433,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             <SettingsPermissionGate permission="posts.read" can={can}>
               <SettingsCard id="advanced-content-models" isHighlighted={highlightedCardId === "content-models"}>
                 <SettingsCardRow
+                  icon={<Database className="h-4 w-4" />}
                   title="Content Models"
                   description="Define structured content types, fields, relations and their validation rules."
                   actionLabel="Manage models"

@@ -8,12 +8,14 @@ import {
   Code,
   CheckCircle,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
-import { apiRequest } from "../../lib/api/client";
+import { apiRequest, ApiError } from "../../lib/api/client";
 import { MediaPicker } from "../MediaPicker";
 import { RelationEntryPicker } from "./RelationEntryPicker";
 import { VibressStudio } from "@vibress/studio-react";
 import { migrateDocument } from "@vibress/studio-core";
+import { Button } from "../ui/button";
 
 export interface FieldDef {
   id: string;
@@ -76,12 +78,56 @@ export function DynamicCollectionEntryEditor({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [mediaFieldKey, setMediaFieldKey] = useState<string | null>(null);
+  const [entryVersion, setEntryVersion] = useState<number | undefined>(undefined);
+  const [conflictState, setConflictState] = useState<{
+    isConflict: boolean;
+    expectedVersion?: number | undefined;
+    currentVersion?: number | undefined;
+  } | null>(null);
 
   // Localization active editor tab (for localizable fields)
   const [activeLocaleTab, setActiveLocaleTab] = useState("en");
   const [defaultLocale, setDefaultLocale] = useState("en");
   const [enabledLocales, setEnabledLocales] = useState<string[]>(["en"]);
   const isRtlLocale = /^(ar|fa|he|ur)(-|$)/i.test(activeLocaleTab);
+
+  const reloadLatestVersion = async () => {
+    if (!isEditing || !entryId) return;
+    try {
+      setLoading(true);
+      setError(null);
+      setConflictState(null);
+      const entryRes = await apiRequest<{
+        data?: {
+          title: string;
+          slug: string;
+          status: "draft" | "published" | "archived";
+          data: Record<string, unknown>;
+          version?: number;
+        };
+        entry?: {
+          title: string;
+          slug: string;
+          status: "draft" | "published" | "archived";
+          data: Record<string, unknown>;
+          version?: number;
+        };
+      }>(`/content-models/${modelSlug}/entries/${entryId}`);
+      const ent = entryRes.data || entryRes.entry;
+      if (ent) {
+        setTitle(ent.title);
+        setSlug(ent.slug);
+        setStatus(ent.status);
+        setFormData(ent.data || {});
+        setEntryVersion(ent.version);
+        setSuccess("Latest version loaded from server.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reload entry");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     void (async () => {
@@ -113,12 +159,14 @@ export function DynamicCollectionEntryEditor({
               slug: string;
               status: "draft" | "published" | "archived";
               data: Record<string, unknown>;
+              version?: number;
             };
             entry?: {
               title: string;
               slug: string;
               status: "draft" | "published" | "archived";
               data: Record<string, unknown>;
+              version?: number;
             };
           }>(`/content-models/${modelSlug}/entries/${entryId}`);
           const ent = entryRes.data || entryRes.entry;
@@ -127,6 +175,8 @@ export function DynamicCollectionEntryEditor({
             setSlug(ent.slug);
             setStatus(ent.status);
             setFormData(ent.data || {});
+            setEntryVersion(ent.version);
+            setConflictState(null);
           }
         }
       } catch (err) {
@@ -194,13 +244,21 @@ export function DynamicCollectionEntryEditor({
         slug: slug.trim(),
         ...(canPublish ? { status } : {}),
         data: formData,
+        ...(isEditing && typeof entryVersion === "number"
+          ? { expectedVersion: entryVersion }
+          : {}),
       };
 
       if (isEditing) {
-        await apiRequest(`/content-models/${modelSlug}/entries/${entryId}`, {
+        const updateRes = await apiRequest<{
+          data?: { version?: number };
+        }>(`/content-models/${modelSlug}/entries/${entryId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
+        if (updateRes.data?.version) {
+          setEntryVersion(updateRes.data.version);
+        }
       } else {
         await apiRequest(`/content-models/${modelSlug}/entries`, {
           method: "POST",
@@ -208,12 +266,23 @@ export function DynamicCollectionEntryEditor({
         });
       }
 
+      setConflictState(null);
       setSuccess("Entry saved successfully.");
       setTimeout(() => {
         onNavigate(`/admin/collections/${modelSlug}`);
       }, 500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save entry");
+      if (err instanceof ApiError && err.statusCode === 409) {
+        setConflictState({
+          isConflict: true,
+          expectedVersion: entryVersion,
+        });
+        setError(
+          "Edit Conflict (409): Another user modified this entry in the meantime. Please reload the latest version to avoid overwriting their work.",
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to save entry");
+      }
     } finally {
       setSaving(false);
     }
@@ -271,6 +340,44 @@ export function DynamicCollectionEntryEditor({
           </button>
         </div>
       </div>
+
+      {conflictState?.isConflict && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <h3 className="font-semibold text-sm">Concurrent Edit Conflict Detected</h3>
+              <p className="text-xs opacity-90">
+                Another user or browser session updated this entry while you were editing (Version {entryVersion ?? 1} is stale).
+                To avoid overwriting their work, reload the latest version from the server.
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={reloadLatestVersion}
+                  className="bg-background text-foreground text-xs"
+                >
+                  Reload Latest Version
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConflictState(null)}
+                  className="text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">

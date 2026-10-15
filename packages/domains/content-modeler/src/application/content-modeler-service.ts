@@ -24,13 +24,13 @@ import {
 } from "../domain/types";
 import {
   ValidationError,
+  ConcurrencyConflictError,
   validateEntryData,
   validateModelDefinition,
   analyzeSchemaEvolution,
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
   MAX_RELATION_EXPANSION_DEPTH,
-  MAX_RELATION_LIST_ITEMS,
 } from "../domain/validation";
 import { domainEvents } from "@vibress/events";
 
@@ -53,20 +53,35 @@ export class ContentModelerService {
     enabledLocales: string[];
   }> {
     const db = getDb();
-    const [publication] = await db
-      .select({ primaryLocale: publications.primaryLocale })
-      .from(publications)
-      .where(eq(publications.id, publicationId))
-      .limit(1);
-    const defaultLocale = publication?.primaryLocale ?? "en";
-    const locales = await db
-      .select({ locale: publicationLocales.locale })
-      .from(publicationLocales)
-      .where(and(
-        eq(publicationLocales.publicationId, publicationId),
-        eq(publicationLocales.enabled, true),
-      ))
-      .orderBy(desc(publicationLocales.isPrimary));
+    let defaultLocale = "en";
+    let locales: Array<{ locale: string }> = [];
+
+    try {
+      const [publication] = await db
+        .select({ primaryLocale: publications.primaryLocale })
+        .from(publications)
+        .where(eq(publications.id, publicationId))
+        .limit(1);
+      if (publication?.primaryLocale) {
+        defaultLocale = publication.primaryLocale;
+      }
+    } catch {
+      // Resilient fallback to "en"
+    }
+
+    try {
+      locales = await db
+        .select({ locale: publicationLocales.locale })
+        .from(publicationLocales)
+        .where(and(
+          eq(publicationLocales.publicationId, publicationId),
+          eq(publicationLocales.status, "active"),
+        ))
+        .orderBy(desc(publicationLocales.isDefault));
+    } catch {
+      // Resilient fallback if locales table query is unavailable
+    }
+
     return {
       defaultLocale,
       enabledLocales: [...new Set(
@@ -320,6 +335,37 @@ export class ContentModelerService {
           model: "Cannot delete a content model with existing entries. Export or explicitly migrate its data first.",
         });
       }
+
+      // Check if other models in this publication reference this model via relation fields
+      const otherModels = await tx
+        .select({ id: contentModels.id, name: contentModels.name, fields: contentModels.fields })
+        .from(contentModels)
+        .where(
+          and(
+            eq(contentModels.publicationId, publicationId),
+            sql`${contentModels.id} != ${existing.id}`,
+          ),
+        );
+
+      const referencingModels: string[] = [];
+      for (const m of otherModels) {
+        const fields = (m.fields as ContentFieldDefinition[]) || [];
+        const isReferenced = fields.some(
+          (f) =>
+            (f.type === "relation" || f.type === "relation_list") &&
+            (f.relationModel === existing.id || f.relationModel === existing.slug),
+        );
+        if (isReferenced) {
+          referencingModels.push(m.name);
+        }
+      }
+
+      if (referencingModels.length > 0) {
+        throw new ValidationError({
+          model: `Cannot delete content model '${existing.name}'. It is referenced by relation fields in model(s): ${referencingModels.join(", ")}.`,
+        });
+      }
+
       await tx
         .delete(contentModels)
         .where(and(
@@ -611,6 +657,14 @@ export class ContentModelerService {
       );
     }
 
+    if (input.expectedVersion !== undefined && input.expectedVersion !== existing.version) {
+      throw new ConcurrencyConflictError(
+        `Update conflict: entry version is ${existing.version}, but expected version was ${input.expectedVersion}. Another user may have modified this entry.`,
+        existing.version,
+        input.expectedVersion,
+      );
+    }
+
     const mergedData = { ...existing.data, ...(input.data || {}) };
     validateEntryData(mergedData, model.fields);
     await this.validateRelationReferences(mergedData, model.fields, publicationId);
@@ -644,15 +698,29 @@ export class ContentModelerService {
       }
     }
 
-    await db
+    const whereConditions = [
+      eq(contentEntries.id, existing.id),
+      eq(contentEntries.publicationId, publicationId),
+    ];
+    if (input.expectedVersion !== undefined) {
+      whereConditions.push(eq(contentEntries.version, input.expectedVersion));
+    }
+
+    const updateResult = await db
       .update(contentEntries)
       .set(updates)
-      .where(
-        and(
-          eq(contentEntries.id, existing.id),
-          eq(contentEntries.publicationId, publicationId),
-        ),
+      .where(and(...whereConditions))
+      .returning({ id: contentEntries.id });
+
+    if (input.expectedVersion !== undefined && updateResult.length === 0) {
+      const fresh = await this.getEntryById(model.id, existing.id, publicationId);
+      const freshVersion = fresh?.version ?? existing.version;
+      throw new ConcurrencyConflictError(
+        `Update conflict: entry was concurrently modified by another user (current version: ${freshVersion}, expected: ${input.expectedVersion}).`,
+        freshVersion,
+        input.expectedVersion,
       );
+    }
 
     const updated = await this.getEntryById(model.id, existing.id, publicationId);
     if (updated) {
@@ -827,23 +895,22 @@ export class ContentModelerService {
           const val = data[field.key];
           if (val !== undefined && val !== null && val !== "") {
             const targetIdOrSlug = typeof val === "string" ? val : ((val as any)?.id || (val as any)?.slug);
-            if (targetIdOrSlug) {
+            if (typeof targetIdOrSlug === "string" && targetIdOrSlug.trim()) {
               const rows = await db
-                .select()
+                .select({ id: contentEntries.id, publicationId: contentEntries.publicationId, modelId: contentEntries.modelId })
                 .from(contentEntries)
                 .where(
                   or(
-                    eq(contentEntries.id, targetIdOrSlug),
-                    eq(contentEntries.slug, targetIdOrSlug),
+                    eq(contentEntries.id, targetIdOrSlug.trim()),
+                    eq(contentEntries.slug, targetIdOrSlug.trim()),
                   ),
                 )
                 .limit(1);
 
               if (rows[0]) {
-                const targetEntry = rows[0];
-                if (targetEntry.publicationId !== publicationId) {
+                if (rows[0].publicationId !== publicationId) {
                   errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' is prohibited.`;
-                } else if (targetEntry.modelId !== targetModel.id) {
+                } else if (rows[0].modelId !== targetModel.id) {
                   errors[field.key] = `Referenced entry '${targetIdOrSlug}' belongs to a different content model.`;
                 }
               }
@@ -851,31 +918,68 @@ export class ContentModelerService {
           }
         } else if (field.type === "relation_list") {
           const val = data[field.key];
-          if (Array.isArray(val) && val.length > 0) {
-            for (let i = 0; i < val.length; i++) {
-              const item = val[i];
-              const targetIdOrSlug = typeof item === "string" ? item : ((item as any)?.id || (item as any)?.slug);
-              if (targetIdOrSlug) {
-                const rows = await db
-                  .select()
-                  .from(contentEntries)
-                  .where(
-                    or(
-                      eq(contentEntries.id, targetIdOrSlug),
-                      eq(contentEntries.slug, targetIdOrSlug),
-                    ),
-                  )
-                  .limit(1);
+          if (val !== undefined && val !== null) {
+            if (!Array.isArray(val)) {
+              errors[field.key] = "Relation list must be an array.";
+              continue;
+            }
 
-                if (rows[0]) {
-                  const targetEntry = rows[0];
-                  if (targetEntry.publicationId !== publicationId) {
-                    errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' at index ${i} is prohibited.`;
-                    break;
-                  } else if (targetEntry.modelId !== targetModel.id) {
-                    errors[field.key] = `Referenced entry '${targetIdOrSlug}' at index ${i} belongs to a different content model.`;
-                    break;
+            if (field.min !== undefined && val.length < field.min) {
+              errors[field.key] = `Relation list requires at least ${field.min} item(s).`;
+              continue;
+            }
+            if (field.max !== undefined && val.length > field.max) {
+              errors[field.key] = `Relation list cannot exceed ${field.max} item(s).`;
+              continue;
+            }
+
+            if (val.length > 0) {
+              const targetKeys: string[] = [];
+              const seen = new Set<string>();
+              let hasDuplicates = false;
+              let hasInvalidFormat = false;
+
+              for (const item of val) {
+                const targetIdOrSlug = typeof item === "string" ? item : ((item as any)?.id || (item as any)?.slug);
+                if (typeof targetIdOrSlug === "string" && targetIdOrSlug.trim()) {
+                  const cleaned = targetIdOrSlug.trim();
+                  if (seen.has(cleaned)) {
+                    hasDuplicates = true;
                   }
+                  seen.add(cleaned);
+                  targetKeys.push(cleaned);
+                } else {
+                  hasInvalidFormat = true;
+                }
+              }
+
+              if (hasInvalidFormat) {
+                errors[field.key] = "Relation list contains invalid items.";
+                continue;
+              }
+              if (hasDuplicates) {
+                errors[field.key] = "Relation list contains duplicate references.";
+                continue;
+              }
+
+              // Batched query to check cross-publication and wrong-model references
+              const matchedRows = await db
+                .select({ id: contentEntries.id, slug: contentEntries.slug, publicationId: contentEntries.publicationId, modelId: contentEntries.modelId })
+                .from(contentEntries)
+                .where(
+                  or(
+                    inArray(contentEntries.id, targetKeys),
+                    inArray(contentEntries.slug, targetKeys),
+                  ),
+                );
+
+              for (const r of matchedRows) {
+                if (r.publicationId !== publicationId) {
+                  errors[field.key] = `Cross-publication relation reference '${r.slug || r.id}' is prohibited.`;
+                  break;
+                } else if (r.modelId !== targetModel.id) {
+                  errors[field.key] = `Referenced entry '${r.slug || r.id}' belongs to a different content model.`;
+                  break;
                 }
               }
             }
@@ -926,12 +1030,12 @@ export class ContentModelerService {
           );
           if (targetEntry) {
             let targetData = targetEntry.data;
-            if (boundedDepth > 1) {
-              const targetModel = await this.getModelByIdOrSlug(
-                targetEntry.modelId,
-                publicationId,
-              );
-              if (targetModel && targetModel.fields) {
+            const targetModel = await this.getModelByIdOrSlug(
+              targetEntry.modelId,
+              publicationId,
+            );
+            if (targetModel && targetModel.fields) {
+              if (boundedDepth > 1) {
                 const nextVisited = new Set([...visitedEntryIds, targetEntry.id, targetEntry.slug]);
                 targetData = await this.resolveRelationsForEntry(
                   targetData,
@@ -948,6 +1052,7 @@ export class ContentModelerService {
               slug: targetEntry.slug,
               status: targetEntry.status,
               data: targetData,
+              _fields: targetModel?.fields,
             };
           } else {
             resolved[field.key] = null;
@@ -987,7 +1092,7 @@ export class ContentModelerService {
             continue;
           }
 
-          // Batched query to prevent N+1 queries
+          // Batched query strictly scoped to publication and target model
           const db = getDb();
           const targetRows = await db
             .select()
@@ -1041,6 +1146,7 @@ export class ContentModelerService {
                 slug: targetEntry.slug,
                 status: targetEntry.status,
                 data: targetEntry.data,
+                _fields: targetModel.fields,
                 cyclic: true,
               });
               continue;
@@ -1064,6 +1170,7 @@ export class ContentModelerService {
               slug: targetEntry.slug,
               status: targetEntry.status,
               data: targetData,
+              _fields: targetModel.fields,
             });
           }
 

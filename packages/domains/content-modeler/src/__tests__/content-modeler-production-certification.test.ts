@@ -6,8 +6,6 @@ import {
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
   analyzeSchemaEvolution,
-  MAX_FIELDS_PER_MODEL,
-  MAX_DATA_PAYLOAD_BYTES,
   MAX_RELATION_EXPANSION_DEPTH,
   ValidationError,
 } from "../domain/validation";

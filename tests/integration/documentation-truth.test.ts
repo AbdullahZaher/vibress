@@ -80,4 +80,4 @@ describe("Documentation Truth & Product Claims Consistency Guard", () => {
     expect(lastEntry.tag).toBe(tags[tags.length - 1]);
     expect(tags).toEqual(journal.entries.map((entry: { tag: string }) => entry.tag));
   });
-};
+});

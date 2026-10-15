@@ -4,6 +4,7 @@ import { FastifyInstance } from "fastify";
 import path from "path";
 import fs from "fs";
 import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
+import { settingsService } from "../services";
 
 describe("Media API Upload & Security Integration", () => {
   let app: FastifyInstance;
@@ -15,6 +16,7 @@ describe("Media API Upload & Security Integration", () => {
   beforeAll(async () => {
     await fs.promises.mkdir(mediaDir, { recursive: true });
     await fs.promises.writeFile(testFilePath, testFileContent);
+    await settingsService.updateSetting("security", "isPrivate", false, null, "pub_default");
     app = buildApp();
     await app.ready();
   });

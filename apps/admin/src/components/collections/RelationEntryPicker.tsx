@@ -36,12 +36,12 @@ export function RelationEntryPicker({
   maxItems = 100,
 }: {
   fieldName: string;
-  targetModel?: string;
+  targetModel?: string | undefined;
   multiple: boolean;
   value: unknown;
   onChange: (value: string | string[]) => void;
-  required?: boolean;
-  maxItems?: number;
+  required?: boolean | undefined;
+  maxItems?: number | undefined;
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
