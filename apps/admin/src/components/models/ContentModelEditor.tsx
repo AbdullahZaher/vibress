@@ -328,10 +328,11 @@ export function ContentModelEditor({
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="model-name" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Model Name *
             </label>
             <input
+              id="model-name"
               type="text"
               required
               value={name}
@@ -341,10 +342,12 @@ export function ContentModelEditor({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="model-slug" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               API Slug *
             </label>
             <input
+              id="model-slug"
+              dir="ltr"
               type="text"
               required
               value={slug}
@@ -355,10 +358,11 @@ export function ContentModelEditor({
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+          <label htmlFor="model-description" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
             Description
           </label>
           <textarea
+            id="model-description"
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -413,10 +417,11 @@ export function ContentModelEditor({
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-label-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
                         Field Label
                       </label>
                       <input
+                        id={`model-field-label-${idx}`}
                         type="text"
                         required
                         value={field.name}
@@ -432,10 +437,12 @@ export function ContentModelEditor({
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-key-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
                         Field Key (API identifier)
                       </label>
                       <input
+                        id={`model-field-key-${idx}`}
+                        dir="ltr"
                         type="text"
                         required
                         value={field.key}
@@ -444,10 +451,11 @@ export function ContentModelEditor({
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-type-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
                         Field Type
                       </label>
                       <select
+                        id={`model-field-type-${idx}`}
                         value={field.type}
                         onChange={(e) => handleUpdateField(idx, { type: e.target.value })}
                         className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
@@ -464,6 +472,7 @@ export function ContentModelEditor({
                     type="button"
                     onClick={() => handleRemoveField(idx)}
                     className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded"
+                    aria-label={`Remove ${field.name}`}
                     title="Remove Field"
                   >
                     <Trash2 className="w-4 h-4" />

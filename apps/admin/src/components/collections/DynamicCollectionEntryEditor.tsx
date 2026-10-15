@@ -297,10 +297,11 @@ export function DynamicCollectionEntryEditor({
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="collection-entry-title" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Title *
             </label>
             <input
+              id="collection-entry-title"
               type="text"
               required
               value={title}
@@ -310,10 +311,12 @@ export function DynamicCollectionEntryEditor({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="collection-entry-slug" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Slug *
             </label>
             <input
+              id="collection-entry-slug"
+              dir="ltr"
               type="text"
               required
               value={slug}
