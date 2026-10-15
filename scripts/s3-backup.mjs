@@ -75,6 +75,8 @@ const secretAccessKey =
 
 const prefix = getArg("--prefix", process.env.S3_PREFIX || "");
 const outputDir = getArg("--output", process.env.BACKUP_DIR || "./backups");
+const customFilename = getArg("--filename", getArg("--archive-name", ""));
+const descriptorOut = getArg("--descriptor-out", "");
 const forcePathStyleArg = getArg("--force-path-style", "");
 const allowEmpty = hasFlag("--allow-empty");
 
@@ -133,7 +135,7 @@ if (endpoint) {
 const client = new S3Client(clientConfig);
 
 const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "_");
-const archiveBasename = `vibress_s3_${timestamp}.tar.gz`;
+const archiveBasename = customFilename ? path.basename(customFilename) : `vibress_s3_${timestamp}.tar.gz`;
 const finalArchive = path.join(outputDir, archiveBasename);
 const stagingDir = path.join(outputDir, `.s3_backup_staging_${timestamp}_${process.pid}`);
 
@@ -280,6 +282,29 @@ async function runBackup() {
     const checksumFile = `${finalArchive}.sha256`;
     fs.writeFileSync(checksumFile, `${archiveSha256}  ${archiveBasename}\n`, "utf8");
     fs.chmodSync(checksumFile, 0o600);
+
+    if (descriptorOut) {
+      const descriptorDir = path.dirname(descriptorOut);
+      fs.mkdirSync(descriptorDir, { recursive: true });
+      fs.writeFileSync(
+        descriptorOut,
+        JSON.stringify(
+          {
+            archiveFile: archiveBasename,
+            archiveSha256,
+            archivePath: finalArchive,
+            checksumFile,
+            objectCount: inventory.objectCount,
+            totalBytes,
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      fs.chmodSync(descriptorOut, 0o600);
+    }
 
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
     const archiveSizeMb = (fs.statSync(finalArchive).size / (1024 * 1024)).toFixed(2);

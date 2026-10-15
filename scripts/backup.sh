@@ -24,6 +24,8 @@ set -Eeuo pipefail
 BACKUP_DIR=""
 WITH_CONTENT=0
 WITH_S3=0
+ALLOW_UNSIGNED=0
+[ "${ALLOW_UNSIGNED_BACKUP:-0}" = "1" ] || [ "${ALLOW_UNSIGNED_BACKUP:-}" = "yes" ] && ALLOW_UNSIGNED=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +34,9 @@ while [ $# -gt 0 ]; do
       ;;
     --with-s3)
       WITH_S3=1
+      ;;
+    --allow-unsigned)
+      ALLOW_UNSIGNED=1
       ;;
     --env-file)
       ENV_FILE="$2"
@@ -432,7 +437,9 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
   else
     # CRITICAL SECURITY FIX (P1-3): Never pass credentials as CLI arguments!
     # Pass access key and secret key strictly through the subprocess environment.
-    S3_BACKUP_CMD=(pnpm exec tsx scripts/s3-backup.mjs --bucket "${S3_BUCKET_NAME}" --output "${BACKUP_DIR}")
+    S3_FILENAME="vibress_s3_${TIMESTAMP}.tar.gz"
+    S3_DESCRIPTOR="${BACKUP_DIR}/.s3_backup_${TIMESTAMP}.json"
+    S3_BACKUP_CMD=(pnpm exec tsx scripts/s3-backup.mjs --bucket "${S3_BUCKET_NAME}" --output "${BACKUP_DIR}" --filename "${S3_FILENAME}" --descriptor-out "${S3_DESCRIPTOR}")
     if [ -n "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}" ]; then
       S3_BACKUP_CMD+=(--endpoint "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}")
     fi
@@ -454,7 +461,19 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
     ); then
       echo "✓ S3 object storage backup completed successfully."
       S3_BACKUP_SUCCESS=1
+      if [ -f "${S3_DESCRIPTOR}" ]; then
+        S3_FILE=$(node -e "try { const d=JSON.parse(fs.readFileSync(process.argv[1])); console.log(d.archiveFile || ''); } catch(e){}" "${S3_DESCRIPTOR}" 2>/dev/null || true)
+        S3_SHA=$(node -e "try { const d=JSON.parse(fs.readFileSync(process.argv[1])); console.log(d.archiveSha256 || ''); } catch(e){}" "${S3_DESCRIPTOR}" 2>/dev/null || true)
+        rm -f "${S3_DESCRIPTOR}"
+      fi
+      if [ -z "${S3_FILE}" ] && [ -f "${BACKUP_DIR}/${S3_FILENAME}" ]; then
+        S3_FILE="${S3_FILENAME}"
+        if [ -f "${BACKUP_DIR}/${S3_FILENAME}.sha256" ]; then
+          S3_SHA=$(awk '{print $1}' "${BACKUP_DIR}/${S3_FILENAME}.sha256")
+        fi
+      fi
     else
+      rm -f "${S3_DESCRIPTOR}"
       echo "Error: S3 backup failed." >&2
       if [ "${S3_REQUIRED}" -eq 1 ]; then
         echo "FAIL-CLOSED: S3 is active storage provider or explicitly requested; aborting backup." >&2
@@ -471,29 +490,29 @@ DB_SHA=""
 CONTENT_SHA=""
 [ -n "${CONTENT_CHECKSUM:-}" ] && [ -f "${CONTENT_CHECKSUM}" ] && CONTENT_SHA=$(awk '{print $1}' "${CONTENT_CHECKSUM}")
 
-S3_FILE="none"
-S3_SHA="none"
-if [ "${S3_BACKUP_SUCCESS:-0}" -eq 1 ]; then
-  LATEST_S3_ARCHIVE=$(ls -t "${BACKUP_DIR}"/vibress_s3_*.tar.gz 2>/dev/null | head -n 1 || true)
-  if [ -n "${LATEST_S3_ARCHIVE}" ] && [ -f "${LATEST_S3_ARCHIVE}" ]; then
-    S3_FILE=$(basename "${LATEST_S3_ARCHIVE}")
-    if [ -f "${LATEST_S3_ARCHIVE}.sha256" ]; then
-      S3_SHA=$(awk '{print $1}' "${LATEST_S3_ARCHIVE}.sha256")
-    elif command -v sha256sum >/dev/null 2>&1; then
-      S3_SHA=$(sha256sum "${LATEST_S3_ARCHIVE}" | awk '{print $1}')
-    elif command -v shasum >/dev/null 2>&1; then
-      S3_SHA=$(shasum -a 256 "${LATEST_S3_ARCHIVE}" | awk '{print $1}')
-    fi
-  fi
-fi
+# Ensure S3 values are initialized deterministically
+S3_FILE="${S3_FILE:-none}"
+S3_SHA="${S3_SHA:-none}"
 
-# Determine signing capability
-SIGNING_KEY="${BACKUP_SIGNING_KEY:-${VIBRESS_ENCRYPTION_KEY:-}}"
+# Determine signing capability (P0: Dedicated BACKUP_SIGNING_KEY; no fallback to VIBRESS_ENCRYPTION_KEY)
+SIGNING_KEY="${BACKUP_SIGNING_KEY:-}"
 SIG_ALG="none"
-HMAC_SIG="none"
 
-if [ -n "${SIGNING_KEY}" ] && command -v openssl >/dev/null 2>&1; then
+IS_PROD_BACKUP=0
+[ "${NODE_ENV:-}" = "production" ] && IS_PROD_BACKUP=1
+[ "${REQUIRE_BACKUP_SIGNING:-0}" -eq 1 ] && IS_PROD_BACKUP=1
+
+if [ -n "${SIGNING_KEY}" ]; then
   SIG_ALG="hmac-sha256"
+elif [ "${IS_PROD_BACKUP}" -eq 1 ]; then
+  if [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
+    echo "Error: Production backup policy requires cryptographic signing." >&2
+    echo "BACKUP_SIGNING_KEY is not set! Aborting backup creation." >&2
+    echo "To override for emergency unsigned backups, pass --allow-unsigned or set ALLOW_UNSIGNED_BACKUP=1." >&2
+    exit 1
+  else
+    echo "Warning: BACKUP_SIGNING_KEY not set; proceeding with unsigned manifest because --allow-unsigned was explicitly set."
+  fi
 fi
 
 cat << EOF > "${MANIFEST_FILE}"
@@ -526,7 +545,22 @@ EOF
 chmod 600 "${MANIFEST_FILE}"
 
 if [ "${SIG_ALG}" = "hmac-sha256" ]; then
-  HMAC_SIG=$(openssl dgst -sha256 -hmac "${SIGNING_KEY}" "${MANIFEST_FILE}" | awk '{print $NF}')
+  # Compute HMAC securely in Node subshell (P0: Zero key exposure in OS process table argv)
+  HMAC_SIG=$(
+    export BACKUP_SIGNING_KEY="${SIGNING_KEY}"
+    node -e '
+      const crypto = require("node:crypto");
+      const fs = require("node:fs");
+      const key = process.env.BACKUP_SIGNING_KEY;
+      if (!key) process.exit(1);
+      const content = fs.readFileSync(process.argv[1]);
+      process.stdout.write(crypto.createHmac("sha256", key).update(content).digest("hex") + "\n");
+    ' "${MANIFEST_FILE}" 2>/dev/null || true
+  )
+  if [ -z "${HMAC_SIG}" ]; then
+    echo "Error: Failed to compute HMAC-SHA256 signature for backup manifest." >&2
+    exit 1
+  fi
   printf '%s\n' "${HMAC_SIG}" > "${MANIFEST_FILE}.sig"
   chmod 600 "${MANIFEST_FILE}.sig"
   echo "✓ Backup set manifest cryptographically signed with HMAC-SHA256: ${MANIFEST_FILE}"

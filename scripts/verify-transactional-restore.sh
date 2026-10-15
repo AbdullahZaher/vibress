@@ -2,16 +2,20 @@
 set -Eeuo pipefail
 
 # ==============================================================================
-# Vibress Transactional Database Restore Verification Drill
+# Vibress Transactional Database Restore & HMAC Manifest Security Verification Drill
 # ==============================================================================
 # Verifies:
 # 1. scripts/restore.sh enforces -X, -v ON_ERROR_STOP=1, --single-transaction, and -f -
-# 2. scripts/restore.sh does NOT drop the public schema outside the restore transaction
-# 3. Corrupt / failing database restores fail closed (non-zero exit code)
-# 4. Pre-existing customer database data is 100% preserved upon restore failure
-#    (DROP SCHEMA public CASCADE is rolled back alongside partial restore tables)
-# 5. Backup set manifest HMAC-SHA256 signature authentication and hash correlation
-# 6. Clean backup archives restore cleanly and completely
+# 2. Key Isolation & OS Process Table Security:
+#    - HMAC signing key is strictly isolated to BACKUP_SIGNING_KEY (no VIBRESS_ENCRYPTION_KEY fallback)
+#    - HMAC signing key is NEVER passed in command-line arguments (argv)
+# 3. Corrupt database restores fail closed without destroying pre-existing customer data
+# 4. Manifest Authenticity & Bypass Prevention:
+#    - Tampered manifest payload fails closed
+#    - Deleting .sig file does NOT bypass authentication (fails closed)
+#    - Unsigned restores are blocked in production mode unless --allow-unsigned is passed
+# 5. Deterministic S3 archive correlation via explicit filename & descriptor
+# 6. Clean backup sets restore cleanly and completely
 # ==============================================================================
 
 DRILL_ID="tx_restore_drill_$$"
@@ -19,7 +23,7 @@ TARGET_DB="vibress_tx_verify_$$"
 DRILL_DIR="/tmp/${DRILL_ID}"
 
 echo "================================================================================"
-echo " VIBRESS TRANSACTIONAL DATABASE RESTORE VERIFICATION DRILL"
+echo " VIBRESS TRANSACTIONAL DATABASE RESTORE & HMAC MANIFEST DRILL"
 echo " Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo " Drill Target DB: ${TARGET_DB}"
 echo "================================================================================"
@@ -52,8 +56,8 @@ cleanup() {
 }
 trap cleanup EXIT ERR INT TERM
 
-# Step 1: Static verification of psql transactional flags
-echo -e "\n[Step 1/6] Verifying transactional restore flags in scripts/restore.sh..."
+# Step 1: Static verification of psql transactional flags & credential security
+echo -e "\n[Step 1/7] Verifying transactional restore flags & HMAC security in scripts..."
 if ! grep -q -- '--single-transaction' scripts/restore.sh; then
   echo "✗ FAIL: scripts/restore.sh does not contain --single-transaction flag!" >&2
   exit 1
@@ -70,10 +74,22 @@ if ! grep -q -- '-X' scripts/restore.sh; then
   echo "✗ FAIL: scripts/restore.sh does not specify -X to bypass .psqlrc!" >&2
   exit 1
 fi
-echo "✓ PASS: scripts/restore.sh enforces -X -v ON_ERROR_STOP=1 --single-transaction -f - on restore."
+
+# Ensure no process-table HMAC key leak via openssl -hmac
+if grep -E 'openssl.*-hmac' scripts/backup.sh scripts/restore.sh 2>/dev/null; then
+  echo "✗ FAIL: Detected openssl -hmac in backup/restore scripts! HMAC key must not be passed in CLI arguments." >&2
+  exit 1
+fi
+
+# Ensure VIBRESS_ENCRYPTION_KEY is never used for backup signing
+if grep -E '\$\{BACKUP_SIGNING_KEY:-\$\{VIBRESS_ENCRYPTION_KEY' scripts/backup.sh scripts/restore.sh 2>/dev/null; then
+  echo "✗ FAIL: Detected fallback to VIBRESS_ENCRYPTION_KEY for backup signing! Must use isolated BACKUP_SIGNING_KEY." >&2
+  exit 1
+fi
+echo "✓ PASS: Transactional psql flags and HMAC key process-table isolation verified."
 
 # Step 2: Prepare temporary drill environment and pre-existing customer data
-echo -e "\n[Step 2/6] Preparing test database with pre-existing customer data..."
+echo -e "\n[Step 2/7] Preparing test database with pre-existing customer data..."
 mkdir -p "${DRILL_DIR}"
 
 run_sql "postgres" "CREATE DATABASE \"${TARGET_DB}\";" >/dev/null 2>&1 || true
@@ -89,7 +105,7 @@ fi
 echo "✓ Pre-existing database state seeded: 'tx_preexisting_customer_data' exists with critical data."
 
 # Step 3: Craft valid archive, corrupt archive, and authenticated manifest
-echo -e "\n[Step 3/6] Crafting test archives and signed manifest..."
+echo -e "\n[Step 3/7] Crafting test archives and signed manifest..."
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # Valid archive
@@ -140,7 +156,7 @@ fi
 printf '%s  %s\n' "${CORRUPT_SHA}" "$(basename "${CORRUPT_GZ}")" > "${CORRUPT_GZ}.sha256"
 
 # Create signed manifest for valid archive
-TEST_KEY="drill_secret_signing_key_998877"
+TEST_KEY="drill_isolated_backup_key_998877"
 VALID_MANIFEST="${DRILL_DIR}/vibress_backup_manifest_${TIMESTAMP}.json"
 cat << EOF > "${VALID_MANIFEST}"
 {
@@ -169,12 +185,23 @@ cat << EOF > "${VALID_MANIFEST}"
   "signatureAlgorithm": "hmac-sha256"
 }
 EOF
-openssl dgst -sha256 -hmac "${TEST_KEY}" "${VALID_MANIFEST}" | awk '{print $NF}' > "${VALID_MANIFEST}.sig"
+
+# Compute HMAC safely via Node without putting key in argv
+(
+  export BACKUP_SIGNING_KEY="${TEST_KEY}"
+  node -e '
+    const crypto = require("node:crypto");
+    const fs = require("node:fs");
+    const key = process.env.BACKUP_SIGNING_KEY;
+    const content = fs.readFileSync(process.argv[1]);
+    process.stdout.write(crypto.createHmac("sha256", key).update(content).digest("hex") + "\n");
+  ' "${VALID_MANIFEST}" > "${VALID_MANIFEST}.sig"
+)
 
 echo "✓ Test archives and HMAC-SHA256 signed manifest created."
 
 # Step 4: Execute corrupt restore (must fail closed and preserve pre-existing data)
-echo -e "\n[Step 4/6] Executing restore with corrupt archive (must fail closed and preserve data)..."
+echo -e "\n[Step 4/7] Executing restore with corrupt archive (must fail closed and preserve data)..."
 RESTORE_FAILED=0
 if [ -n "${RESOLVED_COMPOSE}" ]; then
   COMPOSE_FILE="${RESOLVED_COMPOSE}" ./scripts/restore.sh \
@@ -221,8 +248,10 @@ else
   exit 1
 fi
 
-# Step 5: Test manifest authentication and forgery protection
-echo -e "\n[Step 5/6] Verifying manifest authentication and tampering protection..."
+# Step 5: Test manifest tampering & bypass prevention
+echo -e "\n[Step 5/7] Verifying manifest authentication, tampering rejection & signature deletion prevention..."
+
+# 5A: Tampered payload
 TAMPERED_MANIFEST="${DRILL_DIR}/tampered_manifest.json"
 cp "${VALID_MANIFEST}" "${TAMPERED_MANIFEST}"
 cp "${VALID_MANIFEST}.sig" "${TAMPERED_MANIFEST}.sig"
@@ -243,8 +272,68 @@ else
   exit 1
 fi
 
-# Step 6: Test clean restore with authenticated manifest
-echo -e "\n[Step 6/6] Executing clean restore with authenticated manifest..."
+# 5B: Deleting .sig file must NOT bypass authentication
+DELETED_SIG_DIR="${DRILL_DIR}/no_sig"
+mkdir -p "${DELETED_SIG_DIR}"
+cp "${VALID_MANIFEST}" "${DELETED_SIG_DIR}/vibress_backup_manifest_${TIMESTAMP}.json"
+# Note: deliberately do NOT copy .sig file!
+
+BYPASS_FAILED=0
+BACKUP_SIGNING_KEY="${TEST_KEY}" ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${DELETED_SIG_DIR}/vibress_backup_manifest_${TIMESTAMP}.json" \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_deleted_sig.log" 2>&1 || BYPASS_FAILED=1
+
+if [ "${BYPASS_FAILED}" -eq 1 ]; then
+  echo "✓ PASS: restore.sh rejected restore when .sig file was deleted (cannot bypass authentication)."
+else
+  echo "✗ FAIL: restore.sh allowed restore when .sig file was deleted!" >&2
+  cat "${DRILL_DIR}/restore_deleted_sig.log" >&2
+  exit 1
+fi
+
+# Step 6: Test production mode unsigned policy
+echo -e "\n[Step 6/7] Verifying production unsigned policy & --allow-unsigned override..."
+
+# Create genuinely unsigned manifest
+UNSIGNED_MANIFEST="${DRILL_DIR}/unsigned_manifest.json"
+sed 's/"signatureAlgorithm": "hmac-sha256"/"signatureAlgorithm": "none"/' "${VALID_MANIFEST}" > "${UNSIGNED_MANIFEST}"
+
+PROD_UNSIGNED_FAILED=0
+NODE_ENV=production ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${UNSIGNED_MANIFEST}" \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_prod_unsigned.log" 2>&1 || PROD_UNSIGNED_FAILED=1
+
+if [ "${PROD_UNSIGNED_FAILED}" -eq 1 ]; then
+  echo "✓ PASS: restore.sh rejected unsigned manifest in production mode (NODE_ENV=production)."
+else
+  echo "✗ FAIL: restore.sh permitted unsigned manifest in production mode without --allow-unsigned!" >&2
+  cat "${DRILL_DIR}/restore_prod_unsigned.log" >&2
+  exit 1
+fi
+
+# Verify --allow-unsigned permits emergency legacy recovery
+PROD_OVERRIDE_OK=0
+NODE_ENV=production ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${UNSIGNED_MANIFEST}" \
+  --allow-unsigned \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_prod_override.log" 2>&1 && PROD_OVERRIDE_OK=1
+
+if [ "${PROD_OVERRIDE_OK}" -eq 1 ]; then
+  echo "✓ PASS: --allow-unsigned successfully permitted emergency legacy restore in production mode."
+else
+  echo "✗ FAIL: --allow-unsigned failed to permit restore!" >&2
+  cat "${DRILL_DIR}/restore_prod_override.log" >&2
+  exit 1
+fi
+
+# Step 7: Test clean restore with authenticated manifest
+echo -e "\n[Step 7/7] Executing clean restore with authenticated manifest..."
 if [ -n "${RESOLVED_COMPOSE}" ]; then
   COMPOSE_FILE="${RESOLVED_COMPOSE}" BACKUP_SIGNING_KEY="${TEST_KEY}" ./scripts/restore.sh \
     --archive "${VALID_GZ}" \
@@ -272,5 +361,5 @@ else
 fi
 
 echo "================================================================================"
-echo " TRANSACTIONAL RESTORE VERIFICATION DRILL: ALL 6 CHECKS PASSED"
+echo " TRANSACTIONAL RESTORE VERIFICATION DRILL: ALL 7 CHECKS PASSED"
 echo "================================================================================"
