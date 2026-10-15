@@ -68,10 +68,13 @@ export class ContentModelerService {
       .orderBy(desc(publicationLocales.isPrimary));
     return {
       defaultLocale,
-      enabledLocales: [...new Set([defaultLocale, ...locales.map((row) => row.locale)])],
+      enabledLocales: [...new Set(
+        locales.length > 0
+          ? [defaultLocale, ...locales.map((row) => row.locale)]
+          : [defaultLocale, "en", "ar"],
+      )],
     };
   }
-
 
   async listModels(publicationId = "pub_default"): Promise<ContentModel[]> {
     const db = getDb();
