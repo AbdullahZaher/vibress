@@ -13,14 +13,17 @@ export interface ContentModelItem {
 
 export function ContentModelList({
   onNavigate,
+  canManage = false,
 }: {
   onNavigate: (path: string) => void;
+  canManage?: boolean;
 }) {
   const [models, setModels] = useState<ContentModelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchModels = async () => {
+    setError(null);
     try {
       setLoading(true);
       const res = await apiRequest<{ data?: ContentModelItem[]; models?: ContentModelItem[] }>(
@@ -39,7 +42,7 @@ export function ContentModelList({
   }, []);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete model "${name}"? All entries will be removed.`)) {
+    if (!confirm(`Delete model "${name}"? Models with existing entries cannot be deleted.`)) {
       return;
     }
     try {
@@ -62,13 +65,13 @@ export function ContentModelList({
             Design custom structured content models, validation schemas, and collection APIs.
           </p>
         </div>
-        <button
-          onClick={() => onNavigate("/admin/models/new")}
+        {canManage && <button
+          onClick={() => onNavigate("/admin/settings/content-models/new")}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Create Model
-        </button>
+        </button>}
       </div>
 
       {error && (
@@ -91,13 +94,13 @@ export function ContentModelList({
           <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
             Get started by creating your first structured content type for products, portfolios, courses, or events.
           </p>
-          <button
-            onClick={() => onNavigate("/admin/models/new")}
+          {canManage && <button
+            onClick={() => onNavigate("/admin/settings/content-models/new")}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
           >
             <Plus className="w-4 h-4" />
             Create First Model
-          </button>
+          </button>}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -136,20 +139,20 @@ export function ContentModelList({
                   View Entries
                 </button>
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onNavigate(`/admin/models/${model.id}`)}
+                  {canManage && <button
+                    onClick={() => onNavigate(`/admin/settings/content-models/${model.id}`)}
                     className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
                     title="Edit Model Schema"
                   >
                     <Edit className="w-4 h-4" />
-                  </button>
-                  <button
+                  </button>}
+                  {canManage && <button
                     onClick={() => handleDelete(model.id, model.name)}
                     className="p-1.5 text-destructive/80 hover:text-destructive rounded hover:bg-destructive/10"
                     title="Delete Model"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </button>}
                 </div>
               </div>
             </div>

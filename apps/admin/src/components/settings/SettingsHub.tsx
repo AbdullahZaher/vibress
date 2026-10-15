@@ -4,6 +4,8 @@ import { useSettingsSearch } from "./hooks/useSettingsSearch";
 import { useScrollSpy } from "./hooks/useScrollSpy";
 import { SETTINGS_REGISTRY } from "./settings.registry";
 import { SettingsSection } from "./SettingsSection";
+import { SettingsCard } from "./SettingsCard";
+import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { Input } from "../ui/input";
@@ -53,6 +55,7 @@ import {
 interface SettingsHubProps {
   initialSection?: string | undefined;
   can?: ((perm: string) => boolean) | undefined;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
@@ -77,6 +80,7 @@ const getPillarIcon = (iconName: string) => {
 export const SettingsHub: React.FC<SettingsHubProps> = ({
   initialSection,
   can,
+  onNavigate,
 }) => {
   const {
     general,
@@ -294,6 +298,20 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
               <ThemesManagerCard
                 isHighlighted={highlightedCardId === "themes-manager"}
               />
+            </SettingsPermissionGate>
+          )}
+
+          {isCardVisible("content-models") && (
+            <SettingsPermissionGate permission="posts.read" can={can}>
+              <SettingsCard id="site-content-models" isHighlighted={highlightedCardId === "content-models"}>
+                <SettingsCardRow
+                  title="Content Models"
+                  description="Define structured content types, fields, relations and their validation rules."
+                  actionLabel="Manage models"
+                  onAction={() => onNavigate?.("/admin/settings/content-models")}
+                  disabled={!onNavigate}
+                />
+              </SettingsCard>
             </SettingsPermissionGate>
           )}
 

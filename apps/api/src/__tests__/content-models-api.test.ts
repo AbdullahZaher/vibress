@@ -191,4 +191,43 @@ describe("Content Modeler API Routes", () => {
       expect(body.data[0].title).toBe("Clean Architecture");
     });
   });
+  it("rejects unsafe schema evolution when entries exist", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      payload: {
+        fields: [
+          { id: "f1", name: "Book Title", key: "title", type: "number", required: true },
+          { id: "f2", name: "Pages", key: "pages", type: "number", required: true },
+          { id: "f3", name: "Featured", key: "featured", type: "boolean" },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().errors[0].code).toBe("VALIDATION_ERROR");
+    const modelRes = await app.inject({
+      method: "GET",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(modelRes.json().data.fields[0].type).toBe("text");
+  });
+
+  it("cannot delete models containing entries", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().errors[0].code).toBe("MODEL_IN_USE");
+    const entryRes = await app.inject({
+      method: "GET",
+      url: `/api/admin/v1/content-models/${modelSlug}/entries/${entryId}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(entryRes.statusCode).toBe(200);
+  });
+
 });

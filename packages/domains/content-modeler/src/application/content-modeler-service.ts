@@ -24,6 +24,7 @@ import {
   ValidationError,
   validateEntryData,
   validateModelDefinition,
+  analyzeSchemaEvolution,
   filterEntryDataForVisibility,
   resolveLocalizedEntryData,
   MAX_RELATION_EXPANSION_DEPTH,
@@ -168,6 +169,26 @@ export class ContentModelerService {
       });
     }
 
+    if (input.fields !== undefined) {
+      const diff = analyzeSchemaEvolution(existing.fields, input.fields);
+      if (!diff.safe) {
+        const activeEntries = await db
+          .select({ id: contentEntries.id })
+          .from(contentEntries)
+          .where(and(
+            eq(contentEntries.modelId, existing.id),
+            eq(contentEntries.publicationId, publicationId),
+            isNull(contentEntries.deletedAt),
+          ))
+          .limit(1);
+        if (activeEntries.length > 0) {
+          throw new ValidationError({
+            fields: `Unsafe schema update: ${diff.warnings.join(" ")}. Migrate existing entries before changing this model.`,
+          });
+        }
+      }
+    }
+
     const updates: Partial<ContentModelRow> = {
       updatedAt: new Date(),
     };
@@ -224,14 +245,41 @@ export class ContentModelerService {
     }
 
     const db = getDb();
-    await db
-      .delete(contentModels)
-      .where(
-        and(
+    // Lock the parent row before checking children. Concurrent FK inserts must
+    // wait, so they cannot race with the destructive cascade decision.
+    await db.transaction(async (tx) => {
+      const locked = await tx
+        .select({ id: contentModels.id })
+        .from(contentModels)
+        .where(and(
           eq(contentModels.id, existing.id),
           eq(contentModels.publicationId, publicationId),
-        ),
-      );
+        ))
+        .for("update")
+        .limit(1);
+      if (locked.length === 0) {
+        throw new Error("Content model not found");
+      }
+      const records = await tx
+        .select({ id: contentEntries.id })
+        .from(contentEntries)
+        .where(and(
+          eq(contentEntries.modelId, existing.id),
+          eq(contentEntries.publicationId, publicationId),
+        ))
+        .limit(1);
+      if (records.length > 0) {
+        throw new ValidationError({
+          model: "Cannot delete a content model with existing entries. Export or explicitly migrate its data first.",
+        });
+      }
+      await tx
+        .delete(contentModels)
+        .where(and(
+          eq(contentModels.id, existing.id),
+          eq(contentModels.publicationId, publicationId),
+        ));
+    });
 
     await this.recordAudit({
       action: "content_model.deleted",

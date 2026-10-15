@@ -14,17 +14,23 @@ export interface CollectionEntryItem {
 export function DynamicCollectionList({
   modelSlug,
   onNavigate,
+  canEdit = false,
 }: {
   modelSlug: string;
   onNavigate: (path: string) => void;
+  canEdit?: boolean;
 }) {
   const [entries, setEntries] = useState<CollectionEntryItem[]>([]);
   const [modelName, setModelName] = useState(modelSlug);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const pageSize = 50;
 
   const fetchEntries = async () => {
     try {
+      setError(null);
       setLoading(true);
       const modelRes = await apiRequest<{
         data?: { name: string };
@@ -36,8 +42,10 @@ export function DynamicCollectionList({
       const entriesRes = await apiRequest<{
         data?: CollectionEntryItem[];
         entries?: CollectionEntryItem[];
-      }>(`/content-models/${modelSlug}/entries`);
-      setEntries(entriesRes.data || entriesRes.entries || []);
+      }>(`/content-models/${modelSlug}/entries?limit=${pageSize + 1}&offset=${page * pageSize}`);
+      const results = entriesRes.data || entriesRes.entries || [];
+      setHasNext(results.length > pageSize);
+      setEntries(results.slice(0, pageSize));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load collection entries");
     } finally {
@@ -47,7 +55,7 @@ export function DynamicCollectionList({
 
   useEffect(() => {
     void fetchEntries();
-  }, [modelSlug]);
+  }, [modelSlug, page]);
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
@@ -66,7 +74,7 @@ export function DynamicCollectionList({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate("/admin/models")}
+            onClick={() => onNavigate("/admin/settings/content-models")}
             className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
           >
             <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
@@ -81,13 +89,13 @@ export function DynamicCollectionList({
             </p>
           </div>
         </div>
-        <button
+        {canEdit && <button
           onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
         >
           <Plus className="w-4 h-4" />
           New Entry
-        </button>
+        </button>}
       </div>
 
       {error && (
@@ -110,13 +118,13 @@ export function DynamicCollectionList({
           <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
             Create your first entry in this structured content collection.
           </p>
-          <button
+          {canEdit && <button
             onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
           >
             <Plus className="w-4 h-4" />
             Create Entry
-          </button>
+          </button>}
         </div>
       ) : (
         <div className="border border-border/70 rounded-lg overflow-hidden bg-card shadow-sm">
@@ -155,20 +163,20 @@ export function DynamicCollectionList({
                   </td>
                   <td className="px-4 py-3 text-end">
                     <div className="inline-flex items-center gap-1">
-                      <button
+                      {canEdit && <button
                         onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
                         className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
                         title="Edit Entry"
                       >
                         <Edit className="w-4 h-4" />
-                      </button>
-                      <button
+                      </button>}
+                      {canEdit && <button
                         onClick={() => handleDelete(entry.id, entry.title)}
                         className="p-1.5 text-destructive/80 hover:text-destructive rounded hover:bg-destructive/10"
                         title="Delete Entry"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>
@@ -176,6 +184,17 @@ export function DynamicCollectionList({
             </tbody>
           </table>
         </div>
+      )}
+      {!loading && (page > 0 || hasNext) && (
+        <nav aria-label="Collection entries pages" className="flex items-center justify-between pt-4">
+          <button type="button" disabled={page === 0}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            className="px-3 py-2 border rounded disabled:opacity-50">Previous</button>
+          <span className="text-sm text-muted-foreground">Page {page + 1}</span>
+          <button type="button" disabled={!hasNext}
+            onClick={() => setPage((current) => current + 1)}
+            className="px-3 py-2 border rounded disabled:opacity-50">Next</button>
+        </nav>
       )}
     </div>
   );

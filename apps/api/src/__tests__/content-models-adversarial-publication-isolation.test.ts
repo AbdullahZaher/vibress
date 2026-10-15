@@ -163,7 +163,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const resA = await app.inject({
       method: "POST",
       url: "/api/admin/v1/content-models",
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: {
         name: "Alpha Products",
         slug: modelASlug,
@@ -183,7 +183,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const resB = await app.inject({
       method: "POST",
       url: "/api/admin/v1/content-models",
-      headers: { cookie: cookieB, "x-publication-id": PUB_B },
+      headers: { cookie: cookieB, origin: "http://localhost:7777", "x-publication-id": PUB_B },
       payload: {
         name: "Beta Projects",
         slug: modelBSlug,
@@ -203,7 +203,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const listRes = await app.inject({
       method: "GET",
       url: "/api/admin/v1/content-models",
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(listRes.statusCode).toBe(200);
     const modelsInA = listRes.json().data;
@@ -214,7 +214,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const getRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(getRes.statusCode).toBe(404);
 
@@ -222,7 +222,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const getSlugRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelBSlug}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(getSlugRes.statusCode).toBe(404);
   });
@@ -232,7 +232,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const putRes = await app.inject({
       method: "PUT",
       url: `/api/admin/v1/content-models/${modelBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: { name: "Hacked by A via PUT" },
     });
     expect(putRes.statusCode).toBe(404);
@@ -241,7 +241,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const patchRes = await app.inject({
       method: "PATCH",
       url: `/api/admin/v1/content-models/${modelBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: { name: "Hacked by A via PATCH" },
     });
     expect(patchRes.statusCode).toBe(404);
@@ -250,7 +250,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const delRes = await app.inject({
       method: "DELETE",
       url: `/api/admin/v1/content-models/${modelBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(delRes.statusCode).toBe(404);
   });
@@ -260,7 +260,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const resA = await app.inject({
       method: "POST",
       url: `/api/admin/v1/content-models/${modelASlug}/entries`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: {
         title: "Alpha Entry One",
         slug: entryASlug,
@@ -279,7 +279,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const resB = await app.inject({
       method: "POST",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries`,
-      headers: { cookie: cookieB, "x-publication-id": PUB_B },
+      headers: { cookie: cookieB, origin: "http://localhost:7777", "x-publication-id": PUB_B },
       payload: {
         title: "Beta Entry One",
         slug: entryBSlug,
@@ -298,7 +298,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const listRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(listRes.statusCode).toBe(404);
 
@@ -306,7 +306,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const getRes = await app.inject({
       method: "GET",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries/${entryBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(getRes.statusCode).toBe(404);
 
@@ -314,7 +314,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const createRes = await app.inject({
       method: "POST",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: {
         title: "Injected Entry",
         slug: "injected",
@@ -327,7 +327,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const patchRes = await app.inject({
       method: "PATCH",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries/${entryBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: { title: "Compromised by A" },
     });
     expect(patchRes.statusCode).toBe(400);
@@ -336,7 +336,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const pubActionRes = await app.inject({
       method: "POST",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries/${entryBId}/publish`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(pubActionRes.statusCode).toBe(400);
 
@@ -344,7 +344,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const delRes = await app.inject({
       method: "DELETE",
       url: `/api/admin/v1/content-models/${modelBSlug}/entries/${entryBId}`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
     });
     expect(delRes.statusCode).toBe(400);
   });
@@ -396,7 +396,7 @@ describe("Content Modeler Adversarial Publication Isolation & Security Certifica
     const res = await app.inject({
       method: "POST",
       url: `/api/admin/v1/content-models/${modelAId}/schema-evolution-preview`,
-      headers: { cookie: cookieA, "x-publication-id": PUB_A },
+      headers: { cookie: cookieA, origin: "http://localhost:7777", "x-publication-id": PUB_A },
       payload: {
         fields: [
           { id: "f1", name: "Product Name", key: "name", type: "text", required: true },

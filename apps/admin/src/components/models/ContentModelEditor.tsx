@@ -210,19 +210,26 @@ export function ContentModelEditor({
       };
 
       if (isEditing && modelId) {
-        // Run evolution check first
-        try {
+        // Preview schema changes before saving; do not silently ignore failures.
+        {
           const previewRes = await apiRequest<{
             data?: { safe: boolean; warnings: string[] };
           }>(`/content-models/${modelId}/schema-evolution-preview`, {
             method: "POST",
             body: JSON.stringify({ fields: formattedFields }),
           });
-          if (previewRes.data?.warnings && previewRes.data.warnings.length > 0) {
-            setEvolutionWarnings(previewRes.data.warnings);
+          const preview = previewRes.data;
+          if (!preview) {
+            throw new Error("Unable to verify schema evolution safety.");
           }
-        } catch {
-          // Continue to save
+          if (preview.warnings.length > 0) {
+            setEvolutionWarnings(preview.warnings);
+          }
+          if (!preview.safe && !window.confirm(
+            "This change may invalidate existing entries and will be blocked if entries exist. Continue?"
+          )) {
+            return;
+          }
         }
 
         await apiRequest(`/content-models/${modelId}`, {
@@ -236,7 +243,7 @@ export function ContentModelEditor({
         });
       }
 
-      onNavigate("/admin/models");
+      onNavigate("/admin/settings/content-models");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save model");
     } finally {
@@ -259,7 +266,7 @@ export function ContentModelEditor({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => onNavigate("/admin/models")}
+            onClick={() => onNavigate("/admin/settings/content-models")}
             className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <ArrowLeft className="w-5 h-5" />

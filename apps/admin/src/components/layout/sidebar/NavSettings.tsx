@@ -8,6 +8,7 @@ import {
   CreditCard,
   Sparkles,
   Cpu,
+  Database,
 } from "lucide-react";
 
 interface NavSettingsProps {
@@ -21,6 +22,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 }) => {
   const isSettingsActive =
     currentPath.startsWith("/admin/settings") ||
+    currentPath.startsWith("/admin/models") ||
     currentPath.startsWith("/admin/newsletters");
 
   const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);
@@ -50,6 +52,14 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         currentPath.startsWith("/admin/settings/site") ||
         currentPath.startsWith("/admin/settings/themes") ||
         currentPath.startsWith("/admin/settings/storage"),
+    },
+    {
+      label: "Content Models",
+      path: "/admin/settings/content-models",
+      icon: <Database className="h-3.5 w-3.5 shrink-0" />,
+      active:
+        currentPath.startsWith("/admin/settings/content-models") ||
+        currentPath.startsWith("/admin/models"),
     },
     {
       label: "Membership",

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
+  validateOrigin,
 } from "../middleware/auth";
 import { contentModelerService, workspaceService } from "../services";
 import {
@@ -13,6 +14,7 @@ import {
   analyzeSchemaEvolution,
 } from "@vibress/content-modeler";
 import { getConfig } from "@vibress/config";
+import type { ContentFieldDefinition } from "@vibress/database";
 
 const sendError = (
   reply: FastifyReply,
@@ -25,6 +27,13 @@ const sendError = (
   reply
     .status(status)
     .send({ errors: [{ code, message, requestId, ...(details || {}) }] });
+
+const requirePublishPermissionForBody = async (req: FastifyRequest, reply: FastifyReply) => {
+  const body = req.body;
+  if (typeof body === "object" && body !== null && "status" in body && body.status === "published") {
+    return requirePermission("posts.publish")(req, reply);
+  }
+};
 
 export async function contentModelerRoutes(fastify: FastifyInstance) {
   // ---------------- ADMIN: Content Models ----------------
@@ -39,7 +48,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post<{ Body: CreateModelInput }>("/content-models", {
-    preHandler: [requireStaffSession, requirePermission("settings.edit")],
+    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
     handler: async (req, reply) => {
       const { name, slug, description, fields, settings } = req.body || {};
       if (!name || !name.trim()) {
@@ -118,13 +127,12 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       );
       return reply.send({ data: model });
     } catch (err) {
-      return sendError(
-        reply,
-        "NOT_FOUND",
-        err instanceof Error ? err.message : "Content model not found",
-        req.id,
-        404,
-      );
+      if (err instanceof ValidationError) {
+        return sendError(reply, "VALIDATION_ERROR", err.message, req.id, 400, {
+          fieldErrors: err.fieldErrors,
+        });
+      }
+      return sendError(reply, "NOT_FOUND", "Content model not found", req.id, 404);
     }
   };
 
@@ -132,7 +140,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.put<{ Params: { id: string }; Body: UpdateModelInput }>(
     "/content-models/:id",
     {
-      preHandler: [requireStaffSession, requirePermission("settings.edit")],
+      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
       handler: handleUpdateModel,
     },
   );
@@ -140,26 +148,25 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.patch<{ Params: { id: string }; Body: UpdateModelInput }>(
     "/content-models/:id",
     {
-      preHandler: [requireStaffSession, requirePermission("settings.edit")],
+      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
       handler: handleUpdateModel,
     },
   );
 
   fastify.delete<{ Params: { id: string } }>("/content-models/:id", {
-    preHandler: [requireStaffSession, requirePermission("settings.edit")],
+    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       try {
         await contentModelerService.deleteModel(req.params.id, pubId);
         return reply.send({ data: { deleted: true } });
       } catch (err) {
-        return sendError(
-          reply,
-          "NOT_FOUND",
-          err instanceof Error ? err.message : "Content model not found",
-          req.id,
-          404,
-        );
+        if (err instanceof ValidationError) {
+          return sendError(reply, "MODEL_IN_USE", err.message, req.id, 409, {
+            fieldErrors: err.fieldErrors,
+          });
+        }
+        return sendError(reply, "NOT_FOUND", "Content model not found", req.id, 404);
       }
     },
   });
@@ -167,9 +174,9 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   // Schema Evolution Preview
   fastify.post<{
     Params: { id: string };
-    Body: { fields: any[] };
+    Body: { fields: ContentFieldDefinition[] };
   }>("/content-models/:id/schema-evolution-preview", {
-    preHandler: [requireStaffSession, requirePermission("settings.edit")],
+    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       const model = await contentModelerService.getModelByIdOrSlug(
@@ -229,7 +236,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string };
     Body: CreateEntryInput;
   }>("/content-models/:modelSlug/entries", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
     handler: async (req, reply) => {
       const { title, slug, data, status } = req.body || {};
       if (!title || !title.trim()) {
@@ -349,7 +356,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
     handler: handleUpdateEntry,
   });
 
@@ -357,7 +364,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
     handler: handleUpdateEntry,
   });
 
@@ -365,7 +372,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Params: { modelSlug: string; entryId: string };
   }>("/content-models/:modelSlug/entries/:entryId/publish", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePermission("posts.publish"), validateOrigin],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       try {
@@ -390,7 +397,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Params: { modelSlug: string; entryId: string };
   }>("/content-models/:modelSlug/entries/:entryId/unpublish", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePermission("posts.publish"), validateOrigin],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       try {
@@ -415,7 +422,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Params: { modelSlug: string; entryId: string };
   }>("/content-models/:modelSlug/entries/:entryId/archive", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePermission("posts.publish"), validateOrigin],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       try {
@@ -440,7 +447,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.delete<{ Params: { modelSlug: string; entryId: string } }>(
     "/content-models/:modelSlug/entries/:entryId",
     {
-      preHandler: [requireStaffSession, requirePermission("posts.edit")],
+      preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin],
       handler: async (req, reply) => {
         const pubId = req.publicationContext?.publicationId || "pub_default";
         try {
