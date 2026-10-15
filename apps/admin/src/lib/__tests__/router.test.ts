@@ -59,6 +59,19 @@ describe("Admin Declarative Router", () => {
     expect(patterns).not.toContain("/admin/automations");
   });
 
+  it("routes the Advanced Manage models action to the correct content model screen", () => {
+    const targetPath = "/admin/settings/advanced/content-models";
+    const firstMatch = adminRoutes.find((route) =>
+      matchRoutePattern(route.pattern, targetPath, route.exact ?? false).matches,
+    );
+    expect(firstMatch?.pattern).toBe(targetPath);
+    expect(firstMatch?.requiredPermission).toBe("posts.read");
+    expect(firstMatch?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models")?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/new")?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/:modelId")?.exact).toBe(true);
+  });
+
   it("scopes content model routes to settings and preserves old bookmarks", () => {
     const newRoute = adminRoutes.find((route) => route.pattern === "/admin/settings/advanced/content-models");
     const editRoute = adminRoutes.find((route) => route.pattern === "/admin/settings/advanced/content-models/:modelId");

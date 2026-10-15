@@ -312,9 +312,10 @@ export const adminRoutes: AdminRouteDefinition[] = [
       />
     ),
   },
-  // Content Modeler settings: schema administration belongs under Settings.
+  // Schema administration belongs under Settings → Advanced.
+  // Register canonical routes before the broad /admin/settings/:section fallback.
   {
-    pattern: "/admin/settings/content-models",
+    pattern: "/admin/settings/advanced/content-models",
     exact: true,
     requiredPermission: "posts.read",
     render: ({ onNavigate, can }) => (
@@ -322,17 +323,41 @@ export const adminRoutes: AdminRouteDefinition[] = [
     ),
   },
   {
-    pattern: "/admin/settings/content-models/new",
+    pattern: "/admin/settings/advanced/content-models/new",
     exact: true,
     requiredPermission: "settings.edit",
     render: ({ onNavigate }) => <ContentModelEditor onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/settings/advanced/content-models/:modelId",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ match, onNavigate }) => (
+      <ContentModelEditor modelId={match.params.modelId} onNavigate={onNavigate} />
+    ),
+  },
+  // Preserve the intermediate Settings → Site links and historic bookmarks.
+  {
+    pattern: "/admin/settings/content-models",
+    exact: true,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models" onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/settings/content-models/new",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models/new" onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/content-models/:modelId",
     exact: true,
     requiredPermission: "settings.edit",
     render: ({ match, onNavigate }) => (
-      <ContentModelEditor modelId={match.params.modelId} onNavigate={onNavigate} />
+      <LegacyContentModelRedirect
+        to={`/admin/settings/advanced/content-models/${encodeURIComponent(match.params.modelId || "")}`}
+        onNavigate={onNavigate}
+      />
     ),
   },
   // Preserve old admin bookmarks; redirect into Settings rather than render a second view.
@@ -340,20 +365,20 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/models",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/content-models" onNavigate={onNavigate} />,
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models" onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/models/new",
     exact: true,
     requiredPermission: "settings.edit",
-    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/content-models/new" onNavigate={onNavigate} />,
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models/new" onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/models/:modelId",
     exact: true,
     requiredPermission: "settings.edit",
     render: ({ match, onNavigate }) => (
-      <LegacyContentModelRedirect to={`/admin/settings/content-models/${encodeURIComponent(match.params.modelId || "")}`} onNavigate={onNavigate} />
+      <LegacyContentModelRedirect to={`/admin/settings/advanced/content-models/${encodeURIComponent(match.params.modelId || "")}`} onNavigate={onNavigate} />
     ),
   },
   // Entries remain editorial content, not publication configuration.
@@ -509,9 +534,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/settings/:section",
     exact: false,
-    render: ({ match, can }) => (
+    render: ({ match, can, onNavigate }) => (
       <SettingsHub
-        initialSection={
+        initialSection=
           ["general", "site", "membership", "growth", "advanced"].includes(
             match.params.section || "",
           )
@@ -519,6 +544,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
             : "general"
         }
         can={can}
+        onNavigate={onNavigate}
       />
     ),
   },
