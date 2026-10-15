@@ -293,6 +293,40 @@ else
   exit 1
 fi
 
+# 5C: Passing --skip-checksum must NOT bypass signature check on signed backups
+SKIP_SIGNED_FAILED=0
+BACKUP_SIGNING_KEY="${TEST_KEY}" ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${DELETED_SIG_DIR}/vibress_backup_manifest_${TIMESTAMP}.json" \
+  --skip-checksum \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_skip_signed.log" 2>&1 || SKIP_SIGNED_FAILED=1
+
+if [ "${SKIP_SIGNED_FAILED}" -eq 1 ]; then
+  echo "✓ PASS: restore.sh rejected --skip-checksum on signed backup missing signature."
+else
+  echo "✗ FAIL: restore.sh permitted --skip-checksum to bypass signature check!" >&2
+  cat "${DRILL_DIR}/restore_skip_signed.log" >&2
+  exit 1
+fi
+
+# 5D: Passing --skip-checksum is forbidden on valid signed backup sets
+SKIP_VALID_SIGNED_FAILED=0
+BACKUP_SIGNING_KEY="${TEST_KEY}" ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${VALID_MANIFEST}" \
+  --skip-checksum \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_skip_valid_signed.log" 2>&1 || SKIP_VALID_SIGNED_FAILED=1
+
+if [ "${SKIP_VALID_SIGNED_FAILED}" -eq 1 ]; then
+  echo "✓ PASS: restore.sh rejected --skip-checksum on signed backup set (signature/integrity enforced)."
+else
+  echo "✗ FAIL: restore.sh permitted --skip-checksum on signed backup set!" >&2
+  cat "${DRILL_DIR}/restore_skip_valid_signed.log" >&2
+  exit 1
+fi
+
 # Step 6: Test production mode unsigned policy
 echo -e "\n[Step 6/7] Verifying production unsigned policy & --allow-unsigned override..."
 
@@ -329,6 +363,23 @@ if [ "${PROD_OVERRIDE_OK}" -eq 1 ]; then
 else
   echo "✗ FAIL: --allow-unsigned failed to permit restore!" >&2
   cat "${DRILL_DIR}/restore_prod_override.log" >&2
+  exit 1
+fi
+
+# Verify --skip-checksum in production mode without --allow-unsigned is rejected
+PROD_SKIP_FAILED=0
+NODE_ENV=production ./scripts/restore.sh \
+  --archive "${VALID_GZ}" \
+  --manifest "${UNSIGNED_MANIFEST}" \
+  --skip-checksum \
+  --db "${TARGET_DB}" \
+  --confirm > "${DRILL_DIR}/restore_prod_skip.log" 2>&1 || PROD_SKIP_FAILED=1
+
+if [ "${PROD_SKIP_FAILED}" -eq 1 ]; then
+  echo "✓ PASS: restore.sh rejected --skip-checksum in production mode without --allow-unsigned."
+else
+  echo "✗ FAIL: restore.sh permitted --skip-checksum in production mode without --allow-unsigned!" >&2
+  cat "${DRILL_DIR}/restore_prod_skip.log" >&2
   exit 1
 fi
 

@@ -275,8 +275,8 @@ if is_existing_installation; then
       backup_args+=(--with-content)
     fi
 
-    echo "Executing mandatory pre-upgrade backup via scripts/backup.sh..."
-    if ! COMPOSE_FILE="${COMPOSE_FILE}" ENV_FILE="${ENV_FILE}" ./scripts/backup.sh "${backup_args[@]}" ./backups; then
+    echo "Executing mandatory pre-upgrade backup via scripts/backup.sh (signing enforced)..."
+    if ! REQUIRE_BACKUP_SIGNING=1 COMPOSE_FILE="${COMPOSE_FILE}" ENV_FILE="${ENV_FILE}" ./scripts/backup.sh "${backup_args[@]}" ./backups; then
       echo "================================================================================" >&2
       echo " FATAL: Pre-deployment upgrade backup failed!" >&2
       echo " Aborting deployment before migrations to protect production data." >&2

@@ -242,69 +242,106 @@ echo " Date:             $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo "================================================================================"
 
 # --- Step 1: Pre-restore Manifest & Checksum Verification ---
+# Step 1A: Manifest Authentication & Signature Policy Gate (MANDATORY & PRECEDES ALL CHECKS)
+echo "Verifying backup security, signature policy, and authentication..."
+
+IS_PROD_RESTORE=0
+[ "${NODE_ENV:-}" = "production" ] && IS_PROD_RESTORE=1
+[ "${REQUIRE_SIGNED_BACKUP:-0}" -eq 1 ] && IS_PROD_RESTORE=1
+
+IS_SIGNED_BACKUP=0
+M_SIG_ALG="none"
+
+if [ -n "${MANIFEST_FILE:-}" ] && [ -f "${MANIFEST_FILE}" ]; then
+  M_SIG_ALG=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.signatureAlgorithm || 'none'); } catch(e){ console.log('none'); }" "${MANIFEST_FILE}" 2>/dev/null || true)
+  if [ "${M_SIG_ALG}" = "hmac-sha256" ] || [ -f "${MANIFEST_FILE}.sig" ]; then
+    IS_SIGNED_BACKUP=1
+  fi
+elif [ -f "${BACKUP_FILE}.sig" ]; then
+  IS_SIGNED_BACKUP=1
+fi
+
+# Strict Policy Gate: --skip-checksum must NEVER bypass signature verification or be allowed on signed/production backups
 if [ "${SKIP_CHECKSUM}" -eq 1 ]; then
-  echo "Warning: Checksum and manifest verification explicitly bypassed via --skip-checksum."
-else
-  # Verify Backup Manifest Authentication if present
-  if [ -n "${MANIFEST_FILE:-}" ]; then
-    if [ ! -f "${MANIFEST_FILE}" ]; then
-      echo "Error: Specified manifest file not found: ${MANIFEST_FILE}" >&2
+  if [ "${IS_SIGNED_BACKUP}" -eq 1 ]; then
+    echo "Error: --skip-checksum is strictly forbidden on cryptographically signed backup sets." >&2
+    echo "Cryptographic signature and integrity verification cannot be bypassed on authenticated backups." >&2
+    exit 1
+  fi
+  if [ "${IS_PROD_RESTORE}" -eq 1 ] && [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
+    echo "Error: --skip-checksum is strictly forbidden for production restores without explicit --allow-unsigned." >&2
+    echo "Production data integrity cannot be bypassed without explicit --allow-unsigned." >&2
+    exit 1
+  fi
+fi
+
+# Manifest and Signature Verification Gate
+if [ -n "${MANIFEST_FILE:-}" ]; then
+  if [ ! -f "${MANIFEST_FILE}" ]; then
+    echo "Error: Specified manifest file not found: ${MANIFEST_FILE}" >&2
+    exit 1
+  fi
+
+  if [ "${IS_SIGNED_BACKUP}" -eq 1 ]; then
+    # 1. Enforce signature presence: Cannot bypass by deleting .sig
+    if [ ! -f "${MANIFEST_FILE}.sig" ]; then
+      echo "Error: Backup manifest declares signatureAlgorithm 'hmac-sha256', but detached signature '${MANIFEST_FILE}.sig' is missing!" >&2
+      echo "Deleting the signature file to bypass authentication is strictly forbidden. Aborting restore." >&2
       exit 1
     fi
-    echo "Verifying backup set manifest integrity and authentication..."
+
+    # 2. Enforce BACKUP_SIGNING_KEY presence
     SIGNING_KEY="${BACKUP_SIGNING_KEY:-}"
-    M_SIG_ALG=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.signatureAlgorithm || 'none'); } catch(e){ console.log('none'); }" "${MANIFEST_FILE}" 2>/dev/null || true)
-
-    if [ "${M_SIG_ALG}" = "hmac-sha256" ] || [ -f "${MANIFEST_FILE}.sig" ]; then
-      # 1. Enforce signature presence: Cannot bypass by deleting .sig (Finding 2)
-      if [ ! -f "${MANIFEST_FILE}.sig" ]; then
-        echo "Error: Backup manifest declares signatureAlgorithm 'hmac-sha256', but detached signature '${MANIFEST_FILE}.sig' is missing!" >&2
-        echo "Deleting the signature file to bypass authentication is strictly forbidden. Aborting restore." >&2
-        exit 1
-      fi
-
-      # 2. Enforce BACKUP_SIGNING_KEY presence (Finding 1)
-      if [ -z "${SIGNING_KEY}" ]; then
-        echo "Error: Backup manifest has detached HMAC-SHA256 signature (${MANIFEST_FILE}.sig), but BACKUP_SIGNING_KEY is not configured in environment." >&2
-        echo "Aborting restore to protect against unauthenticated data restoration." >&2
-        exit 1
-      fi
-
-      # 3. Compute HMAC safely in Node subshell (P0: Zero key exposure in OS process table argv)
-      CALC_SIG=$(
-        export BACKUP_SIGNING_KEY="${SIGNING_KEY}"
-        node -e '
-          const crypto = require("node:crypto");
-          const fs = require("node:fs");
-          const key = process.env.BACKUP_SIGNING_KEY;
-          if (!key) process.exit(1);
-          const content = fs.readFileSync(process.argv[1]);
-          process.stdout.write(crypto.createHmac("sha256", key).update(content).digest("hex") + "\n");
-        ' "${MANIFEST_FILE}" 2>/dev/null || true
-      )
-      STORED_SIG=$(tr -d '[:space:]' < "${MANIFEST_FILE}.sig")
-      if [ -z "${CALC_SIG}" ] || [ "${CALC_SIG}" != "${STORED_SIG}" ]; then
-        echo "Error: Manifest HMAC-SHA256 signature verification FAILED! Backup manifest is forged or corrupted." >&2
-        exit 1
-      fi
-      echo "✓ Backup manifest HMAC-SHA256 cryptographic signature verified."
-    else
-      # Manifest is unsigned (Finding 2: Enforce production unsigned policy)
-      IS_PROD_RESTORE=0
-      [ "${NODE_ENV:-}" = "production" ] && IS_PROD_RESTORE=1
-      [ "${REQUIRE_SIGNED_BACKUP:-0}" -eq 1 ] && IS_PROD_RESTORE=1
-
-      if [ "${IS_PROD_RESTORE}" -eq 1 ] && [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
-        echo "Error: Production restore policy requires cryptographically signed backup sets." >&2
-        echo "The backup manifest is unsigned or lacks an authenticated signature." >&2
-        echo "To restore legacy or emergency unauthenticated backups, pass --allow-unsigned or set ALLOW_UNSIGNED_RESTORE=yes." >&2
-        exit 1
-      elif [ "${ALLOW_UNSIGNED}" -eq 1 ]; then
-        echo "Warning: Restoring unsigned backup set because --allow-unsigned was explicitly specified."
-      fi
+    if [ -z "${SIGNING_KEY}" ]; then
+      echo "Error: Backup manifest has detached HMAC-SHA256 signature (${MANIFEST_FILE}.sig), but BACKUP_SIGNING_KEY is not configured in environment." >&2
+      echo "Aborting restore to protect against unauthenticated data restoration." >&2
+      exit 1
     fi
 
-    # Correlate Database SHA-256 against manifest
+    # 3. Compute HMAC safely in Node subshell (P0: Zero key exposure in OS process table argv)
+    CALC_SIG=$(
+      export BACKUP_SIGNING_KEY="${SIGNING_KEY}"
+      node -e '
+        const crypto = require("node:crypto");
+        const fs = require("node:fs");
+        const key = process.env.BACKUP_SIGNING_KEY;
+        if (!key) process.exit(1);
+        const content = fs.readFileSync(process.argv[1]);
+        process.stdout.write(crypto.createHmac("sha256", key).update(content).digest("hex") + "\n");
+      ' "${MANIFEST_FILE}" 2>/dev/null || true
+    )
+    STORED_SIG=$(tr -d '[:space:]' < "${MANIFEST_FILE}.sig")
+    if [ -z "${CALC_SIG}" ] || [ "${CALC_SIG}" != "${STORED_SIG}" ]; then
+      echo "Error: Manifest HMAC-SHA256 signature verification FAILED! Backup manifest is forged or corrupted." >&2
+      exit 1
+    fi
+    echo "✓ Backup manifest HMAC-SHA256 cryptographic signature verified."
+  else
+    # Manifest is unsigned: enforce production unsigned policy
+    if [ "${IS_PROD_RESTORE}" -eq 1 ] && [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
+      echo "Error: Production restore policy requires cryptographically signed backup sets." >&2
+      echo "The backup manifest is unsigned or lacks an authenticated signature." >&2
+      echo "To restore legacy or emergency unauthenticated backups, pass --allow-unsigned or set ALLOW_UNSIGNED_RESTORE=yes." >&2
+      exit 1
+    elif [ "${ALLOW_UNSIGNED}" -eq 1 ]; then
+      echo "Warning: Restoring unsigned backup set because --allow-unsigned was explicitly specified."
+    fi
+  fi
+else
+  # No manifest provided: enforce production unsigned policy
+  if [ "${IS_PROD_RESTORE}" -eq 1 ] && [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
+    echo "Error: In production mode (NODE_ENV=production), restoring unverified backups without an authenticated manifest is forbidden." >&2
+    echo "Provide a backup set containing an authenticated manifest, or pass --allow-unsigned to override." >&2
+    exit 1
+  fi
+fi
+
+# Step 1B: Archive SHA-256 Checksum Verification
+if [ "${SKIP_CHECKSUM}" -eq 1 ]; then
+  echo "Warning: Archive SHA-256 checksum verification explicitly bypassed via --skip-checksum."
+else
+  # Correlate Database SHA-256 against manifest
+  if [ -n "${MANIFEST_FILE:-}" ] && [ -f "${MANIFEST_FILE}" ]; then
     M_DB_SHA=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.database?.sha256 || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
     if [ -n "${M_DB_SHA}" ] && [ "${M_DB_SHA}" != "none" ]; then
       ACTUAL_DB_SHA=""
@@ -392,17 +429,7 @@ else
       exit 1
     fi
   elif [ -z "${MANIFEST_FILE:-}" ]; then
-    IS_PROD_RESTORE=0
-    [ "${NODE_ENV:-}" = "production" ] && IS_PROD_RESTORE=1
-    [ "${REQUIRE_SIGNED_BACKUP:-0}" -eq 1 ] && IS_PROD_RESTORE=1
-
-    if [ "${IS_PROD_RESTORE}" -eq 1 ] && [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
-      echo "Error: In production mode (NODE_ENV=production), restoring unverified backups without an authenticated manifest is forbidden." >&2
-      echo "Provide a backup set containing an authenticated manifest, or pass --allow-unsigned to override." >&2
-      exit 1
-    else
-      echo "Warning: No accompanying database .sha256 file or manifest found. Proceeding with caution."
-    fi
+    echo "Warning: No accompanying database .sha256 file or manifest found. Proceeding with caution."
   fi
 fi
 

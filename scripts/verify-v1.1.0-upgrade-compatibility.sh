@@ -103,6 +103,7 @@ ADMIN_ORIGIN=http://localhost:${DRILL_PORT}
 PORTAL_ORIGIN=http://localhost:${DRILL_PORT}
 VIBRESS_PORT=${DRILL_PORT}
 VIBRESS_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+BACKUP_SIGNING_KEY=drill-backup-signing-key-0123456789abcdef0123456789abcdef
 VIBRESS_SETUP_TOKEN=drill-setup-token-0123456789abcdef
 NEWSLETTER_UNSUBSCRIBE_SECRET=drill-unsub-secret-12345
 STRIPE_SECRET_KEY=sk_test_drill_mock_key
@@ -124,8 +125,15 @@ sed -e "s/^name: vibress-prod/name: ${PROJECT_NAME}/" compose.prod.yml > "${COMP
 echo "Starting isolated PostgreSQL and Redis services..."
 "${COMPOSE_CMD[@]}" up -d postgres redis >/dev/null 2>&1
 
-echo "Waiting for isolated PostgreSQL (${DRILL_DB}) to become ready..."
-until "${COMPOSE_CMD[@]}" exec -T postgres pg_isready -U vibress -d "${DRILL_DB}" >/dev/null 2>&1; do
+echo "Waiting for isolated PostgreSQL (${DRILL_DB}) to become ready and accept queries..."
+MAX_WAIT=30
+WAITED=0
+until "${COMPOSE_CMD[@]}" exec -T postgres psql -U vibress -d "${DRILL_DB}" -c "SELECT 1;" >/dev/null 2>&1; do
+  WAITED=$((WAITED + 1))
+  if [ "${WAITED}" -ge "${MAX_WAIT}" ]; then
+    echo "Error: Timed out waiting for isolated PostgreSQL to accept queries." >&2
+    exit 1
+  fi
   sleep 1
 done
 echo "✓ Isolated PostgreSQL is healthy."

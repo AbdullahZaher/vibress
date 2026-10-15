@@ -460,18 +460,58 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
       "${S3_BACKUP_CMD[@]}"
     ); then
       echo "✓ S3 object storage backup completed successfully."
-      S3_BACKUP_SUCCESS=1
-      if [ -f "${S3_DESCRIPTOR}" ]; then
-        S3_FILE=$(node -e "try { const d=JSON.parse(fs.readFileSync(process.argv[1])); console.log(d.archiveFile || ''); } catch(e){}" "${S3_DESCRIPTOR}" 2>/dev/null || true)
-        S3_SHA=$(node -e "try { const d=JSON.parse(fs.readFileSync(process.argv[1])); console.log(d.archiveSha256 || ''); } catch(e){}" "${S3_DESCRIPTOR}" 2>/dev/null || true)
+      if [ ! -f "${S3_DESCRIPTOR}" ]; then
+        echo "Error: S3 backup completed but descriptor file was not produced at '${S3_DESCRIPTOR}'." >&2
         rm -f "${S3_DESCRIPTOR}"
+        exit 1
       fi
-      if [ -z "${S3_FILE}" ] && [ -f "${BACKUP_DIR}/${S3_FILENAME}" ]; then
-        S3_FILE="${S3_FILENAME}"
-        if [ -f "${BACKUP_DIR}/${S3_FILENAME}.sha256" ]; then
-          S3_SHA=$(awk '{print $1}' "${BACKUP_DIR}/${S3_FILENAME}.sha256")
-        fi
+
+      DESCRIPTOR_CHECK=$(node -e '
+        const fs = require("node:fs");
+        const crypto = require("node:crypto");
+        const path = require("node:path");
+        const descriptorPath = process.argv[1];
+        const backupDir = process.argv[2];
+        try {
+          const d = JSON.parse(fs.readFileSync(descriptorPath, "utf8"));
+          if (!d.archiveFile || typeof d.archiveFile !== "string" || !d.archiveFile.endsWith(".tar.gz")) {
+            console.error("Invalid or missing archiveFile in S3 descriptor");
+            process.exit(1);
+          }
+          if (!d.archiveSha256 || !/^[a-f0-9]{64}$/i.test(d.archiveSha256)) {
+            console.error("Invalid or missing archiveSha256 in S3 descriptor");
+            process.exit(1);
+          }
+          const archivePath = path.join(backupDir, d.archiveFile);
+          if (!fs.existsSync(archivePath)) {
+            console.error("Physical S3 archive file does not exist: " + archivePath);
+            process.exit(1);
+          }
+          const fileBytes = fs.readFileSync(archivePath);
+          const actualSha = crypto.createHash("sha256").update(fileBytes).digest("hex");
+          if (actualSha.toLowerCase() !== d.archiveSha256.toLowerCase()) {
+            console.error("SHA-256 hash mismatch: descriptor=" + d.archiveSha256 + " actual=" + actualSha);
+            process.exit(1);
+          }
+          console.log(d.archiveFile + "\t" + d.archiveSha256);
+        } catch (err) {
+          console.error("Error validating S3 descriptor: " + err.message);
+          process.exit(1);
+        }
+      ' "${S3_DESCRIPTOR}" "${BACKUP_DIR}" 2>&1)
+
+      if [ $? -ne 0 ]; then
+        echo "Error: S3 backup descriptor validation failed!" >&2
+        echo "${DESCRIPTOR_CHECK}" >&2
+        rm -f "${S3_DESCRIPTOR}"
+        exit 1
       fi
+
+      S3_FILE=$(echo "${DESCRIPTOR_CHECK}" | awk '{print $1}')
+      S3_SHA=$(echo "${DESCRIPTOR_CHECK}" | awk '{print $2}')
+      rm -f "${S3_DESCRIPTOR}"
+      S3_BACKUP_SUCCESS=1
+      echo "✓ S3 backup descriptor verified (Archive: ${S3_FILE}, SHA-256: ${S3_SHA:0:16}...)."
     else
       rm -f "${S3_DESCRIPTOR}"
       echo "Error: S3 backup failed." >&2
@@ -504,6 +544,11 @@ IS_PROD_BACKUP=0
 
 if [ -n "${SIGNING_KEY}" ]; then
   SIG_ALG="hmac-sha256"
+elif [ "${REQUIRE_BACKUP_SIGNING:-0}" -eq 1 ]; then
+  echo "Error: Mandatory backup signing policy is enforced (REQUIRE_BACKUP_SIGNING=1)." >&2
+  echo "BACKUP_SIGNING_KEY is not set! Aborting backup creation." >&2
+  echo "Unsigned bypass is strictly forbidden when REQUIRE_BACKUP_SIGNING=1." >&2
+  exit 1
 elif [ "${IS_PROD_BACKUP}" -eq 1 ]; then
   if [ "${ALLOW_UNSIGNED}" -ne 1 ]; then
     echo "Error: Production backup policy requires cryptographic signing." >&2
