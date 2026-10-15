@@ -53,11 +53,12 @@ const legacyAccessKey = getArg("--access-key", "");
 const legacySecretKey = getArg("--secret-key", "");
 
 if (legacySecretKey) {
-  console.warn(
-    "[SECURITY WARNING] Passing secrets via --secret-key CLI argument is deprecated. " +
-    "Process arguments may be inspected in OS process tables. Pass credentials via " +
-    "S3_SECRET_ACCESS_KEY environment variable or AWS credential files instead."
+  console.error(
+    "[SECURITY ERROR] Passing secrets via --secret-key CLI argument is strictly forbidden. " +
+    "Command line arguments are observable in OS process tables (ps, /proc). " +
+    "Supply credentials securely via S3_SECRET_ACCESS_KEY environment variable or AWS credential files instead."
   );
+  process.exit(1);
 }
 
 const accessKeyId =

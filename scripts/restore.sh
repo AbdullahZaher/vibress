@@ -67,6 +67,10 @@ while [ $# -gt 0 ]; do
       BACKUP_FILE="$2"
       shift
       ;;
+    --manifest)
+      MANIFEST_FILE="$2"
+      shift
+      ;;
     --with-content)
       WITH_CONTENT=1
       if [ $# -gt 1 ] && [[ "$2" != --* ]] && [[ "$2" == *.tar.gz ]]; then
@@ -144,12 +148,30 @@ if [ ! -f "${BACKUP_FILE}" ]; then
   exit 1
 fi
 
+BACKUP_DIR=$(dirname "${BACKUP_FILE}")
+SQL_BASENAME=$(basename "${BACKUP_FILE}")
+TS=""
+if [[ "${SQL_BASENAME}" =~ ([0-9]{8}_[0-9]{6}) ]]; then
+  TS="${BASH_REMATCH[1]}"
+fi
+
+# Locate accompanying backup manifest if not explicitly provided
+if [ -z "${MANIFEST_FILE:-}" ] && [ -n "${TS}" ]; then
+  if [ -f "${BACKUP_DIR}/vibress_backup_manifest_${TS}.json" ]; then
+    MANIFEST_FILE="${BACKUP_DIR}/vibress_backup_manifest_${TS}.json"
+    echo "Discovered accompanying backup manifest: ${MANIFEST_FILE}"
+  fi
+fi
+
 # Auto-locate content archive if --with-content was requested without explicit file
 if [ "${WITH_CONTENT}" -eq 1 ] && [ -z "${CONTENT_FILE}" ]; then
-  BACKUP_DIR=$(dirname "${BACKUP_FILE}")
-  SQL_BASENAME=$(basename "${BACKUP_FILE}")
-  if [[ "${SQL_BASENAME}" =~ vibress_backup_([0-9]{8}_[0-9]{6})\.sql\.gz ]]; then
-    TS="${BASH_REMATCH[1]}"
+  if [ -n "${MANIFEST_FILE:-}" ] && [ -f "${MANIFEST_FILE}" ]; then
+    M_CONTENT=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.content?.file || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
+    if [ -n "${M_CONTENT}" ] && [ "${M_CONTENT}" != "none" ] && [ -f "${BACKUP_DIR}/${M_CONTENT}" ]; then
+      CONTENT_FILE="${BACKUP_DIR}/${M_CONTENT}"
+    fi
+  fi
+  if [ -z "${CONTENT_FILE}" ] && [ -n "${TS}" ]; then
     if [ -f "${BACKUP_DIR}/vibress_content_${TS}.tar.gz" ]; then
       CONTENT_FILE="${BACKUP_DIR}/vibress_content_${TS}.tar.gz"
     fi
@@ -168,10 +190,13 @@ fi
 
 # Auto-locate S3 archive if --with-s3 was requested without explicit file
 if [ "${WITH_S3}" -eq 1 ] && [ -z "${S3_FILE}" ]; then
-  BACKUP_DIR=$(dirname "${BACKUP_FILE}")
-  SQL_BASENAME=$(basename "${BACKUP_FILE}")
-  if [[ "${SQL_BASENAME}" =~ vibress_backup_([0-9]{8}_[0-9]{6})\.sql\.gz ]]; then
-    TS="${BASH_REMATCH[1]}"
+  if [ -n "${MANIFEST_FILE:-}" ] && [ -f "${MANIFEST_FILE}" ]; then
+    M_S3=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.s3?.file || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
+    if [ -n "${M_S3}" ] && [ "${M_S3}" != "none" ] && [ -f "${BACKUP_DIR}/${M_S3}" ]; then
+      S3_FILE="${BACKUP_DIR}/${M_S3}"
+    fi
+  fi
+  if [ -z "${S3_FILE}" ] && [ -n "${TS}" ]; then
     if [ -f "${BACKUP_DIR}/vibress_s3_${TS}.tar.gz" ]; then
       S3_FILE="${BACKUP_DIR}/vibress_s3_${TS}.tar.gz"
     fi
@@ -198,6 +223,9 @@ echo "==========================================================================
 echo " Starting Vibress Production Restore"
 echo " Source DB Backup: ${BACKUP_FILE}"
 echo " Target Database:  ${TARGET_DB}"
+if [ -n "${MANIFEST_FILE:-}" ]; then
+  echo " Backup Manifest:  ${MANIFEST_FILE}"
+fi
 if [ "${WITH_CONTENT}" -eq 1 ]; then
   echo " Source Content:   ${CONTENT_FILE}"
 fi
@@ -208,38 +236,122 @@ fi
 echo " Date:             $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo "================================================================================"
 
-# --- Step 1: Pre-restore Database Checksum Verification ---
-CHECKSUM_FILE="${BACKUP_FILE}.sha256"
+# --- Step 1: Pre-restore Manifest & Checksum Verification ---
 if [ "${SKIP_CHECKSUM}" -eq 1 ]; then
-  echo "Warning: Database checksum verification explicitly bypassed via --skip-checksum."
-elif [ -f "${CHECKSUM_FILE}" ]; then
-  echo "Verifying database SHA-256 integrity checksum..."
-  BACKUP_DIR=$(dirname "${BACKUP_FILE}")
-  BACKUP_BASENAME=$(basename "${BACKUP_FILE}")
-  CHECKSUM_BASENAME=$(basename "${CHECKSUM_FILE}")
-
-  CHECKSUM_PASSED=0
-  if command -v sha256sum >/dev/null 2>&1; then
-    if (cd "${BACKUP_DIR}" && sha256sum -c "${CHECKSUM_BASENAME}" >/dev/null 2>&1); then
-      CHECKSUM_PASSED=1
-    fi
-  elif command -v shasum >/dev/null 2>&1; then
-    if (cd "${BACKUP_DIR}" && shasum -a 256 -c "${CHECKSUM_BASENAME}" >/dev/null 2>&1); then
-      CHECKSUM_PASSED=1
-    fi
-  else
-    echo "Warning: Neither sha256sum nor shasum available on host."
-  fi
-
-  if [ "${CHECKSUM_PASSED}" -eq 1 ]; then
-    echo "✓ Database SHA-256 integrity checksum verified successfully."
-  else
-    echo "Error: Checksum verification FAILED for ${BACKUP_FILE}!" >&2
-    echo "The backup file may be corrupt or tampered with. Aborting restore." >&2
-    exit 1
-  fi
+  echo "Warning: Checksum and manifest verification explicitly bypassed via --skip-checksum."
 else
-  echo "Warning: No accompanying database .sha256 file found. Proceeding with caution."
+  # Verify Backup Manifest Authentication if present
+  if [ -n "${MANIFEST_FILE:-}" ]; then
+    if [ ! -f "${MANIFEST_FILE}" ]; then
+      echo "Error: Specified manifest file not found: ${MANIFEST_FILE}" >&2
+      exit 1
+    fi
+    echo "Verifying backup set manifest integrity and authentication..."
+    if [ -f "${MANIFEST_FILE}.sig" ]; then
+      SIGNING_KEY="${BACKUP_SIGNING_KEY:-${VIBRESS_ENCRYPTION_KEY:-}}"
+      if [ -z "${SIGNING_KEY}" ]; then
+        echo "Error: Manifest has detached signature (${MANIFEST_FILE}.sig) but neither BACKUP_SIGNING_KEY nor VIBRESS_ENCRYPTION_KEY is configured." >&2
+        exit 1
+      fi
+      CALC_SIG=$(openssl dgst -sha256 -hmac "${SIGNING_KEY}" "${MANIFEST_FILE}" | awk '{print $NF}')
+      STORED_SIG=$(tr -d '[:space:]' < "${MANIFEST_FILE}.sig")
+      if [ "${CALC_SIG}" != "${STORED_SIG}" ]; then
+        echo "Error: Manifest HMAC-SHA256 signature verification FAILED! Backup manifest is forged or corrupted." >&2
+        exit 1
+      fi
+      echo "✓ Backup manifest HMAC-SHA256 cryptographic signature verified."
+    fi
+
+    # Correlate Database SHA-256 against manifest
+    M_DB_SHA=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.database?.sha256 || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
+    if [ -n "${M_DB_SHA}" ] && [ "${M_DB_SHA}" != "none" ]; then
+      ACTUAL_DB_SHA=""
+      if command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL_DB_SHA=$(sha256sum "${BACKUP_FILE}" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        ACTUAL_DB_SHA=$(shasum -a 256 "${BACKUP_FILE}" | awk '{print $1}')
+      fi
+      if [ "${ACTUAL_DB_SHA}" != "${M_DB_SHA}" ]; then
+        echo "Error: Database backup SHA-256 does not match manifest entry!" >&2
+        echo "  Expected (manifest): ${M_DB_SHA}" >&2
+        echo "  Actual (archive):    ${ACTUAL_DB_SHA}" >&2
+        exit 1
+      fi
+      echo "✓ Database archive SHA-256 matches authenticated backup manifest."
+    fi
+
+    # Correlate Content SHA-256 against manifest if requested
+    if [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${CONTENT_FILE:-}" ] && [ -f "${CONTENT_FILE}" ]; then
+      M_C_SHA=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.content?.sha256 || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
+      if [ -n "${M_C_SHA}" ] && [ "${M_C_SHA}" != "none" ]; then
+        ACTUAL_C_SHA=""
+        if command -v sha256sum >/dev/null 2>&1; then
+          ACTUAL_C_SHA=$(sha256sum "${CONTENT_FILE}" | awk '{print $1}')
+        elif command -v shasum >/dev/null 2>&1; then
+          ACTUAL_C_SHA=$(shasum -a 256 "${CONTENT_FILE}" | awk '{print $1}')
+        fi
+        if [ "${ACTUAL_C_SHA}" != "${M_C_SHA}" ]; then
+          echo "Error: Content backup SHA-256 does not match manifest entry!" >&2
+          echo "  Expected (manifest): ${M_C_SHA}" >&2
+          echo "  Actual (archive):    ${ACTUAL_C_SHA}" >&2
+          exit 1
+        fi
+        echo "✓ Content archive SHA-256 matches authenticated backup manifest."
+      fi
+    fi
+
+    # Correlate S3 SHA-256 against manifest if requested
+    if [ "${WITH_S3}" -eq 1 ] && [ -n "${S3_FILE:-}" ] && [ -f "${S3_FILE}" ]; then
+      M_S3_SHA=$(node -e "try { const m=JSON.parse(fs.readFileSync(process.argv[1])); console.log(m.s3?.sha256 || ''); } catch(e){}" "${MANIFEST_FILE}" 2>/dev/null || true)
+      if [ -n "${M_S3_SHA}" ] && [ "${M_S3_SHA}" != "none" ]; then
+        ACTUAL_S3_SHA=""
+        if command -v sha256sum >/dev/null 2>&1; then
+          ACTUAL_S3_SHA=$(sha256sum "${S3_FILE}" | awk '{print $1}')
+        elif command -v shasum >/dev/null 2>&1; then
+          ACTUAL_S3_SHA=$(shasum -a 256 "${S3_FILE}" | awk '{print $1}')
+        fi
+        if [ "${ACTUAL_S3_SHA}" != "${M_S3_SHA}" ]; then
+          echo "Error: S3 backup SHA-256 does not match manifest entry!" >&2
+          echo "  Expected (manifest): ${M_S3_SHA}" >&2
+          echo "  Actual (archive):    ${ACTUAL_S3_SHA}" >&2
+          exit 1
+        fi
+        echo "✓ S3 archive SHA-256 matches authenticated backup manifest."
+      fi
+    fi
+  fi
+
+  # Fallback to database .sha256 file if present
+  CHECKSUM_FILE="${BACKUP_FILE}.sha256"
+  if [ -f "${CHECKSUM_FILE}" ]; then
+    echo "Verifying database SHA-256 integrity checksum..."
+    BACKUP_DIR=$(dirname "${BACKUP_FILE}")
+    BACKUP_BASENAME=$(basename "${BACKUP_FILE}")
+    CHECKSUM_BASENAME=$(basename "${CHECKSUM_FILE}")
+
+    CHECKSUM_PASSED=0
+    if command -v sha256sum >/dev/null 2>&1; then
+      if (cd "${BACKUP_DIR}" && sha256sum -c "${CHECKSUM_BASENAME}" >/dev/null 2>&1); then
+        CHECKSUM_PASSED=1
+      fi
+    elif command -v shasum >/dev/null 2>&1; then
+      if (cd "${BACKUP_DIR}" && shasum -a 256 -c "${CHECKSUM_BASENAME}" >/dev/null 2>&1); then
+        CHECKSUM_PASSED=1
+      fi
+    else
+      echo "Warning: Neither sha256sum nor shasum available on host."
+    fi
+
+    if [ "${CHECKSUM_PASSED}" -eq 1 ]; then
+      echo "✓ Database SHA-256 integrity checksum verified successfully."
+    else
+      echo "Error: Checksum verification FAILED for ${BACKUP_FILE}!" >&2
+      echo "The backup file may be corrupt or tampered with. Aborting restore." >&2
+      exit 1
+    fi
+  elif [ -z "${MANIFEST_FILE:-}" ]; then
+    echo "Warning: No accompanying database .sha256 file or manifest found. Proceeding with caution."
+  fi
 fi
 
 # --- Step 2: Validate Database Archive Gzip Structure ---
@@ -488,12 +600,6 @@ if [ "${RESTORE_MODE}" = "compose" ]; then
     "${COMPOSE_CMD[@]}" exec -T \
       "${POSTGRES_SERVICE}" \
       sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "$1" -d "postgres" -c "$2"' _ "${PG_USER}" "${CREATE_SQL}"
-  else
-    echo "Resetting public schema in target database '${TARGET_DB}' for clean restore..."
-    CLEAN_SQL="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${PG_USER}\"; GRANT ALL ON SCHEMA public TO public;"
-    "${COMPOSE_CMD[@]}" exec -T \
-      "${POSTGRES_SERVICE}" \
-      sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "$1" -d "$2" -c "$3"' _ "${PG_USER}" "${TARGET_DB}" "${CLEAN_SQL}"
   fi
 elif [ "${RESTORE_MODE}" = "host" ]; then
   if command -v psql >/dev/null 2>&1; then
@@ -501,28 +607,28 @@ elif [ "${RESTORE_MODE}" = "host" ]; then
     if [ "${DB_EXISTS}" != "1" ]; then
       echo "Creating target database '${TARGET_DB}'..."
       PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "postgres" -c "CREATE DATABASE \"${TARGET_DB}\";"
-    else
-      echo "Resetting public schema in target database '${TARGET_DB}' for clean restore..."
-      CLEAN_SQL="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${PG_USER}\"; GRANT ALL ON SCHEMA public TO public;"
-      PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "${TARGET_DB}" -c "${CLEAN_SQL}"
     fi
   fi
 fi
 
-echo "Applying database restore with ON_ERROR_STOP=1 and --single-transaction..."
+SCHEMA_RESET_SQL="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${PG_USER}\"; GRANT ALL ON SCHEMA public TO public;"
+
+echo "Applying transactional database restore (-X -v ON_ERROR_STOP=1 --single-transaction -f -)..."
 
 if [ "${RESTORE_MODE}" = "compose" ]; then
-  gunzip -c "${BACKUP_FILE}" | "${COMPOSE_CMD[@]}" exec -T \
+  ( printf '%s\n' "${SCHEMA_RESET_SQL}"; gunzip -c "${BACKUP_FILE}" ) | "${COMPOSE_CMD[@]}" exec -T \
     "${POSTGRES_SERVICE}" \
-    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=1 --single-transaction -U "$1" -d "$2"' _ "${PG_USER}" "${TARGET_DB}"
+    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -X -v ON_ERROR_STOP=1 --single-transaction -f - -U "$1" -d "$2"' _ "${PG_USER}" "${TARGET_DB}"
 elif [ "${RESTORE_MODE}" = "host" ]; then
   if ! command -v psql >/dev/null 2>&1; then
     echo "Error: psql client is required for host restore mode but was not found in PATH." >&2
     exit 1
   fi
-  gunzip -c "${BACKUP_FILE}" | psql \
+  ( printf '%s\n' "${SCHEMA_RESET_SQL}"; gunzip -c "${BACKUP_FILE}" ) | psql \
+    -X \
     -v ON_ERROR_STOP=1 \
     --single-transaction \
+    -f - \
     -h "${POSTGRES_HOST}" \
     -p "${PG_PORT:-5432}" \
     -U "${PG_USER}" \
@@ -575,12 +681,12 @@ if [ "${WITH_S3}" -eq 1 ]; then
     S3_RESTORE_CMD+=(--env-file "${ENV_FILE}")
   fi
 
-  S3_ENV=()
-  [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ] && S3_ENV+=(S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
-  [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ] && S3_ENV+=(S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
-
   echo "Executing S3 restore engine (credentials protected from OS process table)..."
-  if env "${S3_ENV[@]}" "${S3_RESTORE_CMD[@]}"; then
+  if (
+    [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ] && export S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}"
+    [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ] && export S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}"
+    "${S3_RESTORE_CMD[@]}"
+  ); then
     echo "✓ S3 objects restored and verified successfully."
   else
     echo "Error: S3 restore failed." >&2

@@ -446,12 +446,12 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
       S3_BACKUP_CMD+=(--env-file "${ENV_FILE}")
     fi
 
-    S3_ENV=()
-    [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ] && S3_ENV+=(S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
-    [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ] && S3_ENV+=(S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
-
     echo "Executing S3 backup engine (Fail-Closed, credentials protected from OS process table)..."
-    if env "${S3_ENV[@]}" "${S3_BACKUP_CMD[@]}"; then
+    if (
+      export S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}"
+      export S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}"
+      "${S3_BACKUP_CMD[@]}"
+    ); then
       echo "✓ S3 object storage backup completed successfully."
       S3_BACKUP_SUCCESS=1
     else
@@ -464,12 +464,37 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
   fi
 fi
 
-# --- Backup Set Manifest Generation (Blocker P1-4: Auditability & Correlation) ---
+# --- Backup Set Manifest Generation & Authentication (Blocker P1-4) ---
 MANIFEST_FILE="${BACKUP_DIR}/vibress_backup_manifest_${TIMESTAMP}.json"
 DB_SHA=""
 [ -f "${CHECKSUM_FILE}" ] && DB_SHA=$(awk '{print $1}' "${CHECKSUM_FILE}")
 CONTENT_SHA=""
 [ -n "${CONTENT_CHECKSUM:-}" ] && [ -f "${CONTENT_CHECKSUM}" ] && CONTENT_SHA=$(awk '{print $1}' "${CONTENT_CHECKSUM}")
+
+S3_FILE="none"
+S3_SHA="none"
+if [ "${S3_BACKUP_SUCCESS:-0}" -eq 1 ]; then
+  LATEST_S3_ARCHIVE=$(ls -t "${BACKUP_DIR}"/vibress_s3_*.tar.gz 2>/dev/null | head -n 1 || true)
+  if [ -n "${LATEST_S3_ARCHIVE}" ] && [ -f "${LATEST_S3_ARCHIVE}" ]; then
+    S3_FILE=$(basename "${LATEST_S3_ARCHIVE}")
+    if [ -f "${LATEST_S3_ARCHIVE}.sha256" ]; then
+      S3_SHA=$(awk '{print $1}' "${LATEST_S3_ARCHIVE}.sha256")
+    elif command -v sha256sum >/dev/null 2>&1; then
+      S3_SHA=$(sha256sum "${LATEST_S3_ARCHIVE}" | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+      S3_SHA=$(shasum -a 256 "${LATEST_S3_ARCHIVE}" | awk '{print $1}')
+    fi
+  fi
+fi
+
+# Determine signing capability
+SIGNING_KEY="${BACKUP_SIGNING_KEY:-${VIBRESS_ENCRYPTION_KEY:-}}"
+SIG_ALG="none"
+HMAC_SIG="none"
+
+if [ -n "${SIGNING_KEY}" ] && command -v openssl >/dev/null 2>&1; then
+  SIG_ALG="hmac-sha256"
+fi
 
 cat << EOF > "${MANIFEST_FILE}"
 {
@@ -491,12 +516,23 @@ cat << EOF > "${MANIFEST_FILE}"
   "s3": {
     "backedUp": $( [ "${S3_BACKUP_SUCCESS:-0}" -eq 1 ] && echo "true" || echo "false" ),
     "bucket": "${S3_BUCKET_NAME:-none}",
-    "prefix": "${S3_PREFIX:-none}"
-  }
+    "prefix": "${S3_PREFIX:-none}",
+    "file": "${S3_FILE}",
+    "sha256": "${S3_SHA}"
+  },
+  "signatureAlgorithm": "${SIG_ALG}"
 }
 EOF
 chmod 600 "${MANIFEST_FILE}"
-echo "✓ Backup set manifest created and secured: ${MANIFEST_FILE}"
+
+if [ "${SIG_ALG}" = "hmac-sha256" ]; then
+  HMAC_SIG=$(openssl dgst -sha256 -hmac "${SIGNING_KEY}" "${MANIFEST_FILE}" | awk '{print $NF}')
+  printf '%s\n' "${HMAC_SIG}" > "${MANIFEST_FILE}.sig"
+  chmod 600 "${MANIFEST_FILE}.sig"
+  echo "✓ Backup set manifest cryptographically signed with HMAC-SHA256: ${MANIFEST_FILE}"
+else
+  echo "✓ Backup set manifest created with SHA-256 integrity digests (unsigned): ${MANIFEST_FILE}"
+fi
 
 # Reset trap
 trap - EXIT ERR INT TERM
