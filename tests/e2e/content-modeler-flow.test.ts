@@ -18,6 +18,14 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
     await page.waitForURL("**/admin/settings/advanced/content-models");
     await expect(page.locator("h1")).toContainText("Content Modeler");
 
+    // Legacy bookmarks must redirect to the Advanced settings route.
+    await page.goto("http://localhost:7777/admin/models");
+    await page.waitForURL("**/admin/settings/advanced/content-models");
+    await expect(page.locator("h1")).toContainText("Content Modeler");
+    await page.goto("http://localhost:7777/admin/settings/content-models");
+    await page.waitForURL("**/admin/settings/advanced/content-models");
+    await expect(page.locator("h1")).toContainText("Content Modeler");
+
     // 3. Click Create Model
     await page.click('button:has-text("Create Model"), button:has-text("Create First Model")');
     await page.waitForURL("**/admin/settings/advanced/content-models/new");

@@ -36,12 +36,13 @@ import { domainEvents } from "@vibress/events";
 
 function slugify(text: string): string {
   return text
-    .toString()
+    .normalize("NFKC")
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w-]+/g, "")
-    .replace(/--+/g, "-");
+    .replace(/\s+/gu, "-")
+    .replace(/[^\p{L}\p{M}\p{N}_-]+/gu, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export class ContentModelerService {
@@ -140,6 +141,7 @@ export class ContentModelerService {
     const db = getDb();
     const id = randomUUID();
     const slug = input.slug ? slugify(input.slug) : slugify(input.name);
+    if (!slug) throw new ValidationError({ slug: "Model slug must contain letters or numbers." });
 
     // Verify slug uniqueness within publication
     const existing = await this.getModelByIdOrSlug(slug, publicationId);
@@ -206,6 +208,7 @@ export class ContentModelerService {
     if (input.name !== undefined) updates.name = input.name;
     if (input.slug !== undefined) {
       const newSlug = slugify(input.slug);
+      if (!newSlug) throw new ValidationError({ slug: "Slug must contain letters or numbers." });
       if (newSlug !== existing.slug) {
         const slugCheck = await this.getModelByIdOrSlug(newSlug, publicationId);
         if (slugCheck && slugCheck.id !== existing.id) {
@@ -513,6 +516,7 @@ export class ContentModelerService {
     const db = getDb();
     const id = randomUUID();
     const slug = input.slug ? slugify(input.slug) : slugify(input.title);
+    if (!slug) throw new ValidationError({ slug: "Entry slug must contain letters or numbers." });
     const status = input.status || "draft";
 
     // Check slug uniqueness within model for active entries
@@ -621,6 +625,7 @@ export class ContentModelerService {
     if (input.title !== undefined) updates.title = input.title;
     if (input.slug !== undefined) {
       const newSlug = slugify(input.slug);
+      if (!newSlug) throw new ValidationError({ slug: "Slug must contain letters or numbers." });
       if (newSlug !== existing.slug) {
         const check = await this.getEntryById(model.id, newSlug, publicationId);
         if (check && check.id !== existing.id) {

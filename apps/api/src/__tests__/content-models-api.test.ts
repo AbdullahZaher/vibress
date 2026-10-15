@@ -92,6 +92,32 @@ describe("Content Modeler API Routes", () => {
       expect(res.json().data.enabledLocales).toContain(res.json().data.defaultLocale);
     });
 
+    it("supports Arabic model slugs without changing existing ASCII slugs", async () => {
+      const slug = `مشاريع-${crypto.randomUUID().slice(0, 8)}`;
+      const create = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/content-models",
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+        payload: { name: "مشاريع عربية", slug, fields: [] },
+      });
+      expect(create.statusCode).toBe(201);
+      expect(create.json().data.slug).toBe(slug);
+      const id = create.json().data.id as string;
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/content-models/${id}`,
+        headers: { cookie: cookieHeader },
+      });
+      expect(read.statusCode).toBe(200);
+      expect(read.json().data.slug).toBe(slug);
+      const remove = await app.inject({
+        method: "DELETE",
+        url: `/api/admin/v1/content-models/${id}`,
+        headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      });
+      expect(remove.statusCode).toBe(200);
+    });
+
     it("POST /api/admin/v1/content-models creates a new custom content model", async () => {
       modelSlug = `books-${Date.now()}`;
       const res = await app.inject({

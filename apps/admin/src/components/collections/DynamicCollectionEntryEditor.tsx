@@ -152,7 +152,7 @@ export function DynamicCollectionEntryEditor({
       setSlug(
         val
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
           .replace(/^-|-$/g, ""),
       );
     }
