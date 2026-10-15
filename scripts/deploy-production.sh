@@ -40,6 +40,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+if [ "${FORCE_FRESH}" = "1" ] && [ "${FORCE_UPGRADE}" = "1" ]; then
+  echo "Error: Conflicting deployment flags specified (--fresh and --upgrade). Choose one mode." >&2
+  exit 1
+fi
+
 COMPOSE_ARGS=()
 if [ -n "${ENV_FILE:-}" ] && [ -f "${ENV_FILE}" ]; then
   COMPOSE_ARGS+=(--env-file "${ENV_FILE}")
@@ -52,16 +57,12 @@ echo " Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
 echo " Compose file: ${COMPOSE_FILE}"
 echo "================================================================================"
 
-# Helper: Detect whether this is an existing deployment requiring upgrade backup
-is_existing_installation() {
-  if [ "${FORCE_FRESH}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "1" ]; then
-    return 1 # explicitly forced fresh install
-  fi
-  if [ "${FORCE_UPGRADE}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "0" ]; then
-    return 0 # explicitly forced upgrade
-  fi
+# Helper: Detect authoritative evidence of existing installation state
+EXISTING_REASON=""
+detect_existing_installation() {
+  EXISTING_REASON=""
 
-  # External database safeguard: Check if an external host is configured
+  # 1. External database safeguard: Check if an external host is configured
   local ext_host="${POSTGRES_HOST:-}"
   if [ -z "${ext_host}" ] && [ -f "${ENV_FILE}" ]; then
     ext_host=$(grep -E '^[[:space:]]*POSTGRES_HOST=' "${ENV_FILE}" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
@@ -93,19 +94,24 @@ is_existing_installation() {
 
     if [ -n "${table_count}" ] && [ "${table_count}" -eq 0 ] 2>/dev/null; then
       echo "✓ Verified empty external PostgreSQL database at ${ext_host} (0 schema tables found)." >&2
-      return 1 # Fresh external database
+    elif [ -n "${table_count}" ] && [ "${table_count}" -gt 0 ] 2>/dev/null; then
+      echo "Existing schema tables detected on external database '${ext_host}' (found ${table_count} key tables)." >&2
+      EXISTING_REASON="External database '${ext_host}' contains ${table_count} active schema tables"
+      return 0
     else
-      echo "Existing schema tables detected (or fail-safe triggered) on external database '${ext_host}' (schema count: '${table_count:-unverified}')." >&2
-      return 0 # Existing external database! Missing Docker volumes will NOT bypass backup.
+      echo "Warning: Unable to verify schema state on external database '${ext_host}'. Failing closed for safety." >&2
+      EXISTING_REASON="External database '${ext_host}' schema state could not be verified (fail-closed)"
+      return 0
     fi
   fi
 
-  # 1. Check if postgres container already exists in this compose project
+  # 2. Check if postgres container already exists in this compose project (running or stopped)
   if docker compose "${COMPOSE_ARGS[@]}" ps -a -q postgres 2>/dev/null | grep -q .; then
+    EXISTING_REASON="PostgreSQL container exists in Compose project '${COMPOSE_FILE}'"
     return 0
   fi
 
-  # 2. Check if the project volume exists and has PostgreSQL data
+  # 3. Check if project volume exists and has PostgreSQL data
   local project_name
   project_name=$(docker compose "${COMPOSE_ARGS[@]}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
   [ -z "${project_name}" ] && project_name="vibress-prod"
@@ -113,6 +119,7 @@ is_existing_installation() {
   local volume_name="${project_name}_postgres_data"
   if docker volume inspect "${volume_name}" >/dev/null 2>&1; then
     if docker run --rm -v "${volume_name}:/vol:ro" alpine test -f /vol/PG_VERSION 2>/dev/null; then
+      EXISTING_REASON="Initialized PostgreSQL volume '${volume_name}' exists (PG_VERSION found)"
       return 0
     fi
   fi
@@ -120,11 +127,53 @@ is_existing_installation() {
   # Also check unqualified volume name
   if docker volume inspect "postgres_data" >/dev/null 2>&1; then
     if docker run --rm -v "postgres_data:/vol:ro" alpine test -f /vol/PG_VERSION 2>/dev/null; then
+      EXISTING_REASON="Initialized PostgreSQL volume 'postgres_data' exists (PG_VERSION found)"
+      return 0
+    fi
+  fi
+
+  # 4. Check if project content volume exists and is non-empty
+  local content_vol="${project_name}_vibress_content"
+  if docker volume inspect "${content_vol}" >/dev/null 2>&1; then
+    local content_count
+    content_count=$(docker run --rm -v "${content_vol}:/vol:ro" alpine sh -c 'ls -A /vol 2>/dev/null | wc -l' 2>/dev/null || true)
+    content_count=$(echo "${content_count}" | tr -d '[:space:]')
+    if [ -n "${content_count}" ] && [ "${content_count}" -gt 0 ] 2>/dev/null; then
+      EXISTING_REASON="Non-empty persistent content volume '${content_vol}' exists (${content_count} entries)"
       return 0
     fi
   fi
 
   return 1 # Verified fresh installation
+}
+
+# Helper: Detect whether this is an existing deployment requiring upgrade backup
+is_existing_installation() {
+  if detect_existing_installation; then
+    # Existing data detected! Operator cannot bypass backup via --fresh
+    if [ "${FORCE_FRESH}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "1" ]; then
+      echo "================================================================================" >&2
+      echo " FATAL DEPLOYMENT CONFLICT: UNSAFE FRESH BOOTSTRAP OVERRIDE REJECTED" >&2
+      echo "================================================================================" >&2
+      echo "Fresh installation mode requested (--fresh or VIBRESS_FRESH_INSTALL=1)," >&2
+      echo "but authoritative evidence of an existing installation was discovered:" >&2
+      echo "  -> ${EXISTING_REASON}" >&2
+      echo "" >&2
+      echo "Refusing to proceed with unbacked-up fresh bootstrap on populated destination." >&2
+      echo "To safely upgrade with mandatory pre-upgrade backups, run without '--fresh' (or pass '--upgrade')." >&2
+      echo "================================================================================" >&2
+      exit 1
+    fi
+    return 0
+  else
+    # Destination is clean
+    if [ "${FORCE_UPGRADE}" = "1" ] || [ "${VIBRESS_FRESH_INSTALL:-}" = "0" ]; then
+      echo "Notice: Upgrade mode specified (--upgrade), but no existing installation data was found." >&2
+      echo "Proceeding with upgrade checks on clean destination." >&2
+      return 0
+    fi
+    return 1 # Verified fresh installation
+  fi
 }
 
 # --- Phase 1: Preflight Validation ---
@@ -207,7 +256,33 @@ if is_existing_installation; then
   fi
 
   if [ -f "scripts/backup.sh" ]; then
-    COMPOSE_FILE="${COMPOSE_FILE}" ENV_FILE="${ENV_FILE}" ./scripts/backup.sh ./backups
+    # Provider-aware pre-upgrade backup enforcement (Local, S3, or Hybrid)
+    storage_prov="local"
+    if [ -f "${ENV_FILE}" ]; then
+      storage_prov=$(grep -E '^[[:space:]]*STORAGE_PROVIDER=' "${ENV_FILE}" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
+    fi
+    storage_prov="${storage_prov:-${STORAGE_PROVIDER:-local}}"
+
+    backup_args=()
+    if [ "${storage_prov}" = "s3" ]; then
+      echo "Storage provider configured as 's3': Enforcing PostgreSQL and S3 object backup..."
+      backup_args+=(--with-s3)
+    elif [ "${storage_prov}" = "hybrid" ]; then
+      echo "Storage provider configured as 'hybrid': Enforcing PostgreSQL, persistent volume, and S3 object backup..."
+      backup_args+=(--with-content --with-s3)
+    else
+      echo "Storage provider configured as 'local': Enforcing PostgreSQL and persistent media/theme volume backup..."
+      backup_args+=(--with-content)
+    fi
+
+    echo "Executing mandatory pre-upgrade backup via scripts/backup.sh..."
+    if ! COMPOSE_FILE="${COMPOSE_FILE}" ENV_FILE="${ENV_FILE}" ./scripts/backup.sh "${backup_args[@]}" ./backups; then
+      echo "================================================================================" >&2
+      echo " FATAL: Pre-deployment upgrade backup failed!" >&2
+      echo " Aborting deployment before migrations to protect production data." >&2
+      echo "================================================================================" >&2
+      exit 1
+    fi
     echo "✓ Pre-deployment upgrade backup verified successfully."
   else
     echo "Error: scripts/backup.sh not found. Mandatory pre-upgrade backup cannot be skipped." >&2

@@ -356,12 +356,20 @@ fi
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 RESTORE_MODE=""
 
+COMPOSE_CMD=(docker compose)
+if [ -n "${ENV_FILE:-}" ] && [ -f "${ENV_FILE}" ]; then
+  COMPOSE_CMD+=(--env-file "${ENV_FILE}")
+fi
+if [ -n "${RESOLVED_COMPOSE}" ]; then
+  COMPOSE_CMD+=(-f "${RESOLVED_COMPOSE}")
+fi
+
 if [ -n "${POSTGRES_HOST:-}" ]; then
   PG_PORT="${POSTGRES_PORT:-5432}"
   RESTORE_MODE="host"
   TARGET_DESC="host ${POSTGRES_HOST}:${PG_PORT}"
-elif [ -n "${RESOLVED_COMPOSE}" ] && docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
-  CONTAINER_ID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
+elif [ -n "${RESOLVED_COMPOSE}" ] && "${COMPOSE_CMD[@]}" ps -q "${POSTGRES_SERVICE}" 2>/dev/null | grep -q .; then
+  CONTAINER_ID=$("${COMPOSE_CMD[@]}" ps -q "${POSTGRES_SERVICE}" | head -n 1)
   C_PASS=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_PASSWORD=' | cut -d= -f2- || true)
   [ -n "${C_PASS}" ] && PG_PASSWORD="${C_PASS}"
   C_USER=$(docker inspect "${CONTAINER_ID}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^POSTGRES_USER=' | cut -d= -f2- || true)
@@ -393,9 +401,9 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
     # Detect volume from running compose service
     if [ -n "${RESOLVED_COMPOSE}" ]; then
       for svc in api web worker; do
-        CID=$(docker compose -f "${RESOLVED_COMPOSE}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
+        CID=$("${COMPOSE_CMD[@]}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
         if [ -n "${CID}" ]; then
-          DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' 2>/dev/null || true)
+          DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{println .Name}}{{end}}{{end}}{{end}}' 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)
           if [ -n "${DETECTED_VOL}" ]; then
             RESOLVED_CONTENT_VOL="${DETECTED_VOL}"
             break
@@ -405,23 +413,22 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
     fi
     # Check candidate volume name
     if [ -z "${RESOLVED_CONTENT_VOL}" ] && [ -n "${RESOLVED_COMPOSE}" ]; then
-      PROJECT_NAME=$(docker compose -f "${RESOLVED_COMPOSE}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
+      PROJECT_NAME=$("${COMPOSE_CMD[@]}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
       PROJECT_NAME="${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-vibress-prod}}"
       CANDIDATE_VOL="${PROJECT_NAME}_vibress_content"
-      if docker volume inspect "${CANDIDATE_VOL}" >/dev/null 2>&1; then
-        RESOLVED_CONTENT_VOL="${CANDIDATE_VOL}"
-      fi
+      RESOLVED_CONTENT_VOL="${CANDIDATE_VOL}"
     fi
-    if [ -z "${RESOLVED_CONTENT_VOL}" ]; then
-      MATCHING_VOL=$(docker volume ls -q --filter "name=vibress_content" | head -n 1 || true)
-      if [ -n "${MATCHING_VOL}" ]; then
-        RESOLVED_CONTENT_VOL="${MATCHING_VOL}"
-      fi
-    fi
+    # CRITICAL SECURITY FIX (P0-2): Never perform cross-project volume discovery via `docker volume ls`
+    # Refuse to silently substitute or match an unrelated project's content volume.
   fi
 
   if [ -z "${RESOLVED_CONTENT_VOL}" ]; then
-    RESOLVED_CONTENT_DIR="${TARGET_CONTENT_DIR:-${STORAGE_LOCAL_ROOT:-./content}}"
+    if [ -z "${RESOLVED_COMPOSE}" ]; then
+      RESOLVED_CONTENT_DIR="${TARGET_CONTENT_DIR:-${STORAGE_LOCAL_ROOT:-./content}}"
+    else
+      echo "Error: Content restore requested (--with-content) in Compose mode but no project-scoped volume could be established." >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -463,16 +470,22 @@ echo "Ensuring target database '${TARGET_DB}' exists..."
 export PGPASSWORD="${PG_PASSWORD}"
 
 if [ "${RESTORE_MODE}" = "compose" ]; then
-  DB_EXISTS=$(docker compose -f "${RESOLVED_COMPOSE}" exec -T \
-    -e PGPASSWORD="${PG_PASSWORD}" \
+  CHECK_SQL="SELECT 1 FROM pg_database WHERE datname = '${TARGET_DB}';"
+  DB_EXISTS=$("${COMPOSE_CMD[@]}" exec -T \
     "${POSTGRES_SERVICE}" \
-    psql -U "${PG_USER}" -d "postgres" -t -A -c "SELECT 1 FROM pg_database WHERE datname = '${TARGET_DB}';" 2>/dev/null || true)
+    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "$1" -d "postgres" -t -A -c "$2"' _ "${PG_USER}" "${CHECK_SQL}" 2>/dev/null || true)
   if [ "${DB_EXISTS}" != "1" ]; then
     echo "Creating target database '${TARGET_DB}'..."
-    docker compose -f "${RESOLVED_COMPOSE}" exec -T \
-      -e PGPASSWORD="${PG_PASSWORD}" \
+    CREATE_SQL="CREATE DATABASE \"${TARGET_DB}\";"
+    "${COMPOSE_CMD[@]}" exec -T \
       "${POSTGRES_SERVICE}" \
-      psql -U "${PG_USER}" -d "postgres" -c "CREATE DATABASE \"${TARGET_DB}\";"
+      sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "$1" -d "postgres" -c "$2"' _ "${PG_USER}" "${CREATE_SQL}"
+  else
+    echo "Resetting public schema in target database '${TARGET_DB}' for clean restore..."
+    CLEAN_SQL="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${PG_USER}\"; GRANT ALL ON SCHEMA public TO public;"
+    "${COMPOSE_CMD[@]}" exec -T \
+      "${POSTGRES_SERVICE}" \
+      sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "$1" -d "$2" -c "$3"' _ "${PG_USER}" "${TARGET_DB}" "${CLEAN_SQL}"
   fi
 elif [ "${RESTORE_MODE}" = "host" ]; then
   if command -v psql >/dev/null 2>&1; then
@@ -480,6 +493,10 @@ elif [ "${RESTORE_MODE}" = "host" ]; then
     if [ "${DB_EXISTS}" != "1" ]; then
       echo "Creating target database '${TARGET_DB}'..."
       PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "postgres" -c "CREATE DATABASE \"${TARGET_DB}\";"
+    else
+      echo "Resetting public schema in target database '${TARGET_DB}' for clean restore..."
+      CLEAN_SQL="DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${PG_USER}\"; GRANT ALL ON SCHEMA public TO public;"
+      PGPASSWORD="${PG_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "${TARGET_DB}" -c "${CLEAN_SQL}"
     fi
   fi
 fi
@@ -487,10 +504,9 @@ fi
 echo "Applying database restore with ON_ERROR_STOP=1..."
 
 if [ "${RESTORE_MODE}" = "compose" ]; then
-  gunzip -c "${BACKUP_FILE}" | docker compose -f "${RESOLVED_COMPOSE}" exec -T \
-    -e PGPASSWORD="${PG_PASSWORD}" \
+  gunzip -c "${BACKUP_FILE}" | "${COMPOSE_CMD[@]}" exec -T \
     "${POSTGRES_SERVICE}" \
-    psql -v ON_ERROR_STOP=1 -U "${PG_USER}" -d "${TARGET_DB}"
+    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${PG_USER}" "${TARGET_DB}"
 elif [ "${RESTORE_MODE}" = "host" ]; then
   if ! command -v psql >/dev/null 2>&1; then
     echo "Error: psql client is required for host restore mode but was not found in PATH." >&2
@@ -546,17 +562,16 @@ if [ "${WITH_S3}" -eq 1 ]; then
   if [ -n "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}" ]; then
     S3_RESTORE_CMD+=(--region "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}")
   fi
-  if [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ]; then
-    S3_RESTORE_CMD+=(--access-key "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
-  fi
-  if [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ]; then
-    S3_RESTORE_CMD+=(--secret-key "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
-  fi
   if [ -n "${ENV_FILE:-}" ]; then
     S3_RESTORE_CMD+=(--env-file "${ENV_FILE}")
   fi
 
-  if "${S3_RESTORE_CMD[@]}"; then
+  S3_ENV=()
+  [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ] && S3_ENV+=(S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
+  [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ] && S3_ENV+=(S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
+
+  echo "Executing S3 restore engine (credentials protected from OS process table)..."
+  if env "${S3_ENV[@]}" "${S3_RESTORE_CMD[@]}"; then
     echo "✓ S3 objects restored and verified successfully."
   else
     echo "Error: S3 restore failed." >&2

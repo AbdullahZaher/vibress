@@ -211,11 +211,10 @@ fi
 echo "Executing pg_dump stream with compression..."
 
 if [ "${BACKUP_MODE}" = "compose" ]; then
-  # Execute pg_dump inside the identified compose container
+  # Execute pg_dump inside the identified compose container using container environment (no plaintext secret on host CLI)
   docker compose "${COMPOSE_ARGS[@]}" exec -T \
-    -e PGPASSWORD="${PG_PASSWORD}" \
     "${POSTGRES_SERVICE}" \
-    pg_dump -U "${PG_USER}" -d "${PG_DB}" --clean --if-exists --no-owner --no-privileges \
+    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -U "$1" -d "$2" --clean --if-exists --no-owner --no-privileges' _ "${PG_USER}" "${PG_DB}" \
     | gzip -c > "${TARGET_FILE_TMP}"
 elif [ "${BACKUP_MODE}" = "host" ]; then
   if command -v pg_dump >/dev/null 2>&1; then
@@ -228,12 +227,15 @@ elif [ "${BACKUP_MODE}" = "host" ]; then
       | gzip -c > "${TARGET_FILE_TMP}"
   elif command -v docker >/dev/null 2>&1; then
     echo "Running pg_dump via ephemeral postgres container targeting ${POSTGRES_HOST}..."
+    PG_TMP_ENV="/tmp/.pg_env_$$.tmp"
+    (umask 077 && printf 'PGPASSWORD=%s\n' "${PG_PASSWORD}" > "${PG_TMP_ENV}")
     docker run --rm --network host \
-      -e PGPASSWORD="${PG_PASSWORD}" \
+      --env-file "${PG_TMP_ENV}" \
       postgres:16-alpine \
       pg_dump -h "${POSTGRES_HOST}" -p "${PG_PORT:-5432}" -U "${PG_USER}" -d "${PG_DB}" \
       --clean --if-exists --no-owner --no-privileges \
       | gzip -c > "${TARGET_FILE_TMP}"
+    rm -f "${PG_TMP_ENV}"
   else
     echo "Error: pg_dump client is required for host backup mode but was not found in PATH." >&2
     exit 1
@@ -288,15 +290,20 @@ FILESIZE=$(ls -lh "${TARGET_FILE}" | awk '{print $5}')
 echo "✓ Database backup created and verified: ${TARGET_FILE} (${FILESIZE})"
 echo "✓ Checksum created: ${CHECKSUM_FILE}"
 
-# --- Optional Persistent Content (Media & Themes) Backup ---
+# --- Persistent Content (Media & Themes) Backup ---
 if [ "${WITH_CONTENT}" -eq 1 ]; then
   echo -e "\n--- Processing Persistent Content Backup ---"
   RESOLVED_VOLUME=""
   if [ -n "${CONTENT_VOLUME:-}" ]; then
-    RESOLVED_VOLUME="${CONTENT_VOLUME}"
-    echo "Using explicitly configured content volume: ${RESOLVED_VOLUME}"
+    if docker volume inspect "${CONTENT_VOLUME}" >/dev/null 2>&1; then
+      RESOLVED_VOLUME="${CONTENT_VOLUME}"
+      echo "Using explicitly configured content volume: ${RESOLVED_VOLUME}"
+    else
+      echo "Error: Explicit content volume '${CONTENT_VOLUME}' does not exist." >&2
+      exit 1
+    fi
   elif command -v docker >/dev/null 2>&1; then
-    # 1. Try to detect volume from running compose service (api, web, worker)
+    # 1. Detect volume strictly from compose services belonging to THIS project (api, web, worker)
     if [ -n "${RESOLVED_COMPOSE}" ]; then
       COMPOSE_ARGS=()
       if [ -n "${ENV_FILE:-}" ] && [ -f "${ENV_FILE}" ]; then
@@ -307,17 +314,17 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
       for svc in api web worker; do
         CID=$(docker compose "${COMPOSE_ARGS[@]}" ps -q "${svc}" 2>/dev/null | head -n 1 || true)
         if [ -n "${CID}" ]; then
-          DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' 2>/dev/null || true)
+          DETECTED_VOL=$(docker inspect "${CID}" --format '{{range .Mounts}}{{if or (eq .Destination "/repo/content") (eq .Destination "/repo/apps/api/content")}}{{if eq .Type "volume"}}{{println .Name}}{{end}}{{end}}{{end}}' 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)
           if [ -n "${DETECTED_VOL}" ]; then
             RESOLVED_VOLUME="${DETECTED_VOL}"
-            echo "Detected Docker content volume '${RESOLVED_VOLUME}' from running service '${svc}'."
+            echo "Detected Docker content volume '${RESOLVED_VOLUME}' from running service '${svc}' in project '${RESOLVED_COMPOSE}'."
             break
           fi
         fi
       done
     fi
 
-    # 2. Check candidate project volume name (e.g. vibress-prod_vibress_content)
+    # 2. If services are stopped, resolve the project-scoped volume name from Compose configuration
     if [ -z "${RESOLVED_VOLUME}" ] && [ -n "${RESOLVED_COMPOSE}" ]; then
       PROJECT_NAME=$(docker compose "${COMPOSE_ARGS[@]}" config 2>/dev/null | grep -E '^name:' | head -n 1 | awk '{print $2}' || true)
       PROJECT_NAME="${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-vibress-prod}}"
@@ -328,14 +335,8 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
       fi
     fi
 
-    # 3. Check for any existing volume matching vibress_content
-    if [ -z "${RESOLVED_VOLUME}" ]; then
-      MATCHING_VOL=$(docker volume ls -q --filter "name=vibress_content" | head -n 1 || true)
-      if [ -n "${MATCHING_VOL}" ]; then
-        RESOLVED_VOLUME="${MATCHING_VOL}"
-        echo "Found existing Docker content volume '${RESOLVED_VOLUME}'."
-      fi
-    fi
+    # CRITICAL SECURITY FIX (P0-2): Never perform cross-project volume discovery via `docker volume ls`
+    # Refuse to silently substitute or match an unrelated project's content volume.
   fi
 
   CONTENT_BACKED_UP=0
@@ -355,10 +356,10 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
       mv "${CONTENT_TARGET_TMP}" "${CONTENT_TARGET}"
       CONTENT_BACKED_UP=1
     fi
-  else
-    # Fallback to local host directory if volume is not present
+  elif [ -z "${RESOLVED_COMPOSE}" ]; then
+    # Fallback to local host directory only in standalone host mode (no Docker Compose)
     CONTENT_DIR=""
-    for candidate in "./content" "/repo/content" "${STORAGE_LOCAL_ROOT:-}"; do
+    for candidate in "${STORAGE_LOCAL_ROOT:-}" "./content" "/repo/content"; do
       if [ -n "${candidate}" ] && [ -d "${candidate}" ]; then
         CONTENT_DIR="${candidate}"
         break
@@ -372,7 +373,14 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
         mv "${CONTENT_TARGET_TMP}" "${CONTENT_TARGET}"
         CONTENT_BACKED_UP=1
       fi
+    else
+      echo "Error: Content backup requested (--with-content) but no valid host content directory was found." >&2
+      exit 1
     fi
+  else
+    echo "Error: Content backup requested (--with-content) but no project-scoped Docker volume ('${CANDIDATE_VOL:-vibress_content}') was found for project '${PROJECT_NAME:-vibress-prod}' in '${RESOLVED_COMPOSE}'." >&2
+    echo "Refusing to proceed without backing up required application content or guessing other projects' volumes." >&2
+    exit 1
   fi
 
   if [ "${CONTENT_BACKED_UP}" -eq 1 ]; then
@@ -400,12 +408,12 @@ if [ "${WITH_CONTENT}" -eq 1 ]; then
     echo "✓ Persistent content backup created and verified: ${CONTENT_TARGET} (${CONTENT_SIZE})"
     echo "✓ Content Checksum created: ${CONTENT_CHECKSUM}"
   else
-    echo "Note: Neither Docker named volume ('vibress_content') nor local directory ('./content') found."
+    echo "Error: Failed to create content backup archive '${CONTENT_TARGET}'." >&2
+    exit 1
   fi
-
 fi
 
-# --- S3 / Object Storage Backup (Executed if STORAGE_PROVIDER=s3, --with-s3, or --with-content with S3 configured) ---
+# --- S3 / Object Storage Backup ---
 S3_BUCKET_NAME="${S3_BUCKET:-${AWS_S3_BUCKET:-}}"
 STORAGE_PROV="${STORAGE_PROVIDER:-local}"
 S3_REQUIRED=0
@@ -413,6 +421,7 @@ if [ "${STORAGE_PROV}" = "s3" ] || [ "${WITH_S3:-0}" -eq 1 ]; then
   S3_REQUIRED=1
 fi
 
+S3_BACKUP_SUCCESS=0
 if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUCKET_NAME}" ]; }; then
   echo -e "\n--- Processing S3 / Object Storage Backup ---"
   if [ -z "${S3_BUCKET_NAME}" ]; then
@@ -421,18 +430,14 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
       exit 1
     fi
   else
+    # CRITICAL SECURITY FIX (P1-3): Never pass credentials as CLI arguments!
+    # Pass access key and secret key strictly through the subprocess environment.
     S3_BACKUP_CMD=(pnpm exec tsx scripts/s3-backup.mjs --bucket "${S3_BUCKET_NAME}" --output "${BACKUP_DIR}")
     if [ -n "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}" ]; then
       S3_BACKUP_CMD+=(--endpoint "${S3_ENDPOINT:-${AWS_ENDPOINT_URL:-${STORAGE_S3_ENDPOINT:-}}}")
     fi
     if [ -n "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}" ]; then
       S3_BACKUP_CMD+=(--region "${S3_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}")
-    fi
-    if [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ]; then
-      S3_BACKUP_CMD+=(--access-key "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
-    fi
-    if [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ]; then
-      S3_BACKUP_CMD+=(--secret-key "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
     fi
     if [ -n "${S3_PREFIX:-}" ]; then
       S3_BACKUP_CMD+=(--prefix "${S3_PREFIX}")
@@ -441,9 +446,14 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
       S3_BACKUP_CMD+=(--env-file "${ENV_FILE}")
     fi
 
-    echo "Executing S3 backup engine (Fail-Closed)..."
-    if "${S3_BACKUP_CMD[@]}"; then
+    S3_ENV=()
+    [ -n "${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}" ] && S3_ENV+=(S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}")
+    [ -n "${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}" ] && S3_ENV+=(S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}")
+
+    echo "Executing S3 backup engine (Fail-Closed, credentials protected from OS process table)..."
+    if env "${S3_ENV[@]}" "${S3_BACKUP_CMD[@]}"; then
       echo "✓ S3 object storage backup completed successfully."
+      S3_BACKUP_SUCCESS=1
     else
       echo "Error: S3 backup failed." >&2
       if [ "${S3_REQUIRED}" -eq 1 ]; then
@@ -453,6 +463,40 @@ if [ "${S3_REQUIRED}" -eq 1 ] || { [ "${WITH_CONTENT}" -eq 1 ] && [ -n "${S3_BUC
     fi
   fi
 fi
+
+# --- Backup Set Manifest Generation (Blocker P1-4: Auditability & Correlation) ---
+MANIFEST_FILE="${BACKUP_DIR}/vibress_backup_manifest_${TIMESTAMP}.json"
+DB_SHA=""
+[ -f "${CHECKSUM_FILE}" ] && DB_SHA=$(awk '{print $1}' "${CHECKSUM_FILE}")
+CONTENT_SHA=""
+[ -n "${CONTENT_CHECKSUM:-}" ] && [ -f "${CONTENT_CHECKSUM}" ] && CONTENT_SHA=$(awk '{print $1}' "${CONTENT_CHECKSUM}")
+
+cat << EOF > "${MANIFEST_FILE}"
+{
+  "backupSetId": "vibress_backup_${TIMESTAMP}",
+  "timestamp": "$(date -u +"%Y-%m-%d %H:%M:%S UTC")",
+  "project": "${PROJECT_NAME:-vibress-prod}",
+  "storageProvider": "${STORAGE_PROV}",
+  "database": {
+    "file": "${FILENAME}",
+    "sha256": "${DB_SHA}",
+    "size": "${FILESIZE}"
+  },
+  "content": {
+    "backedUp": $( [ "${CONTENT_BACKED_UP:-0}" -eq 1 ] && echo "true" || echo "false" ),
+    "volume": "${RESOLVED_VOLUME:-none}",
+    "file": "${CONTENT_FILENAME:-none}",
+    "sha256": "${CONTENT_SHA:-none}"
+  },
+  "s3": {
+    "backedUp": $( [ "${S3_BACKUP_SUCCESS:-0}" -eq 1 ] && echo "true" || echo "false" ),
+    "bucket": "${S3_BUCKET_NAME:-none}",
+    "prefix": "${S3_PREFIX:-none}"
+  }
+}
+EOF
+chmod 600 "${MANIFEST_FILE}"
+echo "✓ Backup set manifest created and secured: ${MANIFEST_FILE}"
 
 # Reset trap
 trap - EXIT ERR INT TERM

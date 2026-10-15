@@ -56,15 +56,36 @@ if (!archiveFile && args.length > 0 && !args[0].startsWith("--")) {
 const targetBucket = getArg("--bucket", process.env.TARGET_S3_BUCKET || process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "");
 const endpoint = getArg("--endpoint", process.env.S3_ENDPOINT || process.env.AWS_ENDPOINT_URL || process.env.STORAGE_S3_ENDPOINT || "");
 const region = getArg("--region", process.env.S3_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1");
-const accessKeyId = getArg("--access-key", process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "");
-const secretAccessKey = getArg("--secret-key", process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || "");
+const legacyAccessKey = getArg("--access-key", "");
+const legacySecretKey = getArg("--secret-key", "");
+
+if (legacySecretKey) {
+  console.warn(
+    "[SECURITY WARNING] Passing secrets via --secret-key CLI argument is deprecated. " +
+    "Process arguments may be inspected in OS process tables. Pass credentials via " +
+    "S3_SECRET_ACCESS_KEY environment variable or AWS credential files instead."
+  );
+}
+
+const accessKeyId =
+  process.env.S3_ACCESS_KEY_ID ||
+  process.env.AWS_ACCESS_KEY_ID ||
+  legacyAccessKey ||
+  "";
+
+const secretAccessKey =
+  process.env.S3_SECRET_ACCESS_KEY ||
+  process.env.AWS_SECRET_ACCESS_KEY ||
+  legacySecretKey ||
+  "";
+
 const targetPrefix = getArg("--prefix", process.env.S3_RESTORE_PREFIX || "");
 const forcePathStyleArg = getArg("--force-path-style", "");
 const skipChecksum = hasFlag("--skip-checksum");
 let confirmed = hasFlag("--confirm") || ["yes", "true"].includes(process.env.CONFIRM_DESTRUCTIVE_RESTORE || "");
 
 function redactSecret(str) {
-  if (!str) return "<none>";
+  if (!str) return "<none/provider-chain>";
   if (str.length <= 6) return "***";
   return `${str.slice(0, 3)}...${str.slice(-3)}`;
 }
@@ -92,8 +113,14 @@ if (!targetBucket) {
   console.error("✗ S3 Restore Failure: Target bucket is required (--bucket <name> or TARGET_S3_BUCKET).");
   process.exit(1);
 }
-if (!accessKeyId || !secretAccessKey) {
-  console.error("✗ S3 Restore Failure: Storage credentials required (access key and secret key).");
+
+// For custom/local endpoints (like MinIO), credentials are required
+if (
+  endpoint &&
+  (endpoint.includes("localhost") || endpoint.includes("127.0.0.1") || endpoint.includes("minio")) &&
+  (!accessKeyId || !secretAccessKey)
+) {
+  console.error("✗ S3 Restore Failure: Storage credentials (S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY) are required for custom S3 endpoint.");
   process.exit(1);
 }
 
@@ -195,9 +222,11 @@ async function runRestore() {
 
     const clientConfig = {
       region,
-      credentials: { accessKeyId, secretAccessKey },
       forcePathStyle,
     };
+    if (accessKeyId && secretAccessKey) {
+      clientConfig.credentials = { accessKeyId, secretAccessKey };
+    }
     if (endpoint) clientConfig.endpoint = endpoint;
 
     const client = new S3Client(clientConfig);
