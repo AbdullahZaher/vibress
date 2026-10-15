@@ -13,6 +13,7 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
+import { Button } from "../ui/button";
 
 export interface FieldItem {
   id: string;
@@ -269,52 +270,61 @@ export function ContentModelEditor({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-slate-500">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <div className="me-2 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         Loading model schema...
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSave} className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
+    <form onSubmit={handleSave} className="mx-auto w-full max-w-6xl space-y-6">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back to content models"
             onClick={() => onNavigate("/admin/settings/advanced/content-models")}
-            className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-            {isEditing ? `Edit Model: ${name}` : "Create Content Model"}
-          </h1>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+          </Button>
+          <div className="min-w-0">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+              Settings / Advanced / Content Models
+            </p>
+            <h1 className="break-words text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {isEditing ? `Edit Model: ${name}` : "Create Content Model"}
+            </h1>
+          </div>
         </div>
-        <button
+        <Button
           type="submit"
+          size="sm"
           disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+          className="self-start gap-1.5 sm:self-auto"
         >
           <Save className="w-4 h-4" />
           {saving ? "Saving..." : "Save Model"}
-        </button>
-      </div>
+        </Button>
+      </header>
 
       {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           {error}
         </div>
       )}
 
       {evolutionWarnings.length > 0 && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 rounded-md text-xs space-y-1">
+        <div role="status" className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-800 dark:text-amber-200">
           <div className="flex items-center gap-1.5 font-bold">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
             Schema Evolution Warnings:
           </div>
           {evolutionWarnings.map((w, idx) => (
-            <p key={idx} className="ml-5">
+            <p key={idx} className="ms-5">
               • {w}
             </p>
           ))}
@@ -322,13 +332,13 @@ export function ContentModelEditor({
       )}
 
       {/* Basic Model Info */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
+      <div className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-2xs">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">
           Model Details
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="model-name" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="model-name" className="block text-xs font-medium text-foreground/85 mb-1">
               Model Name *
             </label>
             <input
@@ -338,11 +348,11 @@ export function ContentModelEditor({
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g. Portfolio Project"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+              className="w-full px-3 py-2 border border-border/70 rounded-md bg-background text-sm text-foreground"
             />
           </div>
           <div>
-            <label htmlFor="model-slug" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="model-slug" className="block text-xs font-medium text-foreground/85 mb-1">
               API Slug *
             </label>
             <input
@@ -353,12 +363,12 @@ export function ContentModelEditor({
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="e.g. portfolio-projects"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent font-mono text-sm"
+              className="w-full px-3 py-2 border border-border/70 rounded-md bg-background font-mono text-sm text-foreground"
             />
           </div>
         </div>
         <div>
-          <label htmlFor="model-description" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+          <label htmlFor="model-description" className="block text-xs font-medium text-foreground/85 mb-1">
             Description
           </label>
           <textarea
@@ -367,29 +377,31 @@ export function ContentModelEditor({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Brief description of this content structure..."
-            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+            className="w-full px-3 py-2 border border-border/70 rounded-md bg-background text-sm text-foreground"
           />
         </div>
       </div>
 
       {/* Visual Fields Builder */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
+      <div className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-2xs">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">
             Fields Schema ({fields.length})
           </h2>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={handleAddField}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-800 dark:text-slate-200"
+            className="gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Field
-          </button>
+          </Button>
         </div>
 
         {fields.length === 0 ? (
-          <div className="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-md text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 py-8 text-center text-xs text-muted-foreground">
             No fields defined yet. Click "Add Field" to build your schema.
           </div>
         ) : (
@@ -397,27 +409,27 @@ export function ContentModelEditor({
             {fields.map((field, idx) => (
               <div
                 key={field.id || idx}
-                className="p-4 border border-slate-200 dark:border-slate-800 rounded-md bg-slate-50 dark:bg-slate-950/50 space-y-3"
+                className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-start gap-3">
                   <div className="flex flex-col gap-1">
-                    <button type="button" disabled={idx === 0}
+                    <Button type="button" variant="ghost" size="icon-sm" disabled={idx === 0}
                       onClick={() => handleMoveField(idx, -1)}
                       aria-label={`Move ${field.name} up`}
-                      className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                      className="text-muted-foreground hover:text-foreground">
                       <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <GripVertical aria-hidden="true" className="w-4 h-4 text-slate-400" />
-                    <button type="button" disabled={idx === fields.length - 1}
+                    </Button>
+                    <GripVertical aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
+                    <Button type="button" variant="ghost" size="icon-sm" disabled={idx === fields.length - 1}
                       onClick={() => handleMoveField(idx, 1)}
                       aria-label={`Move ${field.name} down`}
-                      className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                      className="text-muted-foreground hover:text-foreground">
                       <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
+                  <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
-                      <label htmlFor={`model-field-label-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-label-${idx}`} className="block text-[11px] font-medium text-muted-foreground mb-1">
                         Field Label
                       </label>
                       <input
@@ -433,11 +445,11 @@ export function ContentModelEditor({
                             .replace(/^_+|_+$/g, "");
                           handleUpdateField(idx, { name: n, key: field.key || k });
                         }}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
+                        className="w-full px-2.5 py-1.5 border border-border/70 rounded-md bg-card text-xs"
                       />
                     </div>
                     <div>
-                      <label htmlFor={`model-field-key-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-key-${idx}`} className="block text-[11px] font-medium text-muted-foreground mb-1">
                         Field Key (API identifier)
                       </label>
                       <input
@@ -447,18 +459,18 @@ export function ContentModelEditor({
                         required
                         value={field.key}
                         onChange={(e) => handleUpdateField(idx, { key: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 font-mono text-xs"
+                        className="w-full px-2.5 py-1.5 border border-border/70 rounded-md bg-card font-mono text-xs"
                       />
                     </div>
                     <div>
-                      <label htmlFor={`model-field-type-${idx}`} className="block text-[11px] font-medium text-slate-500 mb-1">
+                      <label htmlFor={`model-field-type-${idx}`} className="block text-[11px] font-medium text-muted-foreground mb-1">
                         Field Type
                       </label>
                       <select
                         id={`model-field-type-${idx}`}
                         value={field.type}
                         onChange={(e) => handleUpdateField(idx, { type: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
+                        className="w-full px-2.5 py-1.5 border border-border/70 rounded-md bg-card text-xs"
                       >
                         {FIELD_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>
@@ -468,28 +480,31 @@ export function ContentModelEditor({
                       </select>
                     </div>
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => handleRemoveField(idx)}
-                    className="p-1.5 text-destructive/80 hover:text-destructive hover:bg-destructive/10 rounded"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     aria-label={`Remove ${field.name}`}
                     title="Remove Field"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Conditional Sub-editors for specific field types */}
                 {(field.type === "relation" || field.type === "relation_list") && (
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/70 p-3 text-xs">
                     <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="text-muted-foreground font-medium">
                       Target Related Model:
                     </span>
                     <select
                       value={field.relationModel || ""}
                       onChange={(e) => handleUpdateField(idx, { relationModel: e.target.value })}
-                      className="px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
+                      aria-label={`Target model for ${field.name}`}
+                      className="rounded-md border border-border/70 bg-background px-2 py-1 text-xs text-foreground"
                     >
                       <option value="">-- Select Target Model --</option>
                       {availableModels.map((m) => (
@@ -502,23 +517,24 @@ export function ContentModelEditor({
                 )}
 
                 {(field.type === "select" || field.type === "multi_select") && (
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                    <label className="block font-medium text-slate-600 dark:text-slate-400">
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-card/70 p-3 text-xs">
+                    <label className="block font-medium text-muted-foreground">
                       Options (comma-separated Label:Value or Value):
                     </label>
                     <input
                       type="text"
+                      aria-label={`Options for ${field.name}`}
                       value={field.optionsRaw || ""}
                       onChange={(e) => handleUpdateField(idx, { optionsRaw: e.target.value })}
                       placeholder="e.g. In Stock:in_stock, Out of Stock:out_of_stock"
-                      className="w-full px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-transparent text-xs"
+                      className="w-full px-2 py-1 border border-border/70 rounded bg-background text-xs text-foreground"
                     />
                   </div>
                 )}
 
                 {/* Field Flags & API Visibility */}
-                <div className="flex flex-wrap items-center gap-5 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
+                <div className="flex flex-wrap items-center gap-4 border-t border-border/60 pt-3 text-xs">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-foreground/85">
                     <input
                       type="checkbox"
                       checked={field.required}
@@ -528,8 +544,8 @@ export function ContentModelEditor({
                     Required
                   </label>
 
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-300">
-                    <Globe className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-foreground/85">
+                    <Globe className="w-3.5 h-3.5 text-muted-foreground" />
                     <input
                       type="checkbox"
                       checked={field.localizable}
@@ -539,17 +555,18 @@ export function ContentModelEditor({
                     Localizable (i18n)
                   </label>
 
-                  <div className="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-300 ml-auto">
-                    <Eye className="w-3.5 h-3.5 text-slate-400" />
+                  <div className="inline-flex items-center gap-1.5 text-foreground/85 ms-auto">
+                    <Eye className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>API Visibility:</span>
                     <select
+                      aria-label={`API visibility for ${field.name}`}
                       value={field.apiVisibility || "public"}
                       onChange={(e) =>
                         handleUpdateField(idx, {
                           apiVisibility: e.target.value as "public" | "authenticated" | "private",
                         })
                       }
-                      className="px-2 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-xs"
+                      className="px-2 py-0.5 border border-border/70 rounded-md bg-card text-xs"
                     >
                       <option value="public">Public (Default)</option>
                       <option value="authenticated">Authenticated Only</option>

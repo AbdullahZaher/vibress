@@ -89,12 +89,14 @@ export function DynamicCollectionList({
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <section className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
           <button
+            type="button"
+            aria-label="Back to content models"
             onClick={() => onNavigate("/admin/settings/advanced/content-models")}
-            className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
           </button>
@@ -110,7 +112,7 @@ export function DynamicCollectionList({
         </div>
         {canEdit && <button
           onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Plus className="w-4 h-4" />
           New Entry
@@ -156,18 +158,18 @@ export function DynamicCollectionList({
       </div>
 
       {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+        <div role="status" className="flex items-center justify-center py-12 text-muted-foreground">
+          <div className="me-2 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           Loading collection entries...
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-12 border-2 border-dashed border-border/70 rounded-lg p-8">
+        <div className="rounded-xl border border-dashed border-border/70 bg-card p-8 py-12 text-center">
           <Layers className="w-12 h-12 text-muted-foreground/60 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-foreground">
             {search || statusFilter ? "No matching entries" : "No Entries Yet"}
@@ -177,16 +179,16 @@ export function DynamicCollectionList({
           </p>
           {canEdit && <button
             onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus className="w-4 h-4" />
             Create Entry
           </button>}
         </div>
       ) : (
-        <div className="border border-border/70 rounded-lg overflow-hidden bg-card shadow-sm">
-          <table className="w-full text-start text-sm">
-            <thead className="bg-muted/30 text-xs font-semibold text-muted-foreground uppercase border-b border-border/70">
+        <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-2xs">
+          <table aria-label="Collection entries" className="w-full min-w-[650px] text-start text-sm">
+            <thead className="border-b border-border/70 bg-muted/30 text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Slug</th>
@@ -195,9 +197,9 @@ export function DynamicCollectionList({
                 <th className="px-4 py-3 text-end">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-border/60">
               {entries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <tr key={entry.id} className="hover:bg-muted/40">
                   <td className="px-4 py-3 font-medium text-foreground">
                     {entry.title}
                   </td>
@@ -222,14 +224,14 @@ export function DynamicCollectionList({
                     <div className="inline-flex items-center gap-1">
                       {canEdit && <button
                         onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
-                        className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title="Edit Entry"
                       >
                         <Edit className="w-4 h-4" />
                       </button>}
                       {canEdit && <button
                         onClick={() => handleDelete(entry.id, entry.title)}
-                        className="p-1.5 text-destructive/80 hover:text-destructive rounded hover:bg-destructive/10"
+                        className="rounded-md p-1.5 text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title="Delete Entry"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -246,13 +248,13 @@ export function DynamicCollectionList({
         <nav aria-label="Collection entries pages" className="flex items-center justify-between pt-4">
           <button type="button" disabled={page === 0}
             onClick={() => setPage((current) => Math.max(0, current - 1))}
-            className="px-3 py-2 border rounded disabled:opacity-50">Previous</button>
+            className="rounded-md border border-border/70 bg-card px-3 py-1.5 text-xs text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">Previous</button>
           <span className="text-sm text-muted-foreground">Page {page + 1}</span>
           <button type="button" disabled={!hasNext}
             onClick={() => setPage((current) => current + 1)}
-            className="px-3 py-2 border rounded disabled:opacity-50">Next</button>
+            className="rounded-md border border-border/70 bg-card px-3 py-1.5 text-xs text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">Next</button>
         </nav>
       )}
-    </div>
+    </section>
   );
 }

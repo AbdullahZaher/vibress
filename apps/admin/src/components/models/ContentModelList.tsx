@@ -1,6 +1,18 @@
-import { useState, useEffect } from "react";
-import { Plus, Database, Edit, Trash2, List } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database, Edit, List, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { apiRequest } from "../../lib/api";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 
 export interface ContentModelItem {
   id: string;
@@ -10,6 +22,8 @@ export interface ContentModelItem {
   fields: Array<{ key: string; name: string; type: string; required?: boolean }>;
   createdAt: string;
 }
+
+const MODEL_SETTINGS_PATH = "/admin/settings/advanced/content-models";
 
 export function ContentModelList({
   onNavigate,
@@ -21,17 +35,18 @@ export function ContentModelList({
   const [models, setModels] = useState<ContentModelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const fetchModels = async () => {
+    setLoading(true);
     setError(null);
     try {
-      setLoading(true);
-      const res = await apiRequest<{ data?: ContentModelItem[]; models?: ContentModelItem[] }>(
+      const result = await apiRequest<{ data?: ContentModelItem[]; models?: ContentModelItem[] }>(
         "/content-models",
       );
-      setModels(res.data || res.models || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load content models");
+      setModels(result.data ?? result.models ?? []);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to load content models");
     } finally {
       setLoading(false);
     }
@@ -41,124 +56,202 @@ export function ContentModelList({
     void fetchModels();
   }, []);
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete model "${name}"? Models with existing entries cannot be deleted.`)) {
-      return;
-    }
+  const handleDelete = async (model: ContentModelItem) => {
+    if (!window.confirm(
+      "Delete model \"" + model.name + "\"? Models containing entries cannot be deleted.",
+    )) return;
+
     try {
-      await apiRequest(`/api/admin/v1/content-models/${id}`, { method: "DELETE" });
+      await apiRequest("/content-models/" + encodeURIComponent(model.id), {
+        method: "DELETE",
+      });
       await fetchModels();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete content model");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to delete content model");
     }
   };
 
-  return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Database className="w-6 h-6 text-primary" />
-            Content Modeler
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Design custom structured content models, validation schemas, and collection APIs.
-          </p>
-        </div>
-        {canManage && <button
-          onClick={() => onNavigate("/admin/settings/advanced/content-models/new")}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Create Model
-        </button>}
-      </div>
+  const filteredModels = models.filter((model) => {
+    const query = search.trim().toLocaleLowerCase();
+    return !query ||
+      model.name.toLocaleLowerCase().includes(query) ||
+      model.slug.toLocaleLowerCase().includes(query) ||
+      (model.description ?? "").toLocaleLowerCase().includes(query);
+  });
 
-      {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
-          Loading content models...
-        </div>
-      ) : models.length === 0 ? (
-        <div className="text-center py-12 border-2 border-dashed border-border/70 rounded-lg p-8">
-          <Database className="w-12 h-12 text-muted-foreground/60 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-foreground">
-            No Content Models Found
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-            Get started by creating your first structured content type for products, portfolios, courses, or events.
-          </p>
-          {canManage && <button
-            onClick={() => onNavigate("/admin/settings/advanced/content-models/new")}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
+  const modelActions = (model: ContentModelItem) => (
+    <div className="flex flex-wrap items-center justify-end gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={() => onNavigate("/admin/collections/" + encodeURIComponent(model.slug))}
+      >
+        <List className="h-3.5 w-3.5" />
+        Entries
+      </Button>
+      {canManage && (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={"Edit " + model.name}
+            onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/" + encodeURIComponent(model.id))}
           >
-            <Plus className="w-4 h-4" />
-            Create First Model
-          </button>}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {models.map((model) => (
-            <div
-              key={model.id}
-              className="border border-border/70 rounded-lg p-5 bg-card shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {model.name}
-                  </h3>
-                  <span className="px-2 py-0.5 bg-muted text-xs font-mono text-slate-600 dark:text-muted-foreground/60 rounded">
-                    {model.slug}
-                  </span>
-                </div>
-                {model.description && (
-                  <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                    {model.description}
-                  </p>
-                )}
-                <div className="mt-4 flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">
-                    {model.fields?.length || 0} fields configured
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-border/50 flex items-center justify-between">
-                <button
-                  onClick={() => onNavigate(`/admin/collections/${model.slug}`)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                >
-                  <List className="w-3.5 h-3.5" />
-                  View Entries
-                </button>
-                <div className="flex items-center gap-1">
-                  {canManage && <button
-                    onClick={() => onNavigate(`/admin/settings/advanced/content-models/${model.id}`)}
-                    className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
-                    title="Edit Model Schema"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>}
-                  {canManage && <button
-                    onClick={() => handleDelete(model.id, model.name)}
-                    className="p-1.5 text-destructive/80 hover:text-destructive rounded hover:bg-destructive/10"
-                    title="Delete Model"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+            <Edit className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={"Delete " + model.name}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => void handleDelete(model)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </>
       )}
     </div>
+  );
+
+  return (
+    <section className="mx-auto w-full max-w-7xl space-y-6" aria-labelledby="content-models-title">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+            Settings / Advanced
+          </p>
+          <h1 id="content-models-title" className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            <Database aria-hidden="true" className="h-5 w-5 text-primary" />
+            Content Models
+          </h1>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Define reusable content structures, fields, relations, and validation rules.
+          </p>
+        </div>
+        {canManage && (
+          <Button type="button" size="sm"
+            onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}
+            className="self-start gap-1.5 sm:self-auto">
+            <Plus className="h-4 w-4" />
+            Create Model
+          </Button>
+        )}
+      </header>
+
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+          <span>{error}</span>
+          <Button type="button" variant="outline" size="xs" onClick={() => void fetchModels()}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </Button>
+        </div>
+      )}
+
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {loading ? "Loading models…" : models.length + " content models"}
+        </p>
+        <div className="relative w-full sm:w-72">
+          <Search aria-hidden="true" className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <Input type="search" aria-label="Search content models"
+            placeholder="Search models by name or slug"
+            value={search} onChange={(event) => setSearch(event.target.value)}
+            className="h-8 bg-card ps-8 text-xs" />
+        </div>
+      </div>
+
+      {loading ? (
+        <Card role="status" className="space-y-3 p-5">
+          <span className="text-xs text-muted-foreground">Loading content models…</span>
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="h-12 animate-pulse rounded-md bg-muted/50" />
+          ))}
+        </Card>
+      ) : error && models.length === 0 ? null : models.length === 0 || filteredModels.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+          <Database aria-hidden="true" className="h-8 w-8 text-muted-foreground/50" />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              {models.length === 0 ? "No content models yet" : "No matching models"}
+            </h2>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              {models.length === 0
+                ? "Create your first custom content type to structure editorial entries."
+                : "Try a different name, slug, or description."}
+            </p>
+          </div>
+          {models.length === 0 && canManage && (
+            <Button type="button" size="sm" onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}>
+              <Plus className="h-4 w-4" />
+              Create Model
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <>
+          <Card className="hidden overflow-hidden p-0 sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border">
+                  <TableHead className="ps-6">Model</TableHead>
+                  <TableHead>API Slug</TableHead>
+                  <TableHead>Fields</TableHead>
+                  <TableHead className="pe-6 text-end">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredModels.map((model) => (
+                  <TableRow key={model.id} className="border-border hover:bg-muted/40">
+                    <TableCell className="max-w-sm ps-6">
+                      <div dir="auto" className="text-xs font-semibold text-foreground">{model.name}</div>
+                      {model.description && (
+                        <p dir="auto" className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                          {model.description}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <code dir="auto" className="break-all text-[11px] text-muted-foreground">{model.slug}</code>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="tabular-nums">
+                        {model.fields?.length ?? 0} fields
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="pe-6">{modelActions(model)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="grid gap-3 sm:hidden">
+            {filteredModels.map((model) => (
+              <Card key={model.id} className="space-y-3 p-4">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 dir="auto" className="break-words text-sm font-semibold text-foreground">{model.name}</h2>
+                    <p dir="auto" className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                      {model.slug}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">
+                    {model.fields?.length ?? 0} fields
+                  </Badge>
+                </div>
+                {model.description && (
+                  <p dir="auto" className="text-xs text-muted-foreground">{model.description}</p>
+                )}
+                <div className="border-t border-border/60 pt-2">{modelActions(model)}</div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   );
 }

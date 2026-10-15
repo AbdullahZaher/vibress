@@ -16,15 +16,15 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
     await page.getByRole("button", { name: "Advanced", exact: true }).first().click();
     await page.getByRole("button", { name: "Manage models", exact: true }).click();
     await page.waitForURL("**/admin/settings/advanced/content-models");
-    await expect(page.locator("h1")).toContainText("Content Modeler");
+    await expect(page.getByRole("heading", { level: 1, name: "Content Models" })).toBeVisible();
 
     // Legacy bookmarks must redirect to the Advanced settings route.
     await page.goto("http://localhost:7777/admin/models");
     await page.waitForURL("**/admin/settings/advanced/content-models");
-    await expect(page.locator("h1")).toContainText("Content Modeler");
+    await expect(page.getByRole("heading", { level: 1, name: "Content Models" })).toBeVisible();
     await page.goto("http://localhost:7777/admin/settings/content-models");
     await page.waitForURL("**/admin/settings/advanced/content-models");
-    await expect(page.locator("h1")).toContainText("Content Modeler");
+    await expect(page.getByRole("heading", { level: 1, name: "Content Models" })).toBeVisible();
 
     // 3. Click Create Model
     await page.click('button:has-text("Create Model"), button:has-text("Create First Model")');
@@ -46,7 +46,7 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
     await page.waitForURL("**/admin/settings/advanced/content-models");
 
     // 7. Open Collection Entries
-    await page.click(`button:has-text("View Entries")`);
+    await page.getByRole("button", { name: "Entries", exact: true }).first().click();
     await page.waitForURL(new RegExp(`/admin/collections/${modelSlug}`));
 
     // 8. Create Entry in Dynamic Collection
