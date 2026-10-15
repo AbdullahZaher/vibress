@@ -4,16 +4,14 @@ import {
   Save,
   X,
   Image as ImageIcon,
-  Link as LinkIcon,
   Globe,
   Code,
   CheckCircle,
   FileText,
-  ArrowUp,
-  ArrowDown,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
 import { MediaPicker } from "../MediaPicker";
+import { RelationEntryPicker } from "./RelationEntryPicker";
 import { VibressStudio } from "@vibress/studio-react";
 import { migrateDocument } from "@vibress/studio-core";
 
@@ -85,11 +83,6 @@ export function DynamicCollectionEntryEditor({
   const [enabledLocales, setEnabledLocales] = useState<string[]>(["en"]);
   const isRtlLocale = /^(ar|fa|he|ur)(-|$)/i.test(activeLocaleTab);
 
-  // Relation available options cache { [relationModelSlugOrId]: Array<{ id: string; title: string; slug: string }> }
-  const [relationOptions, setRelationOptions] = useState<
-    Record<string, Array<{ id: string; title: string; slug: string }>>
-  >({});
-
   useEffect(() => {
     void (async () => {
       try {
@@ -110,30 +103,6 @@ export function DynamicCollectionEntryEditor({
           setDefaultLocale(primary);
           setEnabledLocales(configured.length ? configured : [primary]);
           setActiveLocaleTab(primary);
-        }
-
-        if (loadedModel?.fields) {
-          // Pre-fetch relation choices for relation and relation_list fields
-          for (const field of loadedModel.fields) {
-            if (
-              (field.type === "relation" || field.type === "relation_list") &&
-              field.relationModel
-            ) {
-              try {
-                const relRes = await apiRequest<{
-                  data?: Array<{ id: string; title: string; slug: string }>;
-                }>(`/content-models/${field.relationModel}/entries?limit=100`);
-                if (relRes.data) {
-                  setRelationOptions((prev) => ({
-                    ...prev,
-                    [field.relationModel!]: relRes.data || [],
-                  }));
-                }
-              } catch {
-                // Ignore silent relation fetch failure
-              }
-            }
-          }
         }
 
         // If editing, load entry
@@ -606,188 +575,19 @@ export function DynamicCollectionEntryEditor({
                 );
               }
 
-              // 6. RELATION FIELD (1:1 or N:1)
-              if (field.type === "relation") {
-                const targetOptions = relationOptions[field.relationModel || ""] || [];
-                const rawRelVal =
-                  typeof val === "string"
-                    ? val
-                    : typeof val === "object" && val !== null
-                      ? (val as any).id || (val as any).slug
-                      : "";
-                const matchingOpt = targetOptions.find(
-                  (opt) => opt.id === rawRelVal || opt.slug === rawRelVal,
-                );
-                const selectedRelId = matchingOpt ? matchingOpt.id : rawRelVal;
-
+              // Relation pickers paginate through publication-scoped admin APIs.
+              if (field.type === "relation" || field.type === "relation_list") {
                 return (
-                  <div key={field.id || field.key}>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                      {field.name} {field.required && "*"} (Target: {field.relationModel || "Model"})
-                    </label>
-                    <select
-                      required={field.required}
-                      value={selectedRelId}
-                      onChange={(e) => onFieldValChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
-                    >
-                      <option value="">-- Select related {field.relationModel} --</option>
-                      {targetOptions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title} ({item.slug})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              }
-
-              // 7. RELATION LIST FIELD (1:N or M:N)
-              if (field.type === "relation_list") {
-                const targetOptions = relationOptions[field.relationModel || ""] || [];
-                const selectedIds = Array.isArray(val)
-                  ? (val as Array<string | { id: string; slug?: string }>).map((x) =>
-                      typeof x === "string" ? x : x.id || (x as any).slug,
-                    )
-                  : [];
-
-                const selectedItems = selectedIds
-                  .map(
-                    (id) =>
-                      targetOptions.find((opt) => opt.id === id || opt.slug === id) || {
-                        id,
-                        title: id,
-                        slug: "",
-                      },
-                  )
-                  .filter(Boolean);
-
-                const moveItem = (index: number, direction: "up" | "down") => {
-                  const newIds = [...selectedIds];
-                  const targetIndex = direction === "up" ? index - 1 : index + 1;
-                  if (targetIndex < 0 || targetIndex >= newIds.length) return;
-                  const temp = newIds[index]!;
-                  newIds[index] = newIds[targetIndex]!;
-                  newIds[targetIndex] = temp;
-                  onFieldValChange(newIds);
-                };
-
-                const removeItem = (idToRemove: string) => {
-                  onFieldValChange(
-                    selectedIds.filter(
-                      (id) =>
-                        id !== idToRemove &&
-                        targetOptions.find((opt) => (opt.id === id || opt.slug === id) && (opt.id === idToRemove || opt.slug === idToRemove)) === undefined,
-                    ),
-                  );
-                };
-
-                return (
-                  <div key={field.id || field.key} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                        <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                        {field.name} {field.required && "*"} (Multi-relation to: {field.relationModel || "Model"})
-                      </label>
-                      <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                        {selectedIds.length} selected
-                      </span>
-                    </div>
-
-                    {/* Selected Ordered Items */}
-                    {selectedItems.length > 0 && (
-                      <div className="space-y-1.5 border border-primary/20 bg-primary/5 dark:bg-primary/10 rounded-md p-2">
-                        <span className="text-[11px] font-semibold text-primary block">
-                          Selected Items (Drag / Reorder):
-                        </span>
-                        {selectedItems.map((item, idx) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 text-xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-slate-400 text-[10px]">#{idx + 1}</span>
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                {item.title}
-                              </span>
-                              {item.slug && (
-                                <span className="text-slate-400 font-mono text-[10px]">({item.slug})</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={idx === 0}
-                                onClick={() => moveItem(idx, "up")}
-                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
-                                title="Move up"
-                              >
-                                <ArrowUp className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={idx === selectedItems.length - 1}
-                                onClick={() => moveItem(idx, "down")}
-                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
-                                title="Move down"
-                              >
-                                <ArrowDown className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeItem(item.id)}
-                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded text-rose-500"
-                                title="Remove item"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Available Items Picker */}
-                    <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-md p-2 space-y-1">
-                      {targetOptions.length === 0 ? (
-                        <p className="text-xs text-slate-500 py-1 px-2">
-                          No available entries found in target model {field.relationModel}.
-                        </p>
-                      ) : (
-                        targetOptions.map((item) => {
-                          const isChecked = selectedIds.some((id) => id === item.id || id === item.slug);
-                          return (
-                            <label
-                              key={item.id}
-                              className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded text-xs cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    onFieldValChange([...selectedIds, item.id]);
-                                  } else {
-                                    onFieldValChange(
-                                      selectedIds.filter((id) => id !== item.id && id !== item.slug),
-                                    );
-                                  }
-                                }}
-                                className="rounded border-slate-300 text-primary h-3.5 w-3.5"
-                              />
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                {item.title}
-                              </span>
-                              <span className="text-slate-400 font-mono text-[10px]">
-                                ({item.slug})
-                              </span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
+                  <RelationEntryPicker
+                    key={field.id || field.key}
+                    fieldName={field.name}
+                    targetModel={field.relationModel}
+                    multiple={field.type === "relation_list"}
+                    required={field.required}
+                    maxItems={field.max}
+                    value={val}
+                    onChange={onFieldValChange}
+                  />
                 );
               }
 
