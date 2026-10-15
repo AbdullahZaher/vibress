@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Save,
   GripVertical,
+  ArrowUp,
+  ArrowDown,
   Globe,
   Eye,
   AlertTriangle,
@@ -156,6 +158,20 @@ export function ContentModelEditor({
       updated[index] = { ...current, ...updates };
       setFields(updated);
     }
+  };
+
+  const handleMoveField = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= fields.length) return;
+    setFields((current) => {
+      const reordered = [...current];
+      const moving = reordered[index];
+      const adjacent = reordered[target];
+      if (!moving || !adjacent) return current;
+      reordered[index] = adjacent;
+      reordered[target] = moving;
+      return reordered;
+    });
   };
 
   const handleRemoveField = (index: number) => {
@@ -380,7 +396,21 @@ export function ContentModelEditor({
                 className="p-4 border border-slate-200 dark:border-slate-800 rounded-md bg-slate-50 dark:bg-slate-950/50 space-y-3"
               >
                 <div className="flex items-center gap-3">
-                  <GripVertical className="w-4 h-4 text-slate-400 cursor-move" />
+                  <div className="flex flex-col gap-1">
+                    <button type="button" disabled={idx === 0}
+                      onClick={() => handleMoveField(idx, -1)}
+                      aria-label={`Move ${field.name} up`}
+                      className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <GripVertical aria-hidden="true" className="w-4 h-4 text-slate-400" />
+                    <button type="button" disabled={idx === fields.length - 1}
+                      onClick={() => handleMoveField(idx, 1)}
+                      aria-label={`Move ${field.name} down`}
+                      className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
                     <div>
                       <label className="block text-[11px] font-medium text-slate-500 mb-1">

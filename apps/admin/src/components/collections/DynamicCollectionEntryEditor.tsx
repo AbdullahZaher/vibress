@@ -13,6 +13,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
+import { MediaPicker } from "../MediaPicker";
 
 export interface FieldDef {
   id: string;
@@ -54,6 +55,7 @@ export function DynamicCollectionEntryEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [mediaFieldKey, setMediaFieldKey] = useState<string | null>(null);
 
   // Localization active editor tab (for localizable fields)
   const [activeLocaleTab, setActiveLocaleTab] = useState<"en" | "ar">("en");
@@ -530,6 +532,7 @@ export function DynamicCollectionEntryEditor({
                           <button
                             type="button"
                             onClick={() => onFieldValChange("")}
+                            aria-label={`Remove ${field.name} media`}
                             className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-3 h-3" />
@@ -549,8 +552,13 @@ export function DynamicCollectionEntryEditor({
                           placeholder="Media URL or Asset ID (e.g. /media/uploads/photo.jpg or med_123)"
                           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
                         />
+                        <button type="button"
+                          onClick={() => setMediaFieldKey(field.key)}
+                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                          Choose from Media Library
+                        </button>
                         <p className="text-xs text-slate-500">
-                          Enter canonical media storage path or uploaded asset identifier.
+                          Select an uploaded asset or enter a canonical URL or identifier.
                         </p>
                       </div>
                     </div>
@@ -879,6 +887,15 @@ export function DynamicCollectionEntryEditor({
           </div>
         )}
       </div>
+      {mediaFieldKey !== null && (
+        <MediaPicker
+          onClose={() => setMediaFieldKey(null)}
+          onSelectAsset={(asset) => {
+            handleFieldChange(mediaFieldKey, asset.url || asset.id);
+            setMediaFieldKey(null);
+          }}
+        />
+      )}
     </form>
   );
 }

@@ -65,7 +65,7 @@ export const contentModels = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
-    fields: jsonb("fields").notNull().default([]),
+    fields: jsonb("fields").$type<ContentFieldDefinition[]>().notNull().default([]),
     settings: jsonb("settings").default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

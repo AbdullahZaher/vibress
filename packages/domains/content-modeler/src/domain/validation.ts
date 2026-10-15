@@ -571,9 +571,9 @@ export function analyzeSchemaEvolution(
     const oldField = oldMap.get(key);
     if (!oldField) {
       // Added
-      if (newField.required && newField.defaultValue === undefined) {
+      if (newField.required) {
         isOverallSafe = false;
-        const w = `New required field '${newField.name}' (${key}) has no default value and may fail on existing entries.`;
+        const w = `New required field '${newField.name}' (${key}) requires migration of existing entries, even if a default is provided.`;
         warnings.push(w);
         changes.push({ key, action: "added", isSafe: false, warning: w });
       } else {
@@ -592,7 +592,34 @@ export function analyzeSchemaEvolution(
         warnings.push(w);
         changes.push({ key, action: "modified", isSafe: false, warning: w });
       } else {
-        changes.push({ key, action: "modified", isSafe: true });
+        const oldVisibility = oldField.apiVisibility ?? "public";
+        const newVisibility = newField.apiVisibility ?? "public";
+        const visibilityRank = { public: 0, authenticated: 1, private: 2 };
+        const exposureIncreased = visibilityRank[newVisibility] < visibilityRank[oldVisibility];
+        const optionsNarrowed = (
+          (newField.type === "select" || newField.type === "multi_select") &&
+          (oldField.options ?? []).some((option) =>
+            !(newField.options ?? []).some((next) => next.value === option.value))
+        );
+        const constraintsTightened =
+          (newField.min !== undefined && newField.min > (oldField.min ?? -Infinity)) ||
+          (newField.max !== undefined && newField.max < (oldField.max ?? Infinity)) ||
+          (newField.minLength !== undefined && newField.minLength > (oldField.minLength ?? 0)) ||
+          (newField.maxLength !== undefined && newField.maxLength < (oldField.maxLength ?? Infinity)) ||
+          (newField.pattern !== undefined && newField.pattern !== oldField.pattern);
+        const relationChanged =
+          (newField.type === "relation" || newField.type === "relation_list") &&
+          oldField.relationModel !== newField.relationModel;
+        const localizedChanged = Boolean(newField.localizable) !== Boolean(oldField.localizable);
+
+        if (exposureIncreased || optionsNarrowed || constraintsTightened || relationChanged || localizedChanged) {
+          isOverallSafe = false;
+          const w = `Field '${newField.name}' (${key}) changed visibility, constraints, options, relation target, or localization. Existing data requires review and migration.`;
+          warnings.push(w);
+          changes.push({ key, action: "modified", isSafe: false, warning: w });
+        } else {
+          changes.push({ key, action: "modified", isSafe: true });
+        }
       }
     }
   }

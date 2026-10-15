@@ -218,6 +218,8 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       offset?: string;
       search?: string;
       includeRelations?: string;
+      sortBy?: "createdAt" | "updatedAt" | "publishedAt" | "title" | "slug";
+      sortOrder?: "asc" | "desc";
     };
   }>("/content-models/:modelSlug/entries", {
     preHandler: [requireStaffSession, requirePermission("posts.read"), validateInput(CollectionEntriesQuerySchema, "query")],
@@ -233,6 +235,8 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
             offset: req.query.offset ? parseInt(req.query.offset, 10) : undefined,
             search: req.query.search,
             includeRelations: req.query.includeRelations === "true",
+            sortBy: req.query.sortBy,
+            sortOrder: req.query.sortOrder,
           },
         );
         return reply.send({ data: entries });

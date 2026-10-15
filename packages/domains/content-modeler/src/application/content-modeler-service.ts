@@ -169,26 +169,6 @@ export class ContentModelerService {
       });
     }
 
-    if (input.fields !== undefined) {
-      const diff = analyzeSchemaEvolution(existing.fields, input.fields);
-      if (!diff.safe) {
-        const activeEntries = await db
-          .select({ id: contentEntries.id })
-          .from(contentEntries)
-          .where(and(
-            eq(contentEntries.modelId, existing.id),
-            eq(contentEntries.publicationId, publicationId),
-            isNull(contentEntries.deletedAt),
-          ))
-          .limit(1);
-        if (activeEntries.length > 0) {
-          throw new ValidationError({
-            fields: `Unsafe schema update: ${diff.warnings.join(" ")}. Migrate existing entries before changing this model.`,
-          });
-        }
-      }
-    }
-
     const updates: Partial<ContentModelRow> = {
       updatedAt: new Date(),
     };
@@ -209,15 +189,48 @@ export class ContentModelerService {
     if (input.fields !== undefined) updates.fields = input.fields;
     if (input.settings !== undefined) updates.settings = input.settings;
 
-    await db
-      .update(contentModels)
-      .set(updates)
-      .where(
-        and(
+    // Serialize schema changes against entry inserts and other schema edits.
+    // The FK on entries locks the same parent row, avoiding a race between
+    // checking for existing content and writing a breaking schema change.
+    await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ id: contentModels.id, fields: contentModels.fields })
+        .from(contentModels)
+        .where(and(
           eq(contentModels.id, existing.id),
           eq(contentModels.publicationId, publicationId),
-        ),
-      );
+        ))
+        .for("update")
+        .limit(1);
+      if (!locked) {
+        throw new Error("Content model not found");
+      }
+      if (input.fields !== undefined) {
+        const diff = analyzeSchemaEvolution(locked.fields, input.fields);
+        if (!diff.safe) {
+          const rows = await tx
+            .select({ id: contentEntries.id })
+            .from(contentEntries)
+            .where(and(
+              eq(contentEntries.modelId, existing.id),
+              eq(contentEntries.publicationId, publicationId),
+            ))
+            .limit(1);
+          if (rows.length > 0) {
+            throw new ValidationError({
+              fields: `Unsafe schema update: ${diff.warnings.join(" ")}. Migrate existing entries before changing this model.`,
+            });
+          }
+        }
+      }
+      await tx
+        .update(contentModels)
+        .set(updates)
+        .where(and(
+          eq(contentModels.id, existing.id),
+          eq(contentModels.publicationId, publicationId),
+        ));
+    });
 
     const updated = await this.getModelByIdOrSlug(existing.id, publicationId);
     if (updated) {

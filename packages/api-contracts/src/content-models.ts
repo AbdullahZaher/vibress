@@ -34,7 +34,7 @@ export const PreviewContentModelSchema = z.object({
 export const CreateCollectionEntrySchema = z.object({
   title: z.string().trim().min(1).max(255),
   slug: z.string().max(255).optional(),
-  data: z.record(z.unknown()),
+  data: z.record(z.unknown()).optional(),
   status: z.enum(["draft", "published"]).optional(),
 }).passthrough();
 export const UpdateCollectionEntrySchema = z.object({
@@ -49,4 +49,6 @@ export const CollectionEntriesQuerySchema = z.object({
   offset: z.string().regex(/^\d+$/).optional(),
   search: z.string().max(255).optional(),
   includeRelations: z.enum(["true", "false"]).optional(),
+  sortBy: z.enum(["createdAt", "updatedAt", "publishedAt", "title", "slug"]).optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
 }).passthrough();
