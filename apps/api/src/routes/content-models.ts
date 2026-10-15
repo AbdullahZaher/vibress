@@ -63,6 +63,15 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     },
   });
 
+  // Expose publication-authoritative locale choices to collection editors.
+  fastify.get("/content-models/locales", {
+    preHandler: [requireStaffSession, requirePermission("posts.read")],
+    handler: async (req, reply) => {
+      const pubId = req.publicationContext?.publicationId || "pub_default";
+      return reply.send({ data: await contentModelerService.listEnabledLocales(pubId) });
+    },
+  });
+
   fastify.post<{ Body: CreateModelInput }>("/content-models", {
     preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin, validateInput(CreateContentModelSchema)],
     handler: async (req, reply) => {

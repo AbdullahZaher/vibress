@@ -394,15 +394,18 @@ export function resolveLocalizedEntryData(
 
     if (field.localizable && typeof val === "object" && !Array.isArray(val)) {
       const dict = val as Record<string, unknown>;
+      const normalized = Object.fromEntries(
+        Object.entries(dict).map(([key, value]) => [key.toLowerCase(), value]),
+      );
       // Look for exact locale match, e.g. "ar-SA"
-      if (normTarget in dict) {
-        result[field.key] = dict[normTarget];
-      } else if (targetLang && targetLang in dict) {
-        result[field.key] = dict[targetLang];
-      } else if (normFallback in dict) {
-        result[field.key] = dict[normFallback];
-      } else if ("en" in dict) {
-        result[field.key] = dict["en"];
+      if (normTarget in normalized) {
+        result[field.key] = normalized[normTarget];
+      } else if (targetLang && targetLang in normalized) {
+        result[field.key] = normalized[targetLang];
+      } else if (normFallback in normalized) {
+        result[field.key] = normalized[normFallback];
+      } else if ("en" in normalized) {
+        result[field.key] = normalized["en"];
       } else {
         const firstVal = Object.values(dict)[0];
         result[field.key] = firstVal !== undefined ? firstVal : val;
@@ -415,14 +418,17 @@ export function resolveLocalizedEntryData(
         for (const [k, v] of Object.entries(relObj.data as Record<string, unknown>)) {
           if (typeof v === "object" && v !== null && !Array.isArray(v)) {
             const d = v as Record<string, unknown>;
-            if (normTarget in d) {
-              localizedTargetData[k] = d[normTarget];
-            } else if (targetLang && targetLang in d) {
-              localizedTargetData[k] = d[targetLang];
-            } else if (normFallback in d) {
-              localizedTargetData[k] = d[normFallback];
-            } else if ("en" in d) {
-              localizedTargetData[k] = d["en"];
+            const normalizedD = Object.fromEntries(
+              Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
+            );
+            if (normTarget in normalizedD) {
+              localizedTargetData[k] = normalizedD[normTarget];
+            } else if (targetLang && targetLang in normalizedD) {
+              localizedTargetData[k] = normalizedD[targetLang];
+            } else if (normFallback in normalizedD) {
+              localizedTargetData[k] = normalizedD[normFallback];
+            } else if ("en" in normalizedD) {
+              localizedTargetData[k] = normalizedD["en"];
             } else {
               localizedTargetData[k] = Object.values(d)[0] ?? v;
             }
@@ -443,14 +449,17 @@ export function resolveLocalizedEntryData(
             for (const [k, v] of Object.entries(itemObj.data as Record<string, unknown>)) {
               if (typeof v === "object" && v !== null && !Array.isArray(v)) {
                 const d = v as Record<string, unknown>;
-                if (normTarget in d) {
-                  localizedTargetData[k] = d[normTarget];
-                } else if (targetLang && targetLang in d) {
-                  localizedTargetData[k] = d[targetLang];
-                } else if (normFallback in d) {
-                  localizedTargetData[k] = d[normFallback];
-                } else if ("en" in d) {
-                  localizedTargetData[k] = d["en"];
+                const normalizedD = Object.fromEntries(
+                  Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
+                );
+                if (normTarget in normalizedD) {
+                  localizedTargetData[k] = normalizedD[normTarget];
+                } else if (targetLang && targetLang in normalizedD) {
+                  localizedTargetData[k] = normalizedD[targetLang];
+                } else if (normFallback in normalizedD) {
+                  localizedTargetData[k] = normalizedD[normFallback];
+                } else if ("en" in normalizedD) {
+                  localizedTargetData[k] = normalizedD["en"];
                 } else {
                   localizedTargetData[k] = Object.values(d)[0] ?? v;
                 }

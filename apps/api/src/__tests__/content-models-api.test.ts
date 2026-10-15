@@ -81,6 +81,17 @@ describe("Content Modeler API Routes", () => {
   });
 
   describe("Content Models Management", () => {
+    it("lists the publication's enabled content languages", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/content-models/locales",
+        headers: { cookie: cookieHeader },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(typeof res.json().data.defaultLocale).toBe("string");
+      expect(res.json().data.enabledLocales).toContain(res.json().data.defaultLocale);
+    });
+
     it("POST /api/admin/v1/content-models creates a new custom content model", async () => {
       modelSlug = `books-${Date.now()}`;
       const res = await app.inject({

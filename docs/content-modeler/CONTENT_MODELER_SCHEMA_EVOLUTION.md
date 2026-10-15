@@ -1,49 +1,40 @@
-# Vibress Content Modeler — Schema Evolution & Migrations
+# Vibress Content Modeler — Schema Evolution
 
-Content models naturally evolve over time. Vibress provides an automated Schema Evolution engine that analyzes proposed field modifications against existing entries, classifies changes as safe or breaking, and provides a preview diff before changes are persisted.
+Content Modeler uses PostgreSQL JSONB field definitions. The diff preview
+`POST /api/admin/v1/content-models/:id/schema-evolution-preview` classifies
+field changes; it is **not** a migration or backfill engine.
 
----
+The editor lives under
+`/admin/settings/advanced/content-models/:modelId`. Historic admin URLs
+redirect to the new Settings location without changing public APIs.
 
-## 1. Schema Diff & Analysis Engine
+## Safe changes
 
-When model fields are updated or previewed via `POST /api/admin/v1/content-models/:id/schema-evolution-preview`, the service performs a field-by-field diff:
+Optional additions are generally safe. Field removals leave historical JSONB
+data stored, but the removed keys stop appearing in the active model output.
+Changing a field key is classified as an addition and a removal; no implicit
+key-renaming or migration takes place.
 
-1. **Added Fields (`added`)**:
-   - Marking a new field as optional is always **safe**.
-   - Marking a new field as `required: true` when entries already exist produces a **warning** that existing entries will lack the required field.
-2. **Removed Fields (`removed`)**:
-   - Field removals produce a **warning** that historical data for that key will no longer be visible or rendered. Existing JSON values are preserved in historical versions.
-3. **Renamed Fields (`renamed` via `renamedFrom`)**:
-   - Automatically migrates existing data values from `oldKey` to `newKey` across entries.
-4. **Modified Field Types (`modified`)**:
-   - Compatible type mutations (e.g. `text` -> `long_text` or `date` -> `datetime`) are marked **safe**.
-   - Incompatible mutations (e.g. `text` -> `number` or `boolean` -> `relation`) produce an **unsafe** warning, requiring explicit confirmation.
+## Breaking changes
 
----
+New required fields (even with defaults), changed types, narrowed select
+options, tightened validation constraints, different relation targets,
+localization changes, and increased field exposure are treated as unsafe.
+When any entries exist for the model—including soft-deleted records—an
+unsafe update is blocked. The existence check and update run in a transaction
+with a parent-row lock.
 
-## 2. API Response Contract
+The API returns `400 VALIDATION_ERROR` for such changes, without updating
+the stored model. A model with existing records cannot be deleted through
+the admin API: it returns `409 MODEL_IN_USE` to avoid a cascading purge.
 
-```json
-{
-  "data": {
-    "modelId": "mod_books",
-    "safe": true,
-    "warnings": [
-      "Field 'isbn' was removed. Historical entries will preserve data in revisions."
-    ],
-    "changes": [
-      {
-        "key": "isbn",
-        "action": "removed",
-        "isSafe": true,
-        "warnings": ["Field 'isbn' was removed."]
-      },
-      {
-        "key": "edition_year",
-        "action": "added",
-        "isSafe": true
-      }
-    ]
-  }
-}
-```
+## Operational procedure
+
+For a breaking change, first back up and export the publication data, review
+impacts on public APIs, themes and plugins, and perform a separately approved
+migration/backfill. Only then commit the new field definition. Do not rewrite
+released SQL migrations or assume that Preview has transformed stored entries.
+
+The preview response is `{ data: { safe, warnings, changes } }`. Each
+change contains `key`, `action` (added, removed or modified),
+`isSafe`, and an optional `warning`.

@@ -24,12 +24,12 @@ export const CreateContentModelSchema = z.object({
   name: z.string().trim().min(1).max(255),
   slug: z.string().max(255).optional(),
   description: z.string().max(10000).optional(),
-  fields: z.array(ContentModelFieldSchema).max(200).optional(),
+  fields: z.array(ContentModelFieldSchema).max(100).optional(),
   settings: z.record(z.unknown()).optional(),
 }).passthrough();
 export const UpdateContentModelSchema = CreateContentModelSchema.partial();
 export const PreviewContentModelSchema = z.object({
-  fields: z.array(ContentModelFieldSchema).max(200),
+  fields: z.array(ContentModelFieldSchema).max(100),
 });
 export const CreateCollectionEntrySchema = z.object({
   title: z.string().trim().min(1).max(255),

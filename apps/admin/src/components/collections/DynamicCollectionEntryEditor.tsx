@@ -58,7 +58,10 @@ export function DynamicCollectionEntryEditor({
   const [mediaFieldKey, setMediaFieldKey] = useState<string | null>(null);
 
   // Localization active editor tab (for localizable fields)
-  const [activeLocaleTab, setActiveLocaleTab] = useState<"en" | "ar">("en");
+  const [activeLocaleTab, setActiveLocaleTab] = useState("en");
+  const [defaultLocale, setDefaultLocale] = useState("en");
+  const [enabledLocales, setEnabledLocales] = useState<string[]>(["en"]);
+  const isRtlLocale = /^(ar|fa|he|ur)(-|$)/i.test(activeLocaleTab);
 
   // Relation available options cache { [relationModelSlugOrId]: Array<{ id: string; title: string; slug: string }> }
   const [relationOptions, setRelationOptions] = useState<
@@ -76,6 +79,16 @@ export function DynamicCollectionEntryEditor({
         }>(`/content-models/${modelSlug}`);
         const loadedModel = modelRes.data || modelRes.model || null;
         setModel(loadedModel);
+        const localeResponse = await apiRequest<{
+          data?: { defaultLocale: string; enabledLocales: string[] };
+        }>("/content-models/locales").catch(() => null);
+        if (localeResponse?.data) {
+          const primary = localeResponse.data.defaultLocale || "en";
+          const configured = localeResponse.data.enabledLocales;
+          setDefaultLocale(primary);
+          setEnabledLocales(configured.length ? configured : [primary]);
+          setActiveLocaleTab(primary);
+        }
 
         if (loadedModel?.fields) {
           // Pre-fetch relation choices for relation and relation_list fields
@@ -160,9 +173,12 @@ export function DynamicCollectionEntryEditor({
       if (typeof current === "object" && current !== null && !Array.isArray(current)) {
         dict = { ...(current as Record<string, unknown>) };
       } else if (typeof current === "string") {
-        dict = { en: current };
+        dict = { [defaultLocale]: current };
       }
-      dict[locale] = value;
+      const existingKey = Object.keys(dict).find(
+        (key) => key.toLowerCase() === locale.toLowerCase(),
+      );
+      dict[existingKey ?? locale] = value;
       return { ...prev, [fieldKey]: dict };
     });
   };
@@ -318,28 +334,23 @@ export function DynamicCollectionEntryEditor({
           {hasLocalizableFields && (
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-md text-xs">
               <Globe className="w-3.5 h-3.5 text-slate-500 mr-1" />
-              <button
-                type="button"
-                onClick={() => setActiveLocaleTab("en")}
-                className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                  activeLocaleTab === "en"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                English (EN)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLocaleTab("ar")}
-                className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                  activeLocaleTab === "ar"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                العربية (AR)
-              </button>
+              {enabledLocales.map((locale) => (
+                <button
+                  key={locale}
+                  type="button"
+                  lang={locale}
+                  dir={/^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr"}
+                  aria-pressed={activeLocaleTab === locale}
+                  onClick={() => setActiveLocaleTab(locale)}
+                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                    activeLocaleTab === locale
+                      ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
+                      : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {locale === "en" ? "English" : locale.startsWith("ar") ? "العربية" : locale}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -355,8 +366,12 @@ export function DynamicCollectionEntryEditor({
               let val = rawVal;
               if (field.localizable) {
                 if (typeof rawVal === "object" && rawVal !== null && !Array.isArray(rawVal)) {
-                  val = (rawVal as Record<string, unknown>)[activeLocaleTab];
-                } else if (activeLocaleTab === "en") {
+                  const dictionary = rawVal as Record<string, unknown>;
+                  const localeKey = Object.keys(dictionary).find(
+                    (key) => key.toLowerCase() === activeLocaleTab.toLowerCase(),
+                  );
+                  val = localeKey ? dictionary[localeKey] : undefined;
+                } else if (activeLocaleTab === defaultLocale) {
                   val = rawVal;
                 } else {
                   val = "";
@@ -803,7 +818,7 @@ export function DynamicCollectionEntryEditor({
                       rows={6}
                       required={field.required}
                       value={String(val || "")}
-                      dir={activeLocaleTab === "ar" ? "rtl" : "ltr"}
+                      dir={isRtlLocale ? "rtl" : "ltr"}
                       onChange={(e) => onFieldValChange(e.target.value)}
                       placeholder={`Enter formatted content for ${field.name}...`}
                       className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
@@ -828,7 +843,7 @@ export function DynamicCollectionEntryEditor({
                       rows={4}
                       required={field.required}
                       value={String(val || "")}
-                      dir={activeLocaleTab === "ar" ? "rtl" : "ltr"}
+                      dir={isRtlLocale ? "rtl" : "ltr"}
                       onChange={(e) => onFieldValChange(e.target.value)}
                       placeholder={`Enter ${field.name}...`}
                       className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
@@ -864,7 +879,7 @@ export function DynamicCollectionEntryEditor({
                   <input
                     type={inputType}
                     required={field.required}
-                    dir={activeLocaleTab === "ar" && (field.type === "text" || field.type === "short_text") ? "rtl" : "ltr"}
+                    dir={isRtlLocale && (field.type === "text" || field.type === "short_text") ? "rtl" : "ltr"}
                     value={val !== undefined && val !== null ? String(val) : ""}
                     onChange={(e) =>
                       onFieldValChange(

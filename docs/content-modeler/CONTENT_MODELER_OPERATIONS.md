@@ -4,15 +4,30 @@ This document details operational limits, performance boundaries, audit logging,
 
 ---
 
+## Admin location and safeguards
+
+- Schema configuration: **Settings → Advanced → Content Models**
+  (`/admin/settings/advanced/content-models`). Old admin bookmarks redirect.
+- Collection entries remain editorial content under `/admin/collections/:modelSlug`.
+- All lifecycle transitions need `posts.publish`, regular edits need `posts.edit`,
+  and cookie-authenticated mutations require an allowed Origin.
+- Deleting a model containing any entries (including soft-deleted) is blocked.
+- Schema changes are previewed; unsafe changes on populated models are rejected
+  transactionally. No automatic JSONB backfill or key rename exists.
+- Collection listings support pagination, search, status filters and sorting.
+- Enabled publication locales drive editor tabs; legacy regional keys remain readable.
+
+---
+
 ## 1. System Limits & Abuse Controls
 
 | Metric | Configured Limit | Enforced Location |
 |---|---|---|
 | **Max Fields per Model** | `100` fields | `validateModelDefinition` |
 | **Max Entry Payload Size** | `1 MB` | `validateEntryData` |
-| **Max Relation Depth** | `3` levels | `resolveRelationsForEntry` |
+| **Max Relation Depth** | `2` levels | `resolveRelationsForEntry` |
 | **Max Public API Page Limit** | `100` items | `GET /api/content/v1/collections/:slug` |
-| **Reserved Field Keys** | `id`, `slug`, `title`, `status`, `version`, `createdBy`, `createdAt`, `updatedAt`, `deletedAt`, `data` | `validateModelDefinition` |
+| **Reserved Field Keys** | `__proto__`, `constructor`, `prototype` | `validateModelDefinition` |
 
 ---
 

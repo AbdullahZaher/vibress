@@ -7,6 +7,8 @@ import {
   ContentModelRow,
   ContentEntryRow,
   ContentFieldDefinition,
+  publications,
+  publicationLocales,
 } from "@vibress/database";
 import { eq, desc, asc, and, or, isNull, sql, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -44,6 +46,32 @@ function slugify(text: string): string {
 
 export class ContentModelerService {
   // ---------------- Content Models ----------------
+
+  async listEnabledLocales(publicationId: string): Promise<{
+    defaultLocale: string;
+    enabledLocales: string[];
+  }> {
+    const db = getDb();
+    const [publication] = await db
+      .select({ primaryLocale: publications.primaryLocale })
+      .from(publications)
+      .where(eq(publications.id, publicationId))
+      .limit(1);
+    const defaultLocale = publication?.primaryLocale ?? "en";
+    const locales = await db
+      .select({ locale: publicationLocales.locale })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, publicationId),
+        eq(publicationLocales.enabled, true),
+      ))
+      .orderBy(desc(publicationLocales.isPrimary));
+    return {
+      defaultLocale,
+      enabledLocales: [...new Set([defaultLocale, ...locales.map((row) => row.locale)])],
+    };
+  }
+
 
   async listModels(publicationId = "pub_default"): Promise<ContentModel[]> {
     const db = getDb();
