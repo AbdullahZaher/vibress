@@ -394,7 +394,7 @@ export class ContentModelerService {
       .select()
       .from(contentEntries)
       .where(and(...conditions))
-      .orderBy(orderFn(orderCol))
+      .orderBy(orderFn(orderCol), asc(contentEntries.id))
       .limit(Math.min(Math.max(filter?.limit ?? 50, 1), 100))
       .offset(Math.max(filter?.offset ?? 0, 0));
 

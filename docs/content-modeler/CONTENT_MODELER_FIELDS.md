@@ -34,6 +34,22 @@ string representation. Media selection integrates with the existing Media Librar
 
 ---
 
+## Selecting related entries
+
+`relation` and `relation_list` are edited using publication-scoped admin
+queries against `GET /api/admin/v1/content-models/:modelSlug/entries`.
+The picker requests 26 items at a time and displays 25, using the extra
+record to determine whether another page exists. Search and pagination
+are handled by the server. Existing selected IDs and legacy slugs remain
+available when they are not on the current page, and an API error displays
+a retry action instead of pretending no related content exists.
+
+Multiple relations preserve their stored order and can be reordered using
+keyboard-operable buttons. The editor does not expose private or
+cross-publication entries from a different model through this picker.
+
+---
+
 ## Localization Support
 
 Every field type can be marked as `localizable: true`. When enabled:

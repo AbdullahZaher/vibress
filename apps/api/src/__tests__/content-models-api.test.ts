@@ -215,6 +215,33 @@ describe("Content Modeler API Routes", () => {
       expect(body.data.some((e: { id: string }) => e.id === entryId)).toBe(true);
     });
 
+    it("supports searchable, paginated relation choices without changing selected data", async () => {
+      const found = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/content-models/${modelSlug}/entries?limit=1&offset=0&search=Clean&sortBy=title&sortOrder=asc`,
+        headers: { cookie: cookieHeader },
+      });
+      expect(found.statusCode).toBe(200);
+      expect(found.json().data).toHaveLength(1);
+      expect(found.json().data[0].id).toBe(entryId);
+
+      const next = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/content-models/${modelSlug}/entries?limit=1&offset=1&search=Clean&sortBy=title&sortOrder=asc`,
+        headers: { cookie: cookieHeader },
+      });
+      expect(next.statusCode).toBe(200);
+      expect(next.json().data).toEqual([]);
+
+      const missing = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/content-models/${modelSlug}/entries?search=not-a-real-entry-title-xyz`,
+        headers: { cookie: cookieHeader },
+      });
+      expect(missing.statusCode).toBe(200);
+      expect(missing.json().data).toEqual([]);
+    });
+
     it("GET /api/content/v1/collections/:slug returns published entries on public API", async () => {
       const res = await app.inject({
         method: "GET",
