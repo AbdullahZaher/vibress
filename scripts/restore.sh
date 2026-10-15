@@ -59,6 +59,14 @@ while [ $# -gt 0 ]; do
     --skip-checksum)
       SKIP_CHECKSUM=1
       ;;
+    --db|--database|--target-db)
+      TARGET_DB="$2"
+      shift
+      ;;
+    --archive)
+      BACKUP_FILE="$2"
+      shift
+      ;;
     --with-content)
       WITH_CONTENT=1
       if [ $# -gt 1 ] && [[ "$2" != --* ]] && [[ "$2" == *.tar.gz ]]; then
@@ -501,12 +509,12 @@ elif [ "${RESTORE_MODE}" = "host" ]; then
   fi
 fi
 
-echo "Applying database restore with ON_ERROR_STOP=1..."
+echo "Applying database restore with ON_ERROR_STOP=1 and --single-transaction..."
 
 if [ "${RESTORE_MODE}" = "compose" ]; then
   gunzip -c "${BACKUP_FILE}" | "${COMPOSE_CMD[@]}" exec -T \
     "${POSTGRES_SERVICE}" \
-    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${PG_USER}" "${TARGET_DB}"
+    sh -c 'PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=1 --single-transaction -U "$1" -d "$2"' _ "${PG_USER}" "${TARGET_DB}"
 elif [ "${RESTORE_MODE}" = "host" ]; then
   if ! command -v psql >/dev/null 2>&1; then
     echo "Error: psql client is required for host restore mode but was not found in PATH." >&2
@@ -514,6 +522,7 @@ elif [ "${RESTORE_MODE}" = "host" ]; then
   fi
   gunzip -c "${BACKUP_FILE}" | psql \
     -v ON_ERROR_STOP=1 \
+    --single-transaction \
     -h "${POSTGRES_HOST}" \
     -p "${PG_PORT:-5432}" \
     -U "${PG_USER}" \

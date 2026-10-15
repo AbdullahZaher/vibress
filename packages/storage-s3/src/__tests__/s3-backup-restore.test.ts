@@ -26,6 +26,22 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
   const RESTORE_SCRIPT = path.join(ROOT_DIR, "scripts/s3-restore.mjs");
   const TEST_DIR = path.resolve(ROOT_DIR, `backups/test_vitest_${TS}`);
 
+  const authEnv = {
+    ...process.env,
+    S3_ACCESS_KEY_ID: S3_ACCESS_KEY,
+    S3_SECRET_ACCESS_KEY: S3_SECRET_KEY,
+    AWS_ACCESS_KEY_ID: S3_ACCESS_KEY,
+    AWS_SECRET_ACCESS_KEY: S3_SECRET_KEY,
+  };
+
+  const emptyEnv = {
+    ...process.env,
+    S3_ACCESS_KEY_ID: "",
+    S3_SECRET_ACCESS_KEY: "",
+    AWS_ACCESS_KEY_ID: "",
+    AWS_SECRET_ACCESS_KEY: "",
+  };
+
   const s3Client = new S3Client({
     endpoint: S3_ENDPOINT,
     region: S3_REGION,
@@ -67,8 +83,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --output "${TEST_DIR}"`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "" --output "${TEST_DIR}"`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: authEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -81,8 +97,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "${SRC_BUCKET}" --access-key "" --secret-key "" --output "${TEST_DIR}"`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "${SRC_BUCKET}" --endpoint "${S3_ENDPOINT}" --output "${TEST_DIR}"`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: emptyEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -95,8 +111,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "nonexistent-bucket-9999" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --output "${TEST_DIR}"`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "nonexistent-bucket-9999" --endpoint "${S3_ENDPOINT}" --output "${TEST_DIR}"`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: authEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -109,8 +125,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "/tmp/missing-file-${TS}.tar.gz" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --confirm`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "/tmp/missing-file-${TS}.tar.gz" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --confirm`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: authEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -126,8 +142,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${corruptArchive}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --confirm --skip-checksum`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${corruptArchive}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --confirm --skip-checksum`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: authEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -146,8 +162,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
     let failed = false;
     try {
       execSync(
-        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${fakeArchive}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --confirm`,
-        { stdio: "pipe", cwd: ROOT_DIR }
+        `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${fakeArchive}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --confirm`,
+        { stdio: "pipe", cwd: ROOT_DIR, env: authEnv }
       );
     } catch (err: any) {
       failed = true;
@@ -182,8 +198,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
 
     // 1. Run backup
     const backupOut = execSync(
-      `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "${SRC_BUCKET}" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --output "${TEST_DIR}"`,
-      { encoding: "utf8", cwd: ROOT_DIR }
+      `pnpm exec tsx "${BACKUP_SCRIPT}" --bucket "${SRC_BUCKET}" --endpoint "${S3_ENDPOINT}" --output "${TEST_DIR}"`,
+      { encoding: "utf8", cwd: ROOT_DIR, env: authEnv }
     );
     expect(backupOut).toContain("Vibress S3 Backup Completed Successfully");
 
@@ -194,8 +210,8 @@ describe("S3 Fail-Closed Backup & Full Object Restoration", () => {
 
     // 2. Run restore into isolated destination bucket
     const restoreOut = execSync(
-      `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${archivePath}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --access-key "${S3_ACCESS_KEY}" --secret-key "${S3_SECRET_KEY}" --confirm`,
-      { encoding: "utf8", cwd: ROOT_DIR }
+      `pnpm exec tsx "${RESTORE_SCRIPT}" --archive "${archivePath}" --bucket "${DEST_BUCKET}" --endpoint "${S3_ENDPOINT}" --confirm`,
+      { encoding: "utf8", cwd: ROOT_DIR, env: authEnv }
     );
     expect(restoreOut).toContain("100% byte-for-byte parity verified");
 
