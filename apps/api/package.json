@@ -25,7 +25,6 @@
     "@vibress/audit": "workspace:*",
     "@vibress/auth": "workspace:*",
     "@vibress/authors": "workspace:*",
-    "@vibress/automations": "workspace:*",
     "@vibress/billing": "workspace:*",
     "@vibress/cache": "workspace:*",
     "@vibress/comments": "workspace:*",

@@ -260,6 +260,13 @@
       "when": 1786617000000,
       "tag": "0036_audit_publication_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1786618000000,
+      "tag": "0037_retire_automations_permissions",
+      "breakpoints": true
     }
   ]
 }

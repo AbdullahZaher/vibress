@@ -16,7 +16,6 @@ Responsibilities:
 - comments
 - analytics
 - integrations
-- automations
 - themes
 - users/roles
 - settings

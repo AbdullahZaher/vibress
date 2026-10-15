@@ -259,121 +259,23 @@ describe("Batch 13 — Intelligence Integration & Security", () => {
     expect(typeof res.json().count).toBe("number");
   });
 
-  // ---------------- Automations ----------------
-  it("admin creates an automation", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/admin/v1/automations",
-      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
-      payload: {
-        key: `intel-auto-${Date.now()}`,
-        name: "Welcome Webhook",
-        triggerEvent: "member.created",
-        conditions: [{ field: "status", op: "equals", value: "active" }],
-        actions: [
-          {
-            type: "webhook",
-            config: {
-              url: "https://receiver.example.com/hook",
-              eventType: "member.welcome",
-            },
-          },
-        ],
-      },
-    });
-    expect(res.statusCode).toBe(201);
-    expect(res.json().automation.status).toBe("draft");
-    expect(res.json().automation.version).toBe(1);
-  });
-
-  it("admin cannot create an automation with an invalid trigger", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/admin/v1/automations",
-      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
-      payload: {
-        key: "bad",
-        name: "Bad",
-        triggerEvent: "pwn.all",
-        actions: [],
-      },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().errors[0].code).toBe("INVALID_TRIGGER");
-  });
-
-  it("admin activates the automation", async () => {
-    const listRes = await app.inject({
-      method: "GET",
-      url: "/api/admin/v1/automations",
-      headers: { cookie: staffCookie },
-    });
-    const automation =
-      listRes.json().automations[listRes.json().automations.length - 1];
-    const res = await app.inject({
-      method: "POST",
-      url: `/api/admin/v1/automations/${automation.id}/activate`,
-      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().automation.status).toBe("active");
-  });
-
-  it("manual run works for an active automation", async () => {
-    const listRes = await app.inject({
-      method: "GET",
-      url: "/api/admin/v1/automations",
-      headers: { cookie: staffCookie },
-    });
-    const automation =
-      listRes.json().automations[listRes.json().automations.length - 1];
-    const res = await app.inject({
-      method: "POST",
-      url: `/api/admin/v1/automations/${automation.id}/run`,
-      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
-    });
-    expect(res.statusCode).toBe(201);
-    expect(res.json().run.triggerEvent).toBe("manual");
-  });
-
-  it("automation run history is inspectable", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/admin/v1/automation-runs",
-      headers: { cookie: staffCookie },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().runs.length).toBeGreaterThan(0);
-  });
-
-  it("automation routes require RBAC (401 unauth)", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/admin/v1/automations",
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("automation runs list requires staff auth", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/admin/v1/automation-runs",
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("CSRF: automation creation without origin is rejected", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/admin/v1/automations",
-      headers: { cookie: staffCookie },
-      payload: {
-        key: "no-origin",
-        name: "X",
-        triggerEvent: "member.created",
-        actions: [],
-      },
-    });
-    expect(res.statusCode).toBe(403);
+  it("does not expose retired automations endpoints", async () => {
+    for (const [method, url] of [
+      ["GET", "/api/admin/v1/automations"],
+      ["POST", "/api/admin/v1/automations"],
+      ["PATCH", "/api/admin/v1/automations/retired-id"],
+      ["POST", "/api/admin/v1/automations/retired-id/activate"],
+      ["POST", "/api/admin/v1/automations/retired-id/deactivate"],
+      ["POST", "/api/admin/v1/automations/retired-id/run"],
+      ["GET", "/api/admin/v1/automation-runs"],
+      ["GET", "/api/admin/v1/automation-runs/retired-id/steps"],
+    ] as const) {
+      const res = await app.inject({
+        method,
+        url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      });
+      expect(res.statusCode).toBe(404);
+    }
   });
 });

@@ -28,7 +28,6 @@ packages/domains/
 ├── search/
 ├── integrations/
 ├── webhooks/
-├── automations/
 ├── themes/
 ├── settings/
 ├── audit/
@@ -88,10 +87,6 @@ Event ingestion, aggregation, and reporting contracts.
 ### Integrations / Webhooks
 
 Third-party platform connectivity.
-
-### Automations
-
-Rule-driven background actions.
 
 ### Themes
 

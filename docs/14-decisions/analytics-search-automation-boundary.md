@@ -1,4 +1,7 @@
-# ADR-018: Analytics, Search & Automation Boundary
+# ADR-018: Analytics, Search & Automation Boundary (Historical — Automations Retired)
+
+> Historical decision: the automation runtime and admin/API surface were retired.
+> Analytics and search remain supported. See `docs/retirements/automations.md`.
 
 **Status:** Accepted
 **Date:** Batch 13

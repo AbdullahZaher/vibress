@@ -52,6 +52,7 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/comments");
     expect(patterns).toContain("/admin/community");
     expect(patterns).not.toContain("/admin/network");
+    expect(patterns).not.toContain("/admin/automations");
   });
 
   it("matches settings localization and language routes", () => {
