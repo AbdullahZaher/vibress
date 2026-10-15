@@ -536,7 +536,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
     exact: false,
     render: ({ match, can, onNavigate }) => (
       <SettingsHub
-        initialSection=
+        initialSection={
           ["general", "site", "membership", "growth", "advanced"].includes(
             match.params.section || "",
           )
