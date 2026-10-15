@@ -37,10 +37,12 @@ export function DynamicCollectionEntryEditor({
   modelSlug,
   entryId,
   onNavigate,
+  canPublish = false,
 }: {
   modelSlug: string;
   entryId?: string | undefined;
   onNavigate: (path: string) => void;
+  canPublish?: boolean;
 }) {
   const isEditing = Boolean(entryId && entryId !== "new");
   const [model, setModel] = useState<{ name: string; slug: string; fields: FieldDef[] } | null>(null);
@@ -181,7 +183,7 @@ export function DynamicCollectionEntryEditor({
       const payload = {
         title: title.trim(),
         slug: slug.trim(),
-        status,
+        ...(canPublish ? { status } : {}),
         data: formData,
       };
 
@@ -239,7 +241,8 @@ export function DynamicCollectionEntryEditor({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <select
+          {canPublish && <select
+            aria-label="Publication status"
             value={status}
             onChange={(e) => setStatus(e.target.value as "draft" | "published" | "archived")}
             className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-xs font-medium"
@@ -247,7 +250,7 @@ export function DynamicCollectionEntryEditor({
             <option value="draft">Draft</option>
             <option value="published">Published</option>
             <option value="archived">Archived</option>
-          </select>
+          </select>}
           <button
             type="submit"
             disabled={saving}

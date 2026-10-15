@@ -301,20 +301,6 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             </SettingsPermissionGate>
           )}
 
-          {isCardVisible("content-models") && (
-            <SettingsPermissionGate permission="posts.read" can={can}>
-              <SettingsCard id="site-content-models" isHighlighted={highlightedCardId === "content-models"}>
-                <SettingsCardRow
-                  title="Content Models"
-                  description="Define structured content types, fields, relations and their validation rules."
-                  actionLabel="Manage models"
-                  onAction={() => onNavigate?.("/admin/settings/content-models")}
-                  disabled={!onNavigate}
-                />
-              </SettingsCard>
-            </SettingsPermissionGate>
-          )}
-
           {isCardVisible("announcement-bar") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <AnnouncementBarCard
@@ -442,6 +428,20 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           description="Code injection, developer APIs & webhooks, system maintenance, data import/export, and audit logs."
           icon={getPillarIcon("Cpu")}
         >
+          {isCardVisible("content-models") && (
+            <SettingsPermissionGate permission="posts.read" can={can}>
+              <SettingsCard id="advanced-content-models" isHighlighted={highlightedCardId === "content-models"}>
+                <SettingsCardRow
+                  title="Content Models"
+                  description="Define structured content types, fields, relations and their validation rules."
+                  actionLabel="Manage models"
+                  onAction={() => onNavigate?.("/admin/settings/advanced/content-models")}
+                  disabled={!onNavigate}
+                />
+              </SettingsCard>
+            </SettingsPermissionGate>
+          )}
+
           {isCardVisible("code-injection") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <CodeInjectionCard

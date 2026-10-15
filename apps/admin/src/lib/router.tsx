@@ -369,19 +369,20 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/collections/:modelSlug/new",
     exact: true,
     requiredPermission: "posts.edit",
-    render: ({ match, onNavigate }) => (
-      <DynamicCollectionEntryEditor modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} />
+    render: ({ match, onNavigate, can }) => (
+      <DynamicCollectionEntryEditor modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} canPublish={can("posts.publish")} />
     ),
   },
   {
     pattern: "/admin/collections/:modelSlug/:entryId",
     exact: true,
     requiredPermission: "posts.edit",
-    render: ({ match, onNavigate }) => (
+    render: ({ match, onNavigate, can }) => (
       <DynamicCollectionEntryEditor
         modelSlug={match.params.modelSlug || ""}
         entryId={match.params.entryId}
         onNavigate={onNavigate}
+        canPublish={can("posts.publish")}
       />
     ),
   },

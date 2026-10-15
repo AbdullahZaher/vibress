@@ -13,13 +13,14 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
 
     // 2. Navigate to Content Models
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Content Models", exact: true }).click();
-    await page.waitForURL("**/admin/settings/content-models");
+    await page.getByRole("button", { name: "Advanced", exact: true }).first().click();
+    await page.getByRole("button", { name: "Manage models", exact: true }).click();
+    await page.waitForURL("**/admin/settings/advanced/content-models");
     await expect(page.locator("h1")).toContainText("Content Modeler");
 
     // 3. Click Create Model
     await page.click('button:has-text("Create Model"), button:has-text("Create First Model")');
-    await page.waitForURL("**/admin/settings/content-models/new");
+    await page.waitForURL("**/admin/settings/advanced/content-models/new");
     await expect(page.locator("h1")).toContainText("Create Content Model");
 
     // 4. Fill Model Details
@@ -34,7 +35,7 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
 
     // 6. Save Model
     await page.click('button:has-text("Save Model")');
-    await page.waitForURL("**/admin/settings/content-models");
+    await page.waitForURL("**/admin/settings/advanced/content-models");
 
     // 7. Open Collection Entries
     await page.click(`button:has-text("View Entries")`);

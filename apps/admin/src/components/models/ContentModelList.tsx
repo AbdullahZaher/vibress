@@ -66,7 +66,7 @@ export function ContentModelList({
           </p>
         </div>
         {canManage && <button
-          onClick={() => onNavigate("/admin/settings/content-models/new")}
+          onClick={() => onNavigate("/admin/settings/advanced/content-models/new")}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -95,7 +95,7 @@ export function ContentModelList({
             Get started by creating your first structured content type for products, portfolios, courses, or events.
           </p>
           {canManage && <button
-            onClick={() => onNavigate("/admin/settings/content-models/new")}
+            onClick={() => onNavigate("/admin/settings/advanced/content-models/new")}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90"
           >
             <Plus className="w-4 h-4" />
@@ -140,7 +140,7 @@ export function ContentModelList({
                 </button>
                 <div className="flex items-center gap-1">
                   {canManage && <button
-                    onClick={() => onNavigate(`/admin/settings/content-models/${model.id}`)}
+                    onClick={() => onNavigate(`/admin/settings/advanced/content-models/${model.id}`)}
                     className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
                     title="Edit Model Schema"
                   >

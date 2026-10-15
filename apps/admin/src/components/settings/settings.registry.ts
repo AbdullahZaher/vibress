@@ -214,17 +214,6 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
         isLazy: true,
       },
       {
-        id: "content-models",
-        title: "Content Models",
-        description: "Define structured content types, fields, relations, and validation.",
-        keywords: ["content", "models", "schema", "fields", "collections", "custom types"],
-        pillarId: "site",
-        anchor: "site-content-models",
-        editorMode: "drawer",
-        requiredPermission: "posts.read",
-        iconName: "Database",
-      },
-      {
         id: "announcement-bar",
         title: "Announcement bar",
         description:
@@ -418,6 +407,17 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
     anchor: "advanced",
     requiredPermission: "settings.manage",
     cards: [
+      {
+        id: "content-models",
+        title: "Content Models",
+        description: "Define structured content types, fields, relations, and validation.",
+        keywords: ["content", "models", "schema", "fields", "collections", "custom types"],
+        pillarId: "advanced",
+        anchor: "advanced-content-models",
+        editorMode: "drawer",
+        requiredPermission: "posts.read",
+        iconName: "Database",
+      },
       {
         id: "code-injection",
         title: "Code injection",

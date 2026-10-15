@@ -74,7 +74,7 @@ export function DynamicCollectionList({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate("/admin/settings/content-models")}
+            onClick={() => onNavigate("/admin/settings/advanced/content-models")}
             className="p-1.5 text-muted-foreground hover:text-slate-900 dark:hover:text-white rounded hover:bg-muted"
           >
             <ArrowLeft className="w-5 h-5 rtl:rotate-180" />

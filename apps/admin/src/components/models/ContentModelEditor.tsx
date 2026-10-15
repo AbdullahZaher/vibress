@@ -243,7 +243,7 @@ export function ContentModelEditor({
         });
       }
 
-      onNavigate("/admin/settings/content-models");
+      onNavigate("/admin/settings/advanced/content-models");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save model");
     } finally {
@@ -266,7 +266,7 @@ export function ContentModelEditor({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => onNavigate("/admin/settings/content-models")}
+            onClick={() => onNavigate("/admin/settings/advanced/content-models")}
             className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <ArrowLeft className="w-5 h-5" />

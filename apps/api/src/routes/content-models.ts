@@ -15,6 +15,11 @@ import {
 } from "@vibress/content-modeler";
 import { getConfig } from "@vibress/config";
 import type { ContentFieldDefinition } from "@vibress/database";
+import type { ZodTypeAny } from "zod";
+import {
+  CreateContentModelSchema, UpdateContentModelSchema, PreviewContentModelSchema,
+  CreateCollectionEntrySchema, UpdateCollectionEntrySchema, CollectionEntriesQuerySchema,
+} from "@vibress/api-contracts";
 
 const sendError = (
   reply: FastifyReply,
@@ -35,6 +40,17 @@ const requirePublishPermissionForBody = async (req: FastifyRequest, reply: Fasti
   }
 };
 
+const validateInput = (schema: ZodTypeAny, source: "body" | "query" = "body") =>
+  async (req: FastifyRequest, reply: FastifyReply) => {
+    const parsed = schema.safeParse(source === "body" ? req.body : req.query);
+    if (!parsed.success) {
+      const fieldErrors = Object.fromEntries(
+        parsed.error.issues.map((issue) => [issue.path.join(".") || source, issue.message]),
+      );
+      return sendError(reply, "VALIDATION_ERROR", "Invalid request input", req.id, 400, { fieldErrors });
+    }
+  };
+
 export async function contentModelerRoutes(fastify: FastifyInstance) {
   // ---------------- ADMIN: Content Models ----------------
 
@@ -48,7 +64,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post<{ Body: CreateModelInput }>("/content-models", {
-    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
+    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin, validateInput(CreateContentModelSchema)],
     handler: async (req, reply) => {
       const { name, slug, description, fields, settings } = req.body || {};
       if (!name || !name.trim()) {
@@ -140,7 +156,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.put<{ Params: { id: string }; Body: UpdateModelInput }>(
     "/content-models/:id",
     {
-      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
+      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin, validateInput(UpdateContentModelSchema)],
       handler: handleUpdateModel,
     },
   );
@@ -148,7 +164,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
   fastify.patch<{ Params: { id: string }; Body: UpdateModelInput }>(
     "/content-models/:id",
     {
-      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
+      preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin, validateInput(UpdateContentModelSchema)],
       handler: handleUpdateModel,
     },
   );
@@ -176,7 +192,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { id: string };
     Body: { fields: ContentFieldDefinition[] };
   }>("/content-models/:id/schema-evolution-preview", {
-    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin],
+    preHandler: [requireStaffSession, requirePermission("settings.edit"), validateOrigin, validateInput(PreviewContentModelSchema)],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       const model = await contentModelerService.getModelByIdOrSlug(
@@ -204,7 +220,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       includeRelations?: string;
     };
   }>("/content-models/:modelSlug/entries", {
-    preHandler: [requireStaffSession, requirePermission("posts.read")],
+    preHandler: [requireStaffSession, requirePermission("posts.read"), validateInput(CollectionEntriesQuerySchema, "query")],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
       try {
@@ -236,7 +252,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string };
     Body: CreateEntryInput;
   }>("/content-models/:modelSlug/entries", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(CreateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: async (req, reply) => {
       const { title, slug, data, status } = req.body || {};
       if (!title || !title.trim()) {
@@ -356,7 +372,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });
 
@@ -364,7 +380,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit"), requirePublishPermissionForBody, validateOrigin],
+    preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });
 
