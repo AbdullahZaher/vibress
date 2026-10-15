@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
 import { MediaPicker } from "../MediaPicker";
+import { VibressStudio } from "@vibress/studio-react";
+import { migrateDocument } from "@vibress/studio-core";
 
 export interface FieldDef {
   id: string;
@@ -32,6 +34,26 @@ export interface FieldDef {
   options?: Array<{ label: string; value: string | number }>;
   relationModel?: string;
   defaultValue?: unknown;
+}
+
+/** Stable document state across parent form rerenders; localized editors remount on locale change. */
+function StudioDocumentInput({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: ReturnType<typeof migrateDocument>) => void;
+}) {
+  const [document, setDocument] = useState(() => migrateDocument(value));
+  return (
+    <VibressStudio
+      value={document}
+      onChange={(next) => {
+        setDocument(next);
+        onChange(next);
+      }}
+    />
+  );
 }
 
 export function DynamicCollectionEntryEditor({
@@ -804,8 +826,28 @@ export function DynamicCollectionEntryEditor({
                 );
               }
 
-              // 9. RICH TEXT & STUDIO DOC FIELD
-              if (field.type === "rich_text" || field.type === "studio_doc") {
+              // Keep Studio AST structured; preserve legacy string values until edited.
+              if (field.type === "studio_doc") {
+                return (
+                  <div key={field.id || field.key} className="space-y-2">
+                    <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {field.name} {field.required && "*"}
+                      {field.localizable && <span className="ms-2 text-primary">{activeLocaleTab}</span>}
+                    </div>
+                    <div className="rounded-lg border border-border overflow-hidden"
+                      lang={activeLocaleTab} dir={isRtlLocale ? "rtl" : "ltr"}>
+                      <StudioDocumentInput
+                        key={`${field.key}-${field.localizable ? activeLocaleTab : "base"}`}
+                        value={val}
+                        onChange={onFieldValChange}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // Rich text / Markdown remains a string for backward compatibility.
+              if (field.type === "rich_text") {
                 return (
                   <div key={field.id || field.key} className="space-y-1">
                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
