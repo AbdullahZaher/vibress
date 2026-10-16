@@ -120,7 +120,7 @@ export const buildApp = () => {
     logger: false,
     bodyLimit: 524288000, // 500MB body limit to match max media upload capabilities
     requestIdHeader: "x-request-id",
-    trustProxy: true,
+    trustProxy: config.trustProxy,
     genReqId: function (req) {
       return (req.headers["x-request-id"] as string) || crypto.randomUUID();
     },
@@ -146,6 +146,7 @@ export const buildApp = () => {
 
   fastify.register(rateLimit, {
     global: false, // Apply per route as configured
+    keyGenerator: (req) => req.ip,
     errorResponseBuilder: (req, context) => {
       const err = new Error(
         `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,

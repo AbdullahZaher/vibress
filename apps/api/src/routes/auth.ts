@@ -22,6 +22,12 @@ import crypto from "node:crypto";
 import { hashToken, hashPassword, dummyVerifyPassword } from "@vibress/security";
 import { normalizeEmail } from "@vibress/users";
 import { staffAuthMailer } from "../mailer/staff-auth-mailer";
+import {
+  checkAccountThrottle,
+  recordAccountFailure,
+  resetAccountThrottle,
+  AccountThrottleUnavailableError,
+} from "../helpers/account-throttle";
 
 class InvitationAcceptanceError extends Error {
   constructor(
@@ -60,8 +66,43 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       const { email, password } = parseResult.data;
+      const normalizedEmail = normalizeEmail(email);
       const ipAddress = req.ip;
       const userAgent = req.headers["user-agent"] || null;
+
+      try {
+        const throttleCheck = await checkAccountThrottle(
+          "staff_login",
+          normalizedEmail,
+          { failClosed: true },
+        );
+        if (!throttleCheck.allowed) {
+          reply.header("Retry-After", throttleCheck.retryAfterSeconds);
+          return reply.status(429).send({
+            errors: [
+              {
+                code: "TOO_MANY_REQUESTS",
+                message: "Too many failed attempts. Please try again later.",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+      } catch (err: unknown) {
+        if (err instanceof AccountThrottleUnavailableError) {
+          return reply.status(503).send({
+            errors: [
+              {
+                code: "SERVICE_UNAVAILABLE",
+                message:
+                  "Authentication service temporarily unavailable. Please try again later.",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        throw err;
+      }
 
       try {
         const result = await authService.loginStaff(email, password, {
@@ -69,6 +110,8 @@ export async function authRoutes(fastify: FastifyInstance) {
           userAgent,
           requestId: req.id,
         });
+
+        await resetAccountThrottle("staff_login", normalizedEmail);
 
         const isProduction = getConfig().isProduction;
         reply.setCookie(COOKIE_NAME, result.sessionToken, {
@@ -95,6 +138,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           err instanceof AuthDomainError &&
           err.code === "INVALID_CREDENTIALS"
         ) {
+          await recordAccountFailure("staff_login", normalizedEmail);
           return reply.status(401).send({
             errors: [
               {

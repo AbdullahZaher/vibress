@@ -338,3 +338,38 @@ Configure the following Prometheus alerts for production monitoring:
    ```promql
    outbox_oldest_unpublished_age_seconds > 600
    ```
+
+---
+
+## 7. Reverse Proxy, CDN & Trusted Proxy Configuration (Cloudflare / AWS ALB)
+
+### Default Compose Topology (Gateway -> API)
+In the default `compose.prod.yml` topology, the Nginx gateway is the single public entry point:
+- The gateway listens externally (port 7777/8080) and sets `X-Forwarded-For: $remote_addr` when proxying to internal upstream apps. Client-supplied `X-Forwarded-For` headers are discarded, preventing spoofed IP injection.
+- Fastify defaults to `TRUST_PROXY=1` (1 hop), trusting the immediate gateway peer and resolving `req.ip` from the gateway-provided address.
+
+### Deploying Behind Cloudflare, AWS ALB, or Reverse Proxies
+When placing Vibress behind an external CDN or Layer 7 Load Balancer:
+
+1. **Nginx Gateway (`infrastructure/nginx/nginx.prod.conf`):**
+   Uncomment and configure the `realip` module so Nginx replaces `$remote_addr` with the upstream client IP from the trusted load balancer:
+   ```nginx
+   # Cloudflare IPv4 ranges (or AWS VPC CIDRs)
+   set_real_ip_from 173.245.48.0/20;
+   set_real_ip_from 103.21.244.0/22;
+   set_real_ip_from 10.0.0.0/8;        # Internal ALB/VPC range
+   real_ip_header   X-Forwarded-For;   # Or CF-Connecting-IP for Cloudflare
+   real_ip_recursive on;
+   ```
+   With `realip` active, Nginx rewrites `$remote_addr` to the authenticated client address before forwarding.
+
+2. **Application Environment (`TRUST_PROXY`):**
+   Set `TRUST_PROXY` in `.env` to either:
+   - Hop count: `TRUST_PROXY=2` (if external LB appends without Nginx realip rewriting).
+   - CIDR list: `TRUST_PROXY=10.0.0.0/8,172.16.0.0/12,127.0.0.1` to trust only specific private subnets.
+
+### Account-Level Throttling & Lockout
+To protect against credential stuffing attacks rotating across multiple IP addresses, Vibress enforces Redis-backed account-level throttling:
+- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email within a 15-minute window. Exceeding triggers a 15-minute lockout (HTTP 429). If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
+- **Member Authentication (`/api/members/v1/auth/*`):** Rate limits magic link requests and token verification attempts per normalized email/token, resetting on successful authentication.
+

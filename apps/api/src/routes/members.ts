@@ -10,9 +10,15 @@ import {
   MEMBER_COOKIE_NAME,
   extractMemberSessionToken,
 } from "../middleware/member-auth";
-import { MemberAuthError } from "@vibress/members";
+import { MemberAuthError, normalizeMemberEmail } from "@vibress/members";
+import { hashToken } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { appLogger } from "../observability";
+import {
+  checkAccountThrottle,
+  recordAccountFailure,
+  resetAccountThrottle,
+} from "../helpers/account-throttle";
 
 export async function memberRoutes(fastify: FastifyInstance) {
   // Request sign-in link (enumeration-safe; unified signup/login)
@@ -35,6 +41,28 @@ export async function memberRoutes(fastify: FastifyInstance) {
       }
 
       const { email } = parseResult.data;
+      const normalizedEmail = normalizeMemberEmail(email);
+
+      if (normalizedEmail) {
+        const throttleCheck = await checkAccountThrottle(
+          "member_request",
+          normalizedEmail,
+          { failClosed: false },
+        );
+        if (!throttleCheck.allowed) {
+          reply.header("Retry-After", throttleCheck.retryAfterSeconds);
+          return reply.status(429).send({
+            errors: [
+              {
+                code: "TOO_MANY_REQUESTS",
+                message: "Too many requests. Please try again later.",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+        await recordAccountFailure("member_request", normalizedEmail);
+      }
 
       try {
         await memberAuthService.requestAuthLink(email, {
@@ -94,12 +122,42 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const tokenHash = hashToken(token);
+      const throttleCheck = await checkAccountThrottle(
+        "member_verify",
+        tokenHash,
+        { failClosed: false },
+      );
+      if (!throttleCheck.allowed) {
+        reply.header("Retry-After", throttleCheck.retryAfterSeconds);
+        return reply.status(429).send({
+          errors: [
+            {
+              code: "TOO_MANY_REQUESTS",
+              message: "Too many failed attempts. Please try again later.",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       try {
         const result = await memberAuthService.verifyAndCreateSession(token, {
           ipAddress: req.ip,
           userAgent: req.headers["user-agent"] || null,
           requestId: req.id,
         });
+
+        await resetAccountThrottle("member_verify", tokenHash);
+        if (result.member.id) {
+          await resetAccountThrottle("member_verify", result.member.id);
+        }
+        if (result.member.email) {
+          await resetAccountThrottle(
+            "member_request",
+            normalizeMemberEmail(result.member.email) || result.member.email,
+          );
+        }
 
         const isProduction = getConfig().isProduction;
         reply.setCookie(MEMBER_COOKIE_NAME, result.sessionToken, {
@@ -121,6 +179,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof MemberAuthError) {
+          await recordAccountFailure("member_verify", tokenHash);
           const status = err.code === "MEMBER_DISABLED" ? 401 : 400;
           return reply.status(status).send({
             errors: [
@@ -155,12 +214,42 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const tokenHash = hashToken(token);
+      const throttleCheck = await checkAccountThrottle(
+        "member_verify",
+        tokenHash,
+        { failClosed: false },
+      );
+      if (!throttleCheck.allowed) {
+        reply.header("Retry-After", throttleCheck.retryAfterSeconds);
+        return reply.status(429).send({
+          errors: [
+            {
+              code: "TOO_MANY_REQUESTS",
+              message: "Too many failed attempts. Please try again later.",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       try {
         const result = await memberAuthService.verifyAndCreateSession(token, {
           ipAddress: req.ip,
           userAgent: req.headers["user-agent"] || null,
           requestId: req.id,
         });
+
+        await resetAccountThrottle("member_verify", tokenHash);
+        if (result.member.id) {
+          await resetAccountThrottle("member_verify", result.member.id);
+        }
+        if (result.member.email) {
+          await resetAccountThrottle(
+            "member_request",
+            normalizeMemberEmail(result.member.email) || result.member.email,
+          );
+        }
 
         const isProduction = getConfig().isProduction;
         reply.setCookie(MEMBER_COOKIE_NAME, result.sessionToken, {
@@ -182,6 +271,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
         });
       } catch (err: unknown) {
         if (err instanceof MemberAuthError) {
+          await recordAccountFailure("member_verify", tokenHash);
           const status = err.code === "MEMBER_DISABLED" ? 401 : 400;
           return reply.status(status).send({
             errors: [
