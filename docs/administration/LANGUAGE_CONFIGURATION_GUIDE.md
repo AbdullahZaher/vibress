@@ -11,7 +11,7 @@ The new publication starts with **one active language**. On the first-run setup 
 3. Review the configuration before completing setup. Selecting Arabic must make the public site and certified Admin surfaces Arabic/RTL on completion; selecting English must make them English/LTR.
 4. Completing setup saves the primary locale and active locale set together. It does **not** launch AI translation.
 
-**Important:** A content language is not automatically a certified Admin-interface language. The initial rollout must fully certify English and Arabic administration before claiming either is complete; future languages need equally comprehensive UI translation and QA.
+**Important:** A content language is not automatically a certified Admin-interface language. The initial rollout must fully certify English and Arabic administration; the primary-language selector must not offer additional languages as fully supported until equally comprehensive UI translation and QA have passed. Additional content-translation targets remain a separate choice.
 
 ## Maintain languages in /admin/settings
 
@@ -22,7 +22,7 @@ Owners or administrators with the appropriate publication-scoped permission can:
 - Disable an additional language after reviewing the effect on published routes, traffic and existing translations.
 - Request a primary-language change. On a publication with existing authored content, the system must require a deliberate content-language migration/reclassification flow or block the change with an actionable explanation.
 
-**Disabling a language does not delete its translations.** Those entries remain stored for authorized maintenance and possible reactivation. Previously published localized URLs require deliberate redirects/retirement and cache updates.
+**Disabling a language does not delete its translations.** Those entries remain stored for authorized maintenance and possible reactivation. Previously published localized URLs require deliberate redirects/retirement and cache updates. During upgrades, existing publicly reachable translated URLs must be preserved until the owner/operator explicitly reconciles their enabled-language status.
 
 ## What people see
 
