@@ -95,6 +95,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     contentId: string,
     targetLocale: string,
     write: () => ReturnType<typeof translationService.upsertTranslation>,
+    audit: { actorId: string; action: "translation.created" | "translation.ai_generated"; provider?: string },
   ) {
     return runInTransaction(async () => {
       const db = getDb();
@@ -110,7 +111,23 @@ export async function translationRoutes(fastify: FastifyInstance) {
         contentType, contentId, targetLocale, undefined, publicationId, true,
       );
       if (existing) return null;
-      return write();
+      const translation = await write();
+      // Creation and its immutable audit event share a transaction. A failed
+      // audit write cannot leave an untracked translated draft behind.
+      await auditService.record({
+        actorUserId: audit.actorId,
+        action: audit.action,
+        targetType: "translation",
+        targetId: translation.id,
+        metadata: {
+          contentType,
+          contentId,
+          targetLocale,
+          status: translation.status,
+          ...(audit.provider ? { provider: audit.provider } : {}),
+        },
+      });
+      return translation;
     });
   }
 
@@ -349,6 +366,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         sourceUpdatedAt,
         publicationId: req.publicationContext!.publicationId,
       }),
+        { actorId: user.id, action: "translation.created" },
       );
       if (!translation) {
         return reply.status(409).send({ errors: [{
@@ -357,19 +375,6 @@ export async function translationRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         }] });
       }
-
-      await auditService.record({
-        actorUserId: user.id,
-        action: "translation.created",
-        targetType: "translation",
-        targetId: translation.id,
-        metadata: {
-          contentType: type,
-          contentId: id,
-          targetLocale: normalizedTargetLocale,
-          status: translation.status,
-        },
-      });
 
       return reply.status(201).send({ translation });
     },
@@ -754,6 +759,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         translationProvider: `ai:${body.provider || "gateway"}`,
         sourceUpdatedAt,
       }),
+        { actorId: user.id, action: "translation.ai_generated", provider: body.provider || "gateway" },
       );
       if (!translation) {
         return reply.status(409).send({ errors: [{
@@ -762,18 +768,6 @@ export async function translationRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         }] });
       }
-
-      await auditService.record({
-        actorUserId: user.id,
-        action: "translation.ai_generated",
-        targetType: "translation",
-        targetId: translation.id,
-        metadata: {
-          targetLocale: normalizedTargetLocale,
-          provider: body.provider || "gateway",
-          status: "needs_review",
-        },
-      });
 
       return reply.status(200).send({
         translation,
