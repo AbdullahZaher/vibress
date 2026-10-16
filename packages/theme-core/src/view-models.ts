@@ -1,4 +1,5 @@
 import { routes } from "./route-contract";
+import { getDirection } from "@vibress/i18n";
 import type { ThemeLocaleContext, AvailableLocaleItem } from "./theme-core";
 
 export interface AuthorViewModel {
@@ -304,12 +305,7 @@ export function mapSiteToViewModel(site: {
   comment_access?: string | undefined;
 }): SiteViewModel {
   const locale = site.locale || "en";
-  const rtlLocales = ["ar", "he", "fa", "ur"];
-  const direction: "ltr" | "rtl" = rtlLocales.some((r) =>
-    locale.toLowerCase().startsWith(r),
-  )
-    ? "rtl"
-    : "ltr";
+  const direction = getDirection(locale);
 
   const commentAccess =
     site.comments?.commentAccess ||
@@ -361,6 +357,8 @@ export function mapPostToViewModel(
     excerpt?: string | null | undefined;
     html?: string | undefined;
     contentHtml?: string | undefined;
+    locale?: string | undefined;
+    direction?: "ltr" | "rtl" | undefined;
     publishedAt?: string | Date | null | undefined;
     updatedAt?: string | Date | null | undefined;
     readingTimeMinutes?: number | undefined;
@@ -415,8 +413,8 @@ export function mapPostToViewModel(
 
   const title = post.title || "";
   const postUrl = routes.post(slug);
-  const postLocale = (post as any).locale || undefined;
-  const postDirection = (post as any).direction || (postLocale?.toLowerCase().startsWith("ar") ? "rtl" : undefined);
+  const postLocale = post.locale;
+  const postDirection = post.direction || (postLocale ? getDirection(postLocale) : undefined);
 
   return {
     id: post.id || slug,
@@ -508,7 +506,7 @@ export function mapPageToViewModel(
   const title = page.title || "";
   const pageUrl = routes.page(slug);
   const pageLocale = page.locale || undefined;
-  const pageDirection = page.direction || (pageLocale?.toLowerCase().startsWith("ar") ? "rtl" : undefined);
+  const pageDirection = page.direction || (pageLocale ? getDirection(pageLocale) : undefined);
 
   return {
     id: page.id || slug,
