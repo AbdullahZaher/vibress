@@ -1,3 +1,4 @@
+import net from "node:net";
 import { getRedisClient, buildSystemCacheKey } from "@vibress/cache";
 import { appLogger } from "../observability";
 
@@ -48,6 +49,28 @@ const DEFAULT_GLOBAL_MAX_ATTEMPTS = 20;
 const DEFAULT_WINDOW_SECONDS = 900; // 15 minutes window
 const DEFAULT_LOCKOUT_SECONDS = 900; // 15 minutes temporary lockout
 
+/**
+ * Fully expands an IPv6 address string into 8 padded 4-character hex hextets.
+ */
+export function expandIPv6(ip: string): string[] {
+  const clean = ip.trim().toLowerCase();
+  let hextets: string[];
+
+  if (clean.includes("::")) {
+    const [left, right] = clean.split("::");
+    const leftParts = left ? left.split(":") : [];
+    const rightParts = right ? right.split(":") : [];
+    const missing = 8 - (leftParts.length + rightParts.length);
+    const middle = Array(Math.max(missing, 0)).fill("0");
+    hextets = [...leftParts, ...middle, ...rightParts];
+  } else {
+    hextets = clean.split(":");
+  }
+
+  // Ensure exactly 8 hextets, each padded to 4 lowercase hex characters
+  return hextets.slice(0, 8).map((h) => h.padStart(4, "0"));
+}
+
 export function normalizeClientSubnet(ip: string): string {
   const cleanIp = (ip || "").trim().toLowerCase();
   if (!cleanIp) return "unknown";
@@ -60,10 +83,10 @@ export function normalizeClientSubnet(ip: string): string {
     return `${ipv4Match[1]}.0/24`;
   }
 
-  // IPv6 (/64 subnet)
-  if (cleanIp.includes(":")) {
-    const parts = cleanIp.split(":");
-    const prefix = parts.slice(0, 4).join(":");
+  // IPv6 (/64 subnet prefix across expanded first 4 hextets)
+  if (net.isIPv6(cleanIp) || cleanIp.includes(":")) {
+    const hextets = expandIPv6(cleanIp);
+    const prefix = hextets.slice(0, 4).join(":");
     return `${prefix}::/64`;
   }
 

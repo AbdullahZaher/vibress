@@ -566,5 +566,42 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     );
     warnSpy.mockRestore();
   });
+
+  it("normalizes IPv6 /64 subnets correctly across compressed and expanded forms", () => {
+    // 1. Compressed and fully-expanded forms of the same /64 map to the same key
+    const compressed1 = normalizeClientSubnet("fd00::1");
+    const compressed2 = normalizeClientSubnet("fd00::2");
+    const fullyExpanded = normalizeClientSubnet(
+      "fd00:0000:0000:0000:1234:5678:9abc:def0",
+    );
+    expect(compressed1).toBe("fd00:0000:0000:0000::/64");
+    expect(compressed2).toBe("fd00:0000:0000:0000::/64");
+    expect(fullyExpanded).toBe("fd00:0000:0000:0000::/64");
+    expect(compressed1).toBe(compressed2);
+    expect(compressed1).toBe(fullyExpanded);
+
+    const prefix3HextetComp = normalizeClientSubnet("2001:db8:85a3::1");
+    const prefix3HextetExp = normalizeClientSubnet(
+      "2001:0db8:85a3:0000:0000:0000:0000:0001",
+    );
+    expect(prefix3HextetComp).toBe("2001:0db8:85a3:0000::/64");
+    expect(prefix3HextetComp).toBe(prefix3HextetExp);
+
+    // 2. Different /64s map to different keys
+    const diffSubnet = normalizeClientSubnet("2001:db8:85a3:1::1");
+    expect(diffSubnet).toBe("2001:0db8:85a3:0001::/64");
+    expect(prefix3HextetComp).not.toBe(diffSubnet);
+
+    const diffFd = normalizeClientSubnet("fd00:1::1");
+    expect(diffFd).toBe("fd00:0001:0000:0000::/64");
+    expect(compressed1).not.toBe(diffFd);
+
+    // 3. IPv4-mapped IPv6 still maps to /24
+    expect(normalizeClientSubnet("::ffff:192.0.2.1")).toBe("192.0.2.0/24");
+    expect(normalizeClientSubnet("::ffff:198.51.100.99")).toBe(
+      "198.51.100.0/24",
+    );
+    expect(normalizeClientSubnet("192.0.2.1")).toBe("192.0.2.0/24");
+  });
 });
 
