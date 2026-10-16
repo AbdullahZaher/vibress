@@ -611,6 +611,9 @@ export class TranslationService {
     const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
+    if (!["needs_review", "translated", "approved"].includes(existing.status)) {
+      throw new Error("Translation must be submitted for review before approval");
+    }
     const transition = validateTranslationStatusTransition(existing.status, "approved");
     if (!transition.valid) {
       throw new Error(transition.reason);
@@ -639,6 +642,11 @@ export class TranslationService {
     const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
+    // Publishing is an explicit editorial decision after review.
+    // Editors must not publish drafts directly, including through bulk calls.
+    if (existing.status !== "approved" && existing.status !== "published") {
+      throw new Error("Translation must be approved before publishing");
+    }
     const transition = validateTranslationStatusTransition(existing.status, "published");
     if (!transition.valid) {
       throw new Error(transition.reason);
