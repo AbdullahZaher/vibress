@@ -83,6 +83,22 @@ function createCspResponse(
   return response;
 }
 
+function localizedErrorResponse(status: 404 | 503, message: string): NextResponse {
+  // Locale configuration failures must preserve CSP instead of bypassing
+  // the security headers applied to ordinary theme and private-site pages.
+  const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString("base64");
+  const response = new NextResponse(message, {
+    status,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+  response.headers.set("Content-Security-Policy", buildCsp(nonce));
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  return response;
+}
+
 function privateSiteRedirect(
   request: NextRequest,
   reason?: string,
@@ -330,9 +346,7 @@ export async function middleware(request: NextRequest) {
       localePolicy = { primary, enabled };
     } catch {
       // Don't guess a language/tenant on API outages.
-      return new NextResponse("Publication temporarily unavailable", {
-        status: 503, headers: { "Cache-Control": "no-store" },
-      });
+      return localizedErrorResponse(503, "Publication temporarily unavailable");
     }
 
     const segments = pathname.split("/").filter(Boolean);
@@ -355,9 +369,7 @@ export async function middleware(request: NextRequest) {
       } else if (["en", "ar", "fr", "de", "es", "fa", "ur", "tr", "he", "ja", "pt", "zh"]
         .includes(prefix.split("-")[0] || "")) {
         // A known but disabled locale must never render via public fallback.
-        return new NextResponse("Not Found", {
-          status: 404, headers: { "Cache-Control": "no-store" },
-        });
+        return localizedErrorResponse(404, "Not Found");
       }
     }
 
