@@ -6,7 +6,8 @@ import {
   mapSiteToViewModel,
   ThemeViewModelContext,
 } from "@vibress/theme-core";
-import { getDirection, isRtl, defaultLocaleRegistry, type Direction } from "@vibress/i18n";
+import { getDirection, isRtl, getLocalePrefix, defaultLocaleRegistry, type Direction } from "@vibress/i18n";
+import { publishedAlternateLanguageUrls, getPublicSiteUrl } from "./seo-helpers";
 import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHydrator";
@@ -383,42 +384,48 @@ export async function renderThemeTemplate(
   });
 
   const activeLocale = site.locale || "en";
-  const post = (context as any).post;
-  const page = (context as any).page;
-  const rawPath = post ? `/posts/${post.slug}` : (page ? `/pages/${page.slug}` : "/");
-  const enUrl = rawPath;
-  const arUrl = rawPath === "/" ? "/ar" : `/ar${rawPath}`;
+  const primaryLocale = site.primaryLocale || activeLocale;
+  const enabledLocales = site.enabledLocales?.length
+    ? site.enabledLocales : [primaryLocale];
+  const sourcePost = (context as { post?: { slug?: string } }).post;
+  const sourcePage = (context as { page?: { slug?: string } }).page;
+  const isContent = Boolean(sourcePost?.slug || sourcePage?.slug);
+  const pathPart = sourcePost?.slug
+    ? `/posts/${encodeURIComponent(sourcePost.slug)}`
+    : sourcePage?.slug ? `/pages/${encodeURIComponent(sourcePage.slug)}` : "/";
+  const primaryPrefix = getLocalePrefix(activeLocale, primaryLocale, enabledLocales);
+  const currentUrl = `${primaryPrefix}${pathPart === "/" ? "" : pathPart}` || "/";
 
-  const currentLang = activeLocale.split("-")[0] || "en";
-  const isEn = activeLocale === "en" || activeLocale === "en-US";
-  const isAr = activeLocale.startsWith("ar");
-
-  const defaultLocales: {
-    code: string;
-    name: string;
-    nativeName: string;
-    direction: Direction;
-    url: string;
-    isCurrent: boolean;
-  }[] = [
-    { code: "en", name: "English", nativeName: "English", direction: "ltr", url: enUrl, isCurrent: isEn },
-    { code: "ar-SA", name: "Arabic", nativeName: "العربية", direction: "rtl", url: arUrl, isCurrent: isAr },
-  ];
-
-  if (!isEn && !isAr) {
-    const locDef = defaultLocaleRegistry.get(activeLocale);
-    const locUrl = rawPath === "/" ? `/${currentLang}` : `/${currentLang}${rawPath}`;
-    defaultLocales.push({
-      code: activeLocale,
-      name: locDef?.englishName || activeLocale,
-      nativeName: locDef?.nativeName || activeLocale,
-      direction: getDirection(activeLocale),
-      url: locUrl,
-      isCurrent: true,
-    });
-  }
-
-  const currentUrl = isEn ? enUrl : (isAr ? arUrl : (rawPath === "/" ? `/${currentLang}` : `/${currentLang}${rawPath}`));
+  // A switcher must never offer an unpublished or disabled translation.
+  // Homepage variants may be linked directly; content items must be
+  // confirmed by the publication-scoped public API.
+  const published = isContent
+    ? await publishedAlternateLanguageUrls(
+      sourcePost?.slug ? "post" : "page", sourcePost?.slug || sourcePage?.slug || "",
+      activeLocale,
+    )
+    : {};
+  const siteUrl = getPublicSiteUrl();
+  const available = enabledLocales.flatMap((code) => {
+    let url: string | undefined;
+    if (isContent) {
+      const absolute = published[code];
+      url = absolute?.startsWith(siteUrl) ? absolute.slice(siteUrl.length) || "/" : undefined;
+    } else if (pathPart === "/") {
+      url = getLocalePrefix(code, primaryLocale, enabledLocales) || "/";
+    }
+    if (!url) return [];
+    const def = defaultLocaleRegistry.get(code);
+    return [{
+      code,
+      name: def?.englishName || code,
+      nativeName: def?.nativeName || code,
+      direction: getDirection(code),
+      url,
+      isCurrent: code === activeLocale,
+    }];
+  });
+  const currentLang = activeLocale.split("-")[0] || activeLocale;
 
   const fullContext: ThemeViewModelContext = {
     ...context,
@@ -430,7 +437,7 @@ export async function renderThemeTemplate(
       language: currentLang,
       direction: getDirection(activeLocale),
       isRTL: isRtl(activeLocale),
-      availableLocales: defaultLocales,
+      availableLocales: available,
       currentUrl,
     },
   };
