@@ -57,6 +57,8 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   let previousPrimaryLocale = "en";
   let previousSiteLocale: typeof settings.$inferSelect | null = null;
   let insertedArabicLocale = false;
+  let originalFrenchLocale: { status: string; isDefault: boolean } | null = null;
+  let insertedFrenchLocale = false;
 
   beforeAll(async () => {
     app = buildApp();
@@ -108,6 +110,28 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
         locale: "ar-SA",
         status: "active",
         isDefault: false,
+      });
+    }
+
+    // French is a second explicitly enabled translation target in this suite.
+    const [existingFrench] = await db.select({
+      status: publicationLocales.status, isDefault: publicationLocales.isDefault,
+    }).from(publicationLocales).where(and(
+      eq(publicationLocales.publicationId, "pub_default"),
+      eq(publicationLocales.locale, "fr-FR"),
+    ));
+    if (existingFrench) {
+      originalFrenchLocale = existingFrench;
+      await db.update(publicationLocales).set({ status: "active", isDefault: false })
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "fr-FR"),
+        ));
+    } else {
+      insertedFrenchLocale = true;
+      await db.insert(publicationLocales).values({
+        id: randomUUID(), publicationId: "pub_default",
+        locale: "fr-FR", status: "active", isDefault: false,
       });
     }
 
@@ -178,6 +202,17 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
           eq(publicationLocales.publicationId, "pub_default"),
           eq(publicationLocales.locale, "ar-SA"),
         ));
+    }
+    if (insertedFrenchLocale) {
+      await db.delete(publicationLocales).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "fr-FR"),
+      ));
+    } else if (originalFrenchLocale) {
+      await db.update(publicationLocales).set(originalFrenchLocale).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "fr-FR"),
+      ));
     }
     if (app) await app.close();
   });
@@ -461,7 +496,9 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   describe("AI Translation Safety & Bulk Actions", () => {
-    it("generates AI translation draft in 'needs_review' status (never auto-published)", async () => {
+    it("fails safely on an incomplete provider response without writing a fake draft", async () => {
+      // The integration environment intentionally has no configured AI
+      // translation provider. An outage must not save source text as translated.
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/content/post/${testPostId}/ai-translate`,
@@ -470,17 +507,36 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
           "content-type": "application/json",
           origin: "http://localhost:7777",
         },
+        payload: { targetLocale: "fr-FR" },
+      });
+      expect(res.statusCode).toBe(502);
+      const records = await db.select().from(contentTranslations).where(and(
+        eq(contentTranslations.publicationId, "pub_default"),
+        eq(contentTranslations.contentId, testPostId),
+        eq(contentTranslations.targetLocale, "fr-FR"),
+      ));
+      expect(records).toHaveLength(0);
+    });
+
+    it("prepares a reviewed human French draft for the bulk lifecycle test", async () => {
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
         payload: {
-          targetLocale: "fr-FR",
+          targetLocale: "fr-FR", title: "Article français",
+          slug: `${postSlug}-fr`, excerpt: "Description française",
+          content: { schema: "vibress-studio", version: 1, root: { children: [] } },
         },
       });
-
-      expect(res.statusCode).toBe(200);
-      const data = res.json();
-      expect(data.translation).toBeDefined();
-      expect(data.translation.targetLocale).toBe("fr-FR");
-      expect(data.translation.status).toBe("needs_review"); // Verified safety guarantee!
-      expect(data.translation.translationProvider).toContain("ai:");
+      expect(created.statusCode).toBe(201);
+      const id = created.json().translation.id as string;
+      const review = await app.inject({
+        method: "POST", url: `/api/admin/v1/translations/${id}/submit-review`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(review.statusCode).toBe(200);
+      expect(review.json().translation.status).toBe("needs_review");
     });
 
     it("performs bulk operations safely via POST /api/admin/v1/translations/bulk", async () => {
