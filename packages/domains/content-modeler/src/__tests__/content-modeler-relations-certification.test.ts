@@ -351,6 +351,43 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(primary && typeof primary === "object" && "id" in primary ? primary.id : undefined).toBe(author.id);
   });
 
+  it("supports two-pass imports without persisting unresolved or foreign relations", async () => {
+    const targetSlug = "staged-import-author-2026";
+    const staged = await service.createEntry(
+      bookModelA.id,
+      { title: "Staged Import Book", slug: "staged-import-book-2026",
+        data: { title: "Staged Import Book" } },
+      testUserId, pubTenantA,
+    );
+
+    await expect(service.updateEntry(
+      bookModelA.id, staged.id,
+      { data: { primaryAuthor: targetSlug } },
+      testUserId, pubTenantA,
+    )).rejects.toThrow(ValidationError);
+    await expect(service.updateEntry(
+      bookModelA.id, staged.id,
+      { data: { primaryAuthor: authorB.id } },
+      testUserId, pubTenantA,
+    )).rejects.toThrow(ValidationError);
+
+    // Second pass: persist the referenced entry, then attach its scoped ID/slug.
+    const author = await service.createEntry(
+      authorModelA.id,
+      { title: "Imported Author", slug: targetSlug, data: { name: "Imported Author" } },
+      testUserId, pubTenantA,
+    );
+    const updated = await service.updateEntry(
+      bookModelA.id, staged.id,
+      { data: { primaryAuthor: author.id, coAuthors: [author.slug] } },
+      testUserId, pubTenantA,
+    );
+    expect(updated.data).toMatchObject({ primaryAuthor: author.id, coAuthors: [targetSlug] });
+    const hydrated = await service.getEntryById(bookModelA.id, staged.id, pubTenantA, true);
+    const primary = hydrated?.data.primaryAuthor;
+    expect(primary && typeof primary === "object" && "id" in primary ? primary.id : undefined).toBe(author.id);
+  });
+
   // Scenario 6: Cross-publication target rejected on write & omitted on resolve
   it("Scenario 6: Blocks cross-publication references on write and omits them during resolution", async () => {
     await expect(

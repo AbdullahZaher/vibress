@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkEntryDataValidity, analyzeSchemaEvolution, resolveLocalizedEntryData } from "../domain/validation";
+import { checkEntryDataValidity, analyzeSchemaEvolution, resolveLocalizedEntryData, validateModelDefinition, ValidationError } from "../domain/validation";
 import { ContentFieldDefinition } from "../domain/types";
 
 describe("Content Modeler Schema Evolution & Data Safety", () => {
@@ -146,6 +146,31 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
     expect(analyzeSchemaEvolution([base], [
       { ...base, min: 5 },
     ]).safe).toBe(false);
+  });
+
+  it("rejects malformed and pathological patterns during schema definition and runtime validation", () => {
+    const valid = {
+      id: "code", name: "Code", key: "code", type: "text" as const,
+      pattern: "^[a-z0-9_-]+$",
+    };
+    expect(() => validateModelDefinition({ name: "Codes", fields: [valid] })).not.toThrow();
+    expect(checkEntryDataValidity({ code: "safe-123" }, [valid]).valid).toBe(true);
+
+    for (const pattern of ["[", "(a+)+$", "(a|aa)+$", "(?:a+)*", "(?=a)a", "a".repeat(257)]) {
+      const field = { ...valid, pattern };
+      expect(() => validateModelDefinition({ name: "Unsafe", fields: [field] })).toThrow(ValidationError);
+      const result = checkEntryDataValidity({ code: "a".repeat(64) + "!" }, [field]);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]?.field).toBe("code");
+    }
+
+    // Historical nested JSONB constraints are also guarded, without throwing SyntaxError.
+    const legacy = {
+      id: "old", name: "Legacy", key: "legacy", type: "text" as const,
+      validation: { pattern: "[" },
+    };
+    expect(() => validateModelDefinition({ name: "Legacy", fields: [legacy] })).toThrow(ValidationError);
+    expect(checkEntryDataValidity({ legacy: "sample" }, [legacy]).valid).toBe(false);
   });
 
   it("blocks new required fields until existing records are migrated, even with defaults", () => {

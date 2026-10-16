@@ -12,6 +12,71 @@ type FieldWithLegacyValidation = ContentFieldDefinition & {
   };
 };
 
+// Keep administrator-defined patterns bounded. This is a conservative guard
+// against malformed and common super-linear expressions, not a full regex engine.
+const MAX_FIELD_PATTERN_LENGTH = 256;
+
+function validateFieldPattern(pattern: unknown): string | null {
+  if (pattern === undefined || pattern === "") return null;
+  if (typeof pattern !== "string") return "Field pattern must be a string.";
+  if (pattern.length > MAX_FIELD_PATTERN_LENGTH) {
+    return "Field pattern must be at most 256 characters.";
+  }
+  try {
+    new RegExp(pattern);
+  } catch {
+    return "Field pattern is not a valid regular expression.";
+  }
+  // Backreferences and lookarounds can cause expensive, ambiguous matching.
+  if (/\\(?:[1-9]|k<)|\(\?(?:[=!]|<[=!])/.test(pattern)) {
+    return "Field pattern uses unsupported advanced expressions.";
+  }
+
+  // Repeated groups containing alternatives or more repetition can exhibit
+  // catastrophic backtracking, e.g. (a+)+ or (a|aa)+.
+  const groups: Array<{ repetition: boolean; alternation: boolean }> = [
+    { repetition: false, alternation: false },
+  ];
+  let escaped = false;
+  let inClass = false;
+  const isQuantifierAt = (index: number): boolean => {
+    const token = pattern[index];
+    return token === "*" || token === "+" || token === "?" ||
+      (token === "{" && /^\{\d+(?:,\d*)?\}/.test(pattern.slice(index)));
+  };
+  for (let i = 0; i < pattern.length; i++) {
+    const token = pattern[i];
+    if (escaped) { escaped = false; continue; }
+    if (token === "\\") { escaped = true; continue; }
+    if (inClass) { if (token === "]") inClass = false; continue; }
+    if (token === "[") { inClass = true; continue; }
+    if (token === "(") {
+      groups.push({ repetition: false, alternation: false });
+      continue;
+    }
+    if (token === ")") {
+      const child = groups.pop();
+      const parent = groups[groups.length - 1];
+      if (!child || !parent) return "Field pattern is not a valid regular expression.";
+      const repeated = isQuantifierAt(i + 1);
+      if (repeated && (child.repetition || child.alternation)) {
+        return "Field pattern contains unsafe nested or repeated alternatives.";
+      }
+      parent.repetition ||= child.repetition || repeated;
+      continue;
+    }
+    const current = groups[groups.length - 1];
+    if (!current) return "Field pattern is not a valid regular expression.";
+    if (token === "|") current.alternation = true;
+    if (token === "*" || token === "+" ||
+        (token === "?" && pattern[i - 1] !== "(") ||
+        (token === "{" && isQuantifierAt(i))) {
+      current.repetition = true;
+    }
+  }
+  return null;
+}
+
 export interface FieldValidationError {
   field: string;
   message: string;
@@ -86,7 +151,7 @@ export const VALID_FIELD_TYPES = [
 export function validateModelDefinition(input: {
   name: string;
   slug?: string | undefined;
-  fields?: ContentFieldDefinition[] | undefined;
+  fields?: FieldWithLegacyValidation[] | undefined;
 }): void {
   if (!input.name || !input.name.trim()) {
     throw new ValidationError({ name: "Model name is required" });
@@ -118,6 +183,11 @@ export function validateModelDefinition(input: {
       });
     }
     seenKeys.add(key);
+
+    const patternIssue = validateFieldPattern(field.pattern ?? field.validation?.pattern);
+    if (patternIssue) {
+      throw new ValidationError({ [key]: patternIssue });
+    }
 
     if (field.type && !(VALID_FIELD_TYPES as readonly string[]).includes(field.type)) {
       throw new ValidationError({
@@ -158,6 +228,11 @@ export function validateEntryData(
     const minLength = field.minLength ?? field.validation?.minLength;
     const maxLength = field.maxLength ?? field.validation?.maxLength;
     const pattern = field.pattern ?? field.validation?.pattern;
+    const patternIssue = validateFieldPattern(pattern);
+    if (patternIssue) {
+      errors[field.key] = patternIssue;
+      continue;
+    }
 
     // Type validation
     switch (field.type) {

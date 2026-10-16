@@ -294,6 +294,35 @@ describe("Content Modeler API Routes", () => {
     }
   });
 
+  it("rejects unsafe pattern definitions consistently on create, preview, and update", async () => {
+    const headers = { cookie: cookieHeader, origin: "http://localhost:7777" };
+    for (const field of [
+      { id: "a", name: "Code", key: "code", type: "text", pattern: "[" },
+      { id: "a", name: "Code", key: "code", type: "text", validation: { pattern: "(a+)+$" } },
+    ]) {
+      const create = await app.inject({
+        method: "POST", url: "/api/admin/v1/content-models", headers,
+        payload: { name: "Invalid pattern", slug: "invalid-pattern-" + crypto.randomUUID().slice(0, 8), fields: [field] },
+      });
+      expect(create.statusCode).toBe(400);
+      expect(create.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+      const preview = await app.inject({
+        method: "POST", url: "/api/admin/v1/content-models/" + modelId + "/schema-evolution-preview",
+        headers, payload: { fields: [field] },
+      });
+      expect(preview.statusCode).toBe(400);
+      expect(preview.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+      const update = await app.inject({
+        method: "PATCH", url: "/api/admin/v1/content-models/" + modelId,
+        headers, payload: { fields: [field] },
+      });
+      expect(update.statusCode).toBe(400);
+      expect(update.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+  });
+
   it("previews and blocks tightened legacy validation constraints without modifying existing data", async () => {
     const slug = `legacy-schema-${crypto.randomUUID().slice(0, 8)}`;
     const fields = [
