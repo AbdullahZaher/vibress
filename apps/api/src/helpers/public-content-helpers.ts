@@ -207,12 +207,19 @@ export function formatPublicTag(tag: Tag): PublicTagDto {
   };
 }
 
+export interface PublicContentLocaleContext {
+  locale: string;
+  primaryLocale: string;
+  enabledLocales: readonly string[];
+}
+
 export async function buildPublicPostSummaryDto(
   post: Post,
   authors: Author[],
   tags: Tag[],
   mediaService: MediaService,
   commentCount?: number,
+  localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPostSummaryDto> {
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
   let featureImage: PublicMediaDto | null = null;
@@ -260,9 +267,13 @@ export async function buildPublicPostSummaryDto(
   const formattedTags = (tags || []).map(formatPublicTag);
 
   const excerpt = deriveExcerpt(post.excerpt, post.content);
-  const postLocale = (post as any).locale || "en-US";
-  const postDirection = (post as any).direction || getDirection(postLocale);
-  const localePrefix = getLocalePrefix(postLocale);
+  const postWithLocale = post as Post & { locale?: string; direction?: string };
+  const postLocale = localeContext?.locale ?? postWithLocale.locale ?? "en";
+  const postDirection = postWithLocale.direction ?? getDirection(postLocale);
+  const localePrefix = getLocalePrefix(
+    postLocale, localeContext?.primaryLocale ?? "en",
+    localeContext?.enabledLocales ?? [],
+  );
   const canonicalUrl = post.canonicalUrl || `${siteUrl}${localePrefix}/posts/${post.slug}`;
   const seoTitle = post.metaTitle || post.title;
   const seoDescription = post.metaDescription || excerpt;
@@ -315,6 +326,7 @@ export async function buildPublicPostDetailDto(
   tags: Tag[],
   mediaService: MediaService,
   commentCount?: number,
+  localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPostDetailDto> {
   const summary = await buildPublicPostSummaryDto(
     post,
@@ -322,6 +334,7 @@ export async function buildPublicPostDetailDto(
     tags,
     mediaService,
     commentCount,
+    localeContext,
   );
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
 
@@ -347,15 +360,20 @@ export async function buildPublicPostDetailDto(
 export async function buildPublicPageDetailDto(
   page: Page,
   mediaService: MediaService,
+  localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPageDetailDto> {
   const resolvedDoc = await resolveDocumentMedia(page.content, mediaService);
   const featureImage = extractFeatureImage(resolvedDoc);
   const siteUrl = getSiteUrl();
 
   const excerpt = deriveExcerpt(page.excerpt, page.content);
-  const pageLocale = (page as any).locale || "en-US";
-  const pageDirection = (page as any).direction || getDirection(pageLocale);
-  const localePrefix = getLocalePrefix(pageLocale);
+  const pageWithLocale = page as Page & { locale?: string; direction?: string };
+  const pageLocale = localeContext?.locale ?? pageWithLocale.locale ?? "en";
+  const pageDirection = pageWithLocale.direction ?? getDirection(pageLocale);
+  const localePrefix = getLocalePrefix(
+    pageLocale, localeContext?.primaryLocale ?? "en",
+    localeContext?.enabledLocales ?? [],
+  );
   const canonicalUrl = page.canonicalUrl || `${siteUrl}${localePrefix}/pages/${page.slug}`;
   const seoTitle = page.metaTitle || page.title;
   const seoDescription = page.metaDescription || excerpt;
