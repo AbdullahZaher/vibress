@@ -463,6 +463,7 @@ function extractRequestedLocale(
                 content: tr.content,
                 metaTitle: tr.metaTitle,
                 metaDescription: tr.metaDescription,
+                canonicalUrl: null,
                 locale: tr.targetLocale,
               };
             } else {
@@ -680,6 +681,7 @@ function extractRequestedLocale(
                 content: tr.content,
                 metaTitle: tr.metaTitle,
                 metaDescription: tr.metaDescription,
+                canonicalUrl: null,
                 locale: tr.targetLocale,
               };
             } else {
@@ -926,6 +928,7 @@ function extractRequestedLocale(
               content: translation.content,
               metaTitle: translation.metaTitle,
               metaDescription: translation.metaDescription,
+              canonicalUrl: null,
               locale: translation.targetLocale,
             };
           }
@@ -1096,6 +1099,7 @@ function extractRequestedLocale(
               content: translation.content,
               metaTitle: translation.metaTitle,
               metaDescription: translation.metaDescription,
+              canonicalUrl: null,
               locale: translation.targetLocale,
             };
           }
