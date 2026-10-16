@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { PublicationLanguagesManager } from "./PublicationLanguagesManager";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { Languages, Clock } from "lucide-react";
 import { Badge } from "../../ui/badge";
 
@@ -30,6 +31,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
   isHighlighted,
   onSaved,
 }) => {
+  const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const langObj = COMMON_LANGUAGES.find((l) => l.code === locale);
@@ -39,8 +41,8 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
     <SettingsCard id="general-localization" isHighlighted={isHighlighted}>
       <SettingsCardRow
         icon={<Languages className="h-4 w-4" />}
-        title="Site timezone & language"
-        description="Set your publication language code and operational timezone for scheduled posts."
+        title={tr("Site timezone & language")}
+        description={tr("Set your publication language code and operational timezone for scheduled posts.")}
         currentValue={
           <div className="flex items-center gap-1.5 font-medium">
             <Badge variant="secondary" className="text-xs font-mono">
@@ -52,7 +54,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
             </span>
           </div>
         }
-        actionLabel={isExpanded ? "Close" : "Edit"}
+        actionLabel={isExpanded ? tr("Close") : tr("Edit")}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
@@ -70,7 +72,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                 className="text-xs font-semibold text-foreground flex items-center gap-1.5"
               >
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                Site Timezone
+                {tr("Site Timezone")}
               </label>
               <select
                 id="card-site-tz"
@@ -90,7 +92,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                 </option>
               </select>
               <p className="text-[11px] text-muted-foreground">
-                Used for post scheduling and date formatting.
+                {tr("Used for post scheduling and date formatting.")}
               </p>
             </div>
           </div>
