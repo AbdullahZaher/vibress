@@ -370,6 +370,6 @@ When placing Vibress behind an external CDN or Layer 7 Load Balancer:
 
 ### Account-Level Throttling & Lockout
 To protect against credential stuffing attacks rotating across multiple IP addresses, Vibress enforces Redis-backed account-level throttling:
-- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email within a 15-minute window. Exceeding triggers a 15-minute lockout (HTTP 429). If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
-- **Member Authentication (`/api/members/v1/auth/*`):** Rate limits magic link requests and token verification attempts per normalized email/token, resetting on successful authentication.
+- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email + client subnet within a 15-minute window, plus a global progressive delay ceiling. Exceeding triggers a 15-minute lockout (HTTP 429). If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
+- **Member Authentication (`/api/members/v1/auth/*`):** Rate limits magic link requests (5 per normalized email per 10-minute window) and token verification attempts (5 per token per 15-minute window), resetting on successful authentication.
 

@@ -2,8 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { FastifyInstance } from "fastify";
 import { buildApp } from "../main";
 import { seedDatabase } from "@vibress/database";
-import { getRedisClient } from "@vibress/cache";
+import { getRedisClient, buildSystemCacheKey } from "@vibress/cache";
 import * as cacheModule from "@vibress/cache";
+import {
+  recordAccountFailure,
+  resetAccountThrottle,
+  normalizeClientSubnet,
+} from "../helpers/account-throttle";
 
 const PROD_ENV = {
   NODE_ENV: "production",
@@ -413,6 +418,22 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     });
     expect(res6.statusCode).toBe(429);
     expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
+    const retryAfter = Number.parseInt(
+      res6.headers["retry-after"] as string,
+      10,
+    );
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(600);
+
+    const redis = getRedisClient();
+    const memberReqTtl = await redis.ttl(
+      buildSystemCacheKey(
+        "auth_throttle",
+        "member_request:member-spam@example.com",
+      ),
+    );
+    expect(memberReqTtl).toBeGreaterThan(0);
+    expect(memberReqTtl).toBeLessThanOrEqual(600);
 
     // 5 failed verify attempts on a token:
     for (let i = 1; i <= 5; i++) {
@@ -480,6 +501,56 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     });
     expect(memberRes.statusCode).toBe(403);
     expect(memberRes.json().errors[0].code).toBe("INVALID_ORIGIN");
+  });
+
+  it("ensures throttle keys always possess a positive TTL after failure recording (no permanent lockout)", async () => {
+    const redis = getRedisClient();
+    const testScope = "staff_login";
+    const testEmail = "test-atomic-ttl@example.com";
+    const testIp = "192.0.2.77";
+
+    // 1. Initial recorded failure on non-existent key atomically assigns TTL
+    const count1 = await recordAccountFailure(testScope, testEmail, {
+      clientIp: testIp,
+    });
+    expect(count1).toBe(1);
+
+    const subnet = normalizeClientSubnet(testIp);
+    const key = buildSystemCacheKey(
+      "auth_throttle",
+      `staff_login:${testEmail}:${subnet}`,
+    );
+    const initialTtl = await redis.ttl(key);
+    expect(initialTtl).toBeGreaterThan(0);
+    expect(initialTtl).toBeLessThanOrEqual(900);
+
+    // 2. Pre-existing key without TTL (ttl == -1) is healed on subsequent recorded failure
+    await redis.persist(key);
+    expect(await redis.ttl(key)).toBe(-1);
+
+    const count2 = await recordAccountFailure(testScope, testEmail, {
+      clientIp: testIp,
+    });
+    expect(count2).toBe(2);
+
+    const healedTtl = await redis.ttl(key);
+    expect(healedTtl).toBeGreaterThan(0);
+    expect(healedTtl).toBeLessThanOrEqual(900);
+
+    // 3. Reaching lockout threshold assigns lockout TTL > 0
+    await recordAccountFailure(testScope, testEmail, { clientIp: testIp });
+    await recordAccountFailure(testScope, testEmail, { clientIp: testIp });
+    const count5 = await recordAccountFailure(testScope, testEmail, {
+      clientIp: testIp,
+    });
+    expect(count5).toBe(5);
+
+    const lockoutTtl = await redis.ttl(key);
+    expect(lockoutTtl).toBeGreaterThan(0);
+    expect(lockoutTtl).toBeLessThanOrEqual(900);
+
+    // Clean up
+    await resetAccountThrottle(testScope, testEmail, { clientIp: testIp });
   });
 });
 

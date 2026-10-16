@@ -61,7 +61,10 @@ export async function memberRoutes(fastify: FastifyInstance) {
             ],
           });
         }
-        await recordAccountFailure("member_request", normalizedEmail);
+        await recordAccountFailure("member_request", normalizedEmail, {
+          windowSeconds: 600,
+          lockoutTtlSeconds: 600,
+        });
       }
 
       try {

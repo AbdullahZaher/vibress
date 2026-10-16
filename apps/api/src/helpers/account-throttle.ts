@@ -168,9 +168,45 @@ export async function checkAccountThrottle(
   }
 }
 
+const RECORD_FAILURE_LUA = `
+local current = redis.call('INCR', KEYS[1])
+local ttl = redis.call('TTL', KEYS[1])
+local window = tonumber(ARGV[1])
+local maxAttempts = tonumber(ARGV[2])
+local lockoutTtl = tonumber(ARGV[3])
+
+if current >= maxAttempts then
+    redis.call('EXPIRE', KEYS[1], lockoutTtl)
+elseif current == 1 or ttl < 0 then
+    redis.call('EXPIRE', KEYS[1], window)
+end
+return current
+`;
+
+const RECORD_GLOBAL_FAILURE_LUA = `
+local current = redis.call('INCR', KEYS[1])
+local ttl = redis.call('TTL', KEYS[1])
+local window = tonumber(ARGV[1])
+
+if current == 1 or ttl < 0 then
+    redis.call('EXPIRE', KEYS[1], window)
+end
+return current
+`;
+
+const SCOPE_DEFAULTS: Record<
+  ThrottleScope,
+  { windowSeconds: number; lockoutTtlSeconds: number }
+> = {
+  staff_login: { windowSeconds: 900, lockoutTtlSeconds: 900 },
+  staff_login_global: { windowSeconds: 900, lockoutTtlSeconds: 900 },
+  member_request: { windowSeconds: 600, lockoutTtlSeconds: 600 },
+  member_verify: { windowSeconds: 900, lockoutTtlSeconds: 900 },
+};
+
 /**
- * Records a failed attempt for the identifier. Increments failure counter and
- * establishes the rolling window or triggers lockout TTL.
+ * Records a failed attempt for the identifier. Atomically increments failure counter
+ * and establishes rolling window or lockout TTL via Lua script.
  */
 export async function recordAccountFailure(
   scope: ThrottleScope,
@@ -181,23 +217,31 @@ export async function recordAccountFailure(
     return 0;
   }
 
+  const defaultWindow =
+    SCOPE_DEFAULTS[scope]?.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
+  const defaultLockout =
+    SCOPE_DEFAULTS[scope]?.lockoutTtlSeconds ?? DEFAULT_LOCKOUT_SECONDS;
   const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-  const windowSeconds = options?.windowSeconds ?? DEFAULT_WINDOW_SECONDS;
-  const lockoutTtlSeconds =
-    options?.lockoutTtlSeconds ?? DEFAULT_LOCKOUT_SECONDS;
+  const windowSeconds = options?.windowSeconds ?? defaultWindow;
+  const lockoutTtlSeconds = options?.lockoutTtlSeconds ?? defaultLockout;
   const clientIp = options?.clientIp;
 
   const key = resolveThrottleKey(scope, identifier, clientIp);
 
   try {
     const redis = getRedisClient();
-    const count = await redis.incr(key);
-
-    if (count === 1) {
-      await redis.expire(key, windowSeconds);
-    } else if (count >= maxAttempts) {
-      await redis.expire(key, lockoutTtlSeconds);
-    }
+    const rawResult = await redis.eval(
+      RECORD_FAILURE_LUA,
+      1,
+      key,
+      String(windowSeconds),
+      String(maxAttempts),
+      String(lockoutTtlSeconds),
+    );
+    const count =
+      typeof rawResult === "number"
+        ? rawResult
+        : Number.parseInt(String(rawResult), 10);
 
     // Also record against global per-email counter if clientIp was provided
     if (scope === "staff_login" && clientIp) {
@@ -205,10 +249,12 @@ export async function recordAccountFailure(
         "auth_throttle",
         `staff_login_global:${identifier.trim().toLowerCase()}`,
       );
-      const globalCount = await redis.incr(globalKey);
-      if (globalCount === 1) {
-        await redis.expire(globalKey, windowSeconds);
-      }
+      await redis.eval(
+        RECORD_GLOBAL_FAILURE_LUA,
+        1,
+        globalKey,
+        String(windowSeconds),
+      );
     }
 
     return count;
