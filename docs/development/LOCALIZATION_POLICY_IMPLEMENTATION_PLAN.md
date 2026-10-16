@@ -20,16 +20,21 @@ claim of passing tests or production readiness**:
 - **T4:** Translation matrix/navigation/sidebar routing gated by multilingual
   state and permissions; typed mutation validation, source/target checks and
   workflow status authorization on create/edit/publish/bulk/AI paths.
-- **T3 (partial):** Shared Admin language context and selected English/Arabic
-  translations for setup, login, sidebar and settings. **Many screens and error
-  paths still contain hard-coded English text. Full Arabic UI is NOT complete.**
+- **T3 (partial):** Shared Admin language context and English/Arabic UI
+  translations for setup, login, sidebar, settings, core editorial lists,
+  post/page editor labels, member lists, tags and media search. **Other
+  administrative screens, portal surfaces and several error/interaction paths
+  still contain English strings. Arabic UI parity is NOT certified.**
 - **T5 (partial):** Dynamic locale routing, public API enabled-locale checks,
   theme locale context, published-only alternates, sitemap generation and safe
   redirects for unique historical published slugs. Pagination, SEO, plugin/theme
   coverage and upgrade redirect matrices remain to be certified.
-- **T6 (partial):** Structured document text extraction and review-gated AI
-  draft creation; provider failures do not save fake translations. Additional
-  content formats and provider integration need tests and explicit decisions.
+- **T6 (partial):** Structured text extraction supports Studio documents
+  and top-level legacy plain-text bodies, preserving media/IDs. AI failures
+  cannot create fake drafts, and existing records cannot be silently overwritten.
+  Editorial review and approval are required before publication. Additional
+  content formats, provider integration and safe draft revisioning still
+  require certification and explicit decisions.
 
 **Remaining release blockers:** entire Admin UI dictionary parity and RTL/a11y
 review; prior-public-URL inventory and primary-locale reconciliation for
