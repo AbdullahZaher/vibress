@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDb, posts, contentTranslations, users, settings, roles, userRoles,
-  publicationLocales, publications, eq, and,
+  publicationLocales, publications, tags, postTags, eq, and,
 } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
@@ -574,6 +574,53 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(200);
       const data = res.json();
       expect(data.translation.status).toBe("published");
+    });
+  });
+
+  describe("Translated pagination", () => {
+    it("paginates published translations before filtering the original-language source", async () => {
+      const tagId = randomUUID();
+      const untranslatedId = randomUUID();
+      const tagSlug = `locale-pagination-${runSuffix}`;
+      await db.insert(tags).values({
+        id: tagId,
+        publicationId: "pub_default",
+        name: "Localization pagination",
+        slug: tagSlug,
+      });
+      await db.insert(posts).values({
+        id: untranslatedId,
+        publicationId: "pub_default",
+        title: "More recent English-only source",
+        slug: `untranslated-${runSuffix}`,
+        content: { version: 1, root: {} },
+        status: "published",
+        visibility: "public",
+        primaryAuthorId: ownerId,
+        createdBy: ownerId,
+        updatedBy: ownerId,
+        publishedAt: new Date(),
+      });
+      await db.insert(postTags).values([
+        { publicationId: "pub_default", tagId, postId: untranslatedId },
+        { publicationId: "pub_default", tagId, postId: testPostId },
+      ]);
+      try {
+        const result = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/posts?locale=ar-SA&limit=1&page=1&tag=${tagSlug}`,
+        });
+        expect(result.statusCode).toBe(200);
+        const data = result.json();
+        expect(data.pagination.total).toBe(1);
+        expect(data.pagination.pages).toBe(1);
+        expect(data.posts).toHaveLength(1);
+        expect(data.posts[0].slug).toBe(arabicSlug);
+      } finally {
+        await db.delete(postTags).where(eq(postTags.tagId, tagId));
+        await db.delete(posts).where(eq(posts.id, untranslatedId));
+        await db.delete(tags).where(eq(tags.id, tagId));
+      }
     });
   });
 
