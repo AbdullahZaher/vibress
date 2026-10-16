@@ -110,13 +110,16 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: () => void 
               onChange={(e) => setPrimary(e.target.value)}
               disabled={working || config.needsReconciliation}
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {selected.map((code) => <option key={code} value={code}>
+              {selected.filter((code) =>
+                ["en", "ar"].includes(code.split("-")[0] || "") ||
+                code === config.primaryLocale,
+              ).map((code) => <option key={code} value={code}>
                 {nativeLanguage(code)} ({code})
               </option>)}
             </select>
             <p className="text-xs text-muted-foreground">
-              {label("Changing the primary language of a populated site requires a separate content migration.",
-                "يتطلب تغيير اللغة الأساسية لموقع يحوي محتوى عملية ترحيل مستقلة.")}
+              {label("English and Arabic are the currently supported primary Admin languages. Changing the primary of a populated site requires a separate content migration.",
+                "الإنجليزية والعربية هما اللغتان الأساسيتان المدعومتان حاليًا للوحة الإدارة. ويتطلب تغيير لغة موقع يحوي محتوى عملية ترحيل مستقلة.")}
             </p>
           </div>
           <fieldset className="space-y-2">
