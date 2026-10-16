@@ -1,5 +1,7 @@
 # Vibress Translation Management & Editorial UX — Implementation & Certification Report
 
+> **Historical certification only:** The checks and implementation claims below describe their original scope. They do **not** certify the subsequently accepted [single-language-by-default publication policy](../14-decisions/publication-language-policy.md), which remains pending implementation and new tests. See the [engineering plan](../development/LOCALIZATION_POLICY_IMPLEMENTATION_PLAN.md). Original results have deliberately not been rewritten.
+
 ## Executive Summary
 
 Vibress Translation Management & Editorial UX elevates the core Multilingual &

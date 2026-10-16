@@ -144,3 +144,13 @@ loop-safe redirects; diagnostics + bounded maintenance with no shell/SQL.
 **Reason:** Operability without unrestricted admin capabilities.
 
 See `settings-system-tools-boundary.md`.
+
+## ADR-020: Publication-scoped language policy
+
+**Decision:** Every publication starts with only the owner's chosen primary locale enabled. Additional languages, translation tools, locale-prefixed public routes, and translation workflows are opt-in and publication-scoped. Admin UI language follows the primary locale, with complete certified dictionaries; no implicit English/Arabic pair.
+
+**Reason:** One canonical locale contract protects publication identity, compatibility, content integrity, security, SEO and reliable multilingual expansion.
+
+**Status:** Accepted 2026-10-16 as a target specification; code implementation and verification are pending.
+
+See [publication-language-policy.md](publication-language-policy.md).

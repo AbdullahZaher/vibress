@@ -4,11 +4,13 @@ This guide describes how to develop, localize, and certify themes for Vibress wi
 
 ---
 
+> **Policy update (accepted; implementation pending):** [Publication Language Policy](../14-decisions/publication-language-policy.md) is authoritative. Theme language context and switchers must respect the publication's **actual primary locale and explicitly enabled set**. This is the target contract; existing middleware still assumes English default in some cases.
+
 ## 1. Overview of Multilingual Architecture
 
 Vibress uses an **ambient locale context** model:
 - The active locale (`locale`) and writing direction (`direction`: `"ltr"` | `"rtl"`) are supplied to every Liquid template and filter.
-- Locale-prefixed routing is automatic: English (`/`), Arabic (`/ar`), French (`/fr`), Persian (`/fa`), etc.
+- The **publication's configured primary locale** uses unprefixed paths (`/`). Other explicitly enabled locales use locale-prefixed paths. For example, an Arabic-primary site serves Arabic at `/`, while an English-primary site may serve Arabic at `/ar` when Arabic is enabled. Never assume English is the primary locale.
 - No layout shifts: The root HTML attributes (`<html lang="..." dir="...">`) are emitted synchronously by server middleware.
 
 ---
@@ -71,7 +73,7 @@ When rendering directional icons (such as next/previous navigation chevrons or b
 
 Create a `locales/` directory in your theme containing translation JSON files:
 
-### `locales/en.json` (Base / Default)
+### `locales/en.json` (English dictionary example; not automatically the publication default)
 ```json
 {
   "theme.readMore": "Read more",
@@ -93,7 +95,7 @@ Create a `locales/` directory in your theme containing translation JSON files:
 }
 ```
 
-> **Key Parity Rule:** Every key defined in `en.json` must be present in `ar.json` and any other supported locale file.
+> **Key Parity Rule:** Every UI locale the theme claims to fully support must have complete key coverage. English and Arabic are examples, not required active publication locales. The active publication locale is authoritative, and incomplete dictionaries must not silently turn a certified Arabic-only site into a mixed-language UI.
 
 ---
 
@@ -124,7 +126,7 @@ Translates a key from the active theme or core dictionary:
 ```
 
 ### 4. Language Switcher Tag (`locale_switcher`)
-Emits an accessible dropdown or link list preserving current resource URLs:
+Emits an accessible dropdown or link list only when at least one **other enabled and publishable** locale version exists for the current resource. A single-language publication must not render a language switcher. This is the intended post-rollout behavior:
 ```liquid
 <div class="header-lang">
   {% locale_switcher %}

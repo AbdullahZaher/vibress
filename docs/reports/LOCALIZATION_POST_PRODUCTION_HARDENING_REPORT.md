@@ -1,5 +1,7 @@
 # Vibress Localization — Post-Production Hardening & Future Locale Expansion Report
 
+> **Historical verification report — not a certification of the accepted 2026-10-16 language policy.** The new [publication language policy](../14-decisions/publication-language-policy.md) requires single-language-by-default onboarding, no implicit English/Arabic pairing, complete Arabic Admin UI and gated public locale routing. These behaviors need fresh implementation and verification; original metrics below are preserved as historical evidence only.
+
 **Status:** `READY FOR EXPANDED LOCALE ROLLOUT`\
 **Date:** August 23, 2026\
 **Authoritative Context:**
