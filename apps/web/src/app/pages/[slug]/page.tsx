@@ -27,7 +27,7 @@ export async function generateMetadata({
     };
   }
 
-  const localePrefix = getLocalePrefix(site.locale);
+  const localePrefix = getLocalePrefix(site.locale, site.primaryLocale || site.locale, site.enabledLocales);
 
   return buildPageMetadata({
     title: pageObj.seo?.title || pageObj.title,
