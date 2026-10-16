@@ -372,6 +372,13 @@ export async function translationRoutes(fastify: FastifyInstance) {
           message: "Use the approval or publication workflow endpoint",
         });
       }
+      if (body.targetLocale &&
+          canonicalPublicationLocale(body.targetLocale) !== existing.targetLocale) {
+        return reply.status(409).send({
+          statusCode: 409, error: "Conflict",
+          message: "Cannot change the target language of an existing translation",
+        });
+      }
       const canEditLive = (permission: string) =>
         hasPermission(req.permissions || [], permission, req.roles || []);
       if (body.status && body.status !== existing.status) {
