@@ -365,7 +365,8 @@ function extractRequestedLocale(
           : await pagesService.findById(translated.contentId, pubId);
       }
     }
-    if (!source || source.status !== "published" || source.visibility !== "public") {
+    if (!source || source.status !== "published" ||
+        source.visibility !== "public" || source.deletedAt) {
       return reply.status(404).send({ errors: [{
         code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
       }] });
@@ -550,7 +551,7 @@ function extractRequestedLocale(
         }
       }
 
-      if (!post) {
+      if (!post || post.visibility !== "public" || post.deletedAt) {
         return reply.status(404).send({
           errors: [
             {
@@ -730,7 +731,7 @@ function extractRequestedLocale(
         }
       }
 
-      if (!pageObj) {
+      if (!pageObj || pageObj.visibility !== "public" || pageObj.deletedAt) {
         return reply.status(404).send({
           errors: [
             {
