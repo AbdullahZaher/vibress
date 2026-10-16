@@ -268,6 +268,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       if (!(await targetIsEnabled(req, body.targetLocale))) {
         return localeUnavailable(reply, req.id);
       }
+      const normalizedTargetLocale = canonicalPublicationLocale(body.targetLocale);
 
       // Check if source exists
       let sourceUpdatedAt = new Date();
@@ -303,7 +304,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         contentType: type,
         contentId: id,
         sourceLocale: defaultLocale,
-        targetLocale: body.targetLocale,
+        targetLocale: normalizedTargetLocale,
         title: body.title,
         slug: body.slug,
         excerpt: body.excerpt,
@@ -324,7 +325,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         metadata: {
           contentType: type,
           contentId: id,
-          targetLocale: body.targetLocale,
+          targetLocale: normalizedTargetLocale,
           status: translation.status,
         },
       });
@@ -592,6 +593,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       if (!(await targetIsEnabled(req, body.targetLocale))) {
         return localeUnavailable(reply, req.id);
       }
+      const normalizedTargetLocale = canonicalPublicationLocale(body.targetLocale);
 
       // Retrieve source content
       let sourceTitle = "";
@@ -633,19 +635,19 @@ export async function translationRoutes(fastify: FastifyInstance) {
       // The provider only sees approved text segments, not arbitrary Studio
       // JSON identifiers/media refs. Invalid or failed output is never saved.
       const segments = collectTranslatableText(sourceContent);
-      const translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase()}`;
+      const translatedSlug = `${sourceSlug}-${normalizedTargetLocale.toLowerCase()}`;
       const gateway = await getAiGatewayService(req.publicationContext!.publicationId);
       const glossary = defaultTranslationGlossary.buildGlossaryPromptInstructions(
-        defaultLocale, body.targetLocale,
+        defaultLocale, normalizedTargetLocale,
       );
       let translated;
       try {
         const response = await gateway.generate({
           task: "translate",
-          targetLanguage: body.targetLocale,
+          targetLanguage: normalizedTargetLocale,
           userId: user.id,
           prompt: [
-            `Translate from ${defaultLocale} to ${body.targetLocale}.`,
+            `Translate from ${defaultLocale} to ${normalizedTargetLocale}.`,
             "Return only valid JSON with keys title, excerpt, segments.",
             "Translate every segments value; preserve all segment keys exactly.",
             "Do not translate identifiers, URLs, source JSON structure or punctuation-only segments.",
@@ -670,7 +672,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         contentType: type,
         contentId: id,
         sourceLocale: defaultLocale,
-        targetLocale: body.targetLocale,
+        targetLocale: normalizedTargetLocale,
         title: translated.title,
         slug: translatedSlug,
         excerpt: translated.excerpt,
@@ -686,7 +688,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         targetType: "translation",
         targetId: translation.id,
         metadata: {
-          targetLocale: body.targetLocale,
+          targetLocale: normalizedTargetLocale,
           provider: body.provider || "gateway",
           status: "needs_review",
         },
