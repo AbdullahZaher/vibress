@@ -201,6 +201,26 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       });
     });
 
+    it("does not allow unauthenticated users to change language configuration", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("enforces the origin protection on locale writes", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "https://untrusted.example.com" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
     it("rejects invalid and duplicated language configuration without changing state", async () => {
       const res = await app.inject({
         method: "PUT",
