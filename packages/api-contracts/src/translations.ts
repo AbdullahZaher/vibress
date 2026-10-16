@@ -26,6 +26,9 @@ export const AiTranslateRequestSchema = z.object({
 }).strict();
 
 export const UpdateContentTranslationSchema = z.object({
+  // Kept for compatibility with current Admin PATCH payloads. Target locale
+  // cannot be changed for an existing row.
+  targetLocale: PublicationLocaleTagSchema.optional(),
   title: z.string().trim().min(1).max(500).optional(),
   slug: z.string().trim().min(1).max(500).optional(),
   excerpt: z.string().max(5000).nullable().optional(),
