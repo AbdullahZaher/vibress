@@ -109,7 +109,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Drafts
+            {tr("Drafts")}
           </button>
           <button
             type="button"
@@ -120,7 +120,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Scheduled
+            {tr("Scheduled")}
           </button>
           <button
             type="button"
@@ -131,7 +131,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Published
+            {tr("Published")}
           </button>
         </div>
       )}
