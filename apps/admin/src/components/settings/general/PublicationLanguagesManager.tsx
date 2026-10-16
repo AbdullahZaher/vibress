@@ -21,7 +21,7 @@ function nativeLanguage(code: string): string {
   return CONTENT_LANGUAGES.find((lang) => lang.code === code)?.name || code;
 }
 
-export function PublicationLanguagesManager({ onSaved }: { onSaved?: () => void }) {
+export function PublicationLanguagesManager({ onSaved }: { onSaved?: (primaryLocale: string) => void }) {
   const [config, setConfig] = useState<PublicationLocaleConfiguration | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [primary, setPrimary] = useState("");
@@ -80,7 +80,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: () => void 
       setSelected(result.enabledLocales);
       setSuccess(label("Languages saved", "تم حفظ اللغات"));
       window.dispatchEvent(new Event("vibress:locales-updated"));
-      onSaved?.();
+      onSaved?.(result.primaryLocale);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : label("Language change failed", "تعذّر تغيير اللغات"));
     } finally {
