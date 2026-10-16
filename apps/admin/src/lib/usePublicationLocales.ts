@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicationLocalesApi } from "./api/operations";
+import { getPublicationLocaleContextApi } from "./api/operations";
 
 /** Shared per-session snapshot, always fetched through the scoped Admin API. */
 export function usePublicationLocales() {
@@ -14,7 +14,7 @@ export function usePublicationLocales() {
   }, [client]);
   return useQuery({
     queryKey: ["publication", "locales"],
-    queryFn: getPublicationLocalesApi,
+    queryFn: getPublicationLocaleContextApi,
     staleTime: 60000,
     retry: false,
   });
