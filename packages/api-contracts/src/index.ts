@@ -11,3 +11,4 @@ export * from "./setup";
 export * from "./whats-new";
 export * from "./redirects";
 export * from "./content-models";
+export * from "./publication-locales";
