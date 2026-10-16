@@ -14,6 +14,8 @@ import {
   SETTING_NAMESPACES,
   SettingValueType,
   SettingClassification,
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
 } from "@vibress/settings";
 import {
   hashPassword,
@@ -283,6 +285,17 @@ export class SetupService {
         .onConflictDoNothing();
 
       await this.writeSiteSettings(user.id, input.site);
+      // Preserve the selected onboarding language in the publication's
+      // canonical tables as well as the legacy site.locale projection.
+      // The surrounding setup transaction rolls back both if this fails.
+      await new PublicationLocaleService(
+        new DrizzlePublicationLocaleRepository(),
+        this.settingsRepo,
+      ).updateConfiguration(
+        "pub_default",
+        { primaryLocale: input.site.locale, enabledLocales: [input.site.locale] },
+        user.id,
+      );
 
       await this.auditService.record({
         actorUserId: user.id,
