@@ -32,6 +32,13 @@ export class ConcurrencyConflictError extends Error {
   }
 }
 
+export class PermissionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermissionDeniedError";
+  }
+}
+
 export const RESERVED_FIELD_KEYS = new Set([
   "__proto__",
   "constructor",
@@ -100,7 +107,7 @@ export function validateModelDefinition(input: {
     }
     seenKeys.add(key);
 
-    if (field.type && !VALID_FIELD_TYPES.includes(field.type as any)) {
+    if (field.type && !(VALID_FIELD_TYPES as readonly string[]).includes(field.type)) {
       throw new ValidationError({
         [key]: `Invalid field type '${field.type}'. Must be one of: ${VALID_FIELD_TYPES.join(", ")}`,
       });
@@ -360,17 +367,20 @@ export function filterEntryDataForVisibility(
       if (field.type === "relation") {
         if (typeof val === "object" && val !== null && !Array.isArray(val)) {
           const relObj = val as Record<string, unknown>;
-          // Status filtering: non-staff roles cannot see draft/archived relation targets
-          if (userRole !== "staff_admin" && relObj.status && relObj.status !== "published") {
+          // Status filtering: non-staff roles cannot see draft/archived/deleted relation targets (fail-closed)
+          if (userRole !== "staff_admin" && relObj.status !== "published") {
             result[field.key] = null;
             continue;
           }
-          // Recursive visibility filtering on relation data
+          // Recursive visibility filtering on relation data (fail-closed: empty subFields returns empty object for non-staff)
           const subFields = (relObj._fields as ContentFieldDefinition[] | undefined) || [];
           const subData = (relObj.data as Record<string, unknown> | undefined) || {};
-          const filteredSubData = subFields.length > 0
-            ? filterEntryDataForVisibility(subData, subFields, userRole)
-            : subData;
+          const filteredSubData =
+            Array.isArray(subFields) && subFields.length > 0
+              ? filterEntryDataForVisibility(subData, subFields, userRole)
+              : userRole === "staff_admin"
+                ? subData
+                : {};
 
           const cleanRel: Record<string, unknown> = {
             id: relObj.id,
@@ -394,16 +404,19 @@ export function filterEntryDataForVisibility(
           for (const item of val) {
             if (typeof item === "object" && item !== null && !Array.isArray(item)) {
               const itemObj = item as Record<string, unknown>;
-              // Status filtering: non-staff roles cannot see draft/archived relation targets
-              if (userRole !== "staff_admin" && itemObj.status && itemObj.status !== "published") {
+              // Status filtering: non-staff roles cannot see draft/archived/deleted relation targets (fail-closed)
+              if (userRole !== "staff_admin" && itemObj.status !== "published") {
                 continue;
               }
-              // Recursive visibility filtering on relation item data
+              // Recursive visibility filtering on relation item data (fail-closed: empty subFields returns empty object for non-staff)
               const subFields = (itemObj._fields as ContentFieldDefinition[] | undefined) || [];
               const subData = (itemObj.data as Record<string, unknown> | undefined) || {};
-              const filteredSubData = subFields.length > 0
-                ? filterEntryDataForVisibility(subData, subFields, userRole)
-                : subData;
+              const filteredSubData =
+                Array.isArray(subFields) && subFields.length > 0
+                  ? filterEntryDataForVisibility(subData, subFields, userRole)
+                  : userRole === "staff_admin"
+                    ? subData
+                    : {};
 
               const cleanItem: Record<string, unknown> = {
                 id: itemObj.id,

@@ -1105,4 +1105,116 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(coAuthors[0]!.id).toBe(author1A.id);
     expect(coAuthors[1]!.id).toBe(author2A.id);
   });
+
+  // Scenario 33: Mixed ID and Slug Duplicate Detection in relation_list
+  it("Scenario 33: Rejects relation_list containing mixed ID and slug references to the same entry", async () => {
+    try {
+      await service.createEntry(
+        bookModelA.id,
+        {
+          title: "Mixed Duplicates Book",
+          data: {
+            title: "Mixed Duplicates Book",
+            coAuthors: [author1A.id, author1A.slug],
+          },
+        },
+        testUserId,
+        pubTenantA,
+      );
+      expect.unreachable("Should have thrown ValidationError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      expect((err as ValidationError).fieldErrors.coAuthors).toContain("duplicate references");
+    }
+  });
+
+  // Scenario 34: Same slug in multiple tenants resolves cleanly without cross-tenant conflict
+  it("Scenario 34: Correctly resolves same-named slugs across multiple tenants without cross-publication rejection", async () => {
+    // Both tenant A and tenant B have an author with slug "shared-pen-name"
+    const sharedSlugAuthorA = await service.createEntry(
+      authorModelA.id,
+      {
+        title: "Shared Name Author A",
+        slug: "shared-pen-name",
+        data: { name: "Author in Pub A" },
+      },
+      testUserId,
+      pubTenantA,
+    );
+
+    const sharedSlugAuthorB = await service.createEntry(
+      authorModelB.id,
+      {
+        title: "Shared Name Author B",
+        slug: "shared-pen-name",
+        data: { name: "Author in Pub B" },
+      },
+      testUserId,
+      pubTenantB,
+    );
+
+    // Pub A creating an entry referencing "shared-pen-name" must succeed and point to Pub A author
+    const bookInA = await service.createEntry(
+      bookModelA.id,
+      {
+        title: "Book referencing shared slug in A",
+        data: {
+          title: "Book referencing shared slug in A",
+          primaryAuthor: "shared-pen-name",
+        },
+      },
+      testUserId,
+      pubTenantA,
+    );
+
+    const resolved = await service.getEntryById(bookModelA.id, bookInA.id, pubTenantA, true);
+    expect(resolved).not.toBeNull();
+    const resolvedAuthor = resolved!.data.primaryAuthor as Record<string, unknown>;
+    expect(resolvedAuthor.id).toBe(sharedSlugAuthorA.id);
+    expect(resolvedAuthor.id).not.toBe(sharedSlugAuthorB.id);
+  });
+
+  // Scenario 35: Fail-closed visibility filtering when field definitions are empty or untrusted
+  it("Scenario 35: Fails closed and sanitizes relation payload to empty object when subFields are empty or missing", () => {
+    const rawRelationPayload = {
+      author: {
+        id: "rel_123",
+        title: "Target Title",
+        status: "published",
+        data: {
+          publicName: "Exposed Name",
+          superSecretKey: "classified-12345",
+        },
+        // Intentionally missing or empty _fields
+        _fields: [],
+      },
+    };
+
+    const bookFields = [
+      {
+        id: "f_rel",
+        name: "Author",
+        key: "author",
+        type: "relation" as const,
+        relationModel: "author-model",
+        apiVisibility: "public" as const,
+      },
+    ];
+
+    // For public (anonymous) caller:
+    const publicFiltered = filterEntryDataForVisibility(rawRelationPayload, bookFields, "public");
+    const pubAuthor = publicFiltered.author as Record<string, unknown>;
+    expect(pubAuthor).toBeDefined();
+    expect(pubAuthor.id).toBe("rel_123");
+    // Fail-closed: data must be empty object, NEVER leaking superSecretKey
+    expect(pubAuthor.data).toEqual({});
+
+    // For staff_admin caller: data is preserved
+    const staffFiltered = filterEntryDataForVisibility(rawRelationPayload, bookFields, "staff_admin");
+    const staffAuthor = staffFiltered.author as Record<string, unknown>;
+    expect(staffAuthor.data).toEqual({
+      publicName: "Exposed Name",
+      superSecretKey: "classified-12345",
+    });
+  });
 });

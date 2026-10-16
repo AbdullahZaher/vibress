@@ -25,6 +25,7 @@ import {
 import {
   ValidationError,
   ConcurrencyConflictError,
+  PermissionDeniedError,
   validateEntryData,
   validateModelDefinition,
   analyzeSchemaEvolution,
@@ -642,6 +643,7 @@ export class ContentModelerService {
     input: UpdateEntryInput,
     userId: string,
     publicationId = "pub_default",
+    options?: { canPublish?: boolean },
   ): Promise<ContentEntry> {
     const model = await this.getModelByIdOrSlug(modelIdOrSlug, publicationId);
     if (!model) {
@@ -669,14 +671,6 @@ export class ContentModelerService {
     validateEntryData(mergedData, model.fields);
     await this.validateRelationReferences(mergedData, model.fields, publicationId);
 
-    const db = getDb();
-    const updates: Partial<ContentEntryRow> = {
-      updatedBy: userId,
-      updatedAt: new Date(),
-      version: existing.version + 1,
-    };
-
-    if (input.title !== undefined) updates.title = input.title;
     if (input.slug !== undefined) {
       const newSlug = slugify(input.slug);
       if (!newSlug) throw new ValidationError({ slug: "Slug must contain letters or numbers." });
@@ -687,40 +681,90 @@ export class ContentModelerService {
             `An entry with slug '${newSlug}' already exists in model '${model.name}'`,
           );
         }
-        updates.slug = newSlug;
-      }
-    }
-    if (input.data !== undefined) updates.data = mergedData;
-    if (input.status !== undefined) {
-      updates.status = input.status;
-      if (input.status === "published" && !existing.publishedAt) {
-        updates.publishedAt = new Date();
       }
     }
 
-    const whereConditions = [
-      eq(contentEntries.id, existing.id),
-      eq(contentEntries.publicationId, publicationId),
-    ];
-    if (input.expectedVersion !== undefined) {
-      whereConditions.push(eq(contentEntries.version, input.expectedVersion));
-    }
+    const db = getDb();
+    let wasPublished = false;
 
-    const updateResult = await db
-      .update(contentEntries)
-      .set(updates)
-      .where(and(...whereConditions))
-      .returning({ id: contentEntries.id });
+    await db.transaction(async (tx) => {
+      // Row lock to prevent race conditions during lifecycle checks & version updates
+      const [locked] = await tx
+        .select()
+        .from(contentEntries)
+        .where(
+          and(
+            eq(contentEntries.modelId, model.id),
+            eq(contentEntries.id, existing.id),
+            eq(contentEntries.publicationId, publicationId),
+            isNull(contentEntries.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
 
-    if (input.expectedVersion !== undefined && updateResult.length === 0) {
-      const fresh = await this.getEntryById(model.id, existing.id, publicationId);
-      const freshVersion = fresh?.version ?? existing.version;
-      throw new ConcurrencyConflictError(
-        `Update conflict: entry was concurrently modified by another user (current version: ${freshVersion}, expected: ${input.expectedVersion}).`,
-        freshVersion,
-        input.expectedVersion,
-      );
-    }
+      if (!locked) {
+        throw new Error(
+          `Content entry '${entryId}' not found in model '${model.name}' for publication '${publicationId}'`,
+        );
+      }
+
+      if (input.expectedVersion !== undefined && input.expectedVersion !== locked.version) {
+        throw new ConcurrencyConflictError(
+          `Update conflict: entry version is ${locked.version}, but expected version was ${input.expectedVersion}. Another user may have modified this entry.`,
+          locked.version,
+          input.expectedVersion,
+        );
+      }
+
+      const canPublish = options?.canPublish ?? true;
+      if (locked.status === "published" && !canPublish) {
+        throw new PermissionDeniedError(
+          "Permission denied: posts.publish required to modify or transition published content",
+        );
+      }
+      if (
+        input.status !== undefined &&
+        input.status !== locked.status &&
+        (input.status === "published" || input.status === "archived") &&
+        !canPublish
+      ) {
+        throw new PermissionDeniedError(
+          `Permission denied: posts.publish required to transition content to ${input.status}`,
+        );
+      }
+
+      const updates: Partial<ContentEntryRow> = {
+        updatedBy: userId,
+        updatedAt: new Date(),
+        version: locked.version + 1,
+      };
+
+      if (input.title !== undefined) updates.title = input.title;
+      if (input.slug !== undefined) {
+        const newSlug = slugify(input.slug);
+        if (newSlug) updates.slug = newSlug;
+      }
+      if (input.data !== undefined) updates.data = mergedData;
+      if (input.status !== undefined) {
+        updates.status = input.status;
+        if (input.status === "published" && !locked.publishedAt) {
+          updates.publishedAt = new Date();
+        }
+      }
+
+      await tx
+        .update(contentEntries)
+        .set(updates)
+        .where(
+          and(
+            eq(contentEntries.id, locked.id),
+            eq(contentEntries.publicationId, publicationId),
+          ),
+        );
+
+      wasPublished = locked.status !== "published";
+    });
 
     const updated = await this.getEntryById(model.id, existing.id, publicationId);
     if (updated) {
@@ -757,7 +801,7 @@ export class ContentModelerService {
         version: updated.version,
         userId,
       });
-      if (updated.status === "published" && existing.status !== "published") {
+      if (updated.status === "published" && wasPublished) {
         domainEvents.emit("content.entry.published", {
           entryId: updated.id,
           publicationId,
@@ -820,6 +864,7 @@ export class ContentModelerService {
     modelIdOrSlug: string,
     entryId: string,
     publicationId = "pub_default",
+    options?: { canPublish?: boolean },
   ): Promise<void> {
     const model = await this.getModelByIdOrSlug(modelIdOrSlug, publicationId);
     if (!model) {
@@ -836,16 +881,45 @@ export class ContentModelerService {
     }
 
     const db = getDb();
-    await db
-      .update(contentEntries)
-      .set({ deletedAt: new Date() })
-      .where(
-        and(
-          eq(contentEntries.modelId, model.id),
-          eq(contentEntries.id, existing.id),
-          eq(contentEntries.publicationId, publicationId),
-        ),
-      );
+    await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(contentEntries)
+        .where(
+          and(
+            eq(contentEntries.modelId, model.id),
+            eq(contentEntries.id, existing.id),
+            eq(contentEntries.publicationId, publicationId),
+            isNull(contentEntries.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      if (!locked) {
+        throw new Error(
+          `Content entry '${entryId}' not found in model '${model.name}' for publication '${publicationId}'`,
+        );
+      }
+
+      const canPublish = options?.canPublish ?? true;
+      if (locked.status === "published" && !canPublish) {
+        throw new PermissionDeniedError(
+          "Permission denied: posts.publish required to delete published content",
+        );
+      }
+
+      await tx
+        .update(contentEntries)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(contentEntries.modelId, model.id),
+            eq(contentEntries.id, existing.id),
+            eq(contentEntries.publicationId, publicationId),
+          ),
+        );
+    });
 
     await this.recordAudit({
       action: "content_entry.deleted",
@@ -894,24 +968,50 @@ export class ContentModelerService {
         if (field.type === "relation") {
           const val = data[field.key];
           if (val !== undefined && val !== null && val !== "") {
-            const targetIdOrSlug = typeof val === "string" ? val : ((val as any)?.id || (val as any)?.slug);
+            const targetIdOrSlug =
+              typeof val === "string"
+                ? val
+                : typeof val === "object" && val !== null && !Array.isArray(val)
+                  ? ((val as Record<string, unknown>).id as string | undefined) ||
+                    ((val as Record<string, unknown>).slug as string | undefined)
+                  : undefined;
             if (typeof targetIdOrSlug === "string" && targetIdOrSlug.trim()) {
-              const rows = await db
-                .select({ id: contentEntries.id, publicationId: contentEntries.publicationId, modelId: contentEntries.modelId })
+              const cleaned = targetIdOrSlug.trim();
+              const localRows = await db
+                .select({
+                  id: contentEntries.id,
+                  modelId: contentEntries.modelId,
+                })
                 .from(contentEntries)
                 .where(
-                  or(
-                    eq(contentEntries.id, targetIdOrSlug.trim()),
-                    eq(contentEntries.slug, targetIdOrSlug.trim()),
+                  and(
+                    eq(contentEntries.publicationId, publicationId),
+                    or(
+                      eq(contentEntries.id, cleaned),
+                      eq(contentEntries.slug, cleaned),
+                    ),
                   ),
                 )
                 .limit(1);
 
-              if (rows[0]) {
-                if (rows[0].publicationId !== publicationId) {
-                  errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' is prohibited.`;
-                } else if (rows[0].modelId !== targetModel.id) {
+              if (localRows[0]) {
+                if (localRows[0].modelId !== targetModel.id) {
                   errors[field.key] = `Referenced entry '${targetIdOrSlug}' belongs to a different content model.`;
+                }
+              } else {
+                const globalRows = await db
+                  .select({ id: contentEntries.id })
+                  .from(contentEntries)
+                  .where(
+                    or(
+                      eq(contentEntries.id, cleaned),
+                      eq(contentEntries.slug, cleaned),
+                    ),
+                  )
+                  .limit(1);
+
+                if (globalRows.length > 0) {
+                  errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' is prohibited.`;
                 }
               }
             }
@@ -940,7 +1040,13 @@ export class ContentModelerService {
               let hasInvalidFormat = false;
 
               for (const item of val) {
-                const targetIdOrSlug = typeof item === "string" ? item : ((item as any)?.id || (item as any)?.slug);
+                const targetIdOrSlug =
+                  typeof item === "string"
+                    ? item
+                    : typeof item === "object" && item !== null && !Array.isArray(item)
+                      ? ((item as Record<string, unknown>).id as string | undefined) ||
+                        ((item as Record<string, unknown>).slug as string | undefined)
+                      : undefined;
                 if (typeof targetIdOrSlug === "string" && targetIdOrSlug.trim()) {
                   const cleaned = targetIdOrSlug.trim();
                   if (seen.has(cleaned)) {
@@ -962,24 +1068,79 @@ export class ContentModelerService {
                 continue;
               }
 
-              // Batched query to check cross-publication and wrong-model references
-              const matchedRows = await db
-                .select({ id: contentEntries.id, slug: contentEntries.slug, publicationId: contentEntries.publicationId, modelId: contentEntries.modelId })
+              const localMatched = await db
+                .select({
+                  id: contentEntries.id,
+                  slug: contentEntries.slug,
+                  modelId: contentEntries.modelId,
+                })
                 .from(contentEntries)
                 .where(
-                  or(
-                    inArray(contentEntries.id, targetKeys),
-                    inArray(contentEntries.slug, targetKeys),
+                  and(
+                    eq(contentEntries.publicationId, publicationId),
+                    or(
+                      inArray(contentEntries.id, targetKeys),
+                      inArray(contentEntries.slug, targetKeys),
+                    ),
                   ),
                 );
 
-              for (const r of matchedRows) {
-                if (r.publicationId !== publicationId) {
-                  errors[field.key] = `Cross-publication relation reference '${r.slug || r.id}' is prohibited.`;
+              for (const r of localMatched) {
+                if (r.modelId !== targetModel.id) {
+                  const keyName = targetKeys.find((k) => k === r.id || k === r.slug) || r.slug || r.id;
+                  errors[field.key] = `Referenced entry '${keyName}' belongs to a different content model.`;
                   break;
-                } else if (r.modelId !== targetModel.id) {
-                  errors[field.key] = `Referenced entry '${r.slug || r.id}' belongs to a different content model.`;
-                  break;
+                }
+              }
+              if (errors[field.key]) {
+                continue;
+              }
+
+              const keyToEntryId = new Map<string, string>();
+              for (const entry of localMatched) {
+                keyToEntryId.set(entry.id, entry.id);
+                if (entry.slug) {
+                  keyToEntryId.set(entry.slug, entry.id);
+                }
+              }
+
+              const seenResolvedIds = new Set<string>();
+              let hasMixedDuplicates = false;
+              for (const key of targetKeys) {
+                const resolvedId = keyToEntryId.get(key);
+                if (resolvedId) {
+                  if (seenResolvedIds.has(resolvedId)) {
+                    hasMixedDuplicates = true;
+                    break;
+                  }
+                  seenResolvedIds.add(resolvedId);
+                }
+              }
+
+              if (hasMixedDuplicates) {
+                errors[field.key] = "Relation list contains duplicate references.";
+                continue;
+              }
+
+              const unresolvedKeys = targetKeys.filter((k) => !keyToEntryId.has(k));
+              if (unresolvedKeys.length > 0) {
+                const crossPubRows = await db
+                  .select({ id: contentEntries.id, slug: contentEntries.slug })
+                  .from(contentEntries)
+                  .where(
+                    or(
+                      inArray(contentEntries.id, unresolvedKeys),
+                      inArray(contentEntries.slug, unresolvedKeys),
+                    ),
+                  )
+                  .limit(1);
+
+                if (crossPubRows.length > 0) {
+                  const matchedKey =
+                    unresolvedKeys.find(
+                      (k) => k === crossPubRows[0]!.id || k === crossPubRows[0]!.slug,
+                    ) || unresolvedKeys[0]!;
+                  errors[field.key] = `Cross-publication relation reference '${matchedKey}' is prohibited.`;
                 }
               }
             }
@@ -1012,7 +1173,9 @@ export class ContentModelerService {
           typeof val === "string"
             ? val
             : typeof val === "object" && val !== null && !Array.isArray(val)
-              ? (val as any).id || (val as any).slug
+              ? ((val as Record<string, unknown>).id as string | undefined) ||
+                ((val as Record<string, unknown>).slug as string | undefined) ||
+                null
               : null;
 
         if (targetIdOrSlug) {
@@ -1082,7 +1245,9 @@ export class ContentModelerService {
             typeof item === "string"
               ? item
               : typeof item === "object" && item !== null && !Array.isArray(item)
-                ? (item as any).id || (item as any).slug
+                ? ((item as Record<string, unknown>).id as string | undefined) ||
+                  ((item as Record<string, unknown>).slug as string | undefined) ||
+                  null
                 : null,
           );
 
