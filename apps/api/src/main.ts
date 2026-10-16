@@ -116,6 +116,13 @@ function isPublicContentPrivacyExempt(url: string): boolean {
 
 export const buildApp = () => {
   const config = getConfig();
+
+  if (config.isProduction && config.trustProxy === true) {
+    appLogger.warn(
+      "SECURITY WARNING: TRUST_PROXY is set to true (trust all hops). In production, this allows client-spoofed X-Forwarded-For headers to determine req.ip and bypass rate limiting. Use TRUST_PROXY=1 (or specific trusted CIDRs) combined with Nginx realip configuration instead.",
+    );
+  }
+
   const fastify = Fastify({
     logger: false,
     bodyLimit: config.bodyLimitBytes, // Safe configurable default (1MB); raised per-route on upload/import endpoints
@@ -146,7 +153,6 @@ export const buildApp = () => {
 
   fastify.register(rateLimit, {
     global: false, // Apply per route as configured
-    keyGenerator: (req) => req.ip,
     errorResponseBuilder: (req, context) => {
       const err = new Error(
         `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,

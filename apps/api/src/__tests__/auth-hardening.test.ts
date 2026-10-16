@@ -9,6 +9,7 @@ import {
   resetAccountThrottle,
   normalizeClientSubnet,
 } from "../helpers/account-throttle";
+import { appLogger } from "../observability";
 
 const PROD_ENV = {
   NODE_ENV: "production",
@@ -551,6 +552,19 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
 
     // Clean up
     await resetAccountThrottle(testScope, testEmail, { clientIp: testIp });
+  });
+
+  it("logs a startup security warning when TRUST_PROXY is true in production", async () => {
+    process.env.TRUST_PROXY = "true";
+    const warnSpy = vi.spyOn(appLogger, "warn");
+
+    app = buildApp();
+    await app.ready();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("SECURITY WARNING: TRUST_PROXY is set to true"),
+    );
+    warnSpy.mockRestore();
   });
 });
 
