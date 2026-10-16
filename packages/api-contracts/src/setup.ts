@@ -33,6 +33,8 @@ const LocaleSchema = z
   .string()
   .trim()
   .regex(/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/, "Invalid locale")
+  .refine((tag) => ["en", "ar"].includes(tag.split("-")[0] || ""),
+    "Primary Admin interface is currently supported only in English and Arabic")
   .default("en");
 
 export const SetupSiteInputSchema = z.object({
