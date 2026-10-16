@@ -8,6 +8,7 @@ import {
   mediaService,
   themeService,
   settingsService,
+  publicationLocaleService,
   workspaceService,
   commentsService,
   redirectsService,
@@ -26,7 +27,9 @@ import {
   signSiteAuthToken,
   SITE_AUTH_COOKIE_NAME,
 } from "@vibress/security";
-import { getDirection, canonicalizeLocale } from "@vibress/i18n";
+import { getDirection } from "@vibress/i18n";
+import { canonicalPublicationLocale } from "@vibress/settings";
+import type { FastifyRequest } from "fastify";
 import { TranslationService } from "@vibress/i18n/server";
 
 const translationService = new TranslationService();
@@ -42,6 +45,7 @@ async function buildPublicSiteIdentity(publicationId: string): Promise<{
   description: string;
   url: string;
   locale: string;
+  enabledLocales: string[];
   direction: string;
   tagline: string;
   timezone: string;
@@ -65,7 +69,8 @@ async function buildPublicSiteIdentity(publicationId: string): Promise<{
 
   const str = (v: unknown, fallback: string): string =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;
-  const resolvedLocale = str(site.locale, config.site.locale);
+  const localePolicy = await publicationLocaleService.getConfiguration(publicationId);
+  const resolvedLocale = localePolicy.primaryLocale;
 
   return {
     title: str(site.title, config.site.name),
@@ -73,6 +78,7 @@ async function buildPublicSiteIdentity(publicationId: string): Promise<{
     tagline: str(site.tagline, ""),
     url: config.site.url,
     locale: resolvedLocale,
+    enabledLocales: localePolicy.enabledLocales,
     direction: getDirection(resolvedLocale),
     timezone: str(site.timezone, "UTC"),
     accentColor: str(site.accentColor, "#6366f1"),
@@ -154,6 +160,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
           description: site.description,
           url: site.url,
           locale: site.locale,
+          enabledLocales: site.enabledLocales,
           direction: site.direction,
           tagline: site.tagline,
           timezone: site.timezone,
@@ -239,19 +246,45 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
     },
   });
 
-function extractRequestedLocale(req: any): string | null {
-  const query = req.query as { locale?: string } | undefined;
-  if (query?.locale && typeof query.locale === "string" && query.locale.trim()) {
-    return canonicalizeLocale(query.locale.trim());
-  }
-  const acceptLang = req.headers["accept-language"];
-  if (acceptLang && typeof acceptLang === "string") {
-    const primary = acceptLang.split(",")[0]?.split(";")[0]?.trim();
-    if (primary && primary !== "*") {
-      return canonicalizeLocale(primary);
+function extractRequestedLocale(
+  req: FastifyRequest,
+  enabledLocales: readonly string[],
+): { locale: string | null; invalidExplicit: boolean } {
+  const query = req.query as { locale?: unknown } | undefined;
+  if (query && "locale" in query) {
+    if (typeof query.locale !== "string") return { locale: null, invalidExplicit: true };
+    try {
+      const explicit = canonicalPublicationLocale(query.locale);
+      return enabledLocales.includes(explicit)
+        ? { locale: explicit, invalidExplicit: false }
+        : { locale: null, invalidExplicit: true };
+    } catch {
+      return { locale: null, invalidExplicit: true };
     }
   }
-  return null;
+  const header = req.headers["accept-language"];
+  if (typeof header === "string") {
+    // Header language preference is advisory, never an enablement override.
+    for (const candidate of header.split(",")) {
+      const code = candidate.split(";")[0]?.trim();
+      if (!code || code === "*") continue;
+      try {
+        const canonical = canonicalPublicationLocale(code);
+        if (enabledLocales.includes(canonical)) {
+          return { locale: canonical, invalidExplicit: false };
+        }
+        const base = canonical.split("-")[0];
+        const matches = enabledLocales.filter((enabled) =>
+          enabled === base || enabled.split("-")[0] === base);
+        if (matches.length === 1) {
+          return { locale: matches[0]!, invalidExplicit: false };
+        }
+      } catch {
+        // Skip malformed browser preferences without failing the public site.
+      }
+    }
+  }
+  return { locale: null, invalidExplicit: false };
 }
 
   // Public Posts List
@@ -265,12 +298,18 @@ function extractRequestedLocale(req: any): string | null {
       const limit = filter.limit;
       const page = filter.page;
       const offset = (page - 1) * limit;
-      const requestedLocale = extractRequestedLocale(req);
-      
-      const pubId = req.publicationContext?.publicationId;
-      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
-      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
-      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
+      const pubId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(pubId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED",
+          message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
 
       const { posts, total } = await postsService.listPosts({
         publicationId: pubId,
@@ -295,13 +334,13 @@ function extractRequestedLocale(req: any): string | null {
           let mergedPost: any = post;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId);
-            if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
+            if (tr && (tr.status === "published")) {
               mergedPost = {
                 ...post,
                 title: tr.title,
                 slug: tr.slug,
                 excerpt: tr.excerpt ?? post.excerpt,
-                content: Object.keys(tr.content || {}).length > 0 ? tr.content : post.content,
+                content: tr.content,
                 metaTitle: tr.metaTitle ?? post.metaTitle,
                 metaDescription: tr.metaDescription ?? post.metaDescription,
                 locale: tr.targetLocale,
@@ -337,7 +376,7 @@ function extractRequestedLocale(req: any): string | null {
 
       return reply.status(200).send({
         posts: validSummaries,
-        locale: requestedLocale || "en",
+        locale: requestedLocale,
         pagination: {
           page,
           limit,
@@ -352,27 +391,29 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/posts/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const requestedLocale = extractRequestedLocale(req);
-      const pubId = req.publicationContext?.publicationId;
-      
-      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
-      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
-      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
+      const pubId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(pubId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED",
+          message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
 
       let post = await postsService.findPublishedBySlug(slug, pubId);
       let translationItem = null;
 
       if (!post) {
         // Try finding by localized slug
-        if (requestedLocale) {
+        if (isTranslationRequest) {
           translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId);
         }
-        if (!translationItem) {
-          translationItem =
-            (await translationService.findTranslationBySlug("post", "ar-SA", slug, pubId)) ||
-            (await translationService.findTranslationBySlugAny("post", slug, pubId));
-        }
 
+        if (translationItem?.status !== "published") translationItem = null;
         if (translationItem) {
           post = await postsService.findById(translationItem.contentId, pubId);
           if (!post || post.status !== "published") {
@@ -391,9 +432,7 @@ function extractRequestedLocale(req: any): string | null {
 
         if (
           !translationItem ||
-          (translationItem.status !== "published" &&
-            translationItem.status !== "approved" &&
-            translationItem.status !== "translated")
+          translationItem.status !== "published"
         ) {
           return reply.status(404).send({
             errors: [
@@ -426,9 +465,7 @@ function extractRequestedLocale(req: any): string | null {
             slug: translationItem.slug,
             excerpt: translationItem.excerpt ?? post.excerpt,
             content:
-              Object.keys(translationItem.content || {}).length > 0
-                ? translationItem.content
-                : post.content,
+              true ? translationItem.content : post.content,
             metaTitle: translationItem.metaTitle ?? post.metaTitle,
             metaDescription:
               translationItem.metaDescription ?? post.metaDescription,
@@ -454,7 +491,7 @@ function extractRequestedLocale(req: any): string | null {
         mediaService,
         commentCounts.get(post.id) ?? 0,
       );
-      return reply.status(200).send({ post: postDetail, locale: mergedPost.locale || "en" });
+      return reply.status(200).send({ post: postDetail, locale: requestedLocale });
     },
   });
 
@@ -469,12 +506,18 @@ function extractRequestedLocale(req: any): string | null {
       const limit = filter.limit;
       const page = filter.page;
       const offset = (page - 1) * limit;
-      const requestedLocale = extractRequestedLocale(req);
-      
-      const pubId = req.publicationContext?.publicationId;
-      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
-      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
-      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
+      const pubId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(pubId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED",
+          message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
 
       const { pages, total } = await pagesService.listPages({
         publicationId: pubId,
@@ -489,13 +532,13 @@ function extractRequestedLocale(req: any): string | null {
           let mergedPage: any = pageObj;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId);
-            if (tr && (tr.status === "published" || tr.status === "approved" || tr.status === "translated")) {
+            if (tr && (tr.status === "published")) {
               mergedPage = {
                 ...pageObj,
                 title: tr.title,
                 slug: tr.slug,
                 excerpt: tr.excerpt ?? pageObj.excerpt,
-                content: Object.keys(tr.content || {}).length > 0 ? tr.content : pageObj.content,
+                content: tr.content,
                 metaTitle: tr.metaTitle ?? pageObj.metaTitle,
                 metaDescription: tr.metaDescription ?? pageObj.metaDescription,
                 locale: tr.targetLocale,
@@ -514,7 +557,7 @@ function extractRequestedLocale(req: any): string | null {
 
       return reply.status(200).send({
         pages: validDetails,
-        locale: requestedLocale || "en",
+        locale: requestedLocale,
         pagination: {
           page,
           limit,
@@ -529,26 +572,28 @@ function extractRequestedLocale(req: any): string | null {
   fastify.get("/pages/:slug", {
     handler: async (req, reply) => {
       const { slug } = req.params as { slug: string };
-      const requestedLocale = extractRequestedLocale(req);
-      const pubId = req.publicationContext?.publicationId;
-      
-      const site = await buildPublicSiteIdentity(req.publicationContext!.publicationId);
-      const defaultLocaleCode = (site.locale.split('-')[0] || "en").toLowerCase();
-      const isTranslationRequest = requestedLocale && !requestedLocale.startsWith(defaultLocaleCode);
+      const pubId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(pubId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED",
+          message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
 
       let pageObj = await pagesService.findPublishedBySlug(slug, pubId);
       let translationItem = null;
 
       if (!pageObj) {
-        if (requestedLocale) {
+        if (isTranslationRequest) {
           translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId);
         }
-        if (!translationItem) {
-          translationItem =
-            (await translationService.findTranslationBySlug("page", "ar-SA", slug, pubId)) ||
-            (await translationService.findTranslationBySlugAny("page", slug, pubId));
-        }
 
+        if (translationItem?.status !== "published") translationItem = null;
         if (translationItem) {
           pageObj = await pagesService.findById(translationItem.contentId, pubId);
           if (!pageObj || pageObj.status !== "published") {
@@ -566,9 +611,7 @@ function extractRequestedLocale(req: any): string | null {
 
         if (
           !translationItem ||
-          (translationItem.status !== "published" &&
-            translationItem.status !== "approved" &&
-            translationItem.status !== "translated")
+          translationItem.status !== "published"
         ) {
           return reply.status(404).send({
             errors: [
@@ -601,9 +644,7 @@ function extractRequestedLocale(req: any): string | null {
             slug: translationItem.slug,
             excerpt: translationItem.excerpt ?? pageObj.excerpt,
             content:
-              Object.keys(translationItem.content || {}).length > 0
-                ? translationItem.content
-                : pageObj.content,
+              true ? translationItem.content : pageObj.content,
             metaTitle: translationItem.metaTitle ?? pageObj.metaTitle,
             metaDescription:
               translationItem.metaDescription ?? pageObj.metaDescription,
@@ -612,7 +653,7 @@ function extractRequestedLocale(req: any): string | null {
         : pageObj;
 
       const pageDetail = await buildPublicPageDetailDto(mergedPage, mediaService);
-      return reply.status(200).send({ page: pageDetail, locale: mergedPage.locale || "en" });
+      return reply.status(200).send({ page: pageDetail, locale: requestedLocale });
     },
   });
 
