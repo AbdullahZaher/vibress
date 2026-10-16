@@ -187,7 +187,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           onClick={() => onNavigate("/admin/posts/new")}
           className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="h-4 w-4" /> Create Post
+          <Plus className="h-4 w-4" /> {tr("Create Post")}
         </Button>
       </div>
 
@@ -202,7 +202,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            All <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.length})</span>
+            {tr("All")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("published")}
@@ -222,7 +222,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Drafts <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "draft").length})</span>
+            {tr("Drafts")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "draft").length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("scheduled")}
