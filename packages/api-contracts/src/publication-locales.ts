@@ -19,6 +19,7 @@ export const PublicationLocaleTagSchema = z
 export const UpdatePublicationLocalesSchema = z.object({
   primaryLocale: PublicationLocaleTagSchema,
   enabledLocales: z.array(PublicationLocaleTagSchema).min(1).max(20),
+  confirmPublishedUrlRetirement: z.boolean().optional(),
 }).strict().superRefine((value, context) => {
   try {
     const primary = Intl.getCanonicalLocales(value.primaryLocale)[0];

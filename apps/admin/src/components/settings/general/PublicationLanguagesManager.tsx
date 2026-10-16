@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ApiError,
   getPublicationLocalesApi,
   updatePublicationLocalesApi,
   type PublicationLocaleConfiguration,
@@ -73,7 +74,9 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
     setSuccess("");
     try {
       const result = await updatePublicationLocalesApi({
-        primaryLocale: primary, enabledLocales: selected,
+        primaryLocale: primary,
+        enabledLocales: selected,
+        confirmPublishedUrlRetirement: removed.length > 0,
       });
       setConfig(result);
       setPrimary(result.primaryLocale);
@@ -82,6 +85,40 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
       window.dispatchEvent(new Event("vibress:locales-updated"));
       onSaved?.(result.primaryLocale);
     } catch (cause) {
+      if (
+        (cause instanceof ApiError && cause.code === "PUBLISHED_LOCALE_REQUIRES_REVIEW") ||
+        (cause instanceof Error && cause.message.includes("Review published translated URLs"))
+      ) {
+        const confirmed = window.confirm(
+          label(
+            "This language has published translations that will no longer be publicly accessible. Do you want to proceed and disable it?",
+            "تحتوي هذه اللغة على ترجمات منشورة لن تعد متاحة للعامة. هل تريد المتابعة وتعطيلها؟",
+          ),
+        );
+        if (confirmed) {
+          try {
+            const retryResult = await updatePublicationLocalesApi({
+              primaryLocale: primary,
+              enabledLocales: selected,
+              confirmPublishedUrlRetirement: true,
+            });
+            setConfig(retryResult);
+            setPrimary(retryResult.primaryLocale);
+            setSelected(retryResult.enabledLocales);
+            setSuccess(label("Languages saved", "تم حفظ اللغات"));
+            window.dispatchEvent(new Event("vibress:locales-updated"));
+            onSaved?.(retryResult.primaryLocale);
+            return;
+          } catch (retryCause) {
+            setError(
+              retryCause instanceof Error
+                ? retryCause.message
+                : label("Language change failed", "تعذّر تغيير اللغات"),
+            );
+            return;
+          }
+        }
+      }
       setError(cause instanceof Error ? cause.message : label("Language change failed", "تعذّر تغيير اللغات"));
     } finally {
       setWorking(false);

@@ -99,8 +99,11 @@ export class PublicationLocaleService {
     // operators must reconcile the mismatch explicitly before any locale write.
     const historic = await this.repository.listPublicTranslationLocales(publicationId);
     const absentPublicLocales = [...new Set(historic.map(canonicalPublicationLocale))]
-      .filter((locale) => locale !== current.primaryLocale &&
-        !current.enabledLocales.includes(locale));
+      .filter((locale) =>
+        locale !== current.primaryLocale &&
+        !current.enabledLocales.includes(locale) &&
+        !snapshot.locales.some((row) => canonicalPublicationLocale(row.locale) === locale),
+      );
     if (absentPublicLocales.length > 0) {
       const enabledLocales = [...current.enabledLocales, ...absentPublicLocales];
       return {
@@ -183,7 +186,11 @@ export class PublicationLocaleService {
    */
   async updateConfiguration(
     publicationId: string,
-    requested: { primaryLocale: string; enabledLocales: string[] },
+    requested: {
+      primaryLocale: string;
+      enabledLocales: string[];
+      confirmPublishedUrlRetirement?: boolean | undefined;
+    },
     actorId: string | null,
   ): Promise<PublicationLocaleConfiguration> {
     if (!publicationId) {
@@ -224,13 +231,15 @@ export class PublicationLocaleService {
       }
 
       // Do not silently retire a historically public locale on upgrade.
-      const publicLocales = await this.repository.listPublicTranslationLocales(publicationId);
-      for (const locale of publicLocales) {
-        if (!enabledLocales.includes(canonicalPublicationLocale(locale))) {
-          throw new PublicationLocaleError(
-            "PUBLISHED_LOCALE_REQUIRES_REVIEW",
-            "Review published translated URLs before disabling a language",
-          );
+      if (!requested.confirmPublishedUrlRetirement) {
+        const publicLocales = await this.repository.listPublicTranslationLocales(publicationId);
+        for (const locale of publicLocales) {
+          if (!enabledLocales.includes(canonicalPublicationLocale(locale))) {
+            throw new PublicationLocaleError(
+              "PUBLISHED_LOCALE_REQUIRES_REVIEW",
+              "Review published translated URLs before disabling a language",
+            );
+          }
         }
       }
 

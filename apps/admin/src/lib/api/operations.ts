@@ -1,4 +1,5 @@
-import { apiRequest } from "./client";
+import { apiRequest, ApiError } from "./client";
+export { ApiError };
 
 export interface PublicationLocaleConfiguration {
   primaryLocale: string;
@@ -18,6 +19,7 @@ export function getPublicationLocaleContextApi(): Promise<PublicationLocaleConfi
 export function updatePublicationLocalesApi(input: {
   primaryLocale: string;
   enabledLocales: string[];
+  confirmPublishedUrlRetirement?: boolean | undefined;
 }): Promise<PublicationLocaleConfiguration> {
   return apiRequest("/locales", {
     method: "PUT",

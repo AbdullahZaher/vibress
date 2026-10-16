@@ -281,6 +281,32 @@ describe("PublicationLocaleService — single language by default", () => {
     });
   });
 
+  it("allows retiring published translated URLs when explicit review is confirmed", async () => {
+    publicTranslations.set("pub_a", ["ar-SA"]);
+    const updated = await service.updateConfiguration("pub_a", {
+      primaryLocale: "en",
+      enabledLocales: ["en"],
+      confirmPublishedUrlRetirement: true,
+    }, "owner");
+    expect(updated.enabledLocales).toEqual(["en"]);
+    expect(updated.isMultilingual).toBe(false);
+  });
+
+  it("does not resurrect an explicitly deactivated language when checking configuration", async () => {
+    publicTranslations.set("pub_a", ["ar-SA"]);
+    publications.set("pub_a", {
+      primaryLocale: "en",
+      locales: [
+        { locale: "en", status: "active", isDefault: true },
+        { locale: "ar-SA", status: "inactive", isDefault: false },
+      ],
+    });
+    const config = await service.getConfiguration("pub_a");
+    expect(config.enabledLocales).toEqual(["en"]);
+    expect(config.isMultilingual).toBe(false);
+    expect(config.needsReconciliation).toBe(false);
+  });
+
   it("keeps disabled locale rows for reactivation instead of deleting them", async () => {
     publications.set("pub_a", {
       primaryLocale: "en",

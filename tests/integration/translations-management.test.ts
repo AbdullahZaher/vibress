@@ -327,6 +327,75 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       });
       expect(res.statusCode).toBe(400);
     });
+
+    it("guards disabling a language with published URLs unless confirmed via confirmPublishedUrlRetirement", async () => {
+      const enableRes = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA", "de-DE"],
+        },
+      });
+      expect(enableRes.statusCode).toBe(200);
+
+      const trId = randomUUID();
+      await db.insert(contentTranslations).values({
+        id: trId,
+        publicationId: "pub_default",
+        contentType: "post",
+        contentId: testPostId,
+        targetLocale: "de-DE",
+        status: "published",
+        title: "German Title",
+        slug: `german-post-${runSuffix}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      try {
+        const failRes = await app.inject({
+          method: "PUT",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+          payload: {
+            primaryLocale: "en",
+            enabledLocales: ["en", "ar-SA"],
+          },
+        });
+        expect(failRes.statusCode).toBe(409);
+        expect(failRes.json().errors[0].code).toBe("PUBLISHED_LOCALE_REQUIRES_REVIEW");
+
+        const successRes = await app.inject({
+          method: "PUT",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+          payload: {
+            primaryLocale: "en",
+            enabledLocales: ["en", "ar-SA"],
+            confirmPublishedUrlRetirement: true,
+          },
+        });
+        expect(successRes.statusCode).toBe(200);
+        expect(successRes.json().enabledLocales).toEqual(["en", "ar-SA"]);
+
+        const getRes = await app.inject({
+          method: "GET",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie },
+        });
+        expect(getRes.statusCode).toBe(200);
+        expect(getRes.json().enabledLocales).toEqual(["en", "ar-SA"]);
+        expect(getRes.json().needsReconciliation).toBe(false);
+      } finally {
+        await db.delete(contentTranslations).where(eq(contentTranslations.id, trId));
+        await db.delete(publicationLocales).where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "de-DE"),
+        ));
+      }
+    });
   });
 
   describe("GET /api/admin/v1/translations/matrix", () => {

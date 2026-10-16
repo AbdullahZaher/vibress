@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getDb, publications, publicationLocales, settings } from "@vibress/database";
+import { getDb, publications, publicationLocales, settings, contentTranslations } from "@vibress/database";
 import { eq, inArray, and } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
@@ -97,6 +97,49 @@ describe("Publication locale persistence and tenant isolation", () => {
     expect(french?.isDefault).toBe(false);
     const [unaffected] = await db.select().from(publications).where(eq(publications.id, pubB));
     expect(unaffected?.primaryLocale).toBe("fr");
+  });
+
+  it("guards against retiring published translation URLs unless confirmed, and persists deactivation cleanly", async () => {
+    await service.updateConfiguration(
+      pubA, { primaryLocale: "ar", enabledLocales: ["ar", "fr-FR"] }, null,
+    );
+    const translationId = randomUUID();
+    const contentId = randomUUID();
+    await db.insert(contentTranslations).values({
+      id: translationId,
+      publicationId: pubA,
+      contentType: "post",
+      contentId,
+      targetLocale: "fr-FR",
+      status: "published",
+      title: "French Title",
+      slug: `french-slug-${suffix}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    try {
+      await expect(
+        service.updateConfiguration(
+          pubA, { primaryLocale: "ar", enabledLocales: ["ar"] }, null,
+        ),
+      ).rejects.toMatchObject({ code: "PUBLISHED_LOCALE_REQUIRES_REVIEW" });
+
+      const result = await service.updateConfiguration(
+        pubA,
+        { primaryLocale: "ar", enabledLocales: ["ar"], confirmPublishedUrlRetirement: true },
+        null,
+      );
+      expect(result.enabledLocales).toEqual(["ar"]);
+      expect(result.isMultilingual).toBe(false);
+
+      const config = await service.getConfiguration(pubA);
+      expect(config.enabledLocales).toEqual(["ar"]);
+      expect(config.isMultilingual).toBe(false);
+      expect(config.needsReconciliation).toBe(false);
+    } finally {
+      await db.delete(contentTranslations).where(eq(contentTranslations.id, translationId));
+    }
   });
 
   it("rejects attempts to mutate a foreign publication through an unknown ID", async () => {
