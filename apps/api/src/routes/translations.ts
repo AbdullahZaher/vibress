@@ -361,6 +361,15 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Approval and publication transitions are allowed exclusively
+      // through their separately permissioned workflow endpoints.
+      if (body.status && body.status !== existing.status &&
+          !["draft", "in_progress", "translated", "needs_review", "stale"].includes(body.status)) {
+        return reply.status(403).send({
+          statusCode: 403, error: "Forbidden",
+          message: "Use the approval or publication workflow endpoint",
+        });
+      }
       const canEditLive = (permission: string) =>
         hasPermission(req.permissions || [], permission, req.roles || []);
       if (body.status === "needs_review" && !canEditLive("translations.review")) {
