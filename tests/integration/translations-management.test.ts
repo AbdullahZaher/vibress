@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDb, posts, contentTranslations, users, settings, roles, userRoles,
-  publicationLocales, eq, and,
+  publicationLocales, publications, eq, and,
 } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
@@ -54,6 +54,8 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   const postSlug = `integration-post-${runSuffix}`;
   const arabicSlug = `al-manshur-${runSuffix}`;
   let previousArabicLocale: { status: string; isDefault: boolean } | null = null;
+  let previousPrimaryLocale = "en";
+  let previousSiteLocale: typeof settings.$inferSelect | null = null;
   let insertedArabicLocale = false;
 
   beforeAll(async () => {
@@ -62,6 +64,20 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
 
     // The legacy suite exercises a bilingual editorial workflow. The system
     // no longer implicitly activates Arabic, so explicitly enable it here.
+    const [publicationBefore] = await db.select({ primaryLocale: publications.primaryLocale })
+      .from(publications).where(eq(publications.id, "pub_default"));
+    previousPrimaryLocale = publicationBefore?.primaryLocale ?? "en";
+    if (previousPrimaryLocale !== "en") {
+      await db.update(publications)
+        .set({ primaryLocale: "en" })
+        .where(eq(publications.id, "pub_default"));
+    }
+    const [localeSettingBefore] = await db.select().from(settings).where(and(
+      eq(settings.publicationId, "pub_default"),
+      eq(settings.namespace, "site"),
+      eq(settings.key, "locale"),
+    ));
+    previousSiteLocale = localeSettingBefore ?? null;
     await db
       .delete(settings)
       .where(and(
@@ -131,6 +147,25 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   afterAll(async () => {
+    // Translations have no direct content_id foreign key; explicitly remove
+    // all rows created by this suite to avoid polluting later test fixtures.
+    await db.delete(contentTranslations).where(and(
+      eq(contentTranslations.publicationId, "pub_default"),
+      eq(contentTranslations.contentId, testPostId),
+    ));
+    await db.delete(posts).where(eq(posts.id, testPostId));
+    if (previousSiteLocale) {
+      await db.insert(settings).values(previousSiteLocale).onConflictDoUpdate({
+        target: [settings.publicationId, settings.namespace, settings.key],
+        set: {
+          value: previousSiteLocale.value,
+          updatedBy: previousSiteLocale.updatedBy,
+          updatedAt: previousSiteLocale.updatedAt,
+        },
+      });
+    }
+    await db.update(publications).set({ primaryLocale: previousPrimaryLocale })
+      .where(eq(publications.id, "pub_default"));
     if (insertedArabicLocale) {
       await db.delete(publicationLocales).where(and(
         eq(publicationLocales.publicationId, "pub_default"),
