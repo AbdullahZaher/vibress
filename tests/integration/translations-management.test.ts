@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
-import { getDb, posts, contentTranslations, users, settings, roles, userRoles, eq, and } from "@vibress/database";
+import {
+  getDb, posts, contentTranslations, users, settings, roles, userRoles,
+  publicationLocales, eq, and,
+} from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
 import { randomUUID } from "crypto";
@@ -50,15 +53,47 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   const runSuffix = randomUUID().slice(0, 8);
   const postSlug = `integration-post-${runSuffix}`;
   const arabicSlug = `al-manshur-${runSuffix}`;
+  let previousArabicLocale: { status: string; isDefault: boolean } | null = null;
+  let insertedArabicLocale = false;
 
   beforeAll(async () => {
     app = buildApp();
     await app.ready();
 
-    // Ensure site.locale is 'en' for this test suite
+    // The legacy suite exercises a bilingual editorial workflow. The system
+    // no longer implicitly activates Arabic, so explicitly enable it here.
     await db
       .delete(settings)
-      .where(and(eq(settings.namespace, "site"), eq(settings.key, "locale")));
+      .where(and(
+        eq(settings.publicationId, "pub_default"),
+        eq(settings.namespace, "site"),
+        eq(settings.key, "locale"),
+      ));
+    const [existingArabic] = await db
+      .select({ status: publicationLocales.status, isDefault: publicationLocales.isDefault })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA"),
+      ));
+    if (existingArabic) {
+      previousArabicLocale = existingArabic;
+      await db.update(publicationLocales)
+        .set({ status: "active", isDefault: false })
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "ar-SA"),
+        ));
+    } else {
+      insertedArabicLocale = true;
+      await db.insert(publicationLocales).values({
+        id: randomUUID(),
+        publicationId: "pub_default",
+        locale: "ar-SA",
+        status: "active",
+        isDefault: false,
+      });
+    }
 
     // Ensure test owner exists
     await ensureUserWithRole("owner@example.com", "owner", "OwnerPass123!");
@@ -96,6 +131,19 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   afterAll(async () => {
+    if (insertedArabicLocale) {
+      await db.delete(publicationLocales).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA"),
+      ));
+    } else if (previousArabicLocale) {
+      await db.update(publicationLocales)
+        .set(previousArabicLocale)
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "ar-SA"),
+        ));
+    }
     if (app) await app.close();
   });
 
