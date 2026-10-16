@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import {
@@ -42,6 +43,7 @@ const LOCALE_NATIVE_NAMES: Record<string, { name: string; native: string; dir: "
 };
 
 export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate }) => {
+  const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [contentType, setContentType] = useState<"all" | "post" | "page">("all");
@@ -131,12 +133,8 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
               <Globe className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                Translation Matrix
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Manage multilingual content coverage, editorial review workflows, and localization health.
-              </p>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground tabular-nums">{tr("Translation Matrix")}</h1>
+              <p className="text-sm text-muted-foreground">{tr("Manage multilingual content coverage, editorial review workflows, and localization health.")}</p>
             </div>
           </div>
         </div>
@@ -148,7 +146,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             className="gap-2 cursor-pointer relative"
           >
             <Clock className="h-4 w-4 text-amber-500" />
-            <span>Review Queue</span>
+            <span>{tr("Review Queue")}</span>
             {healthData && healthData.needsReviewCount > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
                 {healthData.needsReviewCount}
@@ -161,14 +159,14 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             className="gap-2 cursor-pointer"
           >
             <Globe className="h-4 w-4 text-primary" />
-            <span>Manage Locales</span>
+            <span>{tr("Manage Locales")}</span>
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={() => refetch()}
             className="cursor-pointer"
-            title="Refresh matrix"
+            title={tr("Refresh matrix")}
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -179,7 +177,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-card border border-border/60 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-            <span>Source Content</span>
+            <span>{tr("Source Content")}</span>
             <Layers className="h-4 w-4 text-primary" />
           </div>
           <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
@@ -192,7 +190,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
 
         <div className="p-4 rounded-xl bg-card border border-border/60 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-            <span>Overall Coverage</span>
+            <span>{tr("Overall Coverage")}</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
           <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
@@ -208,28 +206,24 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
 
         <div className="p-4 rounded-xl bg-card border border-border/60 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-            <span>Stale (Outdated)</span>
+            <span>{tr("Stale (Outdated)")}</span>
             <AlertTriangle className="h-4 w-4 text-rose-500" />
           </div>
           <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData?.staleCount ?? 0}
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Source modified after translation
-          </p>
+          <p className="text-[11px] text-muted-foreground">{tr("Source modified after translation")}</p>
         </div>
 
         <div className="p-4 rounded-xl bg-card border border-border/60 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
-            <span>Awaiting Review</span>
+            <span>{tr("Awaiting Review")}</span>
             <Clock className="h-4 w-4 text-amber-500" />
           </div>
           <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
             {healthData?.needsReviewCount ?? 0}
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Drafts & AI translations to approve
-          </p>
+          <p className="text-[11px] text-muted-foreground">{tr("Drafts & AI translations to approve")}</p>
         </div>
       </div>
 
@@ -244,7 +238,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                 setSearch(e.target.value);
                 setPage(0);
               }}
-              placeholder="Search content title or slug..."
+              placeholder={tr("Search content title or slug...")}
               className="ps-9 text-xs sm:text-sm"
             />
           </div>
@@ -261,9 +255,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                   ? "bg-background text-foreground shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-            >
-              All Content
-            </button>
+            >{tr("All Content")}</button>
             <button
               type="button"
               onClick={() => {
@@ -275,9 +267,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                   ? "bg-background text-foreground shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-            >
-              Posts
-            </button>
+            >{tr("Posts")}</button>
             <button
               type="button"
               onClick={() => {
@@ -289,9 +279,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                   ? "bg-background text-foreground shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-            >
-              Pages
-            </button>
+            >{tr("Pages")}</button>
           </div>
         </div>
 
@@ -304,12 +292,12 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
             }}
             className="h-9 px-3 py-1 bg-background border border-border rounded-lg text-xs font-medium text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value="all">All Statuses</option>
-            <option value="published">Published</option>
-            <option value="stale">Stale (Outdated)</option>
-            <option value="needs_review">Needs Review</option>
-            <option value="draft">Draft / In Progress</option>
-            <option value="untranslated">Missing</option>
+            <option value="all">{tr("All Statuses")}</option>
+            <option value="published">{tr("Published")}</option>
+            <option value="stale">{tr("Stale (Outdated)")}</option>
+            <option value="needs_review">{tr("Needs Review")}</option>
+            <option value="draft">{tr("Draft / In Progress")}</option>
+            <option value="untranslated">{tr("Missing")}</option>
           </select>
         </div>
       </div>
@@ -329,9 +317,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
               onClick={() => bulkMutation.mutate({ translationIds: selectedIds, action: "submit_review" })}
               disabled={bulkMutation.isPending}
               className="h-8 text-xs cursor-pointer"
-            >
-              Submit for Review
-            </Button>
+            >{tr("Submit for Review")}</Button>
             <Button
               size="sm"
               variant="outline"
@@ -364,7 +350,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                     )}
                   </button>
                 </th>
-                <th className="py-3 px-4 min-w-[240px]">Content Item</th>
+                <th className="py-3 px-4 min-w-[240px]">{tr("Content Item")}</th>
                 {enabledLocales.map((locale) => {
                   const locInfo = LOCALE_NATIVE_NAMES[locale] || {
                     name: locale,
@@ -403,7 +389,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                   >
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-                      <span>Loading translation matrix...</span>
+                      <span>{tr("Loading translation matrix...")}</span>
                     </div>
                   </td>
                 </tr>
