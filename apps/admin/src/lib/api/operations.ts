@@ -11,6 +11,10 @@ export function getPublicationLocalesApi(): Promise<PublicationLocaleConfigurati
   return apiRequest("/locales");
 }
 
+export function getPublicationLocaleContextApi(): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales/context");
+}
+
 export function updatePublicationLocalesApi(input: {
   primaryLocale: string;
   enabledLocales: string[];
