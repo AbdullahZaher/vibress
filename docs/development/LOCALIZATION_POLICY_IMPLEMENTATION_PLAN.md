@@ -35,7 +35,7 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 
 - Inspect existing `site.locale`, `publications.primary_locale`, `publication_locales` and translation usage across domains, APIs, workers, themes and plugins; document the precedence and conflict treatment before writes.
 - Implement a publication-scoped domain service backed by existing Drizzle schema, exposing `primaryLocale`, `enabledLocales`, `isMultilingual` and locale-resolution helpers through public domain exports.
-- Introduce Zod contracts in `@vibress/api-contracts` for configuration read/update; one transactional update atomically enforces primary/default membership, unique tags and synchronized legacy `site.locale`.
+- Introduce Zod contracts in `@vibress/api-contracts` for configuration read/update; one transactional update atomically enforces primary/default membership, unique tags and synchronized legacy `site.locale`. For legacy sites serving localized content without explicit active-locale rows, reconcile published URLs before enforcing single-language mode; never silently retire live URLs.
 - Scope all reads/writes to authoritative staff/request publication context. Do not use a raw client tenant ID or an implicit `pub_default` when an authoritative context exists.
 - Add a *new* migration only for constraints or data work genuinely required after schema inspection. Leave released migrations intact; prefer zero-downtime-compatible backfills.
 
@@ -46,7 +46,7 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 **Owners:** Implementer, API Designer, Security Reviewer, i18n/RTL.
 
 - Preserve existing setup-token, origin, installed-state and owner-creation gates.
-- Expose a primary selector plus optional unchecked additional content languages in setup; store canonical state and site compatibility value as one consistent bootstrap operation.
+- Expose a primary selector limited to fully certified Admin UI languages (English/Arabic initially) plus optional unchecked additional content languages in setup; store canonical state and site compatibility value as one consistent bootstrap operation. Additional content languages may have translation support before their full Admin UI is certified.
 - Add owner language management to the existing Settings hub, not a second disconnected settings surface. Include native language labels, default marker, add/disable confirmation, populated-site primary-change guard and accessible error messages.
 - Handle partial failures and invalid/unsupported tags without leaving inconsistent setup or locale rows.
 
@@ -100,7 +100,7 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 ## 3. Migration and compatibility checklist
 
 1. Collect per-publication values of `site.locale`, `primary_locale`, `publication_locales`, existing translation target locales and public URL inventory.
-2. Reconcile and record conflicts without assuming `en` or automatically enabling `ar-SA`. Never infer enabled state solely from stored translation rows.
+2. Reconcile and record conflicts without assuming `en` or automatically enabling `ar-SA`. Never infer enabled state solely from stored translation rows; **published** historical localized URLs require an inventory and a preservation/explicit retirement decision before strict-mode cutover.
 3. Preserve `content_translations` and original posts/pages; keep legacy contracts functional through an explicit compatibility projection during the transition.
 4. Changing a populated publication's primary locale requires an explicit content migration/reclassification decision, **not** merely rewriting the site setting.
 5. Deactivating a locale hides it publicly but preserves translations for reactivation; include SEO retirement and cache invalidation.
