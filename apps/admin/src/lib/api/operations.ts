@@ -1,5 +1,26 @@
 import { apiRequest } from "./client";
 
+export interface PublicationLocaleConfiguration {
+  primaryLocale: string;
+  enabledLocales: string[];
+  isMultilingual: boolean;
+  needsReconciliation: boolean;
+}
+
+export function getPublicationLocalesApi(): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales");
+}
+
+export function updatePublicationLocalesApi(input: {
+  primaryLocale: string;
+  enabledLocales: string[];
+}): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 export interface AdminSettingValue {
   key: string;
   value: unknown;
