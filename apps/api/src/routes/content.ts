@@ -451,7 +451,7 @@ function extractRequestedLocale(
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
-          let mergedPost: any = post;
+          let mergedPost: typeof post & { locale?: string } = post;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId, true);
             if (tr && (publiclyVisibleTranslation(tr.status))) {
@@ -580,7 +580,7 @@ function extractRequestedLocale(
         });
       }
 
-      const mergedPost: any = translationItem
+      const mergedPost: typeof post & { locale?: string } = translationItem
         ? {
             ...post,
             title: translationItem.title,
@@ -666,7 +666,7 @@ function extractRequestedLocale(
 
       const details = await Promise.all(
         pages.map(async (pageObj) => {
-          let mergedPage: any = pageObj;
+          let mergedPage: typeof pageObj & { locale?: string } = pageObj;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId, true);
             if (tr && (publiclyVisibleTranslation(tr.status))) {
@@ -776,7 +776,7 @@ function extractRequestedLocale(
         });
       }
 
-      const mergedPage: any = translationItem
+      const mergedPage: typeof pageObj & { locale?: string } = translationItem
         ? {
             ...pageObj,
             title: translationItem.title,
