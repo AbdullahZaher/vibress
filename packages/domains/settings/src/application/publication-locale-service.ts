@@ -120,6 +120,7 @@ export class PublicationLocaleService {
 
     for (const row of snapshot.locales) {
       const locale = canonicalPublicationLocale(row.locale);
+      if (row.locale !== locale) needsReconciliation = true;
       if (allLocales.has(locale)) {
         needsReconciliation = true;
       }
@@ -167,6 +168,15 @@ export class PublicationLocaleService {
         throw new PublicationLocaleError("PUBLICATION_NOT_FOUND", "Publication not found");
       }
       const legacy = await this.settings.get("site", "locale", publicationId);
+      const normalizedExisting = snapshot.locales.map((row) =>
+        canonicalPublicationLocale(row.locale),
+      );
+      if (new Set(normalizedExisting).size !== normalizedExisting.length) {
+        throw new PublicationLocaleError(
+          "LOCALE_RECONCILIATION_REQUIRED",
+          "Duplicate legacy language tags require an explicit reconciliation",
+        );
+      }
       const current = this.resolve(snapshot, legacy?.value);
       const storedPrimary = canonicalPublicationLocale(snapshot.primaryLocale);
       const changesPrimary = current.primaryLocale !== primaryLocale ||
