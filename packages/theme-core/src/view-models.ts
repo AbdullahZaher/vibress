@@ -326,7 +326,7 @@ export function mapSiteToViewModel(site: {
     locale,
     primaryLocale: site.primaryLocale || locale,
     enabledLocales: Array.isArray(site.enabledLocales) ? site.enabledLocales : [locale],
-    direction:
+    direction,
     timezone: site.timezone || "UTC",
     accentColor: site.accentColor || "#6366f1",
     icon: site.iconUrl ?? null,
