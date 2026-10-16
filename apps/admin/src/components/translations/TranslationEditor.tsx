@@ -98,7 +98,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     enabled: Boolean(currentTranslationId),
   });
 
-  const sourceLocale = detailData?.translation?.sourceLocale || localePolicy?.primaryLocale || "en";
+  const sourceLocale = detailData?.translation?.sourceLocale || localePolicy?.primaryLocale || "";
   const targetLocale = detailData?.translation?.targetLocale ||
     suppliedTargetLocale ||
     localePolicy?.enabledLocales.find((locale) => locale !== localePolicy.primaryLocale) ||
