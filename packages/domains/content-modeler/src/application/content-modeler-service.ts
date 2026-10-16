@@ -59,6 +59,11 @@ function relationKey(value: unknown): string | undefined {
   return undefined;
 }
 
+// JSONB fields may contain legacy malformed values; never overwrite them by spreading an unknown value.
+function isEntryDataRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export class ContentModelerService {
   // ---------------- Content Models ----------------
 
@@ -747,9 +752,13 @@ export class ContentModelerService {
 
       // Lock-authoritative merge: avoid overwriting another writer's unrelated
       // fields when callers omit the optional optimistic-concurrency token.
-      const mergedData = { ...locked.data, ...(input.data ?? {}) };
+      const lockedData = locked.data;
+      if (!isEntryDataRecord(lockedData)) {
+        throw new ValidationError({ data: "Stored entry data must be a JSON object." });
+      }
+      const mergedData = { ...lockedData, ...(input.data ?? {}) };
       validateEntryData(mergedData, model.fields);
-      await this.validateRelationReferences(mergedData, model.fields, publicationId, locked.data, tx);
+      await this.validateRelationReferences(mergedData, model.fields, publicationId, lockedData, tx);
 
       const updates: Partial<ContentEntryRow> = {
         updatedBy: userId,
