@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { usePublicationLocales } from "../../../lib/usePublicationLocales";
 import {
   PenLine,
   ChevronDown,
@@ -23,6 +24,7 @@ export const NavContent: React.FC<NavContentProps> = ({
   onNavigate,
   canPublishPosts,
 }) => {
+  const { data: localePolicy } = usePublicationLocales();
   const [postsExpanded, setPostsExpanded] = useState(true);
   const [isIconHovered, setIsIconHovered] = useState(false);
 
@@ -144,6 +146,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>Pages</span>
       </button>
 
+      {localePolicy?.isMultilingual && (
       {/* Translations & Localization */}
       <button
         type="button"
@@ -159,6 +162,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       </button>
 
       {/* Tags */}
+      )}
       <button
         type="button"
         onClick={() => onNavigate("/admin/tags")}
