@@ -2,7 +2,7 @@ import { getLocalePrefix } from "@vibress/i18n";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { ContentApiClient } from "../../../lib/content-api-client";
-import { buildPageMetadata } from "../../../lib/seo-helpers";
+import { buildPageMetadata, publishedAlternateLanguageUrls } from "../../../lib/seo-helpers";
 import {
   resolveThemeHostState,
   getThemeSiteSettings,
@@ -37,6 +37,7 @@ export async function generateMetadata({
     ogImage: pageObj.seo?.ogImage || null,
     ogType: "website",
     locale: site.locale,
+    alternateLocales: await publishedAlternateLanguageUrls("page", slug, site.locale),
   });
 }
 
