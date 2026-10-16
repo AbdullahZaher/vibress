@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import { usePublicationLocales } from "../../lib/usePublicationLocales";
+import { getDirection } from "@vibress/i18n";
 import {
   fetchTranslationDetail,
   createContentTranslation,
@@ -170,7 +171,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     native: targetLocale,
     dir: "ltr",
   };
-  const isTargetRtl = targetMeta.dir === "rtl";
+  const isTargetRtl = targetLocale ? getDirection(targetLocale) === "rtl" : false;
 
   // Mutations
   const saveMutation = useMutation({
