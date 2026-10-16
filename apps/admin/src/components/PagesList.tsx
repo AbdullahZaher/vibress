@@ -155,7 +155,7 @@ export const PagesList: React.FC<PagesListProps> = ({
           onClick={() => onNavigate("/admin/pages/new")}
           className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="h-4 w-4" /> Create Page
+          <Plus className="h-4 w-4" /> {tr("Create Page")}
         </Button>
       </div>
 
@@ -170,7 +170,7 @@ export const PagesList: React.FC<PagesListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            All <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.length})</span>
+            {tr("All")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("published")}
@@ -190,7 +190,7 @@ export const PagesList: React.FC<PagesListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Drafts <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.filter((p) => p.status === "draft").length})</span>
+            {tr("Drafts")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({pages.filter((p) => p.status === "draft").length})</span>
           </button>
         </div>
 
