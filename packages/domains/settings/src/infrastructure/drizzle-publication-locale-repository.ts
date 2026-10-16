@@ -5,6 +5,9 @@ import {
   publicationLocales,
   posts,
   pages,
+  tags,
+  contentEntries,
+  contentModels,
   contentTranslations,
 } from "@vibress/database";
 import { and, eq, inArray } from "drizzle-orm";
@@ -53,7 +56,29 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
       .from(pages)
       .where(eq(pages.publicationId, publicationId))
       .limit(1);
-    return existingPage.length > 0;
+    if (existingPage.length) return true;
+
+    // Primary-language changes can also relabel taxonomy terms and
+    // localizable custom-model data. Metadata-only seeded newsletters do
+    // not count as authored content.
+    const existingTag = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(eq(tags.publicationId, publicationId))
+      .limit(1);
+    if (existingTag.length) return true;
+    const existingEntry = await db
+      .select({ id: contentEntries.id })
+      .from(contentEntries)
+      .where(eq(contentEntries.publicationId, publicationId))
+      .limit(1);
+    if (existingEntry.length) return true;
+    const existingModel = await db
+      .select({ id: contentModels.id })
+      .from(contentModels)
+      .where(eq(contentModels.publicationId, publicationId))
+      .limit(1);
+    return existingModel.length > 0;
   }
 
   async listPublicTranslationLocales(publicationId: string): Promise<string[]> {
