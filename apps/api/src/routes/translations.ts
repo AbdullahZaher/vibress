@@ -379,6 +379,14 @@ export async function translationRoutes(fastify: FastifyInstance) {
           message: "Cannot change the target language of an existing translation",
         });
       }
+      if (body.targetLocale &&
+          canonicalPublicationLocale(body.targetLocale) !== canonicalPublicationLocale(existing.targetLocale)) {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_TARGET_IMMUTABLE",
+          message: "An existing translation cannot change its target language",
+          requestId: req.id,
+        }] });
+      }
       const canEditLive = (permission: string) =>
         hasPermission(req.permissions || [], permission, req.roles || []);
       if (body.status && body.status !== existing.status) {
