@@ -3,6 +3,7 @@ import {
   type ReactNode,
 } from "react";
 import { getPublicationLocaleContextApi } from "./api/operations";
+import { enDictionary, arDictionary } from "@vibress/i18n";
 
 type AdminUiLocale = "en" | "ar";
 interface AdminLocaleContext {
@@ -160,6 +161,14 @@ const translations: Record<string, string> = {
   "Language": "اللغة",
 };
 
+// Reuse already certified shared dictionaries for standard UI labels;
+// the publication-specific Admin vocabulary overrides shared wording.
+const sharedArabicByEnglish = new Map<string, string>(
+  Object.entries(enDictionary).flatMap(([key, text]) =>
+    arDictionary[key] ? [[text, arDictionary[key]!]] : [],
+  ),
+);
+
 function normalize(locale: string): AdminUiLocale {
   return locale.split("-")[0]?.toLowerCase() === "ar" ? "ar" : "en";
 }
@@ -210,7 +219,9 @@ export function AdminLocaleProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const tr = useCallback((english: string) =>
-    locale === "ar" ? translations[english] || english : english, [locale]);
+    locale === "ar"
+      ? translations[english] || sharedArabicByEnglish.get(english) || english
+      : english, [locale]);
   const value = useMemo(() => ({
     locale, setPublicationLanguage, refresh, tr,
   }), [locale, setPublicationLanguage, refresh, tr]);
