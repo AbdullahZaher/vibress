@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { ContentModelerService } from "../application/content-modeler-service";
 import { getDb, publications, workspaces, users, contentEntries, contentModels } from "@vibress/database";
 import { eq, inArray } from "drizzle-orm";
@@ -175,6 +175,62 @@ describe("ContentModelerService Publication Scoping and Relations", () => {
 
     const archived = await service.archiveEntry(modelA!.id, entry.id, testUserId, pubA);
     expect(archived.status).toBe("archived");
+  });
+
+  it("merges truly overlapping entry updates using the locked row without expectedVersion", async () => {
+    const model = await service.createModel(
+      {
+        name: "Concurrent Updates",
+        slug: "concurrent-updates",
+        fields: [
+          { id: "a", name: "A", key: "a", type: "text" },
+          { id: "b", name: "B", key: "b", type: "text" },
+        ],
+      },
+      pubA,
+    );
+    const entry = await service.createEntry(
+      model.id, { title: "Concurrent", data: { a: "original", b: "original" } },
+      testUserId, pubA,
+    );
+    const db = getDb();
+    let releaseLock: () => void = () => {};
+    let reportLock: () => void = () => {};
+    let reportReads: () => void = () => {};
+    const unlocked = new Promise<void>((resolve) => { releaseLock = resolve; });
+    const lockReady = new Promise<void>((resolve) => { reportLock = resolve; });
+    const readsReady = new Promise<void>((resolve) => { reportReads = resolve; });
+    const holdingTransaction = db.transaction(async (tx) => {
+      await tx.select({ id: contentEntries.id }).from(contentEntries)
+        .where(eq(contentEntries.id, entry.id)).for("update");
+      reportLock();
+      await unlocked;
+    });
+    await lockReady;
+
+    const originalGet = service.getEntryById.bind(service);
+    let initialReads = 0;
+    const spy = vi.spyOn(service, "getEntryById").mockImplementation(async (...args) => {
+      const result = await originalGet(...args);
+      if (result?.id === entry.id && result.version === 1 && ++initialReads === 2) {
+        reportReads();
+      }
+      return result;
+    });
+    try {
+      const first = service.updateEntry(model.id, entry.id, { data: { a: "first" } }, testUserId, pubA);
+      const second = service.updateEntry(model.id, entry.id, { data: { b: "second" } }, testUserId, pubA);
+      await readsReady; // both pre-lock reads observed version 1
+      releaseLock();
+      await Promise.all([first, second]);
+      const stored = await originalGet(model.id, entry.id, pubA);
+      expect(stored?.data).toMatchObject({ a: "first", b: "second" });
+      expect(stored?.version).toBe(3);
+    } finally {
+      releaseLock();
+      await holdingTransaction;
+      spy.mockRestore();
+    }
   });
 
   it("resolves relations safely within publication and prevents cross-pub relation leakage", async () => {

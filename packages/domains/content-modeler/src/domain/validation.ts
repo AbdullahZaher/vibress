@@ -1,5 +1,17 @@
 import { ContentFieldDefinition } from "./types";
 
+// Legacy stored model definitions can hold validation constraints under `validation`.
+// These are still enforced by entry validation and must be considered in schema diffs.
+type FieldWithLegacyValidation = ContentFieldDefinition & {
+  validation?: {
+    min?: number;
+    max?: number;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+  };
+};
+
 export interface FieldValidationError {
   field: string;
   message: string;
@@ -117,15 +129,7 @@ export function validateModelDefinition(input: {
 
 export function validateEntryData(
   data: Record<string, unknown>,
-  fieldDefs: (ContentFieldDefinition & {
-    validation?: {
-      min?: number;
-      max?: number;
-      minLength?: number;
-      maxLength?: number;
-      pattern?: string;
-    };
-  })[],
+  fieldDefs: FieldWithLegacyValidation[],
 ): void {
   const jsonStr = JSON.stringify(data);
   if (jsonStr.length > MAX_DATA_PAYLOAD_BYTES) {
@@ -598,15 +602,7 @@ export function extractFilterableAttributes(
 
 export function checkEntryDataValidity(
   data: Record<string, unknown>,
-  fieldDefs: (ContentFieldDefinition & {
-    validation?: {
-      min?: number;
-      max?: number;
-      minLength?: number;
-      maxLength?: number;
-      pattern?: string;
-    };
-  })[],
+  fieldDefs: FieldWithLegacyValidation[],
 ): ValidationResult {
   try {
     validateEntryData(data, fieldDefs);
@@ -628,8 +624,8 @@ export function checkEntryDataValidity(
  * Identifies breaking changes (e.g., removing fields, changing types, adding required fields without defaults).
  */
 export function analyzeSchemaEvolution(
-  oldFields: ContentFieldDefinition[],
-  newFields: ContentFieldDefinition[],
+  oldFields: FieldWithLegacyValidation[],
+  newFields: FieldWithLegacyValidation[],
 ): {
   changes: Array<{
     key: string;
@@ -686,12 +682,24 @@ export function analyzeSchemaEvolution(
           (oldField.options ?? []).some((option) =>
             !(newField.options ?? []).some((next) => next.value === option.value))
         );
+        // Match validateEntryData's top-level-first precedence for historical
+        // definitions that store limits under field.validation in JSONB.
+        const oldMin = oldField.min ?? oldField.validation?.min;
+        const newMin = newField.min ?? newField.validation?.min;
+        const oldMax = oldField.max ?? oldField.validation?.max;
+        const newMax = newField.max ?? newField.validation?.max;
+        const oldMinLength = oldField.minLength ?? oldField.validation?.minLength;
+        const newMinLength = newField.minLength ?? newField.validation?.minLength;
+        const oldMaxLength = oldField.maxLength ?? oldField.validation?.maxLength;
+        const newMaxLength = newField.maxLength ?? newField.validation?.maxLength;
+        const oldPattern = oldField.pattern ?? oldField.validation?.pattern;
+        const newPattern = newField.pattern ?? newField.validation?.pattern;
         const constraintsTightened =
-          (newField.min !== undefined && newField.min > (oldField.min ?? -Infinity)) ||
-          (newField.max !== undefined && newField.max < (oldField.max ?? Infinity)) ||
-          (newField.minLength !== undefined && newField.minLength > (oldField.minLength ?? 0)) ||
-          (newField.maxLength !== undefined && newField.maxLength < (oldField.maxLength ?? Infinity)) ||
-          (newField.pattern !== undefined && newField.pattern !== oldField.pattern);
+          (newMin !== undefined && newMin > (oldMin ?? -Infinity)) ||
+          (newMax !== undefined && newMax < (oldMax ?? Infinity)) ||
+          (newMinLength !== undefined && newMinLength > (oldMinLength ?? 0)) ||
+          (newMaxLength !== undefined && newMaxLength < (oldMaxLength ?? Infinity)) ||
+          (newPattern !== undefined && newPattern !== oldPattern);
         const relationChanged =
           (newField.type === "relation" || newField.type === "relation_list") &&
           oldField.relationModel !== newField.relationModel;

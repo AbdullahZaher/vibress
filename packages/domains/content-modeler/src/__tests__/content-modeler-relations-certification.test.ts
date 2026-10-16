@@ -329,6 +329,28 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     ).rejects.toThrow(ValidationError);
   });
 
+  it("resolves target-model slugs even when another local model uses the same slug", async () => {
+    const slug = "shared-relation-slug-2026";
+    await service.createEntry(
+      bookModelA.id,
+      { title: "Colliding Book", slug, data: { title: "Colliding Book" } },
+      testUserId, pubTenantA,
+    );
+    const author = await service.createEntry(
+      authorModelA.id,
+      { title: "Colliding Author", slug, data: { name: "Colliding Author" } },
+      testUserId, pubTenantA,
+    );
+    const referencing = await service.createEntry(
+      bookModelA.id,
+      { title: "Valid Local Relation", data: { title: "Valid Local Relation", primaryAuthor: slug, coAuthors: [slug] } },
+      testUserId, pubTenantA,
+    );
+    const resolved = await service.getEntryById(bookModelA.id, referencing.id, pubTenantA, true);
+    const primary = resolved?.data.primaryAuthor;
+    expect(primary && typeof primary === "object" && "id" in primary ? primary.id : undefined).toBe(author.id);
+  });
+
   // Scenario 6: Cross-publication target rejected on write & omitted on resolve
   it("Scenario 6: Blocks cross-publication references on write and omits them during resolution", async () => {
     await expect(
@@ -364,6 +386,37 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     expect(resolvedList[0]!.id).toBe(author1A.id);
   });
 
+  it("does not reveal whether an unavailable relation belongs to another publication", async () => {
+    const attempt = async (reference: string, list: boolean): Promise<string | undefined> => {
+      try {
+        await service.createEntry(
+          bookModelA.id,
+          {
+            title: "Unavailable reference probe",
+            data: {
+              title: "Unavailable reference probe",
+              ...(list ? { coAuthors: [reference] } : { primaryAuthor: reference }),
+            },
+          },
+          testUserId,
+          pubTenantA,
+        );
+      } catch (err) {
+        if (!(err instanceof ValidationError)) throw err;
+        return err.fieldErrors[list ? "coAuthors" : "primaryAuthor"];
+      }
+      throw new Error("An unavailable relation was accepted");
+    };
+
+    for (const list of [false, true]) {
+      const unknown = await attempt("unknown_relation_reference_2026", list);
+      const foreign = await attempt(authorB.id, list);
+      expect(unknown).toBeDefined();
+      expect(foreign).toBe(unknown);
+      expect(foreign).not.toContain(authorB.id);
+    }
+  });
+
   // Scenario 7: Deleted target handled safely
   it("Scenario 7: Safely resolves references when target entry has been soft-deleted", async () => {
     const tempAuthor = await service.createEntry(
@@ -378,6 +431,13 @@ describe("Content Modeler — Relations & Relation List Comprehensive Certificat
     );
 
     await service.deleteEntry(authorModelA.id, tempAuthor.id, pubTenantA);
+
+    await expect(service.createEntry(
+      bookModelA.id,
+      { title: "No new deleted relation", data: { title: "No new deleted relation", primaryAuthor: tempAuthor.id } },
+      testUserId,
+      pubTenantA,
+    )).rejects.toThrow(ValidationError);
 
     const testData = {
       primaryAuthor: tempAuthor.id,

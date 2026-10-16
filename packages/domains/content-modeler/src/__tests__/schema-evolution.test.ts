@@ -105,6 +105,49 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
     ]).safe).toBe(false);
   });
 
+  it("treats tightened legacy nested constraints as unsafe", () => {
+    const oldNumber = {
+      id: "n", name: "Score", key: "score", type: "number" as const,
+      validation: { min: 1, max: 100 },
+    };
+    expect(analyzeSchemaEvolution([oldNumber], [
+      { ...oldNumber, validation: { min: 5, max: 100 } },
+    ]).safe).toBe(false);
+    expect(analyzeSchemaEvolution([oldNumber], [
+      { ...oldNumber, max: 50 },
+    ]).safe).toBe(false);
+
+    const oldText = {
+      id: "t", name: "Title", key: "title", type: "text" as const,
+      validation: { minLength: 2, maxLength: 200, pattern: "^[a-z]+$" },
+    };
+    for (const updated of [
+      { ...oldText, validation: { ...oldText.validation, minLength: 10 } },
+      { ...oldText, maxLength: 50 },
+      { ...oldText, validation: { ...oldText.validation, pattern: "^[A-Z]+$" } },
+    ]) {
+      const diff = analyzeSchemaEvolution([oldText], [updated]);
+      expect(diff.safe).toBe(false);
+      expect(diff.changes[0]?.isSafe).toBe(false);
+    }
+  });
+
+  it("uses the effective top-level-first constraints and permits relaxation", () => {
+    const base = {
+      id: "n", name: "Score", key: "score", type: "number" as const,
+      min: 4, validation: { min: 1, max: 10 },
+    };
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, validation: { min: 8, max: 20 } },
+    ]).safe).toBe(true); // top-level min=4 still takes precedence
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, min: 2, validation: { min: 1, max: 20 } },
+    ]).safe).toBe(true);
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, min: 5 },
+    ]).safe).toBe(false);
+  });
+
   it("blocks new required fields until existing records are migrated, even with defaults", () => {
     const diff = analyzeSchemaEvolution([], [
       { id: "new", key: "mandatory", name: "Required", type: "text", required: true, defaultValue: "x" },

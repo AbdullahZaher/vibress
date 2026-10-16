@@ -46,6 +46,19 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+// Resolve legacy ID/slug representations without consulting another publication.
+function relationKey(value: unknown): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  if ("id" in value && typeof value.id === "string" && value.id.trim()) {
+    return value.id.trim();
+  }
+  if ("slug" in value && typeof value.slug === "string" && value.slug.trim()) {
+    return value.slug.trim();
+  }
+  return undefined;
+}
+
 export class ContentModelerService {
   // ---------------- Content Models ----------------
 
@@ -667,10 +680,8 @@ export class ContentModelerService {
       );
     }
 
-    const mergedData = { ...existing.data, ...(input.data || {}) };
-    validateEntryData(mergedData, model.fields);
-    await this.validateRelationReferences(mergedData, model.fields, publicationId);
-
+    // Do not merge entry data until SELECT FOR UPDATE has yielded the current row.
+    // Older clients may omit expectedVersion; they must not lose newer fields.
     if (input.slug !== undefined) {
       const newSlug = slugify(input.slug);
       if (!newSlug) throw new ValidationError({ slug: "Slug must contain letters or numbers." });
@@ -733,6 +744,12 @@ export class ContentModelerService {
           `Permission denied: posts.publish required to transition content to ${input.status}`,
         );
       }
+
+      // Lock-authoritative merge: avoid overwriting another writer's unrelated
+      // fields when callers omit the optional optimistic-concurrency token.
+      const mergedData = { ...locked.data, ...(input.data ?? {}) };
+      validateEntryData(mergedData, model.fields);
+      await this.validateRelationReferences(mergedData, model.fields, publicationId, locked.data, tx);
 
       const updates: Partial<ContentEntryRow> = {
         updatedBy: userId,
@@ -953,9 +970,11 @@ export class ContentModelerService {
     data: Record<string, unknown>,
     fields: ContentFieldDefinition[],
     publicationId: string,
+    previousData?: Record<string, unknown>,
+    queryDb: Pick<ReturnType<typeof getDb>, "select"> = getDb(),
   ): Promise<void> {
     const errors: Record<string, string> = {};
-    const db = getDb();
+    const db = queryDb;
 
     for (const field of fields) {
       if ((field.type === "relation" || field.type === "relation_list") && field.relationModel) {
@@ -986,6 +1005,8 @@ export class ContentModelerService {
                 .where(
                   and(
                     eq(contentEntries.publicationId, publicationId),
+                    eq(contentEntries.modelId, targetModel.id),
+                    isNull(contentEntries.deletedAt),
                     or(
                       eq(contentEntries.id, cleaned),
                       eq(contentEntries.slug, cleaned),
@@ -998,21 +1019,10 @@ export class ContentModelerService {
                 if (localRows[0].modelId !== targetModel.id) {
                   errors[field.key] = `Referenced entry '${targetIdOrSlug}' belongs to a different content model.`;
                 }
-              } else {
-                const globalRows = await db
-                  .select({ id: contentEntries.id })
-                  .from(contentEntries)
-                  .where(
-                    or(
-                      eq(contentEntries.id, cleaned),
-                      eq(contentEntries.slug, cleaned),
-                    ),
-                  )
-                  .limit(1);
-
-                if (globalRows.length > 0) {
-                  errors[field.key] = `Cross-publication relation reference '${targetIdOrSlug}' is prohibited.`;
-                }
+              } else if (relationKey(previousData?.[field.key]) !== cleaned) {
+                // Unknown and foreign references are indistinguishable to callers.
+                // Preserve an unchanged historical dangling reference on update.
+                errors[field.key] = "Referenced entry is invalid or unavailable.";
               }
             }
           }
@@ -1078,6 +1088,8 @@ export class ContentModelerService {
                 .where(
                   and(
                     eq(contentEntries.publicationId, publicationId),
+                    eq(contentEntries.modelId, targetModel.id),
+                    isNull(contentEntries.deletedAt),
                     or(
                       inArray(contentEntries.id, targetKeys),
                       inArray(contentEntries.slug, targetKeys),
@@ -1122,26 +1134,17 @@ export class ContentModelerService {
                 continue;
               }
 
-              const unresolvedKeys = targetKeys.filter((k) => !keyToEntryId.has(k));
-              if (unresolvedKeys.length > 0) {
-                const crossPubRows = await db
-                  .select({ id: contentEntries.id, slug: contentEntries.slug })
-                  .from(contentEntries)
-                  .where(
-                    or(
-                      inArray(contentEntries.id, unresolvedKeys),
-                      inArray(contentEntries.slug, unresolvedKeys),
-                    ),
-                  )
-                  .limit(1);
-
-                if (crossPubRows.length > 0) {
-                  const matchedKey =
-                    unresolvedKeys.find(
-                      (k) => k === crossPubRows[0]!.id || k === crossPubRows[0]!.slug,
-                    ) || unresolvedKeys[0]!;
-                  errors[field.key] = `Cross-publication relation reference '${matchedKey}' is prohibited.`;
-                }
+              const priorValue = previousData?.[field.key];
+              const historicalKeys = new Set(
+                Array.isArray(priorValue)
+                  ? priorValue.map(relationKey).filter((key): key is string => key !== undefined)
+                  : [],
+              );
+              const newlyUnresolved = targetKeys.filter(
+                (key) => !keyToEntryId.has(key) && !historicalKeys.has(key),
+              );
+              if (newlyUnresolved.length > 0) {
+                errors[field.key] = "Relation list contains invalid or unavailable references.";
               }
             }
           }
