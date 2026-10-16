@@ -56,15 +56,18 @@ export function parseStructuredTranslation(
     throw new Error("AI provider returned an invalid translation");
   }
   const required = new Set(segments.map((segment) => segment.path));
-  const keys = Object.keys(parsed.segments);
+  const translatedSegments = parsed.segments;
+  const keys = Object.keys(translatedSegments);
   if (keys.length !== required.size ||
-      keys.some((key) => !required.has(key) || typeof parsed.segments[key] !== "string" ||
-      !(parsed.segments[key] as string).trim())) {
+      keys.some((key) => {
+        const translated = translatedSegments[key];
+        return !required.has(key) || typeof translated !== "string" || !translated.trim();
+      })) {
     throw new Error("AI provider omitted or altered translated document fields");
   }
   const values: Record<string, string> = {};
   for (const segment of segments) {
-    const translated = parsed.segments[segment.path];
+    const translated = translatedSegments[segment.path];
     if (typeof translated !== "string") {
       throw new Error("AI provider omitted a required text segment");
     }
