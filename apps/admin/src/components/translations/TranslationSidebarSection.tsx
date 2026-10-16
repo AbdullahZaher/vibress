@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
+import { usePublicationLocales } from "../../lib/usePublicationLocales";
 import {
   fetchContentTranslations,
   fetchTranslationMatrix,
@@ -41,19 +42,21 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
   onNavigate,
 }) => {
   const queryClient = useQueryClient();
+  const { data: localePolicy } = usePublicationLocales();
   const [aiLoadingLocale, setAiLoadingLocale] = useState<string | null>(null);
 
   // 1. Fetch enabled publication locales
   const { data: matrixData } = useQuery({
     queryKey: adminQueryKeys.translations.matrix({ limit: 1 }),
     queryFn: () => fetchTranslationMatrix({ limit: 1 }),
+    enabled: localePolicy?.isMultilingual === true,
   });
 
   // 2. Fetch existing translations for this content
   const { data: trData, isLoading } = useQuery({
     queryKey: adminQueryKeys.translations.content(contentType, contentId),
     queryFn: () => fetchContentTranslations(contentType, contentId),
-    enabled: Boolean(contentId),
+    enabled: Boolean(contentId) && localePolicy?.isMultilingual === true,
   });
 
   const aiMutation = useMutation({
@@ -69,8 +72,8 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
     },
   });
 
-  const enabledLocales = matrixData?.enabledLocales || ["en", "ar-SA"];
-  const defaultLocale = matrixData?.defaultLocale || "en";
+  const enabledLocales = localePolicy?.enabledLocales ?? [];
+  const defaultLocale = localePolicy?.primaryLocale ?? "";
   const translations = trData?.translations || [];
 
   // Filter out source locale
@@ -83,6 +86,8 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
     setAiLoadingLocale(loc);
     aiMutation.mutate(loc);
   };
+
+  if (!localePolicy?.isMultilingual) return null;
 
   return (
     <div className="p-3 bg-card border border-border/60 rounded-xl space-y-3">
