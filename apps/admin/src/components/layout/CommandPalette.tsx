@@ -464,7 +464,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     onClose();
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-start text-xs transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-primary text-primary-foreground font-medium"
                       : "text-foreground hover:bg-muted/50"
