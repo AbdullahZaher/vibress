@@ -12,7 +12,12 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { TranslationStatus } from "@vibress/database";
+import {
+  CreateContentTranslationSchema,
+  EditContentTranslationSchema,
+  AiTranslateContentSchema,
+  BulkTranslationActionSchema,
+} from "@vibress/api-contracts";
 import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
 import { canonicalPublicationLocale } from "@vibress/settings";
@@ -241,23 +246,19 @@ export async function translationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
-      const body = (req.body ?? {}) as {
-        targetLocale: string;
-        title: string;
-        slug: string;
-        excerpt?: string;
-        content?: Record<string, unknown>;
-        metaTitle?: string;
-        metaDescription?: string;
-        status?: TranslationStatus;
-        translationProvider?: string;
-      };
-
-      if (!body.targetLocale || !body.title || !body.slug) {
+      const parsed = CreateContentTranslationSchema.safeParse(req.body);
+      if (!parsed.success || !["post", "page"].includes(type)) {
         return reply.status(400).send({
-          statusCode: 400,
-          error: "Bad Request",
-          message: "targetLocale, title, and slug are required",
+          statusCode: 400, error: "Bad Request",
+          message: "Invalid translation input",
+        });
+      }
+      const body = parsed.data;
+      if (body.status === "needs_review" &&
+          !hasPermission(req.permissions || [], "translations.review", req.roles || [])) {
+        return reply.status(403).send({
+          statusCode: 403, error: "Forbidden",
+          message: "Editorial review permission is required",
         });
       }
 
@@ -339,16 +340,14 @@ export async function translationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
-      const body = (req.body ?? {}) as {
-        title?: string;
-        slug?: string;
-        excerpt?: string;
-        content?: Record<string, unknown>;
-        metaTitle?: string;
-        metaDescription?: string;
-        status?: TranslationStatus;
-        translationProvider?: string;
-      };
+      const parsed = EditContentTranslationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          statusCode: 400, error: "Bad Request",
+          message: "Invalid translation edit input",
+        });
+      }
+      const body = parsed.data;
 
       const existing = await translationService.getTranslationById(
         id,
@@ -362,8 +361,29 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const canEditLive = (permission: string) =>
+        hasPermission(req.permissions || [], permission, req.roles || []);
+      if (body.status === "needs_review" && !canEditLive("translations.review")) {
+        return reply.status(403).send({
+          statusCode: 403, error: "Forbidden",
+          message: "Editorial review permission is required",
+        });
+      }
+      if ((existing.status === "published" && !canEditLive("translations.publish")) ||
+          (existing.status === "approved" && !canEditLive("translations.approve"))) {
+        return reply.status(403).send({
+          statusCode: 403, error: "Forbidden",
+          message: "Editing an approved or published translation requires its elevated permission",
+        });
+      }
+      if (!["post", "page", "content_entry", "tag"].includes(existing.contentType)) {
+        return reply.status(400).send({
+          statusCode: 400, error: "Bad Request", message: "Unknown translation content type",
+        });
+      }
+      const contentType = existing.contentType as "post" | "page" | "content_entry" | "tag";
       const updated = await translationService.upsertTranslation({
-        contentType: existing.contentType as any,
+        contentType,
         contentId: existing.contentId,
         translationGroupId: existing.translationGroupId,
         sourceLocale: existing.sourceLocale,
@@ -532,19 +552,14 @@ export async function translationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
-      const body = (req.body ?? {}) as {
-        targetLocale: string;
-        provider?: string;
-        model?: string;
-      };
-
-      if (!body.targetLocale) {
+      const parsed = AiTranslateContentSchema.safeParse(req.body);
+      if (!parsed.success || !["post", "page"].includes(type)) {
         return reply.status(400).send({
-          statusCode: 400,
-          error: "Bad Request",
-          message: "targetLocale is required",
+          statusCode: 400, error: "Bad Request",
+          message: "Invalid AI translation request",
         });
       }
+      const body = parsed.data;
 
       const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
       if (!(await targetIsEnabled(req, body.targetLocale))) {
@@ -666,26 +681,13 @@ export async function translationRoutes(fastify: FastifyInstance) {
       requirePermission("translations.edit"), requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
-      const body = (req.body ?? {}) as {
-        translationIds: string[];
-        action: "submit_review" | "approve" | "publish" | "mark_stale" | "delete";
-      };
-
-      if (!body.translationIds || !Array.isArray(body.translationIds) || !body.action) {
-        return reply.status(400).send({
-          statusCode: 400,
-          error: "Bad Request",
-          message: "translationIds array and action are required",
-        });
-      }
-
-      if (body.translationIds.length === 0 || body.translationIds.length > 100 ||
-          new Set(body.translationIds).size !== body.translationIds.length ||
-          !["submit_review", "approve", "publish", "mark_stale", "delete"].includes(body.action)) {
+      const parsed = BulkTranslationActionSchema.safeParse(req.body);
+      if (!parsed.success) {
         return reply.status(400).send({ errors: [{
           code: "VALIDATION_ERROR", message: "Invalid translation bulk request", requestId: req.id,
         }] });
       }
+      const body = parsed.data;
       for (const id of body.translationIds) {
         if (typeof id !== "string") {
           return reply.status(400).send({ errors: [{
