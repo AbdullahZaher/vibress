@@ -11,6 +11,7 @@ import {
   validateOrigin,
 } from "../middleware/auth";
 import { PageDomainError, ListPagesFilter } from "@vibress/pages";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 
 export async function pageRoutes(fastify: FastifyInstance) {
   // List pages
@@ -76,6 +77,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
 
   // Create page
   fastify.post("/pages", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("pages.create"),
@@ -134,6 +136,7 @@ export async function pageRoutes(fastify: FastifyInstance) {
 
   // Update page
   fastify.put("/pages/:id", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("pages.edit"),

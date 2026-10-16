@@ -15,6 +15,7 @@ import {
 import { TranslationStatus } from "@vibress/database";
 import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 
 export async function translationRoutes(fastify: FastifyInstance) {
   // Helper to fetch enabled publication locales
@@ -206,6 +207,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 6. Create / Upsert Translation for Content Item
   fastify.post("/content/:type/:id/translations", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       validateOrigin,
       requireStaffSession,
@@ -302,6 +304,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 7. Update Translation Fields
   fastify.patch("/translations/:id", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       validateOrigin,
       requireStaffSession,
@@ -643,6 +646,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 12. Bulk Translation Operations
   fastify.post("/translations/bulk", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       validateOrigin,
       requireStaffSession,

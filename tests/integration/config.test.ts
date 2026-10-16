@@ -127,5 +127,16 @@ describe("Typed configuration", () => {
     });
     expect(trueConfig.trustProxy).toBe(true);
   });
+
+  it("configures bodyLimitBytes to 1MB default and parses API_BODY_LIMIT_BYTES", () => {
+    const defaultConfig = loadConfig({ NODE_ENV: "development" });
+    expect(defaultConfig.bodyLimitBytes).toBe(1048576);
+
+    const customConfig = loadConfig({
+      NODE_ENV: "development",
+      API_BODY_LIMIT_BYTES: "2097152",
+    });
+    expect(customConfig.bodyLimitBytes).toBe(2097152);
+  });
 });
 

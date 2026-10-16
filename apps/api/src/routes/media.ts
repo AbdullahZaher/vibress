@@ -21,25 +21,52 @@ import {
   MediaUploadFailedError,
 } from "@vibress/media";
 import { errorMessage } from "../helpers/errors";
+import { MEDIA_UPLOAD_BODY_LIMIT_BYTES } from "../constants/limits";
 
 export async function mediaRoutes(fastify: FastifyInstance) {
   // Upload media asset
   fastify.post("/media", {
+    bodyLimit: MEDIA_UPLOAD_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
       validateOrigin,
     ],
     handler: async (req, reply) => {
+      const contentLength = req.headers["content-length"];
+      if (
+        contentLength &&
+        parseInt(contentLength, 10) > MEDIA_UPLOAD_BODY_LIMIT_BYTES
+      ) {
+        return reply.status(413).send({
+          errors: [
+            {
+              code: "PAYLOAD_TOO_LARGE",
+              message: "Request body is too large",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       let fileData;
       try {
         fileData = await req.file();
       } catch (err) {
-        return reply.status(400).send({
+        const isTooLarge =
+          (err as any)?.statusCode === 413 ||
+          (err as any)?.code === "FST_REQ_FILE_TOO_LARGE" ||
+          (err as any)?.code === "FST_ERR_CTP_BODY_TOO_LARGE";
+        const statusCode = isTooLarge ? 413 : 400;
+        return reply.status(statusCode).send({
           errors: [
             {
-              code: "MEDIA_UPLOAD_FAILED",
-              message: errorMessage(err) || "Failed to parse multipart upload",
+              code: isTooLarge ? "PAYLOAD_TOO_LARGE" : "MEDIA_UPLOAD_FAILED",
+              message:
+                errorMessage(err) ||
+                (isTooLarge
+                  ? "Uploaded file exceeds maximum allowed size"
+                  : "Failed to parse multipart upload"),
               requestId: req.id,
             },
           ],
@@ -62,11 +89,30 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       try {
         buffer = await fileData.toBuffer();
       } catch (err) {
-        return reply.status(400).send({
+        const isTooLarge =
+          (err as any)?.statusCode === 413 ||
+          (err as any)?.code === "FST_REQ_FILE_TOO_LARGE" ||
+          (err as any)?.code === "FST_ERR_CTP_BODY_TOO_LARGE";
+        const statusCode = isTooLarge ? 413 : 400;
+        return reply.status(statusCode).send({
           errors: [
             {
-              code: "MEDIA_UPLOAD_FAILED",
-              message: `Failed to read file buffer: ${errorMessage(err)}`,
+              code: isTooLarge ? "PAYLOAD_TOO_LARGE" : "MEDIA_UPLOAD_FAILED",
+              message: isTooLarge
+                ? "Uploaded file exceeds maximum allowed size"
+                : `Failed to read file buffer: ${errorMessage(err)}`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (fileData.file.truncated) {
+        return reply.status(413).send({
+          errors: [
+            {
+              code: "PAYLOAD_TOO_LARGE",
+              message: "Uploaded file exceeds maximum allowed size",
               requestId: req.id,
             },
           ],

@@ -118,7 +118,7 @@ export const buildApp = () => {
   const config = getConfig();
   const fastify = Fastify({
     logger: false,
-    bodyLimit: 524288000, // 500MB body limit to match max media upload capabilities
+    bodyLimit: config.bodyLimitBytes, // Safe configurable default (1MB); raised per-route on upload/import endpoints
     requestIdHeader: "x-request-id",
     trustProxy: config.trustProxy,
     genReqId: function (req) {

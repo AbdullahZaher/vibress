@@ -92,6 +92,7 @@ export interface AppConfig {
   };
   trustProxy: TrustProxyConfig;
   trustProxyRaw?: string | undefined;
+  bodyLimitBytes: number;
 }
 
 export type TrustProxyConfig =
@@ -207,6 +208,7 @@ const envSchema = z.object({
   STORAGE_LOCAL_ROOT: optionalNonEmptyString,
   UNSPLASH_ACCESS_KEY: optionalNonEmptyString,
   TRUST_PROXY: optionalNonEmptyString,
+  API_BODY_LIMIT_BYTES: intString.default(1048576),
 
   EVENT_DELIVERY_MODE: z.enum(["outbox", "direct"]).default("outbox"),
   OUTBOX_PUBLISHED_RETENTION_DAYS: intString.default(7),
@@ -363,6 +365,7 @@ export function loadConfig(env: EnvSource): AppConfig {
     },
     trustProxy: parseTrustProxy(raw.TRUST_PROXY),
     trustProxyRaw: raw.TRUST_PROXY,
+    bodyLimitBytes: raw.API_BODY_LIMIT_BYTES,
   };
 
   enforceProductionGuards(config);
