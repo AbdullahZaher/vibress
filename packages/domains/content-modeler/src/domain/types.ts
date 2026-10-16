@@ -62,6 +62,7 @@ export interface UpdateEntryInput {
   slug?: string | undefined;
   data?: Record<string, unknown> | undefined;
   status?: "draft" | "published" | "archived" | undefined;
+  expectedVersion?: number | undefined;
 }
 
 export interface ListEntriesFilter {

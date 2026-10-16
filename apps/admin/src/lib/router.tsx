@@ -1,4 +1,4 @@
-import { ReactNode, Suspense, lazy } from "react";
+import { ReactNode, Suspense, lazy, useEffect } from "react";
 import { ApiUser } from "./api";
 import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { PermissionDenied } from "../components/common/PermissionDenied";
@@ -153,6 +153,19 @@ export function matchRoutePattern(
 /**
  * Declarative route map for Vibress Admin with granular route boundaries.
  */
+function LegacyContentModelRedirect({
+  to,
+  onNavigate,
+}: {
+  to: string;
+  onNavigate: (path: string) => void;
+}) {
+  useEffect(() => {
+    onNavigate(to);
+  }, [to, onNavigate]);
+  return <RouteLoadingFallback />;
+}
+
 export const adminRoutes: AdminRouteDefinition[] = [
   // 1. Dashboard Root
   {
@@ -299,46 +312,102 @@ export const adminRoutes: AdminRouteDefinition[] = [
       />
     ),
   },
-  // 5. Content Modeler & Custom Collections
+  // Schema administration belongs under Settings → Advanced.
+  // Register canonical routes before the broad /admin/settings/:section fallback.
   {
-    pattern: "/admin/models",
+    pattern: "/admin/settings/advanced/content-models",
     exact: true,
-    render: ({ onNavigate }) => <ContentModelList onNavigate={onNavigate} />,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate, can }) => (
+      <ContentModelList onNavigate={onNavigate} canManage={can("settings.edit")} />
+    ),
   },
   {
-    pattern: "/admin/models/new",
+    pattern: "/admin/settings/advanced/content-models/new",
     exact: true,
+    requiredPermission: "settings.edit",
     render: ({ onNavigate }) => <ContentModelEditor onNavigate={onNavigate} />,
   },
   {
-    pattern: "/admin/models/:modelId",
+    pattern: "/admin/settings/advanced/content-models/:modelId",
     exact: true,
+    requiredPermission: "settings.edit",
     render: ({ match, onNavigate }) => (
       <ContentModelEditor modelId={match.params.modelId} onNavigate={onNavigate} />
     ),
   },
+  // Preserve the intermediate Settings → Site links and historic bookmarks.
+  {
+    pattern: "/admin/settings/content-models",
+    exact: true,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models" onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/settings/content-models/new",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models/new" onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/settings/content-models/:modelId",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ match, onNavigate }) => (
+      <LegacyContentModelRedirect
+        to={`/admin/settings/advanced/content-models/${encodeURIComponent(match.params.modelId || "")}`}
+        onNavigate={onNavigate}
+      />
+    ),
+  },
+  // Preserve old admin bookmarks; redirect into Settings rather than render a second view.
+  {
+    pattern: "/admin/models",
+    exact: true,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models" onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/models/new",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ onNavigate }) => <LegacyContentModelRedirect to="/admin/settings/advanced/content-models/new" onNavigate={onNavigate} />,
+  },
+  {
+    pattern: "/admin/models/:modelId",
+    exact: true,
+    requiredPermission: "settings.edit",
+    render: ({ match, onNavigate }) => (
+      <LegacyContentModelRedirect to={`/admin/settings/advanced/content-models/${encodeURIComponent(match.params.modelId || "")}`} onNavigate={onNavigate} />
+    ),
+  },
+  // Entries remain editorial content, not publication configuration.
   {
     pattern: "/admin/collections/:modelSlug",
     exact: true,
-    render: ({ match, onNavigate }) => (
-      <DynamicCollectionList modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} />
+    requiredPermission: "posts.read",
+    render: ({ match, onNavigate, can }) => (
+      <DynamicCollectionList modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} canEdit={can("posts.edit")} />
     ),
   },
   {
     pattern: "/admin/collections/:modelSlug/new",
     exact: true,
-    render: ({ match, onNavigate }) => (
-      <DynamicCollectionEntryEditor modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} />
+    requiredPermission: "posts.edit",
+    render: ({ match, onNavigate, can }) => (
+      <DynamicCollectionEntryEditor modelSlug={match.params.modelSlug || ""} onNavigate={onNavigate} canPublish={can("posts.publish")} />
     ),
   },
   {
     pattern: "/admin/collections/:modelSlug/:entryId",
     exact: true,
-    render: ({ match, onNavigate }) => (
+    requiredPermission: "posts.edit",
+    render: ({ match, onNavigate, can }) => (
       <DynamicCollectionEntryEditor
         modelSlug={match.params.modelSlug || ""}
         entryId={match.params.entryId}
         onNavigate={onNavigate}
+        canPublish={can("posts.publish")}
       />
     ),
   },
@@ -362,57 +431,57 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/settings",
     exact: true,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/general",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/site",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/themes",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/storage",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="site" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="site" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/membership",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/billing",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/subscriptions",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="membership" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="membership" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/growth",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/newsletters",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/analytics",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="growth" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="growth" can={can} onNavigate={onNavigate} />,
   },
   // 7. Comments & Community Moderation Queue
   {
@@ -430,42 +499,42 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/settings/advanced",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/platform",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/operations",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="advanced" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="advanced" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/localization",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/language",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/locales",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/i18n",
     exact: false,
-    render: ({ can }) => <SettingsHub initialSection="general" can={can} />,
+    render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
   {
     pattern: "/admin/settings/:section",
     exact: false,
-    render: ({ match, can }) => (
+    render: ({ match, can, onNavigate }) => (
       <SettingsHub
         initialSection={
           ["general", "site", "membership", "growth", "advanced"].includes(
@@ -475,6 +544,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
             : "general"
         }
         can={can}
+        onNavigate={onNavigate}
       />
     ),
   },

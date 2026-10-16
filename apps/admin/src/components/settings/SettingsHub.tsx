@@ -4,6 +4,8 @@ import { useSettingsSearch } from "./hooks/useSettingsSearch";
 import { useScrollSpy } from "./hooks/useScrollSpy";
 import { SETTINGS_REGISTRY } from "./settings.registry";
 import { SettingsSection } from "./SettingsSection";
+import { SettingsCard } from "./SettingsCard";
+import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { Input } from "../ui/input";
@@ -48,11 +50,13 @@ import {
   Cpu,
   Search,
   X,
+  Database,
 } from "lucide-react";
 
 interface SettingsHubProps {
   initialSection?: string | undefined;
   can?: ((perm: string) => boolean) | undefined;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
@@ -77,6 +81,7 @@ const getPillarIcon = (iconName: string) => {
 export const SettingsHub: React.FC<SettingsHubProps> = ({
   initialSection,
   can,
+  onNavigate,
 }) => {
   const {
     general,
@@ -424,6 +429,21 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           description="Code injection, developer APIs & webhooks, system maintenance, data import/export, and audit logs."
           icon={getPillarIcon("Cpu")}
         >
+          {isCardVisible("content-models") && (
+            <SettingsPermissionGate permission="posts.read" can={can}>
+              <SettingsCard id="advanced-content-models" isHighlighted={highlightedCardId === "content-models"}>
+                <SettingsCardRow
+                  icon={<Database className="h-4 w-4" />}
+                  title="Content Models"
+                  description="Define structured content types, fields, relations and their validation rules."
+                  actionLabel="Manage models"
+                  onAction={() => onNavigate?.("/admin/settings/advanced/content-models")}
+                  disabled={!onNavigate}
+                />
+              </SettingsCard>
+            </SettingsPermissionGate>
+          )}
+
           {isCardVisible("code-injection") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <CodeInjectionCard

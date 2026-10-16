@@ -462,6 +462,14 @@ describe("Batch 14 — Operations Integration & Security", () => {
     });
     expect(badVerify.statusCode).toBe(401);
     expect(badVerify.json().valid).toBe(false);
+
+    // Restore isPrivate to false so subsequent test suites aren't affected
+    await app.inject({
+      method: "PUT",
+      url: "/api/admin/v1/settings/security/isPrivate",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { value: false },
+    });
   });
 
   // ---------------- SMTP Test Delivery ----------------
@@ -520,44 +528,81 @@ describe("Batch 14 — Operations Integration & Security", () => {
   });
 
   it("POST /api/content/v1/verify-site-password sets signed HMAC vb_site_auth cookie", async () => {
-    const { verifySiteAuthToken } = await import("@vibress/security");
-    // Correct password
-    const okRes = await app.inject({
-      method: "POST",
-      url: "/api/content/v1/verify-site-password",
-      payload: { password: "SecretSitePass123" },
+    // This test needs private mode, even though the preceding settings test
+    // restores the public setting. Restore the prior value on every exit path.
+    const previousSettings = await app.inject({
+      method: "GET",
+      url: "/api/content/v1/site",
     });
-    expect(okRes.statusCode).toBe(200);
-    expect(okRes.json().valid).toBe(true);
+    expect(previousSettings.statusCode).toBe(200);
+    const originalIsPrivate: unknown = previousSettings.json().security?.isPrivate;
+    if (typeof originalIsPrivate !== "boolean") {
+      throw new Error("Expected a boolean public site privacy setting");
+    }
 
-    const setCookie = okRes.headers["set-cookie"] as unknown as string;
-    expect(setCookie).toMatch(/vb_site_auth=v[12]\./);
+    try {
+      const enablePrivate = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/security/isPrivate",
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { value: true },
+      });
+      expect(enablePrivate.statusCode).toBe(200);
 
-    // Extract cookie value
-    const match = /vb_site_auth=([^;]+)/.exec(setCookie);
-    expect(match).not.toBeNull();
-    const token = match![1]!;
+      const { verifySiteAuthToken } = await import("@vibress/security");
+      // Correct password on a private site must issue the signed cookie.
+      const okRes = await app.inject({
+        method: "POST",
+        url: "/api/content/v1/verify-site-password",
+        payload: { password: "SecretSitePass123" },
+      });
+      expect(okRes.statusCode).toBe(200);
+      expect(okRes.json()).toMatchObject({ valid: true, private: true });
 
-    const secret =
-      process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
-    expect(verifySiteAuthToken(token, secret, "pub_default")).toBe(true);
+      const cookieHeader = okRes.headers["set-cookie"];
+      const setCookie = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader;
+      if (typeof setCookie !== "string") {
+        throw new Error("Expected a signed vb_site_auth cookie for a private site");
+      }
+      expect(setCookie).toMatch(/vb_site_auth=v[12]\./);
 
-    // Tampered cookie must fail
-    expect(verifySiteAuthToken("1", secret, "pub_default")).toBe(false);
-    expect(verifySiteAuthToken("vb_site_auth=1", secret, "pub_default")).toBe(false);
-    expect(verifySiteAuthToken(`${token}-tampered`, secret, "pub_default")).toBe(false);
-    expect(verifySiteAuthToken("v2.invalid.fakehmac.fake", secret, "pub_default")).toBe(false);
-    expect(verifySiteAuthToken(null, secret, "pub_default")).toBe(false);
-    expect(verifySiteAuthToken(undefined, secret, "pub_default")).toBe(false);
+      // Extract cookie value and verify its publication-scoped signature.
+      const match = /vb_site_auth=([^;]+)/.exec(setCookie);
+      expect(match).not.toBeNull();
+      if (!match?.[1]) {
+        throw new Error("Expected vb_site_auth cookie token");
+      }
+      const token = match[1];
 
-    // Incorrect password
-    const badRes = await app.inject({
-      method: "POST",
-      url: "/api/content/v1/verify-site-password",
-      payload: { password: "IncorrectPassword" },
-    });
-    expect(badRes.statusCode).toBe(401);
-    expect(badRes.json().valid).toBe(false);
+      const secret =
+        process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
+      expect(verifySiteAuthToken(token, secret, "pub_default")).toBe(true);
+
+      // Tampered cookie must fail
+      expect(verifySiteAuthToken("1", secret, "pub_default")).toBe(false);
+      expect(verifySiteAuthToken("vb_site_auth=1", secret, "pub_default")).toBe(false);
+      expect(verifySiteAuthToken(`${token}-tampered`, secret, "pub_default")).toBe(false);
+      expect(verifySiteAuthToken("v2.invalid.fakehmac.fake", secret, "pub_default")).toBe(false);
+      expect(verifySiteAuthToken(null, secret, "pub_default")).toBe(false);
+      expect(verifySiteAuthToken(undefined, secret, "pub_default")).toBe(false);
+
+      // Incorrect password
+      const badRes = await app.inject({
+        method: "POST",
+        url: "/api/content/v1/verify-site-password",
+        payload: { password: "IncorrectPassword" },
+      });
+      expect(badRes.statusCode).toBe(401);
+      expect(badRes.json().valid).toBe(false);
+    } finally {
+      const restore = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/security/isPrivate",
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { value: originalIsPrivate },
+      });
+      expect(restore.statusCode).toBe(200);
+    }
   });
 
   // ---------------- Code Injection Security & RBAC ----------------

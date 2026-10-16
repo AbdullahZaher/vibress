@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkEntryDataValidity } from "../domain/validation";
+import { checkEntryDataValidity, analyzeSchemaEvolution, resolveLocalizedEntryData } from "../domain/validation";
 import { ContentFieldDefinition } from "../domain/types";
 
 describe("Content Modeler Schema Evolution & Data Safety", () => {
@@ -47,7 +47,7 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
   });
 
   it("safely handles field deprecation and removal", () => {
-    const originalFields: ContentFieldDefinition[] = [
+    const _originalFields: ContentFieldDefinition[] = [
       { id: "f1", name: "Title", key: "title", type: "text", required: true },
       { id: "f2", name: "Legacy Rating", key: "legacyRating", type: "number", required: false },
     ];
@@ -86,4 +86,41 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
     expect(invalidMax.errors[0]?.field).toBe("priorityScore");
     expect(invalidMax.errors[0]?.message).toContain("maximum value 10");
   });
+  it("blocks increasing field visibility, tightening constraints, and relation retargeting", () => {
+    const base: ContentFieldDefinition[] = [
+      { id: "a", name: "Private Cost", key: "cost", type: "number", apiVisibility: "private", max: 100 },
+      { id: "b", name: "Author", key: "author", type: "relation", relationModel: "writers" },
+    ];
+    expect(analyzeSchemaEvolution(base, [
+      { ...base[0]!, apiVisibility: "public" },
+      base[1]!,
+    ]).safe).toBe(false);
+    expect(analyzeSchemaEvolution(base, [
+      { ...base[0]!, max: 10 },
+      base[1]!,
+    ]).safe).toBe(false);
+    expect(analyzeSchemaEvolution(base, [
+      base[0]!,
+      { ...base[1]!, relationModel: "accounts" },
+    ]).safe).toBe(false);
+  });
+
+  it("blocks new required fields until existing records are migrated, even with defaults", () => {
+    const diff = analyzeSchemaEvolution([], [
+      { id: "new", key: "mandatory", name: "Required", type: "text", required: true, defaultValue: "x" },
+    ]);
+    expect(diff.safe).toBe(false);
+  });
+
+  it("resolves historical regional locale keys without changing stored dictionaries", () => {
+    const fields: ContentFieldDefinition[] = [
+      { id: "name", key: "name", name: "Name", type: "text", localizable: true },
+    ];
+    const persisted = { name: { "ar-SA": "مرحبا", en: "Hello" } };
+    const result = resolveLocalizedEntryData(persisted, fields, "ar-SA", "en");
+    expect(result.name).toBe("مرحبا");
+    expect(persisted.name["ar-SA"]).toBe("مرحبا");
+    expect(resolveLocalizedEntryData(persisted, fields, "fr-FR", "en").name).toBe("Hello");
+  });
+
 });

@@ -4,6 +4,11 @@ The Vibress **Content Modeler** is a fully integrated, multi-tenant structured c
 
 ---
 
+Schema configuration is located at **Settings → Advanced → Content Models**
+(`/admin/settings/advanced/content-models`). Editorial records remain under
+`/admin/collections/:modelSlug`. Unsafe schema updates are rejected when
+stored entries exist; automatic data migration is not provided.
+
 ## Architecture Overview
 
 ```

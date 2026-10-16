@@ -67,26 +67,17 @@ describe("Documentation Truth & Product Claims Consistency Guard", () => {
     }
   });
 
-  it("verifies database migrations end at authoritative migration 0036", () => {
-    const journalPath = path.join(
-      rootDir,
-      "packages/database/migrations/meta/_journal.json",
-    );
+  it("verifies migration journal stays aligned with additive SQL migrations", () => {
+    const journalPath = path.join(rootDir, "packages/database/migrations/meta/_journal.json");
     const journal = JSON.parse(fs.readFileSync(journalPath, "utf-8"));
     const lastEntry = journal.entries[journal.entries.length - 1];
-
-    expect(lastEntry.idx).toBe(36);
-    expect(lastEntry.tag).toBe("0036_audit_publication_ownership");
-
-    // Assert no migration files beyond 0036 exist.
+    expect(lastEntry.idx).toBe(journal.entries.length - 1);
     const migrationsDir = path.join(rootDir, "packages/database/migrations");
-    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql"));
-    for (const f of files) {
-      const match = f.match(/^(\d{4})_/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        expect(num).toBeLessThanOrEqual(36);
-      }
-    }
+    const tags = fs.readdirSync(migrationsDir)
+      .filter((file) => /^\d{4}_.+\.sql$/.test(file))
+      .map((file) => file.slice(0, -4))
+      .sort();
+    expect(lastEntry.tag).toBe(tags[tags.length - 1]);
+    expect(tags).toEqual(journal.entries.map((entry: { tag: string }) => entry.tag));
   });
 });

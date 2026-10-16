@@ -4,6 +4,11 @@ The Content Modeler supports a production-grade registry of 18 distinct canonica
 
 ---
 
+The admin `studio_doc` editor now uses Vibress Studio and stores the structured
+AST. Existing string-valued `studio_doc` content is migrated in memory for
+editing; saved records are not bulk-converted. `rich_text` retains the original
+string representation. Media selection integrates with the existing Media Library.
+
 ## Canonical Field Registry Matrix (18 Types)
 
 | Field Type | Storage Type | Validation | Editor Component | API Visibility Options |
@@ -11,7 +16,7 @@ The Content Modeler supports a production-grade registry of 18 distinct canonica
 | `short_text` | `string` | minLength, maxLength, regex pattern | Single-line short text input | public, authenticated, private |
 | `text` | `string` | minLength, maxLength, regex pattern | Single-line standard text input | public, authenticated, private |
 | `long_text` | `string` | minLength, maxLength | Multi-line textarea | public, authenticated, private |
-| `rich_text` | `string` / HTML | None | Rich text editor / Markdown | public, authenticated, private |
+| `rich_text` | `string` / HTML | None | Markdown-compatible textarea (legacy string format) | public, authenticated, private |
 | `studio_doc` | `JSON` AST / string | Schema Version 1 (Lexical) | Vibress Studio / Lexical Document | public, authenticated, private |
 | `number` | `number` | min, max, integer/decimal | Numeric input (step support) | public, authenticated, private |
 | `boolean` | `boolean` | boolean value | Toggle Switch | public, authenticated, private |
@@ -26,6 +31,22 @@ The Content Modeler supports a production-grade registry of 18 distinct canonica
 | `relation_list` | `string[]` (entry UUIDs) | Valid target entries in tenant & model | Multi-entry Ordered Relation Picker | public, authenticated, private |
 | `media` | `string` or `{ id, url, alt }` | Media asset ID or valid URL | Media Library Modal Picker | public, authenticated, private |
 | `json` | `Record<string, unknown>` | Valid JSON syntax | Monospace JSON Editor | public, authenticated, private |
+
+---
+
+## Selecting related entries
+
+`relation` and `relation_list` are edited using publication-scoped admin
+queries against `GET /api/admin/v1/content-models/:modelSlug/entries`.
+The picker requests 26 items at a time and displays 25, using the extra
+record to determine whether another page exists. Search and pagination
+are handled by the server. Existing selected IDs and legacy slugs remain
+available when they are not on the current page, and an API error displays
+a retry action instead of pretending no related content exists.
+
+Multiple relations preserve their stored order and can be reordered using
+keyboard-operable buttons. The editor does not expose private or
+cross-publication entries from a different model through this picker.
 
 ---
 

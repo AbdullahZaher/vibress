@@ -28,7 +28,7 @@ describe("Platform Packages Suite (H7)", () => {
     it("defines standard queue name constants", () => {
       expect(QUEUE_NAMES.EMAIL_DELIVERY).toBe("vibress-email-delivery");
       expect(QUEUE_NAMES.SEARCH).toBe("vibress-search");
-      expect(QUEUE_NAMES.AUTOMATIONS_RUN).toBe("vibress-automations");
+      expect(Object.keys(QUEUE_NAMES)).not.toContain("AUTOMATIONS_RUN");
     });
   });
 

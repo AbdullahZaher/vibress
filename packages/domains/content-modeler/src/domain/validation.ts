@@ -20,6 +20,25 @@ export class ValidationError extends Error {
   }
 }
 
+export class ConcurrencyConflictError extends Error {
+  readonly currentVersion: number;
+  readonly expectedVersion: number;
+
+  constructor(message: string, currentVersion: number, expectedVersion: number) {
+    super(message);
+    this.name = "ConcurrencyConflictError";
+    this.currentVersion = currentVersion;
+    this.expectedVersion = expectedVersion;
+  }
+}
+
+export class PermissionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermissionDeniedError";
+  }
+}
+
 export const RESERVED_FIELD_KEYS = new Set([
   "__proto__",
   "constructor",
@@ -88,7 +107,7 @@ export function validateModelDefinition(input: {
     }
     seenKeys.add(key);
 
-    if (field.type && !VALID_FIELD_TYPES.includes(field.type as any)) {
+    if (field.type && !(VALID_FIELD_TYPES as readonly string[]).includes(field.type)) {
       throw new ValidationError({
         [key]: `Invalid field type '${field.type}'. Must be one of: ${VALID_FIELD_TYPES.join(", ")}`,
       });
@@ -344,25 +363,82 @@ export function filterEntryDataForVisibility(
     }
     if (field.key in data) {
       const val = data[field.key];
-      if (userRole === "public") {
-        if (field.type === "relation" && typeof val === "object" && val !== null && !Array.isArray(val)) {
+
+      if (field.type === "relation") {
+        if (typeof val === "object" && val !== null && !Array.isArray(val)) {
           const relObj = val as Record<string, unknown>;
-          if (relObj.status && relObj.status !== "published") {
+          // Status filtering: non-staff roles cannot see draft/archived/deleted relation targets (fail-closed)
+          if (userRole !== "staff_admin" && relObj.status !== "published") {
             result[field.key] = null;
             continue;
           }
-        } else if (field.type === "relation_list" && Array.isArray(val)) {
-          const filteredList = val.filter((item) => {
+          // Recursive visibility filtering on relation data (fail-closed: empty subFields returns empty object for non-staff)
+          const subFields = (relObj._fields as ContentFieldDefinition[] | undefined) || [];
+          const subData = (relObj.data as Record<string, unknown> | undefined) || {};
+          const filteredSubData =
+            Array.isArray(subFields) && subFields.length > 0
+              ? filterEntryDataForVisibility(subData, subFields, userRole)
+              : userRole === "staff_admin"
+                ? subData
+                : {};
+
+          const cleanRel: Record<string, unknown> = {
+            id: relObj.id,
+            title: relObj.title,
+            slug: relObj.slug,
+            status: relObj.status,
+            data: filteredSubData,
+          };
+          if (relObj.cyclic) {
+            cleanRel.cyclic = true;
+          }
+          result[field.key] = cleanRel;
+          continue;
+        } else if (val === null) {
+          result[field.key] = null;
+          continue;
+        }
+      } else if (field.type === "relation_list") {
+        if (Array.isArray(val)) {
+          const filteredList: Array<Record<string, unknown>> = [];
+          for (const item of val) {
             if (typeof item === "object" && item !== null && !Array.isArray(item)) {
               const itemObj = item as Record<string, unknown>;
-              return !itemObj.status || itemObj.status === "published";
+              // Status filtering: non-staff roles cannot see draft/archived/deleted relation targets (fail-closed)
+              if (userRole !== "staff_admin" && itemObj.status !== "published") {
+                continue;
+              }
+              // Recursive visibility filtering on relation item data (fail-closed: empty subFields returns empty object for non-staff)
+              const subFields = (itemObj._fields as ContentFieldDefinition[] | undefined) || [];
+              const subData = (itemObj.data as Record<string, unknown> | undefined) || {};
+              const filteredSubData =
+                Array.isArray(subFields) && subFields.length > 0
+                  ? filterEntryDataForVisibility(subData, subFields, userRole)
+                  : userRole === "staff_admin"
+                    ? subData
+                    : {};
+
+              const cleanItem: Record<string, unknown> = {
+                id: itemObj.id,
+                title: itemObj.title,
+                slug: itemObj.slug,
+                status: itemObj.status,
+                data: filteredSubData,
+              };
+              if (itemObj.cyclic) {
+                cleanItem.cyclic = true;
+              }
+              filteredList.push(cleanItem);
             }
-            return true;
-          });
+          }
           result[field.key] = filteredList;
+          continue;
+        } else {
+          result[field.key] = [];
           continue;
         }
       }
+
       result[field.key] = val;
     }
   }
@@ -394,15 +470,18 @@ export function resolveLocalizedEntryData(
 
     if (field.localizable && typeof val === "object" && !Array.isArray(val)) {
       const dict = val as Record<string, unknown>;
+      const normalized = Object.fromEntries(
+        Object.entries(dict).map(([key, value]) => [key.toLowerCase(), value]),
+      );
       // Look for exact locale match, e.g. "ar-SA"
-      if (normTarget in dict) {
-        result[field.key] = dict[normTarget];
-      } else if (targetLang && targetLang in dict) {
-        result[field.key] = dict[targetLang];
-      } else if (normFallback in dict) {
-        result[field.key] = dict[normFallback];
-      } else if ("en" in dict) {
-        result[field.key] = dict["en"];
+      if (normTarget in normalized) {
+        result[field.key] = normalized[normTarget];
+      } else if (targetLang && targetLang in normalized) {
+        result[field.key] = normalized[targetLang];
+      } else if (normFallback in normalized) {
+        result[field.key] = normalized[normFallback];
+      } else if ("en" in normalized) {
+        result[field.key] = normalized["en"];
       } else {
         const firstVal = Object.values(dict)[0];
         result[field.key] = firstVal !== undefined ? firstVal : val;
@@ -415,14 +494,17 @@ export function resolveLocalizedEntryData(
         for (const [k, v] of Object.entries(relObj.data as Record<string, unknown>)) {
           if (typeof v === "object" && v !== null && !Array.isArray(v)) {
             const d = v as Record<string, unknown>;
-            if (normTarget in d) {
-              localizedTargetData[k] = d[normTarget];
-            } else if (targetLang && targetLang in d) {
-              localizedTargetData[k] = d[targetLang];
-            } else if (normFallback in d) {
-              localizedTargetData[k] = d[normFallback];
-            } else if ("en" in d) {
-              localizedTargetData[k] = d["en"];
+            const normalizedD = Object.fromEntries(
+              Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
+            );
+            if (normTarget in normalizedD) {
+              localizedTargetData[k] = normalizedD[normTarget];
+            } else if (targetLang && targetLang in normalizedD) {
+              localizedTargetData[k] = normalizedD[targetLang];
+            } else if (normFallback in normalizedD) {
+              localizedTargetData[k] = normalizedD[normFallback];
+            } else if ("en" in normalizedD) {
+              localizedTargetData[k] = normalizedD["en"];
             } else {
               localizedTargetData[k] = Object.values(d)[0] ?? v;
             }
@@ -443,14 +525,17 @@ export function resolveLocalizedEntryData(
             for (const [k, v] of Object.entries(itemObj.data as Record<string, unknown>)) {
               if (typeof v === "object" && v !== null && !Array.isArray(v)) {
                 const d = v as Record<string, unknown>;
-                if (normTarget in d) {
-                  localizedTargetData[k] = d[normTarget];
-                } else if (targetLang && targetLang in d) {
-                  localizedTargetData[k] = d[targetLang];
-                } else if (normFallback in d) {
-                  localizedTargetData[k] = d[normFallback];
-                } else if ("en" in d) {
-                  localizedTargetData[k] = d["en"];
+                const normalizedD = Object.fromEntries(
+                  Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
+                );
+                if (normTarget in normalizedD) {
+                  localizedTargetData[k] = normalizedD[normTarget];
+                } else if (targetLang && targetLang in normalizedD) {
+                  localizedTargetData[k] = normalizedD[targetLang];
+                } else if (normFallback in normalizedD) {
+                  localizedTargetData[k] = normalizedD[normFallback];
+                } else if ("en" in normalizedD) {
+                  localizedTargetData[k] = normalizedD["en"];
                 } else {
                   localizedTargetData[k] = Object.values(d)[0] ?? v;
                 }
@@ -571,9 +656,9 @@ export function analyzeSchemaEvolution(
     const oldField = oldMap.get(key);
     if (!oldField) {
       // Added
-      if (newField.required && newField.defaultValue === undefined) {
+      if (newField.required) {
         isOverallSafe = false;
-        const w = `New required field '${newField.name}' (${key}) has no default value and may fail on existing entries.`;
+        const w = `New required field '${newField.name}' (${key}) requires migration of existing entries, even if a default is provided.`;
         warnings.push(w);
         changes.push({ key, action: "added", isSafe: false, warning: w });
       } else {
@@ -592,7 +677,34 @@ export function analyzeSchemaEvolution(
         warnings.push(w);
         changes.push({ key, action: "modified", isSafe: false, warning: w });
       } else {
-        changes.push({ key, action: "modified", isSafe: true });
+        const oldVisibility = oldField.apiVisibility ?? "public";
+        const newVisibility = newField.apiVisibility ?? "public";
+        const visibilityRank = { public: 0, authenticated: 1, private: 2 };
+        const exposureIncreased = visibilityRank[newVisibility] < visibilityRank[oldVisibility];
+        const optionsNarrowed = (
+          (newField.type === "select" || newField.type === "multi_select") &&
+          (oldField.options ?? []).some((option) =>
+            !(newField.options ?? []).some((next) => next.value === option.value))
+        );
+        const constraintsTightened =
+          (newField.min !== undefined && newField.min > (oldField.min ?? -Infinity)) ||
+          (newField.max !== undefined && newField.max < (oldField.max ?? Infinity)) ||
+          (newField.minLength !== undefined && newField.minLength > (oldField.minLength ?? 0)) ||
+          (newField.maxLength !== undefined && newField.maxLength < (oldField.maxLength ?? Infinity)) ||
+          (newField.pattern !== undefined && newField.pattern !== oldField.pattern);
+        const relationChanged =
+          (newField.type === "relation" || newField.type === "relation_list") &&
+          oldField.relationModel !== newField.relationModel;
+        const localizedChanged = Boolean(newField.localizable) !== Boolean(oldField.localizable);
+
+        if (exposureIncreased || optionsNarrowed || constraintsTightened || relationChanged || localizedChanged) {
+          isOverallSafe = false;
+          const w = `Field '${newField.name}' (${key}) changed visibility, constraints, options, relation target, or localization. Existing data requires review and migration.`;
+          warnings.push(w);
+          changes.push({ key, action: "modified", isSafe: false, warning: w });
+        } else {
+          changes.push({ key, action: "modified", isSafe: true });
+        }
       }
     }
   }

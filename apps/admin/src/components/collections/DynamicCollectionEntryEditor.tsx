@@ -4,15 +4,18 @@ import {
   Save,
   X,
   Image as ImageIcon,
-  Link as LinkIcon,
   Globe,
   Code,
   CheckCircle,
   FileText,
-  ArrowUp,
-  ArrowDown,
+  AlertTriangle,
 } from "lucide-react";
-import { apiRequest } from "../../lib/api/client";
+import { apiRequest, ApiError } from "../../lib/api/client";
+import { MediaPicker } from "../MediaPicker";
+import { RelationEntryPicker } from "./RelationEntryPicker";
+import { VibressStudio } from "@vibress/studio-react";
+import { migrateDocument } from "@vibress/studio-core";
+import { Button } from "../ui/button";
 
 export interface FieldDef {
   id: string;
@@ -33,14 +36,36 @@ export interface FieldDef {
   defaultValue?: unknown;
 }
 
+/** Stable document state across parent form rerenders; localized editors remount on locale change. */
+function StudioDocumentInput({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: ReturnType<typeof migrateDocument>) => void;
+}) {
+  const [document, setDocument] = useState(() => migrateDocument(value));
+  return (
+    <VibressStudio
+      value={document}
+      onChange={(next) => {
+        setDocument(next);
+        onChange(next);
+      }}
+    />
+  );
+}
+
 export function DynamicCollectionEntryEditor({
   modelSlug,
   entryId,
   onNavigate,
+  canPublish = false,
 }: {
   modelSlug: string;
   entryId?: string | undefined;
   onNavigate: (path: string) => void;
+  canPublish?: boolean;
 }) {
   const isEditing = Boolean(entryId && entryId !== "new");
   const [model, setModel] = useState<{ name: string; slug: string; fields: FieldDef[] } | null>(null);
@@ -52,14 +77,57 @@ export function DynamicCollectionEntryEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [mediaFieldKey, setMediaFieldKey] = useState<string | null>(null);
+  const [entryVersion, setEntryVersion] = useState<number | undefined>(undefined);
+  const [conflictState, setConflictState] = useState<{
+    isConflict: boolean;
+    expectedVersion?: number | undefined;
+    currentVersion?: number | undefined;
+  } | null>(null);
 
   // Localization active editor tab (for localizable fields)
-  const [activeLocaleTab, setActiveLocaleTab] = useState<"en" | "ar">("en");
+  const [activeLocaleTab, setActiveLocaleTab] = useState("en");
+  const [defaultLocale, setDefaultLocale] = useState("en");
+  const [enabledLocales, setEnabledLocales] = useState<string[]>(["en"]);
+  const isRtlLocale = /^(ar|fa|he|ur)(-|$)/i.test(activeLocaleTab);
 
-  // Relation available options cache { [relationModelSlugOrId]: Array<{ id: string; title: string; slug: string }> }
-  const [relationOptions, setRelationOptions] = useState<
-    Record<string, Array<{ id: string; title: string; slug: string }>>
-  >({});
+  const reloadLatestVersion = async () => {
+    if (!isEditing || !entryId) return;
+    try {
+      setLoading(true);
+      setError(null);
+      setConflictState(null);
+      const entryRes = await apiRequest<{
+        data?: {
+          title: string;
+          slug: string;
+          status: "draft" | "published" | "archived";
+          data: Record<string, unknown>;
+          version?: number;
+        };
+        entry?: {
+          title: string;
+          slug: string;
+          status: "draft" | "published" | "archived";
+          data: Record<string, unknown>;
+          version?: number;
+        };
+      }>(`/content-models/${modelSlug}/entries/${entryId}`);
+      const ent = entryRes.data || entryRes.entry;
+      if (ent) {
+        setTitle(ent.title);
+        setSlug(ent.slug);
+        setStatus(ent.status);
+        setFormData(ent.data || {});
+        setEntryVersion(ent.version);
+        setSuccess("Latest version loaded from server.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reload entry");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     void (async () => {
@@ -72,29 +140,15 @@ export function DynamicCollectionEntryEditor({
         }>(`/content-models/${modelSlug}`);
         const loadedModel = modelRes.data || modelRes.model || null;
         setModel(loadedModel);
-
-        if (loadedModel?.fields) {
-          // Pre-fetch relation choices for relation and relation_list fields
-          for (const field of loadedModel.fields) {
-            if (
-              (field.type === "relation" || field.type === "relation_list") &&
-              field.relationModel
-            ) {
-              try {
-                const relRes = await apiRequest<{
-                  data?: Array<{ id: string; title: string; slug: string }>;
-                }>(`/content-models/${field.relationModel}/entries?limit=100`);
-                if (relRes.data) {
-                  setRelationOptions((prev) => ({
-                    ...prev,
-                    [field.relationModel!]: relRes.data || [],
-                  }));
-                }
-              } catch {
-                // Ignore silent relation fetch failure
-              }
-            }
-          }
+        const localeResponse = await apiRequest<{
+          data?: { defaultLocale: string; enabledLocales: string[] };
+        }>("/content-models/locales").catch(() => null);
+        if (localeResponse?.data) {
+          const primary = localeResponse.data.defaultLocale || "en";
+          const configured = localeResponse.data.enabledLocales;
+          setDefaultLocale(primary);
+          setEnabledLocales(configured.length ? configured : [primary]);
+          setActiveLocaleTab(primary);
         }
 
         // If editing, load entry
@@ -105,12 +159,14 @@ export function DynamicCollectionEntryEditor({
               slug: string;
               status: "draft" | "published" | "archived";
               data: Record<string, unknown>;
+              version?: number;
             };
             entry?: {
               title: string;
               slug: string;
               status: "draft" | "published" | "archived";
               data: Record<string, unknown>;
+              version?: number;
             };
           }>(`/content-models/${modelSlug}/entries/${entryId}`);
           const ent = entryRes.data || entryRes.entry;
@@ -119,6 +175,8 @@ export function DynamicCollectionEntryEditor({
             setSlug(ent.slug);
             setStatus(ent.status);
             setFormData(ent.data || {});
+            setEntryVersion(ent.version);
+            setConflictState(null);
           }
         }
       } catch (err) {
@@ -135,7 +193,7 @@ export function DynamicCollectionEntryEditor({
       setSlug(
         val
           .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
           .replace(/^-|-$/g, ""),
       );
     }
@@ -156,9 +214,12 @@ export function DynamicCollectionEntryEditor({
       if (typeof current === "object" && current !== null && !Array.isArray(current)) {
         dict = { ...(current as Record<string, unknown>) };
       } else if (typeof current === "string") {
-        dict = { en: current };
+        dict = { [defaultLocale]: current };
       }
-      dict[locale] = value;
+      const existingKey = Object.keys(dict).find(
+        (key) => key.toLowerCase() === locale.toLowerCase(),
+      );
+      dict[existingKey ?? locale] = value;
       return { ...prev, [fieldKey]: dict };
     });
   };
@@ -181,15 +242,23 @@ export function DynamicCollectionEntryEditor({
       const payload = {
         title: title.trim(),
         slug: slug.trim(),
-        status,
+        ...(canPublish ? { status } : {}),
         data: formData,
+        ...(isEditing && typeof entryVersion === "number"
+          ? { expectedVersion: entryVersion }
+          : {}),
       };
 
       if (isEditing) {
-        await apiRequest(`/content-models/${modelSlug}/entries/${entryId}`, {
+        const updateRes = await apiRequest<{
+          data?: { version?: number };
+        }>(`/content-models/${modelSlug}/entries/${entryId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
+        if (updateRes.data?.version) {
+          setEntryVersion(updateRes.data.version);
+        }
       } else {
         await apiRequest(`/content-models/${modelSlug}/entries`, {
           method: "POST",
@@ -197,12 +266,23 @@ export function DynamicCollectionEntryEditor({
         });
       }
 
+      setConflictState(null);
       setSuccess("Entry saved successfully.");
       setTimeout(() => {
         onNavigate(`/admin/collections/${modelSlug}`);
       }, 500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save entry");
+      if (err instanceof ApiError && err.statusCode === 409) {
+        setConflictState({
+          isConflict: true,
+          expectedVersion: entryVersion,
+        });
+        setError(
+          "Edit Conflict (409): Another user modified this entry in the meantime. Please reload the latest version to avoid overwriting their work.",
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to save entry");
+      }
     } finally {
       setSaving(false);
     }
@@ -210,7 +290,7 @@ export function DynamicCollectionEntryEditor({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-slate-500">
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
         <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
         Loading entry editor...
       </div>
@@ -220,38 +300,40 @@ export function DynamicCollectionEntryEditor({
   const hasLocalizableFields = model?.fields.some((f) => f.localizable);
 
   return (
-    <form onSubmit={handleSave} className="p-6 max-w-4xl mx-auto space-y-6">
+    <form onSubmit={handleSave} className="mx-auto w-full max-w-6xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             type="button"
+            aria-label="Back to collection entries"
             onClick={() => onNavigate(`/admin/collections/${modelSlug}`)}
-            className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {isEditing ? `Edit ${model?.name || "Entry"}: ${title}` : `New ${model?.name || "Entry"}`}
             </h1>
-            <p className="text-xs text-slate-500 font-mono">Collection: {modelSlug}</p>
+            <p className="text-xs text-muted-foreground font-mono">Collection: {modelSlug}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <select
+          {canPublish && <select
+            aria-label="Publication status"
             value={status}
             onChange={(e) => setStatus(e.target.value as "draft" | "published" | "archived")}
-            className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-xs font-medium"
+            className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
-            <option value="archived">Archived</option>
-          </select>
+            {isEditing && <option value="archived">Archived</option>}
+          </select>}
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {saving ? "Saving..." : "Save Entry"}
@@ -259,88 +341,124 @@ export function DynamicCollectionEntryEditor({
         </div>
       </div>
 
+      {conflictState?.isConflict && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <h3 className="font-semibold text-sm">Concurrent Edit Conflict Detected</h3>
+              <p className="text-xs opacity-90">
+                Another user or browser session updated this entry while you were editing (Version {entryVersion ?? 1} is stale).
+                To avoid overwriting their work, reload the latest version from the server.
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={reloadLatestVersion}
+                  className="bg-background text-foreground text-xs"
+                >
+                  Reload Latest Version
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConflictState(null)}
+                  className="text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md text-sm">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="p-4 bg-emerald-500/10 text-emerald-600 rounded-md text-sm flex items-center gap-2">
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-400">
           <CheckCircle className="w-4 h-4" />
           {success}
         </div>
       )}
 
       {/* Core Identifiers */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-4">
+      <div className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-2xs">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="collection-entry-title" className="block text-xs font-medium text-foreground/85 mb-1">
               Title *
             </label>
             <input
+              id="collection-entry-title"
               type="text"
               required
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Entry Title"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+              className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="collection-entry-slug" className="block text-xs font-medium text-foreground/85 mb-1">
               Slug *
             </label>
             <input
+              id="collection-entry-slug"
+              dir="ltr"
               type="text"
               required
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               placeholder="entry-slug"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent font-mono text-sm"
+              className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent font-mono text-sm"
             />
           </div>
         </div>
       </div>
 
       {/* Structured Fields Renderer */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-5 space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white uppercase tracking-wider">
+      <div className="space-y-6 rounded-xl border border-border/70 bg-card p-5 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-border/70 pb-3">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
             Structured Data
           </h2>
           {hasLocalizableFields && (
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-md text-xs">
-              <Globe className="w-3.5 h-3.5 text-slate-500 mr-1" />
-              <button
-                type="button"
-                onClick={() => setActiveLocaleTab("en")}
-                className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                  activeLocaleTab === "en"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                English (EN)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLocaleTab("ar")}
-                className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                  activeLocaleTab === "ar"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                العربية (AR)
-              </button>
+            <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1 text-xs">
+              <Globe className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+              {enabledLocales.map((locale) => (
+                <button
+                  key={locale}
+                  type="button"
+                  lang={locale}
+                  dir={/^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr"}
+                  aria-pressed={activeLocaleTab === locale}
+                  onClick={() => setActiveLocaleTab(locale)}
+                  className={`rounded-md px-2.5 py-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    activeLocaleTab === locale
+                      ? "bg-card text-foreground shadow-2xs ring-1 ring-border/70"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {locale === "en" ? "English" : locale.startsWith("ar") ? "العربية" : locale}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
         {model?.fields?.length === 0 ? (
-          <p className="text-sm text-slate-500">This model has no custom fields defined.</p>
+          <p className="text-sm text-muted-foreground">This model has no custom fields defined.</p>
         ) : (
           <div className="space-y-5">
             {model?.fields?.map((field) => {
@@ -350,8 +468,12 @@ export function DynamicCollectionEntryEditor({
               let val = rawVal;
               if (field.localizable) {
                 if (typeof rawVal === "object" && rawVal !== null && !Array.isArray(rawVal)) {
-                  val = (rawVal as Record<string, unknown>)[activeLocaleTab];
-                } else if (activeLocaleTab === "en") {
+                  const dictionary = rawVal as Record<string, unknown>;
+                  const localeKey = Object.keys(dictionary).find(
+                    (key) => key.toLowerCase() === activeLocaleTab.toLowerCase(),
+                  );
+                  val = localeKey ? dictionary[localeKey] : undefined;
+                } else if (activeLocaleTab === defaultLocale) {
                   val = rawVal;
                 } else {
                   val = "";
@@ -370,7 +492,7 @@ export function DynamicCollectionEntryEditor({
               if (field.type === "boolean") {
                 return (
                   <div key={field.id || field.key} className="pt-1">
-                    <label className="flex items-center gap-3 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <label className="flex items-center gap-3 cursor-pointer text-sm font-medium text-foreground/85">
                       <input
                         type="checkbox"
                         checked={Boolean(val)}
@@ -382,7 +504,7 @@ export function DynamicCollectionEntryEditor({
                       </span>
                     </label>
                     {field.helpText && (
-                      <p className="text-xs text-slate-500 mt-1 ml-7">{field.helpText}</p>
+                      <p className="text-xs text-muted-foreground mt-1 ml-7">{field.helpText}</p>
                     )}
                   </div>
                 );
@@ -392,14 +514,14 @@ export function DynamicCollectionEntryEditor({
               if (field.type === "select") {
                 return (
                   <div key={field.id || field.key}>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-medium text-foreground/85 mb-1">
                       {field.name} {field.required && "*"}
                     </label>
                     <select
                       required={field.required}
                       value={String(val || "")}
                       onChange={(e) => onFieldValChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+                      className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
                     >
                       <option value="">-- Select {field.name} --</option>
                       {field.options?.map((opt) => (
@@ -409,7 +531,7 @@ export function DynamicCollectionEntryEditor({
                       ))}
                     </select>
                     {field.helpText && (
-                      <p className="text-xs text-slate-500 mt-1">{field.helpText}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>
                     )}
                   </div>
                 );
@@ -420,16 +542,16 @@ export function DynamicCollectionEntryEditor({
                 const selectedList = Array.isArray(val) ? (val as string[]) : [];
                 return (
                   <div key={field.id || field.key} className="space-y-2">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <label className="block text-xs font-medium text-foreground/85">
                       {field.name} {field.required && "*"} (Select multiple)
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-slate-200 dark:border-slate-800 rounded-md p-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border/70 rounded-md p-3">
                       {field.options?.map((opt) => {
                         const isChecked = selectedList.includes(String(opt.value));
                         return (
                           <label
                             key={String(opt.value)}
-                            className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
+                            className="flex items-center gap-2 text-xs text-foreground/85 cursor-pointer"
                           >
                             <input
                               type="checkbox"
@@ -459,10 +581,10 @@ export function DynamicCollectionEntryEditor({
                 const tags = Array.isArray(val) ? (val as string[]) : [];
                 return (
                   <div key={field.id || field.key} className="space-y-2">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <label className="block text-xs font-medium text-foreground/85">
                       {field.name} {field.required && "*"}
                     </label>
-                    <div className="flex flex-wrap items-center gap-2 border border-slate-300 dark:border-slate-700 rounded-md p-2">
+                    <div className="flex flex-wrap items-center gap-2 border border-border/70 rounded-md p-2">
                       {tags.map((tag, idx) => (
                         <span
                           key={idx}
@@ -472,7 +594,7 @@ export function DynamicCollectionEntryEditor({
                           <button
                             type="button"
                             onClick={() => onFieldValChange(tags.filter((_, i) => i !== idx))}
-                            className="text-slate-400 hover:text-destructive"
+                            className="text-muted-foreground hover:text-destructive"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -509,7 +631,7 @@ export function DynamicCollectionEntryEditor({
 
                 return (
                   <div key={field.id || field.key} className="space-y-2">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <label className="block text-xs font-medium text-foreground/85">
                       {field.name} {field.required && "*"}
                     </label>
                     <div className="flex items-center gap-3">
@@ -527,13 +649,14 @@ export function DynamicCollectionEntryEditor({
                           <button
                             type="button"
                             onClick={() => onFieldValChange("")}
+                            aria-label={`Remove ${field.name} media`}
                             className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-3 h-3" />
                           </button>
                         </div>
                       ) : (
-                        <div className="w-20 h-20 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                        <div className="w-20 h-20 rounded-md border-2 border-dashed border-border/70 flex items-center justify-center text-muted-foreground shrink-0">
                           <ImageIcon className="w-6 h-6" />
                         </div>
                       )}
@@ -544,10 +667,15 @@ export function DynamicCollectionEntryEditor({
                           value={mediaVal}
                           onChange={(e) => onFieldValChange(e.target.value)}
                           placeholder="Media URL or Asset ID (e.g. /media/uploads/photo.jpg or med_123)"
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+                          className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
                         />
-                        <p className="text-xs text-slate-500">
-                          Enter canonical media storage path or uploaded asset identifier.
+                        <button type="button"
+                          onClick={() => setMediaFieldKey(field.key)}
+                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                          Choose from Media Library
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                          Select an uploaded asset or enter a canonical URL or identifier.
                         </p>
                       </div>
                     </div>
@@ -555,188 +683,19 @@ export function DynamicCollectionEntryEditor({
                 );
               }
 
-              // 6. RELATION FIELD (1:1 or N:1)
-              if (field.type === "relation") {
-                const targetOptions = relationOptions[field.relationModel || ""] || [];
-                const rawRelVal =
-                  typeof val === "string"
-                    ? val
-                    : typeof val === "object" && val !== null
-                      ? (val as any).id || (val as any).slug
-                      : "";
-                const matchingOpt = targetOptions.find(
-                  (opt) => opt.id === rawRelVal || opt.slug === rawRelVal,
-                );
-                const selectedRelId = matchingOpt ? matchingOpt.id : rawRelVal;
-
+              // Relation pickers paginate through publication-scoped admin APIs.
+              if (field.type === "relation" || field.type === "relation_list") {
                 return (
-                  <div key={field.id || field.key}>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                      {field.name} {field.required && "*"} (Target: {field.relationModel || "Model"})
-                    </label>
-                    <select
-                      required={field.required}
-                      value={selectedRelId}
-                      onChange={(e) => onFieldValChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
-                    >
-                      <option value="">-- Select related {field.relationModel} --</option>
-                      {targetOptions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title} ({item.slug})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              }
-
-              // 7. RELATION LIST FIELD (1:N or M:N)
-              if (field.type === "relation_list") {
-                const targetOptions = relationOptions[field.relationModel || ""] || [];
-                const selectedIds = Array.isArray(val)
-                  ? (val as Array<string | { id: string; slug?: string }>).map((x) =>
-                      typeof x === "string" ? x : x.id || (x as any).slug,
-                    )
-                  : [];
-
-                const selectedItems = selectedIds
-                  .map(
-                    (id) =>
-                      targetOptions.find((opt) => opt.id === id || opt.slug === id) || {
-                        id,
-                        title: id,
-                        slug: "",
-                      },
-                  )
-                  .filter(Boolean);
-
-                const moveItem = (index: number, direction: "up" | "down") => {
-                  const newIds = [...selectedIds];
-                  const targetIndex = direction === "up" ? index - 1 : index + 1;
-                  if (targetIndex < 0 || targetIndex >= newIds.length) return;
-                  const temp = newIds[index]!;
-                  newIds[index] = newIds[targetIndex]!;
-                  newIds[targetIndex] = temp;
-                  onFieldValChange(newIds);
-                };
-
-                const removeItem = (idToRemove: string) => {
-                  onFieldValChange(
-                    selectedIds.filter(
-                      (id) =>
-                        id !== idToRemove &&
-                        targetOptions.find((opt) => (opt.id === id || opt.slug === id) && (opt.id === idToRemove || opt.slug === idToRemove)) === undefined,
-                    ),
-                  );
-                };
-
-                return (
-                  <div key={field.id || field.key} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                        <LinkIcon className="w-3.5 h-3.5 text-primary" />
-                        {field.name} {field.required && "*"} (Multi-relation to: {field.relationModel || "Model"})
-                      </label>
-                      <span className="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                        {selectedIds.length} selected
-                      </span>
-                    </div>
-
-                    {/* Selected Ordered Items */}
-                    {selectedItems.length > 0 && (
-                      <div className="space-y-1.5 border border-primary/20 bg-primary/5 dark:bg-primary/10 rounded-md p-2">
-                        <span className="text-[11px] font-semibold text-primary block">
-                          Selected Items (Drag / Reorder):
-                        </span>
-                        {selectedItems.map((item, idx) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 text-xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-slate-400 text-[10px]">#{idx + 1}</span>
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                {item.title}
-                              </span>
-                              {item.slug && (
-                                <span className="text-slate-400 font-mono text-[10px]">({item.slug})</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={idx === 0}
-                                onClick={() => moveItem(idx, "up")}
-                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
-                                title="Move up"
-                              >
-                                <ArrowUp className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={idx === selectedItems.length - 1}
-                                onClick={() => moveItem(idx, "down")}
-                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded disabled:opacity-30 text-slate-600 dark:text-slate-300"
-                                title="Move down"
-                              >
-                                <ArrowDown className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeItem(item.id)}
-                                className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded text-rose-500"
-                                title="Remove item"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Available Items Picker */}
-                    <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-md p-2 space-y-1">
-                      {targetOptions.length === 0 ? (
-                        <p className="text-xs text-slate-500 py-1 px-2">
-                          No available entries found in target model {field.relationModel}.
-                        </p>
-                      ) : (
-                        targetOptions.map((item) => {
-                          const isChecked = selectedIds.some((id) => id === item.id || id === item.slug);
-                          return (
-                            <label
-                              key={item.id}
-                              className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded text-xs cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    onFieldValChange([...selectedIds, item.id]);
-                                  } else {
-                                    onFieldValChange(
-                                      selectedIds.filter((id) => id !== item.id && id !== item.slug),
-                                    );
-                                  }
-                                }}
-                                className="rounded border-slate-300 text-primary h-3.5 w-3.5"
-                              />
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                {item.title}
-                              </span>
-                              <span className="text-slate-400 font-mono text-[10px]">
-                                ({item.slug})
-                              </span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
+                  <RelationEntryPicker
+                    key={field.id || field.key}
+                    fieldName={field.name}
+                    targetModel={field.relationModel}
+                    multiple={field.type === "relation_list"}
+                    required={field.required}
+                    maxItems={field.max}
+                    value={val}
+                    onChange={onFieldValChange}
+                  />
                 );
               }
 
@@ -751,8 +710,8 @@ export function DynamicCollectionEntryEditor({
 
                 return (
                   <div key={field.id || field.key} className="space-y-1">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Code className="w-3.5 h-3.5 text-slate-500" />
+                    <label className="block text-xs font-medium text-foreground/85 flex items-center gap-1.5">
+                      <Code className="w-3.5 h-3.5 text-muted-foreground" />
                       {field.name} {field.required && "*"} (JSON)
                     </label>
                     <textarea
@@ -768,18 +727,38 @@ export function DynamicCollectionEntryEditor({
                           onFieldValChange(e.target.value);
                         }
                       }}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-slate-950 text-slate-100 font-mono text-xs"
+                      className="w-full px-3 py-2 border border-border/70 rounded-md bg-slate-950 text-slate-100 font-mono text-xs"
                       placeholder='{ "key": "value" }'
                     />
                   </div>
                 );
               }
 
-              // 9. RICH TEXT & STUDIO DOC FIELD
-              if (field.type === "rich_text" || field.type === "studio_doc") {
+              // Keep Studio AST structured; preserve legacy string values until edited.
+              if (field.type === "studio_doc") {
+                return (
+                  <div key={field.id || field.key} className="space-y-2">
+                    <div className="text-xs font-medium text-foreground/85">
+                      {field.name} {field.required && "*"}
+                      {field.localizable && <span className="ms-2 text-primary">{activeLocaleTab}</span>}
+                    </div>
+                    <div className="rounded-lg border border-border overflow-hidden"
+                      lang={activeLocaleTab} dir={isRtlLocale ? "rtl" : "ltr"}>
+                      <StudioDocumentInput
+                        key={`${field.key}-${field.localizable ? activeLocaleTab : "base"}`}
+                        value={val}
+                        onChange={onFieldValChange}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // Rich text / Markdown remains a string for backward compatibility.
+              if (field.type === "rich_text") {
                 return (
                   <div key={field.id || field.key} className="space-y-1">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <label className="block text-xs font-medium text-foreground/85 flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-primary" />
                       {field.name} {field.required && "*"}
                       {field.localizable && (
@@ -792,10 +771,10 @@ export function DynamicCollectionEntryEditor({
                       rows={6}
                       required={field.required}
                       value={String(val || "")}
-                      dir={activeLocaleTab === "ar" ? "rtl" : "ltr"}
+                      dir={isRtlLocale ? "rtl" : "ltr"}
                       onChange={(e) => onFieldValChange(e.target.value)}
                       placeholder={`Enter formatted content for ${field.name}...`}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+                      className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
                     />
                   </div>
                 );
@@ -805,7 +784,7 @@ export function DynamicCollectionEntryEditor({
               if (field.type === "long_text") {
                 return (
                   <div key={field.id || field.key}>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-medium text-foreground/85 mb-1">
                       {field.name} {field.required && "*"}
                       {field.localizable && (
                         <span className="text-[10px] uppercase font-bold text-primary ml-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
@@ -817,10 +796,10 @@ export function DynamicCollectionEntryEditor({
                       rows={4}
                       required={field.required}
                       value={String(val || "")}
-                      dir={activeLocaleTab === "ar" ? "rtl" : "ltr"}
+                      dir={isRtlLocale ? "rtl" : "ltr"}
                       onChange={(e) => onFieldValChange(e.target.value)}
                       placeholder={`Enter ${field.name}...`}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+                      className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
                     />
                   </div>
                 );
@@ -842,7 +821,7 @@ export function DynamicCollectionEntryEditor({
 
               return (
                 <div key={field.id || field.key}>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-medium text-foreground/85 mb-1">
                     {field.name} {field.required && "*"}
                     {field.localizable && (
                       <span className="text-[10px] uppercase font-bold text-primary ml-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
@@ -853,7 +832,7 @@ export function DynamicCollectionEntryEditor({
                   <input
                     type={inputType}
                     required={field.required}
-                    dir={activeLocaleTab === "ar" && (field.type === "text" || field.type === "short_text") ? "rtl" : "ltr"}
+                    dir={isRtlLocale && (field.type === "text" || field.type === "short_text") ? "rtl" : "ltr"}
                     value={val !== undefined && val !== null ? String(val) : ""}
                     onChange={(e) =>
                       onFieldValChange(
@@ -865,10 +844,10 @@ export function DynamicCollectionEntryEditor({
                       )
                     }
                     placeholder={`Enter ${field.name}...`}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-transparent text-sm"
+                    className="w-full px-3 py-2 border border-border/70 rounded-md bg-transparent text-sm"
                   />
                   {field.helpText && (
-                    <p className="text-xs text-slate-500 mt-1">{field.helpText}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{field.helpText}</p>
                   )}
                 </div>
               );
@@ -876,6 +855,15 @@ export function DynamicCollectionEntryEditor({
           </div>
         )}
       </div>
+      {mediaFieldKey !== null && (
+        <MediaPicker
+          onClose={() => setMediaFieldKey(null)}
+          onSelectAsset={(asset) => {
+            handleFieldChange(mediaFieldKey, asset.url || asset.id);
+            setMediaFieldKey(null);
+          }}
+        />
+      )}
     </form>
   );
 }

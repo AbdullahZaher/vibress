@@ -408,6 +408,17 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
     requiredPermission: "settings.manage",
     cards: [
       {
+        id: "content-models",
+        title: "Content Models",
+        description: "Define structured content types, fields, relations, and validation.",
+        keywords: ["content", "models", "schema", "fields", "collections", "custom types"],
+        pillarId: "advanced",
+        anchor: "advanced-content-models",
+        editorMode: "drawer",
+        requiredPermission: "posts.read",
+        iconName: "Database",
+      },
+      {
         id: "code-injection",
         title: "Code injection",
         description:

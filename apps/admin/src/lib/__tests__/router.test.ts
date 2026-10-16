@@ -42,6 +42,10 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/media");
     expect(patterns).toContain("/admin/members");
     expect(patterns).toContain("/admin/settings");
+    expect(patterns).toContain("/admin/settings/advanced/content-models");
+    expect(patterns).toContain("/admin/settings/content-models");
+    expect(patterns).toContain("/admin/settings/advanced/content-models/new");
+    expect(patterns).toContain("/admin/settings/advanced/content-models/:modelId");
     expect(patterns).toContain("/admin/settings/localization");
     expect(patterns).toContain("/admin/translations");
     expect(patterns).toContain("/admin/translations/queue");
@@ -53,6 +57,31 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/community");
     expect(patterns).not.toContain("/admin/network");
     expect(patterns).not.toContain("/admin/automations");
+  });
+
+  it("routes the Advanced Manage models action to the correct content model screen", () => {
+    const targetPath = "/admin/settings/advanced/content-models";
+    const firstMatch = adminRoutes.find((route) =>
+      matchRoutePattern(route.pattern, targetPath, route.exact ?? false).matches,
+    );
+    expect(firstMatch?.pattern).toBe(targetPath);
+    expect(firstMatch?.requiredPermission).toBe("posts.read");
+    expect(firstMatch?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models")?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/new")?.exact).toBe(true);
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/:modelId")?.exact).toBe(true);
+  });
+
+  it("scopes content model routes to settings and preserves old bookmarks", () => {
+    const newRoute = adminRoutes.find((route) => route.pattern === "/admin/settings/advanced/content-models");
+    const editRoute = adminRoutes.find((route) => route.pattern === "/admin/settings/advanced/content-models/:modelId");
+    const legacyRoute = adminRoutes.find((route) => route.pattern === "/admin/models/:modelId");
+    expect(newRoute?.requiredPermission).toBe("posts.read");
+    expect(editRoute?.requiredPermission).toBe("settings.edit");
+    expect(legacyRoute?.requiredPermission).toBe("settings.edit");
+    expect(matchRoutePattern("/admin/settings/advanced/content-models/:modelId",
+      "/admin/settings/advanced/content-models/book-1", true).params.modelId).toBe("book-1");
+    expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/:modelId")?.requiredPermission).toBe("settings.edit");
   });
 
   it("matches settings localization and language routes", () => {

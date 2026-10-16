@@ -50,11 +50,9 @@ export const publicationLocales = pgTable(
       .notNull()
       .references(() => publications.id, { onDelete: "cascade" }),
     locale: text("locale").notNull(),
-    enabled: boolean("enabled").notNull().default(true),
-    isPrimary: boolean("is_primary").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
-    urlPrefix: text("url_prefix"),
-    isPublic: boolean("is_public").notNull().default(true),
+    status: text("status").notNull().default("active"),
+    label: text("label"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -63,13 +61,15 @@ export const publicationLocales = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    pubLocaleIdx: uniqueIndex("publication_locales_pub_locale_idx").on(
+    pubLocaleUniqueIdx: uniqueIndex("pub_locales_pub_locale_unique_idx").on(
       table.publicationId,
       table.locale,
     ),
-    pubEnabledIdx: index("publication_locales_pub_enabled_idx").on(
+    pubPublicationIdIdx: index("pub_locales_publication_id_idx").on(
       table.publicationId,
-      table.enabled,
+    ),
+    pubLocaleIdx: index("pub_locales_locale_idx").on(
+      table.locale,
     ),
   }),
 );

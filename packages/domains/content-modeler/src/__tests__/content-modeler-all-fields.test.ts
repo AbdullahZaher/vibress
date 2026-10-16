@@ -55,6 +55,20 @@ describe("Content Modeler — 16 Field Types & Constraints Suite", () => {
     expect(check.errors).toHaveLength(0);
   });
 
+  it("preserves serialized Studio documents and accepts historical string documents", () => {
+    const schema: ContentFieldDefinition[] = [
+      { id: "studio", key: "body", name: "Document", type: "studio_doc", required: true },
+    ];
+    const document = {
+      schema: "vibress-studio",
+      version: 1,
+      root: { type: "root", children: [] },
+    };
+    expect(checkEntryDataValidity({ body: document }, schema).valid).toBe(true);
+    expect(checkEntryDataValidity({ body: "Legacy Markdown text" }, schema).valid).toBe(true);
+    expect(JSON.parse(JSON.stringify({ body: document })).body).toEqual(document);
+  });
+
   it("catches errors across URL, email, regex pattern, and numerical bounds", () => {
     const invalidData = {
       shortTitle: "AB", // too short (minLength: 3)

@@ -21,6 +21,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 }) => {
   const isSettingsActive =
     currentPath.startsWith("/admin/settings") ||
+    currentPath.startsWith("/admin/models") ||
     currentPath.startsWith("/admin/newsletters");
 
   const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);

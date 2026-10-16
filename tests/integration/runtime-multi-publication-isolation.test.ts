@@ -21,7 +21,7 @@ import {
   newsletters,
   searchDocuments,
   contentTranslations,
-  automations,
+  contentModels,
   installedThemes,
   webhookEndpoints,
   analyticsEvents,
@@ -1527,27 +1527,32 @@ describe("VIBRESS Step D: Master Runtime Multi-Publication Isolation Suite", () 
       expect(newslettersList.some((n: any) => n.id === alphaNewsId)).toBe(false);
     });
 
-    it("automations: isolates automation workflows between publications", async () => {
+    it("content models: isolates custom schemas between publications", async () => {
       const db = getDb();
-      const alphaAutoId = crypto.randomUUID();
-      await db.insert(automations).values({
-        id: alphaAutoId,
+      const alphaModelId = crypto.randomUUID();
+      await db.insert(contentModels).values({
+        id: alphaModelId,
         publicationId: PUB_ALPHA_ID,
-        key: `on-signup-${runId}`,
-        name: "Welcome Automation",
-        triggerEvent: "member.created",
-        status: "active",
+        slug: `isolated-content-${runId}`,
+        name: "Alpha Content Model",
+        fields: [],
       });
 
-      // Beta staff queries automations -> does not see Alpha automation
-      const betaAutoRes = await app.inject({
+      const betaRes = await app.inject({
         method: "GET",
-        url: "/api/admin/v1/automations",
+        url: "/api/admin/v1/content-models",
         headers: { cookie: betaCookie, "x-publication-id": PUB_BETA_ID },
       });
-      expect(betaAutoRes.statusCode).toBe(200);
-      const automationsList = betaAutoRes.json().automations || [];
-      expect(automationsList.some((a: any) => a.id === alphaAutoId)).toBe(false);
+      expect(betaRes.statusCode).toBe(200);
+      expect(betaRes.json().data.some((model: { id: string }) => model.id === alphaModelId)).toBe(false);
+
+      const alphaRes = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/content-models",
+        headers: { cookie: alphaCookie, "x-publication-id": PUB_ALPHA_ID },
+      });
+      expect(alphaRes.statusCode).toBe(200);
+      expect(alphaRes.json().data.some((model: { id: string }) => model.id === alphaModelId)).toBe(true);
     });
 
     it("installed_themes: isolates installed themes per publication", async () => {
