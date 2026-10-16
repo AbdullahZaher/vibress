@@ -28,7 +28,14 @@ test.describe("Translation Management & Editorial UX E2E Flow", () => {
 
     // This suite is intentionally multilingual, unlike a fresh publication.
     // Configure the fixture explicitly instead of assuming English + Arabic.
-    if (!policy.enabledLocales.some((locale) => locale.startsWith("ar"))) {
+    const desiredLocales = [...policy.enabledLocales];
+    if (!desiredLocales.some((locale) => locale.split("-")[0] === "en")) {
+      desiredLocales.push("en");
+    }
+    if (!desiredLocales.some((locale) => locale.split("-")[0] === "ar")) {
+      desiredLocales.push("ar-SA");
+    }
+    if (desiredLocales.length !== policy.enabledLocales.length) {
       originalLocales = {
         primaryLocale: policy.primaryLocale,
         enabledLocales: [...policy.enabledLocales],
@@ -37,7 +44,7 @@ test.describe("Translation Management & Editorial UX E2E Flow", () => {
         headers: { origin: "http://localhost:7777" },
         data: {
           primaryLocale: policy.primaryLocale,
-          enabledLocales: [...policy.enabledLocales, policy.primaryLocale === "ar" ? "en" : "ar-SA"],
+          enabledLocales: desiredLocales,
         },
       });
       expect(updated.ok()).toBe(true);
