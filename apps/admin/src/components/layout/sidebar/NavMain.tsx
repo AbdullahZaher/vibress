@@ -1,4 +1,5 @@
 import React from "react";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { TrendingUp, AppWindow, ExternalLink } from "lucide-react";
 
 interface NavMainProps {
@@ -10,6 +11,7 @@ export const NavMain: React.FC<NavMainProps> = ({
   currentPath,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const isAnalyticsActive =
     currentPath === "/admin" ||
     currentPath === "/admin/" ||
@@ -27,7 +29,7 @@ export const NavMain: React.FC<NavMainProps> = ({
         }`}
       >
         <TrendingUp className="h-4 w-4 shrink-0" />
-        <span>Analytics</span>
+        <span>{tr("Analytics")}</span>
       </button>
 
 
@@ -38,14 +40,14 @@ export const NavMain: React.FC<NavMainProps> = ({
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer"
         >
           <AppWindow className="h-4 w-4 shrink-0" />
-          <span>View site</span>
+          <span>{tr("View site")}</span>
         </button>
         <a
           href="/"
           target="_blank"
           rel="noreferrer"
           className="absolute right-2 flex size-6 items-center justify-center rounded-full text-muted-foreground opacity-0 group-hover/viewsite:opacity-100 hover:bg-sidebar-accent hover:text-foreground transition-all"
-          title="Open site in new tab"
+          title={tr("View site")}
         >
           <ExternalLink size={13} />
         </a>
