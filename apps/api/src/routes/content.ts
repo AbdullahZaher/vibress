@@ -465,7 +465,7 @@ function extractRequestedLocale(
             slug: translationItem.slug,
             excerpt: translationItem.excerpt ?? post.excerpt,
             content:
-              true ? translationItem.content : post.content,
+              translationItem.content,
             metaTitle: translationItem.metaTitle ?? post.metaTitle,
             metaDescription:
               translationItem.metaDescription ?? post.metaDescription,
@@ -644,7 +644,7 @@ function extractRequestedLocale(
             slug: translationItem.slug,
             excerpt: translationItem.excerpt ?? pageObj.excerpt,
             content:
-              true ? translationItem.content : pageObj.content,
+              translationItem.content,
             metaTitle: translationItem.metaTitle ?? pageObj.metaTitle,
             metaDescription:
               translationItem.metaDescription ?? pageObj.metaDescription,
