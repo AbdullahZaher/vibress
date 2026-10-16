@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/publication-locale-policy-ticket-1]
   pull_request:
     branches: [main]
   workflow_dispatch:
