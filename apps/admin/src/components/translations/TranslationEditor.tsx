@@ -179,6 +179,9 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     mutationFn: async () => {
       setErrorMsg(null);
       setSuccessMsg(null);
+      if (status === "published" || status === "approved") {
+        throw new Error("Approved and published translations must be reopened for review before editing");
+      }
 
       const bodyText = targetBody.trim();
       let content: Record<string, unknown>;
@@ -279,10 +282,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const publishMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync();
-      const targetId = saved?.id || currentTranslationId;
-      if (!targetId) throw new Error("Could not determine translation identifier");
-      const res = await publishTranslationApi(targetId);
+      if (status !== "approved" || !currentTranslationId) {
+        throw new Error("Only an approved translation can be published");
+      }
+      // Do not invoke the generic editor PATCH on an approved record. That
+      // would bypass review or overwrite a live translation before publishing.
+      const res = await publishTranslationApi(currentTranslationId);
       return res.translation;
     },
     onSuccess: (res) => {
@@ -355,7 +360,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
+          {status !== "approved" && status !== "published" && <Button
             variant="outline"
             size="sm"
             onClick={() => saveMutation.mutate()}
@@ -364,7 +369,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           >
             <Save className="h-3.5 w-3.5" />
             <span>{saveMutation.isPending ? "Saving..." : "Save Draft"}</span>
-          </Button>
+          </Button>}
 
           {status !== "needs_review" && status !== "approved" && status !== "published" && (
             <Button
@@ -379,7 +384,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             </Button>
           )}
 
-          {canPublish && (status === "needs_review" || status === "draft" || isStale) && (
+          {canPublish && status === "needs_review" && (
             <Button
               variant="outline"
               size="sm"
@@ -392,7 +397,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             </Button>
           )}
 
-          {canPublish && (
+          {canPublish && status === "approved" && (
             <Button
               size="sm"
               onClick={() => publishMutation.mutate()}
