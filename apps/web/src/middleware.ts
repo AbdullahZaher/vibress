@@ -291,9 +291,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Locale detection & routing
-  const segments = pathname.split("/").filter(Boolean);
-  const firstSegment = segments[0]?.toLowerCase();
+  // Host-authoritative site policy. No fixed "English primary / Arabic
+  // secondary" routing table; every configured primary is unprefixed.
   const isExcludedPrefix =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -301,64 +300,107 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/preview") ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml";
-
-  if (!isExcludedPrefix && firstSegment) {
-    const isEn = firstSegment === "en" || firstSegment === "en-us" || firstSegment === "en-gb";
-
-    // 1. Default locale prefix (/en or /en-us) -> 301 redirect to strip prefix (URL canonicalization)
-    if (isEn) {
-      const rest = segments.slice(1).join("/");
-      const redirectUrl = new URL(rest ? `/${rest}` : "/", request.url);
-      redirectUrl.search = request.nextUrl.search;
-      return NextResponse.redirect(redirectUrl, { status: 301 });
+    pathname === "/sitemap.xml" ||
+    pathname === "/private";
+  if (!isExcludedPrefix) {
+    const host = request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") || undefined;
+    let localePolicy: { primary: string; enabled: string[] };
+    try {
+      const response = await fetch(`${API_BASE}/api/content/v1/site`, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          ...(host ? { "x-forwarded-host": host } : {}),
+        },
+      });
+      if (!response.ok) throw new Error("Publication locale unavailable");
+      const data: unknown = await response.json();
+      if (!data || typeof data !== "object" || !("site" in data) ||
+          !data.site || typeof data.site !== "object" ||
+          !("locale" in data.site) || typeof data.site.locale !== "string" ||
+          !("enabledLocales" in data.site) || !Array.isArray(data.site.enabledLocales)) {
+        throw new Error("Invalid publication locale policy");
+      }
+      const primary = Intl.getCanonicalLocales(data.site.locale)[0];
+      const enabled = data.site.enabledLocales.filter(
+        (value: unknown): value is string => typeof value === "string",
+      );
+      if (!primary || !enabled.includes(primary)) throw new Error("Invalid primary locale");
+      localePolicy = { primary, enabled };
+    } catch {
+      // Don't guess a language/tenant on API outages.
+      return new NextResponse("Publication temporarily unavailable", {
+        status: 503, headers: { "Cache-Control": "no-store" },
+      });
     }
 
-    // Known locale lookup (ar, fr, de, fa, ur, tr, etc.)
-    const localeLookup: Record<string, { code: string; direction: "ltr" | "rtl" }> = {
-      ar: { code: "ar-SA", direction: "rtl" },
-      "ar-sa": { code: "ar-SA", direction: "rtl" },
-      "ar-eg": { code: "ar-EG", direction: "rtl" },
-      fr: { code: "fr-FR", direction: "ltr" },
-      "fr-fr": { code: "fr-FR", direction: "ltr" },
-      de: { code: "de-DE", direction: "ltr" },
-      "de-de": { code: "de-DE", direction: "ltr" },
-      tr: { code: "tr-TR", direction: "ltr" },
-      "tr-tr": { code: "tr-TR", direction: "ltr" },
-      fa: { code: "fa-IR", direction: "rtl" },
-      "fa-ir": { code: "fa-IR", direction: "rtl" },
-      ur: { code: "ur-PK", direction: "rtl" },
-      "ur-pk": { code: "ur-PK", direction: "rtl" },
-      he: { code: "he-IL", direction: "rtl" },
-      "he-il": { code: "he-IL", direction: "rtl" },
-    };
+    const segments = pathname.split("/").filter(Boolean);
+    const prefix = segments[0]?.toLowerCase();
+    let resolved = localePolicy.primary;
+    let isLocalizedPath = false;
 
-    const localeInfo = localeLookup[firstSegment];
-
-    // 2. Case-normalization for non-default locales (e.g. /AR -> /ar, /FR -> /fr, /FA -> /fa)
-    if (localeInfo && segments[0] !== firstSegment) {
-      const rest = segments.slice(1).join("/");
-      const redirectUrl = new URL(rest ? `/${firstSegment}/${rest}` : `/${firstSegment}`, request.url);
-      redirectUrl.search = request.nextUrl.search;
-      return NextResponse.redirect(redirectUrl, { status: 301 });
+    if (prefix) {
+      const candidates = localePolicy.enabled.filter((code) => {
+        const sameBase = code.split("-")[0]?.toLowerCase() === prefix;
+        const exact = code.toLowerCase() === prefix;
+        if (exact) return true;
+        return sameBase && localePolicy.enabled.filter(
+          (variant) => variant.split("-")[0] === code.split("-")[0],
+        ).length === 1;
+      });
+      if (candidates.length === 1) {
+        resolved = candidates[0]!;
+        isLocalizedPath = true;
+      } else if (["en", "ar", "fr", "de", "es", "fa", "ur", "tr", "he", "ja", "pt", "zh"]
+        .includes(prefix.split("-")[0] || "")) {
+        // A known but disabled locale must never render via public fallback.
+        return new NextResponse("Not Found", {
+          status: 404, headers: { "Cache-Control": "no-store" },
+        });
+      }
     }
 
-    // 3. Recognized non-default locale prefix (/ar, /fr, /fa, /de, etc.)
-    if (localeInfo) {
-      const rest = segments.slice(1).join("/");
-      const internalUrl = new URL(rest ? `/${rest}` : "/", request.url);
-      internalUrl.search = request.nextUrl.search;
-
+    if (isLocalizedPath) {
+      const destination = segments.slice(1).join("/");
+      if (resolved === localePolicy.primary) {
+        const canonical = new URL(destination ? `/${destination}` : "/", request.url);
+        canonical.search = request.nextUrl.search;
+        return NextResponse.redirect(canonical, { status: 301 });
+      }
+      const languageCode = resolved.split("-")[0] || resolved;
+      const collisions = localePolicy.enabled.filter(
+        (candidate) => candidate.split("-")[0] === languageCode,
+      );
+      const canonicalPrefix = collisions.length > 1
+        ? resolved.toLowerCase() : languageCode.toLowerCase();
+      if (prefix !== canonicalPrefix || segments[0] !== prefix) {
+        const canonical = new URL(
+          `/${canonicalPrefix}${destination ? "/" + destination : ""}`,
+          request.url,
+        );
+        canonical.search = request.nextUrl.search;
+        return NextResponse.redirect(canonical, { status: 301 });
+      }
+      const internal = new URL(destination ? `/${destination}` : "/", request.url);
+      internal.search = request.nextUrl.search;
       return createCspResponse(request, {
-        rewriteUrl: internalUrl,
+        rewriteUrl: internal,
         extraHeaders: {
-          "x-vibress-locale": localeInfo.code,
-          "x-vibress-direction": localeInfo.direction,
+          "x-vibress-locale": resolved,
+          "x-vibress-direction": ["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi"]
+            .includes(languageCode) ? "rtl" : "ltr",
         },
       });
     }
+    return createCspResponse(request, {
+      extraHeaders: {
+        "x-vibress-locale": localePolicy.primary,
+        "x-vibress-direction": ["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi"]
+          .includes(localePolicy.primary.split("-")[0] || "") ? "rtl" : "ltr",
+      },
+    });
   }
-
   return createCspResponse(request);
 }
 
