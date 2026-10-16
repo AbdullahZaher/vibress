@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
-import { Input } from "../../ui/input";
+import { PublicationLanguagesManager } from "./PublicationLanguagesManager";
 import { Languages, Clock } from "lucide-react";
 import { Badge } from "../../ui/badge";
 
@@ -10,6 +10,7 @@ interface LocalizationCardProps {
   timezone?: string | undefined;
   onChange: (key: "locale" | "timezone", value: string) => void;
   isHighlighted?: boolean | undefined;
+  onSaved?: (() => void) | undefined;
 }
 
 const COMMON_LANGUAGES = [
@@ -27,6 +28,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
   timezone = "UTC",
   onChange,
   isHighlighted,
+  onSaved,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -58,45 +60,8 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
       {isExpanded && (
         <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label
-                htmlFor="card-site-lang"
-                className="text-xs font-semibold text-foreground"
-              >
-                Publication Language
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="card-site-lang"
-                  value={locale}
-                  onChange={(e) => onChange("locale", e.target.value)}
-                  placeholder="e.g. en or ar"
-                  className="max-w-[100px]"
-                />
-                <select
-                  value={
-                    COMMON_LANGUAGES.some((l) => l.code === locale)
-                      ? locale
-                      : "custom"
-                  }
-                  onChange={(e) => {
-                    if (e.target.value !== "custom") {
-                      onChange("locale", e.target.value);
-                    }
-                  }}
-                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <option value="custom">Custom Code...</option>
-                  {COMMON_LANGUAGES.map((lang) => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Default IETF language tag for HTML and RSS feeds.
-              </p>
+            <div className="space-y-3">
+              <PublicationLanguagesManager onSaved={onSaved} />
             </div>
 
             <div className="space-y-1.5">
