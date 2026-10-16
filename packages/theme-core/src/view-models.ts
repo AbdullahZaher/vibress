@@ -110,6 +110,8 @@ export interface SiteViewModel {
   tagline?: string | null | undefined;
   url: string;
   locale: string;
+  primaryLocale?: string | undefined;
+  enabledLocales?: string[] | undefined;
   direction: "ltr" | "rtl";
   timezone: string;
   accentColor: string;
@@ -280,6 +282,8 @@ export function mapSiteToViewModel(site: {
   tagline?: string | null | undefined;
   url?: string | undefined;
   locale?: string | undefined;
+  primaryLocale?: string | undefined;
+  enabledLocales?: string[] | undefined;
   accentColor?: string | undefined;
   timezone?: string | undefined;
   iconUrl?: string | null | undefined;
@@ -324,7 +328,9 @@ export function mapSiteToViewModel(site: {
     tagline: site.tagline ?? null,
     url: site.url || "http://localhost:7778",
     locale,
-    direction,
+    primaryLocale: site.primaryLocale || locale,
+    enabledLocales: Array.isArray(site.enabledLocales) ? site.enabledLocales : [locale],
+    direction:
     timezone: site.timezone || "UTC",
     accentColor: site.accentColor || "#6366f1",
     icon: site.iconUrl ?? null,
