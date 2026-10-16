@@ -237,7 +237,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.create"),, requireMultilingual],
+      requirePermission("translations.create"), requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
@@ -335,7 +335,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.edit"),, requireMultilingual, requireEnabledStoredTranslation],
+      requirePermission("translations.edit"), requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -404,7 +404,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.review"),, requireMultilingual, requireEnabledStoredTranslation],
+      requirePermission("translations.review"), requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -445,7 +445,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.approve"),, requireMultilingual, requireEnabledStoredTranslation],
+      requirePermission("translations.approve"), requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -487,7 +487,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.publish"),, requireMultilingual, requireEnabledStoredTranslation],
+      requirePermission("translations.publish"), requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -528,7 +528,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.create"),, requireMultilingual],
+      requirePermission("translations.create"), requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
@@ -663,7 +663,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.edit"),, requireMultilingual],
+      requirePermission("translations.edit"), requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const body = (req.body ?? {}) as {
