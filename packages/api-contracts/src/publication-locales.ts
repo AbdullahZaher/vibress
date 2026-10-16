@@ -80,3 +80,9 @@ export const BulkTranslationActionSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, "Duplicate translation IDs"),
   action: z.enum(["submit_review", "approve", "publish", "mark_stale", "delete"]),
 }).strict();
+
+/** Read-only compatibility lookup; no caller-provided publication identifier. */
+export const PublicLegacyTranslationRedirectSchema = z.object({
+  type: z.enum(["post", "page"]),
+  slug: z.string().trim().min(1).max(500),
+}).strict();
