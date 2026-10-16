@@ -147,6 +147,66 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     if (app) await app.close();
   });
 
+  describe("Publication language configuration API", () => {
+    it("requires authentication to read the publication's languages", async () => {
+      const res = await app.inject({ method: "GET", url: "/api/admin/v1/locales" });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("returns only configured languages under the authenticated publication context", async () => {
+      const res = await app.inject({
+        method: "GET", url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        primaryLocale: "en",
+        enabledLocales: ["en", "ar-SA"],
+        isMultilingual: true,
+      });
+    });
+
+    it("rejects invalid and duplicated language configuration without changing state", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "en"] },
+      });
+      expect(res.statusCode).toBe(400);
+      const after = await app.inject({
+        method: "GET", url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie },
+      });
+      expect(after.json().enabledLocales).toEqual(["en", "ar-SA"]);
+    });
+
+    it("blocks legacy site.locale changes on a publication with existing source content", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/site/locale",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { value: "ar" },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
+    });
+
+    it("does not accept a caller-provided publication ID in the locale update contract", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          publicationId: "pub_foreign",
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA"],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   describe("GET /api/admin/v1/translations/matrix", () => {
     it("returns paginated translation matrix containing enabled publication locales", async () => {
       const res = await app.inject({
