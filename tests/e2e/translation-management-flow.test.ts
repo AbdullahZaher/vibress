@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Translation Management & Editorial UX E2E Flow", () => {
+  let originalLocales: { primaryLocale: string; enabledLocales: string[] } | null = null;
+
   test.beforeEach(async ({ page }) => {
     await page.goto("http://localhost:7777/admin");
     await page.waitForLoadState("networkidle");
@@ -13,6 +15,44 @@ test.describe("Translation Management & Editorial UX E2E Flow", () => {
         url.pathname === "/admin" || (url.pathname.startsWith("/admin") && !url.pathname.includes("/login")),
       );
     }
+
+    const response = await page.request.get("http://localhost:7777/api/admin/v1/locales");
+    expect(response.ok()).toBe(true);
+    const policy = await response.json() as {
+      primaryLocale: string; enabledLocales: string[]; isMultilingual: boolean;
+    };
+    originalLocales = null;
+    if (!policy.isMultilingual) {
+      await expect(page.getByRole("button", { name: "Translations", exact: true })).toHaveCount(0);
+    }
+
+    // This suite is intentionally multilingual, unlike a fresh publication.
+    // Configure the fixture explicitly instead of assuming English + Arabic.
+    if (!policy.enabledLocales.some((locale) => locale.startsWith("ar"))) {
+      originalLocales = {
+        primaryLocale: policy.primaryLocale,
+        enabledLocales: [...policy.enabledLocales],
+      };
+      const updated = await page.request.put("http://localhost:7777/api/admin/v1/locales", {
+        headers: { origin: "http://localhost:7777" },
+        data: {
+          primaryLocale: policy.primaryLocale,
+          enabledLocales: [...policy.enabledLocales, policy.primaryLocale === "ar" ? "en" : "ar-SA"],
+        },
+      });
+      expect(updated.ok()).toBe(true);
+      await page.evaluate(() => window.dispatchEvent(new Event("vibress:locales-updated")));
+    }
+  });
+
+  test.afterEach(async ({ page }) => {
+    if (!originalLocales) return;
+    const restored = await page.request.put("http://localhost:7777/api/admin/v1/locales", {
+      headers: { origin: "http://localhost:7777" },
+      data: originalLocales,
+    });
+    expect(restored.ok()).toBe(true);
+    originalLocales = null;
   });
 
   test("Translation Matrix view, filters, health metrics, and locale columns", async ({ page }) => {
