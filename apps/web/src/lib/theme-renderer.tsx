@@ -406,7 +406,8 @@ export async function renderThemeTemplate(
     )
     : {};
   const siteUrl = getPublicSiteUrl();
-  const available = enabledLocales.flatMap((code) => {
+  // A one-language publication must not surface a redundant language menu.
+  const available = (enabledLocales.length > 1 ? enabledLocales : []).flatMap((code) => {
     let url: string | undefined;
     if (isContent) {
       const absolute = published[code];
