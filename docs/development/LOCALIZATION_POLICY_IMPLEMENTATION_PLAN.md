@@ -1,10 +1,42 @@
 # Localization Policy — Engineering Implementation Plan
 
-**Status:** Approved policy; T1 implementation committed on `feat/publication-locale-policy-ticket-1` (typecheck, integration tests and CI pending). T2–T6 are not implemented.  
+**Status:** T1–T6 implementation in progress on `feat/publication-locale-policy-ticket-1`. Some features are coded but not production-certified; full Admin localization, upgrade cutover decisions, and validation remain open. Tests, lint, typecheck, builds, and CI have not yet been run.  
 **Decision date:** 2026-10-16  
 **Canonical policy:** [Publication-Scoped Language Policy](../14-decisions/publication-language-policy.md)  
 **Repository baseline reviewed:** `main`, tree `94751ae25a85e4f11e23cfd9be5beccaf1a7282e`  
 **Change constraint:** small additive, publication-scoped, upgrade-safe steps; no unrelated refactors or released-migration rewrites.
+
+## Current branch implementation inventory (unverified)
+
+The following features have been added to the implementation branch; **this is not a
+claim of passing tests or production readiness**:
+
+- **T1:** Publication-scoped locale service and compatibility bridge for
+  `site.locale` and canonical publication tables, with conflict and published
+  URL guards. Database migrations were not rewritten.
+- **T2:** Optional additional languages in the onboarding payload and UI;
+  language controls under existing `/admin/settings`; primary UI selection
+  currently limited to the certified-language targets English and Arabic.
+- **T4:** Translation matrix/navigation/sidebar routing gated by multilingual
+  state and permissions; typed mutation validation, source/target checks and
+  workflow status authorization on create/edit/publish/bulk/AI paths.
+- **T3 (partial):** Shared Admin language context and selected English/Arabic
+  translations for setup, login, sidebar and settings. **Many screens and error
+  paths still contain hard-coded English text. Full Arabic UI is NOT complete.**
+- **T5 (partial):** Dynamic locale routing, public API enabled-locale checks,
+  theme locale context, published-only alternates, sitemap generation and safe
+  redirects for unique historical published slugs. Pagination, SEO, plugin/theme
+  coverage and upgrade redirect matrices remain to be certified.
+- **T6 (partial):** Structured document text extraction and review-gated AI
+  draft creation; provider failures do not save fake translations. Additional
+  content formats and provider integration need tests and explicit decisions.
+
+**Remaining release blockers:** entire Admin UI dictionary parity and RTL/a11y
+review; prior-public-URL inventory and primary-locale reconciliation for
+populated upgrades; source-language persistence policy for existing content;
+public SEO/sitemap limits and plugin/theme compatibility review; full unit,
+integration, E2E, typecheck, lint, build and populated-DB upgrade checks. Tests
+have been added but not executed, per the requested coding-first sequence.
 
 ## 1. Current-code evidence and gaps
 
