@@ -359,7 +359,7 @@ function extractRequestedLocale(
       : await pagesService.findPublishedBySlug(slug, pubId);
     if (!source && locale !== site.locale) {
       const translated = await translationService.findTranslationBySlug(type, locale, slug, pubId);
-      if (translated && publiclyVisibleTranslation(translated.status, site.needsLocaleReconciliation)) {
+      if (translated && publiclyVisibleTranslation(translated.status)) {
         source = isPost
           ? await postsService.findById(translated.contentId, pubId)
           : await pagesService.findById(translated.contentId, pubId);
@@ -375,7 +375,7 @@ function extractRequestedLocale(
       [site.locale]: `/${type === "post" ? "posts" : "pages"}/${encodeURIComponent(source.slug)}`,
     };
     for (const row of stored) {
-      if (!publiclyVisibleTranslation(row.status, site.needsLocaleReconciliation) || !site.enabledLocales.includes(row.targetLocale) ||
+      if (!publiclyVisibleTranslation(row.status) || !site.enabledLocales.includes(row.targetLocale) ||
           row.targetLocale === site.locale) continue;
       alternates[row.targetLocale] =
         `/${type === "post" ? "posts" : "pages"}/${encodeURIComponent(row.slug)}`;
