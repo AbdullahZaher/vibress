@@ -125,6 +125,19 @@ describe("PublicationLocaleService — single language by default", () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
+  it("does not let stale legacy site.locale override a configured canonical default", async () => {
+    legacy.set("pub_a", "ar");
+    publications.set("pub_a", {
+      primaryLocale: "en",
+      locales: [{ locale: "en", status: "active", isDefault: true }],
+    });
+    expect(await service.getConfiguration("pub_a")).toMatchObject({
+      primaryLocale: "en",
+      enabledLocales: ["en"],
+      needsReconciliation: true,
+    });
+  });
+
   it("only activates locales explicitly marked active on the publication", async () => {
     publications.set("pub_a", {
       primaryLocale: "en",
