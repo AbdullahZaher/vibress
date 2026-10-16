@@ -28,7 +28,7 @@ interface WizardProps {
 
 const LOCALES = [
   { value: "en", label: "English" },
-  { value: "ar", label: "العربية (Arabic)" },
+  { value: "ar", label: "العربية" },
   { value: "de", label: "Deutsch" },
   { value: "es", label: "Español" },
   { value: "fr", label: "Français" },
@@ -80,6 +80,11 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   const [siteDescription, setSiteDescription] = useState("");
   const [siteTagline, setSiteTagline] = useState("");
   const [siteLocale, setSiteLocale] = useState("en");
+  const [additionalLocales, setAdditionalLocales] = useState<string[]>([]);
+  // Only languages with certified Admin dictionaries may be primary.
+  const primaryOptions = LOCALES.filter((locale) =>
+    locale.value === "en" || locale.value === "ar",
+  );
 
   // Owner step
   const [ownerName, setOwnerName] = useState("");
@@ -182,6 +187,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           description: siteDescription.trim(),
           ...(tagline ? { tagline } : {}),
           locale: siteLocale,
+          enabledLocales: [siteLocale, ...additionalLocales.filter((loc) => loc !== siteLocale)],
         },
         owner: {
           name: ownerName.trim(),
@@ -360,23 +366,52 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="site-locale"
                   className="text-xs font-medium text-foreground"
                 >
-                  Default language
+                  Primary language / اللغة الأساسية
                 </label>
                 <select
                   id="site-locale"
                   value={siteLocale}
-                  onChange={(e) => setSiteLocale(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSiteLocale(next);
+                    setAdditionalLocales((prev) => prev.filter((loc) => loc !== next));
+                  }}
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  {LOCALES.map((l) => (
+                  {primaryOptions.map((l) => (
                     <option key={l.value} value={l.value}>
                       {l.label}
                     </option>
                   ))}
                 </select>
                 <p className="text-[11px] text-muted-foreground">
-                  Languages without a full dictionary fall back to English.
+                  Only English and Arabic currently have primary Admin language support.
+                  The publication starts with this language alone.
                 </p>
+              </div>
+              <fieldset className="space-y-2" aria-describedby="additional-language-help">
+                <legend className="text-xs font-semibold text-foreground">
+                  Additional content languages (optional) / لغات محتوى إضافية
+                </legend>
+                <p id="additional-language-help" className="text-xs text-muted-foreground">
+                  Adding a second language enables Translation tools after setup.
+                  Content is never translated automatically.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {LOCALES.filter((language) => language.value !== siteLocale).map((language) => (
+                    <label key={language.value} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" value={language.value}
+                        checked={additionalLocales.includes(language.value)}
+                        onChange={(event) =>
+                          setAdditionalLocales((prev) => event.target.checked
+                            ? [...prev, language.value]
+                            : prev.filter((loc) => loc !== language.value))
+                        } />
+                      <span lang={language.value}>{language.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between pt-2">
