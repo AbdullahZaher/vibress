@@ -856,6 +856,18 @@ function extractRequestedLocale(
         });
       }
 
+      const publicationId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(publicationId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED", message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
+
       const parseResult = PublicListFilterSchema.safeParse(req.query);
       const filter = parseResult.success
         ? parseResult.data
@@ -865,16 +877,32 @@ function extractRequestedLocale(
       const page = filter.page;
       const offset = (page - 1) * limit;
 
-      const { posts, total } = await postsService.listPosts({
-        publicationId: pubId,
-        publishedOnly: true,
-        visibility: "public",
-        tagSlug: slug,
-        limit,
-        offset,
-        sortBy: "publishedAt",
-        sortOrder: "desc",
-      });
+      const { posts, total } = isTranslationRequest
+        ? await (async () => {
+            const localized = await translationService.listPublishedLocalizedSourceIds(
+              "post", publicationId, requestedLocale,
+              { limit, offset, tagSlug: slug },
+            );
+            const sources = await Promise.all(
+              localized.ids.map((id) => postsService.findById(id, publicationId)),
+            );
+            return {
+              posts: sources.filter((post): post is NonNullable<typeof post> =>
+                !!post && post.status === "published" &&
+                post.visibility === "public" && !post.deletedAt),
+              total: localized.total,
+            };
+          })()
+        : await postsService.listPosts({
+            publicationId,
+            publishedOnly: true,
+            visibility: "public",
+            tagSlug: slug,
+            limit,
+            offset,
+            sortBy: "publishedAt",
+            sortOrder: "desc",
+          });
 
       const postIds = posts.map((p) => p.id);
       const commentCounts =
@@ -884,6 +912,23 @@ function extractRequestedLocale(
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
+          let mergedPost: typeof post & { locale?: string } = post;
+          if (isTranslationRequest) {
+            const translation = await translationService.getTranslation(
+              "post", post.id, requestedLocale, undefined, publicationId, true,
+            );
+            if (!translation || translation.status !== "published") return null;
+            mergedPost = {
+              ...post,
+              title: translation.title,
+              slug: translation.slug,
+              excerpt: translation.excerpt,
+              content: translation.content,
+              metaTitle: translation.metaTitle,
+              metaDescription: translation.metaDescription,
+              locale: translation.targetLocale,
+            };
+          }
           const tagIds = await postsService.getPostTagIds(post.id);
           const [authors, tagsList] = await Promise.all([
             authorsService.getPostAuthors(post.id),
@@ -894,20 +939,23 @@ function extractRequestedLocale(
           );
 
           return buildPublicPostSummaryDto(
-            post,
+            mergedPost,
             authors,
             validTags,
             mediaService,
             commentCounts.get(post.id) ?? 0,
+            { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
           );
         }),
       );
 
+      const validSummaries = summaries.filter((item): item is NonNullable<typeof item> => item !== null);
       const totalPages = Math.ceil(total / limit) || 1;
 
       return reply.status(200).send({
         tag: formatPublicTag(tag),
-        posts: summaries,
+        posts: validSummaries,
+        locale: requestedLocale,
         pagination: {
           page,
           limit,
@@ -977,6 +1025,18 @@ function extractRequestedLocale(
         });
       }
 
+      const publicationId = req.publicationContext!.publicationId;
+      const site = await buildPublicSiteIdentity(publicationId);
+      const selection = extractRequestedLocale(req, site.enabledLocales);
+      if (selection.invalidExplicit) {
+        return reply.status(404).send({ errors: [{
+          code: "LOCALE_NOT_ENABLED", message: "Requested language is not enabled",
+          requestId: req.id,
+        }] });
+      }
+      const requestedLocale = selection.locale ?? site.locale;
+      const isTranslationRequest = requestedLocale !== site.locale;
+
       const parseResult = PublicListFilterSchema.safeParse(req.query);
       const filter = parseResult.success
         ? parseResult.data
@@ -987,16 +1047,32 @@ function extractRequestedLocale(
       const offset = (page - 1) * limit;
 
       const pubId = req.publicationContext?.publicationId;
-      const { posts, total } = await postsService.listPosts({
-        publicationId: pubId,
-        publishedOnly: true,
-        visibility: "public",
-        authorSlug: slug,
-        limit,
-        offset,
-        sortBy: "publishedAt",
-        sortOrder: "desc",
-      });
+      const { posts, total } = isTranslationRequest
+        ? await (async () => {
+            const localized = await translationService.listPublishedLocalizedSourceIds(
+              "post", publicationId, requestedLocale,
+              { limit, offset, authorSlug: slug },
+            );
+            const sources = await Promise.all(
+              localized.ids.map((id) => postsService.findById(id, publicationId)),
+            );
+            return {
+              posts: sources.filter((post): post is NonNullable<typeof post> =>
+                !!post && post.status === "published" &&
+                post.visibility === "public" && !post.deletedAt),
+              total: localized.total,
+            };
+          })()
+        : await postsService.listPosts({
+            publicationId,
+            publishedOnly: true,
+            visibility: "public",
+            authorSlug: slug,
+            limit,
+            offset,
+            sortBy: "publishedAt",
+            sortOrder: "desc",
+          });
 
       const postIds = posts.map((p) => p.id);
       const commentCounts =
@@ -1006,6 +1082,23 @@ function extractRequestedLocale(
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
+          let mergedPost: typeof post & { locale?: string } = post;
+          if (isTranslationRequest) {
+            const translation = await translationService.getTranslation(
+              "post", post.id, requestedLocale, undefined, publicationId, true,
+            );
+            if (!translation || translation.status !== "published") return null;
+            mergedPost = {
+              ...post,
+              title: translation.title,
+              slug: translation.slug,
+              excerpt: translation.excerpt,
+              content: translation.content,
+              metaTitle: translation.metaTitle,
+              metaDescription: translation.metaDescription,
+              locale: translation.targetLocale,
+            };
+          }
           const tagIds = await postsService.getPostTagIds(post.id);
           const [authors, tagsList] = await Promise.all([
             authorsService.getPostAuthors(post.id),
@@ -1016,20 +1109,23 @@ function extractRequestedLocale(
           );
 
           return buildPublicPostSummaryDto(
-            post,
+            mergedPost,
             authors,
             validTags,
             mediaService,
             commentCounts.get(post.id) ?? 0,
+            { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
           );
         }),
       );
 
+      const validSummaries = summaries.filter((item): item is NonNullable<typeof item> => item !== null);
       const totalPages = Math.ceil(total / limit) || 1;
 
       return reply.status(200).send({
         author: formatPublicAuthor(author as Author),
-        posts: summaries,
+        posts: validSummaries,
+        locale: requestedLocale,
         pagination: {
           page,
           limit,
