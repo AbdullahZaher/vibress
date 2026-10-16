@@ -58,7 +58,7 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
 
   async listPublicTranslationLocales(publicationId: string): Promise<string[]> {
     const rows = await getDb()
-      .select({ locale: contentTranslations.targetLocale })
+      .selectDistinct({ locale: contentTranslations.targetLocale })
       .from(contentTranslations)
       .where(
         and(
