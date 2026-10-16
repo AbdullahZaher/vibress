@@ -1,5 +1,9 @@
 import { FastifyInstance } from "fastify";
-import { PublicListFilterSchema, PublicRedirectResolveQuerySchema } from "@vibress/api-contracts";
+import {
+  PublicListFilterSchema,
+  PublicRedirectResolveQuerySchema,
+  PublicLegacyTranslationRedirectSchema,
+} from "@vibress/api-contracts";
 import {
   postsService,
   pagesService,
@@ -27,7 +31,7 @@ import {
   signSiteAuthToken,
   SITE_AUTH_COOKIE_NAME,
 } from "@vibress/security";
-import { getDirection } from "@vibress/i18n";
+import { getDirection, getLocalePrefix } from "@vibress/i18n";
 import { canonicalPublicationLocale } from "@vibress/settings";
 import type { FastifyRequest } from "fastify";
 import { TranslationService } from "@vibress/i18n/server";
