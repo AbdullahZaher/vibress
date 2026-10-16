@@ -18,12 +18,14 @@ interface NavContentProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   canPublishPosts: boolean;
+  canReadTranslations: boolean;
 }
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
   onNavigate,
   canPublishPosts,
+  canReadTranslations,
 }) => {
   const { data: localePolicy } = usePublicationLocales();
   const { tr } = useAdminLocale();
@@ -148,7 +150,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Pages")}</span>
       </button>
 
-      {localePolicy?.isMultilingual && (
+      {localePolicy?.isMultilingual && canReadTranslations && (
       {/* Translations & Localization */}
       <button
         type="button"
