@@ -142,7 +142,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
       }] });
       const publicationId = req.publicationContext!.publicationId;
       const policy = await publicationLocaleService.getConfiguration(publicationId);
-      const translation = await translationService.findTranslationBySlugAny(
+      const translation = await translationService.findUniquePublishedTranslationBySlug(
         parsed.data.type, parsed.data.slug, publicationId,
       );
       if (!translation || translation.status !== "published" ||
