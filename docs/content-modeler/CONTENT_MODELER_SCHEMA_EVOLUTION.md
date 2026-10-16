@@ -20,6 +20,9 @@ key-renaming or migration takes place.
 New required fields (even with defaults), changed types, narrowed select
 options, tightened validation constraints, different relation targets,
 localization changes, and increased field exposure are treated as unsafe.
+Constraints stored in the historical nested `validation` object are considered
+alongside top-level constraints, matching entry validation. Equivalent
+representations without effective constraint changes remain safe.
 When any entries exist for the model—including soft-deleted records—an
 unsafe update is blocked. The existence check and update run in a transaction
 with a parent-row lock.
@@ -37,4 +40,5 @@ released SQL migrations or assume that Preview has transformed stored entries.
 
 The preview response is `{ data: { safe, warnings, changes } }`. Each
 change contains `key`, `action` (added, removed or modified),
-`isSafe`, and an optional `warning`.
+`isSafe`, and an optional `warning`. Preview rejects malformed model field
+definitions (such as duplicate keys) with `400 VALIDATION_ERROR`.

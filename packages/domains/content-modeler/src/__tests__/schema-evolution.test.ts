@@ -105,6 +105,23 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
     ]).safe).toBe(false);
   });
 
+  it("compares historical nested validation constraints with equivalent top-level constraints", () => {
+    const legacy: ContentFieldDefinition & {
+      validation: { minLength: number; maxLength: number; pattern: string };
+    } = {
+      id: "legacy-title", name: "Title", key: "title", type: "text",
+      validation: { minLength: 2, maxLength: 120, pattern: "^[a-z]+$" },
+    };
+    const equivalent: ContentFieldDefinition = {
+      id: "legacy-title", name: "Title", key: "title", type: "text",
+      minLength: 2, maxLength: 120, pattern: "^[a-z]+$",
+    };
+    expect(analyzeSchemaEvolution([legacy], [equivalent]).safe).toBe(true);
+    expect(analyzeSchemaEvolution([legacy], [{ ...equivalent, minLength: 5 }]).safe).toBe(false);
+    expect(analyzeSchemaEvolution([legacy], [{ ...equivalent, maxLength: 30 }]).safe).toBe(false);
+    expect(analyzeSchemaEvolution([legacy], [{ ...equivalent, pattern: "^[A-Z]+$" }]).safe).toBe(false);
+  });
+
   it("blocks new required fields until existing records are migrated, even with defaults", () => {
     const diff = analyzeSchemaEvolution([], [
       { id: "new", key: "mandatory", name: "Required", type: "text", required: true, defaultValue: "x" },

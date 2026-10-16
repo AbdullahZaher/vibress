@@ -294,6 +294,60 @@ describe("Content Modeler API Routes", () => {
     expect(entryRes.statusCode).toBe(200);
   });
 
+  it("rejects duplicate field keys during schema preview", async () => {
+    const result = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/content-models/${modelId}/schema-evolution-preview`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      payload: {
+        fields: [
+          { id: "first", name: "First", key: "duplicate", type: "text" },
+          { id: "second", name: "Second", key: "duplicate", type: "text" },
+        ],
+      },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(result.json().errors[0].code).toBe("VALIDATION_ERROR");
+    expect(result.json().errors[0].fieldErrors.duplicate).toContain("Duplicate field key");
+  });
+
+  it("blocks tightened historical validation constraints on populated models", async () => {
+    const original = await app.inject({
+      method: "GET",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(original.statusCode).toBe(200);
+    const fields = original.json().data.fields.map((field: { key: string }) =>
+      field.key === "pages" ? { ...field, validation: { max: 10 } } : field,
+    );
+    const preview = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/content-models/${modelId}/schema-evolution-preview`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      payload: { fields },
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().data.safe).toBe(false);
+
+    const update = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader, origin: "http://localhost:7777" },
+      payload: { fields },
+    });
+    expect(update.statusCode).toBe(400);
+    expect(update.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+    const unchanged = await app.inject({
+      method: "GET",
+      url: `/api/admin/v1/content-models/${modelId}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(unchanged.statusCode).toBe(200);
+    expect(unchanged.json().data.fields.find((field: { key: string }) => field.key === "pages").validation).toBeUndefined();
+  });
+
   it("rejects malformed entry filters and invalid lifecycle values at runtime", async () => {
     const malformed = await app.inject({
       method: "GET",

@@ -623,6 +623,23 @@ export function checkEntryDataValidity(
   }
 }
 
+// Match the effective constraints used by validateEntryData, including the
+// historical nested `validation` shape still present in persisted model JSONB.
+function effectiveFieldConstraints(field: ContentFieldDefinition) {
+  const nested: unknown = "validation" in field ? field.validation : undefined;
+  const legacy: Record<string, unknown> =
+    nested !== null && typeof nested === "object" && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : {};
+  return {
+    min: field.min ?? (typeof legacy.min === "number" ? legacy.min : undefined),
+    max: field.max ?? (typeof legacy.max === "number" ? legacy.max : undefined),
+    minLength: field.minLength ?? (typeof legacy.minLength === "number" ? legacy.minLength : undefined),
+    maxLength: field.maxLength ?? (typeof legacy.maxLength === "number" ? legacy.maxLength : undefined),
+    pattern: field.pattern ?? (typeof legacy.pattern === "string" ? legacy.pattern : undefined),
+  };
+}
+
 /**
  * Analyzes schema changes between old model fields and new model fields.
  * Identifies breaking changes (e.g., removing fields, changing types, adding required fields without defaults).
@@ -686,12 +703,14 @@ export function analyzeSchemaEvolution(
           (oldField.options ?? []).some((option) =>
             !(newField.options ?? []).some((next) => next.value === option.value))
         );
+        const oldConstraints = effectiveFieldConstraints(oldField);
+        const newConstraints = effectiveFieldConstraints(newField);
         const constraintsTightened =
-          (newField.min !== undefined && newField.min > (oldField.min ?? -Infinity)) ||
-          (newField.max !== undefined && newField.max < (oldField.max ?? Infinity)) ||
-          (newField.minLength !== undefined && newField.minLength > (oldField.minLength ?? 0)) ||
-          (newField.maxLength !== undefined && newField.maxLength < (oldField.maxLength ?? Infinity)) ||
-          (newField.pattern !== undefined && newField.pattern !== oldField.pattern);
+          (newConstraints.min !== undefined && newConstraints.min > (oldConstraints.min ?? -Infinity)) ||
+          (newConstraints.max !== undefined && newConstraints.max < (oldConstraints.max ?? Infinity)) ||
+          (newConstraints.minLength !== undefined && newConstraints.minLength > (oldConstraints.minLength ?? 0)) ||
+          (newConstraints.maxLength !== undefined && newConstraints.maxLength < (oldConstraints.maxLength ?? Infinity)) ||
+          (newConstraints.pattern !== undefined && newConstraints.pattern !== oldConstraints.pattern);
         const relationChanged =
           (newField.type === "relation" || newField.type === "relation_list") &&
           oldField.relationModel !== newField.relationModel;
