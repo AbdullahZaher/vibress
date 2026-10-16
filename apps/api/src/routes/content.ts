@@ -593,6 +593,7 @@ function extractRequestedLocale(
             metaTitle: translationItem.metaTitle,
             metaDescription:
               translationItem.metaDescription,
+            canonicalUrl: null,
             locale: translationItem.targetLocale,
           }
         : post;
@@ -794,6 +795,7 @@ function extractRequestedLocale(
             metaTitle: translationItem.metaTitle,
             metaDescription:
               translationItem.metaDescription,
+            canonicalUrl: null,
             locale: translationItem.targetLocale,
           }
         : pageObj;
