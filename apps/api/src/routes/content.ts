@@ -289,12 +289,10 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
     },
   });
 
-function publiclyVisibleTranslation(status: string, needsReconciliation: boolean): boolean {
-  // Old API releases exposed approved/translated rows. Keep those historic
-  // URLs reachable during an explicitly flagged upgrade reconciliation, then
-  // require published-only state once canonical locale data is consistent.
-  return status === "published" ||
-    (needsReconciliation && (status === "approved" || status === "translated"));
+function publiclyVisibleTranslation(status: string): boolean {
+  // Review or translation-complete states do not constitute publication,
+  // including during upgrade reconciliation.
+  return status === "published";
 }
 
 function extractRequestedLocale(
@@ -439,7 +437,7 @@ function extractRequestedLocale(
           let mergedPost: any = post;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId);
-            if (tr && (publiclyVisibleTranslation(tr.status, site.needsLocaleReconciliation))) {
+            if (tr && (publiclyVisibleTranslation(tr.status))) {
               mergedPost = {
                 ...post,
                 title: tr.title,
@@ -518,10 +516,11 @@ function extractRequestedLocale(
           translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId);
         }
 
-        if (!translationItem || !publiclyVisibleTranslation(translationItem.status, site.needsLocaleReconciliation)) translationItem = null;
+        if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
         if (translationItem) {
           post = await postsService.findById(translationItem.contentId, pubId);
-          if (!post || post.status !== "published") {
+          if (!post || post.status !== "published" ||
+              post.visibility !== "public" || post.deletedAt) {
             post = null;
           }
         }
@@ -537,7 +536,7 @@ function extractRequestedLocale(
 
         if (
           !translationItem ||
-          !publiclyVisibleTranslation(translationItem.status, site.needsLocaleReconciliation)
+          !publiclyVisibleTranslation(translationItem.status)
         ) {
           return reply.status(404).send({
             errors: [
@@ -637,7 +636,7 @@ function extractRequestedLocale(
           let mergedPage: any = pageObj;
           if (isTranslationRequest) {
             const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId);
-            if (tr && (publiclyVisibleTranslation(tr.status, site.needsLocaleReconciliation))) {
+            if (tr && (publiclyVisibleTranslation(tr.status))) {
               mergedPage = {
                 ...pageObj,
                 title: tr.title,
@@ -698,10 +697,11 @@ function extractRequestedLocale(
           translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId);
         }
 
-        if (!translationItem || !publiclyVisibleTranslation(translationItem.status, site.needsLocaleReconciliation)) translationItem = null;
+        if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
         if (translationItem) {
           pageObj = await pagesService.findById(translationItem.contentId, pubId);
-          if (!pageObj || pageObj.status !== "published") {
+          if (!pageObj || pageObj.status !== "published" ||
+              pageObj.visibility !== "public" || pageObj.deletedAt) {
             pageObj = null;
           }
         }
@@ -716,7 +716,7 @@ function extractRequestedLocale(
 
         if (
           !translationItem ||
-          !publiclyVisibleTranslation(translationItem.status, site.needsLocaleReconciliation)
+          !publiclyVisibleTranslation(translationItem.status)
         ) {
           return reply.status(404).send({
             errors: [
