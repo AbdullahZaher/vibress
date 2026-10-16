@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { ApiUser } from "../../../lib/api";
 import { Avatar } from "../../ui/avatar";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface UserMenuProps {
   user: ApiUser;
@@ -24,6 +25,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   locale = 'en',
   onToggleLocale,
 }) => {
+  const { tr } = useAdminLocale();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
-        title="Account menu"
+        title={tr("Account menu")}
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
           <div className="relative shrink-0">
@@ -112,7 +114,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             >
               <div className="flex items-center gap-2">
                 <ExternalLink className="h-3.5 w-3.5" />
-                <span>View Live Site</span>
+                <span>{tr("View Live Site")}</span>
               </div>
             </a>
 
@@ -128,7 +130,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Settings className="h-3.5 w-3.5" />
-                    <span>General Settings</span>
+                    <span>{tr("General Settings")}</span>
                   </div>
                 </button>
 
@@ -142,7 +144,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Shield className="h-3.5 w-3.5" />
-                    <span>Advanced & Platform</span>
+                    <span>{tr("Advanced & Platform")}</span>
                   </div>
                 </button>
               </>
@@ -170,7 +172,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           <div className="border-t border-border/60 my-1 pt-1">
             <button
               type="button"
-              aria-label="Sign out"
+              aria-label={tr("Sign Out")}
               onClick={() => {
                 setIsOpen(false);
                 onLogout();
@@ -178,7 +180,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
               className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-xs font-semibold text-start"
             >
               <LogOut className="h-3.5 w-3.5" />
-              <span>Sign Out</span>
+              <span>{tr("Sign Out")}</span>
             </button>
           </div>
         </div>
