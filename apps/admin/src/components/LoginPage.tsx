@@ -54,10 +54,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <Lock className="h-5 w-5" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-foreground">
-            Vibress Admin
+            {tr("Vibress Admin")}
           </h1>
           <p className="text-xs text-muted-foreground">
-            Publication Management Console
+            {tr("Publication Management Console")}
           </p>
         </div>
 
@@ -66,7 +66,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-base font-bold">{tr("Sign In")}</CardTitle>
             <CardDescription className="text-xs">
-              Enter your email address to access your dashboard.
+              {tr("Enter your email address to access your dashboard.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -82,7 +82,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   htmlFor="email"
                   className="text-xs font-medium text-foreground"
                 >
-                  Email Address
+                  {tr("Email Address")}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -103,7 +103,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   htmlFor="password"
                   className="text-xs font-medium text-foreground"
                 >
-                  Password
+                  {tr("Password")}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -138,8 +138,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </CardContent>
           <CardFooter className="border-t border-border pt-4 text-center justify-center">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session
-              {tr("Secured")}
+              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> {tr("Session Secured")}
             </p>
           </CardFooter>
         </Card>
