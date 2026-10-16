@@ -1,5 +1,5 @@
 import { getLocalePrefix } from "@vibress/i18n";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Metadata } from "next";
 import { ContentApiClient } from "../../../lib/content-api-client";
 import { buildPageMetadata, publishedAlternateLanguageUrls } from "../../../lib/seo-helpers";
@@ -50,6 +50,8 @@ export default async function StaticPage({
   const site = await getThemeSiteSettings();
   const pageObj = await ContentApiClient.getPageBySlug(slug, { locale: site.locale });
   if (!pageObj) {
+    const legacy = await ContentApiClient.getLegacyTranslationRedirect("page", slug);
+    if (legacy) permanentRedirect(legacy);
     notFound();
   }
 
