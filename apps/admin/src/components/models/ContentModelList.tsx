@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { Database, Edit, List, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { apiRequest } from "../../lib/api";
 import { Badge } from "../ui/badge";
@@ -32,6 +33,7 @@ export function ContentModelList({
   onNavigate: (path: string) => void;
   canManage?: boolean;
 }) {
+  const { tr } = useAdminLocale();
   const [models, setModels] = useState<ContentModelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export function ContentModelList({
         onClick={() => onNavigate("/admin/collections/" + encodeURIComponent(model.slug))}
       >
         <List className="h-3.5 w-3.5" />
-        Entries
+        {tr("Entries")}
       </Button>
       {canManage && (
         <>
@@ -96,7 +98,7 @@ export function ContentModelList({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={"Edit " + model.name}
+            aria-label={tr("Edit") + " " + model.name}
             onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/" + encodeURIComponent(model.id))}
           >
             <Edit className="h-3.5 w-3.5" />
@@ -105,7 +107,7 @@ export function ContentModelList({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={"Delete " + model.name}
+            aria-label={tr("Delete") + " " + model.name}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => void handleDelete(model)}
           >
@@ -121,14 +123,14 @@ export function ContentModelList({
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-            Settings / Advanced
+            {tr("Settings / Advanced")}
           </p>
           <h1 id="content-models-title" className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
             <Database aria-hidden="true" className="h-5 w-5 text-primary" />
-            Content Models
+            {tr("Content Models")}
           </h1>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Define reusable content structures, fields, relations, and validation rules.
+            {tr("Define reusable content structures, fields, relations, and validation rules.")}
           </p>
         </div>
         {canManage && (
@@ -136,7 +138,7 @@ export function ContentModelList({
             onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}
             className="self-start gap-1.5 sm:self-auto">
             <Plus className="h-4 w-4" />
-            Create Model
+            {tr("Create Model")}
           </Button>
         )}
       </header>
@@ -146,19 +148,19 @@ export function ContentModelList({
           <span>{error}</span>
           <Button type="button" variant="outline" size="xs" onClick={() => void fetchModels()}>
             <RefreshCw className="h-3.5 w-3.5" />
-            Retry
+            {tr("Retry")}
           </Button>
         </div>
       )}
 
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <p className="text-xs text-muted-foreground tabular-nums">
-          {loading ? "Loading models…" : models.length + " content models"}
+          {loading ? tr("Loading models…") : models.length + " " + tr("content models")}
         </p>
         <div className="relative w-full sm:w-72">
           <Search aria-hidden="true" className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input type="search" aria-label="Search content models"
-            placeholder="Search models by name or slug"
+          <Input type="search" aria-label={tr("Search content models")}
+            placeholder={tr("Search models by name or slug")}
             value={search} onChange={(event) => setSearch(event.target.value)}
             className="h-8 bg-card ps-8 text-xs" />
         </div>
@@ -166,7 +168,7 @@ export function ContentModelList({
 
       {loading ? (
         <Card role="status" className="space-y-3 p-5">
-          <span className="text-xs text-muted-foreground">Loading content models…</span>
+          <span className="text-xs text-muted-foreground">{tr("Loading content models…")}</span>
           {[1, 2, 3].map((item) => (
             <div key={item} className="h-12 animate-pulse rounded-md bg-muted/50" />
           ))}
@@ -176,18 +178,18 @@ export function ContentModelList({
           <Database aria-hidden="true" className="h-8 w-8 text-muted-foreground/50" />
           <div>
             <h2 className="text-sm font-semibold text-foreground">
-              {models.length === 0 ? "No content models yet" : "No matching models"}
+              {models.length === 0 ? tr("No content models yet") : tr("No matching models")}
             </h2>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {models.length === 0
                 ? "Create your first custom content type to structure editorial entries."
-                : "Try a different name, slug, or description."}
+                : tr("Try a different name, slug, or description.")}
             </p>
           </div>
           {models.length === 0 && canManage && (
             <Button type="button" size="sm" onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}>
               <Plus className="h-4 w-4" />
-              Create Model
+              {tr("Create Model")}
             </Button>
           )}
         </Card>
@@ -197,10 +199,10 @@ export function ContentModelList({
             <Table>
               <TableHeader>
                 <TableRow className="border-border">
-                  <TableHead className="ps-6">Model</TableHead>
-                  <TableHead>API Slug</TableHead>
-                  <TableHead>Fields</TableHead>
-                  <TableHead className="pe-6 text-end">Actions</TableHead>
+                  <TableHead className="ps-6">{tr("Model")}</TableHead>
+                  <TableHead>{tr("API Slug")}</TableHead>
+                  <TableHead>{tr("Fields")}</TableHead>
+                  <TableHead className="pe-6 text-end">{tr("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -219,7 +221,7 @@ export function ContentModelList({
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="tabular-nums">
-                        {model.fields?.length ?? 0} fields
+                        {model.fields?.length ?? 0} {tr("fields")}
                       </Badge>
                     </TableCell>
                     <TableCell className="pe-6">{modelActions(model)}</TableCell>
@@ -240,7 +242,7 @@ export function ContentModelList({
                     </p>
                   </div>
                   <Badge variant="secondary" className="shrink-0 tabular-nums">
-                    {model.fields?.length ?? 0} fields
+                    {model.fields?.length ?? 0} {tr("fields")}
                   </Badge>
                 </div>
                 {model.description && (
