@@ -6,6 +6,7 @@ import {
 } from "../middleware/auth";
 import {
   settingsService,
+  publicationLocaleService,
   workspaceService,
   auditService,
   redirectsService,
@@ -17,9 +18,13 @@ import {
   runIntegrityChecks,
   runMaintenanceOperation,
 } from "../system-tools";
-import { SettingsDomainError } from "@vibress/settings";
+import { SettingsDomainError, PublicationLocaleError } from "@vibress/settings";
 import { RedirectDomainError, type CreateRedirectData } from "@vibress/redirects";
-import { CreateRedirectInputSchema, UpdateRedirectInputSchema } from "@vibress/api-contracts";
+import {
+  CreateRedirectInputSchema,
+  UpdateRedirectInputSchema,
+  UpdatePublicationLocalesSchema,
+} from "@vibress/api-contracts";
 import {
   ImportExportDomainError,
   validateImportEnvelope,
@@ -83,6 +88,79 @@ async function resolvePublicSettingsPublicationId(
 }
 
 export async function adminOperationsRoutes(fastify: FastifyInstance) {
+  // ---------------- Publication locales ----------------
+  fastify.get("/locales", {
+    preHandler: [requireStaffSession, requirePermission("settings.read")],
+    handler: async (req, reply) => {
+      try {
+        const configuration = await publicationLocaleService.getConfiguration(
+          req.publicationContext!.publicationId,
+        );
+        return reply.status(200).send(configuration);
+      } catch (error) {
+        if (error instanceof PublicationLocaleError) {
+          return sendError(
+            reply,
+            error.code,
+            error.message,
+            req.id,
+            error.code === "PUBLICATION_NOT_FOUND" ? 404 : 409,
+          );
+        }
+        throw error;
+      }
+    },
+  });
+
+  fastify.put("/locales", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("settings.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const parsed = UpdatePublicationLocalesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendError(
+          reply,
+          "VALIDATION_ERROR",
+          "Invalid publication language configuration",
+          req.id,
+        );
+      }
+      try {
+        const configuration = await publicationLocaleService.updateConfiguration(
+          req.publicationContext!.publicationId,
+          parsed.data,
+          req.user!.id,
+        );
+        await auditService.record({
+          actorUserId: req.user!.id,
+          action: "publication.locales.updated",
+          targetType: "publication",
+          targetId: req.publicationContext!.publicationId,
+          metadata: { enabledLocaleCount: configuration.enabledLocales.length },
+        });
+        return reply.status(200).send(configuration);
+      } catch (error) {
+        if (error instanceof PublicationLocaleError) {
+          return sendError(
+            reply,
+            error.code,
+            error.message,
+            req.id,
+            error.code === "PUBLICATION_NOT_FOUND"
+              ? 404
+              : error.code === "INVALID_LOCALE_CONFIGURATION"
+                ? 400
+                : 409,
+          );
+        }
+        throw error;
+      }
+    },
+  });
+
   // ---------------- Settings ----------------
   fastify.get("/settings", {
     preHandler: [requireStaffSession, requirePermission("settings.read")],
@@ -193,6 +271,19 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
             },
           });
       } catch (err) {
+        if (err instanceof PublicationLocaleError) {
+          return sendError(
+            reply,
+            err.code,
+            err.message,
+            req.id,
+            err.code === "PUBLICATION_NOT_FOUND"
+              ? 404
+              : err.code === "INVALID_LOCALE_CONFIGURATION"
+                ? 400
+                : 409,
+          );
+        }
         if (err instanceof SettingsDomainError) {
           return sendError(
             reply,
@@ -201,7 +292,9 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
             req.id,
             err.code === "UNKNOWN_NAMESPACE" || err.code === "UNKNOWN_SETTING"
               ? 404
-              : 400,
+              : err.code === "LOCALE_CONFIGURATION_REQUIRED"
+                ? 409
+                : 400,
           );
         }
         throw err;
