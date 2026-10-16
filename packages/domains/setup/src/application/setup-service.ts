@@ -32,6 +32,7 @@ export interface SetupSiteInput {
   name: string;
   description: string;
   locale: string;
+  enabledLocales?: string[] | undefined;
   tagline?: string | undefined;
 }
 
@@ -302,7 +303,7 @@ export class SetupService {
           this.settingsRepo,
         ).updateConfiguration(
           "pub_default",
-          { primaryLocale: input.site.locale, enabledLocales: [input.site.locale] },
+          { primaryLocale: input.site.locale, enabledLocales: input.site.enabledLocales ?? [input.site.locale] },
           user.id,
         );
       } catch (error) {
