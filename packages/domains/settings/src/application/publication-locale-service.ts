@@ -93,22 +93,22 @@ export class PublicationLocaleService {
     }
     const legacy = await this.settings.get("site", "locale", publicationId);
     const current = this.resolve(snapshot, legacy?.value);
-    if (snapshot.locales.length === 0) {
-      // Upgrade bridge: retain URLs that were genuinely published before
-      // locale enablement was modeled, without persisting inferred state.
-      // Draft/approved rows do not enable a locale; require reconciliation.
-      const published = await this.repository.listPublicTranslationLocales(publicationId);
-      const legacyPublished = [...new Set(published.map(canonicalPublicationLocale))]
-        .filter((locale) => locale !== current.primaryLocale);
-      if (legacyPublished.length) {
-        const enabledLocales = [...current.enabledLocales, ...legacyPublished];
-        return {
-          ...current,
-          enabledLocales,
-          isMultilingual: enabledLocales.length > 1,
-          needsReconciliation: true,
-        };
-      }
+    // Upgrade bridge: published URL inventory is authoritative for retired
+    // releases regardless of whether the publication already has locale rows.
+    // Existing URLs are retained in-memory without mutating installed data;
+    // operators must reconcile the mismatch explicitly before any locale write.
+    const historic = await this.repository.listPublicTranslationLocales(publicationId);
+    const absentPublicLocales = [...new Set(historic.map(canonicalPublicationLocale))]
+      .filter((locale) => locale !== current.primaryLocale &&
+        !current.enabledLocales.includes(locale));
+    if (absentPublicLocales.length > 0) {
+      const enabledLocales = [...current.enabledLocales, ...absentPublicLocales];
+      return {
+        ...current,
+        enabledLocales,
+        isMultilingual: true,
+        needsReconciliation: true,
+      };
     }
     return current;
   }
