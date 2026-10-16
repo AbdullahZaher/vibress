@@ -104,7 +104,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
 
   const handleCellClick = (item: TranslationMatrixItem, locale: string) => {
     const locEntry = item.locales[locale];
-    if (locale === defaultLocale || locale.split("-")[0] === defaultLocale) {
+    if (locale === defaultLocale) {
       // Navigate to source editor
       if (item.contentType === "post") {
         onNavigate(`/admin/posts/${item.id}`);
@@ -371,7 +371,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
                     native: locale,
                     dir: "ltr",
                   };
-                  const isDefault = locale === defaultLocale || locale.split("-")[0] === defaultLocale;
+                  const isDefault = locale === defaultLocale;
 
                   return (
                     <th key={locale} className="py-3 px-4 min-w-[170px]">
