@@ -415,17 +415,33 @@ function extractRequestedLocale(
       const requestedLocale = selection.locale ?? site.locale;
       const isTranslationRequest = requestedLocale !== site.locale;
 
-      const { posts, total } = await postsService.listPosts({
-        publicationId: pubId,
-        publishedOnly: true,
-        visibility: "public",
-        tagSlug: filter.tag,
-        authorSlug: filter.author,
-        limit,
-        offset,
-        sortBy: "publishedAt",
-        sortOrder: "desc",
-      });
+      const { posts, total } = isTranslationRequest
+        ? await (async () => {
+            const localized = await translationService.listPublishedLocalizedSourceIds(
+              "post", pubId, requestedLocale,
+              { limit, offset, tagSlug: filter.tag, authorSlug: filter.author },
+            );
+            const sources = await Promise.all(
+              localized.ids.map((id) => postsService.findById(id, pubId)),
+            );
+            return {
+              posts: sources.filter((post): post is NonNullable<typeof post> =>
+                !!post && post.status === "published" &&
+                post.visibility === "public" && !post.deletedAt),
+              total: localized.total,
+            };
+          })()
+        : await postsService.listPosts({
+            publicationId: pubId,
+            publishedOnly: true,
+            visibility: "public",
+            tagSlug: filter.tag,
+            authorSlug: filter.author,
+            limit,
+            offset,
+            sortBy: "publishedAt",
+            sortOrder: "desc",
+          });
 
       const postIds = posts.map((p) => p.id);
       const commentCounts =
@@ -475,7 +491,7 @@ function extractRequestedLocale(
       );
 
       const validSummaries = summaries.filter((s): s is NonNullable<typeof s> => s !== null);
-      const totalCount = isTranslationRequest ? validSummaries.length : total;
+      const totalCount = total;
       const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
@@ -625,13 +641,28 @@ function extractRequestedLocale(
       const requestedLocale = selection.locale ?? site.locale;
       const isTranslationRequest = requestedLocale !== site.locale;
 
-      const { pages, total } = await pagesService.listPages({
-        publicationId: pubId,
-        publishedOnly: true,
-        visibility: "public",
-        limit,
-        offset,
-      });
+      const { pages, total } = isTranslationRequest
+        ? await (async () => {
+            const localized = await translationService.listPublishedLocalizedSourceIds(
+              "page", pubId, requestedLocale, { limit, offset },
+            );
+            const sources = await Promise.all(
+              localized.ids.map((id) => pagesService.findById(id, pubId)),
+            );
+            return {
+              pages: sources.filter((pageObj): pageObj is NonNullable<typeof pageObj> =>
+                !!pageObj && pageObj.status === "published" &&
+                pageObj.visibility === "public" && !pageObj.deletedAt),
+              total: localized.total,
+            };
+          })()
+        : await pagesService.listPages({
+            publicationId: pubId,
+            publishedOnly: true,
+            visibility: "public",
+            limit,
+            offset,
+          });
 
       const details = await Promise.all(
         pages.map(async (pageObj) => {
@@ -658,7 +689,7 @@ function extractRequestedLocale(
       );
 
       const validDetails = details.filter((d): d is NonNullable<typeof d> => d !== null);
-      const totalCount = isTranslationRequest ? validDetails.length : total;
+      const totalCount = total;
       const totalPages = Math.ceil(totalCount / limit) || 1;
 
       return reply.status(200).send({
