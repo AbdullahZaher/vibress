@@ -29,6 +29,7 @@ import {
   ImportExportDomainError,
   validateImportEnvelope,
 } from "@vibress/import-export";
+import { runInTransaction } from "@vibress/database";
 import { hashPassword, verifyPassword } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 
@@ -129,17 +130,20 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
         );
       }
       try {
-        const configuration = await publicationLocaleService.updateConfiguration(
-          req.publicationContext!.publicationId,
-          parsed.data,
-          req.user!.id,
-        );
-        await auditService.record({
-          actorUserId: req.user!.id,
-          action: "publication.locales.updated",
-          targetType: "publication",
-          targetId: req.publicationContext!.publicationId,
-          metadata: { enabledLocaleCount: configuration.enabledLocales.length },
+        const configuration = await runInTransaction(async () => {
+          const updated = await publicationLocaleService.updateConfiguration(
+            req.publicationContext!.publicationId,
+            parsed.data,
+            req.user!.id,
+          );
+          await auditService.record({
+            actorUserId: req.user!.id,
+            action: "publication.locales.updated",
+            targetType: "publication",
+            targetId: req.publicationContext!.publicationId,
+            metadata: { enabledLocaleCount: updated.enabledLocales.length },
+          });
+          return updated;
         });
         return reply.status(200).send(configuration);
       } catch (error) {
