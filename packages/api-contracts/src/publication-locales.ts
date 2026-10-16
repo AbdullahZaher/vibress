@@ -64,7 +64,7 @@ export const EditContentTranslationSchema = CreateContentTranslationSchema.omit(
   targetLocale: true,
 }).partial().extend({
   // Cannot publish or approve through a general-purpose editor PATCH.
-  status: z.enum(["draft", "in_progress", "translated", "needs_review"]).optional(),
+  status: z.enum(["untranslated", "draft", "in_progress", "translated", "needs_review", "approved", "published", "stale"]).optional(),
 }).strict();
 
 export const AiTranslateContentSchema = z.object({
