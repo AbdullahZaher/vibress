@@ -150,8 +150,8 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Pages")}</span>
       </button>
 
-      {localePolicy?.isMultilingual && canReadTranslations && (
       {/* Translations & Localization */}
+      {localePolicy?.isMultilingual && canReadTranslations && (
       <button
         type="button"
         onClick={() => onNavigate("/admin/translations")}
@@ -165,8 +165,8 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Translations")}</span>
       </button>
 
-      {/* Tags */}
       )}
+      {/* Tags */}
       <button
         type="button"
         onClick={() => onNavigate("/admin/tags")}
