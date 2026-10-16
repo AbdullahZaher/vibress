@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getPublicationLocalesApi,
   updatePublicationLocalesApi,
@@ -21,7 +21,7 @@ function nativeLanguage(code: string): string {
   return CONTENT_LANGUAGES.find((lang) => lang.code === code)?.name || code;
 }
 
-export function PublicationLanguagesManager({ onSaved }: { onSaved?: (primaryLocale: string) => void }) {
+export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLocale: string) => void) | undefined }) {
   const [config, setConfig] = useState<PublicationLocaleConfiguration | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [primary, setPrimary] = useState("");
