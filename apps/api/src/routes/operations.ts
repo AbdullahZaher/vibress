@@ -89,6 +89,23 @@ async function resolvePublicSettingsPublicationId(
 }
 
 export async function adminOperationsRoutes(fastify: FastifyInstance) {
+  // Every authenticated editor needs the publication's language context,
+  // even without broad permission to read or change publication settings.
+  fastify.get("/locales/context", {
+    preHandler: [requireStaffSession],
+    handler: async (req, reply) => {
+      const config = await publicationLocaleService.getConfiguration(
+        req.publicationContext!.publicationId,
+      );
+      return reply.send({
+        primaryLocale: config.primaryLocale,
+        enabledLocales: config.enabledLocales,
+        isMultilingual: config.isMultilingual,
+        needsReconciliation: config.needsReconciliation,
+      });
+    },
+  });
+
   // ---------------- Publication locales ----------------
   fastify.get("/locales", {
     preHandler: [requireStaffSession, requirePermission("settings.read")],
