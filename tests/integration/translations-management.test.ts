@@ -577,6 +577,31 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     });
   });
 
+  describe("Regional language isolation", () => {
+    it("does not substitute ar-SA when ar-EG is explicitly requested", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/posts/${arabicSlug}?locale=ar-EG`,
+      });
+      // The publication only enables ar-SA. A base-language match cannot
+      // bypass that feature policy or make an unrelated variant public.
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("supports exact translation lookups without breaking the legacy fallback API", async () => {
+      const { TranslationService } = await import("@vibress/i18n/server");
+      const translations = new TranslationService();
+      const exact = await translations.getTranslation(
+        "post", testPostId, "ar-EG", undefined, "pub_default", true,
+      );
+      expect(exact).toBeNull();
+      const matching = await translations.getTranslation(
+        "post", testPostId, "ar-SA", undefined, "pub_default", true,
+      );
+      expect(matching?.targetLocale).toBe("ar-SA");
+    });
+  });
+
   describe("Published translation protection", () => {
     it("rejects changing live translated text without reopening review", async () => {
       const res = await app.inject({
