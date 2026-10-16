@@ -1,7 +1,7 @@
 import { ContentApiClient } from "./content-api-client";
 import { getPublicSiteUrl } from "./seo-helpers";
 import { getLocalePrefix } from "@vibress/i18n";
-import { getThemeSiteSettings } from "./theme-host";
+import { getThemeSiteSettings } from "./site-settings";
 
 function escapeXml(unsafe: string): string {
   return unsafe

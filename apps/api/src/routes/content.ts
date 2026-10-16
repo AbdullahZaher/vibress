@@ -535,6 +535,15 @@ function extractRequestedLocale(
         // Try finding by localized slug
         if (isTranslationRequest) {
           translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId, true);
+        } else {
+          for (const loc of site.enabledLocales) {
+            if (loc === site.locale) continue;
+            const item = await translationService.findTranslationBySlug("post", loc, slug, pubId, true);
+            if (item && publiclyVisibleTranslation(item.status)) {
+              translationItem = item;
+              break;
+            }
+          }
         }
 
         if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
@@ -619,9 +628,9 @@ function extractRequestedLocale(
         validTags,
         mediaService,
         commentCounts.get(post.id) ?? 0,
-        { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
+        { locale: translationItem?.targetLocale ?? requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
       );
-      return reply.status(200).send({ post: postDetail, locale: requestedLocale });
+      return reply.status(200).send({ post: postDetail, locale: translationItem?.targetLocale ?? requestedLocale });
     },
   });
 
@@ -740,6 +749,15 @@ function extractRequestedLocale(
       if (!pageObj) {
         if (isTranslationRequest) {
           translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId, true);
+        } else {
+          for (const loc of site.enabledLocales) {
+            if (loc === site.locale) continue;
+            const item = await translationService.findTranslationBySlug("page", loc, slug, pubId, true);
+            if (item && publiclyVisibleTranslation(item.status)) {
+              translationItem = item;
+              break;
+            }
+          }
         }
 
         if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
@@ -808,9 +826,9 @@ function extractRequestedLocale(
 
       const pageDetail = await buildPublicPageDetailDto(
         mergedPage, mediaService,
-        { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
+        { locale: translationItem?.targetLocale ?? requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
       );
-      return reply.status(200).send({ page: pageDetail, locale: requestedLocale });
+      return reply.status(200).send({ page: pageDetail, locale: translationItem?.targetLocale ?? requestedLocale });
     },
   });
 

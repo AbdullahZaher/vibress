@@ -32,7 +32,7 @@ import {
   mapPostToViewModel,
 } from "@vibress/theme-core";
 import { buildPageMetadata, getPublicSiteUrl } from "../../apps/web/src/lib/seo-helpers";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "@vibress/database";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -351,6 +351,10 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     });
     expect(draftTranslation.status).toBe("draft");
     expect(draftTranslation.translationProvider).toBe("gemini-pro-translation");
+
+    // Submit for review
+    const submitted = await translationService.submitForReview(draftTranslation.id);
+    expect(submitted?.status).toBe("needs_review");
 
     // Approve translation
     const approved = await translationService.approveTranslation(draftTranslation.id, "editor-user-id");

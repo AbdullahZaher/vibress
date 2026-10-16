@@ -1,5 +1,5 @@
 import { ContentApiClient } from "../../lib/content-api-client";
-import { getThemeSiteSettings } from "../../lib/theme-host";
+import { getThemeSiteSettings } from "../../lib/site-settings";
 import { getLocalePrefix } from "@vibress/i18n";
 import { getPublicSiteUrl } from "../../lib/seo-helpers";
 
