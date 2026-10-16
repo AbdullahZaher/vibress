@@ -57,7 +57,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   translationId: initialTranslationId,
   contentType = "post",
   contentId,
-  targetLocale,
+  targetLocale: suppliedTargetLocale,
   onNavigate,
   canPublish = true,
 }) => {
@@ -96,6 +96,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     queryFn: () => fetchTranslationDetail(currentTranslationId!),
     enabled: Boolean(currentTranslationId),
   });
+
+  const targetLocale = detailData?.translation?.targetLocale ||
+    suppliedTargetLocale ||
+    localePolicy?.enabledLocales.find((locale) => locale !== localePolicy.primaryLocale) ||
+    "";
 
   // 2. Fetch source content directly if creating new translation
   useEffect(() => {
@@ -317,7 +322,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               <TranslationBadge status={status as any} isStale={isStale} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Source (English) ➔ Target ({targetMeta.native} / {targetLocale})
+              Source ({localePolicy?.primaryLocale || "—"}) ➔ Target ({targetMeta.native} / {targetLocale})
             </p>
           </div>
         </div>
