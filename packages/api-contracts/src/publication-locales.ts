@@ -63,7 +63,9 @@ export const CreateContentTranslationSchema = z.object({
 export const EditContentTranslationSchema = CreateContentTranslationSchema.omit({
   targetLocale: true,
 }).partial().extend({
-  // Cannot publish or approve through a general-purpose editor PATCH.
+  // Older Studio clients still send this immutable value on PATCH.
+  targetLocale: PublicationLocaleTagSchema.optional(),
+  // Workflow changes are checked against the stored status in the route.
   status: z.enum(["untranslated", "draft", "in_progress", "translated", "needs_review", "approved", "published", "stale"]).optional(),
 }).strict();
 
