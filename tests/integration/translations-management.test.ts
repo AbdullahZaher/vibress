@@ -225,7 +225,8 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       });
       expect(login.statusCode).toBe(200);
       const header = login.headers["set-cookie"];
-      const cookie = (Array.isArray(header) ? header[0] : header)?.split(";")[0] ?? "";
+      const rawCookie = Array.isArray(header) ? header[0] : header;
+      const cookie = typeof rawCookie === "string" ? (rawCookie.split(";")[0] ?? "") : "";
       const res = await app.inject({
         method: "PUT",
         url: "/api/admin/v1/locales",
