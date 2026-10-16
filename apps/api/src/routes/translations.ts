@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
 import {
   translationService,
   postsService,
@@ -15,6 +15,12 @@ import {
 import { TranslationStatus } from "@vibress/database";
 import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
+import { canonicalPublicationLocale } from "@vibress/settings";
+import {
+  collectTranslatableText,
+  parseStructuredTranslation,
+  applyStructuredTranslation,
+} from "@vibress/i18n/structured-ai-translation";
 
 export async function translationRoutes(fastify: FastifyInstance) {
   // Read the locale policy for the authoritative publication context only.
@@ -30,9 +36,51 @@ export async function translationRoutes(fastify: FastifyInstance) {
     };
   }
 
+  const localeUnavailable = (reply: FastifyReply, requestId: string) =>
+    reply.status(404).send({
+      errors: [{ code: "LOCALE_NOT_ENABLED", message: "Language is not enabled for this publication", requestId }],
+    });
+
+  async function requireMultilingual(req: FastifyRequest, reply: FastifyReply) {
+    const config = await publicationLocaleService.getConfiguration(
+      req.publicationContext!.publicationId,
+    );
+    if (!config.isMultilingual) return localeUnavailable(reply, req.id);
+  }
+
+  async function targetIsEnabled(req: FastifyRequest, raw: unknown): Promise<boolean> {
+    if (typeof raw !== "string") return false;
+    let target: string;
+    try {
+      target = canonicalPublicationLocale(raw);
+    } catch {
+      return false;
+    }
+    const config = await publicationLocaleService.getConfiguration(
+      req.publicationContext!.publicationId,
+    );
+    return config.isMultilingual && target !== config.primaryLocale &&
+      config.enabledLocales.includes(target);
+  }
+
+  async function requireEnabledStoredTranslation(req: FastifyRequest, reply: FastifyReply) {
+    const { id } = req.params as { id: string };
+    const translation = await translationService.getTranslationById(
+      id, req.publicationContext!.publicationId,
+    );
+    if (!translation) {
+      return reply.status(404).send({ errors: [{
+        code: "TRANSLATION_NOT_FOUND", message: "Translation not found", requestId: req.id,
+      }] });
+    }
+    if (!(await targetIsEnabled(req, translation.targetLocale))) {
+      return localeUnavailable(reply, req.id);
+    }
+  }
+
   // 1. Get Translation Matrix
   fastify.get("/translations/matrix", {
-    preHandler: [requireStaffSession, requirePermission("translations.read")],
+    preHandler: [requireStaffSession, requirePermission("translations.read"), requireMultilingual],
     handler: async (req, reply) => {
       const { contentType, search, locale, status, onlyStale, limit, offset } =
         (req.query ?? {}) as {
@@ -73,7 +121,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 2. Get Translation Review Queue
   fastify.get("/translations/queue", {
-    preHandler: [requireStaffSession, requirePermission("translations.read")],
+    preHandler: [requireStaffSession, requirePermission("translations.read"), requireMultilingual],
     handler: async (req, reply) => {
       const { defaultLocale, enabledLocales } = await getPublicationLocales(req.publicationContext!.publicationId);
       const queue = await translationService.getTranslationQueue(
@@ -87,7 +135,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 3. Get Localization Health & Coverage Metrics
   fastify.get("/translations/health", {
-    preHandler: [requireStaffSession, requirePermission("translations.read")],
+    preHandler: [requireStaffSession, requirePermission("translations.read"), requireMultilingual],
     handler: async (req, reply) => {
       const { defaultLocale, enabledLocales } = await getPublicationLocales(req.publicationContext!.publicationId);
       const health = await translationService.getLocalizationHealth(
@@ -101,7 +149,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 4. Get Translation by ID
   fastify.get("/translations/:id", {
-    preHandler: [requireStaffSession, requirePermission("translations.read")],
+    preHandler: [requireStaffSession, requirePermission("translations.read"), requireMultilingual],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const tr = await translationService.getTranslationById(
@@ -172,7 +220,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
   // 5. List Translations for a Content Item
   fastify.get("/content/:type/:id/translations", {
-    preHandler: [requireStaffSession, requirePermission("translations.read")],
+    preHandler: [requireStaffSession, requirePermission("translations.read"), requireMultilingual],
     handler: async (req, reply) => {
       const { type, id } = req.params as { type: string; id: string };
       const translations = await translationService.listTranslationsForContent(
@@ -189,8 +237,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.create"),
-    ],
+      requirePermission("translations.create"),, requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
@@ -215,6 +262,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
       }
 
       const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
+      if (!(await targetIsEnabled(req, body.targetLocale))) {
+        return localeUnavailable(reply, req.id);
+      }
 
       // Check if source exists
       let sourceUpdatedAt = new Date();
@@ -285,8 +335,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.edit"),
-    ],
+      requirePermission("translations.edit"),, requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -355,8 +404,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.review"),
-    ],
+      requirePermission("translations.review"),, requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -397,8 +445,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.approve"),
-    ],
+      requirePermission("translations.approve"),, requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -440,8 +487,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.publish"),
-    ],
+      requirePermission("translations.publish"),, requireMultilingual, requireEnabledStoredTranslation],
     handler: async (req, reply) => {
       const user = req.user!;
       const { id } = req.params as { id: string };
@@ -482,8 +528,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.create"),
-    ],
+      requirePermission("translations.create"),, requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const { type, id } = req.params as { type: "post" | "page"; id: string };
@@ -502,6 +547,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
       }
 
       const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
+      if (!(await targetIsEnabled(req, body.targetLocale))) {
+        return localeUnavailable(reply, req.id);
+      }
 
       // Retrieve source content
       let sourceTitle = "";
@@ -540,62 +588,51 @@ export async function translationRoutes(fastify: FastifyInstance) {
         sourceUpdatedAt = page.updatedAt;
       }
 
-      // Translate using AI Gateway
-      let translatedTitle = sourceTitle;
-      let translatedExcerpt = sourceExcerpt || "";
-      const translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase().slice(0, 2)}`;
-
+      // The provider only sees approved text segments, not arbitrary Studio
+      // JSON identifiers/media refs. Invalid or failed output is never saved.
+      const segments = collectTranslatableText(sourceContent);
+      const translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase()}`;
+      const gateway = await getAiGatewayService(req.publicationContext!.publicationId);
+      const glossary = defaultTranslationGlossary.buildGlossaryPromptInstructions(
+        defaultLocale, body.targetLocale,
+      );
+      let translated;
       try {
-        const aiGateway = await getAiGatewayService(req.publicationContext!.publicationId);
-        const targetLocaleName =
-          body.targetLocale === "ar-SA" || body.targetLocale === "ar"
-            ? "Arabic"
-            : body.targetLocale === "fr-FR" || body.targetLocale === "fr"
-              ? "French"
-              : body.targetLocale === "fa-IR" || body.targetLocale === "fa"
-                ? "Persian"
-                : body.targetLocale;
-
-        const glossaryInstructions = defaultTranslationGlossary.buildGlossaryPromptInstructions(
-          defaultLocale,
-          body.targetLocale,
-        );
-
-        const aiResponse = await aiGateway.generate({
+        const response = await gateway.generate({
           task: "translate",
-          prompt: `Title: ${sourceTitle}\nExcerpt: ${sourceExcerpt || ""}${glossaryInstructions}`,
-          targetLanguage: targetLocaleName,
+          targetLanguage: body.targetLocale,
           userId: user.id,
+          prompt: [
+            `Translate from ${defaultLocale} to ${body.targetLocale}.`,
+            "Return only valid JSON with keys title, excerpt, segments.",
+            "Translate every segments value; preserve all segment keys exactly.",
+            "Do not translate identifiers, URLs, source JSON structure or punctuation-only segments.",
+            glossary,
+            JSON.stringify({
+              title: sourceTitle, excerpt: sourceExcerpt || "",
+              segments: Object.fromEntries(segments.map((entry) => [entry.path, entry.text])),
+            }),
+          ].join("\n"),
         });
-
-        if (aiResponse && aiResponse.text) {
-          const lines = aiResponse.text.split("\n").map((l) => l.trim()).filter(Boolean);
-          if (lines[0]) {
-            translatedTitle = lines[0].replace(/^(Title:|العنوان:)/i, "").trim();
-          }
-          if (lines[1]) {
-            translatedExcerpt = lines.slice(1).join("\n").replace(/^(Excerpt:|الملخص:)/i, "").trim();
-          }
-        }
+        translated = parseStructuredTranslation(response?.text ?? "", segments);
       } catch {
-        // Fallback translation stub for offline/test environments
-        translatedTitle =
-          body.targetLocale.startsWith("ar")
-            ? `[ترجمة آلية] ${sourceTitle}`
-            : `[AI ${body.targetLocale}] ${sourceTitle}`;
+        return reply.status(502).send({
+          errors: [{ code: "TRANSLATION_PROVIDER_FAILED",
+            message: "Translation provider did not return a complete translated draft",
+            requestId: req.id }],
+        });
       }
-
-      // Save as reviewable draft with 'needs_review' status (NEVER published directly)
+      const translatedContent = applyStructuredTranslation(sourceContent, translated);
       const translation = await translationService.upsertTranslation({
-        publicationId: req.publicationContext?.publicationId,
+        publicationId: req.publicationContext!.publicationId,
         contentType: type,
         contentId: id,
         sourceLocale: defaultLocale,
         targetLocale: body.targetLocale,
-        title: translatedTitle,
+        title: translated.title,
         slug: translatedSlug,
-        excerpt: translatedExcerpt,
-        content: sourceContent,
+        excerpt: translated.excerpt,
+        content: translatedContent,
         status: "needs_review",
         translationProvider: `ai:${body.provider || "gateway"}`,
         sourceUpdatedAt,
@@ -626,8 +663,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     preHandler: [
       validateOrigin,
       requireStaffSession,
-      requirePermission("translations.edit"),
-    ],
+      requirePermission("translations.edit"),, requireMultilingual],
     handler: async (req, reply) => {
       const user = req.user!;
       const body = (req.body ?? {}) as {
@@ -641,6 +677,27 @@ export async function translationRoutes(fastify: FastifyInstance) {
           error: "Bad Request",
           message: "translationIds array and action are required",
         });
+      }
+
+      if (body.translationIds.length === 0 || body.translationIds.length > 100 ||
+          new Set(body.translationIds).size !== body.translationIds.length ||
+          !["submit_review", "approve", "publish", "mark_stale", "delete"].includes(body.action)) {
+        return reply.status(400).send({ errors: [{
+          code: "VALIDATION_ERROR", message: "Invalid translation bulk request", requestId: req.id,
+        }] });
+      }
+      for (const id of body.translationIds) {
+        if (typeof id !== "string") {
+          return reply.status(400).send({ errors: [{
+            code: "VALIDATION_ERROR", message: "Invalid translation ID", requestId: req.id,
+          }] });
+        }
+        const row = await translationService.getTranslationById(
+          id, req.publicationContext!.publicationId,
+        );
+        if (!row || !(await targetIsEnabled(req, row.targetLocale))) {
+          return localeUnavailable(reply, req.id);
+        }
       }
 
       // Granular action-specific permission enforcement
