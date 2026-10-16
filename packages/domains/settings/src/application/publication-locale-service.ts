@@ -210,11 +210,16 @@ export class PublicationLocaleService {
         }
       }
 
-      // Ambiguous legacy rows must not be normalized by a routine write on a
-      // populated publication. Handle those with an explicit upgrade process.
+      // A primary-vs-legacy semantic conflict needs operator review when
+      // source content exists. Simple metadata repair (e.g. a missing default
+      // flag) may safely proceed without relabeling existing content.
+      const legacyPrimary =
+        typeof legacy?.value === "string" && legacy.value.length > 0
+          ? canonicalPublicationLocale(legacy.value)
+          : null;
       if (
-        current.needsReconciliation &&
-        snapshot.locales.some((row) => row.status === "active") &&
+        legacyPrimary &&
+        legacyPrimary !== storedPrimary &&
         (await this.repository.hasAuthoredContent(publicationId))
       ) {
         throw new PublicationLocaleError(
