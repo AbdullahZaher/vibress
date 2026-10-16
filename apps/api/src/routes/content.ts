@@ -358,7 +358,7 @@ function extractRequestedLocale(
       ? await postsService.findPublishedBySlug(slug, pubId)
       : await pagesService.findPublishedBySlug(slug, pubId);
     if (!source && locale !== site.locale) {
-      const translated = await translationService.findTranslationBySlug(type, locale, slug, pubId);
+      const translated = await translationService.findTranslationBySlug(type, locale, slug, pubId, true);
       if (translated && publiclyVisibleTranslation(translated.status)) {
         source = isPost
           ? await postsService.findById(translated.contentId, pubId)
@@ -437,7 +437,7 @@ function extractRequestedLocale(
         posts.map(async (post) => {
           let mergedPost: any = post;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId);
+            const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId, true);
             if (tr && (publiclyVisibleTranslation(tr.status))) {
               mergedPost = {
                 ...post,
@@ -514,7 +514,7 @@ function extractRequestedLocale(
       if (!post) {
         // Try finding by localized slug
         if (isTranslationRequest) {
-          translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId);
+          translationItem = await translationService.findTranslationBySlug("post", requestedLocale, slug, pubId, true);
         }
 
         if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
@@ -533,6 +533,7 @@ function extractRequestedLocale(
           requestedLocale,
           undefined,
           pubId,
+          true,
         );
 
         if (
@@ -636,7 +637,7 @@ function extractRequestedLocale(
         pages.map(async (pageObj) => {
           let mergedPage: any = pageObj;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId);
+            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId, true);
             if (tr && (publiclyVisibleTranslation(tr.status))) {
               mergedPage = {
                 ...pageObj,
@@ -695,7 +696,7 @@ function extractRequestedLocale(
 
       if (!pageObj) {
         if (isTranslationRequest) {
-          translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId);
+          translationItem = await translationService.findTranslationBySlug("page", requestedLocale, slug, pubId, true);
         }
 
         if (!translationItem || !publiclyVisibleTranslation(translationItem.status)) translationItem = null;
@@ -713,6 +714,7 @@ function extractRequestedLocale(
           requestedLocale,
           undefined,
           pubId,
+          true,
         );
 
         if (
