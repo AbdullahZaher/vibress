@@ -4,6 +4,7 @@ import { AppSidebar } from "./layout/sidebar/AppSidebar";
 import { MobileHeader } from "./layout/MobileHeader";
 import { CommandPalette } from "./layout/CommandPalette";
 import { renderAdminRoute } from "../lib/router";
+import { useAdminLocale } from "../lib/admin-locale";
 
 interface AdminShellProps {
   user: ApiUser;
@@ -21,9 +22,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   can,
 }) => {
   const [darkMode, setDarkMode] = useState(true);
-  const [locale, setLocale] = useState<"en" | "ar">(() => {
-    return (typeof document !== "undefined" && (document.documentElement.lang as "en" | "ar")) || "en";
-  });
+  const { locale } = useAdminLocale();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
@@ -34,12 +33,6 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
-
-  useEffect(() => {
-    const isArabic = locale === "ar";
-    document.documentElement.dir = isArabic ? "rtl" : "ltr";
-    document.documentElement.lang = locale;
-  }, [locale]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -52,10 +45,6 @@ export const AdminShell: React.FC<AdminShellProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const handleToggleLocale = () => {
-    setLocale((prev) => (prev === "ar" ? "en" : "ar"));
-  };
 
   const canPublishPosts = can("posts.publish");
 
@@ -71,7 +60,6 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onNavigate={onNavigate}
         canPublishPosts={canPublishPosts}
         locale={locale}
-        onToggleLocale={handleToggleLocale}
       />
 
       {/* Vibress Modular Sidebar */}
@@ -87,7 +75,6 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onClose={() => setIsSidebarOpen(false)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         locale={locale}
-        onToggleLocale={handleToggleLocale}
       />
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}
