@@ -450,6 +450,27 @@ export function filterEntryDataForVisibility(
  * If a field is defined as localizable: true, its data value can be a dictionary mapping locale -> value
  * or a single fallback value. Also handles resolving localized fields in nested relation data.
  */
+/**
+ * Relation payloads may contain media objects, IDs and arbitrary JSON.
+ * Only treat a nested record as a locale dictionary when its *whole* key set
+ * consists of plausible language tags; don't erase nested metadata on
+ * a strict localized public read.
+ */
+function isLocalizedValueMap(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  if (keys.length === 0) return false;
+  const metadataKeys = new Set([
+    "id", "url", "src", "mime", "type", "name", "label", "slug",
+    "title", "text", "alt", "ref", "value", "data", "children",
+  ]);
+  return keys.every((key) => {
+    if (metadataKeys.has(key.toLowerCase()) ||
+        !/^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$/.test(key)) return false;
+    try { return Intl.getCanonicalLocales(key).length === 1; }
+    catch { return false; }
+  });
+}
+
 export function resolveLocalizedEntryData(
   data: Record<string, unknown>,
   fieldDefs: ContentFieldDefinition[],
@@ -495,7 +516,8 @@ export function resolveLocalizedEntryData(
         // Recursively localize target data fields if any are localized dicts
         const localizedTargetData: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(relObj.data as Record<string, unknown>)) {
-          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+          if (typeof v === "object" && v !== null && !Array.isArray(v) &&
+              isLocalizedValueMap(v as Record<string, unknown>)) {
             const d = v as Record<string, unknown>;
             const normalizedD = Object.fromEntries(
               Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
@@ -528,7 +550,8 @@ export function resolveLocalizedEntryData(
           if (itemObj.data && typeof itemObj.data === "object" && !Array.isArray(itemObj.data)) {
             const localizedTargetData: Record<string, unknown> = {};
             for (const [k, v] of Object.entries(itemObj.data as Record<string, unknown>)) {
-              if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+              if (typeof v === "object" && v !== null && !Array.isArray(v) &&
+                  isLocalizedValueMap(v as Record<string, unknown>)) {
                 const d = v as Record<string, unknown>;
                 const normalizedD = Object.fromEntries(
                   Object.entries(d).map(([key, value]) => [key.toLowerCase(), value]),
