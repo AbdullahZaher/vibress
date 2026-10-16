@@ -243,7 +243,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <div className="flex items-center gap-1.5">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <button
-              key={t}
+              key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
               onClick={() => setAnalyticsTab(t)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer capitalize ${
                 analyticsTab === t
@@ -311,7 +311,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {data.summary.members.toLocaleString()}
+                          {data.summary.members.toLocaleString(locale)}
                         </span>
                         <ChangeBadge change={data.comparison.members} />
                       </div>
@@ -341,7 +341,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {totalVisitors.toLocaleString()}
+                          {totalVisitors.toLocaleString(locale)}
                         </span>
                         <ChangeBadge change={data.comparison.visitors} />
                       </div>
@@ -401,7 +401,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                         <Eye className="h-4 w-4 text-emerald-500" />
                         <span>{tr("Views")}</span>
                         <span className="font-bold text-foreground text-sm ms-auto tabular-nums">
-                          {data.latestPost.views.toLocaleString()}
+                          {data.latestPost.views.toLocaleString(locale)}
                         </span>
                       </div>
                     </div>
@@ -474,7 +474,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Total views ({formatCompact(totalViews)})
+                    {tr("Total views")} ({formatCompact(totalViews)})
                   </button>
                   <button
                     onClick={() => setTrafficMetric("visitors")}
@@ -484,7 +484,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Unique visitors ({formatCompact(totalVisitors)})
+                    {tr("Unique visitors")} ({formatCompact(totalVisitors)})
                   </button>
                 </div>
 
@@ -500,12 +500,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground">
-                      Top Content
+                      {tr("Top Content")}
                     </h3>
                     <div className="flex items-center gap-1">
                       {(["all", "posts", "pages"] as const).map((t) => (
                         <button
-                          key={t}
+                          key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
                           onClick={() => setTopContentType(t)}
                           className={`px-2.5 py-1 rounded-md text-[11px] transition-all cursor-pointer capitalize ${
                             topContentType === t
@@ -513,7 +513,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                               : "text-muted-foreground hover:text-foreground font-medium"
                           }`}
                         >
-                          {t}
+                          {tr(t.charAt(0).toUpperCase() + t.slice(1))}
                         </button>
                       ))}
                     </div>
@@ -532,7 +532,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                               {item.path}
                             </span>
                             <span className="font-mono text-muted-foreground shrink-0">
-                              {item.views.toLocaleString()} views
+                              {item.views.toLocaleString(locale)} {tr("views")}
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
@@ -553,10 +553,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-foreground">
-                      Top Sources
+                      {tr("Top Sources")}
                     </h3>
                     <span className="text-[11px] text-muted-foreground font-mono">
-                      Referrals
+                      {tr("Referrals")}
                     </span>
                   </div>
 
@@ -576,7 +576,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                             {r.name}
                           </span>
                           <span className="font-mono text-muted-foreground">
-                            {r.views.toLocaleString()}
+                            {r.views.toLocaleString(locale)}
                           </span>
                         </div>
                       ))}
@@ -593,7 +593,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
-                    Average Open Rate
+                    {tr("Average Open Rate")}
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.newsletter.openRate.toFixed(1)}%
@@ -601,7 +601,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </Card>
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
-                    Average Click Rate
+                    {tr("Average Click Rate")}
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.newsletter.clickRate.toFixed(1)}%
@@ -609,10 +609,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </Card>
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
-                    Total Emails Sent
+                    {tr("Total Emails Sent")}
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
-                    {data.newsletter.sent.toLocaleString()}
+                    {data.newsletter.sent.toLocaleString(locale)}
                   </div>
                 </Card>
               </div>
@@ -625,18 +625,18 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
-                    Total Free Members
+                    {tr("Total Free Members")}
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
-                    {data.growth.freeMembers.toLocaleString()}
+                    {data.growth.freeMembers.toLocaleString(locale)}
                   </div>
                 </Card>
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
-                    Total Paid Members
+                    {tr("Total Paid Members")}
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
-                    {data.growth.paidMembers.toLocaleString()}
+                    {data.growth.paidMembers.toLocaleString(locale)}
                   </div>
                 </Card>
               </div>
