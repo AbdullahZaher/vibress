@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   apiRequest,
@@ -89,6 +90,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -970,8 +972,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             <textarea
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="Post Title"
-              aria-label="Post Title"
+              placeholder={tr("Post Title")}
+              aria-label={tr("Post Title")}
               className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground"
               rows={1}
               onInput={(e) => {
