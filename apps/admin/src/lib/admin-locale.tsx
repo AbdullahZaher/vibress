@@ -2,6 +2,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
   type ReactNode,
 } from "react";
+import { getPublicationLocalesApi } from "./api/operations";
 
 type AdminUiLocale = "en" | "ar";
 interface AdminLocaleContext {
@@ -145,6 +146,16 @@ export function AdminLocaleProvider({ children }: { children: ReactNode }) {
     setLocale(normalize(value));
   }, []);
   const refresh = useCallback(async () => {
+    // Authenticated staff may be editing a different publication than the
+    // public host's default. Prefer the staff-scoped and permission-checked
+    // configuration; use public site identity only on the login/setup shell.
+    try {
+      const config = await getPublicationLocalesApi();
+      setLocale(normalize(config.primaryLocale));
+      return;
+    } catch {
+      // Anonymous login, first-run setup, or staff without settings.read.
+    }
     try {
       const response = await fetch("/api/content/v1/site", {
         credentials: "same-origin", cache: "no-store",
