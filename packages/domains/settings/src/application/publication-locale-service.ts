@@ -92,7 +92,25 @@ export class PublicationLocaleService {
       throw new PublicationLocaleError("PUBLICATION_NOT_FOUND", "Publication not found");
     }
     const legacy = await this.settings.get("site", "locale", publicationId);
-    return this.resolve(snapshot, legacy?.value);
+    const current = this.resolve(snapshot, legacy?.value);
+    if (snapshot.locales.length === 0) {
+      // Upgrade bridge: retain URLs that were genuinely published before
+      // locale enablement was modeled, without persisting inferred state.
+      // Draft/approved rows do not enable a locale; require reconciliation.
+      const published = await this.repository.listPublicTranslationLocales(publicationId);
+      const legacyPublished = [...new Set(published.map(canonicalPublicationLocale))]
+        .filter((locale) => locale !== current.primaryLocale);
+      if (legacyPublished.length) {
+        const enabledLocales = [...current.enabledLocales, ...legacyPublished];
+        return {
+          ...current,
+          enabledLocales,
+          isMultilingual: enabledLocales.length > 1,
+          needsReconciliation: true,
+        };
+      }
+    }
+    return current;
   }
 
   /**
