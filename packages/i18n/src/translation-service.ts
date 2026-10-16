@@ -41,7 +41,7 @@ export class TranslationService {
     const sourceUpdated = r.sourceUpdatedAtTranslation ?? new Date();
 
     if (r.contentType === "post") {
-      const srcRows = await db.select().from(posts).where(eq(posts.id, r.contentId)).limit(1);
+      const srcRows = await db.select().from(posts).where(and(eq(posts.id, r.contentId), eq(posts.publicationId, r.publicationId))).limit(1);
       if (srcRows[0] && r.sourceUpdatedAtTranslation) {
         if (srcRows[0].updatedAt.getTime() > r.sourceUpdatedAtTranslation.getTime()) {
           const changed: string[] = ["title", "body"];
@@ -61,7 +61,7 @@ export class TranslationService {
         }
       }
     } else if (r.contentType === "page") {
-      const srcRows = await db.select().from(pages).where(eq(pages.id, r.contentId)).limit(1);
+      const srcRows = await db.select().from(pages).where(and(eq(pages.id, r.contentId), eq(pages.publicationId, r.publicationId))).limit(1);
       if (srcRows[0] && r.sourceUpdatedAtTranslation) {
         if (srcRows[0].updatedAt.getTime() > r.sourceUpdatedAtTranslation.getTime()) {
           const changed: string[] = ["title", "body"];
