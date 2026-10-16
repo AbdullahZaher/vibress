@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
+import { usePublicationLocales } from "../../lib/usePublicationLocales";
 import {
   fetchTranslationDetail,
   createContentTranslation,
@@ -56,10 +57,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   translationId: initialTranslationId,
   contentType = "post",
   contentId,
-  targetLocale = "ar-SA",
+  targetLocale,
   onNavigate,
   canPublish = true,
 }) => {
+  const { data: localePolicy } = usePublicationLocales();
   const queryClient = useQueryClient();
   const [currentTranslationId, setCurrentTranslationId] = useState<string | undefined>(
     initialTranslationId,
