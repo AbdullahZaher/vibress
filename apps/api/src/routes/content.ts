@@ -486,6 +486,7 @@ function extractRequestedLocale(
             validTags,
             mediaService,
             commentCounts.get(post.id) ?? 0,
+            { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
           );
         }),
       );
@@ -612,6 +613,7 @@ function extractRequestedLocale(
         validTags,
         mediaService,
         commentCounts.get(post.id) ?? 0,
+        { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
       );
       return reply.status(200).send({ post: postDetail, locale: requestedLocale });
     },
@@ -684,7 +686,10 @@ function extractRequestedLocale(
               return null;
             }
           }
-          return buildPublicPageDetailDto(mergedPage, mediaService);
+          return buildPublicPageDetailDto(
+            mergedPage, mediaService,
+            { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
+          );
         }),
       );
 
@@ -791,7 +796,10 @@ function extractRequestedLocale(
           }
         : pageObj;
 
-      const pageDetail = await buildPublicPageDetailDto(mergedPage, mediaService);
+      const pageDetail = await buildPublicPageDetailDto(
+        mergedPage, mediaService,
+        { locale: requestedLocale, primaryLocale: site.locale, enabledLocales: site.enabledLocales },
+      );
       return reply.status(200).send({ page: pageDetail, locale: requestedLocale });
     },
   });
