@@ -59,7 +59,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
     const config = await publicationLocaleService.getConfiguration(
       req.publicationContext!.publicationId,
     );
-    return config.isMultilingual && target !== config.primaryLocale &&
+    return config.isMultilingual && !config.needsReconciliation && target !== config.primaryLocale &&
       config.enabledLocales.includes(target);
   }
 
