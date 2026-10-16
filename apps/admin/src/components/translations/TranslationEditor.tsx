@@ -98,6 +98,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     enabled: Boolean(currentTranslationId),
   });
 
+  const sourceLocale = detailData?.translation?.sourceLocale || localePolicy?.primaryLocale || "en";
   const targetLocale = detailData?.translation?.targetLocale ||
     suppliedTargetLocale ||
     localePolicy?.enabledLocales.find((locale) => locale !== localePolicy.primaryLocale) ||
@@ -169,7 +170,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const targetMeta = LOCALE_META[targetLocale] || {
     name: targetLocale,
     native: targetLocale,
-    dir: "ltr",
+    dir: targetLocale ? getDirection(targetLocale) : "ltr",
   };
   const isTargetRtl = targetLocale ? getDirection(targetLocale) === "rtl" : false;
 
@@ -179,15 +180,39 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
       setErrorMsg(null);
       setSuccessMsg(null);
 
+      const bodyText = targetBody.trim();
+      let content: Record<string, unknown>;
+      if (!bodyText) {
+        content = {};
+      } else if (bodyText.startsWith("{")) {
+        const decoded: unknown = JSON.parse(bodyText);
+        if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+          throw new Error("Translated document must be a valid JSON object");
+        }
+        content = decoded as Record<string, unknown>;
+      } else {
+        // Plain-text translation remains a valid Studio document; never
+        // replace a persisted structured document with { body: "..." }.
+        content = {
+          schema: "vibress-studio", version: 1,
+          root: {
+            type: "root",
+            children: [{
+              type: "paragraph",
+              children: [{ type: "text", text: targetBody }],
+            }],
+          },
+        };
+      }
       const payload = {
         targetLocale,
         title: targetTitle,
         slug: targetSlug || `${sourceItem?.slug || "item"}-${targetLocale.slice(0, 2)}`,
         excerpt: targetExcerpt,
-        content: { body: targetBody },
+        content,
         metaTitle,
         metaDescription,
-        status: targetStatus || status,
+        status: currentTranslationId ? status : "draft",
       };
 
       if (currentTranslationId) {
@@ -214,7 +239,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("needs_review");
+      const saved = await saveMutation.mutateAsync();
       const targetId = saved?.id || currentTranslationId;
       if (!targetId) throw new Error("Could not determine translation identifier");
       const res = await submitTranslationForReview(targetId);
@@ -323,7 +348,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               <TranslationBadge status={status as any} isStale={isStale} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Source ({localePolicy?.primaryLocale || "—"}) ➔ Target ({targetMeta.native} / {targetLocale})
+              Source ({sourceLocale}) ➔ Target ({targetMeta.native} / {targetLocale})
             </p>
           </div>
         </div>
@@ -333,7 +358,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => saveMutation.mutate("draft")}
+            onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             className="gap-1.5 cursor-pointer text-xs"
           >
@@ -491,7 +516,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               : "text-muted-foreground"
           }`}
         >
-          Source (English)
+          Source ({sourceLocale})
         </button>
         <button
           type="button"
@@ -524,11 +549,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   </CardTitle>
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-                  LTR • Read-Only
+                  {getDirection(sourceLocale).toUpperCase()} • Read-Only
                 </span>
               </div>
             </CardHeader>
-            <CardContent className="p-4 space-y-4 text-left" dir="ltr">
+            <CardContent className="p-4 space-y-4 text-left" dir={getDirection(sourceLocale)}>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase">
                   Source Title
