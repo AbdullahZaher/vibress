@@ -220,7 +220,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
               <LocalizationCard
                 locale={general.settings.locale}
                 timezone={general.settings.timezone}
-                onSaved={() => void general.reload()}
+                onSaved={(primaryLocale) => general.syncSavedLocale(primaryLocale)}
                 onChange={(key, val) => general.updateField(key, val)}
                 isHighlighted={highlightedCardId === "localization"}
               />
