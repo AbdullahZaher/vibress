@@ -134,6 +134,43 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.get("/legacy-translation/resolve", {
+    handler: async (req, reply) => {
+      const parsed = PublicLegacyTranslationRedirectSchema.safeParse(req.query);
+      if (!parsed.success) return reply.status(400).send({ errors: [{
+        code: "VALIDATION_ERROR", message: "Invalid locale lookup", requestId: req.id,
+      }] });
+      const publicationId = req.publicationContext!.publicationId;
+      const policy = await publicationLocaleService.getConfiguration(publicationId);
+      const translation = await translationService.findTranslationBySlugAny(
+        parsed.data.type, parsed.data.slug, publicationId,
+      );
+      if (!translation || translation.status !== "published" ||
+          translation.targetLocale === policy.primaryLocale ||
+          !policy.enabledLocales.includes(translation.targetLocale)) {
+        return reply.status(404).send({ errors: [{
+          code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
+        }] });
+      }
+      const source = parsed.data.type === "post"
+        ? await postsService.findById(translation.contentId, publicationId)
+        : await pagesService.findById(translation.contentId, publicationId);
+      if (!source || source.status !== "published" ||
+          source.visibility !== "public" || source.deletedAt) {
+        return reply.status(404).send({ errors: [{
+          code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
+        }] });
+      }
+      const localePrefix = getLocalePrefix(
+        translation.targetLocale, policy.primaryLocale, policy.enabledLocales,
+      );
+      const pathType = parsed.data.type === "post" ? "posts" : "pages";
+      return reply.send({
+        path: `${localePrefix}/${pathType}/${encodeURIComponent(translation.slug)}`,
+      });
+    },
+  });
+
   // Host-authoritative public redirect resolution. Never accept a tenant ID
   // from a URL or request header as authorization.
   fastify.get("/redirects/resolve", {
