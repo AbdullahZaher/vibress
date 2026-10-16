@@ -6,7 +6,6 @@ import { useAuth } from "../../hooks/useAuth";
 import { getDirection } from "@vibress/i18n";
 import {
   fetchContentTranslations,
-  fetchTranslationMatrix,
   aiTranslateContent,
 } from "../../lib/api";
 import { TranslationBadge } from "./TranslationBadge";
@@ -50,13 +49,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
   const canCreate = can("translations.create");
   const [aiLoadingLocale, setAiLoadingLocale] = useState<string | null>(null);
 
-  // 1. Fetch enabled publication locales
-  const { data: matrixData } = useQuery({
-    queryKey: adminQueryKeys.translations.matrix({ limit: 1 }),
-    queryFn: () => fetchTranslationMatrix({ limit: 1 }),
-    enabled: canRead && localePolicy?.isMultilingual === true,
-  });
-
+  // Locale policy is already loaded from the scoped staff context.
   // 2. Fetch existing translations for this content
   const { data: trData, isLoading } = useQuery({
     queryKey: adminQueryKeys.translations.content(contentType, contentId),
