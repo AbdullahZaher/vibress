@@ -104,7 +104,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   const handleVerifyKey = async () => {
     if (!setupKey.trim()) {
       setError(
-        "Enter the setup key provided in your environment configuration.",
+        tr("Enter the setup key provided in your environment configuration."),
       );
       return;
     }
@@ -127,13 +127,13 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
       const code = (err as Error & { code?: string }).code;
       if (code === "INVALID_SETUP_TOKEN") {
         setError(
-          "Invalid setup key. Check VIBRESS_SETUP_TOKEN in your environment.",
+          tr("Invalid setup key. Check VIBRESS_SETUP_TOKEN in your environment."),
         );
       } else {
         setError(
           err instanceof Error
             ? err.message
-            : "Could not reach the server. Is the API running?",
+            : tr("Could not reach the server. Is the API running?"),
         );
       }
     } finally {
@@ -142,26 +142,26 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
   };
 
   const validateSite = (): string | null => {
-    if (!siteName.trim()) return "Site name is required.";
+    if (!siteName.trim()) return tr("Site name is required.");
     if (siteName.trim().length > 120)
-      return "Site name must be 120 characters or fewer.";
+      return tr("Site name must be 120 characters or fewer.");
     if (siteDescription.trim().length > 500)
-      return "Site description must be 500 characters or fewer.";
+      return tr("Site description must be 500 characters or fewer.");
     if (siteTagline.trim().length > 200)
-      return "Tagline must be 200 characters or fewer.";
+      return tr("Tagline must be 200 characters or fewer.");
     return null;
   };
 
   const validateOwner = (): string | null => {
-    if (!ownerName.trim()) return "Full name is required.";
+    if (!ownerName.trim()) return tr("Full name is required.");
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail.trim());
-    if (!emailOk) return "Enter a valid email address.";
+    if (!emailOk) return tr("Enter a valid email address.");
     if (ownerPassword.length < 12)
-      return "Password must be at least 12 characters.";
+      return tr("Password must be at least 12 characters.");
     if (ownerPassword.length > 128)
-      return "Password must be 128 characters or fewer.";
+      return tr("Password must be 128 characters or fewer.");
     if (ownerPassword !== ownerPasswordConfirm)
-      return "Passwords do not match.";
+      return tr("Passwords do not match.");
     return null;
   };
 
@@ -211,7 +211,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
       setError(
         err instanceof Error
           ? err.message
-          : "Installation failed. Please try again.",
+          : tr("Installation failed. Please try again."),
       );
       setStep("owner");
     } finally {
