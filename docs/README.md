@@ -4,6 +4,15 @@ Vibress is a modern publishing, membership, newsletter, analytics, and extensibi
 
 The system is designed as a **TypeScript modular monolith** with strong domain boundaries, a separate editor product called **Vibress Studio**, and a plugin ecosystem for storage, integrations, editor extensions, analytics, and payments.
 
+## Canonical publication language policy (accepted; implementation pending)
+
+- **Authoritative product/architecture decision:** [Single language by default; publication-scoped localization](14-decisions/publication-language-policy.md).
+- **Engineering rollout:** [Localization Policy Implementation Plan](development/LOCALIZATION_POLICY_IMPLEMENTATION_PLAN.md) (T1–T6, compatibility and release gates).
+- **Owner documentation:** [Language Configuration Guide](administration/LANGUAGE_CONFIGURATION_GUIDE.md) · [الدليل العربي لإعداد اللغات](administration/LANGUAGE_CONFIGURATION_GUIDE.ar.md).
+- **Translation workflow:** [Staff Handbook](administration/TRANSLATION_WORKFLOW_GUIDE.md).
+
+This policy is **adopted as the target contract**, not yet implemented or certified. Historical localization reports retain their original results and must not be interpreted as verification of the new single-language-by-default behavior.
+
 ## Core principles
 
 1. **Modular monolith first**
