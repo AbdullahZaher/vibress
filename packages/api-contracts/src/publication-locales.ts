@@ -20,20 +20,28 @@ export const UpdatePublicationLocalesSchema = z.object({
   primaryLocale: PublicationLocaleTagSchema,
   enabledLocales: z.array(PublicationLocaleTagSchema).min(1).max(20),
 }).strict().superRefine((value, context) => {
-  const primary = Intl.getCanonicalLocales(value.primaryLocale)[0];
-  const canonical = value.enabledLocales.map((locale) => Intl.getCanonicalLocales(locale)[0]);
-  if (!canonical.includes(primary)) {
+  try {
+    const primary = Intl.getCanonicalLocales(value.primaryLocale)[0];
+    const canonical = value.enabledLocales.map((locale) => Intl.getCanonicalLocales(locale)[0]);
+    if (!canonical.includes(primary)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enabledLocales"],
+        message: "Enabled languages must include the primary language",
+      });
+    }
+    if (new Set(canonical).size !== canonical.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enabledLocales"],
+        message: "Languages must be unique",
+      });
+    }
+  } catch {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["enabledLocales"],
-      message: "Enabled languages must include the primary language",
-    });
-  }
-  if (new Set(canonical).size !== canonical.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["enabledLocales"],
-      message: "Languages must be unique",
+      message: "Invalid language tag",
     });
   }
 });
