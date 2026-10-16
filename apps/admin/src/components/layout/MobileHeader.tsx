@@ -1,4 +1,5 @@
 import React from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { Menu, Sun, Moon, Search, Plus } from "lucide-react";
 import vibressLogo from "../../assets/images/vibress-logo.png";
 
@@ -25,6 +26,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   locale = 'en',
   onToggleLocale,
 }) => {
+  const { tr } = useAdminLocale();
   // Derive a human-friendly title for the top header based on the current path
   const getPageTitle = () => {
     if (currentPath === "/admin" || currentPath === "/admin/")
@@ -63,8 +65,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           type="button"
           onClick={onToggleSidebar}
           className="flex size-9 items-center justify-center rounded-lg border border-border/80 bg-muted/40 text-foreground hover:bg-muted transition-colors cursor-pointer"
-          aria-label="Toggle navigation menu"
-          title="Open menu"
+          aria-label={tr("Toggle navigation menu")}
+          title={tr("Open menu")}
         >
           <Menu className="h-4 w-4" />
         </button>
@@ -79,7 +81,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             className="h-5 w-auto object-contain"
           />
           <span className="font-semibold text-sm tracking-tight text-foreground truncate max-w-[120px]">
-            {getPageTitle()}
+            {tr(getPageTitle())}
           </span>
         </div>
       </div>
@@ -91,8 +93,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             type="button"
             onClick={() => onNavigate("/admin/posts/new")}
             className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
-            title="Create new post"
-            aria-label="Create new post"
+            title={tr("Create new post")}
+            aria-label={tr("Create new post")}
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -103,7 +105,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           onClick={onOpenCommandPalette}
           className="flex size-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           title="Search / Command Palette"
-          aria-label="Search"
+          aria-label={tr("Search")}
         >
           <Search className="h-4 w-4" />
         </button>
@@ -124,8 +126,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           type="button"
           onClick={onToggleDarkMode}
           className="flex size-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-          title="Toggle theme"
-          aria-label="Toggle theme"
+          title={tr("Toggle theme")}
+          aria-label={tr("Toggle theme")}
         >
           {darkMode ? (
             <Sun className="h-3.5 w-3.5 text-amber-400" />
