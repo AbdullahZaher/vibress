@@ -22,7 +22,8 @@ export function collectTranslatableText(content: Record<string, unknown>): TextS
       for (const [key, child] of Object.entries(value)) {
         const childPath = path + "/" + key.replace(/~/g, "~0").replace(/\//g, "~1");
         if (
-          (key === "text" || key === "caption" || key === "alt") &&
+          (key === "text" || key === "caption" || key === "alt" ||
+            (key === "body" && path === "")) &&
           typeof child === "string" &&
           child.trim().length > 0
         ) {
@@ -95,8 +96,10 @@ export function applyStructuredTranslation(
       }
     }
     const final = components.at(-1);
-    if (!final || !["text", "caption", "alt"].includes(final) ||
-        !jsonObject(current) || typeof current[final] !== "string") {
+    if (!final || !(
+      ["text", "caption", "alt"].includes(final) ||
+      (final === "body" && components.length === 1)
+    ) || !jsonObject(current) || typeof current[final] !== "string") {
       throw new Error("Translation attempted to change a non-translatable field");
     }
     current[final] = text;
