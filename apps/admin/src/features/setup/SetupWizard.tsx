@@ -19,6 +19,7 @@ import {
   Rocket,
 } from "lucide-react";
 import { fetchSetupPreflight, completeSetup, SetupPreflight } from "./lib";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 type Step = "welcome" | "site" | "owner" | "ready";
 
@@ -50,6 +51,7 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 function StepHeader({ step }: { step: Step }) {
+  const { tr } = useAdminLocale();
   const labels: Record<Step, string> = {
     welcome: "Welcome",
     site: "Your site",
@@ -62,13 +64,14 @@ function StepHeader({ step }: { step: Step }) {
         <Rocket className="h-5 w-5" />
       </div>
       <h1 className="text-2xl font-black tracking-tight text-foreground">
-        {labels[step]}
+        {tr(labels[step])}
       </h1>
     </div>
   );
 }
 
 export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
+  const { tr, setPublicationLanguage } = useAdminLocale();
   const [step, setStep] = useState<Step>("welcome");
   const [setupKey, setSetupKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -225,12 +228,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-base font-bold">
-                First-run setup
+                {tr("First-run setup")}
               </CardTitle>
               <CardDescription className="text-xs">
-                Welcome to Vibress. This instance has not been installed yet.
-                Enter your setup key to begin, and we'll check that everything
-                is ready.
+                {tr("Welcome to Vibress. This instance has not been installed yet. Enter your setup key to begin, and we'll check that everything is ready.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -240,7 +241,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="setup-key"
                   className="text-xs font-medium text-foreground"
                 >
-                  Setup key
+                  {tr("Setup key")}
                 </label>
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -260,7 +261,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
               {readiness && (
                 <div
                   className="rounded-lg border border-border p-3 space-y-1.5 text-xs"
-                  aria-label="System readiness"
+                  aria-label={tr("System readiness")}
                 >
                   {(["database", "redis", "configuration"] as const).map(
                     (key) => (
@@ -297,7 +298,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                 ) : (
                   <ArrowRight className="h-4 w-4" />
                 )}
-                {isLoading ? "Checking…" : "Continue"}
+                {isLoading ? tr("Checking…") : tr("Continue")}
               </Button>
             </CardFooter>
           </Card>
@@ -307,11 +308,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-base font-bold">
-                About your site
+                {tr("About your site")}
               </CardTitle>
               <CardDescription className="text-xs">
-                Give your site a name and description. You can change these
-                later from Settings.
+                {tr("Give your site a name and description. You can change these later from Settings.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -321,13 +321,13 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="site-name"
                   className="text-xs font-medium text-foreground"
                 >
-                  Site name
+                  {tr("Site name")}
                 </label>
                 <Input
                   id="site-name"
                   value={siteName}
                   onChange={(e) => setSiteName(e.target.value)}
-                  placeholder="My Vibress site"
+                  placeholder={tr("My Vibress site")}
                 />
               </div>
               <div className="space-y-1">
@@ -336,13 +336,13 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   className="text-xs font-medium text-foreground"
                 >
                   Tagline{" "}
-                  <span className="text-muted-foreground">(optional)</span>
+                  <span className="text-muted-foreground">{tr("(optional)")}</span>
                 </label>
                 <Input
                   id="site-tagline"
                   value={siteTagline}
                   onChange={(e) => setSiteTagline(e.target.value)}
-                  placeholder="Short tagline"
+                  placeholder={tr("Short tagline")}
                 />
               </div>
               <div className="space-y-1">
@@ -350,13 +350,13 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="site-description"
                   className="text-xs font-medium text-foreground"
                 >
-                  Description
+                  {tr("Description")}
                 </label>
                 <textarea
                   id="site-description"
                   value={siteDescription}
                   onChange={(e) => setSiteDescription(e.target.value)}
-                  placeholder="What is your site about?"
+                  placeholder={tr("What is your site about?")}
                   rows={3}
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
@@ -366,7 +366,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="site-locale"
                   className="text-xs font-medium text-foreground"
                 >
-                  Primary language / اللغة الأساسية
+                  {tr("Primary language")}
                 </label>
                 <select
                   id="site-locale"
@@ -374,6 +374,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   onChange={(e) => {
                     const next = e.target.value;
                     setSiteLocale(next);
+                    setPublicationLanguage(next);
                     setAdditionalLocales((prev) => prev.filter((loc) => loc !== next));
                   }}
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -385,17 +386,15 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   ))}
                 </select>
                 <p className="text-[11px] text-muted-foreground">
-                  Only English and Arabic currently have primary Admin language support.
-                  The publication starts with this language alone.
+                  {tr("Only English and Arabic currently have primary Admin language support. The publication starts with this language alone.")}
                 </p>
               </div>
               <fieldset className="space-y-2" aria-describedby="additional-language-help">
                 <legend className="text-xs font-semibold text-foreground">
-                  Additional content languages (optional) / لغات محتوى إضافية
+                  {tr("Additional content languages")}
                 </legend>
                 <p id="additional-language-help" className="text-xs text-muted-foreground">
-                  Adding a second language enables Translation tools after setup.
-                  Content is never translated automatically.
+                  {tr("Adding a second language enables Translation tools after setup. Content is never translated automatically.")}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {LOCALES.filter((language) => language.value !== siteLocale).map((language) => (
@@ -412,11 +411,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   ))}
                 </div>
               </fieldset>
-              </div>
             </CardContent>
             <CardFooter className="flex justify-between pt-2">
               <Button variant="ghost" onClick={() => go("welcome")}>
-                <ArrowLeft className="h-4 w-4" /> Back
+                <ArrowLeft className="h-4 w-4" /> {tr("Back")}
               </Button>
               <Button
                 onClick={() => {
@@ -428,7 +426,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   go("owner");
                 }}
               >
-                Continue <ArrowRight className="h-4 w-4" />
+                {tr("Continue")} <ArrowRight className="h-4 w-4" />
               </Button>
             </CardFooter>
           </Card>
@@ -438,11 +436,10 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
           <Card className="border border-border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-base font-bold">
-                Create the owner account
+                {tr("Create the owner account")}
               </CardTitle>
               <CardDescription className="text-xs">
-                This will be the site owner with full administrative access.
-                You'll sign in with these credentials.
+                {tr("This will be the site owner with full administrative access. You'll sign in with these credentials.")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -452,7 +449,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="owner-name"
                   className="text-xs font-medium text-foreground"
                 >
-                  Full name
+                  {tr("Full name")}
                 </label>
                 <Input
                   id="owner-name"
@@ -466,7 +463,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="owner-email"
                   className="text-xs font-medium text-foreground"
                 >
-                  Email
+                  {tr("Email")}
                 </label>
                 <div className="relative">
                   <UserRound className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -485,7 +482,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="owner-password"
                   className="text-xs font-medium text-foreground"
                 >
-                  Password
+                  {tr("Password")}
                 </label>
                 <Input
                   id="owner-password"
@@ -495,7 +492,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   autoComplete="new-password"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  At least 12 characters.
+                  {tr("At least 12 characters.")}
                 </p>
               </div>
               <div className="space-y-1">
@@ -503,7 +500,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   htmlFor="owner-password-confirm"
                   className="text-xs font-medium text-foreground"
                 >
-                  Confirm password
+                  {tr("Confirm password")}
                 </label>
                 <Input
                   id="owner-password-confirm"
@@ -516,7 +513,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
             </CardContent>
             <CardFooter className="flex justify-between pt-2">
               <Button variant="ghost" onClick={() => go("site")}>
-                <ArrowLeft className="h-4 w-4" /> Back
+                <ArrowLeft className="h-4 w-4" /> {tr("Back")}
               </Button>
               <Button
                 onClick={() => {
@@ -529,7 +526,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   handleInstall();
                 }}
               >
-                Install Vibress <Rocket className="h-4 w-4" />
+                {tr("Install Vibress")} <Rocket className="h-4 w-4" />
               </Button>
             </CardFooter>
           </Card>
@@ -545,7 +542,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                     className="text-sm text-muted-foreground"
                     aria-live="polite"
                   >
-                    Setting up Vibress…
+                    {tr("Setting up Vibress…")}
                   </p>
                 </>
               ) : error ? (
@@ -554,7 +551,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                 <>
                   <CheckCircle2 className="h-10 w-10 mx-auto text-green-600 dark:text-green-400" />
                   <p className="text-base font-semibold" role="status">
-                    Vibress is ready.
+                    {tr("Vibress is ready.")}
                   </p>
                 </>
               )}
