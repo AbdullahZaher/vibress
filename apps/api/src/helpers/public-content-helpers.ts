@@ -267,9 +267,9 @@ export async function buildPublicPostSummaryDto(
   const formattedTags = (tags || []).map(formatPublicTag);
 
   const excerpt = deriveExcerpt(post.excerpt, post.content);
-  const postWithLocale = post as Post & { locale?: string; direction?: string };
+  const postWithLocale = post as Post & { locale?: string };
   const postLocale = localeContext?.locale ?? postWithLocale.locale ?? "en";
-  const postDirection = postWithLocale.direction ?? getDirection(postLocale);
+  const postDirection = getDirection(postLocale);
   const localePrefix = getLocalePrefix(
     postLocale, localeContext?.primaryLocale ?? "en",
     localeContext?.enabledLocales ?? [],
@@ -367,9 +367,9 @@ export async function buildPublicPageDetailDto(
   const siteUrl = getSiteUrl();
 
   const excerpt = deriveExcerpt(page.excerpt, page.content);
-  const pageWithLocale = page as Page & { locale?: string; direction?: string };
+  const pageWithLocale = page as Page & { locale?: string };
   const pageLocale = localeContext?.locale ?? pageWithLocale.locale ?? "en";
-  const pageDirection = pageWithLocale.direction ?? getDirection(pageLocale);
+  const pageDirection = getDirection(pageLocale);
   const localePrefix = getLocalePrefix(
     pageLocale, localeContext?.primaryLocale ?? "en",
     localeContext?.enabledLocales ?? [],
