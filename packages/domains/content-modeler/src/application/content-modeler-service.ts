@@ -1338,12 +1338,13 @@ export class ContentModelerService {
     model: ContentModel,
     userRole: "public" | "authenticated" | "staff_admin" = "public",
     locale?: string,
+    fallbackLocale = "en",
   ): PublicContentEntryDto {
     let rawData = entry.data;
 
     // Apply localization if requested
     if (locale) {
-      rawData = resolveLocalizedEntryData(rawData, model.fields, locale, "en");
+      rawData = resolveLocalizedEntryData(rawData, model.fields, locale, fallbackLocale);
     }
 
     // Filter fields according to API visibility rules
