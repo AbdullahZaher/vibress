@@ -650,6 +650,54 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   describe("Published translation protection", () => {
+    it("never exposes a future-dated source through a published localized slug", async () => {
+      const sourceId = randomUUID();
+      const translationId = randomUUID();
+      const sourceSlug = `future-source-${sourceId.slice(0, 8)}`;
+      const translatedSlug = `future-translation-${translationId.slice(0, 8)}`;
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.insert(posts).values({
+        id: sourceId,
+        publicationId: "pub_default",
+        title: "Future Source",
+        slug: sourceSlug,
+        content: { version: 1, root: {} },
+        status: "published",
+        visibility: "public",
+        publishedAt: future,
+        primaryAuthorId: ownerId,
+        createdBy: ownerId,
+        updatedBy: ownerId,
+      });
+      await db.insert(contentTranslations).values({
+        id: translationId,
+        publicationId: "pub_default",
+        contentType: "post",
+        contentId: sourceId,
+        sourceLocale: "en",
+        targetLocale: "ar-SA",
+        title: "مقال مستقبلي",
+        slug: translatedSlug,
+        status: "published",
+        content: { version: 1, root: {} },
+      });
+      try {
+        const localized = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/posts/${translatedSlug}?locale=ar-SA`,
+        });
+        expect(localized.statusCode).toBe(404);
+        const legacy = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/legacy-translation/resolve?type=post&slug=${translatedSlug}`,
+        });
+        expect(legacy.statusCode).toBe(404);
+      } finally {
+        await db.delete(contentTranslations).where(eq(contentTranslations.id, translationId));
+        await db.delete(posts).where(eq(posts.id, sourceId));
+      }
+    });
+
     it("rejects changing live translated text without reopening review", async () => {
       const res = await app.inject({
         method: "PATCH",
