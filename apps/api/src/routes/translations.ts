@@ -546,7 +546,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const translatedSlug = `${sourceSlug}-${body.targetLocale.toLowerCase().slice(0, 2)}`;
 
       try {
-        const aiGateway = await getAiGatewayService();
+        const aiGateway = await getAiGatewayService(req.publicationContext!.publicationId);
         const targetLocaleName =
           body.targetLocale === "ar-SA" || body.targetLocale === "ar"
             ? "Arabic"
