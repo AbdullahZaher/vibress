@@ -313,6 +313,31 @@ export class TranslationService {
     };
   }
 
+  /**
+   * Resolve an old localized slug only when there is exactly one published
+   * translation in this publication. Ambiguous slugs never redirect to a
+   * random locale (or a draft).
+   */
+  async findUniquePublishedTranslationBySlug(
+    contentType: "post" | "page",
+    slug: string,
+    publicationId: string,
+  ): Promise<ContentTranslationItem | null> {
+    const db = getDb();
+    const candidates = await db
+      .select({ id: contentTranslations.id })
+      .from(contentTranslations)
+      .where(and(
+        eq(contentTranslations.publicationId, publicationId),
+        eq(contentTranslations.contentType, contentType),
+        eq(contentTranslations.slug, slug),
+        eq(contentTranslations.status, "published"),
+      ))
+      .limit(2);
+    if (candidates.length !== 1 || !candidates[0]) return null;
+    return this.getTranslationById(candidates[0].id, publicationId);
+  }
+
   async getContentTranslationStats(
     contentType = "post",
     publicationId?: string,
