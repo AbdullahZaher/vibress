@@ -328,6 +328,11 @@ export function getLocalePrefix(
   const canonicalDefault = defaultLocaleRegistry.canonicalize(defaultLocale);
   if (canonical === canonicalDefault) return "";
   const lang = defaultLocaleRegistry.getLanguage(canonical);
+  // Compatibility adapter for older callers that did not provide the
+  // publication's active locales. New routing paths always provide them.
+  if (!enabledLocales.length && canonicalDefault === "en" && lang === "en") {
+    return "";
+  }
   // When multiple regional variants share a language code, use the full
   // language tag to avoid URL collisions.
   const collisions = enabledLocales.filter(
