@@ -214,7 +214,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
       expect(response.statusCode).toBe(200);
       const dto = response.json().post;
       expect(dto.seo?.canonicalUrl).toBe(`http://localhost:7777/fr/posts/${frenchPostSlug}`);
-    });;
+    });
   });
 
   // --- Persian RTL Verification ---
@@ -264,7 +264,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
       expect(response.statusCode).toBe(200);
       const dto = response.json().post;
       expect(dto.seo?.canonicalUrl).toBe(`http://localhost:7777/fa/posts/${persianPostSlug}`);
-    });;
+    });
 
     it("renders theme Liquid engine with Persian RTL direction context", async () => {
       const starterDir = path.resolve(__dirname, "../../content/theme-starter");
