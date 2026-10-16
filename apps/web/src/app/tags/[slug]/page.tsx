@@ -23,6 +23,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const localePolicy = await getThemeSiteSettings();
+  // Tag and author archives currently have no localized titles or filtered
+  // translation variants. Serving their source-language text under a
+  // secondary locale would violate the site's requested language.
+  if (localePolicy.locale !== (localePolicy.primaryLocale || localePolicy.locale)) {
+    notFound();
+  }
   const tag = await ContentApiClient.getTagBySlug(slug);
   if (!tag) {
     return {
@@ -34,6 +41,7 @@ export async function generateMetadata({
     title: `Posts tagged #${tag.name}`,
     description: tag.description || `Browse articles tagged #${tag.name}`,
     canonicalPath: `/tags/${tag.slug}`,
+    locale: localePolicy.locale,
   });
 }
 
@@ -45,6 +53,13 @@ export default async function TagArchivePage({
   searchParams?: Promise<{ page?: string }>;
 }) {
   const { slug } = await params;
+  const localePolicy = await getThemeSiteSettings();
+  // Tag and author archives currently have no localized titles or filtered
+  // translation variants. Serving their source-language text under a
+  // secondary locale would violate the site's requested language.
+  if (localePolicy.locale !== (localePolicy.primaryLocale || localePolicy.locale)) {
+    notFound();
+  }
   const sp = (await searchParams) ?? {};
   const pageNum = sp?.page ? parseInt(sp.page, 10) : 1;
   const validPage = isNaN(pageNum) || pageNum < 1 ? 1 : pageNum;
