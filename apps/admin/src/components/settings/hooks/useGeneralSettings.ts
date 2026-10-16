@@ -130,6 +130,13 @@ export function useGeneralSettings() {
     }
   }, [isDirty, dirtyKeys, draft]);
 
+  // Locale management is committed independently. Keep all other unsaved
+  // settings intact when the publication language has just been saved.
+  const syncSavedLocale = useCallback((locale: string) => {
+    setInitial((current) => ({ ...current, locale }));
+    setDraft((current) => ({ ...current, locale }));
+  }, []);
+
   const discard = useCallback(() => {
     setDraft({ ...initial });
     setError(null);
@@ -147,5 +154,6 @@ export function useGeneralSettings() {
     save,
     discard,
     reload: fetchGeneralSettings,
+    syncSavedLocale,
   };
 }
