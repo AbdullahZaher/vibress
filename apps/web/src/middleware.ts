@@ -310,14 +310,11 @@ export async function middleware(request: NextRequest) {
   // Host-authoritative site policy. No fixed "English primary / Arabic
   // secondary" routing table; every configured primary is unprefixed.
   const isExcludedPrefix =
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/theme-assets") ||
-    pathname.startsWith("/preview") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml" ||
-    pathname === "/private";
+    ["/_next", "/api", "/admin", "/portal", "/health", "/content",
+      "/assets", "/theme-assets", "/preview"].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    ) ||
+    ["/favicon.ico", "/robots.txt", "/sitemap.xml", "/private"].includes(pathname);
   if (!isExcludedPrefix) {
     const host = request.headers.get("x-forwarded-host") ||
       request.headers.get("host") || undefined;
