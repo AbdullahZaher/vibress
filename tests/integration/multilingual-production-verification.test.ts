@@ -7,6 +7,7 @@ import {
   users,
   contentTranslations,
   publicationMemberships,
+  publicationLocales,
   seedDatabase,
   runMigrations,
 } from "@vibress/database";
@@ -31,6 +32,7 @@ import {
   mapPostToViewModel,
 } from "@vibress/theme-core";
 import { buildPageMetadata, getPublicSiteUrl } from "../../apps/web/src/lib/seo-helpers";
+import { eq, and } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,6 +44,8 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   const testPostId = randomUUID();
   const testPageId = randomUUID();
   const testTranslationGroupId = randomUUID();
+  const arLocaleId = randomUUID();
+  let oldArLocale: { id: string; status: string; isDefault: boolean } | null = null;
 
   const suffix = randomUUID().slice(0, 8);
   const testPostSlug = `welcome-to-vibress-${suffix}`;
@@ -69,6 +73,26 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
         role: "author",
       })
       .onConflictDoNothing();
+
+    // Explicitly activate Arabic for this bilingual suite. The platform
+    // does not enable it implicitly for normal publications.
+    const previous = await db.select({
+      id: publicationLocales.id,
+      status: publicationLocales.status,
+      isDefault: publicationLocales.isDefault,
+    }).from(publicationLocales)
+      .where(and(eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA")));
+    oldArLocale = previous[0] ?? null;
+    if (oldArLocale) {
+      await db.update(publicationLocales).set({ status: "active", isDefault: false })
+        .where(eq(publicationLocales.id, oldArLocale.id));
+    } else {
+      await db.insert(publicationLocales).values({
+        id: arLocaleId, publicationId: "pub_default",
+        locale: "ar-SA", status: "active", isDefault: false,
+      });
+    }
 
     // 1. Seed a test source post in English
     await db.insert(posts).values({
@@ -149,6 +173,17 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   });
 
   afterAll(async () => {
+    const db = getDb();
+    if (oldArLocale) {
+      await db.update(publicationLocales).set({
+        status: oldArLocale.status, isDefault: oldArLocale.isDefault,
+      }).where(eq(publicationLocales.id, oldArLocale.id));
+    } else {
+      await db.delete(publicationLocales).where(eq(publicationLocales.id, arLocaleId));
+    }
+    await db.delete(contentTranslations).where(eq(contentTranslations.contentId, testPostId));
+    await db.delete(posts).where(eq(posts.id, testPostId));
+    await db.delete(pages).where(eq(pages.id, testPageId));
     await app.close();
   });
 
