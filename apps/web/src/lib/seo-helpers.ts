@@ -48,17 +48,9 @@ export function buildPageMetadata(options: {
 
   const locale = options.locale ? canonicalizeLocale(options.locale) : "en";
   const ogLocale = locale.replace(/-/g, "_");
-  const currentLang = locale.split("-")[0] || "en";
-  const rawPath = (options.canonicalPath || "").replace(/^\/(?:ar|fr|fa|de|tr|ur|he)/, "");
-
-  const alternateLanguages = options.alternateLocales || {
-    en: `${siteUrl}${rawPath}`,
-    ar: `${siteUrl}/ar${rawPath}`,
-    ...(currentLang !== "en" && currentLang !== "ar"
-      ? { [currentLang]: `${siteUrl}/${currentLang}${rawPath}` }
-      : {}),
-    "x-default": `${siteUrl}${rawPath}`,
-  };
+  // Never advertise translations that are disabled, unpublished or absent.
+  // The caller supplies an explicit published-only map when available.
+  const alternateLanguages = options.alternateLocales || {};
 
   const meta: Metadata = {
     title: options.title,
