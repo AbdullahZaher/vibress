@@ -84,8 +84,8 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
     },
   });
 
-  const enabledLocales = matrixData?.enabledLocales || ["en", "ar-SA"];
-  const defaultLocale = matrixData?.defaultLocale || "en";
+  const enabledLocales = matrixData?.enabledLocales ?? [];
+  const defaultLocale = matrixData?.defaultLocale ?? "";
 
   const handleSelectAll = () => {
     if (!matrixData?.items) return;
