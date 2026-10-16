@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDb, posts, contentTranslations, users, settings, roles, userRoles,
-  publicationLocales, publications, tags, postTags, eq, and,
+  publicationLocales, publications, tags, postTags, eq, and, sql,
 } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
@@ -57,8 +57,6 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   let previousPrimaryLocale = "en";
   let previousSiteLocale: typeof settings.$inferSelect | null = null;
   let insertedArabicLocale = false;
-  let originalFrenchLocale: { status: string; isDefault: boolean } | null = null;
-  let insertedFrenchLocale = false;
 
   beforeAll(async () => {
     app = buildApp();
@@ -113,27 +111,35 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       });
     }
 
-    // French is a second explicitly enabled translation target in this suite.
-    const [existingFrench] = await db.select({
-      status: publicationLocales.status, isDefault: publicationLocales.isDefault,
-    }).from(publicationLocales).where(and(
-      eq(publicationLocales.publicationId, "pub_default"),
-      eq(publicationLocales.locale, "fr-FR"),
-    ));
-    if (existingFrench) {
-      originalFrenchLocale = existingFrench;
-      await db.update(publicationLocales).set({ status: "active", isDefault: false })
+    const [existingEnglish] = await db
+      .select({ status: publicationLocales.status, isDefault: publicationLocales.isDefault })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "en"),
+      ));
+    if (existingEnglish) {
+      await db.update(publicationLocales)
+        .set({ status: "active", isDefault: true })
         .where(and(
           eq(publicationLocales.publicationId, "pub_default"),
-          eq(publicationLocales.locale, "fr-FR"),
+          eq(publicationLocales.locale, "en"),
         ));
     } else {
-      insertedFrenchLocale = true;
       await db.insert(publicationLocales).values({
-        id: randomUUID(), publicationId: "pub_default",
-        locale: "fr-FR", status: "active", isDefault: false,
+        id: randomUUID(),
+        publicationId: "pub_default",
+        locale: "en",
+        status: "active",
+        isDefault: true,
       });
     }
+
+    // Ensure pub_default starts with clean baseline: primary en, enabled [en, ar-SA]
+    await db.delete(publicationLocales).where(and(
+      eq(publicationLocales.publicationId, "pub_default"),
+      sql`${publicationLocales.locale} NOT IN ('en', 'ar-SA')`,
+    ));
 
     // Ensure test owner exists
     await ensureUserWithRole("owner@example.com", "owner", "OwnerPass123!");
@@ -158,7 +164,19 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       title: `Integration Source Post ${runSuffix}`,
       slug: postSlug,
       excerpt: "English source excerpt for translation testing",
-      content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+      content: {
+        schema: "vibress-studio",
+        version: 1,
+        root: {
+          type: "root",
+          children: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", text: "English source text for translation" }],
+            },
+          ],
+        },
+      },
       status: "published",
       visibility: "public",
       primaryAuthorId: ownerId,
@@ -202,17 +220,6 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
           eq(publicationLocales.publicationId, "pub_default"),
           eq(publicationLocales.locale, "ar-SA"),
         ));
-    }
-    if (insertedFrenchLocale) {
-      await db.delete(publicationLocales).where(and(
-        eq(publicationLocales.publicationId, "pub_default"),
-        eq(publicationLocales.locale, "fr-FR"),
-      ));
-    } else if (originalFrenchLocale) {
-      await db.update(publicationLocales).set(originalFrenchLocale).where(and(
-        eq(publicationLocales.publicationId, "pub_default"),
-        eq(publicationLocales.locale, "fr-FR"),
-      ));
     }
     if (app) await app.close();
   });
@@ -742,6 +749,22 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   describe("AI Translation Safety & Bulk Actions", () => {
+    beforeAll(async () => {
+      await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+          origin: "http://localhost:7777",
+        },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA", "fr-FR"],
+        },
+      });
+    });
+
     it("fails safely on an incomplete provider response without writing a fake draft", async () => {
       // The integration environment intentionally has no configured AI
       // translation provider. An outage must not save source text as translated.
@@ -818,6 +841,30 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
         .from(contentTranslations)
         .where(eq(contentTranslations.id, frTr!.id));
       expect(refreshed[0]?.status).toBe("approved");
+    });
+
+    afterAll(async () => {
+      await db.delete(contentTranslations).where(and(
+        eq(contentTranslations.publicationId, "pub_default"),
+        eq(contentTranslations.targetLocale, "fr-FR"),
+      ));
+      await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+          origin: "http://localhost:7777",
+        },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA"],
+        },
+      });
+      await db.delete(publicationLocales).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "fr-FR"),
+      ));
     });
   });
 

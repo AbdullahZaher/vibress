@@ -448,8 +448,14 @@ export function AdminLocaleProvider({ children }: { children: ReactNode }) {
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
+const defaultAdminLocaleContext: AdminLocaleContext = {
+  locale: "en",
+  setPublicationLanguage: () => {},
+  refresh: async () => {},
+  tr: (english: string) => english,
+};
+
 export function useAdminLocale(): AdminLocaleContext {
   const context = useContext(Context);
-  if (!context) throw new Error("Admin locale provider is missing");
-  return context;
+  return context ?? defaultAdminLocaleContext;
 }

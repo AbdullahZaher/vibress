@@ -94,6 +94,40 @@ async function ensureOwner(): Promise<void> {
       .values({ userId: ownerId, roleId: ownerRole[0].id });
 }
 
+async function ensureAuthor(): Promise<void> {
+  const db = getDb();
+  const { users, userRoles, roles } = await import("@vibress/database");
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, "author@vibress.local"))
+    .limit(1);
+  if (rows.length > 0) return;
+  const hash = await hashPassword("DevPassword123!");
+  const authorId = crypto.randomUUID();
+  await db
+    .insert(users)
+    .values({
+      id: authorId,
+      email: "author@vibress.local",
+      name: "Author",
+      slug: "author-local",
+      passwordHash: hash,
+      status: "active",
+    })
+    .onConflictDoNothing();
+  const authorRole = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.key, "author"))
+    .limit(1);
+  if (authorRole[0])
+    await db
+      .insert(userRoles)
+      .values({ userId: authorId, roleId: authorRole[0].id })
+      .onConflictDoNothing();
+}
+
 async function ensurePost(): Promise<string> {
   const db = getDb();
   const { posts } = await import("@vibress/database");
@@ -464,6 +498,7 @@ describe("Batch 11 — Community Integration & Security", () => {
   });
 
   it("author lacks comments.moderate permission and receives 403 on hide", async () => {
+    await ensureAuthor();
     const loginRes = await app.inject({
       method: "POST",
       url: "/api/admin/v1/auth/login",

@@ -15,11 +15,11 @@ import {
   contentTranslations,
   users,
   publicationMemberships,
+  eq,
 } from "@vibress/database";
 import { createLiquidThemeEngine } from "@vibress/theme-core";
 import { buildApp } from "../../apps/api/src/main";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
 import * as path from "path";
 import * as fs from "fs";
 
