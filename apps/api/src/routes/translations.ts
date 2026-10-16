@@ -14,9 +14,9 @@ import {
 } from "../middleware/auth";
 import {
   CreateContentTranslationSchema,
-  EditContentTranslationSchema,
-  AiTranslateContentSchema,
-  BulkTranslationActionSchema,
+  UpdateContentTranslationSchema as EditContentTranslationSchema,
+  AiTranslateRequestSchema as AiTranslateContentSchema,
+  BulkTranslationRequestSchema as BulkTranslationActionSchema,
 } from "@vibress/api-contracts";
 import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
@@ -254,12 +254,14 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
       const body = parsed.data;
-      if (body.status === "needs_review" &&
-          !hasPermission(req.permissions || [], "translations.review", req.roles || [])) {
-        return reply.status(403).send({
-          statusCode: 403, error: "Forbidden",
-          message: "Editorial review permission is required",
-        });
+      if (body.status && !["draft", "in_progress"].includes(body.status)) {
+        // Only lifecycle endpoints may approve, publish or move a draft to
+        // review. Creating a translation cannot bypass editorial gates.
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_REVIEW_REQUIRED",
+          message: "Create a draft, then use the review and publish endpoints",
+          requestId: req.id,
+        }] });
       }
 
       const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
@@ -372,11 +374,12 @@ export async function translationRoutes(fastify: FastifyInstance) {
       }
       const canEditLive = (permission: string) =>
         hasPermission(req.permissions || [], permission, req.roles || []);
-      if (body.status === "needs_review" && !canEditLive("translations.review")) {
-        return reply.status(403).send({
-          statusCode: 403, error: "Forbidden",
-          message: "Editorial review permission is required",
-        });
+      if (body.status && body.status !== existing.status) {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_REVIEW_REQUIRED",
+          message: "Use dedicated review and publish endpoints to change translation status",
+          requestId: req.id,
+        }] });
       }
       if ((existing.status === "published" && !canEditLive("translations.publish")) ||
           (existing.status === "approved" && !canEditLive("translations.approve"))) {
