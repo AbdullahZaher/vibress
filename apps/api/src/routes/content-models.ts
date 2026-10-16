@@ -14,6 +14,7 @@ import {
   ConcurrencyConflictError,
   PermissionDeniedError,
   analyzeSchemaEvolution,
+  validateModelDefinition,
 } from "@vibress/content-modeler";
 import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
@@ -214,9 +215,19 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       if (!model) {
         return sendError(reply, "NOT_FOUND", "Content model not found", req.id, 404);
       }
-      const newFields = req.body?.fields || [];
-      const evolution = analyzeSchemaEvolution(model.fields, newFields);
-      return reply.send({ data: evolution });
+      const newFields = req.body.fields;
+      try {
+        validateModelDefinition({ name: model.name, slug: model.slug, fields: newFields });
+        const evolution = analyzeSchemaEvolution(model.fields, newFields);
+        return reply.send({ data: evolution });
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          return sendError(reply, "VALIDATION_ERROR", err.message, req.id, 400, {
+            fieldErrors: err.fieldErrors,
+          });
+        }
+        throw err;
+      }
     },
   });
 

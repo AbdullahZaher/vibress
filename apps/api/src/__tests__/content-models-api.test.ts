@@ -278,6 +278,98 @@ describe("Content Modeler API Routes", () => {
     expect(modelRes.json().data.fields[0].type).toBe("text");
   });
 
+  it("rejects invalid preview field definitions rather than returning a misleading safe diff", async () => {
+    const url = `/api/admin/v1/content-models/${modelId}/schema-evolution-preview`;
+    const headers = { cookie: cookieHeader, origin: "http://localhost:7777" };
+    for (const fields of [
+      [
+        { id: "a", name: "One", key: "duplicate", type: "text" },
+        { id: "b", name: "Two", key: "duplicate", type: "text" },
+      ],
+      [{ id: "reserved", name: "Prototype", key: "__proto__", type: "text" }],
+    ]) {
+      const res = await app.inject({ method: "POST", url, headers, payload: { fields } });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("rejects unsafe pattern definitions consistently on create, preview, and update", async () => {
+    const headers = { cookie: cookieHeader, origin: "http://localhost:7777" };
+    for (const field of [
+      { id: "a", name: "Code", key: "code", type: "text", pattern: "[" },
+      { id: "a", name: "Code", key: "code", type: "text", validation: { pattern: "(a+)+$" } },
+    ]) {
+      const create = await app.inject({
+        method: "POST", url: "/api/admin/v1/content-models", headers,
+        payload: { name: "Invalid pattern", slug: "invalid-pattern-" + crypto.randomUUID().slice(0, 8), fields: [field] },
+      });
+      expect(create.statusCode).toBe(400);
+      expect(create.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+      const preview = await app.inject({
+        method: "POST", url: "/api/admin/v1/content-models/" + modelId + "/schema-evolution-preview",
+        headers, payload: { fields: [field] },
+      });
+      expect(preview.statusCode).toBe(400);
+      expect(preview.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+      const update = await app.inject({
+        method: "PATCH", url: "/api/admin/v1/content-models/" + modelId,
+        headers, payload: { fields: [field] },
+      });
+      expect(update.statusCode).toBe(400);
+      expect(update.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("previews and blocks tightened legacy validation constraints without modifying existing data", async () => {
+    const slug = `legacy-schema-${crypto.randomUUID().slice(0, 8)}`;
+    const fields = [
+      { id: "score", name: "Score", key: "score", type: "number", validation: { min: 1 } },
+    ];
+    const headers = { cookie: cookieHeader, origin: "http://localhost:7777" };
+    const create = await app.inject({
+      method: "POST", url: "/api/admin/v1/content-models",
+      headers, payload: { name: "Legacy validation", slug, fields },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().data.id as string;
+    const entry = await app.inject({
+      method: "POST", url: `/api/admin/v1/content-models/${slug}/entries`,
+      headers, payload: { title: "Recorded score", data: { score: 3 } },
+    });
+    expect(entry.statusCode).toBe(201);
+
+    const tightened = [
+      { ...fields[0]!, validation: { min: 5 } },
+    ];
+    const preview = await app.inject({
+      method: "POST", url: `/api/admin/v1/content-models/${id}/schema-evolution-preview`,
+      headers, payload: { fields: tightened },
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().data.safe).toBe(false);
+
+    const update = await app.inject({
+      method: "PATCH", url: `/api/admin/v1/content-models/${id}`,
+      headers, payload: { fields: tightened },
+    });
+    expect(update.statusCode).toBe(400);
+    expect(update.json().errors[0].code).toBe("VALIDATION_ERROR");
+    const read = await app.inject({
+      method: "GET", url: `/api/admin/v1/content-models/${id}`, headers,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json().data.fields[0].validation.min).toBe(1);
+    const persistedEntry = await app.inject({
+      method: "GET", url: `/api/admin/v1/content-models/${slug}/entries/${entry.json().data.id}`,
+      headers,
+    });
+    expect(persistedEntry.statusCode).toBe(200);
+    expect(persistedEntry.json().data.data.score).toBe(3);
+  });
+
   it("cannot delete models containing entries", async () => {
     const res = await app.inject({
       method: "DELETE",
