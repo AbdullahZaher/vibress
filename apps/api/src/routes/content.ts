@@ -156,7 +156,8 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
         ? await postsService.findById(translation.contentId, publicationId)
         : await pagesService.findById(translation.contentId, publicationId);
       if (!source || source.status !== "published" ||
-          source.visibility !== "public" || source.deletedAt) {
+          source.visibility !== "public" || source.deletedAt ||
+          !source.publishedAt || source.publishedAt.getTime() > Date.now()) {
         return reply.status(404).send({ errors: [{
           code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
         }] });
@@ -366,7 +367,8 @@ function extractRequestedLocale(
       }
     }
     if (!source || source.status !== "published" ||
-        source.visibility !== "public" || source.deletedAt) {
+        source.visibility !== "public" || source.deletedAt ||
+          !source.publishedAt || source.publishedAt.getTime() > Date.now()) {
       return reply.status(404).send({ errors: [{
         code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
       }] });
@@ -539,7 +541,8 @@ function extractRequestedLocale(
         if (translationItem) {
           post = await postsService.findById(translationItem.contentId, pubId);
           if (!post || post.status !== "published" ||
-              post.visibility !== "public" || post.deletedAt) {
+              post.visibility !== "public" || post.deletedAt ||
+              !post.publishedAt || post.publishedAt.getTime() > Date.now()) {
             post = null;
           }
         }
@@ -570,7 +573,8 @@ function extractRequestedLocale(
         }
       }
 
-      if (!post || post.visibility !== "public" || post.deletedAt) {
+      if (!post || post.visibility !== "public" || post.deletedAt ||
+              !post.publishedAt || post.publishedAt.getTime() > Date.now()) {
         return reply.status(404).send({
           errors: [
             {
@@ -742,7 +746,8 @@ function extractRequestedLocale(
         if (translationItem) {
           pageObj = await pagesService.findById(translationItem.contentId, pubId);
           if (!pageObj || pageObj.status !== "published" ||
-              pageObj.visibility !== "public" || pageObj.deletedAt) {
+              pageObj.visibility !== "public" || pageObj.deletedAt ||
+              !pageObj.publishedAt || pageObj.publishedAt.getTime() > Date.now()) {
             pageObj = null;
           }
         }
@@ -772,7 +777,8 @@ function extractRequestedLocale(
         }
       }
 
-      if (!pageObj || pageObj.visibility !== "public" || pageObj.deletedAt) {
+      if (!pageObj || pageObj.visibility !== "public" || pageObj.deletedAt ||
+              !pageObj.publishedAt || pageObj.publishedAt.getTime() > Date.now()) {
         return reply.status(404).send({
           errors: [
             {
