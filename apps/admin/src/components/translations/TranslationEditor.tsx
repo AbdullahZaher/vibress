@@ -176,7 +176,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
 
   // Mutations
   const saveMutation = useMutation({
-    mutationFn: async (targetStatus?: string) => {
+    mutationFn: async () => {
       setErrorMsg(null);
       setSuccessMsg(null);
 
@@ -189,7 +189,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
         if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
           throw new Error("Translated document must be a valid JSON object");
         }
-        content = decoded as Record<string, unknown>;
+        content = Object.fromEntries(Object.entries(decoded));
       } else {
         // Plain-text translation remains a valid Studio document; never
         // replace a persisted structured document with { body: "..." }.
@@ -259,7 +259,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const approveMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("approved");
+      const saved = await saveMutation.mutateAsync();
       const targetId = saved?.id || currentTranslationId;
       if (!targetId) throw new Error("Could not determine translation identifier");
       const res = await approveTranslationApi(targetId);
@@ -279,7 +279,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const publishMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("published");
+      const saved = await saveMutation.mutateAsync();
       const targetId = saved?.id || currentTranslationId;
       if (!targetId) throw new Error("Could not determine translation identifier");
       const res = await publishTranslationApi(targetId);
