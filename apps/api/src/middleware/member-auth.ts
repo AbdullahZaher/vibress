@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { memberAuthService } from "../services";
 import { getConfig } from "@vibress/config";
+import { safeExtractOrigin } from "./auth";
 
 export const MEMBER_COOKIE_NAME = getConfig().cookies.memberSessionName;
 
@@ -57,9 +58,7 @@ export async function validateMemberOrigin(
   const tokenInCookie = req.cookies && req.cookies[MEMBER_COOKIE_NAME];
   if (!tokenInCookie) return;
 
-  const origin =
-    req.headers.origin ||
-    (req.headers.referer ? new URL(req.headers.referer).origin : null);
+  const origin = safeExtractOrigin(req);
   const allowedOrigins = getConfig().cors.memberAllowedOrigins;
 
   if (!origin || !allowedOrigins.includes(origin)) {

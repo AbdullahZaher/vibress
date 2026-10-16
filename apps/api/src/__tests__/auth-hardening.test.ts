@@ -349,4 +349,39 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     expect(verifyRes6.statusCode).toBe(429);
     expect(verifyRes6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
   });
+
+  it("rejects malformed Referer with 403 INVALID_ORIGIN instead of 500 error", async () => {
+    app = buildApp();
+    await app.ready();
+
+    // Staff endpoint with cookie auth and malformed Referer
+    const staffRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      headers: {
+        cookie: "vibress_session=mock-token",
+        referer: "invalid-url-not-a-valid-uri",
+      },
+      payload: {
+        email: "owner@example.com",
+        password: "OwnerPass123!",
+      },
+    });
+    expect(staffRes.statusCode).toBe(403);
+    expect(staffRes.json().errors[0].code).toBe("INVALID_ORIGIN");
+
+    // Member endpoint with cookie auth and malformed Referer
+    const memberRes = await app.inject({
+      method: "POST",
+      url: "/api/members/v1/auth/logout",
+      headers: {
+        cookie: "vibress_member_session=mock-member-token",
+        referer: "invalid-url-not-a-valid-uri",
+      },
+      payload: {},
+    });
+    expect(memberRes.statusCode).toBe(403);
+    expect(memberRes.json().errors[0].code).toBe("INVALID_ORIGIN");
+  });
 });
+
