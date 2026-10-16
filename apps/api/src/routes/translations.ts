@@ -634,7 +634,29 @@ export async function translationRoutes(fastify: FastifyInstance) {
 
       // The provider only sees approved text segments, not arbitrary Studio
       // JSON identifiers/media refs. Invalid or failed output is never saved.
-      const segments = collectTranslatableText(sourceContent);
+      let segments;
+      try {
+        segments = collectTranslatableText(sourceContent);
+      } catch {
+        return reply.status(422).send({ errors: [{
+          code: "UNSUPPORTED_TRANSLATION_CONTENT",
+          message: "Source content cannot safely be translated as structured text",
+          requestId: req.id,
+        }] });
+      }
+      // A legacy document with nonempty unrecognized content must never be
+      // saved as a completed translation with its original body untouched.
+      if (segments.length === 0 &&
+          Object.entries(sourceContent).some(([key, value]) =>
+            !["schema", "version", "contentVersion"].includes(key) &&
+            value !== null && value !== "" &&
+            (typeof value !== "object" || Object.keys(value).length > 0))) {
+        return reply.status(422).send({ errors: [{
+          code: "UNSUPPORTED_TRANSLATION_CONTENT",
+          message: "Source content has no safely translatable text fields",
+          requestId: req.id,
+        }] });
+      }
       const translatedSlug = `${sourceSlug}-${normalizedTargetLocale.toLowerCase()}`;
       const gateway = await getAiGatewayService(req.publicationContext!.publicationId);
       const glossary = defaultTranslationGlossary.buildGlossaryPromptInstructions(
