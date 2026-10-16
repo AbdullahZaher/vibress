@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import { usePublicationLocales } from "../../lib/usePublicationLocales";
+import { useAuth } from "../../hooks/useAuth";
 import { getDirection } from "@vibress/i18n";
 import {
   fetchContentTranslations,
@@ -44,20 +45,23 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
 }) => {
   const queryClient = useQueryClient();
   const { data: localePolicy } = usePublicationLocales();
+  const { can } = useAuth();
+  const canRead = can("translations.read");
+  const canCreate = can("translations.create");
   const [aiLoadingLocale, setAiLoadingLocale] = useState<string | null>(null);
 
   // 1. Fetch enabled publication locales
   const { data: matrixData } = useQuery({
     queryKey: adminQueryKeys.translations.matrix({ limit: 1 }),
     queryFn: () => fetchTranslationMatrix({ limit: 1 }),
-    enabled: localePolicy?.isMultilingual === true,
+    enabled: canRead && localePolicy?.isMultilingual === true,
   });
 
   // 2. Fetch existing translations for this content
   const { data: trData, isLoading } = useQuery({
     queryKey: adminQueryKeys.translations.content(contentType, contentId),
     queryFn: () => fetchContentTranslations(contentType, contentId),
-    enabled: Boolean(contentId) && localePolicy?.isMultilingual === true,
+    enabled: Boolean(contentId) && canRead && localePolicy?.isMultilingual === true,
   });
 
   const aiMutation = useMutation({
@@ -85,7 +89,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
     aiMutation.mutate(loc);
   };
 
-  if (!localePolicy?.isMultilingual) return null;
+  if (!localePolicy?.isMultilingual || !canRead) return null;
 
   return (
     <div className="p-3 bg-card border border-border/60 rounded-xl space-y-3">
@@ -157,7 +161,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
                       <ExternalLink className="h-3 w-3" />
                       <span>Edit Translation</span>
                     </Button>
-                  ) : (
+                  ) : canCreate ? (
                     <>
                       <Button
                         size="sm"
@@ -185,6 +189,10 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
                         )}
                       </Button>
                     </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      No translation available
+                    </span>
                   )}
                 </div>
               </div>
