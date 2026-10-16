@@ -654,7 +654,9 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
             entry,
             model,
             "public",
-            req.query.locale,
+            requestedLocale,
+            localePolicy.primaryLocale,
+            true,
           ),
         );
 
@@ -738,7 +740,9 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
         entry,
         model,
         "public",
-        req.query.locale,
+        requestedLocale,
+        localePolicy.primaryLocale,
+        true,
       );
 
       return reply.send({ data: publicEntry });
