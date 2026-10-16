@@ -40,8 +40,9 @@ export async function publishedAlternateLanguageUrls(
     const prefix = getLocalePrefix(target, data.primaryLocale, data.enabledLocales);
     alternates[target] = `${url}${prefix}${path}`;
   }
-  if (Object.keys(alternates).length > 1 && alternates[data.primaryLocale]) {
-    alternates["x-default"] = alternates[data.primaryLocale];
+  const primaryUrl = alternates[data.primaryLocale];
+  if (Object.keys(alternates).length > 1 && primaryUrl) {
+    alternates["x-default"] = primaryUrl;
   }
   return alternates;
 }
