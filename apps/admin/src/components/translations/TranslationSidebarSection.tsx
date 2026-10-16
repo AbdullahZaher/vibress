@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import { usePublicationLocales } from "../../lib/usePublicationLocales";
+import { getDirection } from "@vibress/i18n";
 import {
   fetchContentTranslations,
   fetchTranslationMatrix,
@@ -77,10 +78,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
   const translations = trData?.translations || [];
 
   // Filter out source locale
-  const targetLocales = enabledLocales.filter((l) => {
-    const baseLoc = l.split("-")[0] || l;
-    return l !== defaultLocale && baseLoc !== defaultLocale;
-  });
+  const targetLocales = enabledLocales.filter((locale) => locale !== defaultLocale);
 
   const handleAiTranslate = (loc: string) => {
     setAiLoadingLocale(loc);
@@ -123,7 +121,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
             const locMeta = LOCALE_NATIVE_NAMES[loc] || {
               name: loc,
               native: loc,
-              dir: "ltr",
+              dir: getDirection(loc),
             };
             const existingTr = translations.find((t) => t.targetLocale === loc);
             const isAiLoading = aiLoadingLocale === loc;
