@@ -383,6 +383,35 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     });
   });
 
+  describe("Translation write boundary regression", () => {
+    it("rejects direct creation of a published translation", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ar-SA",
+          title: "Unreviewed text", slug: `unreviewed-${runSuffix}`,
+          status: "published",
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("rejects creating a translation in a disabled language", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ja", title: "Disabled text",
+          slug: `disabled-${runSuffix}`, status: "draft",
+        },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe("Translation Editorial Lifecycle Endpoints", () => {
     it("creates a draft translation via POST /api/admin/v1/content/post/:id/translations", async () => {
       const res = await app.inject({
@@ -443,6 +472,24 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(data.translation.title).toBe(`العنوان المحدث ${runSuffix}`);
     });
 
+    it("prevents changing the target language of an existing translation", async () => {
+      const response = await app.inject({
+        method: "PATCH", url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { targetLocale: "fr-FR" },
+      });
+      expect(response.statusCode).toBe(409);
+    });
+
+    it("prevents changing the translation state to published via a generic PATCH", async () => {
+      const response = await app.inject({
+        method: "PATCH", url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { status: "published" },
+      });
+      expect([403, 409]).toContain(response.statusCode);
+    });
+
     it("submits translation for review via POST /api/admin/v1/translations/:id/submit-review", async () => {
       const res = await app.inject({
         method: "POST",
@@ -492,6 +539,25 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(200);
       const data = res.json();
       expect(data.translation.status).toBe("published");
+    });
+  });
+
+  describe("Published legacy translation URL compatibility", () => {
+    it("resolves a unique public translated slug to a canonical enabled path", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/legacy-translation/resolve?type=post&slug=${encodeURIComponent(arabicSlug)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().path).toBe(`/ar/posts/${arabicSlug}`);
+    });
+
+    it("does not reveal drafts or unknown slugs", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/legacy-translation/resolve?type=post&slug=missing-translation",
+      });
+      expect(response.statusCode).toBe(404);
     });
   });
 
