@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import { usePublicationLocales } from "../../lib/usePublicationLocales";
@@ -62,6 +63,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   onNavigate,
   canPublish = true,
 }) => {
+  const { tr } = useAdminLocale();
   const { data: localePolicy } = usePublicationLocales();
   const queryClient = useQueryClient();
   const [currentTranslationId, setCurrentTranslationId] = useState<string | undefined>(
@@ -342,14 +344,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             className="gap-2 cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span>Matrix</span>
+            <span>{tr("Matrix")}</span>
           </Button>
           <div className="h-4 w-[1px] bg-border" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
-                Translation Workspace
-              </h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">{tr("Translation Workspace")}</h1>
               <TranslationBadge status={status as any} isStale={isStale} />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -380,7 +380,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs text-amber-600 dark:text-amber-400 border-amber-500/30"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>Submit for Review</span>
+              <span>{tr("Submit for Review")}</span>
             </Button>
           )}
 
@@ -393,7 +393,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs text-sky-600 dark:text-sky-400 border-sky-500/30"
             >
               <CheckCheck className="h-3.5 w-3.5" />
-              <span>Approve</span>
+              <span>{tr("Approve")}</span>
             </Button>
           )}
 
@@ -405,7 +405,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Publish Translation</span>
+              <span>{tr("Publish Translation")}</span>
             </Button>
           )}
         </div>
@@ -431,7 +431,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-xs">
               <AlertTriangle className="h-4 w-4" />
-              <span>Source content was modified after this translation was created.</span>
+              <span>{tr("Source content was modified after this translation was created.")}</span>
             </div>
             <Button
               variant="outline"
@@ -447,7 +447,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           {detailData?.translation?.fieldDiff?.changedFields &&
             detailData.translation.fieldDiff.changedFields.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-[11px] text-muted-foreground">Modified fields:</span>
+                <span className="text-[11px] text-muted-foreground">{tr("Modified fields:")}</span>
                 {detailData.translation.fieldDiff.changedFields.map((field: string) => (
                   <span
                     key={field}
@@ -476,7 +476,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <span className="text-xs font-bold text-foreground">AI Translation Assistant</span>
+            <span className="text-xs font-bold text-foreground">{tr("AI Translation Assistant")}</span>
             <p className="text-[11px] text-muted-foreground">
               Generates an editorial draft in <span className="font-semibold text-foreground">{targetMeta.native}</span> safely in 'Needs Review' status.
             </p>
@@ -489,7 +489,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             onChange={(e) => setAiProvider(e.target.value)}
             className="h-8 px-2.5 bg-background border border-border rounded-lg text-xs text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value="auto">Auto (Failover)</option>
+            <option value="auto">{tr("Auto (Failover)")}</option>
             <option value="openai">OpenAI (GPT-4o)</option>
             <option value="anthropic">Anthropic (Claude)</option>
             <option value="gemini">Gemini</option>
@@ -635,7 +635,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   htmlFor="target-title"
                   className="text-xs font-semibold text-foreground flex items-center justify-between"
                 >
-                  <span>Translated Title</span>
+                  <span>{tr("Translated Title")}</span>
                   <span className="text-[10px] text-muted-foreground font-normal">
                     Required
                   </span>
@@ -656,7 +656,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   htmlFor="target-slug"
                   className="text-xs font-semibold text-foreground flex items-center justify-between"
                 >
-                  <span>Localized Slug</span>
+                  <span>{tr("Localized Slug")}</span>
                   <span className="text-[10px] text-muted-foreground font-mono">
                     /{targetLocale}/...
                   </span>
@@ -711,7 +711,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               <div className="pt-2 border-t border-border/40 space-y-3">
                 <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Globe className="h-3.5 w-3.5 text-primary" />
-                  <span>SEO & Meta Configuration</span>
+                  <span>{tr("SEO & Meta Configuration")}</span>
                 </span>
                 <div className="space-y-2">
                   <Input
