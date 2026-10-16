@@ -35,7 +35,7 @@ export async function generateMetadata({
   }
 
   const model = res.meta.model;
-  const localePrefix = getLocalePrefix(site.locale);
+  const localePrefix = getLocalePrefix(site.locale, site.primaryLocale || site.locale, site.enabledLocales);
 
   return buildPageMetadata({
     title: `${model.name} | ${site.title}`,
