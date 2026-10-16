@@ -140,6 +140,7 @@ const AppContent: React.FC = () => {
       <LoginPage
         loginFn={async (email, password) => {
           await login(email, password);
+          await refresh();
         }}
         onLoginSuccess={() => navigate("/admin")}
       />
