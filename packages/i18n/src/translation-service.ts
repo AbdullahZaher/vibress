@@ -4,8 +4,12 @@ import {
   ContentTranslationRow,
   posts,
   pages,
+  tags,
+  postTags,
+  postAuthors,
+  users,
 } from "@vibress/database";
-import { eq, and, desc, inArray, or, ilike, isNull } from "drizzle-orm";
+import { eq, and, desc, inArray, or, ilike, isNull, lte, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   TranslationStatus,
@@ -389,6 +393,107 @@ export class TranslationService {
       needsReview,
       byLocale,
     };
+  }
+
+  /**
+   * Paginate the *published localized* source set rather than paginating
+   * English content and discarding untranslated rows after LIMIT/OFFSET.
+   * The query is scoped to both the source and translation publication.
+   */
+  async listPublishedLocalizedSourceIds(
+    type: "post" | "page",
+    publicationId: string,
+    targetLocale: string,
+    options: {
+      limit: number;
+      offset: number;
+      tagSlug?: string | undefined;
+      authorSlug?: string | undefined;
+    },
+  ): Promise<{ ids: string[]; total: number }> {
+    const db = getDb();
+    const limit = Math.max(1, Math.min(options.limit, 100));
+    const offset = Math.max(0, options.offset);
+    const translationConditions = and(
+      eq(contentTranslations.publicationId, publicationId),
+      eq(contentTranslations.contentType, type),
+      eq(contentTranslations.targetLocale, targetLocale),
+      eq(contentTranslations.status, "published"),
+    );
+
+    if (type === "post") {
+      const conditions = [
+        eq(posts.publicationId, publicationId),
+        eq(posts.status, "published"),
+        eq(posts.visibility, "public"),
+        lte(posts.publishedAt, new Date()),
+        isNull(posts.deletedAt),
+      ];
+      if (options.tagSlug) {
+        const tagPosts = db.select({ postId: postTags.postId })
+          .from(postTags)
+          .innerJoin(tags, eq(tags.id, postTags.tagId))
+          .where(and(
+            eq(tags.publicationId, publicationId),
+            eq(tags.slug, options.tagSlug),
+          ));
+        conditions.push(inArray(posts.id, tagPosts));
+      }
+      if (options.authorSlug) {
+        const authorPosts = db.select({ postId: postAuthors.postId })
+          .from(postAuthors)
+          .innerJoin(users, eq(users.id, postAuthors.userId))
+          .where(or(
+            eq(users.slug, options.authorSlug),
+            eq(users.id, options.authorSlug),
+            ilike(users.name, options.authorSlug.replace(/-/g, " ")),
+          ));
+        conditions.push(inArray(posts.id, authorPosts));
+      }
+      const where = and(...conditions);
+      const [countRow] = await db.select({ value: count() })
+        .from(posts)
+        .innerJoin(contentTranslations, and(
+          eq(contentTranslations.contentId, posts.id),
+          translationConditions,
+        ))
+        .where(where);
+      const rows = await db.select({ id: posts.id })
+        .from(posts)
+        .innerJoin(contentTranslations, and(
+          eq(contentTranslations.contentId, posts.id),
+          translationConditions,
+        ))
+        .where(where)
+        .orderBy(desc(posts.publishedAt), desc(posts.id))
+        .limit(limit).offset(offset);
+      return { ids: rows.map((row) => row.id), total: countRow?.value ?? 0 };
+    }
+
+    const pageWhere = and(
+      eq(pages.publicationId, publicationId),
+      eq(pages.status, "published"),
+      eq(pages.visibility, "public"),
+      lte(pages.publishedAt, new Date()),
+      isNull(pages.deletedAt),
+    );
+    const [countRow] = await db.select({ value: count() })
+      .from(pages)
+      .innerJoin(contentTranslations, and(
+        eq(contentTranslations.contentId, pages.id),
+        translationConditions,
+      ))
+      .where(pageWhere);
+    const rows = await db.select({ id: pages.id })
+      .from(pages)
+      .innerJoin(contentTranslations, and(
+        eq(contentTranslations.contentId, pages.id),
+        translationConditions,
+      ))
+      .where(pageWhere)
+      .orderBy(desc(pages.publishedAt), desc(pages.id))
+      .limit(limit).offset(offset);
+    return { ids: rows.map((row) => row.id), total: countRow?.value ?? 0 };
   }
 
   async listTranslationsForContent(
