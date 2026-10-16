@@ -46,13 +46,21 @@ export const SetupSiteInputSchema = z.object({
   enabledLocales: z.array(PublicationLocaleTagSchema).min(1).max(20).optional(),
 }).superRefine((site, ctx) => {
   if (!site.enabledLocales) return;
-  const primary = Intl.getCanonicalLocales(site.locale)[0];
-  const codes = site.enabledLocales.map((locale) => Intl.getCanonicalLocales(locale)[0]);
-  if (!codes.includes(primary) || codes.length !== new Set(codes).size) {
+  try {
+    const primary = Intl.getCanonicalLocales(site.locale)[0];
+    const codes = site.enabledLocales.map((locale) => Intl.getCanonicalLocales(locale)[0]);
+    if (!codes.includes(primary) || codes.length !== new Set(codes).size) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enabledLocales"],
+        message: "Enabled languages must be distinct and include the primary language",
+      });
+    }
+  } catch {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["enabledLocales"],
-      message: "Enabled languages must be distinct and include the primary language",
+      message: "Invalid language tag",
     });
   }
 });
