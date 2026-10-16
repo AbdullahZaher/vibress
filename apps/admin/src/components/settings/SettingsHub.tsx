@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { useSettingsHub } from "./hooks/useSettingsHub";
 import { useSettingsSearch } from "./hooks/useSettingsSearch";
 import { useScrollSpy } from "./hooks/useScrollSpy";
@@ -83,6 +84,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   can,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const {
     general,
     site,
@@ -163,7 +165,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 }`}
               >
                 {getPillarIcon(pillar.iconName)}
-                <span>{pillar.title}</span>
+                <span>{tr(pillar.title)}</span>
               </button>
             );
           })}
@@ -176,7 +178,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter settings..."
+            placeholder={tr("Filter settings...")}
             className="ps-8 text-xs h-8.5 bg-card border-border/70"
           />
           {query && (
@@ -197,8 +199,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {isPillarVisible("general") && (
         <SettingsSection
           id="general"
-          title="General settings"
-          description="Publication identity, localization, social metadata, and team permissions."
+          title={tr("General settings")}
+          description={tr("Publication identity, localization, social metadata, and team permissions.")}
           icon={getPillarIcon("Sliders")}
         >
           {isCardVisible("publication-info") && (
@@ -262,8 +264,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {isPillarVisible("site") && (
         <SettingsSection
           id="site"
-          title="Site"
-          description="Visual presentation, theme selection, navigation menus, and public announcement banners."
+          title={tr("Site")}
+          description={tr("Visual presentation, theme selection, navigation menus, and public announcement banners.")}
           icon={getPillarIcon("Layout")}
         >
           {isCardVisible("design-branding") && (
@@ -323,8 +325,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {isPillarVisible("membership") && (
         <SettingsSection
           id="membership"
-          title="Membership"
-          description="Reader subscriptions, member access levels, Stripe Connect payments, and promotional offers."
+          title={tr("Membership")}
+          description={tr("Reader subscriptions, member access levels, Stripe Connect payments, and promotional offers.")}
           icon={getPillarIcon("CreditCard")}
         >
           {isCardVisible("portal-access") && (
@@ -368,8 +370,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {isPillarVisible("growth") && (
         <SettingsSection
           id="growth"
-          title="Growth"
-          description="Audience acquisition, email newsletter delivery, privacy-first analytics, and member discussions."
+          title={tr("Growth")}
+          description={tr("Audience acquisition, email newsletter delivery, privacy-first analytics, and member discussions.")}
           icon={getPillarIcon("Sparkles")}
         >
           {isCardVisible("newsletters-config") && (
@@ -426,8 +428,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {isPillarVisible("advanced") && (
         <SettingsSection
           id="advanced"
-          title="Advanced"
-          description="Code injection, developer APIs & webhooks, system maintenance, data import/export, and audit logs."
+          title={tr("Advanced")}
+          description={tr("Code injection, developer APIs & webhooks, system maintenance, data import/export, and audit logs.")}
           icon={getPillarIcon("Cpu")}
         >
           {isCardVisible("content-models") && (
@@ -435,8 +437,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
               <SettingsCard id="advanced-content-models" isHighlighted={highlightedCardId === "content-models"}>
                 <SettingsCardRow
                   icon={<Database className="h-4 w-4" />}
-                  title="Content Models"
-                  description="Define structured content types, fields, relations and their validation rules."
+                  title={tr("Content Models")}
+                  description={tr("Define structured content types, fields, relations and their validation rules.")}
                   actionLabel="Manage models"
                   onAction={() => onNavigate?.("/admin/settings/advanced/content-models")}
                   disabled={!onNavigate}
