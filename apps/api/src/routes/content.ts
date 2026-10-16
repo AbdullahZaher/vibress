@@ -442,10 +442,10 @@ function extractRequestedLocale(
                 ...post,
                 title: tr.title,
                 slug: tr.slug,
-                excerpt: tr.excerpt ?? post.excerpt,
+                excerpt: tr.excerpt,
                 content: tr.content,
-                metaTitle: tr.metaTitle ?? post.metaTitle,
-                metaDescription: tr.metaDescription ?? post.metaDescription,
+                metaTitle: tr.metaTitle,
+                metaDescription: tr.metaDescription,
                 locale: tr.targetLocale,
               };
             } else {
@@ -567,12 +567,12 @@ function extractRequestedLocale(
             ...post,
             title: translationItem.title,
             slug: translationItem.slug,
-            excerpt: translationItem.excerpt ?? post.excerpt,
+            excerpt: translationItem.excerpt,
             content:
               translationItem.content,
-            metaTitle: translationItem.metaTitle ?? post.metaTitle,
+            metaTitle: translationItem.metaTitle,
             metaDescription:
-              translationItem.metaDescription ?? post.metaDescription,
+              translationItem.metaDescription,
             locale: translationItem.targetLocale,
           }
         : post;
@@ -641,10 +641,10 @@ function extractRequestedLocale(
                 ...pageObj,
                 title: tr.title,
                 slug: tr.slug,
-                excerpt: tr.excerpt ?? pageObj.excerpt,
+                excerpt: tr.excerpt,
                 content: tr.content,
-                metaTitle: tr.metaTitle ?? pageObj.metaTitle,
-                metaDescription: tr.metaDescription ?? pageObj.metaDescription,
+                metaTitle: tr.metaTitle,
+                metaDescription: tr.metaDescription,
                 locale: tr.targetLocale,
               };
             } else {
@@ -747,12 +747,12 @@ function extractRequestedLocale(
             ...pageObj,
             title: translationItem.title,
             slug: translationItem.slug,
-            excerpt: translationItem.excerpt ?? pageObj.excerpt,
+            excerpt: translationItem.excerpt,
             content:
               translationItem.content,
-            metaTitle: translationItem.metaTitle ?? pageObj.metaTitle,
+            metaTitle: translationItem.metaTitle,
             metaDescription:
-              translationItem.metaDescription ?? pageObj.metaDescription,
+              translationItem.metaDescription,
             locale: translationItem.targetLocale,
           }
         : pageObj;
