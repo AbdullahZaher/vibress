@@ -3,7 +3,7 @@ import {
   translationService,
   postsService,
   pagesService,
-  settingsService,
+  publicationLocaleService,
   auditService,
   getAiGatewayService,
 } from "../services";
@@ -17,37 +17,17 @@ import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
 
 export async function translationRoutes(fastify: FastifyInstance) {
-  // Helper to fetch enabled publication locales
-  async function getPublicationLocales(): Promise<{
+  // Read the locale policy for the authoritative publication context only.
+  // An empty locale table means a single-language publication, not en+ar.
+  async function getPublicationLocales(publicationId: string): Promise<{
     defaultLocale: string;
     enabledLocales: string[];
   }> {
-    const siteSettings = await settingsService
-      .getRawSettings("site")
-      .catch(() => ({} as Record<string, unknown>));
-
-    const defaultLocale = (siteSettings.locale as string) || "en";
-    let enabledLocales = ["en", "ar-SA"];
-
-    if (siteSettings.enabledLocales) {
-      if (Array.isArray(siteSettings.enabledLocales)) {
-        enabledLocales = siteSettings.enabledLocales as string[];
-      } else if (typeof siteSettings.enabledLocales === "string") {
-        enabledLocales = (siteSettings.enabledLocales as string)
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-    }
-
-    if (!enabledLocales.includes(defaultLocale)) {
-      enabledLocales.unshift(defaultLocale);
-    }
-    if (!enabledLocales.includes("ar-SA") && !enabledLocales.includes("ar")) {
-      enabledLocales.push("ar-SA");
-    }
-
-    return { defaultLocale, enabledLocales };
+    const config = await publicationLocaleService.getConfiguration(publicationId);
+    return {
+      defaultLocale: config.primaryLocale,
+      enabledLocales: config.enabledLocales,
+    };
   }
 
   // 1. Get Translation Matrix
@@ -65,7 +45,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
           offset?: string;
         };
 
-      const { defaultLocale, enabledLocales } = await getPublicationLocales();
+      const { defaultLocale, enabledLocales } = await getPublicationLocales(req.publicationContext!.publicationId);
 
       const result = await translationService.getTranslationMatrix(
         {
@@ -95,7 +75,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
   fastify.get("/translations/queue", {
     preHandler: [requireStaffSession, requirePermission("translations.read")],
     handler: async (req, reply) => {
-      const { defaultLocale, enabledLocales } = await getPublicationLocales();
+      const { defaultLocale, enabledLocales } = await getPublicationLocales(req.publicationContext!.publicationId);
       const queue = await translationService.getTranslationQueue(
         enabledLocales,
         defaultLocale,
@@ -109,7 +89,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
   fastify.get("/translations/health", {
     preHandler: [requireStaffSession, requirePermission("translations.read")],
     handler: async (req, reply) => {
-      const { defaultLocale, enabledLocales } = await getPublicationLocales();
+      const { defaultLocale, enabledLocales } = await getPublicationLocales(req.publicationContext!.publicationId);
       const health = await translationService.getLocalizationHealth(
         enabledLocales,
         defaultLocale,
@@ -234,7 +214,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { defaultLocale } = await getPublicationLocales();
+      const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
 
       // Check if source exists
       let sourceUpdatedAt = new Date();
@@ -521,7 +501,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { defaultLocale } = await getPublicationLocales();
+      const { defaultLocale } = await getPublicationLocales(req.publicationContext!.publicationId);
 
       // Retrieve source content
       let sourceTitle = "";
