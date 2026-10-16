@@ -1,6 +1,6 @@
 # Localization Policy — Engineering Implementation Plan
 
-**Status:** Approved implementation plan (work not started)  
+**Status:** Approved policy; T1 implementation committed on `feat/publication-locale-policy-ticket-1` (typecheck, integration tests and CI pending). T2–T6 are not implemented.  
 **Decision date:** 2026-10-16  
 **Canonical policy:** [Publication-Scoped Language Policy](../14-decisions/publication-language-policy.md)  
 **Repository baseline reviewed:** `main`, tree `94751ae25a85e4f11e23cfd9be5beccaf1a7282e`  
@@ -96,6 +96,14 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 - Run focused tests, API/security suites, browser RTL/accessibility, typecheck, lint, build, migration checks and scoped diff review before release.
 
 **Done when:** no source-body copy masquerades as a translated document and all policy acceptance gates are satisfied.
+
+### T1 API contract introduced on the implementation branch
+
+- `GET /api/admin/v1/locales` returns the publication-scoped `primaryLocale`, `enabledLocales`, `isMultilingual` and `needsReconciliation` fields (requires `settings.read`).
+- `PUT /api/admin/v1/locales` accepts `{ "primaryLocale": "...", "enabledLocales": ["..."] }` for the **authenticated publication only** (requires `settings.manage`, origin verification and runtime Zod validation).
+- The legacy `PUT /api/admin/v1/settings/site/locale` path is retained via the canonical service. Changing a populated publication's primary locale returns a conflict until a deliberate content migration is available.
+- The existing `publication_locales` and `publications.primary_locale` schema is reused; no released migration is rewritten.
+- **Limitations:** public locale routing, full UI localization and all translation write/visibility gates are tracked separately in T3–T5. New unit/integration tests have been committed but **not executed or certified** in this environment.
 
 ## 3. Migration and compatibility checklist
 
