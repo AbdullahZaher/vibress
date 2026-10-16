@@ -227,6 +227,21 @@ describe("PublicationLocaleService — single language by default", () => {
     expect(publications.get("pub_a")?.primaryLocale).toBe("en");
   });
 
+  it("repairs a missing default marker without relabeling authored content", async () => {
+    authored.add("pub_a");
+    publications.set("pub_a", {
+      primaryLocale: "en",
+      locales: [{ locale: "en", status: "active", isDefault: false }],
+    });
+    const result = await service.updateConfiguration("pub_a", {
+      primaryLocale: "en", enabledLocales: ["en", "fr"],
+    }, "owner");
+    expect(result.needsReconciliation).toBe(false);
+    expect(publications.get("pub_a")?.locales).toContainEqual({
+      locale: "en", status: "active", isDefault: true,
+    });
+  });
+
   it("refuses to retire published translated URLs without an explicit review", async () => {
     publicTranslations.set("pub_a", ["ar-SA"]);
     await expect(service.updateConfiguration("pub_a", {
