@@ -13,7 +13,7 @@
     "@vibress/studio-core": "workspace:*",
     "@vibress/studio-renderer": "workspace:*",
     "@vibress/studio-utils": "workspace:*",
-    "markdown-it": "^14.1.0"
+    "markdown-it": "^14.3.3"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

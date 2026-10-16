@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.3.3",
     "parse5": "^7.3.0",
     "semver": "^7.6.3"
   },
