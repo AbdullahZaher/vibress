@@ -96,6 +96,12 @@ export interface PaginatedPostsResult {
   };
 }
 
+export interface PublicLocaleAlternates {
+  primaryLocale: string;
+  enabledLocales: string[];
+  alternates: Record<string, string>;
+}
+
 export const ContentApiClient = {
   async getPosts(options?: {
     page?: number;
@@ -105,6 +111,17 @@ export const ContentApiClient = {
     locale?: string;
   }): Promise<PaginatedPostsResult | null> {
     return fetchContentApi<PaginatedPostsResult>("/posts", options);
+  },
+
+  async getPublishedLocaleAlternates(
+    contentType: "post" | "page",
+    slug: string,
+    locale: string,
+  ): Promise<PublicLocaleAlternates | null> {
+    const kind = contentType === "post" ? "posts" : "pages";
+    return fetchContentApi<PublicLocaleAlternates>(
+      `/${kind}/${encodeURIComponent(slug)}/alternates`, { locale },
+    );
   },
 
   async getPostBySlug(
