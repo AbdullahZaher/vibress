@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
@@ -48,6 +49,7 @@ export const PostsList: React.FC<PostsListProps> = ({
   canPublish,
   filterStatus,
 }) => {
+  const { tr } = useAdminLocale();
   const [posts, setPosts] = useState<PostSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,21 +115,21 @@ export const PostsList: React.FC<PostsListProps> = ({
         return (
           <Badge variant="published" className="text-[11px] font-mono">
             <Globe className="h-3 w-3" />
-            <span>Published</span>
+            <span>{tr("Published")}</span>
           </Badge>
         );
       case "scheduled":
         return (
           <Badge variant="scheduled" className="text-[11px] font-mono">
             <Calendar className="h-3 w-3" />
-            <span>Scheduled</span>
+            <span>{tr("Scheduled")}</span>
           </Badge>
         );
       default:
         return (
           <Badge variant="draft" className="text-[11px] font-mono">
             <EyeOff className="h-3 w-3" />
-            <span>Draft</span>
+            <span>{tr("Draft")}</span>
           </Badge>
         );
     }
@@ -158,12 +160,12 @@ export const PostsList: React.FC<PostsListProps> = ({
       <div className="w-full max-w-7xl mx-auto p-6 rounded-xl bg-card border border-rose-500/20 text-foreground space-y-3">
         <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-sm">
           <AlertCircle className="h-4 w-4" />
-          <span>Unable to load publication posts</span>
+          <span>{tr("Unable to load publication posts")}</span>
         </div>
         <p className="text-xs text-muted-foreground">{error}</p>
         <Button variant="outline" size="sm" onClick={fetchPosts} className="gap-1.5">
           <RefreshCw className="h-3.5 w-3.5" />
-          <span>Try again</span>
+          <span>{tr("Try again")}</span>
         </Button>
       </div>
     );
@@ -175,10 +177,10 @@ export const PostsList: React.FC<PostsListProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-            Posts
+            {tr("Posts")}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage editorial articles, revisions, and publication schedules.
+            {tr("Manage editorial articles, revisions, and publication schedules.")}
           </p>
         </div>
         <Button
@@ -210,7 +212,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Published <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "published").length})</span>
+            {tr("Published")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "published").length})</span>
           </button>
           <button
             onClick={() => setStatusFilter("draft")}
@@ -230,7 +232,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Scheduled <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "scheduled").length})</span>
+            {tr("Scheduled")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "scheduled").length})</span>
           </button>
         </div>
 
@@ -238,7 +240,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Filter posts by title or slug..."
+            placeholder={tr("Filter posts by title or slug...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="ps-8 h-8 text-xs bg-card border-border/70"
@@ -251,11 +253,11 @@ export const PostsList: React.FC<PostsListProps> = ({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="ps-6">Title</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Author</TableHead>
-              <TableHead>Updated</TableHead>
-              <TableHead className="text-end pe-6">Actions</TableHead>
+              <TableHead className="ps-6">{tr("Title")}</TableHead>
+              <TableHead>{tr("Status")}</TableHead>
+              <TableHead>{tr("Author")}</TableHead>
+              <TableHead>{tr("Updated")}</TableHead>
+              <TableHead className="text-end pe-6">{tr("Actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -268,7 +270,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                   <div className="flex flex-col items-center justify-center space-y-2 py-4">
                     <FileText className="h-8 w-8 text-muted-foreground/30" />
                     <p className="text-xs font-medium text-foreground">
-                      No posts found
+                      {tr("No posts found")}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {searchQuery
@@ -368,7 +370,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         {filteredPosts.length === 0 ? (
           <div className="rounded-xl border border-border/70 bg-card p-6 text-center text-muted-foreground space-y-2">
             <FileText className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-            <p className="text-xs font-medium text-foreground">No posts found</p>
+            <p className="text-xs font-medium text-foreground">{tr("No posts found")}</p>
             <p className="text-[11px] text-muted-foreground">
               {searchQuery
                 ? "Try adjusting your search query."
