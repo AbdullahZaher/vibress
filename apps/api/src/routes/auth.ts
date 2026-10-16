@@ -74,7 +74,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         const throttleCheck = await checkAccountThrottle(
           "staff_login",
           normalizedEmail,
-          { failClosed: true },
+          { clientIp: ipAddress, failClosed: true },
         );
         if (!throttleCheck.allowed) {
           reply.header("Retry-After", throttleCheck.retryAfterSeconds);
@@ -111,7 +111,9 @@ export async function authRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         });
 
-        await resetAccountThrottle("staff_login", normalizedEmail);
+        await resetAccountThrottle("staff_login", normalizedEmail, {
+          clientIp: ipAddress,
+        });
 
         const isProduction = getConfig().isProduction;
         reply.setCookie(COOKIE_NAME, result.sessionToken, {
@@ -138,7 +140,9 @@ export async function authRoutes(fastify: FastifyInstance) {
           err instanceof AuthDomainError &&
           err.code === "INVALID_CREDENTIALS"
         ) {
-          await recordAccountFailure("staff_login", normalizedEmail);
+          await recordAccountFailure("staff_login", normalizedEmail, {
+            clientIp: ipAddress,
+          });
           return reply.status(401).send({
             errors: [
               {

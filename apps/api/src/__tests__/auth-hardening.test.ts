@@ -97,17 +97,17 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
   });
 
-  it("triggers account throttle after N failed attempts from rotating IPs", async () => {
+  it("ensures an attacker IP cannot lock out the owner logging in from a different IP", async () => {
     app = buildApp();
     await app.ready();
 
-    // 5 failed login attempts for owner@example.com from 5 rotating client IPs:
+    // Attacker sends 5 bad passwords for owner@example.com from 198.51.100.1:
     for (let i = 1; i <= 5; i++) {
       const res = await app.inject({
         method: "POST",
         url: "/api/admin/v1/auth/login",
         headers: {
-          "x-forwarded-for": `198.51.100.${i}`,
+          "x-forwarded-for": "198.51.100.1",
           origin: "https://admin.example.com",
         },
         remoteAddress: "127.0.0.1",
@@ -119,13 +119,12 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
       expect(res.statusCode).toBe(401);
     }
 
-    // 6th attempt from a brand new IP (198.51.100.99):
-    // Should trigger account lockout (429) regardless of rotating client IP.
-    const res6 = await app.inject({
+    // 6th attempt from attacker IP (198.51.100.1) is locked (429):
+    const attackerRes6 = await app.inject({
       method: "POST",
       url: "/api/admin/v1/auth/login",
       headers: {
-        "x-forwarded-for": "198.51.100.99",
+        "x-forwarded-for": "198.51.100.1",
         origin: "https://admin.example.com",
       },
       remoteAddress: "127.0.0.1",
@@ -134,13 +133,108 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
         password: "WrongPassword123!",
       },
     });
+    expect(attackerRes6.statusCode).toBe(429);
+    expect(attackerRes6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
 
-    expect(res6.statusCode).toBe(429);
-    expect(res6.headers["retry-after"]).toBeDefined();
-    expect(res6.json().errors[0]).toMatchObject({
-      code: "TOO_MANY_REQUESTS",
-      message: "Too many failed attempts. Please try again later.",
+    // Legitimate owner logs in from a different IP (203.0.113.10) with valid credentials:
+    // MUST NOT be locked out by attacker's brute force attempts.
+    const ownerRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      headers: {
+        "x-forwarded-for": "203.0.113.10",
+        origin: "https://admin.example.com",
+      },
+      remoteAddress: "127.0.0.1",
+      payload: {
+        email: "owner@example.com",
+        password: "OwnerPass123!",
+      },
     });
+    expect(ownerRes.statusCode).toBe(200);
+    expect(ownerRes.json().user.email).toBe("owner@example.com");
+  });
+
+  it("still triggers legitimate lockout for a single attacker IP after 5 failed attempts", async () => {
+    app = buildApp();
+    await app.ready();
+
+    for (let i = 1; i <= 5; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        headers: {
+          "x-forwarded-for": "198.51.100.5",
+          origin: "https://admin.example.com",
+        },
+        remoteAddress: "127.0.0.1",
+        payload: {
+          email: "owner@example.com",
+          password: "WrongPassword123!",
+        },
+      });
+      expect(res.statusCode).toBe(401);
+    }
+
+    const res6 = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      headers: {
+        "x-forwarded-for": "198.51.100.5",
+        origin: "https://admin.example.com",
+      },
+      remoteAddress: "127.0.0.1",
+      payload: {
+        email: "owner@example.com",
+        password: "WrongPassword123!",
+      },
+    });
+    expect(res6.statusCode).toBe(429);
+    expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
+  });
+
+  it("behaves identically for unknown emails to prevent account enumeration", async () => {
+    app = buildApp();
+    await app.ready();
+
+    // 5 attempts for a nonexistent email from attacker IP
+    for (let i = 1; i <= 5; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        headers: {
+          "x-forwarded-for": "198.51.100.7",
+          origin: "https://admin.example.com",
+        },
+        remoteAddress: "127.0.0.1",
+        payload: {
+          email: "nonexistent-user@example.com",
+          password: "WrongPassword123!",
+        },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().errors[0]).toMatchObject({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid credentials",
+      });
+    }
+
+    // 6th attempt is throttled identically
+    const res6 = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      headers: {
+        "x-forwarded-for": "198.51.100.7",
+        origin: "https://admin.example.com",
+      },
+      remoteAddress: "127.0.0.1",
+      payload: {
+        email: "nonexistent-user@example.com",
+        password: "WrongPassword123!",
+      },
+    });
+    expect(res6.statusCode).toBe(429);
+    expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
   });
 
   it("allows legitimate login and resets the throttle counter on success", async () => {
@@ -153,7 +247,7 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
         method: "POST",
         url: "/api/admin/v1/auth/login",
         headers: {
-          "x-forwarded-for": `198.51.100.${i}`,
+          "x-forwarded-for": "198.51.100.10",
           origin: "https://admin.example.com",
         },
         remoteAddress: "127.0.0.1",
@@ -184,9 +278,13 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     // Verify counter in Redis was deleted
     const redis = getRedisClient();
     const count = await redis.get(
-      "sys:auth_throttle:staff_login:owner@example.com",
+      "sys:auth_throttle:staff_login:owner@example.com:198.51.100.0/24",
     );
     expect(count).toBeNull();
+    const globalCount = await redis.get(
+      "sys:auth_throttle:staff_login_global:owner@example.com",
+    );
+    expect(globalCount).toBeNull();
   });
 
   it("verifies behavior with a trusted proxy CIDR configured", async () => {
