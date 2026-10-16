@@ -611,7 +611,7 @@ export class TranslationService {
     const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
-    if (!["needs_review", "translated", "approved"].includes(existing.status)) {
+    if (!["needs_review", "approved"].includes(existing.status)) {
       throw new Error("Translation must be submitted for review before approval");
     }
     const transition = validateTranslationStatusTransition(existing.status, "approved");
