@@ -103,6 +103,18 @@ export interface PublicLocaleAlternates {
 }
 
 export const ContentApiClient = {
+  async getLegacyTranslationRedirect(
+    type: "post" | "page",
+    slug: string,
+  ): Promise<string | null> {
+    const data = await fetchContentApi<{ path: string }>(
+      "/legacy-translation/resolve", { type, slug },
+    );
+    if (!data || typeof data.path !== "string" ||
+        !/^\/(?!\/)[^?#]*$/.test(data.path)) return null;
+    return data.path;
+  },
+
   async getPosts(options?: {
     page?: number;
     limit?: number;
