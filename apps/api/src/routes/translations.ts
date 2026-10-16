@@ -374,13 +374,6 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
       if (body.targetLocale &&
-          canonicalPublicationLocale(body.targetLocale) !== existing.targetLocale) {
-        return reply.status(409).send({
-          statusCode: 409, error: "Conflict",
-          message: "Cannot change the target language of an existing translation",
-        });
-      }
-      if (body.targetLocale &&
           canonicalPublicationLocale(body.targetLocale) !== canonicalPublicationLocale(existing.targetLocale)) {
         return reply.status(409).send({ errors: [{
           code: "TRANSLATION_TARGET_IMMUTABLE",
@@ -388,21 +381,22 @@ export async function translationRoutes(fastify: FastifyInstance) {
           requestId: req.id,
         }] });
       }
-      const canEditLive = (permission: string) =>
-        hasPermission(req.permissions || [], permission, req.roles || []);
+      // Translation bodies are not revisioned independently. Editing an
+      // already public/approved record in place would publish unreviewed text.
+      // Require explicitly reopening it through the workflow first.
+      if (existing.status === "published" || existing.status === "approved") {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_REVIEW_REQUIRED",
+          message: "Reopen this translation for review before editing its published text",
+          requestId: req.id,
+        }] });
+      }
       if (body.status && body.status !== existing.status) {
         return reply.status(409).send({ errors: [{
           code: "TRANSLATION_REVIEW_REQUIRED",
           message: "Use dedicated review and publish endpoints to change translation status",
           requestId: req.id,
         }] });
-      }
-      if ((existing.status === "published" && !canEditLive("translations.publish")) ||
-          (existing.status === "approved" && !canEditLive("translations.approve"))) {
-        return reply.status(403).send({
-          statusCode: 403, error: "Forbidden",
-          message: "Editing an approved or published translation requires its elevated permission",
-        });
       }
       if (!["post", "page", "content_entry", "tag"].includes(existing.contentType)) {
         return reply.status(400).send({
