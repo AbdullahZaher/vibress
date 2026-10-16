@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,6 +28,7 @@ import { Avatar } from "./ui/avatar";
 import { Users, Search, UserX, UserCheck, ShieldAlert } from "lucide-react";
 
 export const MembersList: React.FC = () => {
+  const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -139,7 +141,7 @@ export const MembersList: React.FC = () => {
           <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search by email or name..."
+            placeholder={tr("Search by email or name...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="ps-8 h-8 text-xs bg-card border-border/70"
@@ -152,10 +154,10 @@ export const MembersList: React.FC = () => {
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="ps-6 text-xs">Member</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-xs">Joined</TableHead>
-              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
+              <TableHead className="ps-6 text-xs">{tr("Member")}</TableHead>
+              <TableHead className="text-xs">{tr("Status")}</TableHead>
+              <TableHead className="text-xs">{tr("Joined")}</TableHead>
+              <TableHead className="text-end pe-6 text-xs">{tr("Actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -165,7 +167,7 @@ export const MembersList: React.FC = () => {
                   colSpan={4}
                   className="h-32 text-center text-xs text-muted-foreground"
                 >
-                  Loading members list...
+                  {tr("Loading members list...")}
                 </TableCell>
               </TableRow>
             ) : isError ? (
@@ -185,7 +187,7 @@ export const MembersList: React.FC = () => {
                 >
                   <div className="flex flex-col items-center justify-center space-y-1">
                     <Users className="h-8 w-8 text-muted-foreground/40" />
-                    <p className="text-xs font-medium">No members found.</p>
+                    <p className="text-xs font-medium">{tr("No members found.")}</p>
                   </div>
                 </TableCell>
               </TableRow>
