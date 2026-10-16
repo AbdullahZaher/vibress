@@ -34,7 +34,7 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
       originalEnv[key] = process.env[key];
       process.env[key] = PROD_ENV[key as keyof typeof PROD_ENV];
     }
-    await seedDatabase();
+    await seedDatabase({ skipDevUsers: false });
     // Clear any leftover redis throttle keys
     const redis = getRedisClient();
     const keys = await redis.keys("sys:auth_throttle:*");
