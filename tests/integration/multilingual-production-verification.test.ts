@@ -362,9 +362,20 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   // --- Requirement 16 & 17: hreflang correctness and localized sitemap ---
   it("Requirement 16 & 17: Generates valid hreflang alternate links and inLanguage schema", () => {
     const siteUrl = getPublicSiteUrl();
+    const noAlternates = buildPageMetadata({
+      title: "Welcome to Vibress",
+      canonicalPath: `/posts/${testPostSlug}`,
+    });
+    // Missing translations must never be advertised from assumed en/ar defaults.
+    expect(noAlternates.alternates?.languages).toEqual({});
     const meta = buildPageMetadata({
       title: "Welcome to Vibress",
       canonicalPath: `/posts/${testPostSlug}`,
+      alternateLocales: {
+        en: `${siteUrl}/posts/${testPostSlug}`,
+        ar: `${siteUrl}/ar/posts/${testPostSlug}`,
+        "x-default": `${siteUrl}/posts/${testPostSlug}`,
+      },
     });
     expect(meta.alternates?.languages?.["en"]).toBe(`${siteUrl}/posts/${testPostSlug}`);
     expect(meta.alternates?.languages?.["ar"]).toBe(`${siteUrl}/ar/posts/${testPostSlug}`);
