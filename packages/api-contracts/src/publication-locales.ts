@@ -55,40 +55,6 @@ export const PublicationLocalesResponseSchema = z.object({
 });
 export type PublicationLocalesResponse = z.infer<typeof PublicationLocalesResponseSchema>;
 
-/** Translation writes do not accept arbitrary publication or source IDs. */
-export const CreateContentTranslationSchema = z.object({
-  targetLocale: PublicationLocaleTagSchema,
-  title: z.string().trim().min(1).max(500),
-  slug: z.string().trim().min(1).max(500),
-  excerpt: z.string().max(20000).optional(),
-  content: z.record(z.string(), z.unknown()).optional(),
-  metaTitle: z.string().max(500).optional(),
-  metaDescription: z.string().max(2000).optional(),
-  status: z.enum(["draft", "in_progress", "translated", "needs_review"]).optional(),
-  translationProvider: z.string().max(100).optional(),
-}).strict();
-
-export const EditContentTranslationSchema = CreateContentTranslationSchema.omit({
-  targetLocale: true,
-}).partial().extend({
-  // Older Studio clients still send this immutable value on PATCH.
-  targetLocale: PublicationLocaleTagSchema.optional(),
-  // Workflow changes are checked against the stored status in the route.
-  status: z.enum(["untranslated", "draft", "in_progress", "translated", "needs_review", "approved", "published", "stale"]).optional(),
-}).strict();
-
-export const AiTranslateContentSchema = z.object({
-  targetLocale: PublicationLocaleTagSchema,
-  provider: z.string().max(80).optional(),
-  model: z.string().max(100).optional(),
-}).strict();
-
-export const BulkTranslationActionSchema = z.object({
-  translationIds: z.array(z.string().min(1).max(200)).min(1).max(100)
-    .refine((ids) => new Set(ids).size === ids.length, "Duplicate translation IDs"),
-  action: z.enum(["submit_review", "approve", "publish", "mark_stale", "delete"]),
-}).strict();
-
 /** Read-only compatibility lookup; no caller-provided publication identifier. */
 export const PublicLegacyTranslationRedirectSchema = z.object({
   type: z.enum(["post", "page"]),
