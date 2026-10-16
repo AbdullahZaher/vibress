@@ -123,7 +123,12 @@ import {
 } from "@vibress/analytics";
 import { AnalyticsOverviewService } from "@vibress/analytics";
 import { DrizzleSearchRepository, SearchService } from "@vibress/search";
-import { DrizzleSettingRepository, SettingsService } from "@vibress/settings";
+import {
+  DrizzleSettingRepository,
+  SettingsService,
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
+} from "@vibress/settings";
 import {
   DrizzleRedirectRepository,
   RedirectsService,
@@ -424,9 +429,14 @@ export const pagesService = new PagesService(
 );
 
 // ---------------- Operations: Settings, Redirects, Import/Export ----------------
+export const publicationLocaleService = new PublicationLocaleService(
+  new DrizzlePublicationLocaleRepository(),
+  new DrizzleSettingRepository(),
+);
 export const settingsService = new SettingsService(
   new DrizzleSettingRepository(),
   auditService,
+  publicationLocaleService,
 );
 export const setupService = new SetupService(
   new DrizzleInstallationRepository(),
