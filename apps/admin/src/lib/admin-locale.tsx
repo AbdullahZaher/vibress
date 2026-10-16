@@ -98,8 +98,6 @@ const translations: Record<string, string> = {
   "Define structured content types, fields, relations and their validation rules.": "تعريف أنواع المحتوى المنظم والحقول والعلاقات وقواعد التحقق.",
   "General Settings": "الإعدادات العامة",
   "Secured": "محمية",
-  "Session Secured": "جلسة آمنة",
-  "General Settings": "الإعدادات العامة",
   "First-run setup": "الإعداد الأولي",
   "Setup key": "مفتاح التثبيت",
   "System readiness": "جاهزية النظام",
