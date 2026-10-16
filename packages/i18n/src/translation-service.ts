@@ -116,6 +116,7 @@ export class TranslationService {
     targetLocale: string,
     currentSourceUpdatedAt?: Date,
     publicationId?: string,
+    exactLocale = false,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
     const conditions = [
@@ -131,8 +132,9 @@ export class TranslationService {
       .where(and(...conditions))
       .limit(1);
 
-    // Fallback: match by base language if regional variant was requested/stored (e.g. ar <-> ar-SA)
-    if (!rows[0]) {
+    // Existing callers retain historical fallback; publication policy
+    // callers use exactLocale=true to prevent regional variant confusion.
+    if (!exactLocale && !rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
       const fallbackConditions = [
         eq(contentTranslations.contentType, contentType),
@@ -195,6 +197,7 @@ export class TranslationService {
     targetLocale: string,
     slug: string,
     publicationId?: string,
+    exactLocale = false,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
     const conditions = [
@@ -210,8 +213,8 @@ export class TranslationService {
       .where(and(...conditions))
       .limit(1);
 
-    // Fallback: match by base language if regional variant was requested/stored
-    if (!rows[0]) {
+    // No implicit regional variant substitution for strict publication routes.
+    if (!exactLocale && !rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
       const fallbackConditions = [
         eq(contentTranslations.contentType, contentType),
@@ -490,6 +493,7 @@ export class TranslationService {
       input.targetLocale,
       undefined,
       pubId,
+      true,
     );
 
     const now = new Date();
