@@ -104,6 +104,8 @@ export interface ThemeSiteSettings {
   description: string;
   url: string;
   locale: string;
+  primaryLocale?: string | undefined;
+  enabledLocales?: string[] | undefined;
   tagline?: string | undefined;
   timezone?: string | undefined;
   accentColor?: string | undefined;
@@ -148,6 +150,8 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     description: process.env.SITE_DESCRIPTION || "Publishing Platform",
     url: getPublicSiteUrl(),
     locale: process.env.SITE_LOCALE || "en",
+    primaryLocale: process.env.SITE_LOCALE || "en",
+    enabledLocales: [process.env.SITE_LOCALE || "en"],
     accentColor: "#6366f1",
     primaryNav: [],
     secondaryNav: [],
@@ -192,7 +196,13 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
     const site = data?.site;
     if (!site || typeof site.title !== "string") return fallback;
     const requestLocale = await getRequestLocaleFromHeaders();
-    const activeLocale = requestLocale || (site.locale as string) || fallback.locale;
+    const primaryLocale = typeof site.locale === "string"
+      ? site.locale : fallback.locale;
+    const enabledLocales = Array.isArray(site.enabledLocales)
+      ? site.enabledLocales.filter((value): value is string => typeof value === "string")
+      : [primaryLocale];
+    const activeLocale = requestLocale && enabledLocales.includes(requestLocale)
+      ? requestLocale : primaryLocale;
     const commentsData = (data.comments as ThemeSiteSettings["comments"]) || {};
     const commentAccess = commentsData?.commentAccess || "all";
     const commentsEnabled = commentAccess !== "disabled";
@@ -206,6 +216,8 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,
       locale: activeLocale,
+      primaryLocale,
+      enabledLocales,
       timezone: (site.timezone as string) || "UTC",
       accentColor: (site.accentColor as string) || fallback.accentColor,
       iconUrl: (site.iconUrl as string) || undefined,
