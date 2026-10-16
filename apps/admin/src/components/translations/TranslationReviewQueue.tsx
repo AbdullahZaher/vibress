@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
 import {
@@ -39,6 +40,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
   onNavigate,
   canPublish = true,
 }) => {
+  const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"stale" | "needsReview" | "missing">("stale");
 
@@ -85,19 +87,15 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
             className="gap-2 cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Matrix</span>
+            <span>{tr("Matrix")}</span>
           </Button>
           <div className="h-4 w-[1px] bg-border" />
           <div>
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-500" />
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Editorial Review Queue
-              </h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{tr("Editorial Review Queue")}</h1>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Prioritized translation tasks: stale published content, review submissions, and missing coverage.
-            </p>
+            <p className="text-xs text-muted-foreground">{tr("Prioritized translation tasks: stale published content, review submissions, and missing coverage.")}</p>
           </div>
         </div>
 
@@ -109,7 +107,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
             className="gap-2 cursor-pointer text-xs"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Refresh Queue</span>
+            <span>{tr("Refresh Queue")}</span>
           </Button>
         </div>
       </div>
@@ -128,15 +126,13 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="h-4 w-4" />
-              <span>Stale Translations</span>
+              <span>{tr("Stale Translations")}</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-700 dark:text-rose-300">
               {staleItems.length}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Live published content whose source was modified.
-          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">{tr("Live published content whose source was modified.")}</p>
         </button>
 
         <button
@@ -151,15 +147,13 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
               <Clock className="h-4 w-4" />
-              <span>Needs Review</span>
+              <span>{tr("Needs Review")}</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
               {needsReviewItems.length}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            AI translations & submitted drafts awaiting approval.
-          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">{tr("AI translations & submitted drafts awaiting approval.")}</p>
         </button>
 
         <button
@@ -174,15 +168,13 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-primary">
               <FileQuestion className="h-4 w-4" />
-              <span>Untranslated</span>
+              <span>{tr("Untranslated")}</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary/20 text-primary">
               {missingItems.length}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Published content without translation in active locales.
-          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">{tr("Published content without translation in active locales.")}</p>
         </button>
       </div>
 
@@ -191,15 +183,13 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground flex items-center justify-center gap-2">
             <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-            <span>Loading review queue...</span>
+            <span>{tr("Loading review queue...")}</span>
           </div>
         ) : currentItems.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground space-y-2">
             <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
-            <p className="font-semibold text-foreground text-sm">All caught up!</p>
-            <p className="text-xs text-muted-foreground">
-              No items currently require attention in this category.
-            </p>
+            <p className="font-semibold text-foreground text-sm">{tr("All caught up!")}</p>
+            <p className="text-xs text-muted-foreground">{tr("No items currently require attention in this category.")}</p>
           </div>
         ) : (
           <div className="divide-y divide-border/40">
@@ -228,7 +218,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
                       {item.translationProvider?.startsWith("ai:") && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
-                          <span>AI Generated</span>
+                          <span>{tr("AI Generated")}</span>
                         </span>
                       )}
                     </div>
@@ -255,7 +245,7 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
                         className="h-8 text-xs cursor-pointer text-sky-600 dark:text-sky-400 border-sky-500/30 gap-1"
                       >
                         <CheckCheck className="h-3.5 w-3.5" />
-                        <span>Approve</span>
+                        <span>{tr("Approve")}</span>
                       </Button>
                     )}
 
