@@ -211,6 +211,30 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(401);
     });
 
+    it("does not grant an Author permission to change publication languages", async () => {
+      await ensureUserWithRole(
+        "language.author@example.com", "Author", "AuthorLanguagePassword123!",
+      );
+      const login = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        payload: {
+          email: "language.author@example.com",
+          password: "AuthorLanguagePassword123!",
+        },
+      });
+      expect(login.statusCode).toBe(200);
+      const header = login.headers["set-cookie"];
+      const cookie = (Array.isArray(header) ? header[0] : header)?.split(";")[0] ?? "";
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie, origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
     it("enforces the origin protection on locale writes", async () => {
       const res = await app.inject({
         method: "PUT",
