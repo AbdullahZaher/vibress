@@ -133,7 +133,7 @@ export class PublicationLocaleService {
       }
     }
 
-    if (activeLocales.length > 0 && !activeLocales.includes(primaryLocale)) {
+    if (snapshot.locales.length > 0 && !activeLocales.includes(primaryLocale)) {
       needsReconciliation = true;
     }
     const enabledLocales = [
