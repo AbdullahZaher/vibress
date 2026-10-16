@@ -18,7 +18,7 @@ export interface SetupPreflight {
 }
 
 export interface SetupCompletePayload {
-  site: { name: string; description: string; tagline?: string; locale: string };
+  site: { name: string; description: string; tagline?: string; locale: string; enabledLocales?: string[] };
   owner: { name: string; email: string; password: string };
 }
 
