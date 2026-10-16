@@ -182,7 +182,7 @@ export function ContentModelList({
             </h2>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {models.length === 0
-                ? "Create your first custom content type to structure editorial entries."
+                ? tr("Create your first custom content type to structure editorial entries.")
                 : tr("Try a different name, slug, or description.")}
             </p>
           </div>
