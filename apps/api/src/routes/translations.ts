@@ -107,7 +107,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
             .limit(1).for("update");
       if (!source.length) return null;
       const existing = await translationService.getTranslation(
-        contentType, contentId, targetLocale, undefined, publicationId,
+        contentType, contentId, targetLocale, undefined, publicationId, true,
       );
       if (existing) return null;
       return write();
@@ -634,6 +634,7 @@ export async function translationRoutes(fastify: FastifyInstance) {
       const existing = await translationService.getTranslation(
         type, id, normalizedTargetLocale, undefined,
         req.publicationContext!.publicationId,
+        true,
       );
       if (existing) {
         return reply.status(409).send({ errors: [{
