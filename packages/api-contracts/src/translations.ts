@@ -44,3 +44,8 @@ export const BulkTranslationRequestSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, "Duplicate translation IDs"),
   action: z.enum(["submit_review", "approve", "publish", "mark_stale", "delete"]),
 }).strict();
+
+/** Backward-compatible route schema names for the existing Admin clients. */
+export const EditContentTranslationSchema = UpdateContentTranslationSchema;
+export const AiTranslateContentSchema = AiTranslateRequestSchema;
+export const BulkTranslationActionSchema = BulkTranslationRequestSchema;
