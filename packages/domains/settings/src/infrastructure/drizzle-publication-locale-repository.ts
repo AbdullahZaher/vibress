@@ -10,7 +10,7 @@ import {
   contentModels,
   contentTranslations,
 } from "@vibress/database";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   canonicalPublicationLocale,
   type PublicationLocaleRepository,
@@ -88,7 +88,7 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
       .where(
         and(
           eq(contentTranslations.publicationId, publicationId),
-          inArray(contentTranslations.status, ["published", "approved", "translated"]),
+          eq(contentTranslations.status, "published"),
         ),
       );
     return rows.map((row) => row.locale);
