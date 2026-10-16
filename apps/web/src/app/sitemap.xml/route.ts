@@ -105,8 +105,8 @@ export async function GET() {
   ];
   const urlEntries: SitemapEntry[] = [
     ...baseUrls.map((loc) => ({ loc, alternateLocales: new Map<string, string>() })),
-    ...[...entries.values()].flatMap((entry) =>
-      [...entry.alternateLocales.values()].map((loc) => ({ ...entry, loc })),
+    ...Array.from(entries.values()).flatMap((entry) =>
+      Array.from(entry.alternateLocales.values()).map((loc) => ({ ...entry, loc })),
     ),
   ];
   // Sitemaps may contain at most 50,000 <url> entries; never quietly emit a
@@ -120,7 +120,7 @@ export async function GET() {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urlEntries.map((entry) => {
   const alternates = entry.alternateLocales.size > 1
-    ? [...entry.alternateLocales.entries()].map(([locale, url]) =>
+    ? Array.from(entry.alternateLocales.entries()).map(([locale, url]) =>
       `    <xhtml:link rel="alternate" hreflang="${escapeXml(locale)}" href="${escapeXml(url)}"/>`)
     : [];
   if (alternates.length && entry.alternateLocales.has(primary)) {
