@@ -137,6 +137,36 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 - The existing `publication_locales` and `publications.primary_locale` schema is reused; no released migration is rewritten.
 - **Limitations:** public locale routing, full UI localization and all translation write/visibility gates are tracked separately in T3–T5. New unit/integration tests have been committed but **not executed or certified** in this environment.
 
+### Additional implementation hardening (unverified)
+
+- Translation creation and AI generation are **create-only** with source-row
+  transaction serialization. Requests for an already existing target locale
+  return a conflict instead of silently overwriting a published/draft record.
+- Translation publication now requires an explicitly **approved** status, and
+  approval requires a review-stage item. Generic edits cannot modify a live
+  approved/published translation without reopening its workflow.
+- Public translation reads are **published only**; approved/translated states
+  are never returned publicly, even while legacy locales need reconciliation.
+  Localized public title/excerpt/SEO never silently inherit untranslated source
+  text, and source visibility/deletion checks are mandatory.
+- Content-model relation locale resolution preserves non-localized metadata
+  objects, while public localizable fields fail closed when the requested
+  value does not exist. Site RSS language and item links use the active locale.
+- Locale routing failures keep CSP and `nosniff` headers. Sitemap processing
+  traverses source pagination and emits reciprocal alternates, but returns
+  503 rather than silently truncating above the existing 50,000-URL
+  single-file limit; a partitioned sitemap architecture is still required.
+- Tests for creation conflicts, review-before-publish, Arabic-only onboarding,
+  source isolation and structured AI documents have been authored but **not
+  executed** pending the requested deferred validation window.
+
+**Remaining launch blockers:** full certified Arabic Admin strings and
+accessibility review; operator-guided reconciliation and safe primary-locale
+changes for populated legacy sites; reliable partitioned sitemaps and
+multi-publication canonical hosts; source language revision integrity and
+new/upgrade rollback rehearsals; successful typecheck/lint/unit/integration/
+browser/build/security gates. Do not deploy this branch as production-ready.
+
 ## 3. Migration and compatibility checklist
 
 1. Collect per-publication values of `site.locale`, `primary_locale`, `publication_locales`, existing translation target locales and public URL inventory.
