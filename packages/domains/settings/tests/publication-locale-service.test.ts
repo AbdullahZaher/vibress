@@ -155,6 +155,36 @@ describe("PublicationLocaleService — single language by default", () => {
     });
   });
 
+  it("preserves historical published URLs even when locale rows already exist", async () => {
+    publications.set("pub_a", {
+      primaryLocale: "en",
+      locales: [{ locale: "en", status: "active", isDefault: true }],
+    });
+    publicTranslations.set("pub_a", ["ar-SA", "fr"]);
+    const config = await service.getConfiguration("pub_a");
+    expect(config.enabledLocales).toEqual(["en", "ar-SA", "fr"]);
+    expect(config.isMultilingual).toBe(true);
+    expect(config.needsReconciliation).toBe(true);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it("does not reactivate unpublished draft-only languages on upgrade", async () => {
+    publications.set("pub_a", {
+      primaryLocale: "en",
+      locales: [
+        { locale: "en", status: "active", isDefault: true },
+        { locale: "ar-SA", status: "inactive", isDefault: false },
+      ],
+    });
+    // The repository returns public states only, not drafts.
+    expect(await service.getConfiguration("pub_a")).toEqual({
+      primaryLocale: "en",
+      enabledLocales: ["en"],
+      isMultilingual: false,
+      needsReconciliation: false,
+    });
+  });
+
   it("never reads another publication's language settings", async () => {
     legacy.set("pub_a", "ar");
     const second = await service.getConfiguration("pub_b");
