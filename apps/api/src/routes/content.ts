@@ -287,6 +287,60 @@ function extractRequestedLocale(
   return { locale: null, invalidExplicit: false };
 }
 
+  // Published-only, host-scoped alternate URLs for SEO. The source record
+  // cannot be resolved across publications or via a disabled locale slug.
+  async function serveAlternates(
+    type: "post" | "page",
+    req: FastifyRequest,
+    reply: import("fastify").FastifyReply,
+  ) {
+    const { slug } = req.params as { slug: string };
+    const pubId = req.publicationContext!.publicationId;
+    const site = await buildPublicSiteIdentity(pubId);
+    const selection = extractRequestedLocale(req, site.enabledLocales);
+    if (selection.invalidExplicit) {
+      return reply.status(404).send({ errors: [{
+        code: "LOCALE_NOT_ENABLED", message: "Language is not enabled", requestId: req.id,
+      }] });
+    }
+    const locale = selection.locale ?? site.locale;
+    const isPost = type === "post";
+    let source = isPost
+      ? await postsService.findPublishedBySlug(slug, pubId)
+      : await pagesService.findPublishedBySlug(slug, pubId);
+    if (!source && locale !== site.locale) {
+      const translated = await translationService.findTranslationBySlug(type, locale, slug, pubId);
+      if (translated?.status === "published") {
+        source = isPost
+          ? await postsService.findById(translated.contentId, pubId)
+          : await pagesService.findById(translated.contentId, pubId);
+      }
+    }
+    if (!source || source.status !== "published" || source.visibility !== "public") {
+      return reply.status(404).send({ errors: [{
+        code: "CONTENT_NOT_FOUND", message: "Content not found", requestId: req.id,
+      }] });
+    }
+    const stored = await translationService.listTranslationsForContent(type, source.id, pubId);
+    const alternates: Record<string, string> = {
+      [site.locale]: `/${type === "post" ? "posts" : "pages"}/${encodeURIComponent(source.slug)}`,
+    };
+    for (const row of stored) {
+      if (row.status !== "published" || !site.enabledLocales.includes(row.targetLocale) ||
+          row.targetLocale === site.locale) continue;
+      alternates[row.targetLocale] =
+        `/${type === "post" ? "posts" : "pages"}/${encodeURIComponent(row.slug)}`;
+    }
+    return reply.status(200).send({ primaryLocale: site.locale, enabledLocales: site.enabledLocales, alternates });
+  }
+
+  fastify.get("/posts/:slug/alternates", {
+    handler: async (req, reply) => serveAlternates("post", req, reply),
+  });
+  fastify.get("/pages/:slug/alternates", {
+    handler: async (req, reply) => serveAlternates("page", req, reply),
+  });
+
   // Public Posts List
   fastify.get("/posts", {
     handler: async (req, reply) => {
