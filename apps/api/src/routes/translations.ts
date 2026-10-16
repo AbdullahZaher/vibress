@@ -20,7 +20,7 @@ import {
   collectTranslatableText,
   parseStructuredTranslation,
   applyStructuredTranslation,
-} from "@vibress/i18n/structured-ai-translation";
+} from "@vibress/i18n";
 
 export async function translationRoutes(fastify: FastifyInstance) {
   // Read the locale policy for the authoritative publication context only.
