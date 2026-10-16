@@ -8,9 +8,10 @@ import {
   contentTranslations,
 } from "@vibress/database";
 import { and, eq, inArray } from "drizzle-orm";
-import type {
-  PublicationLocaleRepository,
-  PublicationLocaleSnapshot,
+import {
+  canonicalPublicationLocale,
+  type PublicationLocaleRepository,
+  type PublicationLocaleSnapshot,
 } from "../application/publication-locale-service";
 
 export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepository {
@@ -85,18 +86,22 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
       .where(eq(publicationLocales.publicationId, publicationId));
 
     for (const row of existing) {
-      const active = enabledLocales.includes(row.locale);
+      const canonical = canonicalPublicationLocale(row.locale);
+      const active = enabledLocales.includes(canonical);
       await db
         .update(publicationLocales)
         .set({
+          locale: canonical,
           status: active ? "active" : "inactive",
-          isDefault: active && row.locale === primaryLocale,
+          isDefault: active && canonical === primaryLocale,
           updatedAt: now,
         })
         .where(eq(publicationLocales.id, row.id));
     }
 
-    const existingCodes = new Set(existing.map((row) => row.locale));
+    const existingCodes = new Set(
+      existing.map((row) => canonicalPublicationLocale(row.locale)),
+    );
     for (const locale of enabledLocales) {
       if (existingCodes.has(locale)) continue;
       await db.insert(publicationLocales).values({
