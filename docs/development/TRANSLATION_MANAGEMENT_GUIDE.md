@@ -1,5 +1,16 @@
 # Vibress Translation Management & Editorial UX — Developer Guide
 
+> **Normative policy adopted 2026-10-16; code rollout pending:** [Publication Language Policy](../14-decisions/publication-language-policy.md) and [Implementation Plan](LOCALIZATION_POLICY_IMPLEMENTATION_PLAN.md). This guide describes existing implementation surfaces and editorial concepts; prior claims of complete multilingual support do **not** certify single-language-by-default, arbitrary primary locales, full Admin translation or safe public locale negotiation.
+
+## Required publication mode boundary
+
+- A publication begins with **only the owner's chosen primary locale** enabled; no automatic English-to-Arabic pairing. A translation workflow exists only when at least two distinct content locales are explicitly enabled.
+- Use the resolved, **authoritative publication-scoped** primary and enabled set from a single domain service. The existing `getPublicationLocales()` fallback to `[en, ar-SA]` and implicit Arabic append in `apps/api/src/routes/translations.ts` violates the accepted policy and **must be removed in T1/T4**.
+- Source locale is the language of the content item, not hard-coded `en`. Target must be explicitly enabled and different from source. Persisted translation records remain intact when a locale is disabled.
+- UI hiding alone is not authorization: retain `requireStaffSession`, action-specific permissions, `validateOrigin`, runtime input validation and publication ownership guards for all translation actions.
+- The current AI route translates title/excerpt but copies the original structured body; T6 must remedy this before claiming full-body translation.
+- Publishable localized content, routing, canonical links and locale negotiation must be gated on active locales, not the mere presence of historical translation rows.
+
 ## 1. Overview
 
 The Vibress Translation Management Subsystem provides a first-class, multi-locale editorial management platform integrated directly into Vibress Studio and Admin. Built on top of Vibress's core localization infrastructure (`LocaleRegistry`, `PublicationLocaleResolver`, `translationGroupId`, `ThemeLocaleContext`, localized routing), it delivers end-to-end translation tracking, automated field-level stale content detection, editorial review gates, AI translation safety workflows with terminology glossaries, and high-performance batched matrix queries.
@@ -57,7 +68,7 @@ Translations with an active database record progress through a strictly validate
 | `stale` | Source post/page was updated after translation date. Outdated live content. | `in_progress`, `needs_review`, `approved`, `published`, `draft` |
 
 #### Synthetic Matrix/Queue State (No DB Row)
-- `missing` (or `untranslated`): Denotes that content exists in the publication's default locale, but no row currently exists in `content_translations` for the target locale. When translation begins, a record is created transitioning into `draft`.
+- `missing` (or `untranslated`): Denotes that content exists in its original/source locale, but no row currently exists in `content_translations` for an explicitly enabled, distinct target locale. When translation begins, a record is created transitioning into `draft`.
 
 ---
 
