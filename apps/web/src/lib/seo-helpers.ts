@@ -3,7 +3,8 @@ import {
   PublicPostDetailDto,
   PublicPageDetailDto,
 } from "@vibress/api-contracts";
-import { canonicalizeLocale } from "@vibress/i18n";
+import { canonicalizeLocale, getLocalePrefix } from "@vibress/i18n";
+import { ContentApiClient } from "./content-api-client";
 
 export function getPublicSiteUrl(): string {
   const envUrl =
@@ -19,6 +20,30 @@ export function getPublicSiteUrl(): string {
   } catch {
     return "http://localhost:7777";
   }
+}
+
+/**
+ * Enumerate only published and explicitly enabled translations. Calling
+ * routes never guess hreflang entries from language registry defaults.
+ */
+export async function publishedAlternateLanguageUrls(
+  kind: "post" | "page",
+  slug: string,
+  locale: string,
+): Promise<Record<string, string>> {
+  const data = await ContentApiClient.getPublishedLocaleAlternates(kind, slug, locale);
+  if (!data) return {};
+  const url = getPublicSiteUrl();
+  const alternates: Record<string, string> = {};
+  for (const [target, path] of Object.entries(data.alternates)) {
+    if (!data.enabledLocales.includes(target) || !path.startsWith("/")) continue;
+    const prefix = getLocalePrefix(target, data.primaryLocale, data.enabledLocales);
+    alternates[target] = `${url}${prefix}${path}`;
+  }
+  if (Object.keys(alternates).length > 1 && alternates[data.primaryLocale]) {
+    alternates["x-default"] = alternates[data.primaryLocale];
+  }
+  return alternates;
 }
 
 export interface AlternateLanguageMap {
