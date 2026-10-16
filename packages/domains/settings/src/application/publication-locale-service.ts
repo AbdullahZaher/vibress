@@ -210,6 +210,12 @@ export class PublicationLocaleService {
       const storedPrimary = canonicalPublicationLocale(snapshot.primaryLocale);
       const changesPrimary = current.primaryLocale !== primaryLocale ||
         storedPrimary !== primaryLocale;
+      if (changesPrimary && !["en", "ar"].includes(primaryLocale.split("-")[0] || "")) {
+        throw new PublicationLocaleError(
+          "INVALID_LOCALE_CONFIGURATION",
+          "The selected primary language is not yet certified for the administrative interface",
+        );
+      }
       if (changesPrimary && (await this.repository.hasAuthoredContent(publicationId))) {
         throw new PublicationLocaleError(
           "PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION",
