@@ -21,6 +21,7 @@ import {
 import { defaultTranslationGlossary } from "@vibress/i18n";
 import { hasPermission } from "@vibress/security";
 import { canonicalPublicationLocale } from "@vibress/settings";
+import { getDb, runInTransaction, posts, pages, eq, and } from "@vibress/database";
 import {
   collectTranslatableText,
   parseStructuredTranslation,
@@ -81,6 +82,36 @@ export async function translationRoutes(fastify: FastifyInstance) {
     if (!(await targetIsEnabled(req, translation.targetLocale))) {
       return localeUnavailable(reply, req.id);
     }
+  }
+
+  /**
+   * Serialize first creation per source item and target locale. The generic
+   * upsert domain method is also used by editors, so a raw create/AI route
+   * must never replace an existing published or other translator's draft.
+   */
+  async function createNewTranslation(
+    publicationId: string,
+    contentType: "post" | "page",
+    contentId: string,
+    targetLocale: string,
+    write: () => ReturnType<typeof translationService.upsertTranslation>,
+  ) {
+    return runInTransaction(async () => {
+      const db = getDb();
+      const source = contentType === "post"
+        ? await db.select({ id: posts.id }).from(posts)
+            .where(and(eq(posts.id, contentId), eq(posts.publicationId, publicationId)))
+            .limit(1).for("update")
+        : await db.select({ id: pages.id }).from(pages)
+            .where(and(eq(pages.id, contentId), eq(pages.publicationId, publicationId)))
+            .limit(1).for("update");
+      if (!source.length) return null;
+      const existing = await translationService.getTranslation(
+        contentType, contentId, targetLocale, undefined, publicationId,
+      );
+      if (existing) return null;
+      return write();
+    });
   }
 
   // 1. Get Translation Matrix
@@ -300,7 +331,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
         sourceUpdatedAt = page.updatedAt;
       }
 
-      const translation = await translationService.upsertTranslation({
+      const translation = await createNewTranslation(
+        req.publicationContext!.publicationId, type, id, normalizedTargetLocale,
+        () => translationService.upsertTranslation({
         contentType: type,
         contentId: id,
         sourceLocale: defaultLocale,
@@ -314,8 +347,16 @@ export async function translationRoutes(fastify: FastifyInstance) {
         status: body.status || "draft",
         translationProvider: body.translationProvider || "human",
         sourceUpdatedAt,
-        publicationId: req.publicationContext?.publicationId,
-      });
+        publicationId: req.publicationContext!.publicationId,
+      }),
+      );
+      if (!translation) {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_ALREADY_EXISTS",
+          message: "Edit the existing translation rather than creating over it",
+          requestId: req.id,
+        }] });
+      }
 
       await auditService.record({
         actorUserId: user.id,
@@ -589,6 +630,19 @@ export async function translationRoutes(fastify: FastifyInstance) {
       }
       const normalizedTargetLocale = canonicalPublicationLocale(body.targetLocale);
 
+      // Never spend an AI request to overwrite an existing translation.
+      const existing = await translationService.getTranslation(
+        type, id, normalizedTargetLocale, undefined,
+        req.publicationContext!.publicationId,
+      );
+      if (existing) {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_ALREADY_EXISTS",
+          message: "Review or edit the existing translation first",
+          requestId: req.id,
+        }] });
+      }
+
       // Retrieve source content
       let sourceTitle = "";
       let sourceSlug = "";
@@ -683,7 +737,9 @@ export async function translationRoutes(fastify: FastifyInstance) {
         });
       }
       const translatedContent = applyStructuredTranslation(sourceContent, translated);
-      const translation = await translationService.upsertTranslation({
+      const translation = await createNewTranslation(
+        req.publicationContext!.publicationId, type, id, normalizedTargetLocale,
+        () => translationService.upsertTranslation({
         publicationId: req.publicationContext!.publicationId,
         contentType: type,
         contentId: id,
@@ -696,7 +752,15 @@ export async function translationRoutes(fastify: FastifyInstance) {
         status: "needs_review",
         translationProvider: `ai:${body.provider || "gateway"}`,
         sourceUpdatedAt,
-      });
+      }),
+      );
+      if (!translation) {
+        return reply.status(409).send({ errors: [{
+          code: "TRANSLATION_ALREADY_EXISTS",
+          message: "Another editor created this translation",
+          requestId: req.id,
+        }] });
+      }
 
       await auditService.record({
         actorUserId: user.id,
