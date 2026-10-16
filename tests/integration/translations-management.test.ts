@@ -395,7 +395,7 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
           status: "published",
         },
       });
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(409);
     });
 
     it("rejects creating a translation in a disabled language", async () => {
@@ -437,6 +437,23 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(data.translation.status).toBe("draft");
       expect(data.translation.targetLocale).toBe("ar-SA");
       createdTrId = data.translation.id;
+    });
+
+    it("rejects a duplicate create request without overwriting existing content", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ar-sa",
+          title: "Overwritten title",
+          slug: `another-${runSuffix}`,
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      const [stored] = await db.select().from(contentTranslations)
+        .where(eq(contentTranslations.id, createdTrId));
+      expect(stored?.title).not.toBe("Overwritten title");
     });
 
     it("retrieves full translation and source context via GET /api/admin/v1/translations/:id", async () => {
@@ -490,6 +507,15 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect([403, 409]).toContain(response.statusCode);
     });
 
+    it("rejects publishing a draft without prior approval", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/translations/${createdTrId}/publish`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
     it("submits translation for review via POST /api/admin/v1/translations/:id/submit-review", async () => {
       const res = await app.inject({
         method: "POST",
@@ -505,6 +531,15 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(200);
       const data = res.json();
       expect(data.translation.status).toBe("needs_review");
+    });
+
+    it("rejects publishing a reviewed but unapproved draft", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/translations/${createdTrId}/publish`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(res.statusCode).toBe(400);
     });
 
     it("approves translation via POST /api/admin/v1/translations/:id/approve", async () => {
@@ -539,6 +574,31 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(200);
       const data = res.json();
       expect(data.translation.status).toBe("published");
+    });
+  });
+
+  describe("Published translation protection", () => {
+    it("rejects changing live translated text without reopening review", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { title: "Unreviewed live edit" },
+      });
+      expect(res.statusCode).toBe(409);
+      const [saved] = await db.select().from(contentTranslations)
+        .where(eq(contentTranslations.id, createdTrId));
+      expect(saved?.title).not.toBe("Unreviewed live edit");
+    });
+
+    it("rejects AI regeneration over a published translation", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/ai-translate`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { targetLocale: "ar-sa" },
+      });
+      expect(res.statusCode).toBe(409);
     });
   });
 
