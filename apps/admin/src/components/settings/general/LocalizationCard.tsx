@@ -11,7 +11,7 @@ interface LocalizationCardProps {
   timezone?: string | undefined;
   onChange: (key: "locale" | "timezone", value: string) => void;
   isHighlighted?: boolean | undefined;
-  onSaved?: (() => void) | undefined;
+  onSaved?: ((primaryLocale: string) => void) | undefined;
 }
 
 const COMMON_LANGUAGES = [
