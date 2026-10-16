@@ -22,16 +22,21 @@ claim of passing tests or production readiness**:
   workflow status authorization on create/edit/publish/bulk/AI paths.
 - **T3 (partial):** Shared Admin language context and English/Arabic UI
   translations for setup, login, sidebar, settings, core editorial lists,
-  post/page editor labels, member lists, tags and media search. **Other
+  post/page editor labels, member lists, tags and media search, plus
+  translated matrix/review-queue/editor controls. **Other
   administrative screens, portal surfaces and several error/interaction paths
   still contain English strings. Arabic UI parity is NOT certified.**
 - **T5 (partial):** Dynamic locale routing, public API enabled-locale checks,
-  theme locale context, published-only alternates, sitemap generation and safe
-  redirects for unique historical published slugs. Pagination, SEO, plugin/theme
-  coverage and upgrade redirect matrices remain to be certified.
+  theme locale context, published-only alternates, sitemap generation, and safe
+  redirects for unique historical published slugs. Added DB-paginated lists
+  for published regional translations, with publication/source visibility,
+  author and tag filters, and correct result totals; strict regional matching
+  is opt-in at service call sites to preserve older callers. SEO performance,
+  plugin/theme coverage and upgrade redirect matrices remain to be certified.
 - **T6 (partial):** Structured text extraction supports Studio documents
   and top-level legacy plain-text bodies, preserving media/IDs. AI failures
   cannot create fake drafts, and existing records cannot be silently overwritten.
+  First creation and its audit event are committed atomically.
   Editorial review and approval are required before publication. Additional
   content formats, provider integration and safe draft revisioning still
   require certification and explicit decisions.
