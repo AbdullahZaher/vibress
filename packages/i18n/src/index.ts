@@ -254,3 +254,4 @@ export * from "./translation-governance";
 export * from "./coverage-reporter";
 export * from "./translation-types";
 export * from "./glossary";
+export * from "./structured-ai-translation";
