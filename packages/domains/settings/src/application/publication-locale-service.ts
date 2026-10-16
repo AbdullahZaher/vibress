@@ -109,8 +109,19 @@ export class PublicationLocaleService {
       typeof legacyValue === "string" && legacyValue.length > 0
         ? canonicalPublicationLocale(legacyValue)
         : null;
+    // Legacy setup wrote site.locale but left primary_locale='en'. Prefer that
+    // explicit choice only if a canonical active default has never been set.
+    const hasCanonicalDefault = snapshot.locales.some(
+      (row) =>
+        row.status === "active" &&
+        row.isDefault &&
+        canonicalPublicationLocale(row.locale) === persistedPrimary,
+    );
     const primaryLocale =
-      persistedPrimary === "en" && legacyLocale && legacyLocale !== "en"
+      persistedPrimary === "en" &&
+      legacyLocale &&
+      legacyLocale !== "en" &&
+      !hasCanonicalDefault
         ? legacyLocale
         : persistedPrimary;
 
