@@ -455,6 +455,7 @@ export function resolveLocalizedEntryData(
   fieldDefs: ContentFieldDefinition[],
   targetLocale = "en",
   fallbackLocale = "en",
+  strictLocale = false,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const normTarget = targetLocale.toLowerCase();
@@ -478,6 +479,8 @@ export function resolveLocalizedEntryData(
         result[field.key] = normalized[normTarget];
       } else if (targetLang && targetLang in normalized) {
         result[field.key] = normalized[targetLang];
+      } else if (strictLocale) {
+        result[field.key] = null;
       } else if (normFallback in normalized) {
         result[field.key] = normalized[normFallback];
       } else if ("en" in normalized) {
@@ -501,6 +504,8 @@ export function resolveLocalizedEntryData(
               localizedTargetData[k] = normalizedD[normTarget];
             } else if (targetLang && targetLang in normalizedD) {
               localizedTargetData[k] = normalizedD[targetLang];
+            } else if (strictLocale) {
+              localizedTargetData[k] = null;
             } else if (normFallback in normalizedD) {
               localizedTargetData[k] = normalizedD[normFallback];
             } else if ("en" in normalizedD) {
@@ -532,6 +537,8 @@ export function resolveLocalizedEntryData(
                   localizedTargetData[k] = normalizedD[normTarget];
                 } else if (targetLang && targetLang in normalizedD) {
                   localizedTargetData[k] = normalizedD[targetLang];
+                } else if (strictLocale) {
+                  localizedTargetData[k] = null;
                 } else if (normFallback in normalizedD) {
                   localizedTargetData[k] = normalizedD[normFallback];
                 } else if ("en" in normalizedD) {
