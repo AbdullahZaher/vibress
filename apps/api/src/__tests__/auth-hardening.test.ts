@@ -7,6 +7,7 @@ import * as cacheModule from "@vibress/cache";
 import {
   recordAccountFailure,
   resetAccountThrottle,
+  checkAccountThrottle,
   normalizeClientSubnet,
 } from "../helpers/account-throttle";
 import { appLogger } from "../observability";
@@ -602,6 +603,36 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
       "198.51.100.0/24",
     );
     expect(normalizeClientSubnet("192.0.2.1")).toBe("192.0.2.0/24");
+  });
+
+  it("enforces progressive delay capped at 1000ms and does not hard-lock distributed attempts", async () => {
+    const redis = getRedisClient();
+    const testEmail = "test-progressive-cap@example.com";
+    const testIp = "192.0.2.100";
+    const globalKey = buildSystemCacheKey(
+      "auth_throttle",
+      `staff_login_global:${testEmail}`,
+    );
+
+    // Simulate 25 distributed failures on global key (exceeding 20)
+    await redis.set(globalKey, "25");
+    const check25 = await checkAccountThrottle("staff_login", testEmail, {
+      clientIp: testIp,
+    });
+    expect(check25.allowed).toBe(true);
+    // 25 - 20 + 1 = 6 multiplier -> 600ms
+    expect(check25.progressiveDelayMs).toBe(600);
+
+    // Simulate 40 distributed failures (delay capped at 1000ms: 100ms * min(n, 10))
+    await redis.set(globalKey, "40");
+    const check40 = await checkAccountThrottle("staff_login", testEmail, {
+      clientIp: testIp,
+    });
+    expect(check40.allowed).toBe(true);
+    expect(check40.retryAfterSeconds).toBe(0);
+    expect(check40.progressiveDelayMs).toBe(1000);
+
+    await redis.del(globalKey);
   });
 });
 

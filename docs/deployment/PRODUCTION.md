@@ -376,6 +376,6 @@ The **only supported approach** with the shipped gateway is configuring the Ngin
 
 ### Account-Level Throttling & Lockout
 To protect against credential stuffing attacks rotating across multiple IP addresses, Vibress enforces Redis-backed account-level throttling:
-- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email + client subnet within a 15-minute window, plus a global progressive delay ceiling. Exceeding triggers a 15-minute lockout (HTTP 429). If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
+- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email + client subnet (IPv4 `/24`, IPv6 `/64`) within a 15-minute window triggers a 15-minute lockout (HTTP 429) for that subnet. To defend against distributed attacks across rotating subnets without locking out the owner, a global per-email ceiling (20 failures) applies a progressive delay (100ms to 1000ms, capped). This global ceiling slows down distributed attacks, but deliberately does not cap or hard-lock the account across all IPs. If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
 - **Member Authentication (`/api/members/v1/auth/*`):** Rate limits magic link requests (5 per normalized email per 10-minute window) and token verification attempts (5 per token per 15-minute window), resetting on successful authentication.
 

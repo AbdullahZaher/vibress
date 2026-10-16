@@ -159,7 +159,7 @@ export async function checkAccountThrottle(
             globalCount - globalMaxAttempts + 1,
             10,
           );
-          const progressiveDelayMs = Math.min(2000, 100 * delayMultiplier);
+          const progressiveDelayMs = Math.min(1000, 100 * delayMultiplier);
           if (progressiveDelayMs > 0) {
             await new Promise((resolve) =>
               setTimeout(resolve, progressiveDelayMs),
