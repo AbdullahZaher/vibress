@@ -19,6 +19,22 @@ Every template receives clean, decoupled View Models populated by Vibress:
 - `site.locale` (`string`): Language locale code (e.g. `en`, `ar`, `es`).
 - `site.primaryNav` (`Array<{ label: string, url: string }>`): Main header navigation links.
 - `site.secondaryNav` (`Array<{ label: string, url: string }>`): Footer / secondary links.
+- `site.socialLinks` (`Array<{ id, platform, label, url, iconUrl }>`): Publication social profiles in configured order; empty by default. Each `url` is a validated HTTPS URL and `iconUrl` points to a platform-owned local SVG. Themes choose where to display them (no automatic injection).
+
+Example footer partial:
+
+```liquid
+{% if site.socialLinks.size > 0 %}
+<nav aria-label="Social media">
+  {% for social in site.socialLinks %}
+  <a href="{{ social.url | escape }}" target="_blank" rel="noopener noreferrer"
+     aria-label="{{ social.label | escape }}">
+    <img src="{{ social.iconUrl | escape }}" alt="" width="20" height="20">
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}
+```
 
 ### `settings` Object
 Contains all variables defined in `settings.json` and saved in the Admin Settings panel:

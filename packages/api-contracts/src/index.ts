@@ -3,6 +3,7 @@ export * from "./content";
 export * from "./media";
 export * from "./storage";
 export * from "./themes";
+export * from "./social-links";
 export * from "./members";
 export * from "./billing";
 export * from "./newsletters";

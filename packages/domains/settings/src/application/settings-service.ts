@@ -6,6 +6,7 @@ import {
   AuditRecorder,
 } from "../domain/setting";
 import { runInTransaction } from "@vibress/database";
+import { SocialLinksSchema, toPublicSocialLinks } from "@vibress/api-contracts";
 import { PublicationLocaleService, canonicalPublicationLocale } from "./publication-locale-service";
 
 export class SettingsDomainError extends Error {
@@ -92,6 +93,15 @@ export const SETTING_NAMESPACES: SettingNamespaceDefinition[] = [
           { id: "5", label: "Privacy Policy", url: "/pages/privacy" },
           { id: "6", label: "Terms of Service", url: "/pages/terms" },
         ],
+      },
+      {
+        key: "socialLinks",
+        type: "json",
+        classification: "public",
+        default: [],
+        validate: (value) => SocialLinksSchema.safeParse(value).success
+          ? null
+          : "Invalid social links (HTTPS URLs, valid platforms, unique IDs, maximum 20)",
       },
       {
         key: "announcementEnabled",
@@ -435,9 +445,9 @@ export class SettingsService {
       for (const def of ns.settings) {
         if (def.classification !== "public") continue;
         const storedSetting = stored.find((s) => s.key === def.key);
-        publicValues[def.key] = storedSetting
-          ? storedSetting.value
-          : def.default;
+        publicValues[def.key] = ns.namespace === "site" && def.key === "socialLinks"
+          ? toPublicSocialLinks(storedSetting?.value ?? def.default)
+          : storedSetting ? storedSetting.value : def.default;
       }
       if (Object.keys(publicValues).length > 0)
         result[ns.namespace] = publicValues;
@@ -463,7 +473,9 @@ export class SettingsService {
       const stored = await this.repo.getMany(ns.namespace, publicationId);
       const values = ns.settings.map((def) => {
         const storedSetting = stored.find((s) => s.key === def.key);
-        const raw = storedSetting ? storedSetting.value : def.default;
+        const raw = ns.namespace === "site" && def.key === "socialLinks"
+          ? toPublicSocialLinks(storedSetting?.value ?? def.default).map(({ iconUrl: _iconUrl, ...link }) => link)
+          : storedSetting ? storedSetting.value : def.default;
         return {
           key: def.key,
           value: this.maskForStaff(raw, def.classification),
@@ -486,7 +498,9 @@ export class SettingsService {
     const result: Record<string, unknown> = {};
     for (const def of ns.settings) {
       const found = stored.find((s) => s.key === def.key);
-      result[def.key] = found ? found.value : def.default;
+      result[def.key] = ns.namespace === "site" && def.key === "socialLinks"
+        ? toPublicSocialLinks(found?.value ?? def.default).map(({ iconUrl: _iconUrl, ...link }) => link)
+        : found ? found.value : def.default;
     }
     return result;
   }
