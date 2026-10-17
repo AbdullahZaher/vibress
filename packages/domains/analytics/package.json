@@ -16,7 +16,7 @@
     "@vibress/subscriptions": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.5.3",
+    "typescript": "^6.0.3",
     "@types/node": "^26.6.5"
   },
   "nx": {
