@@ -301,7 +301,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           {isCardVisible("social-links") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
               <SocialLinksCard
-                links={site.settings.socialLinks}
+                links={site.settings.socialLinks ?? []}
                 onChange={(links) => site.updateField("socialLinks", links)}
                 isHighlighted={highlightedCardId === "social-links"}
               />
