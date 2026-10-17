@@ -23,6 +23,20 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Social links": "روابط التواصل الاجتماعي",
+  "Connect your publication's profiles. Themes can display them anywhere.": "اربط حسابات موقعك؛ ويمكن للقوالب عرضها في أي موضع.",
+  "links": "روابط",
+  "Manage": "إدارة",
+  "Social links appear in built-in theme footers. Changes are saved with Site settings.": "تظهر روابط التواصل في تذييل القوالب المدمجة، وتُحفظ مع إعدادات الموقع.",
+  "Social profile": "حساب تواصل اجتماعي",
+  "Platform": "المنصة",
+  "Label": "التسمية",
+  "Profile URL (HTTPS)": "رابط الحساب (HTTPS)",
+  "Move link up": "نقل الرابط للأعلى",
+  "Move link down": "نقل الرابط للأسفل",
+  "Remove social link": "حذف رابط التواصل",
+  "Add social link": "إضافة رابط تواصل",
+  "A unique label and an HTTPS profile URL are required. Maximum 20 links.": "يجب إدخال تسمية ورابط HTTPS لكل حساب. الحد الأقصى ٢٠ رابطًا.",
   "Featured": "مميز",
   "Feature this post": "تمييز هذا المقال",
   "Allow themes to highlight this post when published.": "السماح للقوالب بإبراز هذا المقال عند نشره.",
