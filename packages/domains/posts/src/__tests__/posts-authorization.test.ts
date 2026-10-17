@@ -22,6 +22,7 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
     status: "draft",
     visibility: "public",
     version: 1,
+    featured: false,
     featureImageId: null,
     featureImageAlt: null,
     featureImageCaption: null,
@@ -114,6 +115,28 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
 
     expect(updated).toBeDefined();
     expect(mockPostRepo.update).toHaveBeenCalled();
+  });
+
+  it("allows owners to feature their own posts using the scoped edit path", async () => {
+    const actor: PostActorContext = {
+      userId: "author-a", roles: ["author"], permissions: ["posts.edit"],
+      publicationId: "pub_default",
+    };
+    const updated = await postsService.updatePost("post-100", { featured: true }, actor);
+    expect(updated.featured).toBe(true);
+    expect(mockPostRepo.update).toHaveBeenCalledWith(
+      "post-100", expect.objectContaining({ featured: true }), "pub_default",
+    );
+  });
+
+  it("prevents unrelated authors from featuring others' posts", async () => {
+    const actor: PostActorContext = {
+      userId: "author-b", roles: ["author"], permissions: ["posts.edit"],
+      publicationId: "pub_default",
+    };
+    await expect(postsService.updatePost("post-100", { featured: true }, actor))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(mockPostRepo.update).not.toHaveBeenCalled();
   });
 
   it("REJECTS an author attempting to update another author's post (IDOR)", async () => {
