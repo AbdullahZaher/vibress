@@ -282,5 +282,39 @@ describe("Social Links in View Models & Liquid Theme Engine", () => {
       const disabledHeader = await engine.renderFile("partials/profile-header.liquid", { site: mockSiteWithLinks, settings: { showSocialLinks: false } });
       expect(disabledHeader).not.toContain("social-links-strip");
     });
+
+    it("renders site.tagline inside status badge and site.description in bio without duplication", async () => {
+      if (linksFiles.size === 0) {
+        return;
+      }
+      const engine = createLiquidThemeEngine({
+        themeId: "vibress-links",
+        themeVersion: "1.0.0",
+        files: linksFiles,
+      });
+
+      const mockSite = mapSiteToViewModel({
+        title: "Vibress Creator",
+        tagline: "Available for collaborations",
+        description: "Publishing Platform.",
+        locale: "en",
+        socialLinks: [],
+      });
+
+      const headerRendered = await engine.renderFile("partials/profile-header.liquid", {
+        site: mockSite,
+        settings: { showStatusBadge: true, showBio: true },
+      });
+
+      // Status badge renders site.tagline
+      expect(headerRendered).toContain('class="profile-status-badge"');
+      expect(headerRendered).toContain('class="status-badge-text">Available for collaborations</span>');
+
+      // Bio renders site.description
+      expect(headerRendered).toContain('class="profile-bio">Publishing Platform.</p>');
+
+      // profile-tagline is NOT rendered redundantly when status badge is active
+      expect(headerRendered).not.toContain('class="profile-tagline"');
+    });
   });
 });
