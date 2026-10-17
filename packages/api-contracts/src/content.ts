@@ -6,6 +6,7 @@ export const CreatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featured: z.boolean().optional(),
   featureImageId: z.string().nullable().optional(),
   featureImageAlt: z.string().max(500).nullable().optional(),
   featureImageCaption: z.string().max(1000).nullable().optional(),
@@ -25,6 +26,7 @@ export const UpdatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featured: z.boolean().optional(),
   featureImageId: z.string().nullable().optional(),
   featureImageAlt: z.string().max(500).nullable().optional(),
   featureImageCaption: z.string().max(1000).nullable().optional(),
@@ -138,6 +140,7 @@ export type PublicSeoDto = z.infer<typeof PublicSeoSchema>;
 
 export const PublicPostSummarySchema = z.object({
   id: z.string(),
+  featured: z.boolean().optional(),
   title: z.string(),
   slug: z.string(),
   excerpt: z.string().nullable(),
@@ -188,6 +191,7 @@ export const PublicPageDetailSchema = z.object({
 export type PublicPageDetailDto = z.infer<typeof PublicPageDetailSchema>;
 
 export const PublicListFilterSchema = z.object({
+  featured: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   tag: z.string().optional(),

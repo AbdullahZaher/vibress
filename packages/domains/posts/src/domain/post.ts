@@ -29,6 +29,7 @@ export interface Post {
   status: PostStatus;
   visibility: PostVisibility;
   version: number;
+  featured: boolean;
   featureImageId: string | null;
   featureImageAlt: string | null;
   featureImageCaption: string | null;
@@ -56,6 +57,7 @@ export interface CreatePostData {
   contentVersion?: number | undefined;
   status?: PostStatus | undefined;
   visibility?: PostVisibility | undefined;
+  featured?: boolean | undefined;
   featureImageId?: string | null | undefined;
   featureImageAlt?: string | null | undefined;
   featureImageCaption?: string | null | undefined;
@@ -76,6 +78,7 @@ export interface UpdatePostData {
   content?: Record<string, unknown> | undefined;
   contentVersion?: number | undefined;
   visibility?: PostVisibility | undefined;
+  featured?: boolean | undefined;
   featureImageId?: string | null | undefined;
   featureImageAlt?: string | null | undefined;
   featureImageCaption?: string | null | undefined;
@@ -96,6 +99,7 @@ export interface ListPostsFilter {
   tagSlug?: string | undefined;
   visibility?: PostVisibility | undefined;
   publishedOnly?: boolean | undefined;
+  featured?: boolean | undefined;
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;

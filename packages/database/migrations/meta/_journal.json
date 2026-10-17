@@ -274,6 +274,13 @@
       "when": 1786619000000,
       "tag": "0038_search_documents_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792252800000,
+      "tag": "0039_posts_featured",
+      "breakpoints": true
     }
   ]
 }

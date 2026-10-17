@@ -407,6 +407,14 @@ function extractRequestedLocale(
         ? parseResult.data
         : { page: 1, limit: 20 };
 
+      if (!parseResult.success && (req.query as { featured?: unknown })?.featured !== undefined) {
+        return reply.status(400).send({ errors: [{
+          code: "VALIDATION_ERROR",
+          message: "Invalid featured filter",
+          requestId: req.id,
+        }] });
+      }
+      const featured = parseResult.success ? parseResult.data.featured : undefined;
       const limit = filter.limit;
       const page = filter.page;
       const offset = (page - 1) * limit;
@@ -427,7 +435,7 @@ function extractRequestedLocale(
         ? await (async () => {
             const localized = await translationService.listPublishedLocalizedSourceIds(
               "post", pubId, requestedLocale,
-              { limit, offset, tagSlug: filter.tag, authorSlug: filter.author },
+              { limit, offset, tagSlug: filter.tag, authorSlug: filter.author, featured },
             );
             const sourcePosts = await batchGetPosts(localized.ids, pubId);
             return {
@@ -439,6 +447,7 @@ function extractRequestedLocale(
             publicationId: pubId,
             publishedOnly: true,
             visibility: "public",
+            featured,
             tagSlug: filter.tag,
             authorSlug: filter.author,
             limit,

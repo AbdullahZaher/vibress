@@ -104,6 +104,7 @@ export class DrizzlePostRepository implements PostRepository {
       status: data.status || "draft",
       visibility: data.visibility || "public",
       version: 1,
+      featured: data.featured ?? false,
       featureImageId: data.featureImageId || null,
       featureImageAlt: data.featureImageAlt || null,
       featureImageCaption: data.featureImageCaption || null,
@@ -161,6 +162,7 @@ export class DrizzlePostRepository implements PostRepository {
     if (data.status !== undefined) updatePayload.status = data.status;
     if (data.visibility !== undefined)
       updatePayload.visibility = data.visibility;
+    if (data.featured !== undefined) updatePayload.featured = data.featured;
     if (data.featureImageId !== undefined)
       updatePayload.featureImageId = data.featureImageId;
     if (data.featureImageAlt !== undefined)
@@ -279,6 +281,9 @@ export class DrizzlePostRepository implements PostRepository {
 
     if (filter.visibility) {
       conditions.push(eq(posts.visibility, filter.visibility));
+    }
+    if (filter.featured !== undefined) {
+      conditions.push(eq(posts.featured, filter.featured));
     }
 
     if (filter.authorId) {
@@ -442,6 +447,7 @@ export class DrizzlePostRepository implements PostRepository {
       status: row.status as PostStatus,
       visibility: row.visibility as PostVisibility,
       version: row.version,
+      featured: row.featured,
       featureImageId: row.featureImageId || null,
       featureImageAlt: row.featureImageAlt || null,
       featureImageCaption: row.featureImageCaption || null,
