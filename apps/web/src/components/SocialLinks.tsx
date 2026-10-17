@@ -13,27 +13,30 @@ export function SocialLinks({ links = [], locale = "en", className }: SocialLink
   const isAr = Boolean(locale && locale.toLowerCase().startsWith("ar"));
   const label = isAr ? "روابط التواصل الاجتماعي" : "Social media links";
 
-  return (
-    <nav
-      aria-label={label}
-      dir={isAr ? "rtl" : "ltr"}
-      className={className}
-      style={{
+  return React.createElement(
+    "nav",
+    {
+      "aria-label": label,
+      dir: isAr ? "rtl" : "ltr",
+      className,
+      style: {
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
         gap: "10px",
-      }}
-    >
-      {safeLinks.map((link) => (
-        <a
-          key={link.id}
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={link.label}
-          title={link.label}
-          style={{
+      },
+    },
+    safeLinks.map((link) =>
+      React.createElement(
+        "a",
+        {
+          key: link.id,
+          href: link.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          "aria-label": link.label,
+          title: link.label,
+          style: {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -41,11 +44,13 @@ export function SocialLinks({ links = [], locale = "en", className }: SocialLink
             minHeight: "44px",
             borderRadius: "50%",
             textDecoration: "none",
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
+          },
+        },
+        React.createElement(
+          "span",
+          {
+            "aria-hidden": "true",
+            style: {
               width: "32px",
               height: "32px",
               borderRadius: "50%",
@@ -55,19 +60,18 @@ export function SocialLinks({ links = [], locale = "en", className }: SocialLink
               alignItems: "center",
               justifyContent: "center",
               boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
-            }}
-          >
-            <img
-              src={link.iconUrl}
-              alt=""
-              width={18}
-              height={18}
-              loading="lazy"
-              style={{ display: "block", width: "18px", height: "18px" }}
-            />
-          </span>
-        </a>
-      ))}
-    </nav>
+            },
+          },
+          React.createElement("img", {
+            src: link.iconUrl,
+            alt: "",
+            width: 18,
+            height: 18,
+            loading: "lazy",
+            style: { display: "block", width: "18px", height: "18px" },
+          }),
+        ),
+      ),
+    ),
   );
 }

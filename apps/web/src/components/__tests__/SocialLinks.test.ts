@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react";
+import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SocialLinks } from "../SocialLinks";
@@ -26,12 +26,12 @@ describe("SocialLinks Component", () => {
 
   it("renders null when links is empty or undefined", () => {
     act(() => {
-      root.render(<SocialLinks links={[]} />);
+      root.render(React.createElement(SocialLinks, { links: [] }));
     });
     expect(container.innerHTML).toBe("");
 
     act(() => {
-      root.render(<SocialLinks links={undefined} />);
+      root.render(React.createElement(SocialLinks, { links: undefined }));
     });
     expect(container.innerHTML).toBe("");
   });
@@ -43,7 +43,7 @@ describe("SocialLinks Component", () => {
     ];
 
     act(() => {
-      root.render(<SocialLinks links={mockLinks} locale="en" className="custom-social-class" />);
+      root.render(React.createElement(SocialLinks, { links: mockLinks, locale: "en", className: "custom-social-class" }));
     });
 
     const nav = container.querySelector("nav");
@@ -76,7 +76,7 @@ describe("SocialLinks Component", () => {
     ];
 
     act(() => {
-      root.render(<SocialLinks links={mockLinks} locale="ar-SA" />);
+      root.render(React.createElement(SocialLinks, { links: mockLinks, locale: "ar-SA" }));
     });
 
     const nav = container.querySelector("nav");
