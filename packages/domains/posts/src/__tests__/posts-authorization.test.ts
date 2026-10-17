@@ -241,7 +241,7 @@ describe("SEC-02: Content Ownership & Resource Authorization", () => {
     });
 
     await expect(
-      postsService.updatePost("post-100", { title: "Cross Tenant Attack" }, foreignAdmin),
+      postsService.updatePost("post-100", { featured: true }, foreignAdmin),
     ).rejects.toMatchObject({ code: "POST_NOT_FOUND" });
 
     await expect(

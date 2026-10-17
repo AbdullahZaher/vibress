@@ -407,7 +407,7 @@ function extractRequestedLocale(
         ? parseResult.data
         : { page: 1, limit: 20 };
 
-      if (!parseResult.success && (req.query as { featured?: unknown })?.featured !== undefined) {
+      if (!parseResult.success && typeof req.query === "object" && req.query !== null && "featured" in req.query) {
         return reply.status(400).send({ errors: [{
           code: "VALIDATION_ERROR",
           message: "Invalid featured filter",
