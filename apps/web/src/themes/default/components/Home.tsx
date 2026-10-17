@@ -2,7 +2,6 @@ import React from "react";
 import { ThemeHomeProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { InlineSubscribeForm } from "./InlineSubscribeForm";
-import { SocialLinks } from "../../../components/SocialLinks";
 import { t } from "../../../lib/i18n";
 
 export async function Home(props: ThemeHomeProps) {
@@ -152,12 +151,6 @@ export async function Home(props: ThemeHomeProps) {
           <p className="footer-newsletter-subtitle">{heroHeadline}</p>
 
           <InlineSubscribeForm variant="footer" />
-
-          <SocialLinks
-            links={props.site.socialLinks}
-            locale={props.site.locale}
-            className="footer-social-links"
-          />
         </div>
       </section>
     </ThemeLayout>

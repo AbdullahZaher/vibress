@@ -161,11 +161,69 @@ describe("Social Links in View Models & Liquid Theme Engine", () => {
     });
   });
 
-  describe("Vibress Links Theme Footer Social Links", () => {
+  describe("Vibress Links Theme Header & Footer Social Links", () => {
     const linksDir = path.resolve(__dirname, "../../../../content/themes/vibress-links/1.0.0");
     const linksFiles = loadDirectoryFiles(linksDir);
 
-    it("renders dynamic social strip in footer if theme exists", async () => {
+    it("renders dynamic social strip in profile header before links if theme exists", async () => {
+      if (linksFiles.size === 0) {
+        return;
+      }
+      const engine = createLiquidThemeEngine({
+        themeId: "vibress-links",
+        themeVersion: "1.0.0",
+        files: linksFiles,
+      });
+
+      const mockSite = mapSiteToViewModel({
+        title: "My Profile",
+        locale: "en",
+        socialLinks: [
+          { id: "1", platform: "instagram", label: "Instagram", url: "https://instagram.com/vibress", iconUrl: "/social-icons/instagram.svg" },
+          { id: "2", platform: "x", label: "X", url: "https://x.com/vibress", iconUrl: "/social-icons/x.svg" },
+        ],
+      });
+
+      const headerRendered = await engine.renderFile("partials/profile-header.liquid", { site: mockSite, settings: { showSocialLinks: true } });
+      expect(headerRendered).toContain('class="social-links-strip"');
+      expect(headerRendered).toContain('aria-label="Social profiles"');
+      expect(headerRendered).toContain('href="https://instagram.com/vibress"');
+      expect(headerRendered).toContain('href="https://x.com/vibress"');
+      expect(headerRendered).toContain('src="/social-icons/instagram.svg"');
+      expect(headerRendered).toContain('src="/social-icons/x.svg"');
+
+      // Test home.liquid structure: header social links occur before primary-links-section
+      const homeRendered = await engine.renderFile("templates/home.liquid", { site: mockSite, settings: { showSocialLinks: true } });
+      const socialIndex = homeRendered.indexOf('class="social-links-strip"');
+      const primaryLinksIndex = homeRendered.indexOf('class="primary-links-section"');
+      expect(socialIndex).toBeGreaterThan(-1);
+      expect(primaryLinksIndex).toBeGreaterThan(-1);
+      expect(socialIndex).toBeLessThan(primaryLinksIndex);
+    });
+
+    it("renders Arabic RTL label in profile header when locale is ar", async () => {
+      if (linksFiles.size === 0) {
+        return;
+      }
+      const engine = createLiquidThemeEngine({
+        themeId: "vibress-links",
+        themeVersion: "1.0.0",
+        files: linksFiles,
+      });
+
+      const mockSite = mapSiteToViewModel({
+        title: "الملف الشخصي",
+        locale: "ar",
+        socialLinks: [
+          { id: "1", platform: "x", label: "إكس", url: "https://x.com/vibress", iconUrl: "/social-icons/x.svg" },
+        ],
+      });
+
+      const headerRendered = await engine.renderFile("partials/profile-header.liquid", { site: mockSite, settings: {} });
+      expect(headerRendered).toContain('aria-label="روابط التواصل الاجتماعي"');
+    });
+
+    it("does not render social links strip in footer (shows only in header)", async () => {
       if (linksFiles.size === 0) {
         return;
       }
@@ -185,15 +243,11 @@ describe("Social Links in View Models & Liquid Theme Engine", () => {
       });
 
       const rendered = await engine.renderFile("partials/footer.liquid", { site: mockSite, settings: {} });
-      expect(rendered).toContain('class="footer-social-links-strip"');
-      expect(rendered).toContain('aria-label="Social media links"');
-      expect(rendered).toContain('href="https://threads.net/@vibress"');
-      expect(rendered).toContain('href="https://bsky.app/profile/vibress.bsky.social"');
-      expect(rendered).toContain('src="/social-icons/threads.svg"');
-      expect(rendered).toContain('src="/social-icons/bluesky.svg"');
+      expect(rendered).not.toContain("footer-social-links-strip");
+      expect(rendered).not.toContain("social-links-strip");
     });
 
-    it("hides social links strip when empty", async () => {
+    it("hides social links strip when empty or disabled", async () => {
       if (linksFiles.size === 0) {
         return;
       }
@@ -209,10 +263,24 @@ describe("Social Links in View Models & Liquid Theme Engine", () => {
         socialLinks: [],
       });
 
-      const rendered = await engine.renderFile("partials/footer.liquid", { site: mockSite, settings: {} });
-      expect(rendered).not.toContain("footer-social-links-strip");
-      expect(rendered).not.toContain("facebook.com");
-      expect(rendered).not.toContain("twitter.com");
+      const headerRendered = await engine.renderFile("partials/profile-header.liquid", { site: mockSite, settings: {} });
+      expect(headerRendered).not.toContain("social-links-strip");
+
+      const footerRendered = await engine.renderFile("partials/footer.liquid", { site: mockSite, settings: {} });
+      expect(footerRendered).not.toContain("footer-social-links-strip");
+      expect(footerRendered).not.toContain("facebook.com");
+      expect(footerRendered).not.toContain("twitter.com");
+
+      // Test showSocialLinks: false
+      const mockSiteWithLinks = mapSiteToViewModel({
+        title: "My Profile",
+        locale: "en",
+        socialLinks: [
+          { id: "1", platform: "x", label: "X", url: "https://x.com/vibress", iconUrl: "/social-icons/x.svg" },
+        ],
+      });
+      const disabledHeader = await engine.renderFile("partials/profile-header.liquid", { site: mockSiteWithLinks, settings: { showSocialLinks: false } });
+      expect(disabledHeader).not.toContain("social-links-strip");
     });
   });
 });
