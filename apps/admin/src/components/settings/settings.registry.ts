@@ -193,6 +193,17 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
         iconName: "Menu",
       },
       {
+        id: "social-links",
+        title: "Social links",
+        description: "Manage social profiles available across every theme.",
+        keywords: ["social", "instagram", "youtube", "facebook", "x", "tiktok", "footer", "profiles"],
+        pillarId: "site",
+        anchor: "site-social-links",
+        editorMode: "inline",
+        requiredPermission: "settings.site.manage",
+        iconName: "Share2",
+      },
+      {
         id: "themes-manager",
         title: "Themes",
         description:

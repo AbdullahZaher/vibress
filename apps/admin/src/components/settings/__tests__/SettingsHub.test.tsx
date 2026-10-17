@@ -29,6 +29,7 @@ vi.mock("../hooks/useSettingsHub", () => ({
         brandColor: "#000",
         primaryNav: [],
         secondaryNav: [],
+        socialLinks: [],
         announcementEnabled: false,
         announcementText: "",
         announcementUrl: "",

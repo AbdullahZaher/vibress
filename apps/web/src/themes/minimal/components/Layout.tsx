@@ -1,5 +1,6 @@
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
+import { SocialLinks } from "../../../components/SocialLinks";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -67,6 +68,7 @@ export async function ThemeLayout({
           <div className="vb-footer-inner vb-inner">
             <div className="vb-footer-bar">
               <span className="vb-footer-logo">{site.title}</span>
+              <SocialLinks links={site.socialLinks} locale={site.locale} />
               <div>{footerText}</div>
             </div>
           </div>

@@ -90,7 +90,32 @@ Reference them inside templates using the `{% asset %}` tag or `asset_url` filte
 
 ---
 
-## 4. Packaging Your Theme
+## 4. Social icons in custom themes
+
+Social profile links are configured by the publication owner under **Settings → Site → Social links** ([owner guide](../administration/SOCIAL_LINKS_GUIDE.md)). They are publication data, not fields in your `settings.json`.
+
+Every Liquid template can access the ordered `site.socialLinks` array of `{ id, platform, label, url, iconUrl }`. An unconfigured site returns `[]`. To render icon links in `partials/footer.liquid`:
+
+```liquid
+{% if site.socialLinks.size > 0 %}
+  <nav class="social-links" aria-label="Social media links">
+    {% for social in site.socialLinks %}
+      <a href="{{ social.url | escape }}" aria-label="{{ social.label | escape }}"
+         target="_blank" rel="noopener noreferrer">
+        <img src="{{ social.iconUrl | escape }}" alt="" width="20" height="20">
+      </a>
+    {% endfor %}
+  </nav>
+{% endif %}
+```
+
+Style the links with a 44px minimum pointer target, visible keyboard focus, and logical/RTL-friendly spacing. The `iconUrl` property references a local SVG supplied by Vibress; avoid icon CDNs, external scripts, and hardcoded platform homepages. The same partial can be included in a header or sidebar. Third-party theme footers are not modified automatically, and older themes remain valid.
+
+See the [Liquid view-model contract and CSS example](templating.md).
+
+---
+
+## 5. Packaging Your Theme
 
 Zip the contents of your theme folder:
 
@@ -103,7 +128,7 @@ zip -r ../my-theme.zip theme.json settings.json preview.webp templates/ partials
 
 ---
 
-## 5. Installing & Activating in Admin
+## 6. Installing & Activating in Admin
 
 1. Open your Vibress Admin Panel.
 2. Navigate to **Settings &rarr; Themes**.

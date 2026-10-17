@@ -13,6 +13,12 @@ The system is designed as a **TypeScript modular monolith** with strong domain b
 
 This policy is **adopted as the target contract**, not yet implemented or certified. Historical localization reports retain their original results and must not be interpreted as verification of the new single-language-by-default behavior.
 
+## Social media links and theme documentation
+
+- [Publication social links — owner guide](administration/SOCIAL_LINKS_GUIDE.md) · [دليل الإدارة بالعربية](administration/SOCIAL_LINKS_GUIDE.ar.md).
+- [Liquid theme developer guide](themes/developer-guide.md) · [Templating reference](themes/templating.md) · [Public site API](10-api/themes-api.md).
+- Default, Minimal and Molten render the social icons in their footers. Custom themes choose where to place them.
+
 ## Core principles
 
 1. **Modular monolith first**

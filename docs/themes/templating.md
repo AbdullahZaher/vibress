@@ -17,8 +17,37 @@ Every template receives clean, decoupled View Models populated by Vibress:
 - `site.coverImage` (`string` | `null`): Publication cover banner URL.
 - `site.tagline` (`string` | `null`): Subtitle / tagline.
 - `site.locale` (`string`): Language locale code (e.g. `en`, `ar`, `es`).
-- `site.primaryNav` (`Array<{ label: string, url: string }>`): Main header navigation links.
-- `site.secondaryNav` (`Array<{ label: string, url: string }>`): Footer / secondary links.
+- `site.navigation.primary` (`Array<{ label: string, url: string }>`): Main header navigation links.
+- `site.navigation.secondary` (`Array<{ label: string, url: string }>`): Footer / secondary links.
+- `site.socialLinks` (`Array<{ id, platform, label, url, iconUrl }>`): Publication social profiles in configured order; empty by default. Each `url` is a validated HTTPS URL and `iconUrl` points to a platform-owned local SVG. Themes choose where to display them (no automatic injection).
+
+This is an **additive Theme API v1 field**, shared by all themes independently of the active theme. The [owner guide](../administration/SOCIAL_LINKS_GUIDE.md) lists supported platform IDs (including `custom`). Each `iconUrl` points to a platform-owned local SVG at `/social-icons/<platform>.svg`. Existing publications without profiles return `[]`, and older themes do not have to change.
+
+Example `partials/footer.liquid` (only renders when configured):
+
+
+```liquid
+{% if site.socialLinks.size > 0 %}
+<nav aria-label="Social media links" class="social-links">
+  {% for social in site.socialLinks %}
+  <a href="{{ social.url | escape }}" target="_blank" rel="noopener noreferrer"
+     aria-label="{{ social.label | escape }}" class="social-link">
+    <img src="{{ social.iconUrl | escape }}" alt="" width="20" height="20">
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}
+```
+
+Add accessible, direction-independent styling to your theme CSS:
+
+```css
+.social-links { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.social-link { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+.social-link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+```
+
+The same collection can be placed in the header, sidebar or other templates; Vibress does **not** inject icons automatically into third-party theme markup. Use the provided `iconUrl`, do not generate remote URLs from user input, and avoid hardcoded platform homepages.
 
 ### `settings` Object
 Contains all variables defined in `settings.json` and saved in the Admin Settings panel:

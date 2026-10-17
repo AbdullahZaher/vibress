@@ -1,3 +1,4 @@
+import { SocialLinksSchema, type SocialLink } from "@vibress/api-contracts";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getStaffSettingsApi,
@@ -17,6 +18,7 @@ export interface SiteSettingsState {
   coverUrl?: string;
   primaryNav: NavItem[];
   secondaryNav: NavItem[];
+  socialLinks: SocialLink[];
   announcementEnabled: boolean;
   announcementText: string;
   announcementUrl: string;
@@ -37,6 +39,7 @@ const DEFAULT_STATE: SiteSettingsState = {
     { id: "5", label: "Privacy Policy", url: "/pages/privacy" },
     { id: "6", label: "Terms of Service", url: "/pages/terms" },
   ],
+  socialLinks: [],
   announcementEnabled: false,
   announcementText: "",
   announcementUrl: "",
@@ -68,6 +71,10 @@ export function useSiteSettings() {
             loaded.primaryNav = s.value as NavItem[];
           if (s.key === "secondaryNav" && Array.isArray(s.value))
             loaded.secondaryNav = s.value as NavItem[];
+          if (s.key === "socialLinks") {
+            const parsed = SocialLinksSchema.safeParse(s.value);
+            loaded.socialLinks = parsed.success ? parsed.data : [];
+          }
           if (s.key === "announcementEnabled")
             loaded.announcementEnabled = Boolean(s.value);
           if (s.key === "announcementText")
@@ -119,6 +126,7 @@ export function useSiteSettings() {
       JSON.stringify(draft.secondaryNav)
     )
       count++;
+    if (JSON.stringify(initial.socialLinks) !== JSON.stringify(draft.socialLinks)) count++;
     if (initial.announcementEnabled !== draft.announcementEnabled) count++;
     if (initial.announcementText !== draft.announcementText) count++;
     if (initial.announcementUrl !== draft.announcementUrl) count++;
@@ -152,6 +160,8 @@ export function useSiteSettings() {
         promises.push(
           updateSettingApi("site", "secondaryNav", draft.secondaryNav),
         );
+      if (JSON.stringify(initial.socialLinks) !== JSON.stringify(draft.socialLinks))
+        promises.push(updateSettingApi("site", "socialLinks", draft.socialLinks));
       if (initial.announcementEnabled !== draft.announcementEnabled)
         promises.push(
           updateSettingApi(

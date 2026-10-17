@@ -109,6 +109,7 @@ export type ThemeSettingsSchema = Record<string, ThemeSettingDefinition>;
 
 export interface ThemeSiteSettings {
   title: string;
+  socialLinks?: Array<{ id: string; platform: string; label: string; url: string; iconUrl: string }> | undefined;
   description: string;
   url: string;
   locale: string;

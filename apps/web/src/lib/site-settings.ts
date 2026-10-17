@@ -1,3 +1,4 @@
+import { toPublicSocialLinks, type PublicSocialLink } from "@vibress/api-contracts";
 import { headers } from "next/headers";
 import { cache } from "react";
 import { getPublicSiteUrl } from "./seo-helpers";
@@ -23,6 +24,7 @@ export interface ThemeSiteSettings {
   coverUrl?: string | undefined;
   primaryNav?: Array<{ label: string; url: string }> | undefined;
   secondaryNav?: Array<{ label: string; url: string }> | undefined;
+  socialLinks?: PublicSocialLink[] | undefined;
   announcementEnabled?: boolean | undefined;
   announcementText?: string | undefined;
   announcementUrl?: string | undefined;
@@ -86,6 +88,7 @@ export const getThemeSiteSettings = serverCache(async function getThemeSiteSetti
     accentColor: "#6366f1",
     primaryNav: [],
     secondaryNav: [],
+    socialLinks: [],
     announcementEnabled: false,
     announcementText: "",
     announcementUrl: "",
@@ -181,6 +184,7 @@ export const getThemeSiteSettings = serverCache(async function getThemeSiteSetti
       secondaryNav: Array.isArray(site.secondaryNav)
         ? (site.secondaryNav as Array<{ label: string; url: string }>)
         : [],
+      socialLinks: toPublicSocialLinks(site.socialLinks),
       announcementEnabled: Boolean(site.announcementEnabled),
       announcementText: (site.announcementText as string) || "",
       announcementUrl: (site.announcementUrl as string) || "",

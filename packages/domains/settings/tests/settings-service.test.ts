@@ -50,6 +50,15 @@ describe("SettingsService", () => {
     );
   }
 
+  it("validates social links at the publication-scoped settings boundary", async () => {
+    const service = makeService();
+    const value = [{ id: "1", platform: "github", label: "GitHub", url: "https://github.com/vibress" }];
+    await service.updateSetting("site", "socialLinks", value, "u1", "pub_one");
+    expect(repo.set).toHaveBeenCalledWith(expect.objectContaining({ publicationId: "pub_one", key: "socialLinks", value }));
+    await expect(service.updateSetting("site", "socialLinks", [{ ...value[0], url: "javascript:alert(1)" }], "u1", "pub_one"))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("updates a valid typed setting", async () => {
     const service = makeService();
     const record = await service.updateSetting(

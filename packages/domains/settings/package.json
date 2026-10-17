@@ -10,6 +10,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@vibress/api-contracts": "workspace:*",
     "@vibress/database": "workspace:*",
     "@vibress/events": "workspace:*",
     "drizzle-orm": "^0.45.2"

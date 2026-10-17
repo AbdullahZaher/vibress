@@ -1,7 +1,7 @@
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
-import { t } from "../../../lib/i18n";
+import { SocialLinks } from "../../../components/SocialLinks";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -69,25 +69,7 @@ export function ThemeLayout({
               {site.title} © {new Date().getFullYear()}
             </div>
             <div className="vb-foot-center">
-              <div className="vb-social-links">
-                {/* Simplified social links for Vibress */}
-                <a
-                  href="https://x.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t("social.twitter")}
-                >
-                  <span>{t("social.twitter")}</span>
-                </a>
-                <a
-                  href="https://facebook.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t("social.facebook")}
-                >
-                  <span>{t("social.facebook")}</span>
-                </a>
-              </div>
+              <SocialLinks links={site.socialLinks} locale={site.locale} className="vb-social-links" />
             </div>
             <div className="vb-powered-by">
               Powered by{" "}
