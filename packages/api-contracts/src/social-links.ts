@@ -26,12 +26,12 @@ const SocialLinkFields = z.object({
 
 export const SocialLinksSchema = z.array(SocialLinkFields.strict()).max(20).superRefine((items, ctx) => {
   const ids = new Set<string>();
-  for (const [index, item] of items.entries()) {
+  items.forEach((item, index) => {
     if (ids.has(item.id)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [index, "id"], message: "Duplicate social link ID" });
     }
     ids.add(item.id);
-  }
+  });
 });
 export type SocialLink = z.infer<typeof SocialLinkFields>;
 export type PublicSocialLink = SocialLink & { iconUrl: string };
