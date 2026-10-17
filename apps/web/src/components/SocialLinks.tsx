@@ -1,8 +1,8 @@
 import React from "react";
-import type { PublicSocialLink } from "@vibress/api-contracts";
+import type { SiteSocialLinkViewModel } from "@vibress/theme-core";
 
 interface SocialLinksProps {
-  links?: PublicSocialLink[] | undefined;
+  links?: SiteSocialLinkViewModel[] | undefined;
   locale?: string | undefined;
   className?: string | undefined;
 }
