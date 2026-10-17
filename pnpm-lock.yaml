@@ -93,6 +93,9 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.45.10
         version: 1.170.20(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@vibress/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@vibress/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -1258,6 +1261,9 @@ importers:
 
   packages/domains/settings:
     dependencies:
+      '@vibress/api-contracts':
+        specifier: workspace:*
+        version: link:../../api-contracts
       '@vibress/database':
         specifier: workspace:*
         version: link:../../database
