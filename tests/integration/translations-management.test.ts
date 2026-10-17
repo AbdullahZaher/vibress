@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDb, posts, contentTranslations, users, settings, roles, userRoles,
-  publicationLocales, publications, tags, postTags, eq, and, sql,
+  publicationLocales, publications, tags, postTags, installation, eq, and, sql,
 } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
@@ -61,6 +61,15 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   beforeAll(async () => {
     app = buildApp();
     await app.ready();
+
+    await db.insert(installation).values({
+      id: "singleton",
+      installed: true,
+      installationSource: "fresh",
+    }).onConflictDoUpdate({
+      target: [installation.id],
+      set: { installed: true },
+    });
 
     // The legacy suite exercises a bilingual editorial workflow. The system
     // no longer implicitly activates Arabic, so explicitly enable it here.

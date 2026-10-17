@@ -80,13 +80,14 @@ export class SearchService {
   ): Promise<{ results: SearchResult[]; total: number }> {
     const start = performance.now();
     const sanitized = sanitizeSearchQuery(q);
-    const result = await this.repo.query(
-      sanitized,
-      Math.min(Math.max(limit, 1), 50),
-      Math.max(offset, 0),
-      publicationId,
-      locale,
-    );
+    const sanitizedLimit = Math.min(Math.max(limit, 1), 50);
+    const sanitizedOffset = Math.max(offset, 0);
+    const result =
+      publicationId !== undefined
+        ? locale !== undefined
+          ? await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset, publicationId, locale)
+          : await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset, publicationId)
+        : await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset);
     const durationMs = Math.round(performance.now() - start);
 
     domainEvents.emit("search.queried", {
@@ -132,7 +133,15 @@ export class SearchService {
     publicationId?: string,
     locale?: string,
   ): Promise<void> {
-    await this.repo.remove(entityType, entityId, publicationId, locale);
+    if (publicationId !== undefined) {
+      if (locale !== undefined) {
+        await this.repo.remove(entityType, entityId, publicationId, locale);
+      } else {
+        await this.repo.remove(entityType, entityId, publicationId);
+      }
+    } else {
+      await this.repo.remove(entityType, entityId);
+    }
     domainEvents.emit("search.removed", { entityType, entityId, publicationId, locale });
   }
 

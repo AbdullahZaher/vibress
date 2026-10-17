@@ -224,11 +224,7 @@ export class PublicationLocaleService {
           "The selected primary language is not yet certified for the administrative interface",
         );
       }
-      const isInstalled = this.repository.isInstallationCompleted
-        ? await this.repository.isInstallationCompleted()
-        : true;
       if (
-        isInstalled &&
         changesPrimary &&
         (await this.repository.hasAuthoredContent(publicationId))
       ) {
@@ -259,7 +255,6 @@ export class PublicationLocaleService {
           ? canonicalPublicationLocale(legacy.value)
           : null;
       if (
-        isInstalled &&
         legacyPrimary &&
         legacyPrimary !== storedPrimary &&
         (await this.repository.hasAuthoredContent(publicationId))
