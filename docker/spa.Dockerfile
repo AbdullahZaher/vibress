@@ -4,7 +4,7 @@
 
 ARG APP=admin
 
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 RUN npm install -g pnpm@11.17.0
 WORKDIR /repo
 
@@ -14,7 +14,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter "@vibress/${APP}" build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
 ARG APP
 ENV APP=${APP}
 # Update alpine packages to patched builds (OS-level CVEs: openssl, zlib, etc.)

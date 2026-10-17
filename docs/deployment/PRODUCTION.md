@@ -338,3 +338,44 @@ Configure the following Prometheus alerts for production monitoring:
    ```promql
    outbox_oldest_unpublished_age_seconds > 600
    ```
+
+---
+
+## 7. Reverse Proxy, CDN & Trusted Proxy Configuration (Cloudflare / AWS ALB)
+
+### Default Compose Topology (Gateway -> API)
+In the default `compose.prod.yml` topology, the Nginx gateway is the single public entry point:
+- The gateway listens externally (port 7777/8080) and sets `proxy_set_header X-Forwarded-For $remote_addr;` when proxying to internal upstream apps. Client-supplied `X-Forwarded-For` headers are intentionally overwritten, preventing spoofed IP injection.
+- Fastify defaults to `TRUST_PROXY=1` (1 hop), trusting the immediate gateway peer and resolving `req.ip` from the gateway-provided address.
+
+### Deploying Behind Cloudflare, AWS ALB, or Reverse Proxies
+When placing Vibress behind an external CDN or Layer 7 Load Balancer, **do not change `TRUST_PROXY=1`** in the application container. Because the shipped Nginx gateway always overwrites `X-Forwarded-For` with `$remote_addr`, attempting to set `TRUST_PROXY=2` in Fastify does not work: the external load balancer's forwarded header is discarded at the gateway, collapsing all visitors into the load balancer's IP address and causing shared rate-limit buckets and self-inflicted lockouts.
+
+The **only supported approach** with the shipped gateway is configuring the Nginx `realip` module in `infrastructure/nginx/nginx.prod.conf`:
+
+1. **Nginx Gateway (`infrastructure/nginx/nginx.prod.conf`):**
+   Configure `set_real_ip_from` for each upstream CDN or load balancer CIDR block, set `real_ip_header`, and enable `real_ip_recursive on`:
+   ```nginx
+   # Cloudflare IPv4 ranges (or AWS VPC CIDRs / ALB subnet)
+   set_real_ip_from 173.245.48.0/20;
+   set_real_ip_from 103.21.244.0/22;
+   set_real_ip_from 10.0.0.0/8;        # Internal ALB/VPC range
+   real_ip_header   X-Forwarded-For;   # Or CF-Connecting-IP for Cloudflare
+   real_ip_recursive on;
+   ```
+   With `realip` active, Nginx validates the upstream proxy IP and safely rewrites `$remote_addr` to the true originating client IP before setting `X-Forwarded-For: $remote_addr` upstream to Fastify.
+
+2. **Application Environment (`TRUST_PROXY`):**
+   Keep `TRUST_PROXY=1` unchanged in `.env`. Fastify continues to trust exactly 1 hop (the internal Nginx gateway).
+
+   > [!NOTE]
+   > Setting `TRUST_PROXY=2` or passing a CIDR list in Fastify is only applicable if deploying the API container directly exposed to the external load balancer without the shipped Nginx gateway.
+
+   > [!WARNING]
+   > Never set `TRUST_PROXY=true` (trust all) in production. Setting `TRUST_PROXY=true` trusts all hops unconditionally, allowing malicious clients to spoof their IP address by injecting arbitrary `X-Forwarded-For` headers. The API logs a security warning at startup if this misconfiguration is detected.
+
+### Account-Level Throttling & Lockout
+To protect against credential stuffing attacks rotating across multiple IP addresses, Vibress enforces Redis-backed account-level throttling:
+- **Staff Login (`/api/admin/v1/auth/login`):** Maximum 5 failed attempts per normalized email + client subnet (IPv4 `/24`, IPv6 `/64`) within a 15-minute window triggers a 15-minute lockout (HTTP 429) for that subnet. To defend against distributed attacks across rotating subnets without locking out the owner, a global per-email ceiling (20 failures) applies a progressive delay (100ms to 1000ms, capped). This global ceiling slows down distributed attacks, but deliberately does not cap or hard-lock the account across all IPs. If Redis is unreachable, login fails closed (HTTP 503) to prevent brute-forcing during cache outages.
+- **Member Authentication (`/api/members/v1/auth/*`):** Rate limits magic link requests (5 per normalized email per 10-minute window) and token verification attempts (5 per token per 15-minute window), resetting on successful authentication.
+

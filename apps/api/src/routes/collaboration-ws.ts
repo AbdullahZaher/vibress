@@ -9,7 +9,7 @@ import {
 } from "../services";
 import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
-import { COOKIE_NAME } from "../middleware/auth";
+import { COOKIE_NAME, safeExtractOrigin } from "../middleware/auth";
 import {
   roomManager,
   MAX_CRDT_UPDATE_BYTES,
@@ -44,11 +44,9 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
       websocket: true,
       preValidation: async (req: FastifyRequest, reply: FastifyReply) => {
         // 1. Validate Origin header
-        const origin =
-          req.headers.origin ||
-          (req.headers.referer ? new URL(req.headers.referer).origin : null);
+        const origin = safeExtractOrigin(req);
         const allowedOrigins = getConfig().cors.staffAllowedOrigins;
-        if (origin && !allowedOrigins.includes(origin)) {
+        if ((req.headers.referer && !origin) || (origin && !allowedOrigins.includes(origin))) {
           return reply.status(403).send({
             errors: [
               {

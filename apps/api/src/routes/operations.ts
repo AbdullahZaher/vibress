@@ -32,6 +32,7 @@ import {
 import { runInTransaction } from "@vibress/database";
 import { hashPassword, verifyPassword } from "@vibress/security";
 import { getConfig } from "@vibress/config";
+import { IMPORT_EXPORT_BODY_LIMIT_BYTES } from "../constants/limits";
 
 type CodedError = Error & { code?: string };
 
@@ -580,6 +581,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
 
   // ---------------- Import / Export ----------------
   fastify.post("/imports/validate", {
+    bodyLimit: IMPORT_EXPORT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("imports.manage"),
@@ -612,6 +614,7 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/imports", {
+    bodyLimit: IMPORT_EXPORT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("imports.manage"),

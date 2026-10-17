@@ -459,15 +459,20 @@ describe("Vibress Content Modeler — Deep Production Certification Suite", () =
         {
           title: "Orphaned Course",
           slug: "orphaned-course",
-          data: {
-            courseTitle: "Orphaned Course",
-            mainModule: "non_existent_module_id",
-          },
+          data: { courseTitle: "Orphaned Course" },
           status: "published",
         },
         testUserId,
         pubAlpha,
       );
+      // Simulate existing JSONB written before relation integrity checks.
+      await getDb().update(contentEntries)
+        .set({ data: { ...brokenEntry.data, mainModule: "non_existent_module_id" } })
+        .where(eq(contentEntries.id, brokenEntry.id));
+      const preserved = await service.updateEntry(
+        courseModel.id, brokenEntry.id, { title: "Still orphaned" }, testUserId, pubAlpha,
+      );
+      expect(preserved.data.mainModule).toBe("non_existent_module_id");
 
       const resolved = await service.getEntryById(courseModel.id, brokenEntry.id, pubAlpha, true);
       expect(resolved).not.toBeNull();

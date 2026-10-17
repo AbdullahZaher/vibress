@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkEntryDataValidity, analyzeSchemaEvolution, resolveLocalizedEntryData } from "../domain/validation";
+import { checkEntryDataValidity, analyzeSchemaEvolution, resolveLocalizedEntryData, validateModelDefinition, ValidationError } from "../domain/validation";
 import { ContentFieldDefinition } from "../domain/types";
 
 describe("Content Modeler Schema Evolution & Data Safety", () => {
@@ -103,6 +103,74 @@ describe("Content Modeler Schema Evolution & Data Safety", () => {
       base[0]!,
       { ...base[1]!, relationModel: "accounts" },
     ]).safe).toBe(false);
+  });
+
+  it("treats tightened legacy nested constraints as unsafe", () => {
+    const oldNumber = {
+      id: "n", name: "Score", key: "score", type: "number" as const,
+      validation: { min: 1, max: 100 },
+    };
+    expect(analyzeSchemaEvolution([oldNumber], [
+      { ...oldNumber, validation: { min: 5, max: 100 } },
+    ]).safe).toBe(false);
+    expect(analyzeSchemaEvolution([oldNumber], [
+      { ...oldNumber, max: 50 },
+    ]).safe).toBe(false);
+
+    const oldText = {
+      id: "t", name: "Title", key: "title", type: "text" as const,
+      validation: { minLength: 2, maxLength: 200, pattern: "^[a-z]+$" },
+    };
+    for (const updated of [
+      { ...oldText, validation: { ...oldText.validation, minLength: 10 } },
+      { ...oldText, maxLength: 50 },
+      { ...oldText, validation: { ...oldText.validation, pattern: "^[A-Z]+$" } },
+    ]) {
+      const diff = analyzeSchemaEvolution([oldText], [updated]);
+      expect(diff.safe).toBe(false);
+      expect(diff.changes[0]?.isSafe).toBe(false);
+    }
+  });
+
+  it("uses the effective top-level-first constraints and permits relaxation", () => {
+    const base = {
+      id: "n", name: "Score", key: "score", type: "number" as const,
+      min: 4, validation: { min: 1, max: 10 },
+    };
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, validation: { min: 8, max: 20 } },
+    ]).safe).toBe(true); // top-level min=4 still takes precedence
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, min: 2, validation: { min: 1, max: 20 } },
+    ]).safe).toBe(true);
+    expect(analyzeSchemaEvolution([base], [
+      { ...base, min: 5 },
+    ]).safe).toBe(false);
+  });
+
+  it("rejects malformed and pathological patterns during schema definition and runtime validation", () => {
+    const valid = {
+      id: "code", name: "Code", key: "code", type: "text" as const,
+      pattern: "^[a-z0-9_-]+$",
+    };
+    expect(() => validateModelDefinition({ name: "Codes", fields: [valid] })).not.toThrow();
+    expect(checkEntryDataValidity({ code: "safe-123" }, [valid]).valid).toBe(true);
+
+    for (const pattern of ["[", "(a+)+$", "(a|aa)+$", "(?:a+)*", "(?=a)a", "a".repeat(257)]) {
+      const field = { ...valid, pattern };
+      expect(() => validateModelDefinition({ name: "Unsafe", fields: [field] })).toThrow(ValidationError);
+      const result = checkEntryDataValidity({ code: "a".repeat(64) + "!" }, [field]);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]?.field).toBe("code");
+    }
+
+    // Historical nested JSONB constraints are also guarded, without throwing SyntaxError.
+    const legacy = {
+      id: "old", name: "Legacy", key: "legacy", type: "text" as const,
+      validation: { pattern: "[" },
+    };
+    expect(() => validateModelDefinition({ name: "Legacy", fields: [legacy] })).toThrow(ValidationError);
+    expect(checkEntryDataValidity({ legacy: "sample" }, [legacy]).valid).toBe(false);
   });
 
   it("blocks new required fields until existing records are migrated, even with defaults", () => {

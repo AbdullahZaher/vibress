@@ -14,10 +14,12 @@ import {
   ConcurrencyConflictError,
   PermissionDeniedError,
   analyzeSchemaEvolution,
+  validateModelDefinition,
 } from "@vibress/content-modeler";
 import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { canonicalPublicationLocale } from "@vibress/settings";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 import type { ContentFieldDefinition } from "@vibress/database";
 import type { ZodTypeAny } from "zod";
 import {
@@ -219,9 +221,19 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
       if (!model) {
         return sendError(reply, "NOT_FOUND", "Content model not found", req.id, 404);
       }
-      const newFields = req.body?.fields || [];
-      const evolution = analyzeSchemaEvolution(model.fields, newFields);
-      return reply.send({ data: evolution });
+      const newFields = req.body.fields;
+      try {
+        validateModelDefinition({ name: model.name, slug: model.slug, fields: newFields });
+        const evolution = analyzeSchemaEvolution(model.fields, newFields);
+        return reply.send({ data: evolution });
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          return sendError(reply, "VALIDATION_ERROR", err.message, req.id, 400, {
+            fieldErrors: err.fieldErrors,
+          });
+        }
+        throw err;
+      }
     },
   });
 
@@ -273,6 +285,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string };
     Body: CreateEntryInput;
   }>("/content-models/:modelSlug/entries", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(CreateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: async (req, reply) => {
       const { title, slug, data, status } = req.body || {};
@@ -423,6 +436,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });
@@ -431,6 +445,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });

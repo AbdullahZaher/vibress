@@ -20,7 +20,7 @@
     "@vibress/observability": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.14.10",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.20.4",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.5.3"

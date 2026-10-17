@@ -20,6 +20,12 @@ key-renaming or migration takes place.
 New required fields (even with defaults), changed types, narrowed select
 options, tightened validation constraints, different relation targets,
 localization changes, and increased field exposure are treated as unsafe.
+Legacy JSONB field definitions may store constraints in `field.validation`;
+preview and updates compare those constraints with the same top-level-first
+precedence used when validating entry data. Tightening any effective legacy
+constraint is unsafe, even when the proposed field switches to top-level keys.
+Invalid field definitions (including duplicate or reserved keys) receive a
+`400 VALIDATION_ERROR` from Preview rather than a misleading migration plan.
 When any entries exist for the model—including soft-deleted records—an
 unsafe update is blocked. The existence check and update run in a transaction
 with a parent-row lock.
@@ -27,6 +33,34 @@ with a parent-row lock.
 The API returns `400 VALIDATION_ERROR` for such changes, without updating
 the stored model. A model with existing records cannot be deleted through
 the admin API: it returns `409 MODEL_IN_USE` to avoid a cascading purge.
+
+## Relation integrity and concurrent edits
+
+New relation IDs/slugs must resolve within the active publication. Missing and
+foreign references produce the same validation error and no global lookup is
+performed. Existing stored dangling references remain readable and are
+preserved when unchanged during an entry update; public relation resolution
+continues to omit unavailable targets. This intentionally tightens new writes:
+clients cannot create fresh dangling relationships.
+
+For staged imports, use the existing create/update entry APIs in two passes:
+first create all target entries (and source entries without relation fields),
+then update the source entries with the resolved target IDs or slugs.
+Do not write unresolved placeholder relations. This preserves import ordering
+without relaxing publication isolation or consulting another publication.
+Previously stored unresolved relations are preserved unchanged on updates.
+
+Schema field patterns are checked when models are created, updated, or
+previewed. Malformed expressions, patterns over 256 characters, backreferences,
+lookarounds, and common catastrophic nested-repeat forms are rejected with
+`VALIDATION_ERROR`. Historical unsafe patterns are rejected during entry
+validation rather than triggering unhandled regular-expression errors.
+These guards are conservative and do not guarantee constant-time matching
+for every possible regex; administrators should use simple anchored patterns.
+
+Entry updates merge against the locked database row, not an earlier snapshot.
+The optional `expectedVersion` continues to detect optimistic conflicts;
+older clients without it retain field-level merge semantics for partial data.
 
 ## Operational procedure
 

@@ -44,8 +44,8 @@ Enter email
 
 ## Abuse Protection
 
-- `POST /auth/request`: rate-limited by IP (10/min, 100/min in test env).
-- `POST|GET /auth/verify`: rate-limited (20/min).
+- `POST /auth/request`: rate-limited by IP (10/min, 100/min in test env) and account throttle (5 requests per normalized email per 10-minute window).
+- `POST|GET /auth/verify`: rate-limited by IP (20/min) and account throttle (5 attempts per token per 15-minute window).
 - Resend cooldown enforced client-side (30s).
 
 ## CSRF

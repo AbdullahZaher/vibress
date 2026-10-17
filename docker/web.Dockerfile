@@ -2,7 +2,7 @@
 # Build context must be the repository root.
 # Requires apps/web/next.config.mjs output: 'standalone'.
 
-FROM node:24-alpine AS base
+FROM node:25-alpine AS base
 RUN npm install -g pnpm@11.17.0
 WORKDIR /repo
 
@@ -12,7 +12,7 @@ ENV NX_WORKSPACE_ROOT=
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @vibress/web build
 
-FROM node:24-alpine AS runtime
+FROM node:25-alpine AS runtime
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=7778
 # Remove the bundled npm CLI (not needed at runtime; carries unpatched
 # bundled deps: brace-expansion, tar, undici, ip-address)

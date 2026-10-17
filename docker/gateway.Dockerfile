@@ -3,7 +3,7 @@
 # nginx-unprivileged reverse proxy: single public entry point (port 8080 inside
 # the container; map to ${VIBRESS_PORT:-7777} on the host).
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 # Update alpine packages to patched builds (OS-level CVEs: openssl, zlib, etc.)
 USER root
 RUN apk upgrade --no-cache

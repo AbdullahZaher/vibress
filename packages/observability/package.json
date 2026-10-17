@@ -13,14 +13,14 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
-    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/resources": "^2.12.0",
     "@opentelemetry/sdk-node": "^0.222.0",
     "@opentelemetry/sdk-trace": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
-    "@types/node": "^20.14.10"
+    "@types/node": "^26.6.5"
   },
   "nx": {
     "tags": [

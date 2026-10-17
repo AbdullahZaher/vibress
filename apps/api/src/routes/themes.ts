@@ -4,6 +4,7 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
+import { THEME_UPLOAD_BODY_LIMIT_BYTES } from "../constants/limits";
 import {
   themeService,
   themeInstaller,
@@ -111,21 +112,47 @@ export async function themeRoutes(fastify: FastifyInstance) {
 
   // Upload external theme ZIP package
   fastify.post("/themes/upload", {
+    bodyLimit: THEME_UPLOAD_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("themes.manage"),
       validateOrigin,
     ],
     handler: async (req, reply) => {
+      const contentLength = req.headers["content-length"];
+      if (
+        contentLength &&
+        parseInt(contentLength, 10) > THEME_UPLOAD_BODY_LIMIT_BYTES
+      ) {
+        return reply.status(413).send({
+          errors: [
+            {
+              code: "PAYLOAD_TOO_LARGE",
+              message: "Request body is too large",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       let fileData;
       try {
         fileData = await req.file();
       } catch (err) {
-        return reply.status(400).send({
+        const isTooLarge =
+          (err as any)?.statusCode === 413 ||
+          (err as any)?.code === "FST_REQ_FILE_TOO_LARGE" ||
+          (err as any)?.code === "FST_ERR_CTP_BODY_TOO_LARGE";
+        const statusCode = isTooLarge ? 413 : 400;
+        return reply.status(statusCode).send({
           errors: [
             {
-              code: "THEME_UPLOAD_FAILED",
-              message: errorMessage(err) || "Failed to parse multipart theme upload",
+              code: isTooLarge ? "PAYLOAD_TOO_LARGE" : "THEME_UPLOAD_FAILED",
+              message:
+                errorMessage(err) ||
+                (isTooLarge
+                  ? "Uploaded theme exceeds maximum allowed size"
+                  : "Failed to parse multipart theme upload"),
               requestId: req.id,
             },
           ],
@@ -147,12 +174,31 @@ export async function themeRoutes(fastify: FastifyInstance) {
       let zipBuffer: Buffer;
       try {
         zipBuffer = await fileData.toBuffer();
-      } catch {
-        return reply.status(400).send({
+      } catch (err) {
+        const isTooLarge =
+          (err as any)?.statusCode === 413 ||
+          (err as any)?.code === "FST_REQ_FILE_TOO_LARGE" ||
+          (err as any)?.code === "FST_ERR_CTP_BODY_TOO_LARGE";
+        const statusCode = isTooLarge ? 413 : 400;
+        return reply.status(statusCode).send({
           errors: [
             {
-              code: "THEME_UPLOAD_FAILED",
-              message: "Failed to read uploaded theme archive buffer",
+              code: isTooLarge ? "PAYLOAD_TOO_LARGE" : "THEME_UPLOAD_FAILED",
+              message: isTooLarge
+                ? "Uploaded theme exceeds maximum allowed size"
+                : "Failed to read uploaded theme archive buffer",
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      if (fileData.file.truncated) {
+        return reply.status(413).send({
+          errors: [
+            {
+              code: "PAYLOAD_TOO_LARGE",
+              message: "Uploaded theme exceeds maximum allowed size",
               requestId: req.id,
             },
           ],
