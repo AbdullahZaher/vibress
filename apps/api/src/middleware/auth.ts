@@ -121,6 +121,21 @@ export function requirePermission(permissionKey: string) {
   };
 }
 
+export function safeExtractOrigin(req: FastifyRequest): string | null {
+  if (req.headers.origin && typeof req.headers.origin === "string") {
+    return req.headers.origin;
+  }
+  const referer = req.headers.referer;
+  if (referer && typeof referer === "string") {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
   // Only check state-changing HTTP methods
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
@@ -134,9 +149,7 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
     return;
   }
 
-  const origin =
-    req.headers.origin ||
-    (req.headers.referer ? new URL(req.headers.referer).origin : null);
+  const origin = safeExtractOrigin(req);
   const allowedOrigins = getConfig().cors.staffAllowedOrigins;
 
   if (!origin || !allowedOrigins.includes(origin)) {

@@ -90,7 +90,34 @@ export interface AppConfig {
       resourceAttributes: Record<string, string>;
     };
   };
+  trustProxy: TrustProxyConfig;
+  trustProxyRaw?: string | undefined;
+  bodyLimitBytes: number;
 }
+
+export type TrustProxyConfig =
+  | boolean
+  | string[]
+  | ((address: string, hop: number) => boolean);
+
+export function parseTrustProxy(value?: string | null): TrustProxyConfig {
+  if (value === undefined || value === null || value.trim() === "") {
+    // Default safe value for shipped compose topology (gateway -> api): 1 hop
+    return (_address: string, hop: number) => hop < 1;
+  }
+  const trimmed = value.trim();
+  if (trimmed.toLowerCase() === "true") return true;
+  if (trimmed.toLowerCase() === "false") return false;
+  if (/^\d+$/.test(trimmed)) {
+    const hops = Number.parseInt(trimmed, 10);
+    return (_address: string, hop: number) => hop < hops;
+  }
+  return trimmed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 
 const emptyToUndefined = (value: unknown): unknown => {
   if (typeof value === "string" && value.trim() === "") return undefined;
@@ -180,6 +207,8 @@ const envSchema = z.object({
   STORAGE_PROVIDER: nonEmptyString.default("local"),
   STORAGE_LOCAL_ROOT: optionalNonEmptyString,
   UNSPLASH_ACCESS_KEY: optionalNonEmptyString,
+  TRUST_PROXY: optionalNonEmptyString,
+  API_BODY_LIMIT_BYTES: intString.default(1048576),
 
   EVENT_DELIVERY_MODE: z.enum(["outbox", "direct"]).default("outbox"),
   OUTBOX_PUBLISHED_RETENTION_DAYS: intString.default(7),
@@ -334,6 +363,9 @@ export function loadConfig(env: EnvSource): AppConfig {
         resourceAttributes: parseKeyValuePairs(raw.OTEL_RESOURCE_ATTRIBUTES),
       },
     },
+    trustProxy: parseTrustProxy(raw.TRUST_PROXY),
+    trustProxyRaw: raw.TRUST_PROXY,
+    bodyLimitBytes: raw.API_BODY_LIMIT_BYTES,
   };
 
   enforceProductionGuards(config);

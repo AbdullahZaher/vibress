@@ -82,4 +82,61 @@ describe("Typed configuration", () => {
     expect(disabled.observability.metricsEnabled).toBe(false);
     expect(disabled.observability.tracingEnabled).toBe(false);
   });
+
+  it("configures trustProxy safely by default and respects hop counts and CIDRs", () => {
+    const defaultConfig = loadConfig({ NODE_ENV: "development" });
+    expect(typeof defaultConfig.trustProxy).toBe("function");
+    const defaultTrustFn = defaultConfig.trustProxy as (
+      addr: string,
+      hop: number,
+    ) => boolean;
+    expect(defaultTrustFn("127.0.0.1", 0)).toBe(true);
+    expect(defaultTrustFn("127.0.0.1", 1)).toBe(false);
+
+    const hopConfig = loadConfig({
+      NODE_ENV: "development",
+      TRUST_PROXY: "2",
+    });
+    expect(typeof hopConfig.trustProxy).toBe("function");
+    const hopTrustFn = hopConfig.trustProxy as (
+      addr: string,
+      hop: number,
+    ) => boolean;
+    expect(hopTrustFn("127.0.0.1", 1)).toBe(true);
+    expect(hopTrustFn("127.0.0.1", 2)).toBe(false);
+
+    const cidrConfig = loadConfig({
+      NODE_ENV: "development",
+      TRUST_PROXY: "127.0.0.1, 10.0.0.0/8, 172.16.0.0/12",
+    });
+    expect(cidrConfig.trustProxy).toEqual([
+      "127.0.0.1",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+    ]);
+
+    const falseConfig = loadConfig({
+      NODE_ENV: "development",
+      TRUST_PROXY: "false",
+    });
+    expect(falseConfig.trustProxy).toBe(false);
+
+    const trueConfig = loadConfig({
+      NODE_ENV: "development",
+      TRUST_PROXY: "true",
+    });
+    expect(trueConfig.trustProxy).toBe(true);
+  });
+
+  it("configures bodyLimitBytes to 1MB default and parses API_BODY_LIMIT_BYTES", () => {
+    const defaultConfig = loadConfig({ NODE_ENV: "development" });
+    expect(defaultConfig.bodyLimitBytes).toBe(1048576);
+
+    const customConfig = loadConfig({
+      NODE_ENV: "development",
+      API_BODY_LIMIT_BYTES: "2097152",
+    });
+    expect(customConfig.bodyLimitBytes).toBe(2097152);
+  });
 });
+

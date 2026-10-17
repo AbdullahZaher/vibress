@@ -12,7 +12,7 @@ import type {
 import { SetupDomainError, setupTokenMatches } from "@vibress/setup";
 import { appLogger } from "../observability";
 import { setupService, authService } from "../services";
-import { COOKIE_NAME } from "../middleware/auth";
+import { COOKIE_NAME, safeExtractOrigin } from "../middleware/auth";
 
 /**
  * Dev-only ephemeral setup token. In production VIBRESS_SETUP_TOKEN is
@@ -56,9 +56,7 @@ function getEffectiveSetupToken(): string | null {
 
 /** Origin enforcement for the unauthenticated bootstrap surface (always on). */
 async function validateSetupOrigin(req: FastifyRequest, reply: FastifyReply) {
-  const origin =
-    req.headers.origin ||
-    (req.headers.referer ? new URL(req.headers.referer).origin : null);
+  const origin = safeExtractOrigin(req);
   const allowedOrigins = getConfig().cors.staffAllowedOrigins;
   if (!origin || !allowedOrigins.includes(origin)) {
     return reply.status(403).send({

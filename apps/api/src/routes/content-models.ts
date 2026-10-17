@@ -18,6 +18,7 @@ import {
 } from "@vibress/content-modeler";
 import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 import type { ContentFieldDefinition } from "@vibress/database";
 import type { ZodTypeAny } from "zod";
 import {
@@ -279,6 +280,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string };
     Body: CreateEntryInput;
   }>("/content-models/:modelSlug/entries", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(CreateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: async (req, reply) => {
       const { title, slug, data, status } = req.body || {};
@@ -429,6 +431,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });
@@ -437,6 +440,7 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     Params: { modelSlug: string; entryId: string };
     Body: UpdateEntryInput;
   }>("/content-models/:modelSlug/entries/:entryId", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [requireStaffSession, requirePermission("posts.edit"), validateOrigin, validateInput(UpdateCollectionEntrySchema), requirePublishPermissionForBody],
     handler: handleUpdateEntry,
   });

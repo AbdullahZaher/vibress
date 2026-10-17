@@ -4,6 +4,7 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 import {
   newslettersService,
   emailService,
@@ -65,6 +66,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/newsletters", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("newsletters.manage"),
@@ -97,6 +99,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
   });
 
   fastify.patch("/newsletters/:id", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("newsletters.manage"),

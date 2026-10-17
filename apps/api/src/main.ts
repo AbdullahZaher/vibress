@@ -116,11 +116,18 @@ function isPublicContentPrivacyExempt(url: string): boolean {
 
 export const buildApp = () => {
   const config = getConfig();
+
+  if (config.isProduction && config.trustProxy === true) {
+    appLogger.warn(
+      "SECURITY WARNING: TRUST_PROXY is set to true (trust all hops). In production, this allows client-spoofed X-Forwarded-For headers to determine req.ip and bypass rate limiting. Use TRUST_PROXY=1 (or specific trusted CIDRs) combined with Nginx realip configuration instead.",
+    );
+  }
+
   const fastify = Fastify({
     logger: false,
-    bodyLimit: 524288000, // 500MB body limit to match max media upload capabilities
+    bodyLimit: config.bodyLimitBytes, // Safe configurable default (1MB); raised per-route on upload/import endpoints
     requestIdHeader: "x-request-id",
-    trustProxy: true,
+    trustProxy: config.trustProxy,
     genReqId: function (req) {
       return (req.headers["x-request-id"] as string) || crypto.randomUUID();
     },

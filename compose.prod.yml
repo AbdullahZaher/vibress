@@ -112,6 +112,8 @@ services:
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_LOCAL_ROOT: ${STORAGE_LOCAL_ROOT:-/repo/content/media}
       EVENT_DELIVERY_MODE: ${EVENT_DELIVERY_MODE:-outbox}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-1048576}
     volumes:
       - vibress_content:/repo/content
       - vibress_content:/repo/apps/api/content

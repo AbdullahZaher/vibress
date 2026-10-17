@@ -13,6 +13,7 @@ import {
 } from "../middleware/auth";
 import { PostDomainError, ListPostsFilter } from "@vibress/posts";
 import { crdtPersistence } from "../collaboration/crdt-persistence";
+import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 
 async function resolvePostFeatureImage(
   featureImageId: string | null,
@@ -120,6 +121,7 @@ export async function postRoutes(fastify: FastifyInstance) {
 
   // Create post
   fastify.post("/posts", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("posts.create"),
@@ -181,6 +183,7 @@ export async function postRoutes(fastify: FastifyInstance) {
 
   // Update post
   fastify.put("/posts/:id", {
+    bodyLimit: DOCUMENT_CONTENT_BODY_LIMIT_BYTES,
     preHandler: [
       requireStaffSession,
       requirePermission("posts.edit"),
