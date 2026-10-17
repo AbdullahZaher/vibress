@@ -1788,8 +1788,8 @@ importers:
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
       '@lexical/history':
-        specifier: 0.13.1
-        version: 0.13.1(lexical@0.13.1)
+        specifier: 0.52.0
+        version: 0.52.0(typescript@5.9.3)
       '@lexical/html':
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
@@ -3248,6 +3248,14 @@ packages:
     peerDependencies:
       lexical: 0.13.1
 
+  '@lexical/extension@0.52.0':
+    resolution: {integrity: sha512-do7uvUxg6mJK0702XlD0Z8UMCtr1Yij4/WpJ7+GY5CL2jKVercMeeYBBEE7cWc/OXQJgzVx3ClNXC7XAHI6Fvw==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   '@lexical/hashtag@0.13.1':
     resolution: {integrity: sha512-Dl0dUG4ZXNjYYuAUR0GMGpLGsA+cps2/ln3xEmy28bZR0sKkjXugsu2QOIxZjYIPBewDrXzPcvK8md45cMYoSg==}
     peerDependencies:
@@ -3257,6 +3265,14 @@ packages:
     resolution: {integrity: sha512-cZXt30MalEEiRaflE9tHeGYnwT1xSDjXLsf9M409DSU9POJyZ1fsULJrG1tWv2uFQOhwal33rve9+MatUlITrg==}
     peerDependencies:
       lexical: 0.13.1
+
+  '@lexical/history@0.52.0':
+    resolution: {integrity: sha512-UJWmTcru+4KWkk8YtBSQ4dNLYuOJVCyCMFGsaCp/jVJEobwdY//jCTj9idOfE4b3H39kAixe9yQG/FNNOj4ujg==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@lexical/html@0.13.1':
     resolution: {integrity: sha512-XkZrnCSHIUavtpMol6aG8YsJ5KqC9hMxEhAENf3HTGi3ocysCByyXOyt1EhEYpjJvgDG4wRqt25xGDbLjj1/sA==}
@@ -4104,6 +4120,9 @@ packages:
     resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@preact/signals-core@1.14.4':
+    resolution: {integrity: sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -8903,6 +8922,15 @@ snapshots:
     dependencies:
       lexical: 0.13.1
 
+  '@lexical/extension@0.52.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/internal': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      '@preact/signals-core': 1.14.4
+      lexical: 0.52.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/hashtag@0.13.1(lexical@0.13.1)':
     dependencies:
       '@lexical/utils': 0.13.1(lexical@0.13.1)
@@ -8912,6 +8940,14 @@ snapshots:
     dependencies:
       '@lexical/utils': 0.13.1(lexical@0.13.1)
       lexical: 0.13.1
+
+  '@lexical/history@0.52.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      lexical: 0.52.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/html@0.13.1(lexical@0.13.1)':
     dependencies:
@@ -9972,6 +10008,8 @@ snapshots:
   '@playwright/test@1.64.0':
     dependencies:
       playwright: 1.64.0
+
+  '@preact/signals-core@1.14.4': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
