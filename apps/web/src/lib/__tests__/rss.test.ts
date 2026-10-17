@@ -17,6 +17,22 @@ vi.mock("../content-api-client", () => ({
   },
 }));
 
+vi.mock("../site-settings", async () => {
+  const actual = await vi.importActual<typeof import("../site-settings")>("../site-settings");
+  return {
+    ...actual,
+    getThemeSiteSettings: vi.fn().mockImplementation(async () => ({
+      publicationId: "test-pub-id",
+      title: process.env.SITE_NAME || "Vibress",
+      description: process.env.SITE_DESCRIPTION || "Publishing Platform",
+      url: process.env.SITE_URL || "https://vibress.example.com",
+      locale: "en",
+      primaryLocale: "en",
+      enabledLocales: ["en"],
+    })),
+  };
+});
+
 import { generateRssFeed } from "../rss";
 
 describe("RSS Feed Generator", () => {

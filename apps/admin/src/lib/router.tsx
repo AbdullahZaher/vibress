@@ -1,5 +1,6 @@
 import { ReactNode, Suspense, lazy, useEffect } from "react";
 import { ApiUser } from "./api";
+import { usePublicationLocales } from "./usePublicationLocales";
 import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { PermissionDenied } from "../components/common/PermissionDenied";
 import { RouteNotFound } from "../components/common/RouteNotFound";
@@ -550,6 +551,23 @@ export const adminRoutes: AdminRouteDefinition[] = [
   },
 ];
 
+function TranslationFeatureBoundary({
+  pathname,
+  onNavigate,
+  children,
+}: {
+  pathname: string;
+  onNavigate: (path: string) => void;
+  children: ReactNode;
+}) {
+  const { data, isLoading } = usePublicationLocales();
+  if (isLoading) return <RouteLoadingFallback />;
+  if (!data?.isMultilingual) {
+    return <RouteNotFound path={pathname} onNavigate={onNavigate} />;
+  }
+  return <>{children}</>;
+}
+
 /**
  * Resolves current path to matching route with guards, suspense, and error boundaries.
  */
@@ -591,19 +609,22 @@ export function renderAdminRoute(options: {
         );
       }
 
+      const isTranslationPath =
+        currentPathname.startsWith("/admin/translations") ||
+        (currentPathname.startsWith("/admin/content/") &&
+          currentPathname.includes("/translate/"));
+      const view = route.render({
+        user,
+        match: { pathname: currentPathname, params, searchParams },
+        onNavigate,
+        can,
+      });
       return (
         <RouteErrorBoundary>
           <Suspense fallback={<RouteLoadingFallback />}>
-            {route.render({
-              user,
-              match: {
-                pathname: currentPathname,
-                params,
-                searchParams,
-              },
-              onNavigate,
-              can,
-            })}
+            {isTranslationPath
+              ? <TranslationFeatureBoundary pathname={currentPathname} onNavigate={onNavigate}>{view}</TranslationFeatureBoundary>
+              : view}
           </Suspense>
         </RouteErrorBoundary>
       );

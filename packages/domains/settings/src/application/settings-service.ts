@@ -6,6 +6,7 @@ import {
   AuditRecorder,
 } from "../domain/setting";
 import { runInTransaction } from "@vibress/database";
+import { PublicationLocaleService, canonicalPublicationLocale } from "./publication-locale-service";
 
 export class SettingsDomainError extends Error {
   code: string;
@@ -405,6 +406,7 @@ export class SettingsService {
   constructor(
     private repo: SettingRepository,
     private audit: AuditRecorder,
+    private readonly publicationLocales?: PublicationLocaleService,
   ) {}
 
   listNamespaces(): string[] {
@@ -533,15 +535,43 @@ export class SettingsService {
       if (error) throw new SettingsDomainError("VALIDATION_ERROR", error);
     }
 
-    const record = await this.repo.set({
-      namespace,
-      key,
-      publicationId,
-      value: coerced,
-      valueType: def.type,
-      classification: def.classification,
-      updatedBy: actorId,
-    });
+    let record: SettingRecord;
+    if (namespace === "site" && key === "locale") {
+      // Preserve the legacy settings API without allowing a divergent
+      // site.locale write. The resolver owns the canonical publication state.
+      if (!this.publicationLocales) {
+        throw new SettingsDomainError(
+          "LOCALE_CONFIGURATION_REQUIRED",
+          "Publication locale service is required for language updates",
+        );
+      }
+      const primaryLocale = canonicalPublicationLocale(String(coerced));
+      const current = await this.publicationLocales.getConfiguration(publicationId);
+      const enabledLocales = [
+        primaryLocale,
+        ...current.enabledLocales.filter(
+          (locale) => locale !== current.primaryLocale && locale !== primaryLocale,
+        ),
+      ];
+      await this.publicationLocales.updateConfiguration(
+        publicationId,
+        { primaryLocale, enabledLocales },
+        actorId,
+      );
+      const stored = await this.repo.get(namespace, key, publicationId);
+      if (!stored) throw new Error("Publication locale was not persisted");
+      record = stored;
+    } else {
+      record = await this.repo.set({
+        namespace,
+        key,
+        publicationId,
+        value: coerced,
+        valueType: def.type,
+        classification: def.classification,
+        updatedBy: actorId,
+      });
+    }
 
     // Audit: never log setting values (sensitive or not); only metadata
     await this.audit.record({

@@ -1,5 +1,7 @@
 import { ContentApiClient } from "./content-api-client";
 import { getPublicSiteUrl } from "./seo-helpers";
+import { getLocalePrefix } from "@vibress/i18n";
+import { getThemeSiteSettings } from "./site-settings";
 
 function escapeXml(unsafe: string): string {
   return unsafe
@@ -11,11 +13,21 @@ function escapeXml(unsafe: string): string {
 }
 
 export async function generateRssFeed() {
+  const site = await getThemeSiteSettings();
+  if (!site.publicationId) {
+    return new Response("Publication information unavailable", {
+      status: 503, headers: { "Cache-Control": "no-store" },
+    });
+  }
   const siteUrl = getPublicSiteUrl();
-  const siteName = process.env.SITE_NAME || "Vibress";
-  const siteDescription = process.env.SITE_DESCRIPTION || "Publishing Platform";
+  const locale = site.locale;
+  const prefix = getLocalePrefix(
+    locale, site.primaryLocale || locale, site.enabledLocales,
+  );
+  const siteName = site.title;
+  const siteDescription = site.description;
 
-  const postsData = await ContentApiClient.getPosts({ page: 1, limit: 30 });
+  const postsData = await ContentApiClient.getPosts({ page: 1, limit: 30, locale });
   const posts = postsData?.posts || [];
 
   const firstPost = posts[0];
@@ -26,7 +38,7 @@ export async function generateRssFeed() {
 
   const itemsXml = posts
     .map((post) => {
-      const link = `${siteUrl}/posts/${post.slug}`;
+      const link = `${siteUrl}${prefix}/posts/${encodeURIComponent(post.slug)}`;
       const pubDate = new Date(post.publishedAt).toUTCString();
       const description = post.excerpt || post.title;
 
@@ -46,9 +58,9 @@ export async function generateRssFeed() {
     <title>${escapeXml(siteName)}</title>
     <link>${escapeXml(siteUrl)}</link>
     <description>${escapeXml(siteDescription)}</description>
-    <language>en</language>
+    <language>${escapeXml(locale)}</language>
     <lastBuildDate>${escapeXml(lastBuildDate)}</lastBuildDate>
-    <atom:link href="${escapeXml(siteUrl)}/rss.xml" rel="self" type="application/rss+xml"/>
+    <atom:link href="${escapeXml(siteUrl)}${escapeXml(prefix)}/rss.xml" rel="self" type="application/rss+xml"/>
 ${itemsXml}
   </channel>
 </rss>`;

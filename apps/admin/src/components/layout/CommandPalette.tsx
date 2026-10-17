@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useAdminLocale } from "../../lib/admin-locale";
 import {
   Search,
   PenLine,
@@ -51,6 +52,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onLogout,
   canPublishPosts,
 }) => {
+  const { tr } = useAdminLocale();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -335,8 +337,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
     ];
 
-    return list;
-  }, [canPublishPosts, darkMode, onNavigate, onToggleDarkMode, onLogout]);
+    return list.map((item) => ({
+      ...item,
+      title: tr(item.title),
+      ...(item.description ? { description: tr(item.description) } : {}),
+    }));
+  }, [canPublishPosts, darkMode, onNavigate, onToggleDarkMode, onLogout, tr]);
 
   // Filter items by search query
   const filteredItems = useMemo(() => {
@@ -421,7 +427,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search commands, actions, settings..."
+            placeholder={tr("Search commands, actions, settings...")}
             className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
           {query && (
@@ -441,7 +447,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         <div className="overflow-y-auto p-2 space-y-1 flex-1">
           {filteredItems.length === 0 ? (
             <div className="p-8 text-center text-xs text-muted-foreground">
-              No matching commands found for{" "}
+              {tr("No matching commands found for")} {" "}
               <span className="font-semibold text-foreground">
                 &quot;{query}&quot;
               </span>
@@ -458,7 +464,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     onClose();
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-start text-xs transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-primary text-primary-foreground font-medium"
                       : "text-foreground hover:bg-muted/50"
@@ -498,7 +504,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                           : "bg-muted text-muted-foreground"
                       }`}
                     >
-                      {item.category}
+                      {tr(item.category)}
                     </span>
                   </div>
                 </button>
@@ -510,15 +516,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         {/* Footer shortcuts hint */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-border/60 bg-muted/10 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span>Navigation:</span>
+            <span>{tr("Navigation:")}</span>
             <kbd className="bg-muted px-1 rounded border border-border">↑</kbd>
             <kbd className="bg-muted px-1 rounded border border-border">↓</kbd>
-            <span>Select:</span>
+            <span>{tr("Select:")}</span>
             <kbd className="bg-muted px-1.5 rounded border border-border">
               ↵
             </kbd>
           </div>
-          <span>Vibress Fast Command Bar</span>
+          <span>{tr("Vibress Fast Command Bar")}</span>
         </div>
       </div>
     </div>,

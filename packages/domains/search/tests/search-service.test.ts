@@ -50,6 +50,15 @@ describe("SearchService", () => {
     expect(repo.query).toHaveBeenCalledWith("hello world", 10, 0);
   });
 
+  it("search forwards allowedLocales to repository when provided", async () => {
+    const service = new SearchService(repo);
+    await service.search("hello", 10, 0, "pub_1", undefined, ["en", "ar"]);
+    expect(repo.query).toHaveBeenCalledWith("hello", 10, 0, "pub_1", undefined, ["en", "ar"]);
+
+    await service.search("hello", 10, 0, "pub_1", "ar", ["en", "ar"]);
+    expect(repo.query).toHaveBeenCalledWith("hello", 10, 0, "pub_1", "ar", ["en", "ar"]);
+  });
+
   it("indexDocument ignores empty titles", async () => {
     const service = new SearchService(repo);
     await service.indexDocument({

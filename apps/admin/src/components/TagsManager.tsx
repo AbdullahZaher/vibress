@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
@@ -27,6 +28,7 @@ interface Tag {
 }
 
 export const TagsManager: React.FC = () => {
+  const { tr } = useAdminLocale();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -101,7 +103,7 @@ export const TagsManager: React.FC = () => {
       {/* Page Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Tags Management
+          {tr("Tags Management")}
         </h1>
       </div>
 
@@ -129,25 +131,25 @@ export const TagsManager: React.FC = () => {
             <form onSubmit={handleSave} className="space-y-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-foreground">
-                  Tag Name
+                  {tr("Tag Name")}
                 </label>
                 <Input
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Technology"
+                  placeholder={tr("e.g. Technology")}
                   className="h-8 text-xs bg-card border-border"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-medium text-foreground">
-                  Description (Optional)
+                  {tr("Description (Optional)")}
                 </label>
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Tag summary..."
+                  placeholder={tr("Tag summary...")}
                   className="h-8 text-xs bg-card border-border"
                 />
               </div>
@@ -172,7 +174,7 @@ export const TagsManager: React.FC = () => {
                     }}
                     className="h-8 text-xs"
                   >
-                    Cancel
+                    {tr("Cancel")}
                   </Button>
                 )}
               </div>
@@ -185,11 +187,11 @@ export const TagsManager: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow className="border-border">
-                <TableHead className="pl-6 text-xs">Name</TableHead>
-                <TableHead className="text-xs">Slug</TableHead>
-                <TableHead className="text-xs">Description</TableHead>
+                <TableHead className="pl-6 text-xs">{tr("Name")}</TableHead>
+                <TableHead className="text-xs">{tr("Slug")}</TableHead>
+                <TableHead className="text-xs">{tr("Description")}</TableHead>
                 <TableHead className="text-right pr-6 text-xs">
-                  Actions
+                  {tr("Actions")}
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -200,7 +202,7 @@ export const TagsManager: React.FC = () => {
                     colSpan={4}
                     className="h-28 text-center text-xs text-muted-foreground"
                   >
-                    Loading tags...
+                    {tr("Loading tags...")}
                   </TableCell>
                 </TableRow>
               ) : tags.length === 0 ? (

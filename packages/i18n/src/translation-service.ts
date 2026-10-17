@@ -4,8 +4,12 @@ import {
   ContentTranslationRow,
   posts,
   pages,
+  tags,
+  postTags,
+  postAuthors,
+  users,
 } from "@vibress/database";
-import { eq, and, desc, inArray, or, ilike, isNull } from "drizzle-orm";
+import { eq, and, desc, inArray, or, ilike, isNull, lte, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   TranslationStatus,
@@ -41,7 +45,7 @@ export class TranslationService {
     const sourceUpdated = r.sourceUpdatedAtTranslation ?? new Date();
 
     if (r.contentType === "post") {
-      const srcRows = await db.select().from(posts).where(eq(posts.id, r.contentId)).limit(1);
+      const srcRows = await db.select().from(posts).where(and(eq(posts.id, r.contentId), eq(posts.publicationId, r.publicationId))).limit(1);
       if (srcRows[0] && r.sourceUpdatedAtTranslation) {
         if (srcRows[0].updatedAt.getTime() > r.sourceUpdatedAtTranslation.getTime()) {
           const changed: string[] = ["title", "body"];
@@ -61,7 +65,7 @@ export class TranslationService {
         }
       }
     } else if (r.contentType === "page") {
-      const srcRows = await db.select().from(pages).where(eq(pages.id, r.contentId)).limit(1);
+      const srcRows = await db.select().from(pages).where(and(eq(pages.id, r.contentId), eq(pages.publicationId, r.publicationId))).limit(1);
       if (srcRows[0] && r.sourceUpdatedAtTranslation) {
         if (srcRows[0].updatedAt.getTime() > r.sourceUpdatedAtTranslation.getTime()) {
           const changed: string[] = ["title", "body"];
@@ -116,6 +120,7 @@ export class TranslationService {
     targetLocale: string,
     currentSourceUpdatedAt?: Date,
     publicationId?: string,
+    exactLocale = false,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
     const conditions = [
@@ -131,8 +136,9 @@ export class TranslationService {
       .where(and(...conditions))
       .limit(1);
 
-    // Fallback: match by base language if regional variant was requested/stored (e.g. ar <-> ar-SA)
-    if (!rows[0]) {
+    // Existing callers retain historical fallback; publication policy
+    // callers use exactLocale=true to prevent regional variant confusion.
+    if (!exactLocale && !rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
       const fallbackConditions = [
         eq(contentTranslations.contentType, contentType),
@@ -195,6 +201,7 @@ export class TranslationService {
     targetLocale: string,
     slug: string,
     publicationId?: string,
+    exactLocale = false,
   ): Promise<ContentTranslationItem | null> {
     const db = getDb();
     const conditions = [
@@ -210,8 +217,8 @@ export class TranslationService {
       .where(and(...conditions))
       .limit(1);
 
-    // Fallback: match by base language if regional variant was requested/stored
-    if (!rows[0]) {
+    // No implicit regional variant substitution for strict publication routes.
+    if (!exactLocale && !rows[0]) {
       const baseLang = targetLocale.split("-")[0] || targetLocale;
       const fallbackConditions = [
         eq(contentTranslations.contentType, contentType),
@@ -313,6 +320,31 @@ export class TranslationService {
     };
   }
 
+  /**
+   * Resolve an old localized slug only when there is exactly one published
+   * translation in this publication. Ambiguous slugs never redirect to a
+   * random locale (or a draft).
+   */
+  async findUniquePublishedTranslationBySlug(
+    contentType: "post" | "page",
+    slug: string,
+    publicationId: string,
+  ): Promise<ContentTranslationItem | null> {
+    const db = getDb();
+    const candidates = await db
+      .select({ id: contentTranslations.id })
+      .from(contentTranslations)
+      .where(and(
+        eq(contentTranslations.publicationId, publicationId),
+        eq(contentTranslations.contentType, contentType),
+        eq(contentTranslations.slug, slug),
+        eq(contentTranslations.status, "published"),
+      ))
+      .limit(2);
+    if (candidates.length !== 1 || !candidates[0]) return null;
+    return this.getTranslationById(candidates[0].id, publicationId);
+  }
+
   async getContentTranslationStats(
     contentType = "post",
     publicationId?: string,
@@ -361,6 +393,115 @@ export class TranslationService {
       needsReview,
       byLocale,
     };
+  }
+
+  /**
+   * Paginate the *published localized* source set rather than paginating
+   * English content and discarding untranslated rows after LIMIT/OFFSET.
+   * The query is scoped to both the source and translation publication.
+   */
+  async listPublishedLocalizedSourceIds(
+    type: "post" | "page",
+    publicationId: string,
+    targetLocale: string,
+    options: {
+      limit: number;
+      offset: number;
+      tagSlug?: string | undefined;
+      authorSlug?: string | undefined;
+    },
+  ): Promise<{ ids: string[]; total: number }> {
+    const db = getDb();
+    const limit = Math.max(1, Math.min(options.limit, 100));
+    const offset = Math.max(0, options.offset);
+    const translationConditions = and(
+      eq(contentTranslations.publicationId, publicationId),
+      eq(contentTranslations.contentType, type),
+      eq(contentTranslations.targetLocale, targetLocale),
+      eq(contentTranslations.status, "published"),
+    );
+
+    if (type === "post") {
+      const conditions = [
+        eq(posts.publicationId, publicationId),
+        eq(posts.status, "published"),
+        eq(posts.visibility, "public"),
+        lte(posts.publishedAt, new Date()),
+        isNull(posts.deletedAt),
+      ];
+      if (options.tagSlug) {
+        const tagPosts = await db.select({ postId: postTags.postId })
+          .from(postTags)
+          .innerJoin(tags, eq(tags.id, postTags.tagId))
+          .where(and(
+            eq(tags.publicationId, publicationId),
+            eq(tags.slug, options.tagSlug),
+          ));
+        const postIds = tagPosts.map(t => t.postId);
+        if (postIds.length === 0) {
+          return { ids: [], total: 0 };
+        }
+        conditions.push(inArray(posts.id, postIds));
+      }
+      if (options.authorSlug) {
+        const authorPosts = await db.select({ postId: postAuthors.postId })
+          .from(postAuthors)
+          .innerJoin(users, eq(users.id, postAuthors.userId))
+          .where(or(
+            eq(users.slug, options.authorSlug),
+            eq(users.id, options.authorSlug),
+            ilike(users.name, options.authorSlug.replace(/-/g, " ")),
+          ));
+        const postIds = authorPosts.map(a => a.postId);
+        if (postIds.length === 0) {
+          return { ids: [], total: 0 };
+        }
+        conditions.push(inArray(posts.id, postIds));
+      }
+      const where = and(...conditions);
+      const [countRow] = await db.select({ value: count() })
+        .from(posts)
+        .innerJoin(contentTranslations, and(
+          eq(contentTranslations.contentId, posts.id),
+          translationConditions,
+        ))
+        .where(where);
+      const rows = await db.select({ id: posts.id })
+        .from(posts)
+        .innerJoin(contentTranslations, and(
+          eq(contentTranslations.contentId, posts.id),
+          translationConditions,
+        ))
+        .where(where)
+        .orderBy(desc(posts.publishedAt), desc(posts.id))
+        .limit(limit).offset(offset);
+      return { ids: rows.map((row) => row.id), total: countRow?.value ?? 0 };
+    }
+
+    const pageWhere = and(
+      eq(pages.publicationId, publicationId),
+      eq(pages.status, "published"),
+      eq(pages.visibility, "public"),
+      lte(pages.publishedAt, new Date()),
+      isNull(pages.deletedAt),
+    );
+    const [countRow] = await db.select({ value: count() })
+      .from(pages)
+      .innerJoin(contentTranslations, and(
+        eq(contentTranslations.contentId, pages.id),
+        translationConditions,
+      ))
+      .where(pageWhere);
+    const rows = await db.select({ id: pages.id })
+      .from(pages)
+      .innerJoin(contentTranslations, and(
+        eq(contentTranslations.contentId, pages.id),
+        translationConditions,
+      ))
+      .where(pageWhere)
+      .orderBy(desc(pages.publishedAt), desc(pages.id))
+      .limit(limit).offset(offset);
+    return { ids: rows.map((row) => row.id), total: countRow?.value ?? 0 };
   }
 
   async listTranslationsForContent(
@@ -465,6 +606,7 @@ export class TranslationService {
       input.targetLocale,
       undefined,
       pubId,
+      true,
     );
 
     const now = new Date();
@@ -586,6 +728,9 @@ export class TranslationService {
     const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
+    if (!["needs_review", "approved"].includes(existing.status)) {
+      throw new Error("Translation must be submitted for review before approval");
+    }
     const transition = validateTranslationStatusTransition(existing.status, "approved");
     if (!transition.valid) {
       throw new Error(transition.reason);
@@ -614,6 +759,11 @@ export class TranslationService {
     const existing = await this.getTranslationById(id, publicationId);
     if (!existing) return null;
 
+    // Publishing is an explicit editorial decision after review.
+    // Editors must not publish drafts directly, including through bulk calls.
+    if (existing.status !== "approved" && existing.status !== "published") {
+      throw new Error("Translation must be approved before publishing");
+    }
     const transition = validateTranslationStatusTransition(existing.status, "published");
     if (!transition.valid) {
       throw new Error(transition.reason);

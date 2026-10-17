@@ -318,17 +318,25 @@ export function getLocaleDefinition(code: string): LocaleDefinition | undefined 
   return defaultLocaleRegistry.get(code);
 }
 
-export function getLocalePrefix(code?: string | null, defaultLocale = "en"): string {
+export function getLocalePrefix(
+  code?: string | null,
+  defaultLocale = "en",
+  enabledLocales: readonly string[] = [],
+): string {
   if (!code || typeof code !== "string") return "";
   const canonical = defaultLocaleRegistry.canonicalize(code);
   const canonicalDefault = defaultLocaleRegistry.canonicalize(defaultLocale);
-  if (
-    canonical === canonicalDefault ||
-    canonical.startsWith("en") ||
-    canonicalDefault.startsWith("en") && canonical.startsWith("en")
-  ) {
+  if (canonical === canonicalDefault) return "";
+  const lang = defaultLocaleRegistry.getLanguage(canonical);
+  // Compatibility adapter for older callers that did not provide the
+  // publication's active locales. New routing paths always provide them.
+  if (!enabledLocales.length && canonicalDefault === "en" && lang === "en") {
     return "";
   }
-  const lang = defaultLocaleRegistry.getLanguage(canonical);
-  return `/${lang}`;
+  // When multiple regional variants share a language code, use the full
+  // language tag to avoid URL collisions.
+  const collisions = enabledLocales.filter(
+    (candidate) => defaultLocaleRegistry.getLanguage(candidate) === lang,
+  );
+  return `/${collisions.length > 1 ? canonical.toLowerCase() : lang}`;
 }

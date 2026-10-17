@@ -53,6 +53,9 @@ jobs:
       - name: Test
         run: pnpm vitest run --no-file-parallelism
 
+      - name: Verify locale migration 0038 replay invariants
+        run: pnpm exec tsx packages/database/scripts/verify-migration-0038.ts
+
       - name: Build
         run: pnpm build
 

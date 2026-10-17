@@ -112,6 +112,8 @@ export interface ThemeSiteSettings {
   description: string;
   url: string;
   locale: string;
+  primaryLocale?: string | undefined;
+  enabledLocales?: string[] | undefined;
   direction?: "ltr" | "rtl" | undefined;
   commentsEnabled?: boolean | undefined;
   commentAccess?: string | undefined;

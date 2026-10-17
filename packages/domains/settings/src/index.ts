@@ -1,3 +1,5 @@
 export * from "./domain/setting";
 export * from "./application/settings-service";
 export * from "./infrastructure/drizzle-setting-repository";
+export * from "./application/publication-locale-service";
+export * from "./infrastructure/drizzle-publication-locale-repository";

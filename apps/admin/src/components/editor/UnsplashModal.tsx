@@ -16,6 +16,7 @@ import {
   UnsplashPhoto,
   UnsplashSelectResponse,
 } from "../../lib/api/unsplash";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 export interface UnsplashModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
   onClose,
   onSelectPhoto,
 }) => {
+  const { tr } = useAdminLocale();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -166,7 +168,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Unsplash Photo Library"
+      aria-label={tr("Unsplash Photo Library")}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in-0 duration-200"
     >
       <div
@@ -181,20 +183,20 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-1.5">
-                Unsplash Photo Library
+                {tr("Unsplash Photo Library")}
                 <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                  Free
+                  {tr("Free")}
                 </span>
               </h2>
               <p className="text-xs text-muted-foreground">
-                High-resolution photography curated from Unsplash
+                {tr("High-resolution photography curated from Unsplash")}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label={tr("Close")}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -208,7 +210,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
               <AlertCircle className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-semibold mb-2 text-foreground">
-              Unsplash Integration Not Configured
+              {tr("Unsplash Integration Not Configured")}
             </h3>
             <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
               To browse and insert high-resolution Unsplash photography directly into your posts, configure your Unsplash API Access Key in your environment variables.
@@ -223,11 +225,11 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                 onClick={() => window.open("https://unsplash.com/developers", "_blank")}
                 className="gap-1.5"
               >
-                <span>Get Unsplash API Key</span>
+                <span>{tr("Get Unsplash API Key")}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </Button>
               <Button variant="secondary" size="sm" onClick={onClose}>
-                Close
+                {tr("Close")}
               </Button>
             </div>
           </div>
@@ -245,15 +247,15 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search millions of high-resolution photos..."
-                  aria-label="Search Unsplash"
+                  placeholder={tr("Search millions of high-resolution photos...")}
+                  aria-label={tr("Search millions of high-resolution photos...")}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-muted/40 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground/60"
                 />
                 {query && (
                   <button
                     type="button"
                     onClick={() => setQuery("")}
-                    aria-label="Clear search"
+                    aria-label={tr("Clear Selection")}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -275,12 +277,12 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
               {isLoading && photos.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-3">
                   <Loader2 className="w-7 h-7 animate-spin text-primary" />
-                  <span className="text-sm">Searching Unsplash...</span>
+                  <span className="text-sm">{tr("Searching Unsplash...")}</span>
                 </div>
               ) : photos.length === 0 && !isLoading ? (
                 <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground p-6">
                   <Camera className="w-10 h-10 stroke-1 opacity-40 mb-2" />
-                  <p className="text-sm font-medium text-foreground">No photos found</p>
+                  <p className="text-sm font-medium text-foreground">{tr("No photos found")}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Try searching for something else like &quot;architecture&quot;, &quot;minimal&quot;, or &quot;nature&quot;
                   </p>
@@ -342,10 +344,10 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                                 {selectingThis ? (
                                   <>
                                     <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                                    <span>Importing...</span>
+                                    <span>{tr("Importing...")}</span>
                                   </>
                                 ) : (
-                                  <span>Select</span>
+                                  <span>{tr("Select")}</span>
                                 )}
                               </Button>
                             </div>
@@ -355,7 +357,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                           {selectingThis && (
                             <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-2">
                               <Loader2 className="w-6 h-6 animate-spin text-white" />
-                              <span className="text-xs font-medium tracking-wide">Importing photo...</span>
+                              <span className="text-xs font-medium tracking-wide">{tr("Importing photo...")}</span>
                             </div>
                           )}
                         </div>
@@ -376,10 +378,10 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                         {isLoadingMore ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Loading more...
+                            {tr("Loading...")}
                           </>
                         ) : (
-                          `Load more photos (${photos.length} of ${totalPhotos})`
+                          `${tr("Load more photos")} (${photos.length} / ${totalPhotos})`
                         )}
                       </Button>
                     </div>

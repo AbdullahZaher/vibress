@@ -30,6 +30,8 @@ describe("First-run setup", () => {
   let app: ReturnType<typeof buildApp>;
   const originalEnv: Record<string, string | undefined> = {};
   let settingsBackupRows: Record<string, unknown>[] = [];
+  let previousPrimaryLocale = "en";
+  let previousPublicationLocaleRows: Record<string, unknown>[] = [];
 
   beforeAll(async () => {
     for (const key of Object.keys(BASE_ENV)) {
@@ -39,13 +41,24 @@ describe("First-run setup", () => {
 
     await runMigrations();
     const pool = getDbPool();
+    // Isolate setup from previously configured languages and restore them.
+    const priorPrimary = await pool.query<{ primary_locale: string }>(
+      "SELECT primary_locale FROM publications WHERE id = 'pub_default'",
+    );
+    previousPrimaryLocale = priorPrimary.rows[0]?.primary_locale ?? "en";
+    const priorLocales = await pool.query(
+      "SELECT * FROM publication_locales WHERE publication_id = 'pub_default'",
+    );
+    previousPublicationLocaleRows = priorLocales.rows;
+    await pool.query("DELETE FROM publication_locales WHERE publication_id = 'pub_default'");
+    await pool.query("UPDATE publications SET primary_locale = 'en' WHERE id = 'pub_default'");
     try {
       const { rows } = await pool.query("SELECT * FROM settings");
       settingsBackupRows = rows;
     } catch {}
 
     await pool.query(`
-      TRUNCATE TABLE audit_events, sessions, role_permissions, user_roles, permissions, roles, users, settings, installation CASCADE;
+      TRUNCATE TABLE audit_events, sessions, role_permissions, user_roles, permissions, roles, users, settings, installation, posts, pages, tags, content_entries, content_models CASCADE;
     `);
     // Roles + permissions only — no dev users, fresh installation state.
     await seedDatabase({ skipDevUsers: true });
@@ -84,6 +97,21 @@ describe("First-run setup", () => {
           ).catch(() => {});
         }
       }
+      const pool = getDbPool();
+      await pool.query("DELETE FROM publication_locales WHERE publication_id = 'pub_default'");
+      for (const row of previousPublicationLocaleRows) {
+        await pool.query(
+          `INSERT INTO publication_locales
+             (id, publication_id, locale, is_default, status, label, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [row.id, row.publication_id, row.locale, row.is_default,
+            row.status, row.label, row.created_at, row.updated_at],
+        );
+      }
+      await pool.query(
+        "UPDATE publications SET primary_locale = $1 WHERE id = 'pub_default'",
+        [previousPrimaryLocale],
+      );
     } catch (err) {
       // Best-effort cleanup — never mask the actual test results.
       console.error(
@@ -117,8 +145,10 @@ describe("First-run setup", () => {
   async function resetState() {
     const pool = getDbPool();
     await pool.query(`
-      TRUNCATE TABLE audit_events, sessions, user_roles, users, settings CASCADE;
+      TRUNCATE TABLE audit_events, sessions, user_roles, users, settings, posts, pages, tags, content_entries, content_models CASCADE;
     `);
+    await pool.query("DELETE FROM publication_locales WHERE publication_id = 'pub_default'");
+    await pool.query("UPDATE publications SET primary_locale = 'en' WHERE id = 'pub_default'");
     // Restore the singleton row (the migration normally guarantees it exists).
     await pool.query(`DELETE FROM installation;`);
     await pool.query(
@@ -194,6 +224,19 @@ describe("First-run setup", () => {
       expect(asRecord.description).toBe("A test site");
       expect(asRecord.locale).toBe("en");
 
+      const primary = await pool.query<{ primary_locale: string }>(
+        "SELECT primary_locale FROM publications WHERE id = 'pub_default'",
+      );
+      expect(primary.rows[0]?.primary_locale).toBe("en");
+      const publicationLanguages = await pool.query<{
+        locale: string; status: string; is_default: boolean;
+      }>(
+        "SELECT locale, status, is_default FROM publication_locales WHERE publication_id = 'pub_default'",
+      );
+      expect(publicationLanguages.rows).toEqual([
+        { locale: "en", status: "active", is_default: true },
+      ]);
+
       const audit = await pool.query<{ action: string; metadata: unknown }>(
         `SELECT action, metadata FROM audit_events WHERE action = 'setup.completed'`,
       );
@@ -212,6 +255,37 @@ describe("First-run setup", () => {
         `SELECT installed, installed_version FROM installation WHERE id = 'singleton'`,
       );
       expect(inst.rows[0].installed).toBe(true);
+    });
+  });
+
+  describe("Arabic-first setup", () => {
+    beforeEach(async () => {
+      await resetState();
+    });
+
+    it("persists Arabic as the only enabled publication language", async () => {
+      const res = await post(SETUP_TOKEN, {
+        ...validPayload,
+        site: { ...validPayload.site, locale: "ar" },
+      });
+      expect(res.statusCode).toBe(200);
+      const pool = getDbPool();
+      const pub = await pool.query<{ primary_locale: string }>(
+        "SELECT primary_locale FROM publications WHERE id = 'pub_default'",
+      );
+      expect(pub.rows[0]?.primary_locale).toBe("ar");
+      const locales = await pool.query<{
+        locale: string; is_default: boolean; status: string;
+      }>(
+        "SELECT locale, is_default, status FROM publication_locales WHERE publication_id = 'pub_default'",
+      );
+      expect(locales.rows).toEqual([
+        { locale: "ar", is_default: true, status: "active" },
+      ]);
+      const legacy = await pool.query<{ value: string }>(
+        "SELECT value FROM settings WHERE publication_id = 'pub_default' AND namespace = 'site' AND key = 'locale'",
+      );
+      expect(legacy.rows[0]?.value).toBe("ar");
     });
   });
 

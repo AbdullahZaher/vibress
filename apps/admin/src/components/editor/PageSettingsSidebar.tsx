@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { X, Sparkles } from "lucide-react";
 import { generateAiCompletion } from "../../lib/api";
 import { TranslationSidebarSection } from "../translations/TranslationSidebarSection";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 interface PageSettingsSidebarProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
   pageId,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const [generatingSeo, setGeneratingSeo] = useState(false);
 
   const handleGenerateSeoWithAi = async () => {
@@ -75,8 +77,8 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
       <div className="fixed inset-y-0 end-0 w-88 max-w-[90vw] bg-card border-s border-border shadow-2xl z-50 flex flex-col overflow-y-auto animate-in ltr:slide-in-from-right rtl:slide-in-from-left duration-200">
         <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-card/95 backdrop-blur z-10">
           <div>
-            <h2 className="font-semibold text-sm text-foreground">Page Settings</h2>
-            <p className="text-[11px] text-muted-foreground">Manage static page configuration and SEO</p>
+            <h2 className="font-semibold text-sm text-foreground">{tr("Page Settings")}</h2>
+            <p className="text-[11px] text-muted-foreground">{tr("Manage static page configuration and SEO")}</p>
           </div>
           <Button
             variant="ghost"
@@ -93,24 +95,24 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
-                URL Slug
+                {tr("URL Slug")}
               </label>
               <Input
                 type="text"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                placeholder="page-url-slug"
+                placeholder={tr("page-url-slug")}
                 className="text-sm font-mono h-9"
               />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
-                Excerpt
+                {tr("Excerpt")}
               </label>
               <textarea
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
-                placeholder="Short summary for preview..."
+                placeholder={tr("Short summary for preview...")}
                 className="w-full min-h-[100px] text-sm flex rounded-md border border-input bg-transparent px-3 py-2 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
@@ -120,7 +122,7 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
           <div className="space-y-4 border-t pt-6">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" /> Meta Data
+                <Sparkles className="h-4 w-4 text-primary" /> {tr("Meta Data")}
               </h3>
               <Button
                 variant="outline"
@@ -130,35 +132,35 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
                 disabled={generatingSeo}
               >
                 <Sparkles className="h-3 w-3 text-primary" />
-                {generatingSeo ? "Generating..." : "Generate AI"}
+                {generatingSeo ? tr("Generating...") : tr("Generate AI")}
               </Button>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
-                Meta Title
+                {tr("Meta Title")}
               </label>
               <Input
                 type="text"
                 value={metaTitle}
                 onChange={(e) => setMetaTitle(e.target.value)}
-                placeholder="Title for Search Engines"
+                placeholder={tr("Title for Search Engines")}
                 className="text-sm h-9"
               />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
-                Meta Description
+                {tr("Meta Description")}
               </label>
               <textarea
                 value={metaDescription}
                 onChange={(e) => setMetaDescription(e.target.value)}
-                placeholder="Search engine description..."
+                placeholder={tr("Search engine description...")}
                 className="w-full min-h-[80px] text-sm flex rounded-md border border-input bg-transparent px-3 py-2 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">
-                Canonical URL
+                {tr("Canonical URL")}
               </label>
               <Input
                 type="text"
@@ -168,7 +170,7 @@ export const PageSettingsSidebar: React.FC<PageSettingsSidebarProps> = ({
                 className="text-sm font-mono h-9"
               />
               <p className="text-[11px] text-muted-foreground">
-                Leave blank to use the default canonical URL.
+                {tr("Leave blank to use the default canonical URL.")}
               </p>
             </div>
 

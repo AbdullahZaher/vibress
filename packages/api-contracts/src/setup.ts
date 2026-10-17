@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PublicationLocaleTagSchema } from "./publication-locales";
 
 /**
  * First-run setup contracts. The bootstrap secret (VIBRESS_SETUP_TOKEN) is
@@ -32,6 +33,8 @@ const LocaleSchema = z
   .string()
   .trim()
   .regex(/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/, "Invalid locale")
+  .refine((tag) => ["en", "ar"].includes(tag.split("-")[0] || ""),
+    "Primary Admin interface is currently supported only in English and Arabic")
   .default("en");
 
 export const SetupSiteInputSchema = z.object({
@@ -39,6 +42,27 @@ export const SetupSiteInputSchema = z.object({
   description: SiteDescriptionSchema,
   tagline: SiteTaglineSchema,
   locale: LocaleSchema,
+  // Optional for older installation clients; an omitted set is one language.
+  enabledLocales: z.array(PublicationLocaleTagSchema).min(1).max(20).optional(),
+}).superRefine((site, ctx) => {
+  if (!site.enabledLocales) return;
+  try {
+    const primary = Intl.getCanonicalLocales(site.locale)[0];
+    const codes = site.enabledLocales.map((locale) => Intl.getCanonicalLocales(locale)[0]);
+    if (!codes.includes(primary) || codes.length !== new Set(codes).size) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enabledLocales"],
+        message: "Enabled languages must be distinct and include the primary language",
+      });
+    }
+  } catch {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["enabledLocales"],
+      message: "Invalid language tag",
+    });
+  }
 });
 export type SetupSiteInput = z.infer<typeof SetupSiteInputSchema>;
 

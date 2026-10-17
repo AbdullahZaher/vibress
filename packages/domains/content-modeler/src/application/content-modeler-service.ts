@@ -72,42 +72,26 @@ export class ContentModelerService {
     enabledLocales: string[];
   }> {
     const db = getDb();
-    let defaultLocale = "en";
-    let locales: Array<{ locale: string }> = [];
-
-    try {
-      const [publication] = await db
-        .select({ primaryLocale: publications.primaryLocale })
-        .from(publications)
-        .where(eq(publications.id, publicationId))
-        .limit(1);
-      if (publication?.primaryLocale) {
-        defaultLocale = publication.primaryLocale;
-      }
-    } catch {
-      // Resilient fallback to "en"
-    }
-
-    try {
-      locales = await db
-        .select({ locale: publicationLocales.locale })
-        .from(publicationLocales)
-        .where(and(
-          eq(publicationLocales.publicationId, publicationId),
-          eq(publicationLocales.status, "active"),
-        ))
-        .orderBy(desc(publicationLocales.isDefault));
-    } catch {
-      // Resilient fallback if locales table query is unavailable
-    }
-
+    const [publication] = await db
+      .select({ primaryLocale: publications.primaryLocale })
+      .from(publications)
+      .where(eq(publications.id, publicationId))
+      .limit(1);
+    if (!publication) throw new Error("Publication not found");
+    const active = await db
+      .select({ locale: publicationLocales.locale })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, publicationId),
+        eq(publicationLocales.status, "active"),
+      ))
+      .orderBy(desc(publicationLocales.isDefault));
     return {
-      defaultLocale,
-      enabledLocales: [...new Set(
-        locales.length > 0
-          ? [defaultLocale, ...locales.map((row) => row.locale)]
-          : [defaultLocale, "en", "ar"],
-      )],
+      defaultLocale: publication.primaryLocale,
+      enabledLocales: [...new Set([
+        publication.primaryLocale,
+        ...active.map((row) => row.locale),
+      ])],
     };
   }
 
@@ -1366,12 +1350,16 @@ export class ContentModelerService {
     model: ContentModel,
     userRole: "public" | "authenticated" | "staff_admin" = "public",
     locale?: string,
+    fallbackLocale = "en",
+    strictLocale = false,
   ): PublicContentEntryDto {
     let rawData = entry.data;
 
     // Apply localization if requested
     if (locale) {
-      rawData = resolveLocalizedEntryData(rawData, model.fields, locale, "en");
+      rawData = resolveLocalizedEntryData(
+        rawData, model.fields, locale, fallbackLocale, strictLocale,
+      );
     }
 
     // Filter fields according to API visibility rules

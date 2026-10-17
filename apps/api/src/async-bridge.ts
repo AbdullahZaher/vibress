@@ -207,22 +207,48 @@ function sanitizeForAnalytics(
  * Content source for the search index rebuild: only published, public
  * posts/pages/tags are indexed. Restricted content is never indexed.
  */
+import { getDb, contentTranslations, eq, and } from "@vibress/database";
+import { publicationLocaleService } from "./services";
+import {
+  canonicalPublicationLocale,
+  PublicationLocaleConfiguration,
+} from "@vibress/settings";
+
 export class SearchRebuildContentSource {
   private postRepo = new DrizzlePostRepository();
   private pageRepo = new DrizzlePageRepository();
   private tagRepo = new DrizzleTagRepository();
 
-  async listIndexableContent(): Promise<SearchDocumentInput[]> {
+  async listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]> {
     const docs: SearchDocumentInput[] = [];
     const siteUrl = getSiteUrl();
+    const db = getDb();
+
+    const configCache = new Map<string, PublicationLocaleConfiguration>();
+    const getLocaleConfig = async (pubId?: string | null): Promise<PublicationLocaleConfiguration> => {
+      const targetId = pubId || publicationId || "pub_default";
+      const cached = configCache.get(targetId);
+      if (cached) return cached;
+      const config = await publicationLocaleService.getConfiguration(targetId);
+      configCache.set(targetId, config);
+      return config;
+    };
+
+    // Upfront fail-closed verification of target publication locale configuration
+    if (publicationId) {
+      await getLocaleConfig(publicationId);
+    }
 
     // Posts: published + public only
     const { posts } = await this.postRepo.list({
       publishedOnly: true,
       limit: 10000,
+      ...(publicationId ? { publicationId } : {}),
     });
     for (const post of posts) {
       if (post.visibility !== "public") continue;
+      const config = await getLocaleConfig(post.publicationId);
+      const postLocale = config.primaryLocale;
       const bodyText = renderStudioDocumentToPlainText(post.content).slice(
         0,
         2000,
@@ -230,20 +256,55 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "post",
         entityId: post.id,
+        locale: postLocale,
         title: post.title,
         bodyText,
         slug: post.slug,
         url: `${siteUrl}/posts/${post.slug}`,
+        publicationId: post.publicationId,
       });
+
+      // Index published translations for this post
+      const postTranslations = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, "post"),
+            eq(contentTranslations.contentId, post.id),
+            eq(contentTranslations.status, "published"),
+            ...(publicationId ? [eq(contentTranslations.publicationId, publicationId)] : []),
+          ),
+        );
+
+      for (const tr of postTranslations) {
+        const canonicalLocale = canonicalPublicationLocale(tr.targetLocale);
+        if (!config.enabledLocales.includes(canonicalLocale)) continue;
+        docs.push({
+          entityType: "post",
+          entityId: post.id,
+          locale: canonicalLocale,
+          title: tr.title,
+          bodyText: renderStudioDocumentToPlainText(
+            tr.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
+          slug: tr.slug,
+          url: `${siteUrl}/${canonicalLocale}/posts/${tr.slug}`,
+          publicationId: tr.publicationId,
+        });
+      }
     }
 
     // Pages: published + public only
     const { pages } = await this.pageRepo.list({
       publishedOnly: true,
       limit: 10000,
+      ...(publicationId ? { publicationId } : {}),
     });
     for (const page of pages) {
       if (page.visibility !== "public") continue;
+      const config = await getLocaleConfig(page.publicationId);
+      const pageLocale = config.primaryLocale;
       const bodyText = renderStudioDocumentToPlainText(page.content).slice(
         0,
         2000,
@@ -251,22 +312,57 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "page",
         entityId: page.id,
+        locale: pageLocale,
         title: page.title,
         bodyText,
         slug: page.slug,
         url: `${siteUrl}/${page.slug}`,
+        publicationId: page.publicationId,
       });
+
+      // Index published translations for this page
+      const pageTranslations = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, "page"),
+            eq(contentTranslations.contentId, page.id),
+            eq(contentTranslations.status, "published"),
+            ...(publicationId ? [eq(contentTranslations.publicationId, publicationId)] : []),
+          ),
+        );
+
+      for (const tr of pageTranslations) {
+        const canonicalLocale = canonicalPublicationLocale(tr.targetLocale);
+        if (!config.enabledLocales.includes(canonicalLocale)) continue;
+        docs.push({
+          entityType: "page",
+          entityId: page.id,
+          locale: canonicalLocale,
+          title: tr.title,
+          bodyText: renderStudioDocumentToPlainText(
+            tr.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
+          slug: tr.slug,
+          url: `${siteUrl}/${canonicalLocale}/pages/${tr.slug}`,
+          publicationId: tr.publicationId,
+        });
+      }
     }
 
     // Tags
-    const tags = await this.tagRepo.listAll();
+    const tags = await this.tagRepo.listAll(publicationId);
     for (const tag of tags) {
+      const config = await getLocaleConfig(tag.publicationId);
       docs.push({
         entityType: "tag",
         entityId: tag.id,
+        locale: config.primaryLocale,
         title: tag.name,
         slug: tag.slug,
         url: `${siteUrl}/tags/${tag.slug}`,
+        publicationId: tag.publicationId,
       });
     }
 

@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { usePublicationLocales } from "../../../lib/usePublicationLocales";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import {
   PenLine,
   ChevronDown,
@@ -16,13 +18,17 @@ interface NavContentProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   canPublishPosts: boolean;
+  canReadTranslations: boolean;
 }
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
   onNavigate,
   canPublishPosts,
+  canReadTranslations,
 }) => {
+  const { data: localePolicy } = usePublicationLocales();
+  const { tr } = useAdminLocale();
   const [postsExpanded, setPostsExpanded] = useState(true);
   const [isIconHovered, setIsIconHovered] = useState(false);
 
@@ -103,7 +109,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Drafts
+            {tr("Drafts")}
           </button>
           <button
             type="button"
@@ -114,7 +120,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Scheduled
+            {tr("Scheduled")}
           </button>
           <button
             type="button"
@@ -125,7 +131,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
             }`}
           >
-            Published
+            {tr("Published")}
           </button>
         </div>
       )}
@@ -141,10 +147,11 @@ export const NavContent: React.FC<NavContentProps> = ({
         }`}
       >
         <File className="h-4 w-4 shrink-0" />
-        <span>Pages</span>
+        <span>{tr("Pages")}</span>
       </button>
 
       {/* Translations & Localization */}
+      {localePolicy?.isMultilingual && canReadTranslations && (
       <button
         type="button"
         onClick={() => onNavigate("/admin/translations")}
@@ -155,9 +162,10 @@ export const NavContent: React.FC<NavContentProps> = ({
         }`}
       >
         <Globe className="h-4 w-4 shrink-0" />
-        <span>Translations</span>
+        <span>{tr("Translations")}</span>
       </button>
 
+      )}
       {/* Tags */}
       <button
         type="button"
@@ -169,7 +177,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         }`}
       >
         <TagIcon className="h-4 w-4 shrink-0" />
-        <span>Tags</span>
+        <span>{tr("Tags")}</span>
       </button>
 
       {/* Media */}
@@ -197,7 +205,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         }`}
       >
         <Users className="h-4 w-4 shrink-0" />
-        <span>Members</span>
+        <span>{tr("Members")}</span>
       </button>
 
       {/* Comments & Moderation */}
@@ -211,7 +219,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         }`}
       >
         <MessageSquare className="h-4 w-4 shrink-0" />
-        <span>Comments</span>
+        <span>{tr("Comments")}</span>
       </button>
     </div>
   );

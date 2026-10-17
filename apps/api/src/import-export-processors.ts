@@ -107,7 +107,9 @@ export class NativeImportProcessor implements ImportProcessor {
         for (const [key, value] of Object.entries(values || {})) {
           // Imported settings cannot bypass code-injection and credential controls.
           const definition = SETTING_NAMESPACES.find((n) => n.namespace === namespace)?.settings.find((s) => s.key === key);
-          if (!definition || definition.classification === "secret" || definition.classification === "internal" || namespace === "code") continue;
+          if (!definition || definition.classification === "secret" ||
+              definition.classification === "internal" || namespace === "code" ||
+              (namespace === "site" && key === "locale")) continue;
           try {
             await this.settingsService.updateSetting(
               namespace,

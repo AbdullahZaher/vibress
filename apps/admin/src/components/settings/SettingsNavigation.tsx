@@ -1,5 +1,6 @@
 import React from "react";
 import { SettingsSearch } from "./SettingsSearch";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { Sliders, Layout, CreditCard, Sparkles, Cpu } from "lucide-react";
 import { PillarId } from "./settings.registry";
 
@@ -45,10 +46,11 @@ export const SettingsNavigation: React.FC<SettingsNavigationProps> = ({
   resultCount,
   totalCount,
 }) => {
+  const { tr } = useAdminLocale();
   return (
     <nav
       role="navigation"
-      aria-label="Settings categories navigation"
+      aria-label={tr("Settings categories navigation")}
       className="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-border/60 pb-3 pt-1 -mt-2 space-y-3"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -69,7 +71,7 @@ export const SettingsNavigation: React.FC<SettingsNavigationProps> = ({
                 }`}
               >
                 {getIcon(pillar.iconName)}
-                <span>{pillar.title}</span>
+                <span>{tr(pillar.title)}</span>
               </button>
             );
           })}

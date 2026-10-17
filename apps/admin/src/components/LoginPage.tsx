@@ -10,6 +10,7 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { useAdminLocale } from "../lib/admin-locale";
 
 interface LoginPageProps {
   loginFn: (email: string, password?: string) => Promise<void>;
@@ -20,6 +21,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   loginFn,
   onLoginSuccess,
 }) => {
+  const { tr } = useAdminLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +38,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to login. Check credentials.",
+          : tr("Failed to login. Check credentials."),
       );
     } finally {
       setIsLoading(false);
@@ -52,19 +54,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <Lock className="h-5 w-5" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-foreground">
-            Vibress Admin
+            {tr("Vibress Admin")}
           </h1>
           <p className="text-xs text-muted-foreground">
-            Publication Management Console
+            {tr("Publication Management Console")}
           </p>
         </div>
 
         {/* Minimal Login Card */}
         <Card className="border border-border shadow-sm">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-base font-bold">Sign In</CardTitle>
+            <CardTitle className="text-base font-bold">{tr("Sign In")}</CardTitle>
             <CardDescription className="text-xs">
-              Enter your email address to access your dashboard.
+              {tr("Enter your email address to access your dashboard.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -80,7 +82,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   htmlFor="email"
                   className="text-xs font-medium text-foreground"
                 >
-                  Email Address
+                  {tr("Email Address")}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -101,7 +103,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   htmlFor="password"
                   className="text-xs font-medium text-foreground"
                 >
-                  Password
+                  {tr("Password")}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -124,11 +126,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <span className="h-3.5 w-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                    Signing in...
+                    {tr("Signing in...")}
                   </span>
                 ) : (
                   <>
-                    Continue <ArrowRight className="h-3.5 w-3.5" />
+                    {tr("Continue")} <ArrowRight className="h-3.5 w-3.5" />
                   </>
                 )}
               </Button>
@@ -136,8 +138,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </CardContent>
           <CardFooter className="border-t border-border pt-4 text-center justify-center">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> Session
-              Secured
+              <ShieldCheck className="h-3.5 w-3.5 text-foreground" /> {tr("Session Secured")}
             </p>
           </CardFooter>
         </Card>

@@ -1,8 +1,8 @@
 import { getLocalePrefix } from "@vibress/i18n";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Metadata } from "next";
 import { ContentApiClient } from "../../../lib/content-api-client";
-import { buildPageMetadata } from "../../../lib/seo-helpers";
+import { buildPageMetadata, publishedAlternateLanguageUrls } from "../../../lib/seo-helpers";
 import {
   resolveThemeHostState,
   getThemeSiteSettings,
@@ -27,7 +27,7 @@ export async function generateMetadata({
     };
   }
 
-  const localePrefix = getLocalePrefix(site.locale);
+  const localePrefix = getLocalePrefix(site.locale, site.primaryLocale || site.locale, site.enabledLocales);
 
   return buildPageMetadata({
     title: post.seo?.title || post.title,
@@ -37,6 +37,7 @@ export async function generateMetadata({
     ogImage: post.featureImage?.url || post.seo?.ogImage || null,
     ogType: "article",
     locale: site.locale,
+    alternateLocales: await publishedAlternateLanguageUrls("post", slug, site.locale),
   });
 }
 
@@ -49,6 +50,8 @@ export default async function PostPage({
   const site = await getThemeSiteSettings();
   const post = await ContentApiClient.getPostBySlug(slug, { locale: site.locale });
   if (!post) {
+    const legacy = await ContentApiClient.getLegacyTranslationRedirect("post", slug);
+    if (legacy) permanentRedirect(legacy);
     notFound();
   }
 

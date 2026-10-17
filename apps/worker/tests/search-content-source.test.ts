@@ -88,4 +88,38 @@ describe("WorkerSearchContentSource", () => {
     const types = docs.map((d: any) => `${d.entityType}:${d.slug}`);
     expect(types).toEqual(["post:post-1", "page:page-1"]);
   });
+
+  it("fails closed when publication locale configuration fails to resolve", async () => {
+    mocks.postList.mockResolvedValue({
+      posts: [{ ...post(1), visibility: "public", publicationId: "pub_error" }],
+      total: 1,
+    });
+    mocks.pageList.mockResolvedValue({ pages: [], total: 0 });
+
+    const source = new WorkerSearchContentSource();
+    (source as any).localeService = {
+      getConfiguration: vi.fn().mockRejectedValue(new Error("Config unavailable")),
+    };
+
+    await expect(source.listIndexableContent("pub_error")).rejects.toThrow("Config unavailable");
+  });
+
+  it("derives locale from publication locale configuration (Arabic-first)", async () => {
+    mocks.postList.mockResolvedValue({
+      posts: [{ ...post(1), visibility: "public", publicationId: "pub_ar" }],
+      total: 1,
+    });
+    mocks.pageList.mockResolvedValue({ pages: [], total: 0 });
+
+    const source = new WorkerSearchContentSource();
+    (source as any).localeService = {
+      getConfiguration: vi.fn().mockResolvedValue({
+        primaryLocale: "ar",
+        enabledLocales: ["ar"],
+      }),
+    };
+
+    const docs = await source.listIndexableContent("pub_ar");
+    expect(docs[0]?.locale).toBe("ar");
+  });
 });

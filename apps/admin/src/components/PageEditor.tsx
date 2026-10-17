@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   apiRequest,
@@ -36,6 +37,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -449,8 +451,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             <textarea
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Page Title"
-              aria-label="Page Title"
+              placeholder={tr("Page Title")}
+              aria-label={tr("Page Title")}
               className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground"
               rows={1}
               onInput={(e) => {

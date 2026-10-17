@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useUnsavedChanges } from "./hooks/useUnsavedChanges";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 interface SettingsSaveBarProps {
   isDirty: boolean;
@@ -29,6 +30,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
   successMsg,
   errorMsg,
 }) => {
+  const { tr } = useAdminLocale();
   // Guard window navigation / tab close
   useUnsavedChanges(isDirty);
 
@@ -79,13 +81,13 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
               </span>
-              <span className="text-xs font-medium">Unsaved changes</span>
+              <span className="text-xs font-medium">{tr("Unsaved changes")}</span>
               {dirtyCount > 0 && (
                 <Badge
                   variant="secondary"
                   className="text-[10px] font-mono px-1.5 py-0 h-4.5 bg-muted"
                 >
-                  {dirtyCount} {dirtyCount === 1 ? "field" : "fields"}
+                  {dirtyCount} {dirtyCount === 1 ? tr("field") : tr("fields")}
                 </Badge>
               )}
             </div>
@@ -99,7 +101,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
-                Discard
+                {tr("Discard")}
               </Button>
               <Button
                 size="sm"
@@ -112,7 +114,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 ) : (
                   <Sparkles className="h-3 w-3" />
                 )}
-                {saving ? "Saving..." : "Save (⌘S)"}
+                {saving ? tr("Saving...") : tr("Save (⌘S)") }
               </Button>
             </div>
           </div>

@@ -15,6 +15,7 @@ interface AppSidebarProps {
   onNavigate: (path: string) => void;
   onLogout: () => void;
   canPublishPosts: boolean;
+  canReadTranslations: boolean;
   isOpen?: boolean | undefined;
   onClose?: (() => void) | undefined;
   onOpenCommandPalette?: (() => void) | undefined;
@@ -30,6 +31,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onNavigate,
   onLogout,
   canPublishPosts,
+  canReadTranslations,
   isOpen = false,
   onClose,
   onOpenCommandPalette,
@@ -85,6 +87,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           currentPath={currentPath}
           onNavigate={handleNavigate}
           canPublishPosts={canPublishPosts}
+          canReadTranslations={canReadTranslations}
         />
       </div>
 

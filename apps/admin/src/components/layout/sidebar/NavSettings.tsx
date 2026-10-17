@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import {
   Settings,
   ChevronDown,
@@ -19,6 +20,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
   currentPath,
   onNavigate,
 }) => {
+  const { tr } = useAdminLocale();
   const isSettingsActive =
     currentPath.startsWith("/admin/settings") ||
     currentPath.startsWith("/admin/models") ||
@@ -35,7 +37,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 
   const settingsItems = [
     {
-      label: "General settings",
+      label: tr("General settings"),
       path: "/admin/settings/general",
       icon: <Sliders className="h-3.5 w-3.5 shrink-0" />,
       active:
@@ -44,7 +46,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         currentPath.startsWith("/admin/settings/general"),
     },
     {
-      label: "Site",
+      label: tr("Site"),
       path: "/admin/settings/site",
       icon: <Layout className="h-3.5 w-3.5 shrink-0" />,
       active:
@@ -53,7 +55,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         currentPath.startsWith("/admin/settings/storage"),
     },
     {
-      label: "Membership",
+      label: tr("Membership"),
       path: "/admin/settings/membership",
       icon: <CreditCard className="h-3.5 w-3.5 shrink-0" />,
       active:
@@ -62,7 +64,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         currentPath.startsWith("/admin/subscriptions"),
     },
     {
-      label: "Growth",
+      label: tr("Growth"),
       path: "/admin/settings/growth",
       icon: <Sparkles className="h-3.5 w-3.5 shrink-0" />,
       active:
@@ -70,7 +72,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         currentPath.startsWith("/admin/newsletters"),
     },
     {
-      label: "Advanced",
+      label: tr("Advanced"),
       path: "/admin/settings/advanced",
       icon: <Cpu className="h-3.5 w-3.5 shrink-0" />,
       active:
@@ -94,7 +96,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
       >
         <div className="flex items-center gap-2.5">
           <Settings className="h-4 w-4 shrink-0" />
-          <span>Settings</span>
+          <span>{tr("Settings")}</span>
         </div>
         <ChevronDown
           className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${
@@ -131,7 +133,7 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer"
       >
         <HelpCircle className="h-4 w-4 shrink-0" />
-        <span>Help</span>
+        <span>{tr("Help")}</span>
       </button>
     </div>
   );

@@ -78,8 +78,30 @@ function createCspResponse(
     });
   }
 
+  if (options?.extraHeaders) {
+    for (const [k, v] of Object.entries(options.extraHeaders)) {
+      response.headers.set(k, v);
+    }
+  }
+
   response.headers.set("Content-Security-Policy", cspHeader);
   response.headers.set("x-nonce", nonce);
+  return response;
+}
+
+function localizedErrorResponse(status: 404 | 503, message: string): NextResponse {
+  // Locale configuration failures must preserve CSP instead of bypassing
+  // the security headers applied to ordinary theme and private-site pages.
+  const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString("base64");
+  const response = new NextResponse(message, {
+    status,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+  response.headers.set("Content-Security-Policy", buildCsp(nonce));
+  response.headers.set("X-Content-Type-Options", "nosniff");
   return response;
 }
 
@@ -97,10 +119,105 @@ function encodeSiteAuthScope(publicationId: string): string {
   return Buffer.from(publicationId, "utf8").toString("base64url");
 }
 
+interface CachedSiteSettings {
+  data: any;
+  publicationId?: string | undefined;
+  timestamp: number;
+}
+const siteSettingsCache = new Map<string, CachedSiteSettings>();
+const CACHE_TTL_MS = 10_000;
+
+export function _clearSiteSettingsCache(): void {
+  siteSettingsCache.clear();
+}
+
+async function fetchSiteSettings(host?: string): Promise<{ data: any; publicationId?: string | undefined } | null> {
+  const cacheKey = host || "default";
+  const now = Date.now();
+  const cached = siteSettingsCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return { data: cached.data, publicationId: cached.publicationId };
+  }
+
+  try {
+    const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        ...(host ? { "x-forwarded-host": host } : {}),
+      },
+    });
+
+    if (!siteRes.ok) {
+      return cached ? { data: cached.data, publicationId: cached.publicationId } : null;
+    }
+
+    const data = await siteRes.json();
+    const publicationId = siteRes.headers.get("x-vibress-publication-id") || undefined;
+    siteSettingsCache.set(cacheKey, { data, publicationId, timestamp: now });
+    return { data, publicationId };
+  } catch {
+    return cached ? { data: cached.data, publicationId: cached.publicationId } : null;
+  }
+}
+
+async function verifySiteAuth(
+  token: string | undefined | null,
+  publicationId: string,
+): Promise<boolean> {
+  if (!token || typeof token !== "string") return false;
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "v2") return false;
+
+  const timestampStr = parts[1];
+  const scope = parts[2];
+  const signature = parts[3];
+  if (!timestampStr || !scope || !signature || !/^[a-f0-9]{64}$/i.test(signature))
+    return false;
+
+  const timestamp = parseInt(timestampStr, 10);
+  if (Number.isNaN(timestamp) || !/^\d+$/.test(timestampStr)) return false;
+
+  const now = Date.now();
+  if (
+    timestamp > now + 300_000 ||
+    now - timestamp > 30 * 24 * 60 * 60 * 1000
+  ) {
+    return false;
+  }
+
+  const expectedScope = encodeSiteAuthScope(publicationId);
+  if (scope !== expectedScope) return false;
+
+  try {
+    const secret =
+      process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sigBuffer = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      enc.encode(`v2:${timestampStr}:${scope}`),
+    );
+    const expectedHex = Array.from(new Uint8Array(sigBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return expectedHex.toLowerCase() === signature.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Site Privacy enforcement
   const isProtectedPath =
     !pathname.startsWith("/_next") &&
     !pathname.startsWith("/api") &&
@@ -111,78 +228,18 @@ export async function middleware(request: NextRequest) {
     pathname !== "/robots.txt" &&
     pathname !== "/sitemap.xml";
 
-  async function verifySiteAuth(
-    token: string | undefined | null,
-    publicationId: string,
-  ): Promise<boolean> {
-    if (!token || typeof token !== "string") return false;
-    const parts = token.split(".");
-    if (parts.length !== 4 || parts[0] !== "v2") return false;
-
-    const timestampStr = parts[1];
-    const scope = parts[2];
-    const signature = parts[3];
-    if (!timestampStr || !scope || !signature || !/^[a-f0-9]{64}$/i.test(signature))
-      return false;
-
-    const timestamp = parseInt(timestampStr, 10);
-    if (Number.isNaN(timestamp) || !/^\d+$/.test(timestampStr)) return false;
-
-    const now = Date.now();
-    if (
-      timestamp > now + 300_000 ||
-      now - timestamp > 30 * 24 * 60 * 60 * 1000
-    ) {
-      return false;
-    }
-
-    const expectedScope = encodeSiteAuthScope(publicationId);
-    if (scope !== expectedScope) return false;
-
-    try {
-      const secret =
-        process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
-      );
-      const sigBuffer = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        enc.encode(`v2:${timestampStr}:${scope}`),
-      );
-      const expectedHex = Array.from(new Uint8Array(sigBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-      return expectedHex.toLowerCase() === signature.toLowerCase();
-    } catch {
-      return false;
-    }
-  }
-
   if (isProtectedPath) {
     try {
       const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
-      const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
-        },
-      });
+      const sitePayload = await fetchSiteSettings(hostHeader);
 
-      if (!siteRes.ok) {
+      if (!sitePayload) {
         return privateSiteRedirect(request, "privacy_unavailable");
       }
 
-      const siteData = await siteRes.json();
+      const siteData = sitePayload.data;
       if (siteData.security?.isPrivate) {
-        const publicationId = siteRes.headers.get("x-vibress-publication-id");
+        const publicationId = sitePayload.publicationId;
         const hasSiteAuth = publicationId
           ? await verifySiteAuth(
               request.cookies.get("vb_site_auth")?.value,
@@ -291,74 +348,109 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Locale detection & routing
-  const segments = pathname.split("/").filter(Boolean);
-  const firstSegment = segments[0]?.toLowerCase();
+  // Host-authoritative site policy. No fixed "English primary / Arabic
+  // secondary" routing table; every configured primary is unprefixed.
   const isExcludedPrefix =
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/theme-assets") ||
-    pathname.startsWith("/preview") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml";
-
-  if (!isExcludedPrefix && firstSegment) {
-    const isEn = firstSegment === "en" || firstSegment === "en-us" || firstSegment === "en-gb";
-
-    // 1. Default locale prefix (/en or /en-us) -> 301 redirect to strip prefix (URL canonicalization)
-    if (isEn) {
-      const rest = segments.slice(1).join("/");
-      const redirectUrl = new URL(rest ? `/${rest}` : "/", request.url);
-      redirectUrl.search = request.nextUrl.search;
-      return NextResponse.redirect(redirectUrl, { status: 301 });
+    ["/_next", "/api", "/admin", "/portal", "/health", "/content",
+      "/assets", "/theme-assets", "/preview"].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    ) ||
+    ["/favicon.ico", "/robots.txt", "/sitemap.xml", "/private"].includes(pathname);
+  if (!isExcludedPrefix) {
+    const host = request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") || undefined;
+    let localePolicy: { primary: string; enabled: string[] };
+    try {
+      const sitePayload = await fetchSiteSettings(host);
+      if (!sitePayload) throw new Error("Publication locale unavailable");
+      const data: unknown = sitePayload.data;
+      if (!data || typeof data !== "object" || !("site" in data) ||
+          !data.site || typeof data.site !== "object" ||
+          !("locale" in data.site) || typeof data.site.locale !== "string" ||
+          !("enabledLocales" in data.site) || !Array.isArray(data.site.enabledLocales)) {
+        throw new Error("Invalid publication locale policy");
+      }
+      const primary = Intl.getCanonicalLocales(data.site.locale)[0];
+      const enabled = data.site.enabledLocales.filter(
+        (value: unknown): value is string => typeof value === "string",
+      );
+      if (!primary || !enabled.includes(primary)) throw new Error("Invalid primary locale");
+      localePolicy = { primary, enabled };
+    } catch {
+      // Don't guess a language/tenant on API outages.
+      return localizedErrorResponse(503, "Publication temporarily unavailable");
     }
 
-    // Known locale lookup (ar, fr, de, fa, ur, tr, etc.)
-    const localeLookup: Record<string, { code: string; direction: "ltr" | "rtl" }> = {
-      ar: { code: "ar-SA", direction: "rtl" },
-      "ar-sa": { code: "ar-SA", direction: "rtl" },
-      "ar-eg": { code: "ar-EG", direction: "rtl" },
-      fr: { code: "fr-FR", direction: "ltr" },
-      "fr-fr": { code: "fr-FR", direction: "ltr" },
-      de: { code: "de-DE", direction: "ltr" },
-      "de-de": { code: "de-DE", direction: "ltr" },
-      tr: { code: "tr-TR", direction: "ltr" },
-      "tr-tr": { code: "tr-TR", direction: "ltr" },
-      fa: { code: "fa-IR", direction: "rtl" },
-      "fa-ir": { code: "fa-IR", direction: "rtl" },
-      ur: { code: "ur-PK", direction: "rtl" },
-      "ur-pk": { code: "ur-PK", direction: "rtl" },
-      he: { code: "he-IL", direction: "rtl" },
-      "he-il": { code: "he-IL", direction: "rtl" },
-    };
+    const segments = pathname.split("/").filter(Boolean);
+    const prefix = segments[0]?.toLowerCase();
+    let resolved = localePolicy.primary;
+    let isLocalizedPath = false;
 
-    const localeInfo = localeLookup[firstSegment];
-
-    // 2. Case-normalization for non-default locales (e.g. /AR -> /ar, /FR -> /fr, /FA -> /fa)
-    if (localeInfo && segments[0] !== firstSegment) {
-      const rest = segments.slice(1).join("/");
-      const redirectUrl = new URL(rest ? `/${firstSegment}/${rest}` : `/${firstSegment}`, request.url);
-      redirectUrl.search = request.nextUrl.search;
-      return NextResponse.redirect(redirectUrl, { status: 301 });
+    if (prefix) {
+      const isExactLocaleTag =
+        /^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(prefix) ||
+        /^[a-z]{2,3}-(?:hans|hant|arab|latn|cyrl)$/i.test(prefix);
+      const candidates = localePolicy.enabled.filter((code) => {
+        const sameBase = code.split("-")[0]?.toLowerCase() === prefix;
+        const exact = code.toLowerCase() === prefix;
+        if (exact) return true;
+        return sameBase && localePolicy.enabled.filter(
+          (variant) => variant.split("-")[0] === code.split("-")[0],
+        ).length === 1;
+      });
+      if (candidates.length === 1) {
+        resolved = candidates[0]!;
+        isLocalizedPath = true;
+      } else if (
+        isExactLocaleTag &&
+        ["en", "ar", "fr", "de", "es", "fa", "ur", "tr", "he", "ja", "pt", "zh", "ru", "it", "nl", "pl", "ko", "hi", "sv", "da", "fi", "no"]
+          .includes(prefix.split("-")[0] || "")
+      ) {
+        // A genuine but disabled locale must never render via public fallback.
+        return localizedErrorResponse(404, "Not Found");
+      }
     }
 
-    // 3. Recognized non-default locale prefix (/ar, /fr, /fa, /de, etc.)
-    if (localeInfo) {
-      const rest = segments.slice(1).join("/");
-      const internalUrl = new URL(rest ? `/${rest}` : "/", request.url);
-      internalUrl.search = request.nextUrl.search;
-
+    if (isLocalizedPath) {
+      const destination = segments.slice(1).join("/");
+      if (resolved === localePolicy.primary) {
+        const canonical = new URL(destination ? `/${destination}` : "/", request.url);
+        canonical.search = request.nextUrl.search;
+        return NextResponse.redirect(canonical, { status: 301 });
+      }
+      const languageCode = resolved.split("-")[0] || resolved;
+      const collisions = localePolicy.enabled.filter(
+        (candidate) => candidate.split("-")[0] === languageCode,
+      );
+      const canonicalPrefix = collisions.length > 1
+        ? resolved.toLowerCase() : languageCode.toLowerCase();
+      if (prefix !== canonicalPrefix || segments[0] !== prefix) {
+        const canonical = new URL(
+          `/${canonicalPrefix}${destination ? "/" + destination : ""}`,
+          request.url,
+        );
+        canonical.search = request.nextUrl.search;
+        return NextResponse.redirect(canonical, { status: 301 });
+      }
+      const internal = new URL(destination ? `/${destination}` : "/", request.url);
+      internal.search = request.nextUrl.search;
       return createCspResponse(request, {
-        rewriteUrl: internalUrl,
+        rewriteUrl: internal,
         extraHeaders: {
-          "x-vibress-locale": localeInfo.code,
-          "x-vibress-direction": localeInfo.direction,
+          "x-vibress-locale": resolved,
+          "x-vibress-direction": ["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi"]
+            .includes(languageCode) ? "rtl" : "ltr",
         },
       });
     }
+    return createCspResponse(request, {
+      extraHeaders: {
+        "x-vibress-locale": localePolicy.primary,
+        "x-vibress-direction": ["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi"]
+          .includes(localePolicy.primary.split("-")[0] || "") ? "rtl" : "ltr",
+      },
+    });
   }
-
   return createCspResponse(request);
 }
 

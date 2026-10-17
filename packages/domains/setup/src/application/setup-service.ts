@@ -14,6 +14,9 @@ import {
   SETTING_NAMESPACES,
   SettingValueType,
   SettingClassification,
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
+  PublicationLocaleError,
 } from "@vibress/settings";
 import {
   hashPassword,
@@ -29,6 +32,7 @@ export interface SetupSiteInput {
   name: string;
   description: string;
   locale: string;
+  enabledLocales?: string[] | undefined;
   tagline?: string | undefined;
 }
 
@@ -63,7 +67,14 @@ export interface SetupContext {
 const LOCALE_RE = /^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/;
 
 export function validateSetupLocale(locale: string): boolean {
-  return LOCALE_RE.test(locale.trim());
+  if (typeof locale !== "string" || !LOCALE_RE.test(locale.trim())) {
+    return false;
+  }
+  try {
+    return Intl.getCanonicalLocales(locale.trim()).length === 1;
+  } catch {
+    return false;
+  }
 }
 
 export function isSetupTokenInsecure(
@@ -283,6 +294,24 @@ export class SetupService {
         .onConflictDoNothing();
 
       await this.writeSiteSettings(user.id, input.site);
+      // Preserve the selected onboarding language in the publication's
+      // canonical tables as well as the legacy site.locale projection.
+      // The surrounding setup transaction rolls back both if this fails.
+      try {
+        await new PublicationLocaleService(
+          new DrizzlePublicationLocaleRepository(),
+          this.settingsRepo,
+        ).updateConfiguration(
+          "pub_default",
+          { primaryLocale: input.site.locale, enabledLocales: input.site.enabledLocales ?? [input.site.locale] },
+          user.id,
+        );
+      } catch (error) {
+        if (error instanceof PublicationLocaleError) {
+          throw new SetupDomainError("INVALID_SITE_SETTINGS", error.message);
+        }
+        throw error;
+      }
 
       await this.auditService.record({
         actorUserId: user.id,

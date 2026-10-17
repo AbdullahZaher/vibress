@@ -4,7 +4,7 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { contentModelerService, workspaceService } from "../services";
+import { contentModelerService, workspaceService, publicationLocaleService } from "../services";
 import {
   CreateEntryInput,
   CreateModelInput,
@@ -18,6 +18,7 @@ import {
 } from "@vibress/content-modeler";
 import { hasPermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
+import { canonicalPublicationLocale } from "@vibress/settings";
 import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 import type { ContentFieldDefinition } from "@vibress/database";
 import type { ZodTypeAny } from "zod";
@@ -73,7 +74,11 @@ export async function contentModelerRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("posts.read")],
     handler: async (req, reply) => {
       const pubId = req.publicationContext?.publicationId || "pub_default";
-      return reply.send({ data: await contentModelerService.listEnabledLocales(pubId) });
+      const config = await publicationLocaleService.getConfiguration(pubId);
+      return reply.send({ data: {
+        defaultLocale: config.primaryLocale,
+        enabledLocales: config.enabledLocales,
+      } });
     },
   });
 
@@ -607,7 +612,19 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
     };
   }>("/collections/:modelSlug", {
     handler: async (req, reply) => {
-      const pubId = req.publicationContext?.publicationId || "pub_default";
+      const pubId = req.publicationContext!.publicationId;
+      const localePolicy = await publicationLocaleService.getConfiguration(pubId);
+      let requestedLocale = localePolicy.primaryLocale;
+      if (req.query.locale) {
+        try {
+          requestedLocale = canonicalPublicationLocale(req.query.locale);
+        } catch {
+          return sendError(reply, "LOCALE_NOT_ENABLED", "Language not enabled", req.id, 404);
+        }
+        if (!localePolicy.enabledLocales.includes(requestedLocale)) {
+          return sendError(reply, "LOCALE_NOT_ENABLED", "Language not enabled", req.id, 404);
+        }
+      }
       const model = await contentModelerService.getModelByIdOrSlug(
         req.params.modelSlug,
         pubId,
@@ -652,7 +669,9 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
             entry,
             model,
             "public",
-            req.query.locale,
+            requestedLocale,
+            localePolicy.primaryLocale,
+            true,
           ),
         );
 
@@ -689,7 +708,19 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
     Querystring: { locale?: string };
   }>("/collections/:modelSlug/:entrySlug", {
     handler: async (req, reply) => {
-      const pubId = req.publicationContext?.publicationId || "pub_default";
+      const pubId = req.publicationContext!.publicationId;
+      const localePolicy = await publicationLocaleService.getConfiguration(pubId);
+      let requestedLocale = localePolicy.primaryLocale;
+      if (req.query.locale) {
+        try {
+          requestedLocale = canonicalPublicationLocale(req.query.locale);
+        } catch {
+          return sendError(reply, "LOCALE_NOT_ENABLED", "Language not enabled", req.id, 404);
+        }
+        if (!localePolicy.enabledLocales.includes(requestedLocale)) {
+          return sendError(reply, "LOCALE_NOT_ENABLED", "Language not enabled", req.id, 404);
+        }
+      }
       const model = await contentModelerService.getModelByIdOrSlug(
         req.params.modelSlug,
         pubId,
@@ -724,7 +755,9 @@ export async function publicContentModelRoutes(fastify: FastifyInstance) {
         entry,
         model,
         "public",
-        req.query.locale,
+        requestedLocale,
+        localePolicy.primaryLocale,
+        true,
       );
 
       return reply.send({ data: publicEntry });

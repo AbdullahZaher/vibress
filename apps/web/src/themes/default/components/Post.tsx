@@ -7,6 +7,7 @@ import { CodeCopyHandler } from "../../../components/reader/CodeCopyHandler";
 import { ImageLightbox } from "../../../components/reader/ImageLightbox";
 import { CommentSection } from "../../../components/comments/CommentSection";
 import { t } from "../../../lib/i18n";
+import { buildPostJsonLd, safeJsonLdScript } from "../../../lib/seo-helpers";
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
@@ -25,20 +26,10 @@ export async function Post(props: ThemePostProps) {
   const primaryTag = post.tags?.[0];
   const dateLocale = props.site.locale || "en";
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    headline: post.title,
-    description: post.excerpt || post.seo?.description,
-    datePublished: post.publishedAt,
-    dateModified: post.updatedAt,
-    mainEntityOfPage: {
-      "@type": "WebPage",
-      "@id": post.seo?.canonicalUrl,
-    },
-    author: post.authors?.map((a) => ({ "@type": "Person", name: a.name })),
-    ...(post.featureImage?.url ? { image: [post.featureImage.url] } : {}),
-  };
+  const jsonLd = buildPostJsonLd(post, props.site.locale, {
+    primaryLocale: props.site.primaryLocale,
+    enabledLocales: props.site.enabledLocales,
+  });
 
   const readTimeMins =
     post.readingTimeMins ||
@@ -62,7 +53,7 @@ export async function Post(props: ThemePostProps) {
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
-              __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+              __html: safeJsonLdScript(jsonLd),
             }}
           />
 

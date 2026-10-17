@@ -96,7 +96,25 @@ export interface PaginatedPostsResult {
   };
 }
 
+export interface PublicLocaleAlternates {
+  primaryLocale: string;
+  enabledLocales: string[];
+  alternates: Record<string, string>;
+}
+
 export const ContentApiClient = {
+  async getLegacyTranslationRedirect(
+    type: "post" | "page",
+    slug: string,
+  ): Promise<string | null> {
+    const data = await fetchContentApi<{ path: string }>(
+      "/legacy-translation/resolve", { type, slug },
+    );
+    if (!data || typeof data.path !== "string" ||
+        !/^\/(?!\/)[^?#]*$/.test(data.path)) return null;
+    return data.path;
+  },
+
   async getPosts(options?: {
     page?: number;
     limit?: number;
@@ -105,6 +123,17 @@ export const ContentApiClient = {
     locale?: string;
   }): Promise<PaginatedPostsResult | null> {
     return fetchContentApi<PaginatedPostsResult>("/posts", options);
+  },
+
+  async getPublishedLocaleAlternates(
+    contentType: "post" | "page",
+    slug: string,
+    locale: string,
+  ): Promise<PublicLocaleAlternates | null> {
+    const kind = contentType === "post" ? "posts" : "pages";
+    return fetchContentApi<PublicLocaleAlternates>(
+      `/${kind}/${encodeURIComponent(slug)}/alternates`, { locale },
+    );
   },
 
   async getPostBySlug(

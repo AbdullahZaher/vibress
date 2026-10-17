@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
+import { usePublicationLocales } from "../../lib/usePublicationLocales";
+import { useAuth } from "../../hooks/useAuth";
+import { getDirection } from "@vibress/i18n";
 import {
   fetchContentTranslations,
-  fetchTranslationMatrix,
   aiTranslateContent,
 } from "../../lib/api";
 import { TranslationBadge } from "./TranslationBadge";
@@ -41,19 +43,18 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
   onNavigate,
 }) => {
   const queryClient = useQueryClient();
+  const { data: localePolicy } = usePublicationLocales();
+  const { can } = useAuth();
+  const canRead = can("translations.read");
+  const canCreate = can("translations.create");
   const [aiLoadingLocale, setAiLoadingLocale] = useState<string | null>(null);
 
-  // 1. Fetch enabled publication locales
-  const { data: matrixData } = useQuery({
-    queryKey: adminQueryKeys.translations.matrix({ limit: 1 }),
-    queryFn: () => fetchTranslationMatrix({ limit: 1 }),
-  });
-
+  // Locale policy is already loaded from the scoped staff context.
   // 2. Fetch existing translations for this content
   const { data: trData, isLoading } = useQuery({
     queryKey: adminQueryKeys.translations.content(contentType, contentId),
     queryFn: () => fetchContentTranslations(contentType, contentId),
-    enabled: Boolean(contentId),
+    enabled: Boolean(contentId) && canRead && localePolicy?.isMultilingual === true,
   });
 
   const aiMutation = useMutation({
@@ -69,20 +70,19 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
     },
   });
 
-  const enabledLocales = matrixData?.enabledLocales || ["en", "ar-SA"];
-  const defaultLocale = matrixData?.defaultLocale || "en";
+  const enabledLocales = localePolicy?.enabledLocales ?? [];
+  const defaultLocale = localePolicy?.primaryLocale ?? "";
   const translations = trData?.translations || [];
 
   // Filter out source locale
-  const targetLocales = enabledLocales.filter((l) => {
-    const baseLoc = l.split("-")[0] || l;
-    return l !== defaultLocale && baseLoc !== defaultLocale;
-  });
+  const targetLocales = enabledLocales.filter((locale) => locale !== defaultLocale);
 
   const handleAiTranslate = (loc: string) => {
     setAiLoadingLocale(loc);
     aiMutation.mutate(loc);
   };
+
+  if (!localePolicy?.isMultilingual || !canRead) return null;
 
   return (
     <div className="p-3 bg-card border border-border/60 rounded-xl space-y-3">
@@ -118,7 +118,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
             const locMeta = LOCALE_NATIVE_NAMES[loc] || {
               name: loc,
               native: loc,
-              dir: "ltr",
+              dir: getDirection(loc),
             };
             const existingTr = translations.find((t) => t.targetLocale === loc);
             const isAiLoading = aiLoadingLocale === loc;
@@ -154,7 +154,7 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
                       <ExternalLink className="h-3 w-3" />
                       <span>Edit Translation</span>
                     </Button>
-                  ) : (
+                  ) : canCreate ? (
                     <>
                       <Button
                         size="sm"
@@ -182,6 +182,10 @@ export const TranslationSidebarSection: React.FC<TranslationSidebarSectionProps>
                         )}
                       </Button>
                     </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      No translation available
+                    </span>
                   )}
                 </div>
               </div>

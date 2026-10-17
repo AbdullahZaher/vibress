@@ -15,6 +15,14 @@ import { DrizzlePageRepository } from "@vibress/pages";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { tracedProcessor } from "./trace-helper";
 
+import { getDb, contentTranslations, eq, and } from "@vibress/database";
+import {
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
+  DrizzleSettingRepository,
+  canonicalPublicationLocale,
+} from "@vibress/settings";
+
 export interface SearchIndexJob {
   scope?: "publication" | "system";
   publicationId?: string;
@@ -22,6 +30,7 @@ export interface SearchIndexJob {
   doc?: SearchDocumentInput;
   entityType?: string;
   entityId?: string;
+  locale?: string;
   traceparent?: string;
 }
 
@@ -49,6 +58,10 @@ export class SearchIndexerWorker {
   private searchService = new SearchService(new DrizzleSearchRepository());
   private postRepo = new DrizzlePostRepository();
   private pageRepo = new DrizzlePageRepository();
+  private localeService = new PublicationLocaleService(
+    new DrizzlePublicationLocaleRepository(),
+    new DrizzleSettingRepository(),
+  );
   private contentProvider: IndexableContentProvider;
 
   constructor(contentProvider: IndexableContentProvider) {
@@ -94,6 +107,7 @@ export class SearchIndexerWorker {
           job.data.doc.entityType,
           job.data.doc.entityId,
           docPubId,
+          job.data.doc.locale,
         );
       }
       return;
@@ -103,6 +117,7 @@ export class SearchIndexerWorker {
         job.data.entityType,
         job.data.entityId,
         pubId,
+        job.data.locale,
       );
     }
   }
@@ -110,14 +125,64 @@ export class SearchIndexerWorker {
   private async resolveVerifiedDoc(
     doc: SearchDocumentInput,
   ): Promise<SearchDocumentInput | null> {
-    const pubId = doc.publicationId;
+    const pubId = doc.publicationId || "pub_default";
+    const db = getDb();
+
+    // Authoritative publication locale configuration (fail-closed: do not swallow errors)
+    const config = await this.localeService.getConfiguration(pubId);
+    const primaryLocale = config.primaryLocale;
+
+    // Check if a target locale was requested; if so, canonicalize and verify it is enabled
+    if (doc.locale) {
+      const canonicalTarget = canonicalPublicationLocale(doc.locale);
+      if (!config.enabledLocales.includes(canonicalTarget)) {
+        // Disabled locale — must not be indexed
+        return null;
+      }
+    }
+
     if (doc.entityType === "post") {
       const post = await this.postRepo.findById(doc.entityId, pubId);
       if (!post || post.status !== "published" || post.visibility !== "public")
         return null;
+
+      const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
+      if (isTranslation) {
+        const canonicalLocale = canonicalPublicationLocale(doc.locale!);
+        if (!config.enabledLocales.includes(canonicalLocale)) {
+          return null;
+        }
+        const [translation] = await db
+          .select()
+          .from(contentTranslations)
+          .where(
+            and(
+              eq(contentTranslations.contentType, "post"),
+              eq(contentTranslations.contentId, post.id),
+              eq(contentTranslations.targetLocale, doc.locale!),
+              eq(contentTranslations.status, "published"),
+              eq(contentTranslations.publicationId, pubId),
+            ),
+          );
+        if (!translation) return null;
+        return {
+          entityType: "post",
+          entityId: post.id,
+          locale: canonicalLocale,
+          title: translation.title,
+          bodyText: renderStudioDocumentToPlainText(
+            translation.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
+          slug: translation.slug,
+          url: doc.url || `/${canonicalLocale}/posts/${translation.slug}`,
+          publicationId: post.publicationId,
+        };
+      }
+
       return {
         entityType: "post",
         entityId: post.id,
+        locale: primaryLocale,
         title: post.title,
         bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
         slug: post.slug,
@@ -129,9 +194,44 @@ export class SearchIndexerWorker {
       const page = await this.pageRepo.findById(doc.entityId, pubId);
       if (!page || page.status !== "published" || page.visibility !== "public")
         return null;
+
+      const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
+      if (isTranslation) {
+        const canonicalLocale = canonicalPublicationLocale(doc.locale!);
+        if (!config.enabledLocales.includes(canonicalLocale)) {
+          return null;
+        }
+        const [translation] = await db
+          .select()
+          .from(contentTranslations)
+          .where(
+            and(
+              eq(contentTranslations.contentType, "page"),
+              eq(contentTranslations.contentId, page.id),
+              eq(contentTranslations.targetLocale, doc.locale!),
+              eq(contentTranslations.status, "published"),
+              eq(contentTranslations.publicationId, pubId),
+            ),
+          );
+        if (!translation) return null;
+        return {
+          entityType: "page",
+          entityId: page.id,
+          locale: canonicalLocale,
+          title: translation.title,
+          bodyText: renderStudioDocumentToPlainText(
+            translation.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
+          slug: translation.slug,
+          url: doc.url || `/${canonicalLocale}/pages/${translation.slug}`,
+          publicationId: page.publicationId,
+        };
+      }
+
       return {
         entityType: "page",
         entityId: page.id,
+        locale: primaryLocale,
         title: page.title,
         bodyText: renderStudioDocumentToPlainText(page.content).slice(0, 2000),
         slug: page.slug,
@@ -140,7 +240,14 @@ export class SearchIndexerWorker {
       };
     }
     // Tags and authors: trusted metadata, no restriction concept
-    return doc;
+    const docLocale = doc.locale ? canonicalPublicationLocale(doc.locale) : primaryLocale;
+    if (!config.enabledLocales.includes(docLocale)) {
+      return null;
+    }
+    return {
+      ...doc,
+      locale: docLocale,
+    };
   }
 
   async stop(): Promise<void> {

@@ -13,21 +13,18 @@ import {
   getDb,
   posts,
   contentTranslations,
-  pages,
-  systemSettings,
   users,
   publicationMemberships,
+  eq,
 } from "@vibress/database";
 import { createLiquidThemeEngine } from "@vibress/theme-core";
-import { buildPublicPostSummaryDto } from "../../apps/api/src/helpers/public-content-helpers";
 import { buildApp } from "../../apps/api/src/main";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
 import * as path from "path";
 import * as fs from "fs";
 
 describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
-  let app: any;
+  let app: ReturnType<typeof buildApp>;
   const translationService = new TranslationService();
   const db = getDb();
 
@@ -66,8 +63,6 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     await db.insert(posts).values({
       id: testPostId,
       publicationId: "pub_default",
-      translationGroupId: testGroupId,
-      locale: "en",
       title: "Dry Run Source Post",
       slug: englishPostSlug,
       excerpt: "Testing locale expansion for Vibress.",
@@ -152,9 +147,13 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
   });
 
   afterAll(async () => {
-    if (app) {
-      await app.close();
-    }
+    // The suite writes real publication data: never leave synthetic content
+    // or memberships behind for other integration suites or upgrade tests.
+    await db.delete(contentTranslations).where(eq(contentTranslations.contentId, testPostId));
+    await db.delete(posts).where(eq(posts.id, testPostId));
+    await db.delete(publicationMemberships).where(eq(publicationMemberships.userId, authorId));
+    await db.delete(users).where(eq(users.id, authorId));
+    if (app) await app.close();
   });
 
   // --- French LTR Verification ---
@@ -186,7 +185,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     it("retrieves French translation by localized slug directly via API", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/content/v1/posts/${frenchPostSlug}`,
+        url: `/api/content/v1/posts/${frenchPostSlug}?locale=fr-FR`,
       });
       expect(res.statusCode).toBe(200);
       const data = JSON.parse(res.body);
@@ -207,29 +206,13 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
       expect(data.post.title).toBe("Bienvenue sur Vibress");
     });
 
-    it("generates correct canonical URL with /fr prefix in public post summary DTO", async () => {
-      const dto = await buildPublicPostSummaryDto(
-        {
-          id: testPostId,
-          title: "Bienvenue sur Vibress",
-          slug: frenchPostSlug,
-          excerpt: "Plateforme de publication moderne.",
-          content: {},
-          locale: "fr-FR",
-          direction: "ltr",
-          featureImage: null,
-          featured: false,
-          status: "published",
-          visibility: "public",
-          publishedAt: new Date(),
-          updatedAt: new Date(),
-          readingTimeMinutes: 2,
-        } as any,
-        [],
-        [],
-        null as any,
-      );
-
+    it("generates correct canonical URL with /fr prefix from the published API", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/posts/${frenchPostSlug}?locale=fr-FR`,
+      });
+      expect(response.statusCode).toBe(200);
+      const dto = response.json().post;
       expect(dto.seo?.canonicalUrl).toBe(`http://localhost:7777/fr/posts/${frenchPostSlug}`);
     });
   });
@@ -255,7 +238,7 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
     it("retrieves Persian translation by localized slug directly via API", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/content/v1/posts/${persianPostSlug}`,
+        url: `/api/content/v1/posts/${persianPostSlug}?locale=fa-IR`,
       });
       expect(res.statusCode).toBe(200);
       const data = JSON.parse(res.body);
@@ -273,29 +256,13 @@ describe("Locale Expansion Dry Run (fr-FR LTR & fa-IR RTL)", () => {
       expect(data.post.title).toBe("به وایبرس خوش آمدید");
     });
 
-    it("generates correct canonical URL with /fa prefix for Persian posts", async () => {
-      const dto = await buildPublicPostSummaryDto(
-        {
-          id: testPostId,
-          title: "به وایبرس خوش آمدید",
-          slug: persianPostSlug,
-          excerpt: "پلتفرم مدرن انتشار محتوا.",
-          content: {},
-          locale: "fa-IR",
-          direction: "rtl",
-          featureImage: null,
-          featured: false,
-          status: "published",
-          visibility: "public",
-          publishedAt: new Date(),
-          updatedAt: new Date(),
-          readingTimeMinutes: 2,
-        } as any,
-        [],
-        [],
-        null as any,
-      );
-
+    it("generates correct canonical URL with /fa prefix from the published API", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/posts/${persianPostSlug}?locale=fa-IR`,
+      });
+      expect(response.statusCode).toBe(200);
+      const dto = response.json().post;
       expect(dto.seo?.canonicalUrl).toBe(`http://localhost:7777/fa/posts/${persianPostSlug}`);
     });
 

@@ -34,6 +34,7 @@
     "@vibress/search": "workspace:*",
     "@vibress/security": "workspace:*",
     "@vibress/tags": "workspace:*",
+    "@vibress/settings": "workspace:*",
     "@vibress/studio-renderer": "workspace:*"
   },
   "devDependencies": {

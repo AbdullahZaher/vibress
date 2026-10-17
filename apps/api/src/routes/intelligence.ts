@@ -8,13 +8,15 @@ import {
   searchService,
   analyticsService,
   workspaceService,
+  publicationLocaleService,
 } from "../services";
 import { enqueueSearchRebuild } from "../async-bridge";
 import { SearchDomainError } from "@vibress/search";
 import { AnalyticsDomainError } from "@vibress/analytics";
 import { getConfig } from "@vibress/config";
+import { canonicalPublicationLocale } from "@vibress/settings";
 
-type SearchQuery = { q?: string; limit?: string; offset?: string };
+type SearchQuery = { q?: string; limit?: string; offset?: string; locale?: string };
 type AnalyticsQuery = { from?: string; to?: string; metricName?: string };
 const sendError = (
   reply: FastifyReply,
@@ -63,12 +65,28 @@ export async function publicSearchRoutes(fastify: FastifyInstance) {
       const q = typeof query.q === "string" ? query.q : "";
       const limit = query.limit ? parseInt(query.limit, 10) : 20;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
+      const pubId = req.publicationContext?.publicationId || "pub_default";
+
+      const localeConfig = await publicationLocaleService.getConfiguration(pubId);
+
+      let targetLocale: string | undefined = undefined;
+      if (typeof query.locale === "string" && query.locale.trim()) {
+        const canonical = canonicalPublicationLocale(query.locale.trim());
+        // Disabled locale: return 0 results immediately at the API boundary
+        if (!localeConfig.enabledLocales.includes(canonical)) {
+          return reply.status(200).send({ results: [], total: 0 });
+        }
+        targetLocale = canonical;
+      }
+
       try {
         const result = await searchService.search(
           q,
           limit,
           offset,
-          req.publicationContext?.publicationId,
+          pubId,
+          targetLocale,
+          localeConfig.enabledLocales,
         );
         return reply.status(200).send(result);
       } catch (err) {

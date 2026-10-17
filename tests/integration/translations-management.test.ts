@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
-import { getDb, posts, contentTranslations, users, settings, roles, userRoles, eq, and } from "@vibress/database";
+import {
+  getDb, posts, contentTranslations, users, settings, roles, userRoles,
+  publicationLocales, publications, tags, postTags, installation, eq, and, sql,
+} from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
 import { randomUUID } from "crypto";
@@ -50,15 +53,102 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   const runSuffix = randomUUID().slice(0, 8);
   const postSlug = `integration-post-${runSuffix}`;
   const arabicSlug = `al-manshur-${runSuffix}`;
+  let previousArabicLocale: { status: string; isDefault: boolean } | null = null;
+  let previousPrimaryLocale = "en";
+  let previousSiteLocale: typeof settings.$inferSelect | null = null;
+  let insertedArabicLocale = false;
 
   beforeAll(async () => {
     app = buildApp();
     await app.ready();
 
-    // Ensure site.locale is 'en' for this test suite
+    await db.insert(installation).values({
+      id: "singleton",
+      installed: true,
+      installationSource: "fresh",
+    }).onConflictDoUpdate({
+      target: [installation.id],
+      set: { installed: true },
+    });
+
+    // The legacy suite exercises a bilingual editorial workflow. The system
+    // no longer implicitly activates Arabic, so explicitly enable it here.
+    const [publicationBefore] = await db.select({ primaryLocale: publications.primaryLocale })
+      .from(publications).where(eq(publications.id, "pub_default"));
+    previousPrimaryLocale = publicationBefore?.primaryLocale ?? "en";
+    if (previousPrimaryLocale !== "en") {
+      await db.update(publications)
+        .set({ primaryLocale: "en" })
+        .where(eq(publications.id, "pub_default"));
+    }
+    const [localeSettingBefore] = await db.select().from(settings).where(and(
+      eq(settings.publicationId, "pub_default"),
+      eq(settings.namespace, "site"),
+      eq(settings.key, "locale"),
+    ));
+    previousSiteLocale = localeSettingBefore ?? null;
     await db
       .delete(settings)
-      .where(and(eq(settings.namespace, "site"), eq(settings.key, "locale")));
+      .where(and(
+        eq(settings.publicationId, "pub_default"),
+        eq(settings.namespace, "site"),
+        eq(settings.key, "locale"),
+      ));
+    const [existingArabic] = await db
+      .select({ status: publicationLocales.status, isDefault: publicationLocales.isDefault })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA"),
+      ));
+    if (existingArabic) {
+      previousArabicLocale = existingArabic;
+      await db.update(publicationLocales)
+        .set({ status: "active", isDefault: false })
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "ar-SA"),
+        ));
+    } else {
+      insertedArabicLocale = true;
+      await db.insert(publicationLocales).values({
+        id: randomUUID(),
+        publicationId: "pub_default",
+        locale: "ar-SA",
+        status: "active",
+        isDefault: false,
+      });
+    }
+
+    const [existingEnglish] = await db
+      .select({ status: publicationLocales.status, isDefault: publicationLocales.isDefault })
+      .from(publicationLocales)
+      .where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "en"),
+      ));
+    if (existingEnglish) {
+      await db.update(publicationLocales)
+        .set({ status: "active", isDefault: true })
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "en"),
+        ));
+    } else {
+      await db.insert(publicationLocales).values({
+        id: randomUUID(),
+        publicationId: "pub_default",
+        locale: "en",
+        status: "active",
+        isDefault: true,
+      });
+    }
+
+    // Ensure pub_default starts with clean baseline: primary en, enabled [en, ar-SA]
+    await db.delete(publicationLocales).where(and(
+      eq(publicationLocales.publicationId, "pub_default"),
+      sql`${publicationLocales.locale} NOT IN ('en', 'ar-SA')`,
+    ));
 
     // Ensure test owner exists
     await ensureUserWithRole("owner@example.com", "owner", "OwnerPass123!");
@@ -83,7 +173,19 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       title: `Integration Source Post ${runSuffix}`,
       slug: postSlug,
       excerpt: "English source excerpt for translation testing",
-      content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+      content: {
+        schema: "vibress-studio",
+        version: 1,
+        root: {
+          type: "root",
+          children: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", text: "English source text for translation" }],
+            },
+          ],
+        },
+      },
       status: "published",
       visibility: "public",
       primaryAuthorId: ownerId,
@@ -96,7 +198,214 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
   });
 
   afterAll(async () => {
+    // Translations have no direct content_id foreign key; explicitly remove
+    // all rows created by this suite to avoid polluting later test fixtures.
+    await db.delete(contentTranslations).where(and(
+      eq(contentTranslations.publicationId, "pub_default"),
+      eq(contentTranslations.contentId, testPostId),
+    ));
+    await db.delete(posts).where(eq(posts.id, testPostId));
+    if (previousSiteLocale) {
+      await db.insert(settings).values(previousSiteLocale).onConflictDoUpdate({
+        target: [settings.publicationId, settings.namespace, settings.key],
+        set: {
+          value: previousSiteLocale.value,
+          updatedBy: previousSiteLocale.updatedBy,
+          updatedAt: previousSiteLocale.updatedAt,
+        },
+      });
+    }
+    await db.update(publications).set({ primaryLocale: previousPrimaryLocale })
+      .where(eq(publications.id, "pub_default"));
+    if (insertedArabicLocale) {
+      await db.delete(publicationLocales).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA"),
+      ));
+    } else if (previousArabicLocale) {
+      await db.update(publicationLocales)
+        .set(previousArabicLocale)
+        .where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "ar-SA"),
+        ));
+    }
     if (app) await app.close();
+  });
+
+  describe("Publication language configuration API", () => {
+    it("requires authentication to read the publication's languages", async () => {
+      const res = await app.inject({ method: "GET", url: "/api/admin/v1/locales" });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("returns only configured languages under the authenticated publication context", async () => {
+      const res = await app.inject({
+        method: "GET", url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        primaryLocale: "en",
+        enabledLocales: ["en", "ar-SA"],
+        isMultilingual: true,
+      });
+    });
+
+    it("does not allow unauthenticated users to change language configuration", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("does not grant an Author permission to change publication languages", async () => {
+      await ensureUserWithRole(
+        "language.author@example.com", "Author", "AuthorLanguagePassword123!",
+      );
+      const login = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        payload: {
+          email: "language.author@example.com",
+          password: "AuthorLanguagePassword123!",
+        },
+      });
+      expect(login.statusCode).toBe(200);
+      const header = login.headers["set-cookie"];
+      const rawCookie = Array.isArray(header) ? header[0] : header;
+      const cookie = typeof rawCookie === "string" ? (rawCookie.split(";")[0] ?? "") : "";
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie, origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("enforces the origin protection on locale writes", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "https://untrusted.example.com" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "ar-SA"] },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("rejects invalid and duplicated language configuration without changing state", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { primaryLocale: "en", enabledLocales: ["en", "en"] },
+      });
+      expect(res.statusCode).toBe(400);
+      const after = await app.inject({
+        method: "GET", url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie },
+      });
+      expect(after.json().enabledLocales).toEqual(["en", "ar-SA"]);
+    });
+
+    it("blocks legacy site.locale changes on a publication with existing source content", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/settings/site/locale",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { value: "ar" },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
+    });
+
+    it("strictly guards changing the primary language of a populated publication", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          primaryLocale: "ar",
+          enabledLocales: ["ar", "en"],
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
+      expect(res.json().errors[0].message).toContain("content migration");
+    });
+
+    it("guards disabling a language with published URLs unless confirmed via confirmPublishedUrlRetirement", async () => {
+      const enableRes = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA", "de-DE"],
+        },
+      });
+      expect(enableRes.statusCode).toBe(200);
+
+      const trId = randomUUID();
+      await db.insert(contentTranslations).values({
+        id: trId,
+        publicationId: "pub_default",
+        contentType: "post",
+        contentId: testPostId,
+        targetLocale: "de-DE",
+        status: "published",
+        title: "German Title",
+        slug: `german-post-${runSuffix}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      try {
+        const failRes = await app.inject({
+          method: "PUT",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+          payload: {
+            primaryLocale: "en",
+            enabledLocales: ["en", "ar-SA"],
+          },
+        });
+        expect(failRes.statusCode).toBe(409);
+        expect(failRes.json().errors[0].code).toBe("PUBLISHED_LOCALE_REQUIRES_REVIEW");
+
+        const successRes = await app.inject({
+          method: "PUT",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+          payload: {
+            primaryLocale: "en",
+            enabledLocales: ["en", "ar-SA"],
+            confirmPublishedUrlRetirement: true,
+          },
+        });
+        expect(successRes.statusCode).toBe(200);
+        expect(successRes.json().enabledLocales).toEqual(["en", "ar-SA"]);
+
+        const getRes = await app.inject({
+          method: "GET",
+          url: "/api/admin/v1/locales",
+          headers: { cookie: ownerCookie },
+        });
+        expect(getRes.statusCode).toBe(200);
+        expect(getRes.json().enabledLocales).toEqual(["en", "ar-SA"]);
+        expect(getRes.json().needsReconciliation).toBe(false);
+      } finally {
+        await db.delete(contentTranslations).where(eq(contentTranslations.id, trId));
+        await db.delete(publicationLocales).where(and(
+          eq(publicationLocales.publicationId, "pub_default"),
+          eq(publicationLocales.locale, "de-DE"),
+        ));
+      }
+    });
   });
 
   describe("GET /api/admin/v1/translations/matrix", () => {
@@ -160,6 +469,35 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     });
   });
 
+  describe("Translation write boundary regression", () => {
+    it("rejects direct creation of a published translation", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ar-SA",
+          title: "Unreviewed text", slug: `unreviewed-${runSuffix}`,
+          status: "published",
+        },
+      });
+      expect(response.statusCode).toBe(409);
+    });
+
+    it("rejects creating a translation in a disabled language", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ja", title: "Disabled text",
+          slug: `disabled-${runSuffix}`, status: "draft",
+        },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe("Translation Editorial Lifecycle Endpoints", () => {
     it("creates a draft translation via POST /api/admin/v1/content/post/:id/translations", async () => {
       const res = await app.inject({
@@ -185,6 +523,23 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(data.translation.status).toBe("draft");
       expect(data.translation.targetLocale).toBe("ar-SA");
       createdTrId = data.translation.id;
+    });
+
+    it("rejects a duplicate create request without overwriting existing content", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          targetLocale: "ar-sa",
+          title: "Overwritten title",
+          slug: `another-${runSuffix}`,
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      const [stored] = await db.select().from(contentTranslations)
+        .where(eq(contentTranslations.id, createdTrId));
+      expect(stored?.title).not.toBe("Overwritten title");
     });
 
     it("retrieves full translation and source context via GET /api/admin/v1/translations/:id", async () => {
@@ -220,6 +575,33 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(data.translation.title).toBe(`العنوان المحدث ${runSuffix}`);
     });
 
+    it("prevents changing the target language of an existing translation", async () => {
+      const response = await app.inject({
+        method: "PATCH", url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { targetLocale: "fr-FR" },
+      });
+      expect(response.statusCode).toBe(409);
+    });
+
+    it("prevents changing the translation state to published via a generic PATCH", async () => {
+      const response = await app.inject({
+        method: "PATCH", url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { status: "published" },
+      });
+      expect([403, 409]).toContain(response.statusCode);
+    });
+
+    it("rejects publishing a draft without prior approval", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/translations/${createdTrId}/publish`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
     it("submits translation for review via POST /api/admin/v1/translations/:id/submit-review", async () => {
       const res = await app.inject({
         method: "POST",
@@ -235,6 +617,15 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.statusCode).toBe(200);
       const data = res.json();
       expect(data.translation.status).toBe("needs_review");
+    });
+
+    it("rejects publishing a reviewed but unapproved draft", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/translations/${createdTrId}/publish`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(res.statusCode).toBe(400);
     });
 
     it("approves translation via POST /api/admin/v1/translations/:id/approve", async () => {
@@ -272,8 +663,190 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
     });
   });
 
+  describe("Translated pagination", () => {
+    it("paginates published translations before filtering the original-language source", async () => {
+      const tagId = randomUUID();
+      const untranslatedId = randomUUID();
+      const tagSlug = `locale-pagination-${runSuffix}`;
+      await db.insert(tags).values({
+        id: tagId,
+        publicationId: "pub_default",
+        name: "Localization pagination",
+        slug: tagSlug,
+      });
+      await db.insert(posts).values({
+        id: untranslatedId,
+        publicationId: "pub_default",
+        title: "More recent English-only source",
+        slug: `untranslated-${runSuffix}`,
+        content: { version: 1, root: {} },
+        status: "published",
+        visibility: "public",
+        primaryAuthorId: ownerId,
+        createdBy: ownerId,
+        updatedBy: ownerId,
+        publishedAt: new Date(),
+      });
+      await db.insert(postTags).values([
+        { publicationId: "pub_default", tagId, postId: untranslatedId },
+        { publicationId: "pub_default", tagId, postId: testPostId },
+      ]);
+      try {
+        const result = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/posts?locale=ar-SA&limit=1&page=1&tag=${tagSlug}`,
+        });
+        expect(result.statusCode).toBe(200);
+        const data = result.json();
+        expect(data.pagination.total).toBe(1);
+        expect(data.pagination.pages).toBe(1);
+        expect(data.posts).toHaveLength(1);
+        expect(data.posts[0].slug).toBe(arabicSlug);
+      } finally {
+        await db.delete(postTags).where(eq(postTags.tagId, tagId));
+        await db.delete(posts).where(eq(posts.id, untranslatedId));
+        await db.delete(tags).where(eq(tags.id, tagId));
+      }
+    });
+  });
+
+  describe("Regional language isolation", () => {
+    it("does not substitute ar-SA when ar-EG is explicitly requested", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/posts/${arabicSlug}?locale=ar-EG`,
+      });
+      // The publication only enables ar-SA. A base-language match cannot
+      // bypass that feature policy or make an unrelated variant public.
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("supports exact translation lookups without breaking the legacy fallback API", async () => {
+      const { TranslationService } = await import("@vibress/i18n/server");
+      const translations = new TranslationService();
+      const exact = await translations.getTranslation(
+        "post", testPostId, "ar-EG", undefined, "pub_default", true,
+      );
+      expect(exact).toBeNull();
+      const matching = await translations.getTranslation(
+        "post", testPostId, "ar-SA", undefined, "pub_default", true,
+      );
+      expect(matching?.targetLocale).toBe("ar-SA");
+    });
+  });
+
+  describe("Published translation protection", () => {
+    it("never exposes a future-dated source through a published localized slug", async () => {
+      const sourceId = randomUUID();
+      const translationId = randomUUID();
+      const sourceSlug = `future-source-${sourceId.slice(0, 8)}`;
+      const translatedSlug = `future-translation-${translationId.slice(0, 8)}`;
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.insert(posts).values({
+        id: sourceId,
+        publicationId: "pub_default",
+        title: "Future Source",
+        slug: sourceSlug,
+        content: { version: 1, root: {} },
+        status: "published",
+        visibility: "public",
+        publishedAt: future,
+        primaryAuthorId: ownerId,
+        createdBy: ownerId,
+        updatedBy: ownerId,
+      });
+      await db.insert(contentTranslations).values({
+        id: translationId,
+        publicationId: "pub_default",
+        contentType: "post",
+        contentId: sourceId,
+        sourceLocale: "en",
+        targetLocale: "ar-SA",
+        title: "مقال مستقبلي",
+        slug: translatedSlug,
+        status: "published",
+        content: { version: 1, root: {} },
+      });
+      try {
+        const localized = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/posts/${translatedSlug}?locale=ar-SA`,
+        });
+        expect(localized.statusCode).toBe(404);
+        const legacy = await app.inject({
+          method: "GET",
+          url: `/api/content/v1/legacy-translation/resolve?type=post&slug=${translatedSlug}`,
+        });
+        expect(legacy.statusCode).toBe(404);
+      } finally {
+        await db.delete(contentTranslations).where(eq(contentTranslations.id, translationId));
+        await db.delete(posts).where(eq(posts.id, sourceId));
+      }
+    });
+
+    it("rejects changing live translated text without reopening review", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/api/admin/v1/translations/${createdTrId}`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { title: "Unreviewed live edit" },
+      });
+      expect(res.statusCode).toBe(409);
+      const [saved] = await db.select().from(contentTranslations)
+        .where(eq(contentTranslations.id, createdTrId));
+      expect(saved?.title).not.toBe("Unreviewed live edit");
+    });
+
+    it("rejects AI regeneration over a published translation", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/ai-translate`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: { targetLocale: "ar-sa" },
+      });
+      expect(res.statusCode).toBe(409);
+    });
+  });
+
+  describe("Published legacy translation URL compatibility", () => {
+    it("resolves a unique public translated slug to a canonical enabled path", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/content/v1/legacy-translation/resolve?type=post&slug=${encodeURIComponent(arabicSlug)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().path).toBe(`/ar/posts/${arabicSlug}`);
+    });
+
+    it("does not reveal drafts or unknown slugs", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/legacy-translation/resolve?type=post&slug=missing-translation",
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe("AI Translation Safety & Bulk Actions", () => {
-    it("generates AI translation draft in 'needs_review' status (never auto-published)", async () => {
+    beforeAll(async () => {
+      await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+          origin: "http://localhost:7777",
+        },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA", "fr-FR"],
+        },
+      });
+    });
+
+    it("fails safely on an incomplete provider response without writing a fake draft", async () => {
+      // The integration environment intentionally has no configured AI
+      // translation provider. An outage must not save source text as translated.
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/content/post/${testPostId}/ai-translate`,
@@ -282,17 +855,36 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
           "content-type": "application/json",
           origin: "http://localhost:7777",
         },
+        payload: { targetLocale: "fr-FR" },
+      });
+      expect(res.statusCode).toBe(502);
+      const records = await db.select().from(contentTranslations).where(and(
+        eq(contentTranslations.publicationId, "pub_default"),
+        eq(contentTranslations.contentId, testPostId),
+        eq(contentTranslations.targetLocale, "fr-FR"),
+      ));
+      expect(records).toHaveLength(0);
+    });
+
+    it("prepares a reviewed human French draft for the bulk lifecycle test", async () => {
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/content/post/${testPostId}/translations`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
         payload: {
-          targetLocale: "fr-FR",
+          targetLocale: "fr-FR", title: "Article français",
+          slug: `${postSlug}-fr`, excerpt: "Description française",
+          content: { schema: "vibress-studio", version: 1, root: { children: [] } },
         },
       });
-
-      expect(res.statusCode).toBe(200);
-      const data = res.json();
-      expect(data.translation).toBeDefined();
-      expect(data.translation.targetLocale).toBe("fr-FR");
-      expect(data.translation.status).toBe("needs_review"); // Verified safety guarantee!
-      expect(data.translation.translationProvider).toContain("ai:");
+      expect(created.statusCode).toBe(201);
+      const id = created.json().translation.id as string;
+      const review = await app.inject({
+        method: "POST", url: `/api/admin/v1/translations/${id}/submit-review`,
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+      });
+      expect(review.statusCode).toBe(200);
+      expect(review.json().translation.status).toBe("needs_review");
     });
 
     it("performs bulk operations safely via POST /api/admin/v1/translations/bulk", async () => {
@@ -328,6 +920,30 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
         .from(contentTranslations)
         .where(eq(contentTranslations.id, frTr!.id));
       expect(refreshed[0]?.status).toBe("approved");
+    });
+
+    afterAll(async () => {
+      await db.delete(contentTranslations).where(and(
+        eq(contentTranslations.publicationId, "pub_default"),
+        eq(contentTranslations.targetLocale, "fr-FR"),
+      ));
+      await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: {
+          cookie: ownerCookie,
+          "content-type": "application/json",
+          origin: "http://localhost:7777",
+        },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA"],
+        },
+      });
+      await db.delete(publicationLocales).where(and(
+        eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "fr-FR"),
+      ));
     });
   });
 

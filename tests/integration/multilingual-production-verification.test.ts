@@ -7,6 +7,7 @@ import {
   users,
   contentTranslations,
   publicationMemberships,
+  publicationLocales,
   seedDatabase,
   runMigrations,
 } from "@vibress/database";
@@ -31,6 +32,7 @@ import {
   mapPostToViewModel,
 } from "@vibress/theme-core";
 import { buildPageMetadata, getPublicSiteUrl } from "../../apps/web/src/lib/seo-helpers";
+import { eq, and } from "@vibress/database";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,6 +44,8 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   const testPostId = randomUUID();
   const testPageId = randomUUID();
   const testTranslationGroupId = randomUUID();
+  const arLocaleId = randomUUID();
+  let oldArLocale: { id: string; status: string; isDefault: boolean } | null = null;
 
   const suffix = randomUUID().slice(0, 8);
   const testPostSlug = `welcome-to-vibress-${suffix}`;
@@ -69,6 +73,26 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
         role: "author",
       })
       .onConflictDoNothing();
+
+    // Explicitly activate Arabic for this bilingual suite. The platform
+    // does not enable it implicitly for normal publications.
+    const previous = await db.select({
+      id: publicationLocales.id,
+      status: publicationLocales.status,
+      isDefault: publicationLocales.isDefault,
+    }).from(publicationLocales)
+      .where(and(eq(publicationLocales.publicationId, "pub_default"),
+        eq(publicationLocales.locale, "ar-SA")));
+    oldArLocale = previous[0] ?? null;
+    if (oldArLocale) {
+      await db.update(publicationLocales).set({ status: "active", isDefault: false })
+        .where(eq(publicationLocales.id, oldArLocale.id));
+    } else {
+      await db.insert(publicationLocales).values({
+        id: arLocaleId, publicationId: "pub_default",
+        locale: "ar-SA", status: "active", isDefault: false,
+      });
+    }
 
     // 1. Seed a test source post in English
     await db.insert(posts).values({
@@ -149,6 +173,17 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   });
 
   afterAll(async () => {
+    const db = getDb();
+    if (oldArLocale) {
+      await db.update(publicationLocales).set({
+        status: oldArLocale.status, isDefault: oldArLocale.isDefault,
+      }).where(eq(publicationLocales.id, oldArLocale.id));
+    } else {
+      await db.delete(publicationLocales).where(eq(publicationLocales.id, arLocaleId));
+    }
+    await db.delete(contentTranslations).where(eq(contentTranslations.contentId, testPostId));
+    await db.delete(posts).where(eq(posts.id, testPostId));
+    await db.delete(pages).where(eq(pages.id, testPageId));
     await app.close();
   });
 
@@ -317,6 +352,10 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
     expect(draftTranslation.status).toBe("draft");
     expect(draftTranslation.translationProvider).toBe("gemini-pro-translation");
 
+    // Submit for review
+    const submitted = await translationService.submitForReview(draftTranslation.id);
+    expect(submitted?.status).toBe("needs_review");
+
     // Approve translation
     const approved = await translationService.approveTranslation(draftTranslation.id, "editor-user-id");
     expect(approved?.status).toBe("approved");
@@ -327,9 +366,20 @@ describe("Strict Production Verification: Vibress Multilingual & RTL Implementat
   // --- Requirement 16 & 17: hreflang correctness and localized sitemap ---
   it("Requirement 16 & 17: Generates valid hreflang alternate links and inLanguage schema", () => {
     const siteUrl = getPublicSiteUrl();
+    const noAlternates = buildPageMetadata({
+      title: "Welcome to Vibress",
+      canonicalPath: `/posts/${testPostSlug}`,
+    });
+    // Missing translations must never be advertised from assumed en/ar defaults.
+    expect(noAlternates.alternates?.languages).toEqual({});
     const meta = buildPageMetadata({
       title: "Welcome to Vibress",
       canonicalPath: `/posts/${testPostSlug}`,
+      alternateLocales: {
+        en: `${siteUrl}/posts/${testPostSlug}`,
+        ar: `${siteUrl}/ar/posts/${testPostSlug}`,
+        "x-default": `${siteUrl}/posts/${testPostSlug}`,
+      },
     });
     expect(meta.alternates?.languages?.["en"]).toBe(`${siteUrl}/posts/${testPostSlug}`);
     expect(meta.alternates?.languages?.["ar"]).toBe(`${siteUrl}/ar/posts/${testPostSlug}`);

@@ -1,10 +1,52 @@
 # Localization Policy — Engineering Implementation Plan
 
-**Status:** Approved implementation plan (work not started)  
+**Status:** T1–T6 implementation in progress on `feat/publication-locale-policy-ticket-1`. Some features are coded but not production-certified; full Admin localization, upgrade cutover decisions, and validation remain open. Tests, lint, typecheck, builds, and CI have not yet been run.  
 **Decision date:** 2026-10-16  
 **Canonical policy:** [Publication-Scoped Language Policy](../14-decisions/publication-language-policy.md)  
 **Repository baseline reviewed:** `main`, tree `94751ae25a85e4f11e23cfd9be5beccaf1a7282e`  
 **Change constraint:** small additive, publication-scoped, upgrade-safe steps; no unrelated refactors or released-migration rewrites.
+
+## Current branch implementation inventory (unverified)
+
+The following features have been added to the implementation branch; **this is not a
+claim of passing tests or production readiness**:
+
+- **T1:** Publication-scoped locale service and compatibility bridge for
+  `site.locale` and canonical publication tables, with conflict and published
+  URL guards. Database migrations were not rewritten.
+- **T2:** Optional additional languages in the onboarding payload and UI;
+  language controls under existing `/admin/settings`; primary UI selection
+  currently limited to the certified-language targets English and Arabic.
+- **T4:** Translation matrix/navigation/sidebar routing gated by multilingual
+  state and permissions; typed mutation validation, source/target checks and
+  workflow status authorization on create/edit/publish/bulk/AI paths.
+- **T3 (partial):** Shared Admin language context and English/Arabic UI
+  translations for setup, login, sidebar, settings, core editorial lists,
+  post/page editor labels, member lists, tags and media search, plus
+  translated matrix/review-queue/editor controls. **Other
+  administrative screens, portal surfaces and several error/interaction paths
+  still contain English strings. Arabic UI parity is NOT certified.**
+- **T5 (partial):** Dynamic locale routing, public API enabled-locale checks,
+  theme locale context, published-only alternates, sitemap generation, and safe
+  redirects for unique historical published slugs. Added DB-paginated lists
+  for published regional translations, with publication/source visibility,
+  author and tag filters, and correct result totals; strict regional matching
+  is opt-in at service call sites to preserve older callers. SEO performance,
+  plugin/theme coverage and upgrade redirect matrices remain to be certified.
+- **T6 (partial):** Structured text extraction supports Studio documents
+  and top-level legacy plain-text bodies, preserving media/IDs. AI failures
+  cannot create fake drafts, and existing records cannot be silently overwritten.
+  First creation and its audit event are committed atomically.
+  Editorial review and approval are required before publication. Additional
+  content formats, provider integration and safe draft revisioning still
+  require certification and explicit decisions.
+
+**Remaining release blockers:** entire Admin UI dictionary parity and RTL/a11y
+review; prior-public-URL inventory and primary-locale reconciliation for
+populated upgrades; source-language persistence policy for existing content;
+public SEO/sitemap limits and plugin/theme compatibility review; full unit,
+integration, E2E, typecheck, lint, build and populated-DB upgrade checks. Tests
+have been added but not executed, per the requested coding-first sequence.
 
 ## 1. Current-code evidence and gaps
 
@@ -96,6 +138,44 @@ This is a **static code review**, not runtime proof. Verify all consumers and li
 - Run focused tests, API/security suites, browser RTL/accessibility, typecheck, lint, build, migration checks and scoped diff review before release.
 
 **Done when:** no source-body copy masquerades as a translated document and all policy acceptance gates are satisfied.
+
+### T1 API contract introduced on the implementation branch
+
+- `GET /api/admin/v1/locales` returns the publication-scoped `primaryLocale`, `enabledLocales`, `isMultilingual` and `needsReconciliation` fields (requires `settings.read`).
+- `PUT /api/admin/v1/locales` accepts `{ "primaryLocale": "...", "enabledLocales": ["..."] }` for the **authenticated publication only** (requires `settings.manage`, origin verification and runtime Zod validation).
+- The legacy `PUT /api/admin/v1/settings/site/locale` path is retained via the canonical service. Changing a populated publication's primary locale returns a conflict until a deliberate content migration is available.
+- The existing `publication_locales` and `publications.primary_locale` schema is reused; no released migration is rewritten.
+- **Limitations:** public locale routing, full UI localization and all translation write/visibility gates are tracked separately in T3–T5. New unit/integration tests have been committed but **not executed or certified** in this environment.
+
+### Additional implementation hardening (unverified)
+
+- Translation creation and AI generation are **create-only** with source-row
+  transaction serialization. Requests for an already existing target locale
+  return a conflict instead of silently overwriting a published/draft record.
+- Translation publication now requires an explicitly **approved** status, and
+  approval requires a review-stage item. Generic edits cannot modify a live
+  approved/published translation without reopening its workflow.
+- Public translation reads are **published only**; approved/translated states
+  are never returned publicly, even while legacy locales need reconciliation.
+  Localized public title/excerpt/SEO never silently inherit untranslated source
+  text, and source visibility/deletion checks are mandatory.
+- Content-model relation locale resolution preserves non-localized metadata
+  objects, while public localizable fields fail closed when the requested
+  value does not exist. Site RSS language and item links use the active locale.
+- Locale routing failures keep CSP and `nosniff` headers. Sitemap processing
+  traverses source pagination and emits reciprocal alternates, but returns
+  503 rather than silently truncating above the existing 50,000-URL
+  single-file limit; a partitioned sitemap architecture is still required.
+- Tests for creation conflicts, review-before-publish, Arabic-only onboarding,
+  source isolation and structured AI documents have been authored but **not
+  executed** pending the requested deferred validation window.
+
+**Remaining launch blockers:** full certified Arabic Admin strings and
+accessibility review; operator-guided reconciliation and safe primary-locale
+changes for populated legacy sites; reliable partitioned sitemaps and
+multi-publication canonical hosts; source language revision integrity and
+new/upgrade rollback rehearsals; successful typecheck/lint/unit/integration/
+browser/build/security gates. Do not deploy this branch as production-ready.
 
 ## 3. Migration and compatibility checklist
 

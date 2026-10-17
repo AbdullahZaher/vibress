@@ -267,6 +267,13 @@
       "when": 1786618000000,
       "tag": "0037_retire_automations_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786619000000,
+      "tag": "0038_search_documents_locale",
+      "breakpoints": true
     }
   ]
 }

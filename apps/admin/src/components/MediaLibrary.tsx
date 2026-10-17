@@ -1,3 +1,4 @@
+import { useAdminLocale } from "../lib/admin-locale";
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 
 export const MediaLibrary: React.FC = () => {
+  const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -175,7 +177,7 @@ export const MediaLibrary: React.FC = () => {
           <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Filter assets by filename..."
+            placeholder={tr("Filter assets by filename...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="ps-8 h-8 text-xs bg-card border-border/70"

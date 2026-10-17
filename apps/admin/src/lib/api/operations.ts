@@ -1,4 +1,31 @@
-import { apiRequest } from "./client";
+import { apiRequest, ApiError } from "./client";
+export { ApiError };
+
+export interface PublicationLocaleConfiguration {
+  primaryLocale: string;
+  enabledLocales: string[];
+  isMultilingual: boolean;
+  needsReconciliation: boolean;
+}
+
+export function getPublicationLocalesApi(): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales");
+}
+
+export function getPublicationLocaleContextApi(): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales/context");
+}
+
+export function updatePublicationLocalesApi(input: {
+  primaryLocale: string;
+  enabledLocales: string[];
+  confirmPublishedUrlRetirement?: boolean | undefined;
+}): Promise<PublicationLocaleConfiguration> {
+  return apiRequest("/locales", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
 
 export interface AdminSettingValue {
   key: string;

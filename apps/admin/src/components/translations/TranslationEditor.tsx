@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminQueryKeys } from "../../lib/query-keys";
+import { usePublicationLocales } from "../../lib/usePublicationLocales";
+import { getDirection } from "@vibress/i18n";
 import {
   fetchTranslationDetail,
   createContentTranslation,
@@ -56,10 +59,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   translationId: initialTranslationId,
   contentType = "post",
   contentId,
-  targetLocale = "ar-SA",
+  targetLocale: suppliedTargetLocale,
   onNavigate,
   canPublish = true,
 }) => {
+  const { tr } = useAdminLocale();
+  const { data: localePolicy } = usePublicationLocales();
   const queryClient = useQueryClient();
   const [currentTranslationId, setCurrentTranslationId] = useState<string | undefined>(
     initialTranslationId,
@@ -94,6 +99,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
     queryFn: () => fetchTranslationDetail(currentTranslationId!),
     enabled: Boolean(currentTranslationId),
   });
+
+  const sourceLocale = detailData?.translation?.sourceLocale || localePolicy?.primaryLocale || "";
+  const targetLocale = detailData?.translation?.targetLocale ||
+    suppliedTargetLocale ||
+    localePolicy?.enabledLocales.find((locale) => locale !== localePolicy.primaryLocale) ||
+    "";
 
   // 2. Fetch source content directly if creating new translation
   useEffect(() => {
@@ -161,25 +172,52 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const targetMeta = LOCALE_META[targetLocale] || {
     name: targetLocale,
     native: targetLocale,
-    dir: "ltr",
+    dir: targetLocale ? getDirection(targetLocale) : "ltr",
   };
-  const isTargetRtl = targetMeta.dir === "rtl";
+  const isTargetRtl = targetLocale ? getDirection(targetLocale) === "rtl" : false;
 
   // Mutations
   const saveMutation = useMutation({
-    mutationFn: async (targetStatus?: string) => {
+    mutationFn: async () => {
       setErrorMsg(null);
       setSuccessMsg(null);
+      if (status === "published" || status === "approved") {
+        throw new Error("Approved and published translations must be reopened for review before editing");
+      }
 
+      const bodyText = targetBody.trim();
+      let content: Record<string, unknown>;
+      if (!bodyText) {
+        content = {};
+      } else if (bodyText.startsWith("{")) {
+        const decoded: unknown = JSON.parse(bodyText);
+        if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+          throw new Error("Translated document must be a valid JSON object");
+        }
+        content = Object.fromEntries(Object.entries(decoded));
+      } else {
+        // Plain-text translation remains a valid Studio document; never
+        // replace a persisted structured document with { body: "..." }.
+        content = {
+          schema: "vibress-studio", version: 1,
+          root: {
+            type: "root",
+            children: [{
+              type: "paragraph",
+              children: [{ type: "text", text: targetBody }],
+            }],
+          },
+        };
+      }
       const payload = {
         targetLocale,
         title: targetTitle,
         slug: targetSlug || `${sourceItem?.slug || "item"}-${targetLocale.slice(0, 2)}`,
         excerpt: targetExcerpt,
-        content: { body: targetBody },
+        content,
         metaTitle,
         metaDescription,
-        status: targetStatus || status,
+        status: currentTranslationId ? status : "draft",
       };
 
       if (currentTranslationId) {
@@ -206,7 +244,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("needs_review");
+      const saved = await saveMutation.mutateAsync();
       const targetId = saved?.id || currentTranslationId;
       if (!targetId) throw new Error("Could not determine translation identifier");
       const res = await submitTranslationForReview(targetId);
@@ -226,7 +264,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const approveMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("approved");
+      const saved = await saveMutation.mutateAsync();
       const targetId = saved?.id || currentTranslationId;
       if (!targetId) throw new Error("Could not determine translation identifier");
       const res = await approveTranslationApi(targetId);
@@ -246,10 +284,12 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
   const publishMutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
-      const saved = await saveMutation.mutateAsync("published");
-      const targetId = saved?.id || currentTranslationId;
-      if (!targetId) throw new Error("Could not determine translation identifier");
-      const res = await publishTranslationApi(targetId);
+      if (status !== "approved" || !currentTranslationId) {
+        throw new Error("Only an approved translation can be published");
+      }
+      // Do not invoke the generic editor PATCH on an approved record. That
+      // would bypass review or overwrite a live translation before publishing.
+      const res = await publishTranslationApi(currentTranslationId);
       return res.translation;
     },
     onSuccess: (res) => {
@@ -304,34 +344,32 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             className="gap-2 cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span>Matrix</span>
+            <span>{tr("Matrix")}</span>
           </Button>
           <div className="h-4 w-[1px] bg-border" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
-                Translation Workspace
-              </h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">{tr("Translation Workspace")}</h1>
               <TranslationBadge status={status as any} isStale={isStale} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Source (English) ➔ Target ({targetMeta.native} / {targetLocale})
+              Source ({sourceLocale}) ➔ Target ({targetMeta.native} / {targetLocale})
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
+          {status !== "approved" && status !== "published" && <Button
             variant="outline"
             size="sm"
-            onClick={() => saveMutation.mutate("draft")}
+            onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             className="gap-1.5 cursor-pointer text-xs"
           >
             <Save className="h-3.5 w-3.5" />
             <span>{saveMutation.isPending ? "Saving..." : "Save Draft"}</span>
-          </Button>
+          </Button>}
 
           {status !== "needs_review" && status !== "approved" && status !== "published" && (
             <Button
@@ -342,11 +380,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs text-amber-600 dark:text-amber-400 border-amber-500/30"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>Submit for Review</span>
+              <span>{tr("Submit for Review")}</span>
             </Button>
           )}
 
-          {canPublish && (status === "needs_review" || status === "draft" || isStale) && (
+          {canPublish && status === "needs_review" && (
             <Button
               variant="outline"
               size="sm"
@@ -355,11 +393,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs text-sky-600 dark:text-sky-400 border-sky-500/30"
             >
               <CheckCheck className="h-3.5 w-3.5" />
-              <span>Approve</span>
+              <span>{tr("Approve")}</span>
             </Button>
           )}
 
-          {canPublish && (
+          {canPublish && status === "approved" && (
             <Button
               size="sm"
               onClick={() => publishMutation.mutate()}
@@ -367,7 +405,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               className="gap-1.5 cursor-pointer text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Publish Translation</span>
+              <span>{tr("Publish Translation")}</span>
             </Button>
           )}
         </div>
@@ -393,7 +431,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-xs">
               <AlertTriangle className="h-4 w-4" />
-              <span>Source content was modified after this translation was created.</span>
+              <span>{tr("Source content was modified after this translation was created.")}</span>
             </div>
             <Button
               variant="outline"
@@ -409,7 +447,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
           {detailData?.translation?.fieldDiff?.changedFields &&
             detailData.translation.fieldDiff.changedFields.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-[11px] text-muted-foreground">Modified fields:</span>
+                <span className="text-[11px] text-muted-foreground">{tr("Modified fields:")}</span>
                 {detailData.translation.fieldDiff.changedFields.map((field: string) => (
                   <span
                     key={field}
@@ -438,7 +476,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <span className="text-xs font-bold text-foreground">AI Translation Assistant</span>
+            <span className="text-xs font-bold text-foreground">{tr("AI Translation Assistant")}</span>
             <p className="text-[11px] text-muted-foreground">
               Generates an editorial draft in <span className="font-semibold text-foreground">{targetMeta.native}</span> safely in 'Needs Review' status.
             </p>
@@ -451,7 +489,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
             onChange={(e) => setAiProvider(e.target.value)}
             className="h-8 px-2.5 bg-background border border-border rounded-lg text-xs text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value="auto">Auto (Failover)</option>
+            <option value="auto">{tr("Auto (Failover)")}</option>
             <option value="openai">OpenAI (GPT-4o)</option>
             <option value="anthropic">Anthropic (Claude)</option>
             <option value="gemini">Gemini</option>
@@ -483,7 +521,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               : "text-muted-foreground"
           }`}
         >
-          Source (English)
+          Source ({sourceLocale})
         </button>
         <button
           type="button"
@@ -516,11 +554,11 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   </CardTitle>
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">
-                  LTR • Read-Only
+                  {getDirection(sourceLocale).toUpperCase()} • Read-Only
                 </span>
               </div>
             </CardHeader>
-            <CardContent className="p-4 space-y-4 text-left" dir="ltr">
+            <CardContent className="p-4 space-y-4 text-left" dir={getDirection(sourceLocale)}>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase">
                   Source Title
@@ -597,7 +635,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   htmlFor="target-title"
                   className="text-xs font-semibold text-foreground flex items-center justify-between"
                 >
-                  <span>Translated Title</span>
+                  <span>{tr("Translated Title")}</span>
                   <span className="text-[10px] text-muted-foreground font-normal">
                     Required
                   </span>
@@ -618,7 +656,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                   htmlFor="target-slug"
                   className="text-xs font-semibold text-foreground flex items-center justify-between"
                 >
-                  <span>Localized Slug</span>
+                  <span>{tr("Localized Slug")}</span>
                   <span className="text-[10px] text-muted-foreground font-mono">
                     /{targetLocale}/...
                   </span>
@@ -673,7 +711,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
               <div className="pt-2 border-t border-border/40 space-y-3">
                 <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Globe className="h-3.5 w-3.5 text-primary" />
-                  <span>SEO & Meta Configuration</span>
+                  <span>{tr("SEO & Meta Configuration")}</span>
                 </span>
                 <div className="space-y-2">
                   <Input

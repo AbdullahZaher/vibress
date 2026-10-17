@@ -213,6 +213,10 @@ export default defineConfig({
         __dirname,
         "./packages/domains/ai/src/index.ts",
       ),
+      "@vibress/search": path.resolve(
+        __dirname,
+        "./packages/domains/search/src/index.ts",
+      ),
       "@": path.resolve(__dirname, "./apps/admin/src"),
     },
   },

@@ -3,7 +3,8 @@ import {
   PublicPostDetailDto,
   PublicPageDetailDto,
 } from "@vibress/api-contracts";
-import { canonicalizeLocale } from "@vibress/i18n";
+import { canonicalizeLocale, getLocalePrefix } from "@vibress/i18n";
+import { ContentApiClient } from "./content-api-client";
 
 export function getPublicSiteUrl(): string {
   const envUrl =
@@ -19,6 +20,31 @@ export function getPublicSiteUrl(): string {
   } catch {
     return "http://localhost:7777";
   }
+}
+
+/**
+ * Enumerate only published and explicitly enabled translations. Calling
+ * routes never guess hreflang entries from language registry defaults.
+ */
+export async function publishedAlternateLanguageUrls(
+  kind: "post" | "page",
+  slug: string,
+  locale: string,
+): Promise<Record<string, string>> {
+  const data = await ContentApiClient.getPublishedLocaleAlternates(kind, slug, locale);
+  if (!data) return {};
+  const url = getPublicSiteUrl();
+  const alternates: Record<string, string> = {};
+  for (const [target, path] of Object.entries(data.alternates)) {
+    if (!data.enabledLocales.includes(target) || !path.startsWith("/")) continue;
+    const prefix = getLocalePrefix(target, data.primaryLocale, data.enabledLocales);
+    alternates[target] = `${url}${prefix}${path}`;
+  }
+  const primaryUrl = alternates[data.primaryLocale];
+  if (Object.keys(alternates).length > 1 && primaryUrl) {
+    alternates["x-default"] = primaryUrl;
+  }
+  return alternates;
 }
 
 export interface AlternateLanguageMap {
@@ -48,17 +74,9 @@ export function buildPageMetadata(options: {
 
   const locale = options.locale ? canonicalizeLocale(options.locale) : "en";
   const ogLocale = locale.replace(/-/g, "_");
-  const currentLang = locale.split("-")[0] || "en";
-  const rawPath = (options.canonicalPath || "").replace(/^\/(?:ar|fr|fa|de|tr|ur|he)/, "");
-
-  const alternateLanguages = options.alternateLocales || {
-    en: `${siteUrl}${rawPath}`,
-    ar: `${siteUrl}/ar${rawPath}`,
-    ...(currentLang !== "en" && currentLang !== "ar"
-      ? { [currentLang]: `${siteUrl}/${currentLang}${rawPath}` }
-      : {}),
-    "x-default": `${siteUrl}${rawPath}`,
-  };
+  // Never advertise translations that are disabled, unpublished or absent.
+  // The caller supplies an explicit published-only map when available.
+  const alternateLanguages = options.alternateLocales || {};
 
   const meta: Metadata = {
     title: options.title,
@@ -90,16 +108,22 @@ export function buildPageMetadata(options: {
 export function buildPostJsonLd(
   post: PublicPostDetailDto,
   locale = "en",
+  localeContext?: { primaryLocale?: string | undefined; enabledLocales?: string[] | undefined },
 ): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
-  const canonicalUrl =
-    post.seo?.canonicalUrl || `${siteUrl}/posts/${post.slug}`;
+  let canonicalUrl = post.seo?.canonicalUrl?.trim();
+  if (!canonicalUrl) {
+    const prefix = localeContext
+      ? getLocalePrefix(locale, localeContext.primaryLocale || locale, localeContext.enabledLocales)
+      : "";
+    canonicalUrl = `${siteUrl}${prefix}/posts/${post.slug}`;
+  }
 
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
-    description: post.excerpt || post.seo.description,
+    description: post.excerpt || post.seo?.description,
     datePublished: post.publishedAt,
     dateModified: post.updatedAt,
     inLanguage: canonicalizeLocale(locale),
@@ -107,7 +131,8 @@ export function buildPostJsonLd(
       "@type": "WebPage",
       "@id": canonicalUrl,
     },
-    author: post.authors.map((a) => ({
+    url: canonicalUrl,
+    author: post.authors?.map((a) => ({
       "@type": "Person",
       name: a.name,
     })),
@@ -118,17 +143,27 @@ export function buildPostJsonLd(
 export function buildPageJsonLd(
   page: PublicPageDetailDto,
   locale = "en",
+  localeContext?: { primaryLocale?: string | undefined; enabledLocales?: string[] | undefined },
 ): Record<string, unknown> {
   const siteUrl = getPublicSiteUrl();
-  const canonicalUrl =
-    page.seo?.canonicalUrl || `${siteUrl}/pages/${page.slug}`;
+  let canonicalUrl = page.seo?.canonicalUrl?.trim();
+  if (!canonicalUrl) {
+    const prefix = localeContext
+      ? getLocalePrefix(locale, localeContext.primaryLocale || locale, localeContext.enabledLocales)
+      : "";
+    canonicalUrl = `${siteUrl}${prefix}/pages/${page.slug}`;
+  }
 
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
     name: page.title,
-    description: page.excerpt || page.seo.description,
+    description: page.excerpt || page.seo?.description,
     url: canonicalUrl,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
     inLanguage: canonicalizeLocale(locale),
     datePublished: page.publishedAt,
     dateModified: page.updatedAt,
