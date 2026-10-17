@@ -120,6 +120,12 @@ Themes can expose user-customizable visual options and variables in the Admin Pa
 
 ---
 
+### Publication-owned social profiles
+
+Social icons are **not theme settings** and should not be added to `settings.json` or the theme manifest. Vibress passes an additive `site.socialLinks` collection (`id`, `platform`, `label`, `url`, `iconUrl`) to Theme API v1 templates. It defaults to an empty array, and third-party themes decide where or whether to render it. Icons use platform-owned local SVG URLs; no manifest capability, theme API bump, or database migration is required. See the [Liquid example](templating.md).
+
+---
+
 ## 4. Multi-Version Lifecycle & Settings Persistence
 
 1. **Parallel Version Storage**: Multiple versions of the same theme identity (e.g. `editorial-pro@1.0.0` and `editorial-pro@2.0.0`) can be installed side-by-side in storage and database.
