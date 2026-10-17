@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest } from "fastify";
 import {
   PublicListFilterSchema,
+  PublicPostsListFilterSchema,
   PublicRedirectResolveQuerySchema,
   PublicLegacyTranslationRedirectSchema,
 } from "@vibress/api-contracts";
@@ -402,7 +403,7 @@ function extractRequestedLocale(
   // Public Posts List
   fastify.get("/posts", {
     handler: async (req, reply) => {
-      const parseResult = PublicListFilterSchema.safeParse(req.query);
+      const parseResult = PublicPostsListFilterSchema.safeParse(req.query);
       const filter = parseResult.success
         ? parseResult.data
         : { page: 1, limit: 20 };
