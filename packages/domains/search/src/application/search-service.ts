@@ -77,6 +77,7 @@ export class SearchService {
     offset = 0,
     publicationId?: string,
     locale?: string,
+    allowedLocales?: string[],
   ): Promise<{ results: SearchResult[]; total: number }> {
     const start = performance.now();
     const sanitized = sanitizeSearchQuery(q);
@@ -85,8 +86,37 @@ export class SearchService {
     const result =
       publicationId !== undefined
         ? locale !== undefined
-          ? await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset, publicationId, locale)
-          : await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset, publicationId)
+          ? allowedLocales !== undefined
+            ? await this.repo.query(
+                sanitized,
+                sanitizedLimit,
+                sanitizedOffset,
+                publicationId,
+                locale,
+                allowedLocales,
+              )
+            : await this.repo.query(
+                sanitized,
+                sanitizedLimit,
+                sanitizedOffset,
+                publicationId,
+                locale,
+              )
+          : allowedLocales !== undefined
+            ? await this.repo.query(
+                sanitized,
+                sanitizedLimit,
+                sanitizedOffset,
+                publicationId,
+                undefined,
+                allowedLocales,
+              )
+            : await this.repo.query(
+                sanitized,
+                sanitizedLimit,
+                sanitizedOffset,
+                publicationId,
+              )
         : await this.repo.query(sanitized, sanitizedLimit, sanitizedOffset);
     const durationMs = Math.round(performance.now() - start);
 
@@ -98,6 +128,7 @@ export class SearchService {
       timestamp: new Date().toISOString(),
       publicationId,
       locale,
+      allowedLocales,
     });
 
     return result;

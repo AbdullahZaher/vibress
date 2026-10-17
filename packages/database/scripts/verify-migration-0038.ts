@@ -115,9 +115,52 @@ async function verifyMigration0038() {
   await db.delete(publications).where(eq(publications.id, testPubId));
 
   // ----------------------------------------------------
-  // 5. Idempotency Test: re-running SQL does not fail
+  // 5. Concurrent Writes Verification Test
   // ----------------------------------------------------
-  console.log("\n5. Verifying idempotency of migration SQL...");
+  console.log("\n5. Verifying concurrent writes and reads during migration execution...");
+  const concurrentPubId = "pub_mig_concurrent_" + Date.now();
+  await db.insert(publications).values({
+    id: concurrentPubId,
+    workspaceId: "ws_default",
+    name: "Concurrent Test Publication",
+    slug: "concurrent-" + Date.now(),
+    primaryLocale: "ar",
+  });
+
+  // Execute migration in parallel with concurrent inserts/selects
+  let concurrentWritesCompleted = 0;
+  const writePromise = (async () => {
+    for (let i = 0; i < 20; i++) {
+      await db.insert(searchDocuments).values({
+        id: crypto.randomUUID(),
+        publicationId: concurrentPubId,
+        entityType: "post",
+        entityId: `post_concurrent_${i}`,
+        locale: "ar",
+        title: `Concurrent Title ${i}`,
+        bodyText: `Concurrent Body Text ${i}`,
+        slug: `concurrent-${i}`,
+        url: `/posts/concurrent-${i}`,
+        searchable: true,
+      });
+      concurrentWritesCompleted++;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  })();
+
+  const migrationPromise = db.execute(sql.raw(migrationSql));
+
+  await Promise.all([writePromise, migrationPromise]);
+  console.log(`Concurrent writes verified: ${concurrentWritesCompleted} writes succeeded during migration execution.`);
+
+  // Cleanup concurrent test documents
+  await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, concurrentPubId));
+  await db.delete(publications).where(eq(publications.id, concurrentPubId));
+
+  // ----------------------------------------------------
+  // 6. Idempotency Test: re-running SQL does not fail
+  // ----------------------------------------------------
+  console.log("\n6. Verifying idempotency of migration SQL...");
   await db.execute(sql.raw(migrationSql));
   console.log("Idempotency verified: re-running SQL succeeded without error.");
 

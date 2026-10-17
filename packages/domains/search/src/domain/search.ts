@@ -51,6 +51,7 @@ export interface SearchRepository {
     offset: number,
     publicationId?: string,
     locale?: string,
+    allowedLocales?: string[],
   ): Promise<{ results: SearchResult[]; total: number }>;
   count(publicationId?: string): Promise<number>;
   clear(publicationId?: string): Promise<void>;

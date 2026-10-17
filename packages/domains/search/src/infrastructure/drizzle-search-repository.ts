@@ -1,5 +1,5 @@
 import { getDb, searchDocuments } from "@vibress/database";
-import { eq, and, count, desc, sql } from "drizzle-orm";
+import { eq, and, count, desc, sql, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   SearchRepository,
@@ -84,6 +84,7 @@ export class DrizzleSearchRepository implements SearchRepository {
     offset: number,
     publicationId?: string,
     locale?: string,
+    allowedLocales?: string[],
   ): Promise<{ results: SearchResult[]; total: number }> {
     const db = getDb();
     const like = `%${q}%`;
@@ -94,6 +95,13 @@ export class DrizzleSearchRepository implements SearchRepository {
     ];
     if (publicationId) {
       whereConditions.push(eq(searchDocuments.publicationId, publicationId));
+    }
+    if (allowedLocales !== undefined) {
+      if (allowedLocales.length === 0) {
+        whereConditions.push(sql`1 = 0`);
+      } else {
+        whereConditions.push(inArray(searchDocuments.locale, allowedLocales));
+      }
     }
     if (locale) {
       whereConditions.push(eq(searchDocuments.locale, locale));

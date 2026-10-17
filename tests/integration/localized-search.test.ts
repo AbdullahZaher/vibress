@@ -3,12 +3,15 @@ import {
   getDb,
   publications,
   publicationMemberships,
+  publicationLocales,
   posts,
   users,
   contentTranslations,
   searchDocuments,
   eq,
+  and,
   inArray,
+  notInArray,
 } from "@vibress/database";
 import { DrizzleSearchRepository, SearchService } from "@vibress/search";
 import { WorkerSearchContentSource } from "../../apps/worker/src/processors/search-content-source";
@@ -414,5 +417,258 @@ describe("LOC-005: Localized Search Architecture & Multi-Locale Indexing", () =>
     // Clean up
     await db.delete(searchDocuments).where(inArray(searchDocuments.publicationId, [pubA, pubB]));
     await db.delete(publications).where(inArray(publications.id, [pubA, pubB]));
+  });
+
+  it("strictly excludes disabled locale documents from search results even if present in index", async () => {
+    const disabledPubId = "pub_disabled_locale_" + Date.now();
+    const db = getDb();
+
+    await db.insert(publications).values({
+      id: disabledPubId,
+      workspaceId: "ws_default",
+      name: "Disabled Locale Pub",
+      slug: "disabled-locale-pub-" + Date.now(),
+      primaryLocale: "en",
+    });
+
+    // Seed search index with an English document, an Arabic document, and a stale Spanish document
+    await searchService.indexDocument({
+      entityType: "post",
+      entityId: "p_en",
+      locale: "en",
+      title: "Global Architecture Overview",
+      bodyText: "Core microservice and database patterns",
+      publicationId: disabledPubId,
+    });
+    await searchService.indexDocument({
+      entityType: "post",
+      entityId: "p_ar",
+      locale: "ar",
+      title: "نظرة عامة على البنية البرمجية",
+      bodyText: "أنماط قواعد البيانات",
+      publicationId: disabledPubId,
+    });
+    await searchService.indexDocument({
+      entityType: "post",
+      entityId: "p_es",
+      locale: "es", // Disabled language!
+      title: "Arquitectura Global",
+      bodyText: "Patrones de bases de datos",
+      publicationId: disabledPubId,
+    });
+
+    // 1. Search without locale but with allowedLocales = ['en', 'ar']
+    // Must return the English and Arabic matches, but strictly exclude 'es'
+    const openRes = await searchService.search("Architecture", 10, 0, disabledPubId, undefined, ["en", "ar"]);
+    expect(openRes.total).toBe(1);
+    expect(openRes.results[0]?.locale).toBe("en");
+
+    // 2. Client queries directly for disabled 'es' locale with allowedLocales = ['en', 'ar']
+    const esRes = await searchService.search("Arquitectura", 10, 0, disabledPubId, "es", ["en", "ar"]);
+    expect(esRes.total).toBe(0);
+
+    // Clean up
+    await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, disabledPubId));
+    await db.delete(publications).where(eq(publications.id, disabledPubId));
+  });
+
+  it("rebuild content source ignores translations whose locale is not enabled", async () => {
+    const db = getDb();
+    const pubId = "pub_filter_trans_" + Date.now();
+    const postId = "post_trans_filter_" + Date.now();
+
+    await db.insert(publications).values({
+      id: pubId,
+      workspaceId: "ws_default",
+      name: "Translation Filter Pub",
+      slug: "trans-filter-" + Date.now(),
+      primaryLocale: "en",
+    });
+
+    // Enable 'en' and 'ar' in publicationLocales, leaving 'es' disabled/unregistered
+    await db.insert(publicationLocales).values([
+      {
+        id: "pl_en_" + Date.now(),
+        publicationId: pubId,
+        locale: "en",
+        status: "active",
+        isDefault: true,
+      },
+      {
+        id: "pl_ar_" + Date.now(),
+        publicationId: pubId,
+        locale: "ar",
+        status: "active",
+        isDefault: false,
+      },
+      {
+        id: "pl_es_" + Date.now(),
+        publicationId: pubId,
+        locale: "es",
+        status: "disabled",
+        isDefault: false,
+      },
+    ]);
+
+    await db.insert(publicationMemberships).values({
+      id: "pm_trans_filter_" + Date.now(),
+      publicationId: pubId,
+      userId: authorId,
+      role: "owner",
+    });
+
+    await db.insert(posts).values({
+      id: postId,
+      publicationId: pubId,
+      title: "Core System Design",
+      slug: "system-design",
+      primaryAuthorId: authorId,
+      createdBy: authorId,
+      updatedBy: authorId,
+      content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+      status: "published",
+      visibility: "public",
+      publishedAt: new Date(),
+    });
+
+    // Arabic translation (active locale)
+    await db.insert(contentTranslations).values({
+      id: "tr_ar_" + Date.now(),
+      publicationId: pubId,
+      contentType: "post",
+      contentId: postId,
+      sourceLocale: "en",
+      targetLocale: "ar",
+      title: "تصميم النظام الأساسي",
+      slug: "system-design-ar",
+      content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+      status: "published",
+    });
+
+    // Spanish translation (disabled locale)
+    await db.insert(contentTranslations).values({
+      id: "tr_es_" + Date.now(),
+      publicationId: pubId,
+      contentType: "post",
+      contentId: postId,
+      sourceLocale: "en",
+      targetLocale: "es",
+      title: "Diseño del Sistema Central",
+      slug: "system-design-es",
+      content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+      status: "published",
+    });
+
+    const contentSource = new WorkerSearchContentSource();
+    const indexable = await contentSource.listIndexableContent(pubId);
+
+    const locales = indexable.map((d) => d.locale);
+    expect(locales).toContain("en");
+    expect(locales).toContain("ar");
+    // 'es' must be omitted because it is disabled
+    expect(locales).not.toContain("es");
+
+    // Clean up
+    await db.delete(contentTranslations).where(eq(contentTranslations.publicationId, pubId));
+    await db.delete(posts).where(eq(posts.publicationId, pubId));
+    await db.delete(publicationMemberships).where(eq(publicationMemberships.publicationId, pubId));
+    await db.delete(publicationLocales).where(eq(publicationLocales.publicationId, pubId));
+    await db.delete(publications).where(eq(publications.id, pubId));
+  });
+
+  it("purges stale search documents when locales are disabled in publication settings", async () => {
+    const db = getDb();
+    const pubId = "pub_purge_" + Date.now();
+
+    await db.insert(publications).values({
+      id: pubId,
+      workspaceId: "ws_default",
+      name: "Purge Test Pub",
+      slug: "purge-pub-" + Date.now(),
+      primaryLocale: "en",
+    });
+
+    // Seed search documents for en, ar, and es
+    await db.insert(searchDocuments).values([
+      {
+        id: "sd_en_" + Date.now(),
+        publicationId: pubId,
+        entityType: "post",
+        entityId: "p1",
+        locale: "en",
+        title: "English Post",
+        bodyText: "Text",
+        slug: "post-en",
+        url: "/posts/post-en",
+        searchVector: "",
+      },
+      {
+        id: "sd_ar_" + Date.now(),
+        publicationId: pubId,
+        entityType: "post",
+        entityId: "p1",
+        locale: "ar",
+        title: "منشور عربي",
+        bodyText: "نص",
+        slug: "post-ar",
+        url: "/ar/posts/post-ar",
+        searchVector: "",
+      },
+      {
+        id: "sd_es_" + Date.now(),
+        publicationId: pubId,
+        entityType: "post",
+        entityId: "p1",
+        locale: "es", // Now disabled
+        title: "Publicación en Español",
+        bodyText: "Texto",
+        slug: "post-es",
+        url: "/es/posts/post-es",
+        searchVector: "",
+      },
+    ]);
+
+    // Active enabled locales after update: ['en', 'ar']
+    const enabledLocales = ["en", "ar"];
+    await db
+      .delete(searchDocuments)
+      .where(
+        and(
+          eq(searchDocuments.publicationId, pubId),
+          notInArray(searchDocuments.locale, enabledLocales),
+        ),
+      );
+
+    const remaining = await db
+      .select({ locale: searchDocuments.locale })
+      .from(searchDocuments)
+      .where(eq(searchDocuments.publicationId, pubId));
+
+    const remainingLocales = remaining.map((r) => r.locale);
+    expect(remainingLocales).toContain("en");
+    expect(remainingLocales).toContain("ar");
+    expect(remainingLocales).not.toContain("es");
+
+    // Clean up
+    await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, pubId));
+    await db.delete(publications).where(eq(publications.id, pubId));
+  });
+
+  it("fails closed when publication locale configuration cannot be resolved", async () => {
+    const pubId = "pub_fail_closed_" + Date.now();
+    const contentSource = new WorkerSearchContentSource();
+
+    // Mock localeService.getConfiguration to throw
+    const errorService = {
+      getConfiguration: async () => {
+        throw new Error("Locale configuration database replica unavailable");
+      },
+    };
+    (contentSource as any).localeService = errorService;
+
+    // Must fail closed and throw, rather than silently defaulting to "en"
+    await expect(contentSource.listIndexableContent(pubId)).rejects.toThrow(
+      "Locale configuration database replica unavailable",
+    );
   });
 });

@@ -605,28 +605,52 @@ export async function translationRoutes(fastify: FastifyInstance) {
           metadata: { targetLocale: updated.targetLocale },
         });
 
-        // Index published translation in search if source content is published & public
-        let isSourcePublic = false;
-        if (updated.contentType === "post") {
-          const post = await postsService.findById(updated.contentId, req.publicationContext?.publicationId);
-          isSourcePublic = !!post && post.status === "published" && post.visibility === "public";
-        } else if (updated.contentType === "page") {
-          const page = await pagesService.findById(updated.contentId, req.publicationContext?.publicationId);
-          isSourcePublic = !!page && page.status === "published" && page.visibility === "public";
-        }
+        // Manage search index for translation: only index if published, public, and locale is enabled
+        const pubId = req.publicationContext?.publicationId || "pub_default";
+        const localeConfig = await publicationLocaleService.getConfiguration(pubId);
+        const canonicalLocale = canonicalPublicationLocale(updated.targetLocale);
+        const isLocaleEnabled = localeConfig.enabledLocales.includes(canonicalLocale);
 
-        if (isSourcePublic) {
-          const plainText = renderStudioDocumentToPlainText(updated.content as any).slice(0, 2000);
-          await searchService.indexDocument({
-            entityType: updated.contentType as "post" | "page",
-            entityId: updated.contentId,
-            locale: updated.targetLocale,
-            title: updated.title,
-            bodyText: plainText,
-            slug: updated.slug,
-            url: `/${updated.targetLocale}/${updated.contentType === "post" ? "posts" : "pages"}/${updated.slug}`,
-            publicationId: req.publicationContext?.publicationId,
-          });
+        if (updated.status === "published" && isLocaleEnabled) {
+          let isSourcePublic = false;
+          if (updated.contentType === "post") {
+            const post = await postsService.findById(updated.contentId, pubId);
+            isSourcePublic = !!post && post.status === "published" && post.visibility === "public";
+          } else if (updated.contentType === "page") {
+            const page = await pagesService.findById(updated.contentId, pubId);
+            isSourcePublic = !!page && page.status === "published" && page.visibility === "public";
+          }
+
+          if (isSourcePublic) {
+            const plainText = renderStudioDocumentToPlainText(
+              updated.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+            ).slice(0, 2000);
+            await searchService.indexDocument({
+              entityType: updated.contentType as "post" | "page",
+              entityId: updated.contentId,
+              locale: canonicalLocale,
+              title: updated.title,
+              bodyText: plainText,
+              slug: updated.slug,
+              url: `/${canonicalLocale}/${updated.contentType === "post" ? "posts" : "pages"}/${updated.slug}`,
+              publicationId: pubId,
+            });
+          } else {
+            await searchService.removeDocument(
+              updated.contentType,
+              updated.contentId,
+              pubId,
+              canonicalLocale,
+            );
+          }
+        } else {
+          // If translation is not published, or locale is disabled: remove from search index
+          await searchService.removeDocument(
+            updated.contentType,
+            updated.contentId,
+            pubId,
+            canonicalLocale,
+          );
         }
 
         return reply.status(200).send({ translation: updated });
@@ -888,46 +912,55 @@ export async function translationRoutes(fastify: FastifyInstance) {
       });
 
       if (body.action === "publish" && result.succeededIds?.length) {
+        const pubId = req.publicationContext?.publicationId || "pub_default";
+        const localeConfig = await publicationLocaleService.getConfiguration(pubId);
+
         for (const tid of result.succeededIds) {
           const tr = await translationService.getTranslationById(
             tid,
-            req.publicationContext?.publicationId,
+            pubId,
           );
           if (!tr) continue;
+          const canonicalLocale = canonicalPublicationLocale(tr.targetLocale);
+          if (!localeConfig.enabledLocales.includes(canonicalLocale)) continue;
+
           let isSourcePublic = false;
           if (tr.contentType === "post") {
-            const post = await postsService.findById(tr.contentId, req.publicationContext?.publicationId);
+            const post = await postsService.findById(tr.contentId, pubId);
             isSourcePublic = !!post && post.status === "published" && post.visibility === "public";
           } else if (tr.contentType === "page") {
-            const page = await pagesService.findById(tr.contentId, req.publicationContext?.publicationId);
+            const page = await pagesService.findById(tr.contentId, pubId);
             isSourcePublic = !!page && page.status === "published" && page.visibility === "public";
           }
           if (isSourcePublic) {
-            const plainText = renderStudioDocumentToPlainText(tr.content as any).slice(0, 2000);
+            const plainText = renderStudioDocumentToPlainText(
+              tr.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+            ).slice(0, 2000);
             await searchService.indexDocument({
               entityType: tr.contentType as "post" | "page",
               entityId: tr.contentId,
-              locale: tr.targetLocale,
+              locale: canonicalLocale,
               title: tr.title,
               bodyText: plainText,
               slug: tr.slug,
-              url: `/${tr.targetLocale}/${tr.contentType === "post" ? "posts" : "pages"}/${tr.slug}`,
-              publicationId: req.publicationContext?.publicationId,
+              url: `/${canonicalLocale}/${tr.contentType === "post" ? "posts" : "pages"}/${tr.slug}`,
+              publicationId: pubId,
             });
           }
         }
       } else if (body.action === "delete" && result.succeededIds?.length) {
+        const pubId = req.publicationContext?.publicationId || "pub_default";
         for (const tid of result.succeededIds) {
           const row = await translationService.getTranslationById(
             tid,
-            req.publicationContext?.publicationId,
+            pubId,
           );
           if (row) {
             await searchService.removeDocument(
               row.contentType,
               row.contentId,
-              req.publicationContext?.publicationId,
-              row.targetLocale,
+              pubId,
+              canonicalPublicationLocale(row.targetLocale),
             );
           }
         }

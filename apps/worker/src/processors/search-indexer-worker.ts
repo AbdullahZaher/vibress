@@ -20,6 +20,7 @@ import {
   PublicationLocaleService,
   DrizzlePublicationLocaleRepository,
   DrizzleSettingRepository,
+  canonicalPublicationLocale,
 } from "@vibress/settings";
 
 export interface SearchIndexJob {
@@ -127,10 +128,18 @@ export class SearchIndexerWorker {
     const pubId = doc.publicationId || "pub_default";
     const db = getDb();
 
-    const primaryLocale = await this.localeService
-      .getConfiguration(pubId)
-      .then((c) => c.primaryLocale)
-      .catch(() => "en");
+    // Authoritative publication locale configuration (fail-closed: do not swallow errors)
+    const config = await this.localeService.getConfiguration(pubId);
+    const primaryLocale = config.primaryLocale;
+
+    // Check if a target locale was requested; if so, canonicalize and verify it is enabled
+    if (doc.locale) {
+      const canonicalTarget = canonicalPublicationLocale(doc.locale);
+      if (!config.enabledLocales.includes(canonicalTarget)) {
+        // Disabled locale — must not be indexed
+        return null;
+      }
+    }
 
     if (doc.entityType === "post") {
       const post = await this.postRepo.findById(doc.entityId, pubId);
@@ -139,6 +148,10 @@ export class SearchIndexerWorker {
 
       const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
       if (isTranslation) {
+        const canonicalLocale = canonicalPublicationLocale(doc.locale!);
+        if (!config.enabledLocales.includes(canonicalLocale)) {
+          return null;
+        }
         const [translation] = await db
           .select()
           .from(contentTranslations)
@@ -155,11 +168,13 @@ export class SearchIndexerWorker {
         return {
           entityType: "post",
           entityId: post.id,
-          locale: doc.locale!,
+          locale: canonicalLocale,
           title: translation.title,
-          bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
+          bodyText: renderStudioDocumentToPlainText(
+            translation.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
           slug: translation.slug,
-          url: doc.url || `/${doc.locale}/posts/${translation.slug}`,
+          url: doc.url || `/${canonicalLocale}/posts/${translation.slug}`,
           publicationId: post.publicationId,
         };
       }
@@ -182,6 +197,10 @@ export class SearchIndexerWorker {
 
       const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
       if (isTranslation) {
+        const canonicalLocale = canonicalPublicationLocale(doc.locale!);
+        if (!config.enabledLocales.includes(canonicalLocale)) {
+          return null;
+        }
         const [translation] = await db
           .select()
           .from(contentTranslations)
@@ -198,11 +217,13 @@ export class SearchIndexerWorker {
         return {
           entityType: "page",
           entityId: page.id,
-          locale: doc.locale!,
+          locale: canonicalLocale,
           title: translation.title,
-          bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
+          bodyText: renderStudioDocumentToPlainText(
+            translation.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+          ).slice(0, 2000),
           slug: translation.slug,
-          url: doc.url || `/${doc.locale}/pages/${translation.slug}`,
+          url: doc.url || `/${canonicalLocale}/pages/${translation.slug}`,
           publicationId: page.publicationId,
         };
       }
@@ -219,9 +240,13 @@ export class SearchIndexerWorker {
       };
     }
     // Tags and authors: trusted metadata, no restriction concept
+    const docLocale = doc.locale ? canonicalPublicationLocale(doc.locale) : primaryLocale;
+    if (!config.enabledLocales.includes(docLocale)) {
+      return null;
+    }
     return {
       ...doc,
-      locale: doc.locale || primaryLocale,
+      locale: docLocale,
     };
   }
 

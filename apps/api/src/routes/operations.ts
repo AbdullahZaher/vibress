@@ -29,7 +29,14 @@ import {
   ImportExportDomainError,
   validateImportEnvelope,
 } from "@vibress/import-export";
-import { runInTransaction } from "@vibress/database";
+import {
+  runInTransaction,
+  getDb,
+  searchDocuments,
+  eq,
+  and,
+  notInArray,
+} from "@vibress/database";
 import { hashPassword, verifyPassword } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { IMPORT_EXPORT_BODY_LIMIT_BYTES } from "../constants/limits";
@@ -163,6 +170,20 @@ export async function adminOperationsRoutes(fastify: FastifyInstance) {
           });
           return updated;
         });
+
+        // Defense in depth: purge search documents for any locales that were disabled
+        if (configuration.enabledLocales.length > 0) {
+          const db = getDb();
+          await db
+            .delete(searchDocuments)
+            .where(
+              and(
+                eq(searchDocuments.publicationId, req.publicationContext!.publicationId),
+                notInArray(searchDocuments.locale, configuration.enabledLocales),
+              ),
+            );
+        }
+
         return reply.status(200).send(configuration);
       } catch (error) {
         if (error instanceof PublicationLocaleError) {
