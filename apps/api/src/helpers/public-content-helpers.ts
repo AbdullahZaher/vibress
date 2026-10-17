@@ -268,7 +268,7 @@ export async function buildPublicPostSummaryDto(
 
   const excerpt = deriveExcerpt(post.excerpt, post.content);
   const postWithLocale = post as Post & { locale?: string };
-  const postLocale = localeContext?.locale ?? postWithLocale.locale ?? "en";
+  const postLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? postWithLocale.locale ?? "en";
   const postDirection = getDirection(postLocale);
   const localePrefix = getLocalePrefix(
     postLocale, localeContext?.primaryLocale ?? "en",
@@ -368,7 +368,7 @@ export async function buildPublicPageDetailDto(
 
   const excerpt = deriveExcerpt(page.excerpt, page.content);
   const pageWithLocale = page as Page & { locale?: string };
-  const pageLocale = localeContext?.locale ?? pageWithLocale.locale ?? "en";
+  const pageLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? pageWithLocale.locale ?? "en";
   const pageDirection = getDirection(pageLocale);
   const localePrefix = getLocalePrefix(
     pageLocale, localeContext?.primaryLocale ?? "en",

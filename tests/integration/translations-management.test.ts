@@ -314,7 +314,7 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
     });
 
-    it("guards changing the primary language of a populated publication without confirmation", async () => {
+    it("strictly guards changing the primary language of a populated publication", async () => {
       const res = await app.inject({
         method: "PUT",
         url: "/api/admin/v1/locales",
@@ -326,35 +326,7 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       });
       expect(res.statusCode).toBe(409);
       expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
-    });
-
-    it("allows changing the primary language of a populated publication when explicitly confirmed", async () => {
-      const res = await app.inject({
-        method: "PUT",
-        url: "/api/admin/v1/locales",
-        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
-        payload: {
-          primaryLocale: "ar",
-          enabledLocales: ["ar", "en"],
-          confirmPrimaryLocaleChange: true,
-        },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json().primaryLocale).toBe("ar");
-
-      // Restore back to English primary
-      const restoreRes = await app.inject({
-        method: "PUT",
-        url: "/api/admin/v1/locales",
-        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
-        payload: {
-          primaryLocale: "en",
-          enabledLocales: ["en", "ar-SA"],
-          confirmPrimaryLocaleChange: true,
-        },
-      });
-      expect(restoreRes.statusCode).toBe(200);
-      expect(restoreRes.json().primaryLocale).toBe("en");
+      expect(res.json().errors[0].message).toContain("content migration");
     });
 
     it("guards disabling a language with published URLs unless confirmed via confirmPublishedUrlRetirement", async () => {

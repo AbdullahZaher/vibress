@@ -191,7 +191,6 @@ export class PublicationLocaleService {
       primaryLocale: string;
       enabledLocales: string[];
       confirmPublishedUrlRetirement?: boolean | undefined;
-      confirmPrimaryLocaleChange?: boolean | undefined;
     },
     actorId: string | null,
   ): Promise<PublicationLocaleConfiguration> {
@@ -231,7 +230,6 @@ export class PublicationLocaleService {
       if (
         isInstalled &&
         changesPrimary &&
-        !requested.confirmPrimaryLocaleChange &&
         (await this.repository.hasAuthoredContent(publicationId))
       ) {
         throw new PublicationLocaleError(
@@ -264,7 +262,6 @@ export class PublicationLocaleService {
         isInstalled &&
         legacyPrimary &&
         legacyPrimary !== storedPrimary &&
-        !requested.confirmPrimaryLocaleChange &&
         (await this.repository.hasAuthoredContent(publicationId))
       ) {
         throw new PublicationLocaleError(

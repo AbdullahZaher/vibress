@@ -63,11 +63,10 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
       return;
     }
     const removed = config.enabledLocales.filter((locale) => !selected.includes(locale));
-    const changesPrimary = primary !== config.primaryLocale;
-    if ((removed.length > 0 || changesPrimary) &&
+    if (removed.length > 0 &&
         !window.confirm(label(
-          "Changing languages may affect existing content, translations and public URLs. Continue?",
-          "قد يؤثر تغيير اللغات في المحتوى والترجمات والروابط المنشورة. هل تريد المتابعة؟",
+          "Disabling a language will retire public access to its translated URLs. Do you want to proceed?",
+          "سيؤدي تعطيل إحدى اللغات إلى إيقاف الوصول إلى روابطها المترجمة المنشورة. هل تريد المتابعة؟",
         ))) return;
 
     setWorking(true);
@@ -78,7 +77,6 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
         primaryLocale: primary,
         enabledLocales: selected,
         confirmPublishedUrlRetirement: removed.length > 0,
-        confirmPrimaryLocaleChange: changesPrimary,
       });
       setConfig(result);
       setPrimary(result.primaryLocale);
@@ -91,36 +89,11 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
         (cause instanceof ApiError && cause.code === "PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION") ||
         (cause instanceof Error && cause.message.includes("content migration"))
       ) {
-        const confirmed = window.confirm(
-          label(
-            "Changing the primary language of a populated publication will reassign the default language for existing content. Do you want to proceed and change the primary language?",
-            "سيؤدي تغيير اللغة الأساسية لمنشور يحتوي على محتوى إلى إعادة تعيين اللغة الافتراضية للمحتوى الحالي. هل تريد المتابعة وتغيير اللغة الأساسية؟",
-          ),
-        );
-        if (confirmed) {
-          try {
-            const retryResult = await updatePublicationLocalesApi({
-              primaryLocale: primary,
-              enabledLocales: selected,
-              confirmPublishedUrlRetirement: removed.length > 0,
-              confirmPrimaryLocaleChange: true,
-            });
-            setConfig(retryResult);
-            setPrimary(retryResult.primaryLocale);
-            setSelected(retryResult.enabledLocales);
-            setSuccess(label("Languages saved", "تم حفظ اللغات"));
-            window.dispatchEvent(new Event("vibress:locales-updated"));
-            onSaved?.(retryResult.primaryLocale);
-            return;
-          } catch (retryCause) {
-            setError(
-              retryCause instanceof Error
-                ? retryCause.message
-                : label("Language change failed", "تعذّر تغيير اللغات"),
-            );
-            return;
-          }
-        }
+        setError(label(
+          "Changing the primary language of a populated publication is restricted because existing content, URLs, and translations are anchored to it. Enable additional languages or translate content instead.",
+          "تغيير اللغة الأساسية لمنشور يحتوي على محتوى مقيّد لأن المحتوى الحالي والروابط والترجمات مرتبطة بها. يمكنك تفعيل لغات إضافية أو ترجمة المحتوى بدلاً من ذلك.",
+        ));
+        return;
       }
       if (
         (cause instanceof ApiError && cause.code === "PUBLISHED_LOCALE_REQUIRES_REVIEW") ||
@@ -138,7 +111,6 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
               primaryLocale: primary,
               enabledLocales: selected,
               confirmPublishedUrlRetirement: true,
-              confirmPrimaryLocaleChange: changesPrimary,
             });
             setConfig(retryResult);
             setPrimary(retryResult.primaryLocale);
@@ -201,8 +173,8 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
               </option>)}
             </select>
             <p className="text-xs text-muted-foreground">
-              {label("English and Arabic are the currently certified primary Admin languages. Changing the primary language will update the default language for existing content.",
-                "الإنجليزية والعربية هما اللغتان الأساسيتان المدعومتان حاليًا للوحة الإدارة. سيؤدي تغيير اللغة الأساسية إلى تحديث اللغة الافتراضية للمحتوى الحالي.")}
+              {label("English and Arabic are certified primary Admin languages. Changing the primary language of a populated publication requires a content migration to protect existing content and canonical URLs.",
+                "الإنجليزية والعربية هما اللغتان الأساسيتان المعتمدتان للوحة الإدارة. يتطلب تغيير اللغة الأساسية لموقع يحتوي على محتوى ترحيلاً للمحتوى لحماية المحتوى الحالي والروابط المنشورة.")}
             </p>
           </div>
           <fieldset className="space-y-2">

@@ -16,6 +16,11 @@ import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { tracedProcessor } from "./trace-helper";
 
 import { getDb, contentTranslations, eq, and } from "@vibress/database";
+import {
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
+  DrizzleSettingRepository,
+} from "@vibress/settings";
 
 export interface SearchIndexJob {
   scope?: "publication" | "system";
@@ -52,6 +57,10 @@ export class SearchIndexerWorker {
   private searchService = new SearchService(new DrizzleSearchRepository());
   private postRepo = new DrizzlePostRepository();
   private pageRepo = new DrizzlePageRepository();
+  private localeService = new PublicationLocaleService(
+    new DrizzlePublicationLocaleRepository(),
+    new DrizzleSettingRepository(),
+  );
   private contentProvider: IndexableContentProvider;
 
   constructor(contentProvider: IndexableContentProvider) {
@@ -115,14 +124,21 @@ export class SearchIndexerWorker {
   private async resolveVerifiedDoc(
     doc: SearchDocumentInput,
   ): Promise<SearchDocumentInput | null> {
-    const pubId = doc.publicationId;
+    const pubId = doc.publicationId || "pub_default";
     const db = getDb();
+
+    const primaryLocale = await this.localeService
+      .getConfiguration(pubId)
+      .then((c) => c.primaryLocale)
+      .catch(() => "en");
+
     if (doc.entityType === "post") {
       const post = await this.postRepo.findById(doc.entityId, pubId);
       if (!post || post.status !== "published" || post.visibility !== "public")
         return null;
 
-      if (doc.locale && doc.locale !== (post as any).locale && doc.locale !== "en") {
+      const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
+      if (isTranslation) {
         const [translation] = await db
           .select()
           .from(contentTranslations)
@@ -130,16 +146,16 @@ export class SearchIndexerWorker {
             and(
               eq(contentTranslations.contentType, "post"),
               eq(contentTranslations.contentId, post.id),
-              eq(contentTranslations.targetLocale, doc.locale),
+              eq(contentTranslations.targetLocale, doc.locale!),
               eq(contentTranslations.status, "published"),
-              ...(pubId ? [eq(contentTranslations.publicationId, pubId)] : []),
+              eq(contentTranslations.publicationId, pubId),
             ),
           );
         if (!translation) return null;
         return {
           entityType: "post",
           entityId: post.id,
-          locale: doc.locale,
+          locale: doc.locale!,
           title: translation.title,
           bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
           slug: translation.slug,
@@ -151,7 +167,7 @@ export class SearchIndexerWorker {
       return {
         entityType: "post",
         entityId: post.id,
-        locale: (post as any).locale || "en",
+        locale: primaryLocale,
         title: post.title,
         bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
         slug: post.slug,
@@ -164,7 +180,8 @@ export class SearchIndexerWorker {
       if (!page || page.status !== "published" || page.visibility !== "public")
         return null;
 
-      if (doc.locale && doc.locale !== (page as any).locale && doc.locale !== "en") {
+      const isTranslation = Boolean(doc.locale && doc.locale !== primaryLocale);
+      if (isTranslation) {
         const [translation] = await db
           .select()
           .from(contentTranslations)
@@ -172,16 +189,16 @@ export class SearchIndexerWorker {
             and(
               eq(contentTranslations.contentType, "page"),
               eq(contentTranslations.contentId, page.id),
-              eq(contentTranslations.targetLocale, doc.locale),
+              eq(contentTranslations.targetLocale, doc.locale!),
               eq(contentTranslations.status, "published"),
-              ...(pubId ? [eq(contentTranslations.publicationId, pubId)] : []),
+              eq(contentTranslations.publicationId, pubId),
             ),
           );
         if (!translation) return null;
         return {
           entityType: "page",
           entityId: page.id,
-          locale: doc.locale,
+          locale: doc.locale!,
           title: translation.title,
           bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
           slug: translation.slug,
@@ -193,7 +210,7 @@ export class SearchIndexerWorker {
       return {
         entityType: "page",
         entityId: page.id,
-        locale: (page as any).locale || "en",
+        locale: primaryLocale,
         title: page.title,
         bodyText: renderStudioDocumentToPlainText(page.content).slice(0, 2000),
         slug: page.slug,
@@ -204,7 +221,7 @@ export class SearchIndexerWorker {
     // Tags and authors: trusted metadata, no restriction concept
     return {
       ...doc,
-      locale: doc.locale || "en",
+      locale: doc.locale || primaryLocale,
     };
   }
 

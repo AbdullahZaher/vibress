@@ -5,6 +5,11 @@ import { DrizzleTagRepository } from "@vibress/tags";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { getConfig } from "@vibress/config";
 import { getDb, contentTranslations, eq, and } from "@vibress/database";
+import {
+  PublicationLocaleService,
+  DrizzlePublicationLocaleRepository,
+  DrizzleSettingRepository,
+} from "@vibress/settings";
 
 /**
  * Worker-side content source for full index rebuilds.
@@ -15,11 +20,30 @@ export class WorkerSearchContentSource {
   private postRepo = new DrizzlePostRepository();
   private pageRepo = new DrizzlePageRepository();
   private tagRepo = new DrizzleTagRepository();
+  private localeService = new PublicationLocaleService(
+    new DrizzlePublicationLocaleRepository(),
+    new DrizzleSettingRepository(),
+  );
 
   async listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]> {
     const docs: SearchDocumentInput[] = [];
     const siteUrl = getConfig().site.url;
     const db = getDb();
+
+    const localeCache = new Map<string, string>();
+    const getPrimaryLocale = async (pubId?: string | null): Promise<string> => {
+      const targetId = pubId || publicationId || "pub_default";
+      const cached = localeCache.get(targetId);
+      if (cached) return cached;
+      try {
+        const config = await this.localeService.getConfiguration(targetId);
+        localeCache.set(targetId, config.primaryLocale);
+        return config.primaryLocale;
+      } catch {
+        localeCache.set(targetId, "en");
+        return "en";
+      }
+    };
 
     const PAGE_SIZE = 100;
     let offset = 0;
@@ -32,10 +56,11 @@ export class WorkerSearchContentSource {
       });
       for (const post of postRows) {
         if (post.visibility !== "public") continue;
+        const postLocale = await getPrimaryLocale(post.publicationId);
         docs.push({
           entityType: "post",
           entityId: post.id,
-          locale: (post as any).locale || "en",
+          locale: postLocale,
           title: post.title,
           bodyText: renderStudioDocumentToPlainText(post.content).slice(
             0,
@@ -86,10 +111,11 @@ export class WorkerSearchContentSource {
       });
       for (const pg of pageRows) {
         if (pg.visibility !== "public") continue;
+        const pageLocale = await getPrimaryLocale(pg.publicationId);
         docs.push({
           entityType: "page",
           entityId: pg.id,
-          locale: (pg as any).locale || "en",
+          locale: pageLocale,
           title: pg.title,
           bodyText: renderStudioDocumentToPlainText(pg.content).slice(0, 2000),
           slug: pg.slug,
@@ -129,10 +155,11 @@ export class WorkerSearchContentSource {
 
     const tags = await this.tagRepo.listAll(publicationId);
     for (const tag of tags) {
+      const tagLocale = await getPrimaryLocale(tag.publicationId);
       docs.push({
         entityType: "tag",
         entityId: tag.id,
-        locale: "en",
+        locale: tagLocale,
         title: tag.name,
         slug: tag.slug,
         url: `${siteUrl}/tags/${tag.slug}`,

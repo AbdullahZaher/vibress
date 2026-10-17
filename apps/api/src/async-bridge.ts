@@ -208,6 +208,7 @@ function sanitizeForAnalytics(
  * posts/pages/tags are indexed. Restricted content is never indexed.
  */
 import { getDb, contentTranslations, eq, and } from "@vibress/database";
+import { publicationLocaleService } from "./services";
 
 export class SearchRebuildContentSource {
   private postRepo = new DrizzlePostRepository();
@@ -219,6 +220,21 @@ export class SearchRebuildContentSource {
     const siteUrl = getSiteUrl();
     const db = getDb();
 
+    const localeCache = new Map<string, string>();
+    const getPrimaryLocale = async (pubId?: string | null): Promise<string> => {
+      const targetId = pubId || publicationId || "pub_default";
+      const cached = localeCache.get(targetId);
+      if (cached) return cached;
+      try {
+        const config = await publicationLocaleService.getConfiguration(targetId);
+        localeCache.set(targetId, config.primaryLocale);
+        return config.primaryLocale;
+      } catch {
+        localeCache.set(targetId, "en");
+        return "en";
+      }
+    };
+
     // Posts: published + public only
     const { posts } = await this.postRepo.list({
       publishedOnly: true,
@@ -227,6 +243,7 @@ export class SearchRebuildContentSource {
     });
     for (const post of posts) {
       if (post.visibility !== "public") continue;
+      const postLocale = await getPrimaryLocale(post.publicationId);
       const bodyText = renderStudioDocumentToPlainText(post.content).slice(
         0,
         2000,
@@ -234,7 +251,7 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "post",
         entityId: post.id,
-        locale: (post as any).locale || "en",
+        locale: postLocale,
         title: post.title,
         bodyText,
         slug: post.slug,
@@ -277,6 +294,7 @@ export class SearchRebuildContentSource {
     });
     for (const page of pages) {
       if (page.visibility !== "public") continue;
+      const pageLocale = await getPrimaryLocale(page.publicationId);
       const bodyText = renderStudioDocumentToPlainText(page.content).slice(
         0,
         2000,
@@ -284,7 +302,7 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "page",
         entityId: page.id,
-        locale: (page as any).locale || "en",
+        locale: pageLocale,
         title: page.title,
         bodyText,
         slug: page.slug,
@@ -322,10 +340,11 @@ export class SearchRebuildContentSource {
     // Tags
     const tags = await this.tagRepo.listAll(publicationId);
     for (const tag of tags) {
+      const tagLocale = await getPrimaryLocale(tag.publicationId);
       docs.push({
         entityType: "tag",
         entityId: tag.id,
-        locale: "en",
+        locale: tagLocale,
         title: tag.name,
         slug: tag.slug,
         url: `${siteUrl}/tags/${tag.slug}`,

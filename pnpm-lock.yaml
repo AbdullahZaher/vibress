@@ -508,6 +508,9 @@ importers:
       '@vibress/security':
         specifier: workspace:*
         version: link:../../packages/security
+      '@vibress/settings':
+        specifier: workspace:*
+        version: link:../../packages/domains/settings
       '@vibress/studio-renderer':
         specifier: workspace:*
         version: link:../../packages/studio-renderer

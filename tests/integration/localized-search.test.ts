@@ -294,4 +294,125 @@ describe("LOC-005: Localized Search Architecture & Multi-Locale Indexing", () =>
     const enFinal = await searchService.search("English", 10, 0, testPubId, "en");
     expect(enFinal.total).toBe(0);
   });
+
+  it("indexes and rebuilds Arabic-first publication source posts with locale 'ar'", async () => {
+    const db = getDb();
+    const arabicPubId = "pub_arabic_first_" + Date.now();
+    const arabicPostId = "post_ar_first_" + Date.now();
+
+    await db.insert(publications).values({
+      id: arabicPubId,
+      workspaceId: "ws_default",
+      name: "منشور عربي أولاً",
+      slug: "arabic-first-" + Date.now(),
+      primaryLocale: "ar",
+    });
+
+    await db.insert(publicationMemberships).values({
+      id: "pm_ar_" + Date.now(),
+      publicationId: arabicPubId,
+      userId: authorId,
+      role: "owner",
+    });
+
+    await db.insert(posts).values({
+      id: arabicPostId,
+      publicationId: arabicPubId,
+      title: "التطوير الهندسي للنظم السحابية",
+      slug: "cloud-engineering-ar",
+      primaryAuthorId: authorId,
+      createdBy: authorId,
+      updatedBy: authorId,
+      content: {
+        schema: "vibress-studio",
+        version: 1,
+        root: {
+          type: "root",
+          children: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", text: "بناء أنظمة برمجية قابلة للتوسع." }],
+            },
+          ],
+        },
+      },
+      status: "published",
+      visibility: "public",
+      publishedAt: new Date(),
+    });
+
+    const contentSource = new WorkerSearchContentSource();
+    const indexable = await contentSource.listIndexableContent(arabicPubId);
+
+    const postDoc = indexable.find((d) => d.entityId === arabicPostId);
+    expect(postDoc).toBeDefined();
+    // Must be indexed with Arabic locale, NOT hardcoded "en"
+    expect(postDoc?.locale).toBe("ar");
+    expect(postDoc?.url).toContain(`/posts/cloud-engineering-ar`);
+
+    // Perform full rebuild on the Arabic publication
+    const indexedCount = await searchService.rebuild(contentSource, arabicPubId);
+    expect(indexedCount).toBeGreaterThanOrEqual(1);
+
+    // Search with Arabic query in Arabic locale
+    const searchAr = await searchService.search("الهندسي", 10, 0, arabicPubId, "ar");
+    expect(searchAr.total).toBe(1);
+    expect(searchAr.results[0]?.locale).toBe("ar");
+    expect(searchAr.results[0]?.url).toContain(`/posts/cloud-engineering-ar`);
+
+    // Search with English locale should yield 0 results
+    const searchEn = await searchService.search("الهندسي", 10, 0, arabicPubId, "en");
+    expect(searchEn.total).toBe(0);
+
+    // Clean up
+    await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, arabicPubId));
+    await db.delete(posts).where(eq(posts.publicationId, arabicPubId));
+    await db.delete(publicationMemberships).where(eq(publicationMemberships.publicationId, arabicPubId));
+    await db.delete(publications).where(eq(publications.id, arabicPubId));
+  });
+
+  it("enforces cross-publication tenant isolation in search queries", async () => {
+    const db = getDb();
+    const pubA = "pub_tenant_a_" + Date.now();
+    const pubB = "pub_tenant_b_" + Date.now();
+
+    await db.insert(publications).values([
+      { id: pubA, workspaceId: "ws_default", name: "Tenant A", slug: "tenant-a-" + Date.now(), primaryLocale: "en" },
+      { id: pubB, workspaceId: "ws_default", name: "Tenant B", slug: "tenant-b-" + Date.now(), primaryLocale: "en" },
+    ]);
+
+    await searchService.indexDocument({
+      entityType: "post",
+      entityId: "post_tenant_a",
+      locale: "en",
+      title: "Shared Security Topic in Tenant A",
+      bodyText: "Confidential Tenant A data",
+      slug: "security-tenant-a",
+      publicationId: pubA,
+    });
+
+    await searchService.indexDocument({
+      entityType: "post",
+      entityId: "post_tenant_b",
+      locale: "en",
+      title: "Shared Security Topic in Tenant B",
+      bodyText: "Confidential Tenant B data",
+      slug: "security-tenant-b",
+      publicationId: pubB,
+    });
+
+    // Query on pubA must only return Tenant A's document
+    const resA = await searchService.search("Shared Security Topic", 10, 0, pubA, "en");
+    expect(resA.total).toBe(1);
+    expect(resA.results[0]?.entityId).toBe("post_tenant_a");
+
+    // Query on pubB must only return Tenant B's document
+    const resB = await searchService.search("Shared Security Topic", 10, 0, pubB, "en");
+    expect(resB.total).toBe(1);
+    expect(resB.results[0]?.entityId).toBe("post_tenant_b");
+
+    // Clean up
+    await db.delete(searchDocuments).where(inArray(searchDocuments.publicationId, [pubA, pubB]));
+    await db.delete(publications).where(inArray(publications.id, [pubA, pubB]));
+  });
 });
