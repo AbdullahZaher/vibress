@@ -6,6 +6,7 @@ import { t } from "../../../lib/i18n";
 
 export async function Home(props: ThemeHomeProps) {
   const posts = props.posts || [];
+  const hasExplicitFeatured = posts.some((post) => post.featured);
 
   return (
     <ThemeLayout
@@ -17,7 +18,7 @@ export async function Home(props: ThemeHomeProps) {
         <main className="site-main vb-inner">
           <div className="post-feed vb-feed">
             {posts.map((post, index) => (
-              <PostCard key={post.id} post={post} isFeatured={index === 0} />
+              <PostCard key={post.id} post={post} isFeatured={index === 0 && !hasExplicitFeatured} />
             ))}
           </div>
 
