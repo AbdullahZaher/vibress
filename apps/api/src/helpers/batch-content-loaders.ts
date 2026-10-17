@@ -57,6 +57,7 @@ export async function batchGetPosts(
       status: row.status as PostStatus,
       visibility: row.visibility as PostVisibility,
       version: row.version,
+      featured: row.featured,
       featureImageId: row.featureImageId || null,
       featureImageAlt: row.featureImageAlt || null,
       featureImageCaption: row.featureImageCaption || null,
