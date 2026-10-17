@@ -6,6 +6,7 @@ export const CreatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featured: z.boolean().optional(),
   featureImageId: z.string().nullable().optional(),
   featureImageAlt: z.string().max(500).nullable().optional(),
   featureImageCaption: z.string().max(1000).nullable().optional(),
@@ -25,6 +26,7 @@ export const UpdatePostInputSchema = z.object({
   excerpt: z.string().max(1000).nullable().optional(),
   content: z.record(z.unknown()).optional(),
   visibility: z.enum(["public", "members", "paid"]).optional(),
+  featured: z.boolean().optional(),
   featureImageId: z.string().nullable().optional(),
   featureImageAlt: z.string().max(500).nullable().optional(),
   featureImageCaption: z.string().max(1000).nullable().optional(),
@@ -138,6 +140,7 @@ export type PublicSeoDto = z.infer<typeof PublicSeoSchema>;
 
 export const PublicPostSummarySchema = z.object({
   id: z.string(),
+  featured: z.boolean().optional(),
   title: z.string(),
   slug: z.string(),
   excerpt: z.string().nullable(),
@@ -195,3 +198,8 @@ export const PublicListFilterSchema = z.object({
   locale: z.string().optional(),
 });
 export type PublicListFilterInput = z.infer<typeof PublicListFilterSchema>;
+
+/** Post-specific discovery filter; unrelated public collections retain their existing contract. */
+export const PublicPostsListFilterSchema = PublicListFilterSchema.extend({
+  featured: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
+});

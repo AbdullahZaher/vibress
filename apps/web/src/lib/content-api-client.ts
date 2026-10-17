@@ -28,7 +28,7 @@ export interface PaginationInfo {
 
 async function fetchContentApi<T>(
   path: string,
-  params?: Record<string, string | number | undefined>,
+  params?: Record<string, string | number | boolean | undefined>,
 ): Promise<T | null> {
   const baseUrl = getApiBaseUrl();
   const url = new URL(`${baseUrl}/api/content/v1${path}`);
@@ -116,6 +116,7 @@ export const ContentApiClient = {
   },
 
   async getPosts(options?: {
+    featured?: boolean;
     page?: number;
     limit?: number;
     tag?: string;

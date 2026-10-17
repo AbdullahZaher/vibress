@@ -287,6 +287,7 @@ export async function buildPublicPostSummaryDto(
 
   return {
     id: post.id,
+    featured: post.featured,
     title: post.title,
     slug: post.slug,
     excerpt,

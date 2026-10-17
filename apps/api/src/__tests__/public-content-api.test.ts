@@ -82,6 +82,7 @@ describe("Batch 6 — Public Content API & Visibility Security Integration", () 
           },
         },
         primaryAuthorId: testAuthorId,
+        featured: true,
         tagIds: [testTagId],
       },
       testAuthorId,
@@ -93,6 +94,7 @@ describe("Batch 6 — Public Content API & Visibility Security Integration", () 
     const draftPost = await postsService.createPost(
       {
         title: "Draft Secret Post",
+        featured: true,
         slug: `draft-post-${Date.now()}`,
         excerpt: "Secret draft post summary",
         content: {
@@ -119,6 +121,7 @@ describe("Batch 6 — Public Content API & Visibility Security Integration", () 
     const schedPost = await postsService.createPost(
       {
         title: "Future Scheduled Post",
+        featured: true,
         slug: `sched-post-${Date.now()}`,
         excerpt: "Future scheduled post summary",
         content: {
@@ -196,6 +199,24 @@ describe("Batch 6 — Public Content API & Visibility Security Integration", () 
     expect(slugs).toContain(publishedPostSlug);
     expect(slugs).not.toContain(draftPostSlug);
     expect(slugs).not.toContain(scheduledPostSlug);
+  });
+
+  it("filters featured posts without leaking drafts or future posts", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/content/v1/posts?featured=true" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.posts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: publishedPostSlug, featured: true }),
+    ]));
+    expect(body.posts.some((p: { slug: string }) => p.slug === draftPostSlug)).toBe(false);
+    expect(body.posts.some((p: { slug: string }) => p.slug === scheduledPostSlug)).toBe(false);
+
+    const unfeatured = await app.inject({ method: "GET", url: "/api/content/v1/posts?featured=false" });
+    expect(unfeatured.statusCode).toBe(200);
+    expect(JSON.parse(unfeatured.body).posts.some((p: { slug: string }) => p.slug === publishedPostSlug)).toBe(false);
+
+    const invalid = await app.inject({ method: "GET", url: "/api/content/v1/posts?featured=maybe" });
+    expect(invalid.statusCode).toBe(400);
   });
 
   it("should fetch published post by slug with rendered HTML and DTO allowlisting", async () => {

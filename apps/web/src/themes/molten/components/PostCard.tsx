@@ -16,7 +16,7 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
   ].filter(Boolean);
 
   const isActuallyFeatured =
-    isFeatured || (post as { featured?: boolean }).featured;
+    isFeatured || Boolean(post.featured);
   const postClass = `post ${isActuallyFeatured ? "featured" : ""}`;
 
   // Use post.featureImage or fallback to a default thumbnail

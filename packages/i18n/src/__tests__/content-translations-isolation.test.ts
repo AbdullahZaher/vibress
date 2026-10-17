@@ -77,6 +77,7 @@ describe("Content Translations Runtime Multi-Publication Isolation", () => {
       content: { root: { type: "root", children: [] } },
       status: "published",
       visibility: "public",
+      featured: true,
       primaryAuthorId: authorId,
       createdBy: authorId,
       updatedBy: authorId,
@@ -234,4 +235,33 @@ describe("Content Translations Runtime Multi-Publication Isolation", () => {
     expect(betaIds).toContain(betaPostId);
     expect(betaIds).not.toContain(alphaPostId);
   });
+  it("filters translated featured sources before pagination and respects publication boundaries", async () => {
+    await db.update(contentTranslations)
+      .set({ status: "published" })
+      .where(inArray(contentTranslations.id, [alphaTrId, betaTrId]));
+
+    const alphaFeatured = await service.listPublishedLocalizedSourceIds(
+      "post", "pub_alpha", "ar-SA", { limit: 100, offset: 0, featured: true },
+    );
+    expect(alphaFeatured.ids).toContain(alphaPostId);
+    expect(alphaFeatured.ids).not.toContain(betaPostId);
+    expect(alphaFeatured.total).toBeGreaterThanOrEqual(1);
+
+    const alphaUnfeatured = await service.listPublishedLocalizedSourceIds(
+      "post", "pub_alpha", "ar-SA", { limit: 100, offset: 0, featured: false },
+    );
+    expect(alphaUnfeatured.ids).not.toContain(alphaPostId);
+
+    const betaFeatured = await service.listPublishedLocalizedSourceIds(
+      "post", "pub_beta", "ar-SA", { limit: 100, offset: 0, featured: true },
+    );
+    expect(betaFeatured.ids).not.toContain(alphaPostId);
+    expect(betaFeatured.ids).not.toContain(betaPostId);
+
+    const betaUnfeatured = await service.listPublishedLocalizedSourceIds(
+      "post", "pub_beta", "ar-SA", { limit: 100, offset: 0, featured: false },
+    );
+    expect(betaUnfeatured.ids).toContain(betaPostId);
+  });
+
 });

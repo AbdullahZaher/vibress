@@ -409,6 +409,7 @@ export class TranslationService {
       offset: number;
       tagSlug?: string | undefined;
       authorSlug?: string | undefined;
+      featured?: boolean | undefined;
     },
   ): Promise<{ ids: string[]; total: number }> {
     const db = getDb();
@@ -429,6 +430,9 @@ export class TranslationService {
         lte(posts.publishedAt, new Date()),
         isNull(posts.deletedAt),
       ];
+      if (options.featured !== undefined) {
+        conditions.push(eq(posts.featured, options.featured));
+      }
       if (options.tagSlug) {
         const tagPosts = await db.select({ postId: postTags.postId })
           .from(postTags)

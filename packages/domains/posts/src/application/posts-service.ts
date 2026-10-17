@@ -283,6 +283,7 @@ export class PostsService {
       updatePayload.contentVersion = data.contentVersion;
     if (data.visibility !== undefined)
       updatePayload.visibility = data.visibility;
+    if (data.featured !== undefined) updatePayload.featured = data.featured;
     if (data.featureImageId !== undefined) {
       if (data.featureImageId) {
         try {

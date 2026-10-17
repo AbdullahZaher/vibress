@@ -31,6 +31,8 @@ interface PostSettingsSidebarProps {
   onClose: () => void;
   postTitle?: string | undefined;
   contentContext?: string | undefined;
+  featured: boolean;
+  setFeatured: (value: boolean) => void;
   slug: string;
   setSlug: (val: string) => void;
   excerpt: string;
@@ -59,6 +61,8 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
   onClose,
   postTitle,
   contentContext,
+  featured,
+  setFeatured,
   slug,
   setSlug,
   excerpt,
@@ -153,6 +157,23 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                 className="w-full min-h-[100px] text-sm flex rounded-md border border-input bg-transparent px-3 py-2 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
+          </div>
+
+          {/* Featured flag is independent of the feature image. */}
+          <div className="border-t pt-6">
+            <label htmlFor="post-featured" className="flex cursor-pointer items-center justify-between gap-4">
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold">{tr("Feature this post")}</span>
+                <span className="block text-xs text-muted-foreground">{tr("Allow themes to highlight this post when published.")}</span>
+              </span>
+              <input
+                id="post-featured"
+                type="checkbox"
+                checked={featured}
+                onChange={(event) => setFeatured(event.target.checked)}
+                className="h-4 w-4 shrink-0 accent-primary"
+              />
+            </label>
           </div>
 
           {/* Tags */}

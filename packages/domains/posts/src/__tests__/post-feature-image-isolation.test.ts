@@ -32,6 +32,7 @@ describe("Post Feature Image - Publication Isolation & Media Reference Lifecycle
     status: "draft",
     visibility: "public",
     version: 1,
+    featured: false,
     featureImageId: null,
     featureImageAlt: null,
     featureImageCaption: null,

@@ -23,6 +23,9 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Featured": "مميز",
+  "Feature this post": "تمييز هذا المقال",
+  "Allow themes to highlight this post when published.": "السماح للقوالب بإبراز هذا المقال عند نشره.",
   "Translation Matrix": "مصفوفة الترجمة",
   "Manage multilingual content coverage, editorial review workflows, and localization health.": "إدارة تغطية المحتوى متعدد اللغات والمراجعات التحريرية وصحة التوطين.",
   "Review Queue": "قائمة المراجعة",

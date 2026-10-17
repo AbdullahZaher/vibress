@@ -32,6 +32,7 @@ interface PostSummary {
   title: string;
   slug: string;
   status: string;
+  featured?: boolean;
   publishedAt: string | null;
   scheduledAt: string | null;
   updatedAt: string;
@@ -303,6 +304,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                       >
                         {post.title}
                       </button>
+                      {post.featured && <span className="text-[11px] text-primary">{tr("Featured")}</span>}
                       <span className="text-[11px] text-muted-foreground font-mono">
                         /{post.slug}
                       </span>
@@ -391,6 +393,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                   >
                     {post.title}
                   </button>
+                  {post.featured && <span className="text-[11px] text-primary block">{tr("Featured")}</span>}
                   <span className="text-[11px] text-muted-foreground font-mono block truncate">
                     /{post.slug}
                   </span>
