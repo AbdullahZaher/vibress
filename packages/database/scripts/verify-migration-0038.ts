@@ -1,4 +1,4 @@
-import { getDb, closeDbPool, searchDocuments, publications, settings } from "../src";
+import { getDb, closeDbPool, searchDocuments, publications } from "../src";
 import { sql, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -44,8 +44,8 @@ async function verifyMigration0038() {
       'search_documents_pub_entity_idx'
     );
   `);
-  console.log("Indexes found:", indexRes.rows.map((r: any) => r.indexname));
-  const indexNames = indexRes.rows.map((r: any) => r.indexname);
+  console.log("Indexes found:", indexRes.rows.map((r) => String(r.indexname)));
+  const indexNames = indexRes.rows.map((r) => String(r.indexname));
   if (!indexNames.includes("search_documents_pub_entity_locale_idx")) {
     throw new Error("Missing unique index: search_documents_pub_entity_locale_idx");
   }
@@ -110,14 +110,27 @@ async function verifyMigration0038() {
   }
   console.log(`Successfully verified 2 localized search documents for entity ${testEntityId}`);
 
+  // Re-execution must preserve a genuine English translation on an Arabic
+  // publication and never collapse multiple locale variants into one.
+  await db.execute(sql.raw(migrationSql));
+  const replayRows = await db.select().from(searchDocuments)
+    .where(eq(searchDocuments.entityId, testEntityId));
+  if (
+    replayRows.length !== 2 ||
+    !replayRows.some((row) => row.locale === "en" && row.title === "English Title") ||
+    !replayRows.some((row) => row.locale === "ar" && row.title === "عنوان عربي")
+  ) {
+    throw new Error("Migration 0038 replay modified existing localized documents");
+  }
+
   // Cleanup test documents
   await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, testPubId));
   await db.delete(publications).where(eq(publications.id, testPubId));
 
   // ----------------------------------------------------
-  // 5. Concurrent Writes Verification Test
+  // 5. Live writes during idempotent re-execution (not initial index build)
   // ----------------------------------------------------
-  console.log("\n5. Verifying concurrent writes and reads during migration execution...");
+  console.log("\n5. Verifying writes during replay of an installed migration...");
   const concurrentPubId = "pub_mig_concurrent_" + Date.now();
   await db.insert(publications).values({
     id: concurrentPubId,
@@ -127,7 +140,8 @@ async function verifyMigration0038() {
     primaryLocale: "ar",
   });
 
-  // Execute migration in parallel with concurrent inserts/selects
+  // This exercises replay safety, not first-time index creation. The first
+  // index build runs online in prepareOnlineSearchLocaleMigration().
   let concurrentWritesCompleted = 0;
   const writePromise = (async () => {
     for (let i = 0; i < 20; i++) {
@@ -151,7 +165,7 @@ async function verifyMigration0038() {
   const migrationPromise = db.execute(sql.raw(migrationSql));
 
   await Promise.all([writePromise, migrationPromise]);
-  console.log(`Concurrent writes verified: ${concurrentWritesCompleted} writes succeeded during migration execution.`);
+  console.log(`Writes during migration replay verified: ${concurrentWritesCompleted} writes succeeded during migration execution.`);
 
   // Cleanup concurrent test documents
   await db.delete(searchDocuments).where(eq(searchDocuments.publicationId, concurrentPubId));

@@ -1,5 +1,6 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { getDb, closeDbPool } from "./connection";
+import { prepareOnlineSearchLocaleMigration } from "./online-locale-migration";
 import path from "node:path";
 import fs from "node:fs";
 const currentDir =
@@ -28,6 +29,7 @@ export const runMigrations = async (): Promise<void> => {
   const db = getDb();
   const migrationsFolder = findMigrationsFolder();
   console.log(`Running migrations from ${migrationsFolder}...`);
+  await prepareOnlineSearchLocaleMigration();
   await migrate(db, { migrationsFolder });
   console.log("Migrations completed successfully.");
 };
