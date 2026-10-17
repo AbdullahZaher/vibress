@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { cache } from "react";
 import { getPublicSiteUrl } from "./seo-helpers";
 
 export const DEFAULT_THEME_ID = "vibress-default";
@@ -47,12 +48,33 @@ export interface ThemeSiteSettings {
   commentAccess?: string | undefined;
 }
 
+interface CachedSiteSettingsResponse {
+  data: {
+    site?: Record<string, unknown>;
+    security?: { isPrivate: boolean };
+    analytics?: Record<string, unknown>;
+    code?: Record<string, unknown>;
+    comments?: Record<string, unknown>;
+    theme?: { legacyStorage?: unknown; themeId?: unknown; themeVersion?: unknown };
+  };
+  publicationId?: string | undefined;
+  timestamp: number;
+}
+
+const serverSiteCache = new Map<string, CachedSiteSettingsResponse>();
+const SERVER_CACHE_TTL_MS = 15_000;
+
 /**
  * Public site identity, precedence: DB setting (first-run wizard) →
  * environment → built-in default. SITE_URL stays infrastructure-driven —
  * it is only echoed from the content API, never redefined here.
  */
-export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
+const serverCache =
+  typeof cache === "function"
+    ? cache
+    : <T extends (...args: any[]) => any>(fn: T): T => fn;
+
+export const getThemeSiteSettings = serverCache(async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
   const fallback: ThemeSiteSettings = {
     publicationId: process.env.NODE_ENV === "test" ? "test-pub-id" : undefined,
     title: process.env.SITE_NAME || "Vibress",
@@ -84,24 +106,45 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       // Headers unavailable in static/fallback context
     }
 
-    const res = await fetch(`${baseUrl}/api/content/v1/site`, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
-      },
-    });
-    if (!res.ok) return fallback;
-    const publicationId =
-      res.headers.get("x-vibress-publication-id") || undefined;
-    const data = (await res.json()) as {
-      site?: Record<string, unknown>;
-      security?: { isPrivate: boolean };
-      analytics?: Record<string, unknown>;
-      code?: Record<string, unknown>;
-      comments?: Record<string, unknown>;
-      theme?: { legacyStorage?: unknown; themeId?: unknown; themeVersion?: unknown };
-    };
+    const cacheKey = hostHeader || "default";
+    const now = Date.now();
+    const cached = serverSiteCache.get(cacheKey);
+
+    let data: CachedSiteSettingsResponse["data"] | undefined;
+    let publicationId: string | undefined;
+
+    if (cached && now - cached.timestamp < SERVER_CACHE_TTL_MS) {
+      data = cached.data;
+      publicationId = cached.publicationId;
+    } else {
+      try {
+        const res = await fetch(`${baseUrl}/api/content/v1/site`, {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
+          },
+        });
+        if (res.ok) {
+          publicationId = res.headers.get("x-vibress-publication-id") || undefined;
+          data = (await res.json()) as CachedSiteSettingsResponse["data"];
+          serverSiteCache.set(cacheKey, { data, publicationId, timestamp: now });
+        } else if (cached) {
+          data = cached.data;
+          publicationId = cached.publicationId;
+        } else {
+          return fallback;
+        }
+      } catch {
+        if (cached) {
+          data = cached.data;
+          publicationId = cached.publicationId;
+        } else {
+          return fallback;
+        }
+      }
+    }
+
     const site = data?.site;
     if (!site || typeof site.title !== "string") return fallback;
     const requestLocale = await getRequestLocaleFromHeaders();
@@ -112,15 +155,15 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
       : [primaryLocale];
     const activeLocale = requestLocale && enabledLocales.includes(requestLocale)
       ? requestLocale : primaryLocale;
-    const commentsData = (data.comments as ThemeSiteSettings["comments"]) || {};
+    const commentsData = (data?.comments as ThemeSiteSettings["comments"]) || {};
     const commentAccess = commentsData?.commentAccess || "all";
     const commentsEnabled = commentAccess !== "disabled";
 
     return {
       publicationId,
-      legacyThemeStorage: data.theme?.legacyStorage === true,
-      legacyThemeId: typeof data.theme?.themeId === "string" ? data.theme.themeId : undefined,
-      legacyThemeVersion: typeof data.theme?.themeVersion === "string" ? data.theme.themeVersion : undefined,
+      legacyThemeStorage: data?.theme?.legacyStorage === true,
+      legacyThemeId: typeof data?.theme?.themeId === "string" ? data.theme.themeId : undefined,
+      legacyThemeVersion: typeof data?.theme?.themeVersion === "string" ? data.theme.themeVersion : undefined,
       title: site.title as string,
       description: (site.description as string) || fallback.description,
       url: (site.url as string) || fallback.url,
@@ -145,9 +188,9 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
         typeof site.tagline === "string" && site.tagline
           ? site.tagline
           : undefined,
-      security: data.security || { isPrivate: false },
-      analytics: (data.analytics as ThemeSiteSettings["analytics"]) || {},
-      code: (data.code as ThemeSiteSettings["code"]) || {},
+      security: data?.security || { isPrivate: false },
+      analytics: (data?.analytics as ThemeSiteSettings["analytics"]) || {},
+      code: (data?.code as ThemeSiteSettings["code"]) || {},
       comments: commentsData,
       commentsEnabled,
       commentAccess,
@@ -155,7 +198,7 @@ export async function getThemeSiteSettings(): Promise<ThemeSiteSettings> {
   } catch {
     return fallback;
   }
-}
+});
 
 export async function getRequestLocaleFromHeaders(): Promise<string | null> {
   try {

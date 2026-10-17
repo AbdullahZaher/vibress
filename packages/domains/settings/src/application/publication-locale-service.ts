@@ -23,6 +23,7 @@ export interface PublicationLocaleRepository {
   save(publicationId: string, primaryLocale: string, enabledLocales: string[]): Promise<void>;
   hasAuthoredContent(publicationId: string): Promise<boolean>;
   listPublicTranslationLocales(publicationId: string): Promise<string[]>;
+  isInstallationCompleted?(): Promise<boolean>;
 }
 
 export class PublicationLocaleError extends Error {
@@ -190,6 +191,7 @@ export class PublicationLocaleService {
       primaryLocale: string;
       enabledLocales: string[];
       confirmPublishedUrlRetirement?: boolean | undefined;
+      confirmPrimaryLocaleChange?: boolean | undefined;
     },
     actorId: string | null,
   ): Promise<PublicationLocaleConfiguration> {
@@ -223,7 +225,15 @@ export class PublicationLocaleService {
           "The selected primary language is not yet certified for the administrative interface",
         );
       }
-      if (changesPrimary && (await this.repository.hasAuthoredContent(publicationId))) {
+      const isInstalled = this.repository.isInstallationCompleted
+        ? await this.repository.isInstallationCompleted()
+        : true;
+      if (
+        isInstalled &&
+        changesPrimary &&
+        !requested.confirmPrimaryLocaleChange &&
+        (await this.repository.hasAuthoredContent(publicationId))
+      ) {
         throw new PublicationLocaleError(
           "PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION",
           "Changing the primary language of a populated publication requires a content migration",
@@ -251,8 +261,10 @@ export class PublicationLocaleService {
           ? canonicalPublicationLocale(legacy.value)
           : null;
       if (
+        isInstalled &&
         legacyPrimary &&
         legacyPrimary !== storedPrimary &&
+        !requested.confirmPrimaryLocaleChange &&
         (await this.repository.hasAuthoredContent(publicationId))
       ) {
         throw new PublicationLocaleError(

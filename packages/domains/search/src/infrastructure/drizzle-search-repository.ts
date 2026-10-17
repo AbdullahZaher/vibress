@@ -11,6 +11,7 @@ export class DrizzleSearchRepository implements SearchRepository {
   async upsert(doc: SearchDocumentInput & { publicationId?: string }): Promise<void> {
     const db = getDb();
     const pubId = doc.publicationId || "pub_default";
+    const loc = doc.locale || "en";
     await db
       .insert(searchDocuments)
       .values({
@@ -18,6 +19,7 @@ export class DrizzleSearchRepository implements SearchRepository {
         publicationId: pubId,
         entityType: doc.entityType,
         entityId: doc.entityId,
+        locale: loc,
         title: doc.title,
         bodyText: doc.bodyText || "",
         slug: doc.slug || "",
@@ -26,7 +28,12 @@ export class DrizzleSearchRepository implements SearchRepository {
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: [searchDocuments.publicationId, searchDocuments.entityType, searchDocuments.entityId],
+        target: [
+          searchDocuments.publicationId,
+          searchDocuments.entityType,
+          searchDocuments.entityId,
+          searchDocuments.locale,
+        ],
         set: {
           title: doc.title,
           bodyText: doc.bodyText || "",
@@ -38,13 +45,14 @@ export class DrizzleSearchRepository implements SearchRepository {
       });
   }
 
-  async remove(entityType: string, entityId: string, publicationId?: string): Promise<void> {
+  async remove(entityType: string, entityId: string, publicationId?: string, locale?: string): Promise<void> {
     const db = getDb();
     const conditions = [
       eq(searchDocuments.entityType, entityType),
       eq(searchDocuments.entityId, entityId),
     ];
     if (publicationId) conditions.push(eq(searchDocuments.publicationId, publicationId));
+    if (locale) conditions.push(eq(searchDocuments.locale, locale));
     await db
       .delete(searchDocuments)
       .where(and(...conditions));
@@ -55,6 +63,7 @@ export class DrizzleSearchRepository implements SearchRepository {
     entityId: string,
     searchable: boolean,
     publicationId?: string,
+    locale?: string,
   ): Promise<void> {
     const db = getDb();
     const conditions = [
@@ -62,6 +71,7 @@ export class DrizzleSearchRepository implements SearchRepository {
       eq(searchDocuments.entityId, entityId),
     ];
     if (publicationId) conditions.push(eq(searchDocuments.publicationId, publicationId));
+    if (locale) conditions.push(eq(searchDocuments.locale, locale));
     await db
       .update(searchDocuments)
       .set({ searchable, updatedAt: new Date() })
@@ -73,6 +83,7 @@ export class DrizzleSearchRepository implements SearchRepository {
     limit: number,
     offset: number,
     publicationId?: string,
+    locale?: string,
   ): Promise<{ results: SearchResult[]; total: number }> {
     const db = getDb();
     const like = `%${q}%`;
@@ -83,6 +94,9 @@ export class DrizzleSearchRepository implements SearchRepository {
     ];
     if (publicationId) {
       whereConditions.push(eq(searchDocuments.publicationId, publicationId));
+    }
+    if (locale) {
+      whereConditions.push(eq(searchDocuments.locale, locale));
     }
 
     const whereClause = and(...whereConditions);
@@ -108,6 +122,7 @@ export class DrizzleSearchRepository implements SearchRepository {
       id: r.id,
       entityType: r.entityType,
       entityId: r.entityId,
+      locale: r.locale,
       title: r.title,
       excerpt: r.bodyText.slice(0, 200),
       url: r.url,

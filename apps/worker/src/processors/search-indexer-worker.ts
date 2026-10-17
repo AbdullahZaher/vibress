@@ -15,6 +15,8 @@ import { DrizzlePageRepository } from "@vibress/pages";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 import { tracedProcessor } from "./trace-helper";
 
+import { getDb, contentTranslations, eq, and } from "@vibress/database";
+
 export interface SearchIndexJob {
   scope?: "publication" | "system";
   publicationId?: string;
@@ -22,6 +24,7 @@ export interface SearchIndexJob {
   doc?: SearchDocumentInput;
   entityType?: string;
   entityId?: string;
+  locale?: string;
   traceparent?: string;
 }
 
@@ -94,6 +97,7 @@ export class SearchIndexerWorker {
           job.data.doc.entityType,
           job.data.doc.entityId,
           docPubId,
+          job.data.doc.locale,
         );
       }
       return;
@@ -103,6 +107,7 @@ export class SearchIndexerWorker {
         job.data.entityType,
         job.data.entityId,
         pubId,
+        job.data.locale,
       );
     }
   }
@@ -111,13 +116,42 @@ export class SearchIndexerWorker {
     doc: SearchDocumentInput,
   ): Promise<SearchDocumentInput | null> {
     const pubId = doc.publicationId;
+    const db = getDb();
     if (doc.entityType === "post") {
       const post = await this.postRepo.findById(doc.entityId, pubId);
       if (!post || post.status !== "published" || post.visibility !== "public")
         return null;
+
+      if (doc.locale && doc.locale !== (post as any).locale && doc.locale !== "en") {
+        const [translation] = await db
+          .select()
+          .from(contentTranslations)
+          .where(
+            and(
+              eq(contentTranslations.contentType, "post"),
+              eq(contentTranslations.contentId, post.id),
+              eq(contentTranslations.targetLocale, doc.locale),
+              eq(contentTranslations.status, "published"),
+              ...(pubId ? [eq(contentTranslations.publicationId, pubId)] : []),
+            ),
+          );
+        if (!translation) return null;
+        return {
+          entityType: "post",
+          entityId: post.id,
+          locale: doc.locale,
+          title: translation.title,
+          bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
+          slug: translation.slug,
+          url: doc.url || `/${doc.locale}/posts/${translation.slug}`,
+          publicationId: post.publicationId,
+        };
+      }
+
       return {
         entityType: "post",
         entityId: post.id,
+        locale: (post as any).locale || "en",
         title: post.title,
         bodyText: renderStudioDocumentToPlainText(post.content).slice(0, 2000),
         slug: post.slug,
@@ -129,9 +163,37 @@ export class SearchIndexerWorker {
       const page = await this.pageRepo.findById(doc.entityId, pubId);
       if (!page || page.status !== "published" || page.visibility !== "public")
         return null;
+
+      if (doc.locale && doc.locale !== (page as any).locale && doc.locale !== "en") {
+        const [translation] = await db
+          .select()
+          .from(contentTranslations)
+          .where(
+            and(
+              eq(contentTranslations.contentType, "page"),
+              eq(contentTranslations.contentId, page.id),
+              eq(contentTranslations.targetLocale, doc.locale),
+              eq(contentTranslations.status, "published"),
+              ...(pubId ? [eq(contentTranslations.publicationId, pubId)] : []),
+            ),
+          );
+        if (!translation) return null;
+        return {
+          entityType: "page",
+          entityId: page.id,
+          locale: doc.locale,
+          title: translation.title,
+          bodyText: renderStudioDocumentToPlainText(translation.content as any).slice(0, 2000),
+          slug: translation.slug,
+          url: doc.url || `/${doc.locale}/pages/${translation.slug}`,
+          publicationId: page.publicationId,
+        };
+      }
+
       return {
         entityType: "page",
         entityId: page.id,
+        locale: (page as any).locale || "en",
         title: page.title,
         bodyText: renderStudioDocumentToPlainText(page.content).slice(0, 2000),
         slug: page.slug,
@@ -140,7 +202,10 @@ export class SearchIndexerWorker {
       };
     }
     // Tags and authors: trusted metadata, no restriction concept
-    return doc;
+    return {
+      ...doc,
+      locale: doc.locale || "en",
+    };
   }
 
   async stop(): Promise<void> {

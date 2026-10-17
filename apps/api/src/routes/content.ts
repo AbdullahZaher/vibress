@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyRequest } from "fastify";
 import {
   PublicListFilterSchema,
   PublicRedirectResolveQuerySchema,
@@ -33,8 +33,14 @@ import {
 } from "@vibress/security";
 import { getDirection, getLocalePrefix } from "@vibress/i18n";
 import { canonicalPublicationLocale } from "@vibress/settings";
-import type { FastifyRequest } from "fastify";
 import { TranslationService } from "@vibress/i18n/server";
+import {
+  batchGetPosts,
+  batchGetPages,
+  batchGetPostAuthors,
+  batchGetPostTags,
+  batchGetTranslations,
+} from "../helpers/batch-content-loaders";
 
 const translationService = new TranslationService();
 
@@ -423,13 +429,9 @@ function extractRequestedLocale(
               "post", pubId, requestedLocale,
               { limit, offset, tagSlug: filter.tag, authorSlug: filter.author },
             );
-            const sources = await Promise.all(
-              localized.ids.map((id) => postsService.findById(id, pubId)),
-            );
+            const sourcePosts = await batchGetPosts(localized.ids, pubId);
             return {
-              posts: sources.filter((post): post is NonNullable<typeof post> =>
-                !!post && post.status === "published" &&
-                post.visibility === "public" && !post.deletedAt),
+              posts: sourcePosts,
               total: localized.total,
             };
           })()
@@ -446,17 +448,23 @@ function extractRequestedLocale(
           });
 
       const postIds = posts.map((p) => p.id);
-      const commentCounts =
+      const [commentCounts, authorsMap, tagsMap, translationsMap] = await Promise.all([
         postIds.length > 0 && pubId
           ? await commentsService.getCommentCounts(pubId, postIds)
-          : new Map<string, number>();
+          : new Map<string, number>(),
+        batchGetPostAuthors(postIds),
+        batchGetPostTags(postIds, pubId),
+        isTranslationRequest
+          ? batchGetTranslations("post", postIds, requestedLocale, pubId)
+          : Promise.resolve(new Map()),
+      ]);
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
           let mergedPost: typeof post & { locale?: string } = post;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("post", post.id, requestedLocale, undefined, pubId, true);
-            if (tr && (publiclyVisibleTranslation(tr.status))) {
+            const tr = translationsMap.get(post.id);
+            if (tr && publiclyVisibleTranslation(tr.status)) {
               mergedPost = {
                 ...post,
                 title: tr.title,
@@ -474,14 +482,8 @@ function extractRequestedLocale(
             }
           }
 
-          const authorIds = await postsService.getPostTagIds(post.id);
-          const [authors, tagsList] = await Promise.all([
-            authorsService.getPostAuthors(post.id),
-            Promise.all(authorIds.map((tId) => tagsService.findById(tId))),
-          ]);
-          const validTags = tagsList.filter(
-            (t): t is NonNullable<typeof t> => !!t,
-          );
+          const authors = authorsMap.get(post.id) ?? [];
+          const validTags = tagsMap.get(post.id) ?? [];
 
           return buildPublicPostSummaryDto(
             mergedPost,
@@ -663,13 +665,9 @@ function extractRequestedLocale(
             const localized = await translationService.listPublishedLocalizedSourceIds(
               "page", pubId, requestedLocale, { limit, offset },
             );
-            const sources = await Promise.all(
-              localized.ids.map((id) => pagesService.findById(id, pubId)),
-            );
+            const sourcePages = await batchGetPages(localized.ids, pubId);
             return {
-              pages: sources.filter((pageObj): pageObj is NonNullable<typeof pageObj> =>
-                !!pageObj && pageObj.status === "published" &&
-                pageObj.visibility === "public" && !pageObj.deletedAt),
+              pages: sourcePages,
               total: localized.total,
             };
           })()
@@ -681,12 +679,17 @@ function extractRequestedLocale(
             offset,
           });
 
+      const pageIds = pages.map((p) => p.id);
+      const translationsMap = isTranslationRequest
+        ? await batchGetTranslations("page", pageIds, requestedLocale, pubId)
+        : new Map();
+
       const details = await Promise.all(
         pages.map(async (pageObj) => {
           let mergedPage: typeof pageObj & { locale?: string } = pageObj;
           if (isTranslationRequest) {
-            const tr = await translationService.getTranslation("page", pageObj.id, requestedLocale, undefined, pubId, true);
-            if (tr && (publiclyVisibleTranslation(tr.status))) {
+            const tr = translationsMap.get(pageObj.id);
+            if (tr && publiclyVisibleTranslation(tr.status)) {
               mergedPage = {
                 ...pageObj,
                 title: tr.title,
@@ -911,13 +914,9 @@ function extractRequestedLocale(
               "post", publicationId, requestedLocale,
               { limit, offset, tagSlug: slug },
             );
-            const sources = await Promise.all(
-              localized.ids.map((id) => postsService.findById(id, publicationId)),
-            );
+            const sourcePosts = await batchGetPosts(localized.ids, publicationId);
             return {
-              posts: sources.filter((post): post is NonNullable<typeof post> =>
-                !!post && post.status === "published" &&
-                post.visibility === "public" && !post.deletedAt),
+              posts: sourcePosts,
               total: localized.total,
             };
           })()
@@ -933,18 +932,22 @@ function extractRequestedLocale(
           });
 
       const postIds = posts.map((p) => p.id);
-      const commentCounts =
+      const [commentCounts, authorsMap, tagsMap, translationsMap] = await Promise.all([
         postIds.length > 0 && pubId
           ? await commentsService.getCommentCounts(pubId, postIds)
-          : new Map<string, number>();
+          : new Map<string, number>(),
+        batchGetPostAuthors(postIds),
+        batchGetPostTags(postIds, publicationId),
+        isTranslationRequest
+          ? batchGetTranslations("post", postIds, requestedLocale, publicationId)
+          : Promise.resolve(new Map()),
+      ]);
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
           let mergedPost: typeof post & { locale?: string } = post;
           if (isTranslationRequest) {
-            const translation = await translationService.getTranslation(
-              "post", post.id, requestedLocale, undefined, publicationId, true,
-            );
+            const translation = translationsMap.get(post.id);
             if (!translation || translation.status !== "published") return null;
             mergedPost = {
               ...post,
@@ -958,14 +961,8 @@ function extractRequestedLocale(
               locale: translation.targetLocale,
             };
           }
-          const tagIds = await postsService.getPostTagIds(post.id);
-          const [authors, tagsList] = await Promise.all([
-            authorsService.getPostAuthors(post.id),
-            Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
-          ]);
-          const validTags = tagsList.filter(
-            (t): t is NonNullable<typeof t> => !!t,
-          );
+          const authors = authorsMap.get(post.id) ?? [];
+          const validTags = tagsMap.get(post.id) ?? [];
 
           return buildPublicPostSummaryDto(
             mergedPost,
@@ -1082,13 +1079,9 @@ function extractRequestedLocale(
               "post", publicationId, requestedLocale,
               { limit, offset, authorSlug: slug },
             );
-            const sources = await Promise.all(
-              localized.ids.map((id) => postsService.findById(id, publicationId)),
-            );
+            const sourcePosts = await batchGetPosts(localized.ids, publicationId);
             return {
-              posts: sources.filter((post): post is NonNullable<typeof post> =>
-                !!post && post.status === "published" &&
-                post.visibility === "public" && !post.deletedAt),
+              posts: sourcePosts,
               total: localized.total,
             };
           })()
@@ -1104,18 +1097,22 @@ function extractRequestedLocale(
           });
 
       const postIds = posts.map((p) => p.id);
-      const commentCounts =
+      const [commentCounts, authorsMap, tagsMap, translationsMap] = await Promise.all([
         postIds.length > 0 && pubId
           ? await commentsService.getCommentCounts(pubId, postIds)
-          : new Map<string, number>();
+          : new Map<string, number>(),
+        batchGetPostAuthors(postIds),
+        batchGetPostTags(postIds, publicationId),
+        isTranslationRequest
+          ? batchGetTranslations("post", postIds, requestedLocale, publicationId)
+          : Promise.resolve(new Map()),
+      ]);
 
       const summaries = await Promise.all(
         posts.map(async (post) => {
           let mergedPost: typeof post & { locale?: string } = post;
           if (isTranslationRequest) {
-            const translation = await translationService.getTranslation(
-              "post", post.id, requestedLocale, undefined, publicationId, true,
-            );
+            const translation = translationsMap.get(post.id);
             if (!translation || translation.status !== "published") return null;
             mergedPost = {
               ...post,
@@ -1129,14 +1126,8 @@ function extractRequestedLocale(
               locale: translation.targetLocale,
             };
           }
-          const tagIds = await postsService.getPostTagIds(post.id);
-          const [authors, tagsList] = await Promise.all([
-            authorsService.getPostAuthors(post.id),
-            Promise.all(tagIds.map((tId) => tagsService.findById(tId))),
-          ]);
-          const validTags = tagsList.filter(
-            (t): t is NonNullable<typeof t> => !!t,
-          );
+          const authors = authorsMap.get(post.id) ?? [];
+          const validTags = tagsMap.get(post.id) ?? [];
 
           return buildPublicPostSummaryDto(
             mergedPost,

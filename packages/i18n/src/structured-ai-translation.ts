@@ -45,6 +45,9 @@ function jsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const DANGEROUS_PAYLOAD_REGEX =
+  /<\s*script\b|javascript:|data:text\/html|<\s*iframe\b|onload\s*=|onerror\s*=/i;
+
 export function parseStructuredTranslation(
   raw: string,
   segments: TextSegment[],
@@ -56,6 +59,23 @@ export function parseStructuredTranslation(
       parsed.title.trim().length === 0) {
     throw new Error("AI provider returned an invalid translation");
   }
+
+  // Reject unexpected or injected root keys (security hardening)
+  const allowedRootKeys = new Set(["title", "excerpt", "segments"]);
+  for (const key of Object.keys(parsed)) {
+    if (!allowedRootKeys.has(key)) {
+      throw new Error(`AI provider returned unexpected injected field: ${key}`);
+    }
+  }
+
+  // Reject dangerous script/XSS payloads
+  if (
+    DANGEROUS_PAYLOAD_REGEX.test(parsed.title) ||
+    DANGEROUS_PAYLOAD_REGEX.test(parsed.excerpt)
+  ) {
+    throw new Error("AI translation contains unsafe script content");
+  }
+
   const required = new Set(segments.map((segment) => segment.path));
   const translatedSegments = parsed.segments;
   const keys = Object.keys(translatedSegments);
@@ -71,6 +91,12 @@ export function parseStructuredTranslation(
     const translated = translatedSegments[segment.path];
     if (typeof translated !== "string") {
       throw new Error("AI provider omitted a required text segment");
+    }
+    if (DANGEROUS_PAYLOAD_REGEX.test(translated)) {
+      throw new Error("AI translation segment contains unsafe script content");
+    }
+    if (translated.length > 50000) {
+      throw new Error("AI translation segment exceeds maximum length limit");
     }
     values[segment.path] = translated;
   }

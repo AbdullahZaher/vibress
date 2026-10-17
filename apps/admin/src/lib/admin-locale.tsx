@@ -3,7 +3,13 @@ import {
   type ReactNode,
 } from "react";
 import { getPublicationLocaleContextApi } from "./api/operations";
-import { enDictionary, arDictionary } from "@vibress/i18n";
+import {
+  enDictionary,
+  arDictionary,
+  formatDate as i18nFormatDate,
+  formatNumber as i18nFormatNumber,
+  formatRelativeTime as i18nFormatRelativeTime,
+} from "@vibress/i18n";
 
 type AdminUiLocale = "en" | "ar";
 interface AdminLocaleContext {
@@ -11,6 +17,9 @@ interface AdminLocaleContext {
   setPublicationLanguage: (locale: string) => void;
   refresh: () => Promise<void>;
   tr: (english: string) => string;
+  formatDate: (date: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatNumber: (num: number, options?: Intl.NumberFormatOptions) => string;
+  formatRelativeTime: (date: Date | string | number, baseDate?: Date | string) => string;
 }
 
 const translations: Record<string, string> = {
@@ -379,6 +388,60 @@ const translations: Record<string, string> = {
   "draft": "مسودة",
   "scheduled": "مجدول",
   "Language": "اللغة",
+  "Post Settings": "إعدادات المقال",
+  "Manage publication, metadata and SEO": "إدارة النشر والبيانات الوصفية ومحركات البحث",
+  "URL Slug": "معرّف الرابط",
+  "post-url-slug": "رابط-المقال",
+  "Excerpt": "المقتطف",
+  "Short summary for preview...": "موجز قصير للمعاينة...",
+  "Meta Data": "بيانات الميتا",
+  "Generating...": "جارٍ التوليد...",
+  "Generate AI": "توليد بالذكاء الاصطناعي",
+  "Meta Title": "عنوان الميتا",
+  "Title for Search Engines": "العنوان لمحركات البحث",
+  "Meta Description": "وصف الميتا",
+  "Search engine description...": "الوصف لمحركات البحث...",
+  "Canonical URL": "الرابط الأساسي (Canonical)",
+  "Leave blank to use the default canonical URL.": "اتركه فارغًا لاستخدام الرابط الأساسي التلقائي.",
+  "Publish Date": "تاريخ النشر",
+  "Schedule": "جدولة",
+  "History": "السجل",
+  "Version #": "الإصدار #",
+  "Restore Version": "استعادة هذا الإصدار",
+  "Page Settings": "إعدادات الصفحة",
+  "Manage static page configuration and SEO": "إدارة إعدادات الصفحة الثابتة ومحركات البحث",
+  "page-url-slug": "رابط-الصفحة",
+  "Select Media Asset": "اختيار وسائط",
+  "Choose existing media or upload new files": "اختر من الوسائط الحالية أو ارفع ملفات جديدة",
+  "Search filename...": "ابحث باسم الملف...",
+  "All Types": "جميع الأنواع",
+  "Images": "الصور",
+  "Videos": "مقاطع الفيديو",
+  "Audio": "الملفات الصوتية",
+  "Files": "الملفات",
+  "Uploading...": "جارٍ الرفع...",
+  "Upload File": "رفع ملف",
+  "Upload failed": "فشل الرفع",
+  "Dismiss": "تجاهل",
+  "Loading media assets...": "جارٍ تحميل الوسائط...",
+  "Failed to load media:": "تعذّر تحميل الوسائط:",
+  "No media assets found": "لم يُعثر على وسائط",
+  "Upload images, videos or documents to use them here": "ارفع صورًا أو مقاطع فيديو أو مستندات لاستخدامها هنا",
+  "Click an asset to insert it directly": "انقر فوق عنصر لإدراجه مباشرة",
+  "Add feature image": "إضافة صورة مميزة",
+  "Change": "تغيير",
+  "Alt / Caption": "النص البديل / التسمية",
+  "Unsplash Photo Library": "مكتبة صور Unsplash",
+  "Free": "مجاني",
+  "High-resolution photography curated from Unsplash": "صور عالية الدقة من Unsplash",
+  "Unsplash Integration Not Configured": "لم يتم إعداد تكامل Unsplash",
+  "Get Unsplash API Key": "الحصول على مفتاح Unsplash API",
+  "Search millions of high-resolution photos...": "ابحث في ملايين الصور عالية الدقة...",
+  "Searching Unsplash...": "جارٍ البحث في Unsplash...",
+  "No photos found": "لم يُعثر على صور",
+  "Importing...": "جارٍ الاستيراد...",
+  "Importing photo...": "جارٍ استيراد الصورة...",
+  "Load more photos": "تحميل المزيد من الصور",
 };
 
 // Reuse already certified shared dictionaries for standard UI labels;
@@ -395,8 +458,14 @@ function normalize(locale: string): AdminUiLocale {
 
 const Context = createContext<AdminLocaleContext | null>(null);
 
-export function AdminLocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<AdminUiLocale>("en");
+export function AdminLocaleProvider({
+  children,
+  initialLocale = "en",
+}: {
+  children: ReactNode;
+  initialLocale?: string;
+}) {
+  const [locale, setLocale] = useState<AdminUiLocale>(normalize(initialLocale));
   const setPublicationLanguage = useCallback((value: string) => {
     setLocale(normalize(value));
   }, []);
@@ -442,9 +511,22 @@ export function AdminLocaleProvider({ children }: { children: ReactNode }) {
     locale === "ar"
       ? translations[english] || sharedArabicByEnglish.get(english) || english
       : english, [locale]);
+
+  const formatDate = useCallback((date: Date | string | number, options?: Intl.DateTimeFormatOptions) => {
+    return i18nFormatDate(date, locale === "ar" ? "ar-SA" : "en-US", options);
+  }, [locale]);
+
+  const formatNumber = useCallback((num: number, options?: Intl.NumberFormatOptions) => {
+    return i18nFormatNumber(num, locale === "ar" ? "ar-SA" : "en-US", options);
+  }, [locale]);
+
+  const formatRelativeTime = useCallback((date: Date | string | number, baseDate?: Date | string) => {
+    return i18nFormatRelativeTime(date, locale === "ar" ? "ar-SA" : "en-US", baseDate);
+  }, [locale]);
+
   const value = useMemo(() => ({
-    locale, setPublicationLanguage, refresh, tr,
-  }), [locale, setPublicationLanguage, refresh, tr]);
+    locale, setPublicationLanguage, refresh, tr, formatDate, formatNumber, formatRelativeTime,
+  }), [locale, setPublicationLanguage, refresh, tr, formatDate, formatNumber, formatRelativeTime]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -453,6 +535,12 @@ const defaultAdminLocaleContext: AdminLocaleContext = {
   setPublicationLanguage: () => {},
   refresh: async () => {},
   tr: (english: string) => english,
+  formatDate: (date: Date | string | number, options?: Intl.DateTimeFormatOptions) =>
+    i18nFormatDate(date, "en-US", options),
+  formatNumber: (num: number, options?: Intl.NumberFormatOptions) =>
+    i18nFormatNumber(num, "en-US", options),
+  formatRelativeTime: (date: Date | string | number, baseDate?: Date | string) =>
+    i18nFormatRelativeTime(date, "en-US", baseDate),
 };
 
 export function useAdminLocale(): AdminLocaleContext {

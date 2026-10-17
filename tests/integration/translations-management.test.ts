@@ -314,18 +314,47 @@ describe("Translation Management & Editorial UX API Integration Suite", () => {
       expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
     });
 
-    it("does not accept a caller-provided publication ID in the locale update contract", async () => {
+    it("guards changing the primary language of a populated publication without confirmation", async () => {
       const res = await app.inject({
         method: "PUT",
         url: "/api/admin/v1/locales",
         headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
         payload: {
-          publicationId: "pub_foreign",
-          primaryLocale: "en",
-          enabledLocales: ["en", "ar-SA"],
+          primaryLocale: "ar",
+          enabledLocales: ["ar", "en"],
         },
       });
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION");
+    });
+
+    it("allows changing the primary language of a populated publication when explicitly confirmed", async () => {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          primaryLocale: "ar",
+          enabledLocales: ["ar", "en"],
+          confirmPrimaryLocaleChange: true,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().primaryLocale).toBe("ar");
+
+      // Restore back to English primary
+      const restoreRes = await app.inject({
+        method: "PUT",
+        url: "/api/admin/v1/locales",
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
+        payload: {
+          primaryLocale: "en",
+          enabledLocales: ["en", "ar-SA"],
+          confirmPrimaryLocaleChange: true,
+        },
+      });
+      expect(restoreRes.statusCode).toBe(200);
+      expect(restoreRes.json().primaryLocale).toBe("en");
     });
 
     it("guards disabling a language with published URLs unless confirmed via confirmPublishedUrlRetirement", async () => {

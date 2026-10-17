@@ -20,6 +20,7 @@ export function updatePublicationLocalesApi(input: {
   primaryLocale: string;
   enabledLocales: string[];
   confirmPublishedUrlRetirement?: boolean | undefined;
+  confirmPrimaryLocaleChange?: boolean | undefined;
 }): Promise<PublicationLocaleConfiguration> {
   return apiRequest("/locales", {
     method: "PUT",

@@ -63,7 +63,8 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
       return;
     }
     const removed = config.enabledLocales.filter((locale) => !selected.includes(locale));
-    if ((removed.length > 0 || primary !== config.primaryLocale) &&
+    const changesPrimary = primary !== config.primaryLocale;
+    if ((removed.length > 0 || changesPrimary) &&
         !window.confirm(label(
           "Changing languages may affect existing content, translations and public URLs. Continue?",
           "قد يؤثر تغيير اللغات في المحتوى والترجمات والروابط المنشورة. هل تريد المتابعة؟",
@@ -77,6 +78,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
         primaryLocale: primary,
         enabledLocales: selected,
         confirmPublishedUrlRetirement: removed.length > 0,
+        confirmPrimaryLocaleChange: changesPrimary,
       });
       setConfig(result);
       setPrimary(result.primaryLocale);
@@ -85,6 +87,41 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
       window.dispatchEvent(new Event("vibress:locales-updated"));
       onSaved?.(result.primaryLocale);
     } catch (cause) {
+      if (
+        (cause instanceof ApiError && cause.code === "PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION") ||
+        (cause instanceof Error && cause.message.includes("content migration"))
+      ) {
+        const confirmed = window.confirm(
+          label(
+            "Changing the primary language of a populated publication will reassign the default language for existing content. Do you want to proceed and change the primary language?",
+            "سيؤدي تغيير اللغة الأساسية لمنشور يحتوي على محتوى إلى إعادة تعيين اللغة الافتراضية للمحتوى الحالي. هل تريد المتابعة وتغيير اللغة الأساسية؟",
+          ),
+        );
+        if (confirmed) {
+          try {
+            const retryResult = await updatePublicationLocalesApi({
+              primaryLocale: primary,
+              enabledLocales: selected,
+              confirmPublishedUrlRetirement: removed.length > 0,
+              confirmPrimaryLocaleChange: true,
+            });
+            setConfig(retryResult);
+            setPrimary(retryResult.primaryLocale);
+            setSelected(retryResult.enabledLocales);
+            setSuccess(label("Languages saved", "تم حفظ اللغات"));
+            window.dispatchEvent(new Event("vibress:locales-updated"));
+            onSaved?.(retryResult.primaryLocale);
+            return;
+          } catch (retryCause) {
+            setError(
+              retryCause instanceof Error
+                ? retryCause.message
+                : label("Language change failed", "تعذّر تغيير اللغات"),
+            );
+            return;
+          }
+        }
+      }
       if (
         (cause instanceof ApiError && cause.code === "PUBLISHED_LOCALE_REQUIRES_REVIEW") ||
         (cause instanceof Error && cause.message.includes("Review published translated URLs"))
@@ -101,6 +138,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
               primaryLocale: primary,
               enabledLocales: selected,
               confirmPublishedUrlRetirement: true,
+              confirmPrimaryLocaleChange: changesPrimary,
             });
             setConfig(retryResult);
             setPrimary(retryResult.primaryLocale);
@@ -144,19 +182,27 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
               {label("Primary language", "اللغة الأساسية")}
             </label>
             <select id="publication-primary-language" value={primary}
-              onChange={(e) => setPrimary(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPrimary(next);
+                if (!selected.includes(next)) {
+                  setSelected((current) => [...current, next]);
+                }
+              }}
               disabled={working || config.needsReconciliation}
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {selected.filter((code) =>
-                ["en", "ar"].includes(code.split("-")[0] || "") ||
-                code === config.primaryLocale,
-              ).map((code) => <option key={code} value={code}>
+              {Array.from(new Set([
+                "en",
+                "ar",
+                config.primaryLocale,
+                ...selected.filter((code) => ["en", "ar"].includes(code.split("-")[0] || "")),
+              ])).map((code) => <option key={code} value={code}>
                 {nativeLanguage(code)} ({code})
               </option>)}
             </select>
             <p className="text-xs text-muted-foreground">
-              {label("English and Arabic are the currently supported primary Admin languages. Changing the primary of a populated site requires a separate content migration.",
-                "الإنجليزية والعربية هما اللغتان الأساسيتان المدعومتان حاليًا للوحة الإدارة. ويتطلب تغيير لغة موقع يحوي محتوى عملية ترحيل مستقلة.")}
+              {label("English and Arabic are the currently certified primary Admin languages. Changing the primary language will update the default language for existing content.",
+                "الإنجليزية والعربية هما اللغتان الأساسيتان المدعومتان حاليًا للوحة الإدارة. سيؤدي تغيير اللغة الأساسية إلى تحديث اللغة الافتراضية للمحتوى الحالي.")}
             </p>
           </div>
           <fieldset className="space-y-2">

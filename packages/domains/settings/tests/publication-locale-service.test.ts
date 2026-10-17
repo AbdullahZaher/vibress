@@ -238,7 +238,7 @@ describe("PublicationLocaleService — single language by default", () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
-  it("blocks changing a populated publication's primary language", async () => {
+  it("blocks changing a populated publication's primary language without confirmation", async () => {
     authored.add("pub_a");
     await expect(service.updateConfiguration("pub_a", {
       primaryLocale: "ar", enabledLocales: ["ar"],
@@ -246,6 +246,15 @@ describe("PublicationLocaleService — single language by default", () => {
       code: "PRIMARY_LOCALE_CHANGE_REQUIRES_MIGRATION",
     });
     expect(publications.get("pub_a")?.primaryLocale).toBe("en");
+  });
+
+  it("allows changing a populated publication's primary language when explicitly confirmed", async () => {
+    authored.add("pub_a");
+    const updated = await service.updateConfiguration("pub_a", {
+      primaryLocale: "ar", enabledLocales: ["ar"], confirmPrimaryLocaleChange: true,
+    }, "owner");
+    expect(updated.primaryLocale).toBe("ar");
+    expect(publications.get("pub_a")?.primaryLocale).toBe("ar");
   });
 
   it("can add a secondary locale without altering the source language of stored content", async () => {

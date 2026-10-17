@@ -7,10 +7,10 @@ import {
   pages,
   tags,
   contentEntries,
-  contentModels,
   contentTranslations,
+  installation,
 } from "@vibress/database";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   canonicalPublicationLocale,
   type PublicationLocaleRepository,
@@ -48,19 +48,19 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
     const existingPost = await db
       .select({ id: posts.id })
       .from(posts)
-      .where(eq(posts.publicationId, publicationId))
+      .where(and(eq(posts.publicationId, publicationId), isNull(posts.deletedAt)))
       .limit(1);
     if (existingPost.length) return true;
     const existingPage = await db
       .select({ id: pages.id })
       .from(pages)
-      .where(eq(pages.publicationId, publicationId))
+      .where(and(eq(pages.publicationId, publicationId), isNull(pages.deletedAt)))
       .limit(1);
     if (existingPage.length) return true;
 
     // Primary-language changes can also relabel taxonomy terms and
-    // localizable custom-model data. Metadata-only seeded newsletters do
-    // not count as authored content.
+    // localizable custom-model data entries. Metadata-only schemas (contentModels)
+    // and newsletters do not count as authored content.
     const existingTag = await db
       .select({ id: tags.id })
       .from(tags)
@@ -72,13 +72,17 @@ export class DrizzlePublicationLocaleRepository implements PublicationLocaleRepo
       .from(contentEntries)
       .where(eq(contentEntries.publicationId, publicationId))
       .limit(1);
-    if (existingEntry.length) return true;
-    const existingModel = await db
-      .select({ id: contentModels.id })
-      .from(contentModels)
-      .where(eq(contentModels.publicationId, publicationId))
+    return existingEntry.length > 0;
+  }
+
+  async isInstallationCompleted(): Promise<boolean> {
+    const db = getDb();
+    const rows = await db
+      .select({ installed: installation.installed })
+      .from(installation)
+      .where(eq(installation.id, "singleton"))
       .limit(1);
-    return existingModel.length > 0;
+    return rows[0]?.installed === true;
   }
 
   async listPublicTranslationLocales(publicationId: string): Promise<string[]> {

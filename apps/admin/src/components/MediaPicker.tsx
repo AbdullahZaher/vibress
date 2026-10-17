@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listMediaApi, uploadMediaApi, ApiMediaAsset } from "../lib/api";
+import { useAdminLocale } from "../lib/admin-locale";
 import {
   X,
   Search,
@@ -77,6 +78,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
   allowedTypes,
   onClose,
 }) => {
+  const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState<string>(
@@ -178,7 +180,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-200">
-      <div role="dialog" aria-modal="true" aria-label="Select Media Asset" className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
+      <div role="dialog" aria-modal="true" aria-label={tr("Select Media Asset")} className="studio-glassy-modal bg-card/90 dark:bg-[#1a1c20]/95 backdrop-blur-2xl border border-border/80 dark:border-white/10 rounded-2xl w-[800px] max-w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground transition-all">
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-border/60 dark:border-white/10">
           <div className="flex items-center gap-2.5">
@@ -187,10 +189,10 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
             </div>
             <div>
               <h3 className="text-base font-semibold text-foreground">
-                Select Media Asset
+                {tr("Select Media Asset")}
               </h3>
               <p className="text-xs text-muted-foreground">
-                Choose existing media or upload new files
+                {tr("Choose existing media or upload new files")}
               </p>
             </div>
           </div>
@@ -199,7 +201,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               type="button"
               onClick={onClose}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 dark:hover:bg-white/10 transition"
-              aria-label="Close"
+              aria-label={tr("Close")}
             >
               <X className="w-4 h-4" />
             </button>
@@ -213,11 +215,11 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               <Search className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search filename..."
+                placeholder={tr("Search filename...")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full ps-9 pe-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-                aria-label="Search media"
+                aria-label={tr("Search filename...")}
               />
             </div>
 
@@ -226,13 +228,13 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
                 className="px-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                aria-label="Filter by media type"
+                aria-label={tr("Filter by media type")}
               >
-                <option value="all">All Types</option>
-                <option value="image">Images</option>
-                <option value="video">Videos</option>
-                <option value="audio">Audio</option>
-                <option value="file">Files</option>
+                <option value="all">{tr("All Types")}</option>
+                <option value="image">{tr("Images")}</option>
+                <option value="video">{tr("Videos")}</option>
+                <option value="audio">{tr("Audio")}</option>
+                <option value="file">{tr("Files")}</option>
               </select>
             )}
           </div>
@@ -241,12 +243,12 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
             {uploadMutation.isPending ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Uploading...</span>
+                <span>{tr("Uploading...")}</span>
               </>
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5" />
-                <span>Upload File</span>
+                <span>{tr("Upload File")}</span>
               </>
             )}
             <input
@@ -265,7 +267,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               onClick={() => setUploadError(null)}
               className="text-xs underline font-medium"
             >
-              Dismiss
+              {tr("Dismiss")}
             </button>
           </div>
         )}
@@ -275,13 +277,13 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
           {isLoading && (
             <div className="py-16 flex flex-col items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-sm">Loading media assets...</span>
+              <span className="text-sm">{tr("Loading media assets...")}</span>
             </div>
           )}
 
           {isError && (
             <div className="py-12 text-center text-destructive text-sm">
-              Failed to load media: {(error as Error).message}
+              {tr("Failed to load media:")} {(error as Error).message}
             </div>
           )}
 
@@ -292,10 +294,10 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  No media assets found
+                  {tr("No media assets found")}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload images, videos or documents to use them here
+                  {tr("Upload images, videos or documents to use them here")}
                 </p>
               </div>
             </div>
@@ -365,8 +367,8 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
         <div className="px-6 py-3.5 border-t border-border/60 dark:border-white/10 flex justify-between items-center bg-muted/30 dark:bg-white/[0.02]">
           <span className="text-xs text-muted-foreground">
             {multiple
-              ? `${selectedAssetIds.size} item(s) selected`
-              : "Click an asset to insert it directly"}
+              ? `${selectedAssetIds.size} ${tr("item(s) selected")}`
+              : tr("Click an asset to insert it directly")}
           </span>
 
           {multiple && (
@@ -375,7 +377,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
               disabled={selectedAssetIds.size === 0}
               className="px-4 py-1.5 bg-primary text-primary-foreground font-medium rounded-lg text-xs hover:opacity-90 disabled:opacity-50 transition"
             >
-              Select {selectedAssetIds.size} Asset(s)
+              {tr("Select")} {selectedAssetIds.size} {tr("Asset(s)")}
             </button>
           )}
         </div>

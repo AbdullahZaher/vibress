@@ -5,6 +5,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { ApiMediaAsset } from "../../lib/api";
+import { useAdminLocale } from "../../lib/admin-locale";
 import {
   StudioMediaFloatingToolbar,
   ImageMetadataPopover,
@@ -31,6 +32,7 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
   onUpdateAltAndCaption,
   disabled = false,
 }) => {
+  const { tr } = useAdminLocale();
   const [altText, setAltText] = useState(featureImageAlt);
   const [caption, setCaption] = useState(featureImageCaption);
 
@@ -54,10 +56,10 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
           disabled={disabled}
           onClick={onOpenMediaPicker}
           className="group inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg border border-dashed border-border/70 hover:border-border hover:bg-muted/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary/30"
-          aria-label="Add feature image from media library"
+          aria-label={tr("Add feature image")}
         >
           <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-primary transition-colors" />
-          <span>Add feature image</span>
+          <span>{tr("Add feature image")}</span>
         </button>
 
         <button
@@ -88,11 +90,11 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
         {/* Floating Action Bar (reusing StudioMediaFloatingToolbar) */}
         <StudioMediaFloatingToolbar
           onChange={onOpenMediaPicker}
-          changeLabel="Change"
-          changeTitle="Change image from library"
+          changeLabel={tr("Change")}
+          changeTitle={tr("Change")}
           onUnsplash={onOpenUnsplashModal}
-          metadataLabel="Alt / Caption"
-          metadataTitle="Edit alt text and caption"
+          metadataLabel={tr("Alt / Caption")}
+          metadataTitle={tr("Alt / Caption")}
           metadataContent={
             <ImageMetadataPopover
               alt={altText}
@@ -106,7 +108,7 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
             />
           }
           onDelete={onRemoveFeatureImage}
-          deleteTitle="Remove feature image"
+          deleteTitle={tr("Delete")}
           disabled={disabled}
         />
       </div>

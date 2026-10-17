@@ -51,6 +51,64 @@ describe("structured AI translations", () => {
     }), segments)).toThrow();
   });
 
+  it("rejects injected root keys that could attempt privilege escalation or state modification", () => {
+    const segments = collectTranslatableText(original);
+    const validSegments = Object.fromEntries(segments.map(s => [s.path, "مترجم"]));
+    
+    // Injected status
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: validSegments, status: "published",
+    }), segments)).toThrow(/unexpected injected field/i);
+
+    // Injected publicationId
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: validSegments, publicationId: "pub_hacked",
+    }), segments)).toThrow(/unexpected injected field/i);
+
+    // Injected author
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: validSegments, authorId: "usr_attacker",
+    }), segments)).toThrow(/unexpected injected field/i);
+  });
+
+  it("rejects dangerous script payloads and HTML execution vectors in title, excerpt, and segments", () => {
+    const segments = collectTranslatableText(original);
+    const validSegments = Object.fromEntries(segments.map(s => [s.path, "مترجم"]));
+
+    // Script tag in title
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "<script>alert('xss')</script>", excerpt: "وصف", segments: validSegments,
+    }), segments)).toThrow(/unsafe script content/i);
+
+    // javascript: URI in excerpt
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "javascript:evil()", segments: validSegments,
+    }), segments)).toThrow(/unsafe script content/i);
+
+    // iframe in segment
+    const maliciousSegments = { ...validSegments, [segments[0]!.path]: "<iframe src='evil.com'></iframe>" };
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: maliciousSegments,
+    }), segments)).toThrow(/unsafe script content/i);
+
+    // event handler injection
+    const handlerSegments = { ...validSegments, [segments[0]!.path]: "Text with <img src=x onerror=alert(1)>" };
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: handlerSegments,
+    }), segments)).toThrow(/unsafe script content/i);
+  });
+
+  it("rejects oversized translated segments exceeding security limits", () => {
+    const segments = collectTranslatableText(original);
+    const oversizedSegments = {
+      ...Object.fromEntries(segments.map(s => [s.path, "مترجم"])),
+      [segments[0]!.path]: "a".repeat(50001),
+    };
+    expect(() => parseStructuredTranslation(JSON.stringify({
+      title: "عنوان", excerpt: "وصف", segments: oversizedSegments,
+    }), segments)).toThrow(/exceeds maximum length/i);
+  });
+
   it("enforces nesting and text length bounds", () => {
     expect(() => collectTranslatableText({ text: "x".repeat(80001) })).toThrow();
     let nested: Record<string, unknown> = { text: "leaf" };

@@ -76,21 +76,17 @@ export class SearchService {
     limit = 20,
     offset = 0,
     publicationId?: string,
+    locale?: string,
   ): Promise<{ results: SearchResult[]; total: number }> {
     const start = performance.now();
     const sanitized = sanitizeSearchQuery(q);
-    const result = publicationId
-      ? await this.repo.query(
-          sanitized,
-          Math.min(Math.max(limit, 1), 50),
-          Math.max(offset, 0),
-          publicationId,
-        )
-      : await this.repo.query(
-          sanitized,
-          Math.min(Math.max(limit, 1), 50),
-          Math.max(offset, 0),
-        );
+    const result = await this.repo.query(
+      sanitized,
+      Math.min(Math.max(limit, 1), 50),
+      Math.max(offset, 0),
+      publicationId,
+      locale,
+    );
     const durationMs = Math.round(performance.now() - start);
 
     domainEvents.emit("search.queried", {
@@ -100,6 +96,7 @@ export class SearchService {
       isZeroResult: result.total === 0,
       timestamp: new Date().toISOString(),
       publicationId,
+      locale,
     });
 
     return result;
@@ -109,11 +106,13 @@ export class SearchService {
     if (!doc.title.trim()) return;
 
     const pubId = publicationId || doc.publicationId || "pub_default";
+    const loc = doc.locale || "en";
 
     // Normalize Arabic text in title and bodyText for high-recall index matching
     const normalizedDoc: SearchDocumentInput = {
       ...doc,
       publicationId: pubId,
+      locale: loc,
       title: isArabicText(doc.title) ? normalizeArabicText(doc.title) : doc.title,
       bodyText: doc.bodyText && isArabicText(doc.bodyText) ? normalizeArabicText(doc.bodyText) : doc.bodyText,
     };
@@ -122,13 +121,19 @@ export class SearchService {
     domainEvents.emit("search.indexed", {
       entityType: doc.entityType,
       entityId: doc.entityId,
+      locale: loc,
       publicationId: pubId,
     });
   }
 
-  async removeDocument(entityType: string, entityId: string, publicationId?: string): Promise<void> {
-    await this.repo.remove(entityType, entityId, publicationId);
-    domainEvents.emit("search.removed", { entityType, entityId, publicationId });
+  async removeDocument(
+    entityType: string,
+    entityId: string,
+    publicationId?: string,
+    locale?: string,
+  ): Promise<void> {
+    await this.repo.remove(entityType, entityId, publicationId, locale);
+    domainEvents.emit("search.removed", { entityType, entityId, publicationId, locale });
   }
 
   /**

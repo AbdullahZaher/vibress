@@ -78,6 +78,12 @@ function createCspResponse(
     });
   }
 
+  if (options?.extraHeaders) {
+    for (const [k, v] of Object.entries(options.extraHeaders)) {
+      response.headers.set(k, v);
+    }
+  }
+
   response.headers.set("Content-Security-Policy", cspHeader);
   response.headers.set("x-nonce", nonce);
   return response;
@@ -113,10 +119,105 @@ function encodeSiteAuthScope(publicationId: string): string {
   return Buffer.from(publicationId, "utf8").toString("base64url");
 }
 
+interface CachedSiteSettings {
+  data: any;
+  publicationId?: string | undefined;
+  timestamp: number;
+}
+const siteSettingsCache = new Map<string, CachedSiteSettings>();
+const CACHE_TTL_MS = 10_000;
+
+export function _clearSiteSettingsCache(): void {
+  siteSettingsCache.clear();
+}
+
+async function fetchSiteSettings(host?: string): Promise<{ data: any; publicationId?: string | undefined } | null> {
+  const cacheKey = host || "default";
+  const now = Date.now();
+  const cached = siteSettingsCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return { data: cached.data, publicationId: cached.publicationId };
+  }
+
+  try {
+    const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        ...(host ? { "x-forwarded-host": host } : {}),
+      },
+    });
+
+    if (!siteRes.ok) {
+      return cached ? { data: cached.data, publicationId: cached.publicationId } : null;
+    }
+
+    const data = await siteRes.json();
+    const publicationId = siteRes.headers.get("x-vibress-publication-id") || undefined;
+    siteSettingsCache.set(cacheKey, { data, publicationId, timestamp: now });
+    return { data, publicationId };
+  } catch {
+    return cached ? { data: cached.data, publicationId: cached.publicationId } : null;
+  }
+}
+
+async function verifySiteAuth(
+  token: string | undefined | null,
+  publicationId: string,
+): Promise<boolean> {
+  if (!token || typeof token !== "string") return false;
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "v2") return false;
+
+  const timestampStr = parts[1];
+  const scope = parts[2];
+  const signature = parts[3];
+  if (!timestampStr || !scope || !signature || !/^[a-f0-9]{64}$/i.test(signature))
+    return false;
+
+  const timestamp = parseInt(timestampStr, 10);
+  if (Number.isNaN(timestamp) || !/^\d+$/.test(timestampStr)) return false;
+
+  const now = Date.now();
+  if (
+    timestamp > now + 300_000 ||
+    now - timestamp > 30 * 24 * 60 * 60 * 1000
+  ) {
+    return false;
+  }
+
+  const expectedScope = encodeSiteAuthScope(publicationId);
+  if (scope !== expectedScope) return false;
+
+  try {
+    const secret =
+      process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sigBuffer = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      enc.encode(`v2:${timestampStr}:${scope}`),
+    );
+    const expectedHex = Array.from(new Uint8Array(sigBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return expectedHex.toLowerCase() === signature.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Site Privacy enforcement
   const isProtectedPath =
     !pathname.startsWith("/_next") &&
     !pathname.startsWith("/api") &&
@@ -127,78 +228,18 @@ export async function middleware(request: NextRequest) {
     pathname !== "/robots.txt" &&
     pathname !== "/sitemap.xml";
 
-  async function verifySiteAuth(
-    token: string | undefined | null,
-    publicationId: string,
-  ): Promise<boolean> {
-    if (!token || typeof token !== "string") return false;
-    const parts = token.split(".");
-    if (parts.length !== 4 || parts[0] !== "v2") return false;
-
-    const timestampStr = parts[1];
-    const scope = parts[2];
-    const signature = parts[3];
-    if (!timestampStr || !scope || !signature || !/^[a-f0-9]{64}$/i.test(signature))
-      return false;
-
-    const timestamp = parseInt(timestampStr, 10);
-    if (Number.isNaN(timestamp) || !/^\d+$/.test(timestampStr)) return false;
-
-    const now = Date.now();
-    if (
-      timestamp > now + 300_000 ||
-      now - timestamp > 30 * 24 * 60 * 60 * 1000
-    ) {
-      return false;
-    }
-
-    const expectedScope = encodeSiteAuthScope(publicationId);
-    if (scope !== expectedScope) return false;
-
-    try {
-      const secret =
-        process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
-      );
-      const sigBuffer = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        enc.encode(`v2:${timestampStr}:${scope}`),
-      );
-      const expectedHex = Array.from(new Uint8Array(sigBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-      return expectedHex.toLowerCase() === signature.toLowerCase();
-    } catch {
-      return false;
-    }
-  }
-
   if (isProtectedPath) {
     try {
       const hostHeader = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
-      const siteRes = await fetch(`${API_BASE}/api/content/v1/site`, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          ...(hostHeader ? { "x-forwarded-host": hostHeader } : {}),
-        },
-      });
+      const sitePayload = await fetchSiteSettings(hostHeader);
 
-      if (!siteRes.ok) {
+      if (!sitePayload) {
         return privateSiteRedirect(request, "privacy_unavailable");
       }
 
-      const siteData = await siteRes.json();
+      const siteData = sitePayload.data;
       if (siteData.security?.isPrivate) {
-        const publicationId = siteRes.headers.get("x-vibress-publication-id");
+        const publicationId = sitePayload.publicationId;
         const hasSiteAuth = publicationId
           ? await verifySiteAuth(
               request.cookies.get("vb_site_auth")?.value,
@@ -320,15 +361,9 @@ export async function middleware(request: NextRequest) {
       request.headers.get("host") || undefined;
     let localePolicy: { primary: string; enabled: string[] };
     try {
-      const response = await fetch(`${API_BASE}/api/content/v1/site`, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          ...(host ? { "x-forwarded-host": host } : {}),
-        },
-      });
-      if (!response.ok) throw new Error("Publication locale unavailable");
-      const data: unknown = await response.json();
+      const sitePayload = await fetchSiteSettings(host);
+      if (!sitePayload) throw new Error("Publication locale unavailable");
+      const data: unknown = sitePayload.data;
       if (!data || typeof data !== "object" || !("site" in data) ||
           !data.site || typeof data.site !== "object" ||
           !("locale" in data.site) || typeof data.site.locale !== "string" ||
@@ -352,6 +387,9 @@ export async function middleware(request: NextRequest) {
     let isLocalizedPath = false;
 
     if (prefix) {
+      const isExactLocaleTag =
+        /^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(prefix) ||
+        /^[a-z]{2,3}-(?:hans|hant|arab|latn|cyrl)$/i.test(prefix);
       const candidates = localePolicy.enabled.filter((code) => {
         const sameBase = code.split("-")[0]?.toLowerCase() === prefix;
         const exact = code.toLowerCase() === prefix;
@@ -363,9 +401,12 @@ export async function middleware(request: NextRequest) {
       if (candidates.length === 1) {
         resolved = candidates[0]!;
         isLocalizedPath = true;
-      } else if (["en", "ar", "fr", "de", "es", "fa", "ur", "tr", "he", "ja", "pt", "zh"]
-        .includes(prefix.split("-")[0] || "")) {
-        // A known but disabled locale must never render via public fallback.
+      } else if (
+        isExactLocaleTag &&
+        ["en", "ar", "fr", "de", "es", "fa", "ur", "tr", "he", "ja", "pt", "zh", "ru", "it", "nl", "pl", "ko", "hi", "sv", "da", "fi", "no"]
+          .includes(prefix.split("-")[0] || "")
+      ) {
+        // A genuine but disabled locale must never render via public fallback.
         return localizedErrorResponse(404, "Not Found");
       }
     }

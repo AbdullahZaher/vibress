@@ -3,18 +3,14 @@ import { ThemePageProps } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { CodeCopyHandler } from "../../../components/reader/CodeCopyHandler";
 import { ImageLightbox } from "../../../components/reader/ImageLightbox";
+import { buildPageJsonLd, safeJsonLdScript } from "../../../lib/seo-helpers";
 
 export async function Page(props: ThemePageProps) {
   const pageObj = props.page;
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: pageObj.title,
-    description: pageObj.excerpt || pageObj.seo?.description,
-    url: pageObj.seo?.canonicalUrl,
-    datePublished: pageObj.publishedAt,
-    dateModified: pageObj.updatedAt,
-  };
+  const jsonLd = buildPageJsonLd(pageObj, props.site.locale, {
+    primaryLocale: props.site.primaryLocale,
+    enabledLocales: props.site.enabledLocales,
+  });
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -26,7 +22,7 @@ export async function Page(props: ThemePageProps) {
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
-              __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+              __html: safeJsonLdScript(jsonLd),
             }}
           />
 

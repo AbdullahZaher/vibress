@@ -115,6 +115,7 @@ export const searchDocuments = pgTable(
       .references(() => publications.id, { onDelete: "cascade" }),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
+    locale: text("locale").notNull().default("en"),
     title: text("title").notNull(),
     bodyText: text("body_text").notNull().default(""),
     slug: text("slug").notNull().default(""),
@@ -126,10 +127,16 @@ export const searchDocuments = pgTable(
   },
   (table) => {
     return {
-      pubEntityIdx: uniqueIndex("search_documents_pub_entity_idx").on(
+      pubEntityLocaleIdx: uniqueIndex("search_documents_pub_entity_locale_idx").on(
         table.publicationId,
         table.entityType,
         table.entityId,
+        table.locale,
+      ),
+      pubLocaleSearchableIdx: index("search_documents_pub_locale_searchable_idx").on(
+        table.publicationId,
+        table.locale,
+        table.searchable,
       ),
       pubSearchableIdx: index("search_documents_pub_searchable_idx").on(
         table.publicationId,

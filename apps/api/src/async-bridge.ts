@@ -207,19 +207,23 @@ function sanitizeForAnalytics(
  * Content source for the search index rebuild: only published, public
  * posts/pages/tags are indexed. Restricted content is never indexed.
  */
+import { getDb, contentTranslations, eq, and } from "@vibress/database";
+
 export class SearchRebuildContentSource {
   private postRepo = new DrizzlePostRepository();
   private pageRepo = new DrizzlePageRepository();
   private tagRepo = new DrizzleTagRepository();
 
-  async listIndexableContent(): Promise<SearchDocumentInput[]> {
+  async listIndexableContent(publicationId?: string): Promise<SearchDocumentInput[]> {
     const docs: SearchDocumentInput[] = [];
     const siteUrl = getSiteUrl();
+    const db = getDb();
 
     // Posts: published + public only
     const { posts } = await this.postRepo.list({
       publishedOnly: true,
       limit: 10000,
+      ...(publicationId ? { publicationId } : {}),
     });
     for (const post of posts) {
       if (post.visibility !== "public") continue;
@@ -230,17 +234,46 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "post",
         entityId: post.id,
+        locale: (post as any).locale || "en",
         title: post.title,
         bodyText,
         slug: post.slug,
         url: `${siteUrl}/posts/${post.slug}`,
+        publicationId: post.publicationId,
       });
+
+      // Index published translations for this post
+      const postTranslations = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, "post"),
+            eq(contentTranslations.contentId, post.id),
+            eq(contentTranslations.status, "published"),
+            ...(publicationId ? [eq(contentTranslations.publicationId, publicationId)] : []),
+          ),
+        );
+
+      for (const tr of postTranslations) {
+        docs.push({
+          entityType: "post",
+          entityId: post.id,
+          locale: tr.targetLocale,
+          title: tr.title,
+          bodyText: renderStudioDocumentToPlainText(tr.content as any).slice(0, 2000),
+          slug: tr.slug,
+          url: `${siteUrl}/${tr.targetLocale}/posts/${tr.slug}`,
+          publicationId: tr.publicationId,
+        });
+      }
     }
 
     // Pages: published + public only
     const { pages } = await this.pageRepo.list({
       publishedOnly: true,
       limit: 10000,
+      ...(publicationId ? { publicationId } : {}),
     });
     for (const page of pages) {
       if (page.visibility !== "public") continue;
@@ -251,22 +284,52 @@ export class SearchRebuildContentSource {
       docs.push({
         entityType: "page",
         entityId: page.id,
+        locale: (page as any).locale || "en",
         title: page.title,
         bodyText,
         slug: page.slug,
         url: `${siteUrl}/${page.slug}`,
+        publicationId: page.publicationId,
       });
+
+      // Index published translations for this page
+      const pageTranslations = await db
+        .select()
+        .from(contentTranslations)
+        .where(
+          and(
+            eq(contentTranslations.contentType, "page"),
+            eq(contentTranslations.contentId, page.id),
+            eq(contentTranslations.status, "published"),
+            ...(publicationId ? [eq(contentTranslations.publicationId, publicationId)] : []),
+          ),
+        );
+
+      for (const tr of pageTranslations) {
+        docs.push({
+          entityType: "page",
+          entityId: page.id,
+          locale: tr.targetLocale,
+          title: tr.title,
+          bodyText: renderStudioDocumentToPlainText(tr.content as any).slice(0, 2000),
+          slug: tr.slug,
+          url: `${siteUrl}/${tr.targetLocale}/pages/${tr.slug}`,
+          publicationId: tr.publicationId,
+        });
+      }
     }
 
     // Tags
-    const tags = await this.tagRepo.listAll();
+    const tags = await this.tagRepo.listAll(publicationId);
     for (const tag of tags) {
       docs.push({
         entityType: "tag",
         entityId: tag.id,
+        locale: "en",
         title: tag.name,
         slug: tag.slug,
         url: `${siteUrl}/tags/${tag.slug}`,
+        publicationId: tag.publicationId,
       });
     }
 

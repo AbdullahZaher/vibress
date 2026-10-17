@@ -58,7 +58,7 @@ describe("First-run setup", () => {
     } catch {}
 
     await pool.query(`
-      TRUNCATE TABLE audit_events, sessions, role_permissions, user_roles, permissions, roles, users, settings, installation CASCADE;
+      TRUNCATE TABLE audit_events, sessions, role_permissions, user_roles, permissions, roles, users, settings, installation, posts, pages, tags, content_entries, content_models CASCADE;
     `);
     // Roles + permissions only — no dev users, fresh installation state.
     await seedDatabase({ skipDevUsers: true });
@@ -145,7 +145,7 @@ describe("First-run setup", () => {
   async function resetState() {
     const pool = getDbPool();
     await pool.query(`
-      TRUNCATE TABLE audit_events, sessions, user_roles, users, settings CASCADE;
+      TRUNCATE TABLE audit_events, sessions, user_roles, users, settings, posts, pages, tags, content_entries, content_models CASCADE;
     `);
     await pool.query("DELETE FROM publication_locales WHERE publication_id = 'pub_default'");
     await pool.query("UPDATE publications SET primary_locale = 'en' WHERE id = 'pub_default'");

@@ -14,7 +14,7 @@ import { SearchDomainError } from "@vibress/search";
 import { AnalyticsDomainError } from "@vibress/analytics";
 import { getConfig } from "@vibress/config";
 
-type SearchQuery = { q?: string; limit?: string; offset?: string };
+type SearchQuery = { q?: string; limit?: string; offset?: string; locale?: string };
 type AnalyticsQuery = { from?: string; to?: string; metricName?: string };
 const sendError = (
   reply: FastifyReply,
@@ -63,12 +63,14 @@ export async function publicSearchRoutes(fastify: FastifyInstance) {
       const q = typeof query.q === "string" ? query.q : "";
       const limit = query.limit ? parseInt(query.limit, 10) : 20;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
+      const locale = typeof query.locale === "string" && query.locale.trim() ? query.locale.trim() : undefined;
       try {
         const result = await searchService.search(
           q,
           limit,
           offset,
           req.publicationContext?.publicationId,
+          locale,
         );
         return reply.status(200).send(result);
       } catch (err) {

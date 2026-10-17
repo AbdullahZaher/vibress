@@ -98,16 +98,41 @@ export async function GET() {
   const [tags, authors] = await Promise.all([
     ContentApiClient.getTags(), ContentApiClient.getAuthors(),
   ]);
-  const baseUrls = [
-    `${siteUrl}/`,
-    ...(tags ?? []).map((tag) => `${siteUrl}/tags/${encodeURIComponent(tag.slug)}`),
-    ...(authors ?? []).map((author) => `${siteUrl}/authors/${encodeURIComponent(author.slug)}`),
+
+  const homeAlternates = new Map<string, string>();
+  if (enabled.length > 1) {
+    for (const loc of enabled) {
+      const pfx = getLocalePrefix(loc, primary, enabled);
+      homeAlternates.set(loc, `${siteUrl}${pfx ? pfx : ""}/`);
+    }
+  }
+
+  const homeEntries: SitemapEntry[] = enabled.length > 1
+    ? Array.from(homeAlternates.values()).map((loc) => ({
+        loc,
+        alternateLocales: homeAlternates,
+      }))
+    : [{ loc: `${siteUrl}/`, alternateLocales: new Map<string, string>() }];
+
+  const archiveEntries: SitemapEntry[] = [
+    ...(tags ?? []).map((tag) => ({
+      loc: `${siteUrl}/tags/${encodeURIComponent(tag.slug)}`,
+      alternateLocales: new Map<string, string>(),
+    })),
+    ...(authors ?? []).map((author) => ({
+      loc: `${siteUrl}/authors/${encodeURIComponent(author.slug)}`,
+      alternateLocales: new Map<string, string>(),
+    })),
   ];
+
+  const contentEntries = Array.from(entries.values()).flatMap((entry) =>
+    Array.from(entry.alternateLocales.values()).map((loc) => ({ ...entry, loc })),
+  );
+
   const urlEntries: SitemapEntry[] = [
-    ...baseUrls.map((loc) => ({ loc, alternateLocales: new Map<string, string>() })),
-    ...Array.from(entries.values()).flatMap((entry) =>
-      Array.from(entry.alternateLocales.values()).map((loc) => ({ ...entry, loc })),
-    ),
+    ...homeEntries,
+    ...archiveEntries,
+    ...contentEntries,
   ];
   // Sitemaps may contain at most 50,000 <url> entries; never quietly emit a
   // truncated index. Large sites require separately partitioned sitemap URLs.

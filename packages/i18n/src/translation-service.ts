@@ -430,17 +430,21 @@ export class TranslationService {
         isNull(posts.deletedAt),
       ];
       if (options.tagSlug) {
-        const tagPosts = db.select({ postId: postTags.postId })
+        const tagPosts = await db.select({ postId: postTags.postId })
           .from(postTags)
           .innerJoin(tags, eq(tags.id, postTags.tagId))
           .where(and(
             eq(tags.publicationId, publicationId),
             eq(tags.slug, options.tagSlug),
           ));
-        conditions.push(inArray(posts.id, tagPosts));
+        const postIds = tagPosts.map(t => t.postId);
+        if (postIds.length === 0) {
+          return { ids: [], total: 0 };
+        }
+        conditions.push(inArray(posts.id, postIds));
       }
       if (options.authorSlug) {
-        const authorPosts = db.select({ postId: postAuthors.postId })
+        const authorPosts = await db.select({ postId: postAuthors.postId })
           .from(postAuthors)
           .innerJoin(users, eq(users.id, postAuthors.userId))
           .where(or(
@@ -448,7 +452,11 @@ export class TranslationService {
             eq(users.id, options.authorSlug),
             ilike(users.name, options.authorSlug.replace(/-/g, " ")),
           ));
-        conditions.push(inArray(posts.id, authorPosts));
+        const postIds = authorPosts.map(a => a.postId);
+        if (postIds.length === 0) {
+          return { ids: [], total: 0 };
+        }
+        conditions.push(inArray(posts.id, postIds));
       }
       const where = and(...conditions);
       const [countRow] = await db.select({ value: count() })
