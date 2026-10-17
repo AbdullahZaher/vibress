@@ -8,23 +8,63 @@ interface SocialLinksProps {
 }
 
 export function SocialLinks({ links = [], locale = "en", className }: SocialLinksProps) {
-  if (links.length === 0) return null;
-  const label = locale.toLowerCase().startsWith("ar")
-    ? "روابط التواصل الاجتماعي" : "Social media links";
+  const safeLinks = Array.isArray(links) ? links : [];
+  if (safeLinks.length === 0) return null;
+  const isAr = Boolean(locale && locale.toLowerCase().startsWith("ar"));
+  const label = isAr ? "روابط التواصل الاجتماعي" : "Social media links";
 
   return (
-    <nav aria-label={label} className={className}
-      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
-      {links.map((link) => (
-        <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
-          aria-label={link.label} title={link.label}
-          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "40px", minHeight: "40px" }}>
-          <span aria-hidden="true" style={{
-            width: "30px", height: "30px", borderRadius: "50%", background: "#fff",
-            border: "1px solid #d1d5db", display: "inline-flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <img src={link.iconUrl} alt="" width={18} height={18}
-              style={{ display: "block", width: "18px", height: "18px" }} />
+    <nav
+      aria-label={label}
+      dir={isAr ? "rtl" : "ltr"}
+      className={className}
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "10px",
+      }}
+    >
+      {safeLinks.map((link) => (
+        <a
+          key={link.id}
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={link.label}
+          title={link.label}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: "44px",
+            minHeight: "44px",
+            borderRadius: "50%",
+            textDecoration: "none",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              background: "#ffffff",
+              border: "1px solid #d1d5db",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+            }}
+          >
+            <img
+              src={link.iconUrl}
+              alt=""
+              width={18}
+              height={18}
+              loading="lazy"
+              style={{ display: "block", width: "18px", height: "18px" }}
+            />
           </span>
         </a>
       ))}

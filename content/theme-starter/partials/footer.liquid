@@ -18,5 +18,22 @@
         </ul>
       </nav>
     {% endif %}
+
+    {% if site.socialLinks.size > 0 %}
+      {% assign isAr = false %}
+      {% if site.locale == 'ar' or site.locale == 'ar-SA' or site.direction == 'rtl' %}
+        {% assign isAr = true %}
+      {% endif %}
+      {% assign socialLabel = "Social media links" %}
+      {% if isAr %}{% assign socialLabel = "روابط التواصل الاجتماعي" %}{% endif %}
+      <nav class="theme-social-links" aria-label="{{ socialLabel }}">
+        {% for social in site.socialLinks %}
+          <a href="{{ social.url | escape }}" aria-label="{{ social.label | escape }}" title="{{ social.label | escape }}"
+             target="_blank" rel="noopener noreferrer" class="theme-social-link">
+            <img src="{{ social.iconUrl | escape }}" alt="" width="20" height="20" loading="lazy" />
+          </a>
+        {% endfor %}
+      </nav>
+    {% endif %}
   </div>
 </footer>

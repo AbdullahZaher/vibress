@@ -9,6 +9,7 @@
 - **Editorial Typography:** High-contrast serif headlines, elegant kicker taxonomy, pastel category accents, and readable body geometry.
 - **Responsive Magazine Grid:** Asymmetric lead story hero, vertical compact story stack, topic cards, and numbered latest stories feed.
 - **Zero JavaScript Dependency:** Ultra-fast rendering with pure HTML & CSS.
+- **Dynamic Social Media Links:** Accessible publication social profile strip with local SVG icons, 44px min touch targets, and automatic RTL labels.
 - **Color Modes:** Automatic system mode, light mode, and dark mode support with tailored contrast tokens.
 
 ## Template Hierarchy
