@@ -219,7 +219,7 @@ export const MediaPicker: React.FC<MediaPickerProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full ps-9 pe-3 py-1.5 rounded-lg border border-border/80 bg-background/80 dark:bg-white/[0.05] text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-                aria-label={tr("Search filename...")}
+                aria-label={tr("Search media")}
               />
             </div>
 

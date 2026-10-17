@@ -414,6 +414,7 @@ const translations: Record<string, string> = {
   "Select Media Asset": "اختيار وسائط",
   "Choose existing media or upload new files": "اختر من الوسائط الحالية أو ارفع ملفات جديدة",
   "Search filename...": "ابحث باسم الملف...",
+  "Search media": "بحث في الوسائط",
   "All Types": "جميع الأنواع",
   "Images": "الصور",
   "Videos": "مقاطع الفيديو",
