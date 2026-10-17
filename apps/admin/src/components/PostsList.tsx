@@ -23,6 +23,7 @@ import {
   Calendar,
   AlertCircle,
   RefreshCw,
+  Star,
   Clock,
   User,
 } from "lucide-react";
@@ -32,6 +33,7 @@ interface PostSummary {
   title: string;
   slug: string;
   status: string;
+  featured?: boolean;
   publishedAt: string | null;
   scheduledAt: string | null;
   updatedAt: string;
@@ -102,7 +104,7 @@ export const PostsList: React.FC<PostsListProps> = ({
 
   const filteredPosts = posts.filter((post) => {
     const matchesStatus =
-      statusFilter === "all" || post.status === statusFilter;
+      statusFilter === "all" || (statusFilter === "featured" ? post.featured === true : post.status === statusFilter);
     const matchesSearch =
       post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       post.slug.toLowerCase().includes(searchQuery.toLowerCase());
@@ -234,6 +236,18 @@ export const PostsList: React.FC<PostsListProps> = ({
           >
             {tr("Scheduled")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.status === "scheduled").length})</span>
           </button>
+          <button
+            onClick={() => setStatusFilter("featured")}
+            aria-pressed={statusFilter === "featured"}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+              statusFilter === "featured"
+                ? "bg-card text-foreground border border-border/80 shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Star className="h-3 w-3 inline-block me-1" aria-hidden="true" />
+            {tr("Featured")} <span className="ms-1 text-[11px] opacity-70 tabular-nums">({posts.filter((p) => p.featured).length})</span>
+          </button>
         </div>
 
         <div className="relative w-full sm:w-64">
@@ -303,6 +317,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                       >
                         {post.title}
                       </button>
+                      {post.featured && <span className="text-[11px] text-primary">{tr("Featured")}</span>}
                       <span className="text-[11px] text-muted-foreground font-mono">
                         /{post.slug}
                       </span>

@@ -52,6 +52,7 @@ interface AdminPostDetail {
   metaDescription: string | null;
   canonicalUrl: string | null;
   status: string;
+  featured?: boolean;
   scheduledAt: string | null;
   version: number;
   content: unknown;
@@ -101,6 +102,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     createEmptyStudioDocument(),
   );
   const [status, setStatus] = useState("draft");
+  const [featured, setFeatured] = useState(false);
   const [version, setVersion] = useState(1);
   const [restoreKey, setRestoreKey] = useState(0);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -196,6 +198,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const latestMetaDescriptionRef = useRef(metaDescription);
   const latestCanonicalUrlRef = useRef(canonicalUrl);
   const latestTagIdsRef = useRef(selectedTagIds);
+  const latestFeaturedRef = useRef(featured);
   const latestVersionRef = useRef(version);
 
   useEffect(() => { latestDocRef.current = studioDoc; }, [studioDoc]);
@@ -206,6 +209,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => { latestMetaDescriptionRef.current = metaDescription; }, [metaDescription]);
   useEffect(() => { latestCanonicalUrlRef.current = canonicalUrl; }, [canonicalUrl]);
   useEffect(() => { latestTagIdsRef.current = selectedTagIds; }, [selectedTagIds]);
+  useEffect(() => { latestFeaturedRef.current = featured; }, [featured]);
   useEffect(() => { latestVersionRef.current = version; }, [version]);
 
   useEffect(() => {
@@ -375,6 +379,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setMetaDescription(p.metaDescription || "");
         setCanonicalUrl(p.canonicalUrl || "");
         setStatus(p.status || "draft");
+        setFeatured(p.featured ?? false);
+        latestFeaturedRef.current = p.featured ?? false;
         setVersion(p.version || 1);
         if (p.featureImage !== undefined) {
           setFeatureImage(p.featureImage || null);
@@ -464,6 +470,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         canonicalUrl: latestCanonicalUrlRef.current || null,
         content: currentDoc,
         tagIds: latestTagIdsRef.current,
+        featured: latestFeaturedRef.current,
         expectedVersion: currentVersion,
       };
 
@@ -557,6 +564,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     if (!slug || slug === generateSlug(title)) {
       setSlug(generatedSlug);
     }
+    triggerAutosaveDebounced();
+  };
+
+  const handleFeaturedChange = (value: boolean) => {
+    setFeatured(value);
+    latestFeaturedRef.current = value;
     triggerAutosaveDebounced();
   };
 
@@ -663,6 +676,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         canonicalUrl: canonicalUrl || null,
         content: studioDoc,
         tagIds: selectedTagIds,
+        featured,
         expectedVersion: postId ? version : undefined,
       };
 
@@ -1002,6 +1016,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         onClose={() => setShowSettings(false)}
         postTitle={title}
         contentContext={excerpt}
+        featured={featured}
+        setFeatured={handleFeaturedChange}
         slug={slug}
         setSlug={setSlug}
         excerpt={excerpt}
