@@ -7,8 +7,10 @@ import { getDbPool } from "./connection";
  * is possible. Only NULL (pre-upgrade) locale values may be backfilled.
  * Fresh installations are handled by the ordinary migration.
  */
-export async function prepareOnlineSearchLocaleMigration(): Promise<void> {
-  const client = await getDbPool().connect();
+export async function prepareOnlineSearchLocaleMigration(
+  providedClient?: PoolClient,
+): Promise<void> {
+  const client = providedClient ?? await getDbPool().connect();
   try {
     await client.query("SELECT pg_advisory_lock(380038)");
     const initial = await client.query<{ legacy_index: string | null }>(
@@ -87,7 +89,7 @@ export async function prepareOnlineSearchLocaleMigration(): Promise<void> {
     // The legacy index is intentionally kept until 0038 commits successfully.
   } finally {
     await client.query("SELECT pg_advisory_unlock(380038)").catch(() => undefined);
-    client.release();
+    if (!providedClient) client.release();
   }
 }
 

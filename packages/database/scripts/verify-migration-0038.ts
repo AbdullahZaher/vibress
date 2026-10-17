@@ -1,4 +1,5 @@
-import { getDb, closeDbPool, searchDocuments, publications } from "../src";
+import { getDb, getDbPool, closeDbPool, searchDocuments, publications } from "../src";
+import { prepareOnlineSearchLocaleMigration } from "../src/online-locale-migration";
 import { sql, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -178,7 +179,110 @@ async function verifyMigration0038() {
   await db.execute(sql.raw(migrationSql));
   console.log("Idempotency verified: re-running SQL succeeded without error.");
 
+  await verifyOnlineFirstUpgrade(migrationSql);
+
   console.log("\n=== MIGRATION 0038 VERIFICATION PASSED SUCCESSFULLY ===");
+}
+
+
+/**
+ * Model the FIRST upgrade in an isolated schema, not a replay against an
+ * already migrated public database. This validates old NULL-row backfill,
+ * legacy Arabic settings, index creation, concurrent writes, and replay.
+ */
+async function verifyOnlineFirstUpgrade(migrationSql: string): Promise<void> {
+  const schemaName = "vibress_m0038_" + Date.now();
+  const client = await getDbPool().connect();
+  const writer = await getDbPool().connect();
+  try {
+    await client.query('CREATE SCHEMA "' + schemaName + '"');
+    await client.query('SET search_path TO "' + schemaName + '", public');
+    await writer.query('SET search_path TO "' + schemaName + '", public');
+    await client.query(
+      "CREATE TABLE publications (id text PRIMARY KEY, primary_locale text NOT NULL)",
+    );
+    await client.query(
+      "CREATE TABLE settings (publication_id text, namespace text, key text, value jsonb)",
+    );
+    await client.query(
+      "CREATE TABLE search_documents (" +
+      " id text PRIMARY KEY, publication_id text NOT NULL," +
+      " entity_type text NOT NULL, entity_id text NOT NULL," +
+      " searchable boolean NOT NULL DEFAULT true)",
+    );
+    await client.query(
+      'CREATE UNIQUE INDEX "search_documents_pub_entity_idx" ON "search_documents" (publication_id, entity_type, entity_id)',
+    );
+    await client.query(
+      "INSERT INTO publications (id, primary_locale) VALUES" +
+      " ('arabic', 'ar'), ('legacy', 'en'), ('english', 'en')",
+    );
+    await client.query(
+      "INSERT INTO settings (publication_id, namespace, key, value)" +
+      " VALUES ('legacy', 'site', 'locale', '\"ar\"'::jsonb)",
+    );
+    await client.query(
+      "INSERT INTO search_documents(id, publication_id, entity_type, entity_id)" +
+      " VALUES ('old_ar','arabic','post','ar')," +
+      " ('old_legacy','legacy','post','legacy')," +
+      " ('old_en','english','post','en')",
+    );
+
+    // A separate connection writes during the FIRST concurrent index build.
+    // Its inserts work whether they precede or follow the default being set.
+    const writes = (async () => {
+      for (let i = 0; i < 20; i++) {
+        await writer.query(
+          "INSERT INTO search_documents(id, publication_id, entity_type, entity_id)" +
+          " VALUES ($1, 'english', 'post', $2)",
+          ["live_" + i, "live_" + i],
+        );
+      }
+    })();
+    await Promise.all([prepareOnlineSearchLocaleMigration(client), writes]);
+
+    const checked = await client.query<{ id: string; locale: string }>(
+      "SELECT id, locale FROM search_documents" +
+      " WHERE id IN ('old_ar','old_legacy','old_en') ORDER BY id",
+    );
+    const locales = new Map(checked.rows.map((row) => [row.id, row.locale]));
+    if (locales.get("old_ar") !== "ar" ||
+        locales.get("old_legacy") !== "ar" ||
+        locales.get("old_en") !== "en") {
+      throw new Error("First-run locale backfill failed: " + JSON.stringify(checked.rows));
+    }
+    const noNulls = await client.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM search_documents WHERE locale IS NULL",
+    );
+    if (noNulls.rows[0]?.count !== 0) {
+      throw new Error("First-run migration left NULL locales");
+    }
+
+    // Complete the journaled SQL step, then prove that a true English
+    // translation survives re-running it on an Arabic publication.
+    await client.query(migrationSql);
+    await client.query(
+      "INSERT INTO search_documents(id, publication_id, entity_type, entity_id, locale)" +
+      " VALUES ('bi_ar','arabic','post','bilingual','ar')," +
+      " ('bi_en','arabic','post','bilingual','en')",
+    );
+    await client.query(migrationSql);
+    const bilingual = await client.query<{ locale: string }>(
+      "SELECT locale FROM search_documents WHERE entity_id = 'bilingual'",
+    );
+    if (bilingual.rows.length !== 2 ||
+        new Set(bilingual.rows.map((row) => row.locale)).size !== 2) {
+      throw new Error("Replay changed English/Arabic locale identities");
+    }
+    console.log("First-run upgrade, 20 concurrent writes, and bilingual replay verified.");
+  } finally {
+    await writer.query("RESET search_path").catch(() => undefined);
+    await client.query("RESET search_path").catch(() => undefined);
+    await client.query('DROP SCHEMA IF EXISTS "' + schemaName + '" CASCADE')
+      .catch(() => undefined);
+    writer.release();
+    client.release();
+  }
 }
 
 verifyMigration0038()
