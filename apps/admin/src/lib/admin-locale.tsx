@@ -29,7 +29,6 @@ const translations: Record<string, string> = {
   "Manage": "إدارة",
   "Social links appear in built-in theme footers. Changes are saved with Site settings.": "تظهر روابط التواصل في تذييل القوالب المدمجة، وتُحفظ مع إعدادات الموقع.",
   "Social profile": "حساب تواصل اجتماعي",
-  "Platform": "المنصة",
   "Label": "التسمية",
   "Profile URL (HTTPS)": "رابط الحساب (HTTPS)",
   "Move link up": "نقل الرابط للأعلى",
