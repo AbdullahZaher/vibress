@@ -176,7 +176,7 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
             </label>
           </div>
 
-          {/* Tags */
+          {/* Tags */}
           <div className="space-y-4 border-t pt-6">
             <h3 className="text-sm font-bold flex items-center gap-2">
               <TagIcon className="h-4 w-4 text-primary" /> {tr("Tags")}
