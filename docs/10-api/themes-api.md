@@ -12,7 +12,16 @@ Returns site metadata and the active theme identity + safe presentation settings
     "title": "Vibress",
     "description": "Publishing Platform",
     "url": "https://example.com",
-    "locale": "en"
+    "locale": "en",
+    "socialLinks": [
+      {
+        "id": "instagram-1",
+        "platform": "instagram",
+        "label": "Vibress on Instagram",
+        "url": "https://instagram.com/vibress",
+        "iconUrl": "/social-icons/instagram.svg"
+      }
+    ]
   },
   "theme": {
     "themeId": "vibress-default",
@@ -31,7 +40,13 @@ Returns site metadata and the active theme identity + safe presentation settings
 
 No authentication required. Contains only presentation-safe settings — never secrets.
 
+The additive `site.socialLinks` field is a publication-owned, ordered array of `{ id, platform, label, url, iconUrl }`. It defaults to `[]` when no profiles exist. Each `url` is validated HTTPS; each `iconUrl` references a locally hosted SVG. Existing clients can safely ignore this new field, while custom Liquid themes can access `site.socialLinks` directly. See the [owner guide](../administration/SOCIAL_LINKS_GUIDE.md) and [Liquid reference](../themes/templating.md).
+
 The active theme is resolved from the request host's authoritative publication context. The response carries an internal `x-vibress-publication-id` header for the Web theme renderer; callers cannot select a publication by providing a raw publication ID. The JSON response shape is unchanged.
+
+### Editing social profiles
+
+Use the existing **staff Settings API** and `site.socialLinks` key, not the per-theme settings endpoint. Writes require an authenticated staff session, `settings.manage`, origin validation, and the authoritative publication context. Validation enforces HTTPS, valid platforms, unique link IDs and at most 20 entries. No database migration or new public write route is needed.
 
 ## Publication isolation
 
