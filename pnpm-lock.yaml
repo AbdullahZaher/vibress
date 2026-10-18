@@ -1827,8 +1827,8 @@ importers:
         specifier: 0.52.0
         version: 0.52.0(typescript@5.9.3)
       '@lexical/yjs':
-        specifier: ^0.49.0
-        version: 0.49.0(typescript@5.9.3)(yjs@13.6.32)
+        specifier: ^0.52.0
+        version: 0.52.0(typescript@5.9.3)(yjs@13.6.32)
       '@vibress/studio-cards':
         specifier: workspace:*
         version: link:../studio-cards
@@ -3288,14 +3288,6 @@ packages:
     peerDependencies:
       lexical: 0.13.1
 
-  '@lexical/internal@0.49.0':
-    resolution: {integrity: sha512-s+XjPC7Qb39A/Xx9ahcz1s69CPix4ultaqyW+MDG0AXYW2quDr7m0USqReKIAiuoLIWtGN5HW8BwV2Y6t4qr6Q==}
-    peerDependencies:
-      typescript: '>=5.2'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   '@lexical/internal@0.52.0':
     resolution: {integrity: sha512-Y7jKqeh4Irf/FwNmAqHIk3b05HpMsHv2RyWPQ8+M7FAdEbT9N2mksjc8ZUZ3tHqDMi7FNiLkjZN/DwbdekUb1g==}
     peerDependencies:
@@ -3362,14 +3354,6 @@ packages:
     peerDependencies:
       lexical: 0.13.1
 
-  '@lexical/selection@0.49.0':
-    resolution: {integrity: sha512-08Vd1+VoC6YnztWOFWVsqF/Hxw5EP8qeL1c7t3+rVCV8revLzXxdQw+vbPX3tgM4fmjOBDUXk6Ws1+rTtsqjcQ==}
-    peerDependencies:
-      typescript: '>=5.2'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   '@lexical/selection@0.52.0':
     resolution: {integrity: sha512-O1hgwqUvoF/R2DxXIOJJvCqXxNM7kOWq1TBxqnbjT4TXNlDokEdpkO5EpetAWYWZj5UE2BUphfGUZAPQjvcUKQ==}
     peerDependencies:
@@ -3407,11 +3391,11 @@ packages:
       lexical: 0.13.1
       yjs: '>=13.5.22'
 
-  '@lexical/yjs@0.49.0':
-    resolution: {integrity: sha512-uqV3D0AOLqQ1f/Bo6ZtuDLoJYGlBm0RlucNYhNvfMAncEw0f/xHc1pTyXeWjdCI/iWgWR/MV6hgVi26TSPs+Vg==}
+  '@lexical/yjs@0.52.0':
+    resolution: {integrity: sha512-6Qd9/AkMDxDNalsXDs1X7ddLTw2OsqUy42RRvpIWlv0ya1MO4CNedl4NvgwMtYzxtLzOkq0prtspCPvkirYkmA==}
     peerDependencies:
       typescript: '>=5.2'
-      yjs: '>=13.5.22'
+      yjs: '>=13.5.37'
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -6102,14 +6086,6 @@ packages:
 
   lexical@0.13.1:
     resolution: {integrity: sha512-jaqRYzVEfBKbX4FwYpd/g+MyOjRaraAel0iQsTrwvx3hyN0bswUZuzb6H6nGlFSjcdrc77wKpyKwoWj4aUd+Bw==}
-
-  lexical@0.49.0:
-    resolution: {integrity: sha512-9V1ZIzGpJEd8rIN+nN7veL4fW4fFWbS66Un4JNqSZB4D5t9euzN9+3+jEXy83FjNjNy0MiiUI3+DQaGCLYko0w==}
-    peerDependencies:
-      typescript: '>=5.2'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
 
   lexical@0.52.0:
     resolution: {integrity: sha512-mePejqwCDaW0GR89IoofJTTlk/EiwwlGhbs1D8qOx/Iw6ieG5D3nh7PSPLv0Csia0UC58HpuV91DilJjqeAWSw==}
@@ -8958,10 +8934,6 @@ snapshots:
       '@lexical/utils': 0.13.1(lexical@0.13.1)
       lexical: 0.13.1
 
-  '@lexical/internal@0.49.0(typescript@5.9.3)':
-    optionalDependencies:
-      typescript: 5.9.3
-
   '@lexical/internal@0.52.0(typescript@5.9.3)':
     optionalDependencies:
       typescript: 5.9.3
@@ -9053,13 +9025,6 @@ snapshots:
     dependencies:
       lexical: 0.13.1
 
-  '@lexical/selection@0.49.0(typescript@5.9.3)':
-    dependencies:
-      '@lexical/internal': 0.49.0(typescript@5.9.3)
-      lexical: 0.49.0(typescript@5.9.3)
-    optionalDependencies:
-      typescript: 5.9.3
-
   '@lexical/selection@0.52.0(typescript@5.9.3)':
     dependencies:
       '@lexical/internal': 0.52.0(typescript@5.9.3)
@@ -9097,11 +9062,11 @@ snapshots:
       lexical: 0.13.1
       yjs: 13.6.32
 
-  '@lexical/yjs@0.49.0(typescript@5.9.3)(yjs@13.6.32)':
+  '@lexical/yjs@0.52.0(typescript@5.9.3)(yjs@13.6.32)':
     dependencies:
-      '@lexical/internal': 0.49.0(typescript@5.9.3)
-      '@lexical/selection': 0.49.0(typescript@5.9.3)
-      lexical: 0.49.0(typescript@5.9.3)
+      '@lexical/internal': 0.52.0(typescript@5.9.3)
+      '@lexical/selection': 0.52.0(typescript@5.9.3)
+      lexical: 0.52.0(typescript@5.9.3)
       yjs: 13.6.32
     optionalDependencies:
       typescript: 5.9.3
@@ -12095,12 +12060,6 @@ snapshots:
       type-check: 0.4.0
 
   lexical@0.13.1: {}
-
-  lexical@0.49.0(typescript@5.9.3):
-    dependencies:
-      '@lexical/internal': 0.49.0(typescript@5.9.3)
-    optionalDependencies:
-      typescript: 5.9.3
 
   lexical@0.52.0(typescript@5.9.3):
     dependencies:
