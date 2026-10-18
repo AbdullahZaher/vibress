@@ -344,6 +344,14 @@ ${colors.cyan}Examples:${colors.reset}
     const Liquid = liquidModule.Liquid || liquidModule.default?.Liquid;
     if (Liquid) {
       const engine = new Liquid();
+      const noopTag = { parse() {}, render() { return ""; } };
+      engine.registerTag("route", noopTag);
+      engine.registerTag("asset", noopTag);
+      engine.registerTag("locale_switcher", noopTag);
+      engine.registerTag("comments", noopTag);
+      engine.registerTag("t", noopTag);
+      engine.registerTag("translate", noopTag);
+
       for (const [relPath, buffer] of fileMap.entries()) {
         if (relPath.endsWith(".liquid") || relPath.endsWith(".html")) {
           try {
