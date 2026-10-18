@@ -21,6 +21,7 @@ import { StaffOverviewCard } from "./general/StaffOverviewCard";
 // Site Pillar Compact Cards
 import { DesignBrandingCard } from "./site/DesignBrandingCard";
 import { NavigationManagerCard } from "./site/NavigationManagerCard";
+import { SocialLinksCard } from "./site/SocialLinksCard";
 import { ThemesManagerCard } from "./site/ThemesManagerCard";
 import { AnnouncementBarCard } from "./site/AnnouncementBarCard";
 
@@ -293,6 +294,16 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   site.updateField("secondaryNav", items)
                 }
                 isHighlighted={highlightedCardId === "navigation-manager"}
+              />
+            </SettingsPermissionGate>
+          )}
+
+          {isCardVisible("social-links") && (
+            <SettingsPermissionGate permission="settings.manage" can={can}>
+              <SocialLinksCard
+                links={site.settings.socialLinks ?? []}
+                onChange={(links) => site.updateField("socialLinks", links)}
+                isHighlighted={highlightedCardId === "social-links"}
               />
             </SettingsPermissionGate>
           )}

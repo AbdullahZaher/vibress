@@ -1,3 +1,4 @@
+import { toPublicSocialLinks, type PublicSocialLink } from "@vibress/api-contracts";
 import { FastifyInstance, FastifyRequest } from "fastify";
 import {
   PublicListFilterSchema,
@@ -67,6 +68,7 @@ async function buildPublicSiteIdentity(publicationId: string): Promise<{
   coverUrl: string;
   primaryNav: Array<{ label: string; url: string }>;
   secondaryNav: Array<{ label: string; url: string }>;
+  socialLinks: PublicSocialLink[];
   announcementEnabled: boolean;
   announcementText: string;
   announcementUrl: string;
@@ -100,6 +102,7 @@ async function buildPublicSiteIdentity(publicationId: string): Promise<{
     coverUrl: str(site.coverUrl, ""),
     primaryNav: Array.isArray(site.primaryNav) ? site.primaryNav : [],
     secondaryNav: Array.isArray(site.secondaryNav) ? site.secondaryNav : [],
+    socialLinks: toPublicSocialLinks(site.socialLinks),
     announcementEnabled: Boolean(site.announcementEnabled),
     announcementText: str(site.announcementText, ""),
     announcementUrl: str(site.announcementUrl, ""),
@@ -221,6 +224,7 @@ export async function publicContentRoutes(fastify: FastifyInstance) {
           coverUrl: site.coverUrl,
           primaryNav: site.primaryNav,
           secondaryNav: site.secondaryNav,
+          socialLinks: site.socialLinks,
           announcementEnabled: site.announcementEnabled,
           announcementText: site.announcementText,
           announcementUrl: site.announcementUrl,

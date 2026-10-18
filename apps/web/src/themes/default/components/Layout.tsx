@@ -1,6 +1,7 @@
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
+import { SocialLinks } from "../../../components/SocialLinks";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -72,6 +73,7 @@ export async function ThemeLayout({
                 ))}
               </div>
             ) : null}
+            <SocialLinks links={site.socialLinks} locale={site.locale} />
             <div>
               <a href="#/portal/signup">Sign up</a>
             </div>

@@ -105,6 +105,14 @@ export interface SiteNavigationItemViewModel {
   url: string;
 }
 
+export interface SiteSocialLinkViewModel {
+  id: string;
+  platform: string;
+  label: string;
+  url: string;
+  iconUrl: string;
+}
+
 export interface SiteViewModel {
   title: string;
   description: string;
@@ -123,6 +131,7 @@ export interface SiteViewModel {
     primary: SiteNavigationItemViewModel[];
     secondary: SiteNavigationItemViewModel[];
   };
+  socialLinks?: SiteSocialLinkViewModel[] | undefined;
   announcement?: {
     enabled: boolean;
     text: string;
@@ -292,6 +301,7 @@ export function mapSiteToViewModel(site: {
   coverUrl?: string | null | undefined;
   primaryNav?: Array<{ label: string; url: string }> | undefined;
   secondaryNav?: Array<{ label: string; url: string }> | undefined;
+  socialLinks?: SiteSocialLinkViewModel[] | undefined;
   announcementEnabled?: boolean | undefined;
   announcementText?: string | null | undefined;
   announcementUrl?: string | null | undefined;
@@ -336,6 +346,7 @@ export function mapSiteToViewModel(site: {
       primary: Array.isArray(site.primaryNav) ? site.primaryNav : [],
       secondary: Array.isArray(site.secondaryNav) ? site.secondaryNav : [],
     },
+    socialLinks: Array.isArray(site.socialLinks) ? site.socialLinks : [],
     announcement: {
       enabled: Boolean(site.announcementEnabled),
       text: site.announcementText || "",

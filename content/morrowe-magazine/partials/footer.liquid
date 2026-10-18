@@ -5,6 +5,22 @@
       {% if site.description %}
         <p>{{ site.description | escape }}</p>
       {% endif %}
+      {% if site.socialLinks.size > 0 %}
+        {% assign isAr = false %}
+        {% if site.locale == 'ar' or site.locale == 'ar-SA' or site.direction == 'rtl' %}
+          {% assign isAr = true %}
+        {% endif %}
+        {% assign socialLabel = "Social media links" %}
+        {% if isAr %}{% assign socialLabel = "روابط التواصل الاجتماعي" %}{% endif %}
+        <nav class="mr-footer-social-links" aria-label="{{ socialLabel }}">
+          {% for social in site.socialLinks %}
+            <a href="{{ social.url | escape }}" aria-label="{{ social.label | escape }}" title="{{ social.label | escape }}"
+               target="_blank" rel="noopener noreferrer" class="mr-footer-social-link">
+              <img src="{{ social.iconUrl | escape }}" alt="" width="20" height="20" loading="lazy" />
+            </a>
+          {% endfor %}
+        </nav>
+      {% endif %}
     </div>
 
     {% if site.navigation.secondary.size > 0 %}

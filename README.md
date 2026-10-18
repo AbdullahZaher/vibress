@@ -21,6 +21,7 @@ The name **Vibress** represents:
 * **Arabic-First Multilingual & RTL**: Native RTL layout detection, Umm al-Qura Hijri calendar formatting, and multilingual translation management.
 * **Subscriptions & Monetization**: Tiered subscription plans, member access gating, Stripe billing integration, and paid newsletters.
 * **Search**: Full-text and fuzzy search powered by PostgreSQL `pg_trgm` GIN indexes.
+* **Publication Social Links**: Publication-wide social profiles with local SVG icons, built-in theme footer rendering, and an additive React/Liquid theme contract.
 * **Extensibility**: Trusted plugin architecture (Tier 1 bundled & Tier 2 admin-verified) with capability permission scoping, SHA-256 verified themes with Liquid templating, and Webhook event dispatching.
 * **Reliability & Observability**: Real-time collaborative CRDT document editing (Yjs), transactional outbox event delivery, Prometheus metrics, and OpenTelemetry tracing.
 
@@ -155,6 +156,8 @@ Documentation is available in the [`docs/`](docs/) directory:
 - [**Docker Deployment**](docs/deployment/DOCKER.md) — Container topology, volumes, and health checks.
 - [**Backup & Disaster Recovery**](docs/deployment/SELF_HOSTING.md#10-backup--disaster-recovery) — Transactional backup and restore procedures.
 - [**Troubleshooting Runbooks**](docs/deployment/TROUBLESHOOTING.md) — Diagnostic guides and common remediation playbooks.
+- [**Social Icons & Profiles**](docs/administration/SOCIAL_LINKS_GUIDE.md) ([الدليل العربي](docs/administration/SOCIAL_LINKS_GUIDE.ar.md)) — Configure accounts, icon appearance, and theme integration.
+- [**Theme Developer Guide**](docs/themes/developer-guide.md) — Use publication social icons in third-party themes.
 - [**Changelog & Release Notes**](CHANGELOG.md) — Release history and notes.
 
 ---
