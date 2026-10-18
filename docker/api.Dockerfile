@@ -2,7 +2,7 @@
 # Build context must be the repository root.
 
 # ---- Base: pnpm toolchain on Node 24 (matches root engines) ----
-FROM node:25-alpine AS base
+FROM node:26-alpine AS base
 RUN apk upgrade --no-cache && npm install -g pnpm@11.22.0
 WORKDIR /repo
 
@@ -24,7 +24,7 @@ RUN mkdir -p /repo/runtime_node_modules && \
     cp -rL node_modules/.pnpm/node-gyp-build@*/node_modules/node-gyp-build /repo/runtime_node_modules/node-gyp-build
 
 # ---- Runtime: non-root, minimal immutable runtime, hardened container ----
-FROM node:25-alpine AS runtime
+FROM node:26-alpine AS runtime
 ARG VIBRESS_VERSION=1.2.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
