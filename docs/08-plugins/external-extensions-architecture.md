@@ -44,7 +44,7 @@ The code contains **two non-equivalent plugin contracts**: `@vibress/plugin-sdk`
 - Stage D: dispatch all plugin actions through stable, narrow host services; no private imports. Runtime type enforcement and authenticated scope matter more than TypeScript restrictions.
 - Stage E: when plugin work can block, delegate durable tasks to existing workers. For unstable external integrations, choose a separately deployed service accessed through authenticated, bounded APIs rather than claiming an in-process timeout is isolation.
 
-A trusted in-process JS module has effective process privileges even if its SDK does not export `process`. Capabilities control *authorized mediated operations*, not the kernel/OS privileges of hostile JS. Only reviewed/controlled packages qualify for this model. A future remote service/WASM/container sandbox requires a separate ADR and threat model.
+A trusted in-process JS module has effective process privileges even if its SDK does not export `process`. **Ordinary rejected async handlers may be caught, but fatal OOM, CPU/event-loop stalls, process exit and global mutations are not isolated. Core continuity during arbitrary plugin faults cannot be promised.** Strong availability guarantees require a separately designed and supervised process/container runtime. Capabilities control *authorized mediated operations*, not the kernel/OS privileges of hostile JS. Only reviewed/controlled packages qualify for this model. A future remote service/WASM/container sandbox requires a separate ADR and threat model.
 
 ## 4. Ownership and boundaries
 
@@ -70,7 +70,7 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 ## 6. Extension points — host-provided, not runtime features yet
 
 1. Versioned admin, member and public API route descriptors; shared `@vibress/api-contracts` runtime validation; host owns auth/tenant middleware and stable errors.
-2. Declarative navigation + view slots; admin plugin views isolated by origin/CSP and keyboard/RTL verified. No open-ended React internals.
+2. Declarative navigation references registered staff-only Studio view IDs, never public routes; admin plugin views are isolated by origin/CSP and keyboard/RTL verified. No open-ended React internals.
 3. Reserved public route namespace (`/extensions/{pluginId}/...` initially) and SEO metadata/locale-aware helper. Vanity `/courses/...` routes only after collision-safe route-registration design.
 4. Host-mediated members and commerce readers for *entitlement checks*, content modeler public editors/readers as explicit capabilities; do not assume existing subscriptions cover one-time course purchases.
 5. Namespaced per-publication data access, migrations, background tasks and events.
@@ -89,7 +89,7 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 
 ## 8. Implementation-blocking specifications
 
-The architecture is not approved for coding until [SDK ABI and legacy adapter](external-extensions-sdk-compatibility.md), [principal publication binding, typed data and legacy migration](external-extensions-identity-data.md) and [immutable release integrity, Admin/Next.js assets and worker lifecycle](external-extensions-package-and-ui.md) have explicit decisions, test fixtures and owners. `packages/theme-core/src/route-contract.ts` does not register extension pages today. `PluginsService.deactivatePlugin` does not call `deactivate()`, and `executeHook` does not forward the actual event name correctly; those are functional blockers for credible lifecycle documentation.
+The typed storage and shared runtime-schema contract is [specified here](external-extensions-storage-contract.md) but not implemented. The architecture is not approved for coding until [SDK ABI and legacy adapter](external-extensions-sdk-compatibility.md), [principal publication binding, typed data and legacy migration](external-extensions-identity-data.md) and [immutable release integrity, Admin/Next.js assets and worker lifecycle](external-extensions-package-and-ui.md) have explicit decisions, test fixtures and owners. `packages/theme-core/src/route-contract.ts` does not register extension pages today. `PluginsService.deactivatePlugin` does not call `deactivate()`, and `executeHook` does not forward the actual event name correctly; those are functional blockers for credible lifecycle documentation.
 
 ## 9. Explicit decisions pending approval
 

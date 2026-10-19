@@ -22,8 +22,9 @@
   ],
   "permissions": ["lms.course.read", "lms.course.manage"],
   "contributions": {
-    "adminNavigation": [{"id":"courses","titleKey":"lms.nav.courses","path":"/extensions/vibress-lms/courses"}],
-    "publicRoutes": [{"path":"/extensions/vibress-lms/courses/*","localeAware":true}]
+    "adminViews": [{"id":"course-editor","assetKey":"admin-course-editor"}],
+    "adminNavigation": [{"id":"courses","titleKey":"lms.nav.courses","viewId":"course-editor","permission":"lms.course.manage"}],
+    "publicRoutes": [{"id":"catalog","handlerId":"catalog","path":"/extensions/vibress-lms/courses/*","localeAware":true}]
   },
   "migrations": { "namespace": "vibress_lms", "head": "0001" }
 }
@@ -59,7 +60,7 @@ type ExtensionServices = {
 };
 ```
 
-**No callable data API is specified by this snippet.** It intentionally omits a storage method until reviewed typed repository operations are available. The approved design must expose registered, capability-checked **typed publication-scoped repository operations**, not a raw SQL or Drizzle transaction. See [identity/data RFC](external-extensions-identity-data.md). Reject dangerous coercions, raw SQL and arbitrarily supplied publication-scoped context.
+**Storage design chosen:** the [typed storage and validation RFC](external-extensions-storage-contract.md) specifies a namespace-bound, registered-model repository and scoped transaction facade, with external route schemas admitted via a public SDK and validated by the host's `@vibress/api-contracts` adapter. This is **not yet a callable SDK export**. The approved design must expose registered, capability-checked **typed publication-scoped repository operations**, not a raw SQL or Drizzle transaction. See [identity/data RFC](external-extensions-identity-data.md). Reject dangerous coercions, raw SQL and arbitrarily supplied publication-scoped context.
 
 ## 3. Route namespaces / policy
 
@@ -76,6 +77,7 @@ Host owns the router; extensions register **declarative handlers with schema and
 - Conflict-free route registry rejects collisions, unapproved verbs, unbounded payloads, missing schema, namespace escape and duplicate IDs at install time.
 - Public/non-staff return 404 for unpublished/paid content instead of leaking existence or internal metadata.
 - CORS/CSRF, auth cookies, caching and entitlement checks are **host-side**, not opt-in extension conventions. `requireMemberSession` alone is insufficient for publication isolation: the host MUST match the returned Member's `publicationId` to resolved site/publication context. Global public-content privacy middleware does not automatically cover new route prefixes; host must apply equivalent site privacy guards.
+- Studio navigation must reference a registered `adminViews[].id`, not a public `/extensions/:pluginId/*` URL. The host resolves a **staff-only** URL relative to the actual Studio base path; public catalog routes are publication-resolved and never share Staff auth. Reject unknown view IDs, collisions, and disabled contributions.
 - Admin navigation registration is not authentication: every route enforces authorization independently.
 
 ## 4. Settings and data
@@ -100,6 +102,7 @@ Host owns the router; extensions register **declarative handlers with schema and
 - The final packaged artifact digest must be stored outside the artifact; a field inside a self-hashed archive is not proof of integrity.
 - Member publication binding, trusted scope provenance, member/core table FK limitations, non-sandboxed host storage, and migration of old global settings are specified in [identity and data](external-extensions-identity-data.md).
 - Locale-aware public routes and theme slots require a real Next.js dispatcher and a stable asset/CSP scheme, not just manifest route declarations. See [package and UI](external-extensions-package-and-ui.md).
+- The route/runtime schemas and storage operation registry are specified for host conformance in [storage RFC](external-extensions-storage-contract.md); actual public SDK exports remain to be implemented.
 - Public extension route v1 prefixes are drafts. No registered route, SDK method or capability in this RFC is callable until implemented and versioned.
 
 ## 7. Contract tests and versioning

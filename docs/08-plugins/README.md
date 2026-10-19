@@ -11,7 +11,8 @@
 5. [SDK compatibility and adapter](external-extensions-sdk-compatibility.md) — resolve the two existing plugin interfaces and preserve v1.
 6. [Principal scope and typed data](external-extensions-identity-data.md) — publication-bound sessions, old settings migration and storage.
 7. [Package integrity, UI and worker runtime](external-extensions-package-and-ui.md) — detached release checksums, dynamic surface limitations and lifecycle.
-8. [Current plugin system](plugin-system.md) and [current SDK](plugin-sdk.md) — existing functionality, **not** complete external installation support.
+8. [Typed storage and runtime validation contract](external-extensions-storage-contract.md) — concrete host-mediated, schema-bound data API design.
+9. [Current plugin system](plugin-system.md) and [current SDK](plugin-sdk.md) — existing functionality, **not** complete external installation support.
 
 ### Known baseline (verified from `main` on 2026-10-19)
 

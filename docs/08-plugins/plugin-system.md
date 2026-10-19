@@ -42,9 +42,7 @@ activation failure.
 - Update metadata (re-register)
 - Unregister (delete)
 
-**Failure isolation:** an activation failure marks the plugin `error` and
-throws a domain error — it never crashes or degrades unrelated core
-functionality.
+**Failure handling:** caught activation errors mark the plugin `error` and surface a domain error. The current bundled in-process host is **not** crash isolation: an OOM, blocking loop, fatal error or `process.exit` may still impact the core service. External process/container isolation is a separate design, not a v1 guarantee.
 
 ## Settings / Secrets
 

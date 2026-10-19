@@ -60,7 +60,7 @@ Instrumentation: record plugin ID, artifact release, publication, request/event 
 
 ## Contract and runtime blockers
 
-Before admitting external packages, resolve the two existing plugin ABI shapes, fix actual lifecycle event-name/deactivate dispatch, specify typed repository permissions and Member publication binding, and validate Next.js public-route privacy, versioned UI assets and workers across replicas. See [SDK compatibility](external-extensions-sdk-compatibility.md), [identity/data](external-extensions-identity-data.md), [package/UI/worker](external-extensions-package-and-ui.md). A short Promise timeout is not process sandboxing.
+Before admitting external packages, resolve the two existing plugin ABI shapes, fix actual lifecycle event-name/deactivate dispatch, specify typed repository permissions and Member publication binding, and validate Next.js public-route privacy, versioned UI assets and workers across replicas. See [SDK compatibility](external-extensions-sdk-compatibility.md), [identity/data](external-extensions-identity-data.md), [package/UI/worker](external-extensions-package-and-ui.md). A short Promise timeout is not process sandboxing. Even trusted in-process packages can terminate or stall the Node.js runtime, exhaust memory or mutate globals. **Do not promise core survives arbitrary plugin failure.** Catch ordinary handler rejections, fail closed, record telemetry and require independently supervised process/container isolation for stronger availability guarantees.
 
 ## Operator-facing runbook (to be implemented)
 

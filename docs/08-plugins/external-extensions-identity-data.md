@@ -23,7 +23,9 @@ type ExtensionActor = StaffActor | MemberActor | PublicActor | MachineActor;
 
 The real API uses opaque/branded scopes where practical. Every service must enforce its permissions in runtime code. Granting `publicationId` in a type is not proof of authorization.
 
-## Typed data access boundary — choose one and freeze it in the SDK
+## Typed data access boundary — chosen contract, pending code
+
+**Design choice:** [namespace-bound typed scoped repositories and runtime-schema admission](external-extensions-storage-contract.md). Keep the ABI proposed until implemented/tested. Do not interpret conceptual signatures as SDK exports.
 
 - **Recommended:** host-mediated namespace-bound *typed repository registration* using reviewed table descriptors, operations and query builders, with publication predicate injection and no raw SQL; host runs migrations and owns its privileged DB handle.
 - Domain plugins may declare tables, constraints, migrations and named operations; the host exposes only permission-gated scoped methods, e.g. `courses.getById(scope, id)`, `enrollments.createUnique(scope, input)`. Never pass raw Drizzle connection or unrestricted `transaction(callback(tx: unknown))` to an untrusted extension context. A transaction API, if approved, must operate through **scoped typed repositories** within one publication.

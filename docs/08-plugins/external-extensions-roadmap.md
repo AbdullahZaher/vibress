@@ -16,7 +16,7 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 | EXT-001 | Inventory **both** `@vibress/plugin-sdk.PluginModule` and `plugin-core.VibressPlugin` consumers, repair developer docs/examples, choose canonical runtime ABI | Signed-off SDK adapter mapping; bundled v1 and any supported legacy shapes validated; lifecycle callbacks preserved |
 | EXT-002 | Threat model + ADR for trusted package format, **external release digest/attestation**, plugin admission, UI/worker surfaces | Security/Architecture/Ops agree no circular digest or false JS sandbox claim |
 | EXT-003 | Inspect existing global plugin settings/status plus dual SDKs, hooks, member/public privacy middleware, DB migration baseline | Compatibility matrix, **no automatic cross-publication enable/settings copy**, upgrade and negative-case fixtures checked in |
-| EXT-004 | Approve versioned typed repositories, authority-bound Member/public context, Next.js renderer/assets, SDK package boundaries and billing bridge | Shared schemas compile in independent SDK consumer, Member publication mismatch denied, no `unknown` transaction contract |
+| EXT-004 | Approve [typed storage/runtime validation RFC](external-extensions-storage-contract.md), authority-bound Member/public context, separate Studio view IDs and public routes, SDK contract boundaries and billing bridge | Shared schemas compile in independent SDK consumer, Member publication mismatch denied, no `unknown` transaction contract |
 
 **Exit:** platform technical design approved, no implementation assumed.
 
@@ -37,7 +37,7 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 | --- | --- | --- |
 | EXT-201 | Admin/member/public namespaced route descriptor registry and shared contracts; host-owned auth + origin + limits | 401/403/404, forged tenant, collision, schema error, rate limits |
 | EXT-202 | Authority-bound principal/publication, Member-publication equality check, site privacy and per-call capability enforcement | Member from B denied on A, forged ID ignored, mixed cookies, event/job scope and privacy tests |
-| EXT-203 | Namespaced schema migrations + **typed publication-scoped repository contracts**, schema ownership and core Member FK review | No raw transaction/SQL exposed, incompatible member FK rejected, expand/backfill/crash/retry/large data tests |
+| EXT-203 | Implement [typed scoped storage + runtime validation contract](external-extensions-storage-contract.md), migration ledger, and core Member FK review | No raw transaction/SQL exposed, incompatible member FK rejected, expand/backfill/crash/retry/large data tests |
 | EXT-204 | Versioned, scoped member/entitlement/content read bridges as needed by pilot | No payment authority bypass; wrong member/plan/publication denied |
 
 **Exit:** API can manage plugin-owned course and enrollment through **public SDK only**, not `@vibress/database` or private domain deep imports.
@@ -46,7 +46,7 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 | Ticket | Deliverable | Required tests |
 | --- | --- | --- |
-| EXT-301 | Declarative nav, version/hash-addressed admin assets or reviewed iframe, CSP and translations | Forbidden origin/token leak, stale cache/disabled route, keyboard/RTL/long text tests |
+| EXT-301 | Resolve staff-only `adminNavigation.viewId` into admitted Studio views; version/hash-addressed assets or reviewed iframe, CSP and translations | Forbidden origin/token leak, stale cache/disabled route, keyboard/RTL/long text tests |
 | EXT-302 | Next.js reserved dispatcher, site privacy, theme fallbacks, SSR cache and locale/SEO policy | No private/hydration leak or route collision, 404, canonical/hreflang, preview/disabled tests |
 | EXT-303 | Sanitized view-model/theme slot and accessible fallback | External Liquid + built-in themes, escaping, Arabic/RTL, no slot |
 | EXT-304 | Docs + SDK reference implementation and independent plugin build/test workflow | Docs builds, sample package passes consumer contract CI |
@@ -75,9 +75,11 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 **Exit:** after review, mark shipped features as implemented in docs and announce stable vNext SDK. Do not label ready earlier.
 
-## Dependency order
+## Dependency order — two explicit gates
 
-`EXT-001..004 → EXT-101..104 → EXT-201..204 → EXT-301..304 → EXT-401..404 → EXT-501..504`.
+**Internal vertical-slice pilot:** `EXT-001..004 → EXT-101..104 → EXT-201..204 → minimal EXT-301/302 → LMS-101..106 (EXT-501)`. LMS-101..106 **implements** the pilot measured by EXT-501: it cannot be a prerequisite to itself. Focus this pilot on one course, protected lesson, correct Staff/Member/tenant access and basic public/Studio views. Optional async operations are not allowed to bypass an unimplemented worker contract.
+
+**Production / supported SDK release:** All `EXT-301..304`, `EXT-401..404`, `EXT-501..504` must be validated along with LMS MVP release gates. Full worker/event idempotency, backup/restore, package provenance, cross-replica versioning, RTL/themes, CI and support matrix are **release blockers**, even if not all are needed to start the internal pilot. `EXT-504` freezes the external SDK only after pilot and operational evidence.
 
 Within phases, run independent contract/test/docs work concurrently where possible; API policy precedes UI exposure, and data ownership precedes enrollment. Optional vanity URLs, one-time commerce bridge, untrusted sandbox and marketplace are **post-pilot**, separately approved initiatives.
 

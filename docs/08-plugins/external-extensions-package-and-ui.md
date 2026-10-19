@@ -35,12 +35,14 @@ Proposed safe design:
 
 | Surface | Artifact | Resolution & security | Disable/version semantics |
 | --- | --- | --- | --- |
-| Admin navigation | Declarative IDs, translation keys, namespaced href, permission ID | Host validates permission and locale, long labels, keyboard focus | Hidden and API disabled atomically |
+| Admin navigation | Staff-only registered `viewId`, translation key and permission; **no public href** | Host validates permission and locale, long labels, keyboard focus | Hidden and API disabled atomically |
 | Admin view | Reviewed static bundle **or** origin-locked iframe; no arbitrary React internals | CSP, asset integrity, constrained origin, no ambient credentials across origins; host auth API | Asset path carries plugin ID+version+hash; old bundle cache cannot call disabled APIs |
 | Public route | Reserved route descriptor; sanitized localized view-model and approved template slot | Next.js host dispatcher + explicit publication/site privacy, canonical/hreflang and theme fallback | Runtime registry resolution by enabled publication+artifact version; never dynamic source file edits |
 | Learner/private view | Member-verified SSR/API with per-request entitlement and private cache | No secret lesson data in public hydration/metadata/search or unsafe Liquid context | Disabled immediately denies new SSR/API/media grants |
 | Assets | Manifest-declared content-addressed paths | Escaped URLs, content-type allowlist, immutable-cache only for hash paths, restrictive CSP | New release gets new asset URL, old cache harmless |
 | Theme slots | Typed sanitized stable view-model schema and fallback default component | Bounded fields, bidi-safe strings, tests with built-in and external Liquid themes | Missing slot does not break existing themes |
+
+**Admin/Web route separation:** Manifest `adminNavigation[].viewId` resolves only to `adminViews[].id` under the **host-computed Studio base path**, not `/extensions/:pluginId/*`. The latter is reserved for public Web route descriptors. Protected Member lesson pages require an explicit Member-authenticated renderer and private cache. Treat forged view IDs, same-name collisions and stale assets as admission/runtime errors.
 
 Do not assume the existing `packages/theme-core/src/route-contract.ts` has extension routes: it currently covers home/posts/pages/tags/authors/collections/portal and theme assets. Approval requires a collision resolver with priority, locale prefixes and canonical rules; first iteration uses reserved `/extensions/:pluginId/*` only. The host must prevent theme/extension JS from reading authenticated member data without a private route.
 
