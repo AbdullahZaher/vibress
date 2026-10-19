@@ -80,16 +80,31 @@ describe("migrations 0040-0041: safe external plugin publication isolation", () 
         VALUES ('duplicate', 'plugin-a', 'pub-a', 'apiToken', 'another-encrypted', true);
       `)).rejects.toMatchObject({ code: "23505" });
 
-      await expect(client.query(
-        "DELETE FROM plugin_publication_states WHERE plugin_id='plugin-a' AND publication_id='pub-a'",
-      )).rejects.toMatchObject({ code: "23503" });
+      await client.query(`
+        INSERT INTO plugin_publication_settings
+          (id, plugin_id, publication_id, key, value, is_secret)
+        VALUES ('s-b', 'plugin-a', 'pub-b', 'locale', 'ar', false);
+      `);
 
-      const pubB = await client.query(
-        "SELECT * FROM plugin_publication_settings WHERE publication_id = 'pub-b'",
+      // Deleting the owning publication must cascade its state AND scoped secrets.
+      // Another publication and the legacy global plugin/settings remain intact.
+      await client.query("DELETE FROM publications WHERE id='pub-a'");
+      const removed = await client.query(
+        "SELECT id FROM plugin_publication_settings WHERE publication_id='pub-a'",
       );
-      expect(pubB.rows).toEqual([]);
+      expect(removed.rowCount).toBe(0);
+      const pubB = await client.query<{ value: string }>(
+        "SELECT value FROM plugin_publication_settings WHERE publication_id='pub-b'",
+      );
+      expect(pubB.rows).toEqual([{ value: "ar" }]);
+      const pubBState = await client.query(
+        "SELECT enabled FROM plugin_publication_states WHERE publication_id='pub-b'",
+      );
+      expect(pubBState.rowCount).toBe(1);
       const oldGlobal = await client.query("SELECT * FROM plugin_settings");
       expect(oldGlobal.rowCount).toBe(1);
+      const installedPlugin = await client.query("SELECT id FROM plugins WHERE id = 'plugin-a'");
+      expect(installedPlugin.rowCount).toBe(1);
 
       // Reapplying migration DDL is intentionally idempotent for retry/recovery.
       await client.query(migration0040);

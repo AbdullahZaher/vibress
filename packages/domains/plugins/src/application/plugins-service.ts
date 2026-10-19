@@ -13,6 +13,7 @@ import {
 } from "@vibress/plugin-sdk";
 import { encryptSecret, decryptSecret } from "@vibress/security";
 import { domainEvents } from "@vibress/events";
+import { isDeepStrictEqual } from "node:util";
 
 export class PluginDomainError extends Error {
   code: string;
@@ -69,18 +70,35 @@ export class PluginsService {
     const existing = await this.pluginRepo.findByManifestId(manifest.id);
     if (existing) {
       // An external code/version change must never bypass deactivate/activate.
-      if (existing.status === "active" &&
-          this.host.requiresPublicationEnablement?.(existing) === true &&
-          (existing.version !== manifest.version ||
-            existing.entrypoint !== manifest.entrypoint ||
-            existing.vibressApiVersion !== manifest.vibressApiVersion ||
-            existing.capabilities.join("\\0") !== manifest.capabilities.join("\\0") ||
-            existing.hooks.join("\\0") !== (manifest.hooks ?? []).join("\\0") ||
-            JSON.stringify(existing.settingsSchema) !== JSON.stringify(manifest.settingsSchema ?? {}))) {
-        throw new PluginDomainError(
-          "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
-          "Deactivate the external plugin before registering a changed release",
-        );
+      if (this.host.requiresPublicationEnablement?.(existing) === true) {
+        const newSchema = manifest.settingsSchema ?? {};
+        const oldFields = this.getSettingDefinitions(existing.settingsSchema);
+        const newFields = this.getSettingDefinitions(newSchema);
+        // Existing setting keys are immutable without a reviewed data migration.
+        // In particular, plaintext settings must never silently become secrets.
+        for (const [key, definition] of Object.entries(oldFields)) {
+          if (!Object.hasOwn(newFields, key) ||
+              !isDeepStrictEqual(definition, newFields[key])) {
+            throw new PluginDomainError(
+              "PLUGIN_SETTINGS_SCHEMA_MIGRATION_REQUIRED",
+              "Changing an existing plugin setting requires a reviewed migration",
+            );
+          }
+        }
+        if (existing.status === "active" &&
+            (existing.name !== manifest.name ||
+              existing.description !== (manifest.description ?? null) ||
+              existing.version !== manifest.version ||
+              existing.entrypoint !== manifest.entrypoint ||
+              existing.vibressApiVersion !== manifest.vibressApiVersion ||
+              !isDeepStrictEqual(existing.capabilities, manifest.capabilities) ||
+              !isDeepStrictEqual(existing.hooks, manifest.hooks ?? []) ||
+              !isDeepStrictEqual(existing.settingsSchema, newSchema))) {
+          throw new PluginDomainError(
+            "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+            "Deactivate the external plugin before registering a changed release",
+          );
+        }
       }
       // Update metadata (re-registration)
       const updated = await this.pluginRepo.updateMetadata(existing.id, {
@@ -435,12 +453,7 @@ export class PluginsService {
     if (!(await this.publicationStates.isEnabled(pluginId, publicationId))) {
       throw new PluginDomainError("PLUGIN_PUBLICATION_INACTIVE", "Enable this plugin for the publication first");
     }
-    const schema = plugin.settingsSchema;
-    const rawDefs: unknown = "properties" in schema ? schema.properties : schema;
-    if (!rawDefs || typeof rawDefs !== "object" || Array.isArray(rawDefs)) {
-      throw new PluginDomainError("PLUGIN_SETTINGS_SCHEMA_INVALID", "Plugin settings schema is invalid");
-    }
-    const defs: Record<string, unknown> = rawDefs as Record<string, unknown>;
+    const defs = this.getSettingDefinitions(plugin.settingsSchema);
     const entries: Array<{
       key: string;
       value: string | null;
@@ -483,13 +496,23 @@ export class PluginsService {
     if (!this.host.requiresPublicationEnablement?.(plugin)) {
       throw new PluginDomainError("PLUGIN_LEGACY_GLOBAL", "Bundled plugins use legacy global settings");
     }
+    const definitions = this.getSettingDefinitions(plugin.settingsSchema);
     const records = await this.publicationSettings.listForPlugin(pluginId, publicationId);
-    return records.map((record) => ({
-      key: record.key,
-      value: record.isSecret ? "••••••••" : record.value,
-      isSecret: record.isSecret,
-      masked: record.isSecret,
-    }));
+    return records.flatMap((record) => {
+      const definition = definitions[record.key];
+      if (!definition || typeof definition !== "object" || Array.isArray(definition) ||
+          !("type" in definition) || definition.type !== "string") return [];
+      // A secret according to EITHER the persisted row or current manifest
+      // must never be exposed as plaintext, even after an inconsistent upgrade.
+      const declaredSecret = "secret" in definition && definition.secret === true;
+      const isSecret = record.isSecret || declaredSecret;
+      return [{
+        key: record.key,
+        value: isSecret ? "••••••••" : record.value,
+        isSecret,
+        masked: isSecret,
+      }];
+    });
   }
 
   private async loadPublicationSettings(
@@ -497,9 +520,16 @@ export class PluginsService {
     publicationId: string,
   ): Promise<Record<string, unknown>> {
     if (!this.publicationSettings) return {};
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) return {};
+    const definitions = this.getSettingDefinitions(plugin.settingsSchema);
     const data = await this.publicationSettings.listForPlugin(pluginId, publicationId);
     const settings: Record<string, unknown> = {};
     for (const item of data) {
+      const definition = definitions[item.key];
+      if (!definition || typeof definition !== "object" ||
+          !("type" in definition) || definition.type !== "string" ||
+          ("secret" in definition && definition.secret === true)) continue;
       if (!item.isSecret && item.value !== null) settings[item.key] = item.value;
     }
     return settings;
@@ -518,6 +548,16 @@ export class PluginsService {
     } catch {
       return null;
     }
+  }
+
+  private getSettingDefinitions(schema: Record<string, unknown>): Record<string, unknown> {
+    const raw: unknown = Object.hasOwn(schema, "properties") ? schema.properties : schema;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new PluginDomainError(
+        "PLUGIN_SETTINGS_SCHEMA_INVALID", "Plugin settings schema is invalid",
+      );
+    }
+    return raw as Record<string, unknown>;
   }
 
   // ---------------- Settings ----------------

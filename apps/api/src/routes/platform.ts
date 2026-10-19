@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
+  requirePlatformPluginOperator,
   validateOrigin,
 } from "../middleware/auth";
 import {
@@ -433,6 +434,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -459,6 +461,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -490,6 +493,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -516,6 +520,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -707,6 +712,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {

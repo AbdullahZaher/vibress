@@ -164,3 +164,26 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
     });
   }
 }
+
+/**
+ * Package admission and global lifecycle are platform operations, not
+ * publication-local plugin configuration. Global system roles are resolved
+ * from the authenticated Staff session, never from a request header.
+ */
+export async function requirePlatformPluginOperator(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const systemOperator = req.roles?.some((role) =>
+    role === "owner" || role === "administrator") === true;
+  if (!systemOperator || !req.permissions ||
+      !hasPermission(req.permissions, "system.manage", req.roles)) {
+    return reply.status(403).send({
+      errors: [{
+        code: "PLATFORM_OPERATOR_REQUIRED",
+        message: "Platform operator access required",
+        requestId: req.id,
+      }],
+    });
+  }
+}

@@ -230,7 +230,7 @@ export const pluginPublicationSettings = pgTable(
       name: "plugin_pub_settings_owner_fk",
       columns: [table.pluginId, table.publicationId],
       foreignColumns: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
-    }).onDelete("restrict"),
+    }).onDelete("cascade"),
     uniqueScopedSetting: uniqueIndex("plugin_pub_settings_unique_idx")
       .on(table.pluginId, table.publicationId, table.key),
     publicationSettingsIdx: index("plugin_pub_settings_publication_idx")

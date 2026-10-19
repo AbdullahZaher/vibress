@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS "plugin_publication_settings" (
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "plugin_pub_settings_owner_fk" FOREIGN KEY ("plugin_id", "publication_id")
-    REFERENCES "plugin_publication_states" ("plugin_id", "publication_id") ON DELETE RESTRICT,
+    REFERENCES "plugin_publication_states" ("plugin_id", "publication_id") ON DELETE CASCADE,
   CONSTRAINT "plugin_pub_settings_value_check" CHECK (
     (is_secret = true AND value IS NULL AND encrypted_value IS NOT NULL)
     OR (is_secret = false AND encrypted_value IS NULL)
