@@ -75,3 +75,17 @@ export interface PluginPublicationStateRepository {
   isEnabled(pluginId: string, publicationId: string): Promise<boolean>;
   setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void>;
 }
+
+/** Publication-scoped settings: legacy plugin_settings is not a fallback. */
+export interface PluginPublicationSettingRepository {
+  set(
+    pluginId: string,
+    publicationId: string,
+    key: string,
+    value: string | null,
+    encryptedValue: string | null,
+    isSecret: boolean,
+  ): Promise<void>;
+  listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]>;
+  getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null>;
+}

@@ -32,7 +32,8 @@ export interface PluginContext {
 export interface PluginModule {
   activate(context: PluginContext): void | Promise<void>;
   deactivate?(): void | Promise<void>;
-  onEvent?(eventName: string, payload: unknown): void | Promise<void>;
+  /** Third parameter is additive; bundled v1 handlers may ignore it. */
+  onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
 }
 
 export const SDK_VERSION = "1.0.0";
