@@ -1,6 +1,6 @@
 # External extensions: contract proposals (not an SDK reference)
 
-**Status: DRAFT RFC, no implementation shipped.** Names, JSON and URLs below are proposed design targets. Do not import or call them today. Existing `@vibress/plugin-sdk` `SDK_VERSION` is `1.0.0` in source and exact-match validation is current behavior. Package.json version does not replace SDK protocol compatibility.
+**Status: ARCHITECTURE DIRECTION ACCEPTED — detailed wire/SDK contract NOT FROZEN, no implementation shipped.** [Decision record](EXTENSION_RFC_APPROVAL.md). Names, JSON and URLs below are illustrative design targets. Do not import or call them today. Existing `@vibress/plugin-sdk` `SDK_VERSION` is `1.0.0` in source and exact-match validation is current behavior. Package.json version does not replace SDK protocol compatibility.
 
 ## 1. Artifact + deployment manifest (illustrative vNext)
 
@@ -30,7 +30,7 @@
 }
 ```
 
-**Illustration only:** release metadata schema, capability names and host API negotiation require formal approval. `artifactRef` is an identity resolved **only from an operator-trusted external lockfile or detached signed envelope**, whose SHA-256 covers the *final archive bytes*. The archive must not claim its own archive digest from inside itself (circular checksum). See [package and UI RFC](external-extensions-package-and-ui.md).
+**Illustration only:** release metadata field names, capability strings, host API vNext major value and SDK method signatures require **EXT-004 schema and conformance approval**. The approved architectural principles are in the [ADR](../adr/2026-10-19-external-extension-host-vnext.md). `artifactRef` is an identity resolved **only from an operator-trusted external lockfile or detached signed envelope**, whose SHA-256 covers the *final archive bytes*. The archive must not claim its own archive digest from inside itself (circular checksum). See [package and UI RFC](external-extensions-package-and-ui.md).
 
 ### Manifest validation requirements
 

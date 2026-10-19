@@ -1,6 +1,6 @@
 # Versioned extension storage and runtime schema contract — proposed vNext RFC
 
-**Status:** Approved *planning choice*, NOT a shipped SDK/API; explicit Architect, Security, API and DB review is required before implementing EXT-004/201/203. Current external plugins cannot call the interfaces below.
+**Status:** ACCEPTED AS DESIGN DIRECTION, NOT A SHIPPED SDK/API — scoped named-model typed repositories and public runtime-schema adapter; final ABI, SQL and named operations subject to EXT-004/201/203 reviews/tests. [ADR](../adr/2026-10-19-external-extension-host-vnext.md). Current external plugins cannot call the interfaces below.
 
 ## Design decision
 

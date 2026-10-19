@@ -1,6 +1,6 @@
 # Extension SDK unification and legacy compatibility RFC
 
-**Status:** PROPOSED — blocking `EXT-001`, `EXT-003` and `EXT-102`. No SDK change is shipped by this document.
+**Status:** ACCEPTED DESIGN DIRECTION — canonical `@vibress/plugin-sdk` + v1 preservation; consumer inventory/legacy adapter contract pending EXT-001/102. No SDK change shipped. [ADR](../adr/2026-10-19-external-extension-host-vnext.md).
 
 ## Existing executable contracts (verified 2026-10-19)
 
@@ -17,7 +17,7 @@
 ## Proposed canonical contract and migration policy
 
 1. **Canonical runtime ABI:** extend `@vibress/plugin-sdk` via a separately versioned *vNext host protocol*; `apps/api` uses this exclusively for newly admitted packages. Final names/types follow an RFC and release process. Preserve v1 bundled `PluginModule` behavior.
-2. **Inventory before adapter:** search imports/usages of `@vibress/plugin-sdk`, `@vibress/plugin-core`, ``plugin-core/src`, `VibressPlugin`, manifests, worker hooks, theme code, tests and operator docs. Classify each by active, test-only, historical or externally consumed. Do not remove or rename blindly.
+2. **Inventory before adapter:** search imports/usages of `@vibress/plugin-sdk`, `@vibress/plugin-core`, `plugin-core/src`, `VibressPlugin`, manifests, worker hooks, theme code, tests and operator docs. Classify each by active, test-only, historical or externally consumed. Do not remove or rename blindly.
 3. **Explicit version dispatch:** loader chooses exactly one adapter by verified manifest format and admitted protocol; unknown/ambiguous or mixed manifest versions fail closed. A plugin-core manifest with no `vibressApiVersion` must *not* be silently treated as an SDK v1 external artifact.
 4. **Compatibility mapping:** for demonstrably supported legacy consumers, bridge `onActivate(context)` to host activation, `onDeactivate(context)` with captured original context and `onEvent(event,payload,context)` with scoped context. Do not drop context or settings; reject unsupported capabilities or lifecycle semantics rather than silently ignoring them.
 5. **Stable existing v1:** keep exact-match `vibressApiVersion` validation for existing bundled modules; new protocol negotiation is additive and supports only explicitly advertised majors/minors. Keep current status, settings, error format, request IDs and current bundled IDs working.
@@ -41,4 +41,4 @@
 - Invalid module exports, missing lifecycle hooks, double activation, interrupted deactivation, queue drain and cross-publication event tests.
 - A clean external sample compiles using **only** published SDK packages; no private deep imports. Run conformance against supported host API majors and Docker image versions.
 
-**Decision owner:** Plugin/Theme Reviewer + Architect + Security + QA. Remains RFC until approved ADR, tests, and code land.
+**Decision owner:** Plugin/Theme Reviewer + Architect + Security + QA. Architecture decision accepted in [ADR](../adr/2026-10-19-external-extension-host-vnext.md); exact adapter behavior remains an implementation hold point until consumer evidence/tests exist.

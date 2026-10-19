@@ -1,6 +1,6 @@
 # Trusted package, integrity, UI and worker integration RFC
 
-**Status:** PROPOSED — `EXT-101`, `EXT-301`, `EXT-302`, `EXT-401` dependencies. No runtime support today.
+**Status:** ACCEPTED DESIGN DIRECTION — operator-pinned artifact, separated Studio/Web routes, versioned UI/worker assets. Exact package encoding/loading is subject to EXT-101/301/302/401 tests. No runtime support today. [ADR](../adr/2026-10-19-external-extension-host-vnext.md).
 
 ## Immutable artifact and digest scope
 

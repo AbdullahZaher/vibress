@@ -1,6 +1,6 @@
 # External plugin platform — architecture RFC
 
-**Status:** PROPOSED / NOT IMPLEMENTED  
+**Status:** ACCEPTED FOR IMPLEMENTATION — architectural direction only; NOT IMPLEMENTED. [ADR](../adr/2026-10-19-external-extension-host-vnext.md).  
 **Date:** 2026-10-19  
 **Owners:** Vibress core maintainers (Architect, Security, API, DB, Web/Admin, QA)  
 **Pilot consumer:** `vibress-lms` (independently versioned repository).
@@ -89,11 +89,11 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 
 ## 8. Implementation-blocking specifications
 
-The typed storage and shared runtime-schema contract is [specified here](external-extensions-storage-contract.md) but not implemented. The architecture is not approved for coding until [SDK ABI and legacy adapter](external-extensions-sdk-compatibility.md), [principal publication binding, typed data and legacy migration](external-extensions-identity-data.md) and [immutable release integrity, Admin/Next.js assets and worker lifecycle](external-extensions-package-and-ui.md) have explicit decisions, test fixtures and owners. `packages/theme-core/src/route-contract.ts` does not register extension pages today. `PluginsService.deactivatePlugin` does not call `deactivate()`, and `executeHook` does not forward the actual event name correctly; those are functional blockers for credible lifecycle documentation.
+The typed storage and shared runtime-schema direction is [accepted by the ADR](../adr/2026-10-19-external-extension-host-vnext.md) but not implemented. Sensitive implementation remains blocked until [SDK ABI and legacy adapter](external-extensions-sdk-compatibility.md), [principal publication binding, typed data and legacy migration](external-extensions-identity-data.md) and [immutable release integrity, Admin/Next.js assets and worker lifecycle](external-extensions-package-and-ui.md) have explicit decisions, test fixtures and owners. `packages/theme-core/src/route-contract.ts` does not register extension pages today. `PluginsService.deactivatePlugin` does not call `deactivate()`, and `executeHook` does not forward the actual event name correctly; those are functional blockers for credible lifecycle documentation.
 
-## 9. Explicit decisions pending approval
+## 9. Adopted architecture choices requiring concrete implementation and contract freeze
 
-| Decision | Proposed default | Gate |
+| Decision | Accepted design default | Implementation/release gate |
 | --- | --- | --- |
 | Package source | Operator-vetted release/lockfile, built into image | Supply-chain/security sign-off |
 | API compatibility | New major host contract; additive optional fields | SDK consumer test suite |

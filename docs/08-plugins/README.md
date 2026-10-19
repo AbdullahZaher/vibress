@@ -2,6 +2,10 @@
 
 **Documentation status: design proposal — 2026-10-19.** These documents do not imply the features are implemented.
 
+## Architecture decision
+
+**Approved for implementation direction, not shipped:** [RFC review/approval record](EXTENSION_RFC_APPROVAL.md) and [accepted architecture ADR](../adr/2026-10-19-external-extension-host-vnext.md). Conceptual API examples remain unimplemented; production release and SDK contract freeze require the gates below.
+
 ## Read in this order
 
 1. [External extensions architecture](external-extensions-architecture.md) — production trust boundary, service ownership, lifecycle, tenant model, deployment.

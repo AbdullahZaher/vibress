@@ -1,6 +1,6 @@
 # External plugin platform: implementation roadmap
 
-**Status: PROPOSED; no tickets are implemented by this document.**  
+**Status: ACCEPTED IMPLEMENTATION SEQUENCING; no tickets are implemented by this document.** [Decision record](EXTENSION_RFC_APPROVAL.md).  
 **Anchor:** current Vibress `main` reviewed 2026-10-19.  
 **Outcome:** external operator-installed trusted package runs end-to-end, without plugin-specific core edits.  
 **Pilot:** `vibress-lms` (separate private repository).
@@ -82,6 +82,10 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 **Production / supported SDK release:** All `EXT-301..304`, `EXT-401..404`, `EXT-501..504` must be validated along with LMS MVP release gates. Full worker/event idempotency, backup/restore, package provenance, cross-replica versioning, RTL/themes, CI and support matrix are **release blockers**, even if not all are needed to start the internal pilot. `EXT-504` freezes the external SDK only after pilot and operational evidence.
 
 Within phases, run independent contract/test/docs work concurrently where possible; API policy precedes UI exposure, and data ownership precedes enrollment. Optional vanity URLs, one-time commerce bridge, untrusted sandbox and marketplace are **post-pilot**, separately approved initiatives.
+
+## Approval milestone
+
+The architectural RFC is [accepted for implementation](EXTENSION_RFC_APPROVAL.md), with binding invariants recorded in [ADR](../adr/2026-10-19-external-extension-host-vnext.md). `EXT-001..004` is now the **next authorized implementation phase**. Detailed SDK ABI/manifest/schema remains provisional and requires its own reviewed conformance sample before implementation tickets are marked complete. No stable external plugin API or production readiness is implied.
 
 ## Definition of done (every ticket)
 

@@ -1,6 +1,6 @@
 # Extension identity, scoped data and migration contract RFC
 
-**Status:** PROPOSED — prerequisites for `EXT-202`, `EXT-203` and LMS enrollment. Not a callable current API.
+**Status:** ACCEPTED AS DESIGN — host principal binding, publication isolation, guarded legacy migration. Not a callable current API; runtime/DB tests pending EXT-202/203. [ADR](../adr/2026-10-19-external-extension-host-vnext.md).
 
 ## Principals and authoritative publication binding
 

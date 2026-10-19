@@ -1,6 +1,6 @@
 # External plugin security and operations standard
 
-**Status: PROPOSED design controls.** Apply when implementing the external extension host. Current accepted policy remains trusted/bundled code only.
+**Status: ACCEPTED ARCHITECTURAL CONTROLS, NOT IMPLEMENTED.** Apply when implementing the external extension host. [ADR](../adr/2026-10-19-external-extension-host-vnext.md). Current accepted policy remains trusted/bundled code only.
 
 ## Trust model
 
