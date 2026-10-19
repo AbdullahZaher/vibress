@@ -258,6 +258,31 @@ describe("API — External Theme System Integration", () => {
     expect(body.theme.settings.headlineFont).toBe("Georgia");
   });
 
+  it("returns saved theme settings to authorized staff only", async () => {
+    const path = "/api/admin/v1/themes/vibress-news-express";
+    const unauthenticated = await app.inject({ method: "GET", url: path });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: path,
+      headers: { cookie: staffCookie },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().settings).toMatchObject({
+      accentColor: "#ff4400",
+      headlineFont: "Georgia",
+    });
+    expect(detail.json().settingsSchema.accentColor.type).toBe("color");
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/themes/does-not-exist",
+      headers: { cookie: staffCookie },
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
   it("creates and resolves theme preview tokens", async () => {
     const createRes = await app.inject({
       method: "POST",
@@ -307,6 +332,42 @@ describe("API — External Theme System Integration", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().errors[0]?.message).toMatch(/Built-in system themes cannot be uninstalled/i);
+  });
+
+  it("edits an inactive theme and restores its settings upon reactivation", async () => {
+    const headers = { cookie: staffCookie, origin: "http://localhost:7777" };
+    const base = "/api/admin/v1/themes";
+    const switchToDefault = await app.inject({
+      method: "POST", url: `${base}/vibress-default/activate`, headers,
+    });
+    expect(switchToDefault.statusCode).toBe(200);
+
+    const saved = await app.inject({
+      method: "GET", url: `${base}/vibress-news-express`, headers: { cookie: staffCookie },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings.accentColor).toBe("#ff4400");
+
+    const updated = await app.inject({
+      method: "PATCH", url: `${base}/vibress-news-express/settings`,
+      headers,
+      payload: { accentColor: "#ccaa44", headlineFont: "Georgia" },
+    });
+    expect(updated.statusCode).toBe(200);
+    const stillDefault = await app.inject({
+      method: "GET", url: `${base}/active`, headers: { cookie: staffCookie },
+    });
+    expect(stillDefault.json().themeId).toBe("vibress-default");
+
+    const reactivate = await app.inject({
+      method: "POST", url: `${base}/vibress-news-express/activate`, headers,
+    });
+    expect(reactivate.statusCode).toBe(200);
+    expect(reactivate.json().theme.settings.accentColor).toBe("#ccaa44");
+
+    await app.inject({
+      method: "POST", url: `${base}/vibress-default/activate`, headers,
+    });
   });
 
   it("deletes an external theme when no longer active", async () => {
