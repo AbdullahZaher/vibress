@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminPlugin, AdminScopedPluginSetting } from "../../lib/api";
 import {
   listPluginPublicationSettingsApi,
@@ -40,12 +40,14 @@ export function ScopedPluginSettingsEditor({ plugin, onError }: Props) {
   const [saved, setSaved] = useState<AdminScopedPluginSetting[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState(false);
+  const generation = useRef(0);
   const fields = declaredStringFields(plugin.settingsSchema);
 
   useEffect(() => {
     // Switching publications must never preserve the previous site's secret
     // edit state, saved values or form visibility.
     const reset = () => {
+      generation.current += 1;
       setOpen(false);
       setSaved([]);
       setDraft({});
@@ -58,11 +60,20 @@ export function ScopedPluginSettingsEditor({ plugin, onError }: Props) {
   useEffect(() => {
     if (!open) return;
     let canceled = false;
+    const requestedGeneration = generation.current;
     setLoading(true);
     void listPluginPublicationSettingsApi(plugin.id)
-      .then((response) => { if (!canceled) setSaved(response.settings); })
-      .catch(() => { if (!canceled) onError(tr("Settings loading failed")); })
-      .finally(() => { if (!canceled) setLoading(false); });
+      .then((response) => {
+        if (!canceled && requestedGeneration === generation.current) setSaved(response.settings);
+      })
+      .catch(() => {
+        if (!canceled && requestedGeneration === generation.current) {
+          onError(tr("Settings loading failed"));
+        }
+      })
+      .finally(() => {
+        if (!canceled && requestedGeneration === generation.current) setLoading(false);
+      });
     return () => { canceled = true; };
   }, [open, plugin.id]);
 
@@ -71,16 +82,21 @@ export function ScopedPluginSettingsEditor({ plugin, onError }: Props) {
     if (saving || Object.keys(draft).length === 0) return;
     setSaving(true);
     setSuccess(false);
+    const requestedGeneration = generation.current;
     try {
       await setPluginPublicationSettingsApi(plugin.id, draft);
       const response = await listPluginPublicationSettingsApi(plugin.id);
-      setSaved(response.settings);
-      setDraft({});
-      setSuccess(true);
+      if (requestedGeneration === generation.current) {
+        setSaved(response.settings);
+        setDraft({});
+        setSuccess(true);
+      }
     } catch (error: unknown) {
-      onError(error instanceof Error ? error.message : tr("Plugin action failed"));
+      if (requestedGeneration === generation.current) {
+        onError(error instanceof Error ? error.message : tr("Plugin action failed"));
+      }
     } finally {
-      setSaving(false);
+      if (requestedGeneration === generation.current) setSaving(false);
     }
   };
 
