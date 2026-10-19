@@ -10,7 +10,7 @@ vi.mock("../../../../lib/admin-locale", () => ({
   useAdminLocale: () => ({ tr: (key: string) => key }),
 }));
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("Admin sidebar Plugins navigation", () => {
   let container: HTMLDivElement;
