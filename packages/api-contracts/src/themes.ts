@@ -40,6 +40,20 @@ export const ActiveThemeDtoSchema = z.object({
 });
 export type ActiveThemeDto = z.infer<typeof ActiveThemeDtoSchema>;
 
+/** Optional optimistic concurrency check supplied only by modern Admin clients. */
+export const ThemeSettingsPreconditionSchema = z.object({
+  themeVersion: z.string().regex(/^\\d+\\.\\d+\\.\\d+$/),
+  settingsSchemaVersion: z.coerce.number().int().positive(),
+});
+export type ThemeSettingsPrecondition = z.infer<typeof ThemeSettingsPreconditionSchema>;
+
+export const ThemePreviewResolvedDtoSchema = z.object({
+  themeId: z.string(),
+  themeVersion: z.string(),
+  isBuiltIn: z.boolean(),
+  settings: z.record(z.unknown()),
+});
+
 export const ThemeSettingsUpdateSchema = z.record(z.unknown());
 export type ThemeSettingsUpdateInput = z.infer<
   typeof ThemeSettingsUpdateSchema
