@@ -102,14 +102,19 @@ export class PluginsService {
           "Plugin entrypoint does not export an activate function",
         );
       }
-      const settings = await this.loadPlainSettings(plugin.id);
+      // Existing v1 settings are platform-global. Until publication-scoped
+      // settings exist, external packages must never receive global secrets.
+      const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
+      const settings = publicationScoped ? {} : await this.loadPlainSettings(plugin.id);
       const context: PluginContext = {
         manifestId: plugin.manifestId,
         name: plugin.name,
         version: plugin.version,
         publicationId: undefined,
         settings,
-        getSecret: (key: string) => this.getDecryptedSecret(plugin.id, key),
+        getSecret: publicationScoped
+          ? async (_key: string) => null
+          : (key: string) => this.getDecryptedSecret(plugin.id, key),
         log: (message: string, level: "info" | "warn" | "error" = "info") => {
           console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
         },
@@ -331,6 +336,12 @@ export class PluginsService {
     const plugin = await this.pluginRepo.findById(pluginId);
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError(
+        "PLUGIN_SETTINGS_NOT_SCOPED",
+        "External plugin settings require publication-scoped storage",
+      );
+    }
 
     const schemaMap = (schema || plugin.settingsSchema || {}) as Record<
       string,
@@ -374,6 +385,14 @@ export class PluginsService {
       masked: boolean;
     }>
   > {
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError(
+        "PLUGIN_SETTINGS_NOT_SCOPED",
+        "External plugin settings require publication-scoped storage",
+      );
+    }
     const settings = await this.settingRepo.listForPlugin(pluginId);
     return settings.map((s) => ({
       key: s.key,
