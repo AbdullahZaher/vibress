@@ -130,8 +130,8 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
         </p>
       ) : detail ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          {Object.entries(detail.settingsSchema).map(([key, definition]) => {
-            const inputId = `${idPrefix}-${key}`;
+          {Object.entries(detail.settingsSchema).map(([key, definition], index) => {
+            const inputId = `${idPrefix}-${index}`;
             const descriptionId = `${inputId}-description`;
             const value = draft[key] ?? definition.default;
             const describedBy = definition.description ? descriptionId : undefined;
