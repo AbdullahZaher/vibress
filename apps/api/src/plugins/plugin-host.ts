@@ -1,5 +1,6 @@
 import { Plugin, PluginHost } from "@vibress/plugins";
-import { PluginModule } from "@vibress/plugin-sdk";
+import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
+import { isDeepStrictEqual } from "node:util";
 import {
   manifest as contentMetricsManifest,
   plugin as contentMetricsPlugin,
@@ -22,6 +23,24 @@ export class BundledPluginHost implements PluginHost {
 
   requiresPublicationEnablement(plugin: Plugin): boolean {
     return !this.registry.has(plugin.manifestId);
+  }
+
+  async getOperatorManifests(): Promise<PluginManifest[]> {
+    return this.external.listTrustedManifests();
+  }
+
+  async authorizeRegistration(manifest: PluginManifest): Promise<void> {
+    const builtin = this.registry.get(manifest.id);
+    if (builtin) {
+      if (!isDeepStrictEqual(validateManifest(builtin.manifest), manifest)) {
+        throw new Error("Bundled plugin manifest differs from installed module");
+      }
+      return;
+    }
+    const approved = (await this.external.listTrustedManifests()).find((p) => p.id === manifest.id);
+    if (!approved || !isDeepStrictEqual(approved, manifest)) {
+      throw new Error("Plugin manifest is not operator approved");
+    }
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {

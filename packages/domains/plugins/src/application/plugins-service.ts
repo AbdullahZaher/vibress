@@ -26,6 +26,8 @@ export class PluginDomainError extends Error {
 export interface PluginHost {
   loadModule(plugin: Plugin): Promise<PluginModule | null>;
   requiresPublicationEnablement?(plugin: Plugin): boolean;
+  getOperatorManifests?(): Promise<PluginManifest[]>;
+  authorizeRegistration?(manifest: PluginManifest): Promise<void>;
 }
 
 export class PluginsService {
@@ -53,6 +55,14 @@ export class PluginsService {
       throw new PluginDomainError(
         "INVALID_MANIFEST",
         (err as Error).message || "Invalid plugin manifest",
+      );
+    }
+
+    try {
+      await this.host.authorizeRegistration?.(manifest);
+    } catch {
+      throw new PluginDomainError(
+        "PLUGIN_NOT_TRUSTED", "Plugin manifest is not approved by the operator",
       );
     }
 
@@ -289,6 +299,37 @@ export class PluginsService {
 
   async listPlugins(): Promise<Plugin[]> {
     return this.pluginRepo.list();
+  }
+
+  /** Operator-approved external package discovery, no client-provided manifest trust. */
+  async listOperatorManifests(): Promise<
+    Array<{ id: string; name: string; version: string; description: string | null }>
+  > {
+    try {
+      const manifests = await this.host.getOperatorManifests?.() ?? [];
+      return manifests.map((manifest) => ({
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        description: manifest.description ?? null,
+      }));
+    } catch {
+      throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
+    }
+  }
+
+  async registerOperatorPlugin(manifestId: string, actorId: string | null): Promise<Plugin> {
+    let approved: PluginManifest | undefined;
+    try {
+      approved = (await this.host.getOperatorManifests?.() ?? [])
+        .find((manifest) => manifest.id === manifestId);
+    } catch {
+      throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
+    }
+    if (!approved) {
+      throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
+    }
+    return this.registerPlugin(approved, actorId);
   }
 
   /** Additive Admin projection; global v1 activation remains unchanged. */

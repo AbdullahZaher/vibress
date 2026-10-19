@@ -68,12 +68,28 @@ function isPluginModule(value: unknown): value is PluginModule {
 export class TrustedExternalPluginHost {
   constructor(private readonly lockfilePath: string | undefined = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {}
 
+  /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
+  async listTrustedManifests(): Promise<PluginManifest[]> {
+    if (!this.lockfilePath) return [];
+    if (!path.isAbsolute(this.lockfilePath)) {
+      throw new Error("Trusted plugin lockfile must use an absolute path");
+    }
+    const lockfileStats = await lstat(this.lockfilePath);
+    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
+      lockfileStats.size > MAX_LOCKFILE_BYTES) {
+      throw new Error("Invalid trusted plugin lockfile");
+    }
+    const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
+  }
+
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
     if (!this.lockfilePath) return null;
     if (!path.isAbsolute(this.lockfilePath)) throw new Error("Trusted plugin lockfile must use an absolute path");
 
-    const lockfileStats = await stat(this.lockfilePath);
-    if (!lockfileStats.isFile() || lockfileStats.size > MAX_LOCKFILE_BYTES) {
+    const lockfileStats = await lstat(this.lockfilePath);
+    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
+      lockfileStats.size > MAX_LOCKFILE_BYTES) {
       throw new Error("Invalid trusted plugin lockfile");
     }
     const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
