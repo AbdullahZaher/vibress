@@ -221,6 +221,25 @@ describe("Theme Domain — Activation & Management", () => {
     expect(list.some((t) => t.manifest.id === "vibress-default")).toBe(true);
   });
 
+  it("shows the active installed version in the theme catalog", async () => {
+    const first = await installedRepo.findByThemeId("custom-nordic");
+    if (!first) throw new Error("Missing seeded theme");
+    await installedRepo.create({
+      ...first,
+      id: "installed-2",
+      version: "2.0.0",
+      manifest: { ...first.manifest, version: "2.0.0" },
+      settingsSchema: { accentColor: { type: "color", default: "#222222" } },
+      updatedAt: new Date(first.updatedAt.getTime() + 1000),
+    });
+    await service.activateTheme("custom-nordic", "user-1", "1.0.0");
+
+    const catalog = await service.listThemes();
+    const selected = catalog.find((t) => t.manifest.id === "custom-nordic");
+    expect(selected?.manifest.version).toBe("1.0.0");
+    expect(selected?.settingsSchema.accentColor.default).toBe("#5e81ac");
+  });
+
   it("activates an external theme and updates its status", async () => {
     const activated = await service.activateTheme("custom-nordic", "user-1");
     expect(activated.themeId).toBe("custom-nordic");
