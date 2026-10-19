@@ -30,3 +30,8 @@
 1. Automated CI verification: `pnpm typecheck`, `pnpm lint`, `verify:explicit-any`, focused Vitest tests, database migration tests, integration tests, and build.
 2. Verified fresh and populated PostgreSQL upgrades through 0040/0041, publication deletion cascading, checksum verification, concurrency, disabled-state, and tenant-denial behavior. A process crash during `activating/deactivating` leaves a fail-closed state that operators can recover via `POST /api/admin/v1/plugins/:id/recover`.
 3. Architecture note: Any installed trusted JavaScript runs with API-process privileges; `hasCapability` checks only mediated host operations and does not stop a malicious extension from reading Node process state. Operator must vet packages. Separate supervised process/container isolation remains a future ADR.
+
+## Admin navigation and maintenance recovery (2026-10-19)
+
+- **Plugins** is a dedicated `/admin/plugins` route, permission-checked with `plugins.read`, linked immediately **above Settings** in the sidebar. Legacy `/admin/settings/platform` remains available for integrations, API keys, and webhooks; it no longer duplicates Plugins.
+- **Lifecycle recovery is explicitly offline/maintenance-only.** Normal serving APIs return a conflict even when a transition is stuck. An operator must stop/drain all normal API and worker replicas, start one dedicated API with `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`, verify the transition is at least 15 minutes old, and explicitly send `{"confirmAllRuntimesStopped":true}`. The maintenance instance rejects plugin execution. Recovery still relies on the operator's attestation; it is **not** an automatic distributed fencing or crash-isolation guarantee. See [recovery runbook](plugin-system.md).

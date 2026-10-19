@@ -50,7 +50,7 @@ export function PlatformSettings() {
   useEffect(() => {
     void refresh();
     const onPublicationChanged = () => {
-      // Never keep stale plugin/publication state or one-time secrets visible.
+      // Clear one-time integration secrets whenever the publication changes.
       setNewSecret(null);
       void refresh();
     };
