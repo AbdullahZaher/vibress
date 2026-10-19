@@ -40,6 +40,51 @@ export class PluginsService {
     private publicationSettings?: PluginPublicationSettingRepository,
   ) {}
 
+  /** An API replica initializes a module locally before its first event. */
+  private readonly initializedHere = new Map<string, Promise<void>>();
+
+  private activationKey(plugin: Plugin): string {
+    return `${plugin.id}:${plugin.version}:${plugin.entrypoint}`;
+  }
+
+  private async activationContext(plugin: Plugin): Promise<PluginContext> {
+    const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
+    const settings = publicationScoped ? {} : await this.loadPlainSettings(plugin.id);
+    return {
+      manifestId: plugin.manifestId,
+      name: plugin.name,
+      version: plugin.version,
+      publicationId: undefined,
+      settings,
+      getSecret: publicationScoped
+        ? async (_key: string) => null
+        : (key: string) => this.getDecryptedSecret(plugin.id, key),
+      log: (message: string, level: "info" | "warn" | "error" = "info") => {
+        console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
+      },
+      hasCapability: (capability: string) => plugin.capabilities.includes(capability),
+    };
+  }
+
+  private async ensureInitializedHere(plugin: Plugin, module: PluginModule): Promise<void> {
+    const key = this.activationKey(plugin);
+    let pending = this.initializedHere.get(key);
+    if (!pending) {
+      pending = Promise.resolve().then(async () => {
+        await module.activate(await this.activationContext(plugin));
+      });
+      this.initializedHere.set(key, pending);
+    }
+    try {
+      await pending;
+    } catch {
+      if (this.initializedHere.get(key) === pending) this.initializedHere.delete(key);
+      throw new PluginDomainError(
+        "PLUGIN_LOCAL_INITIALIZATION_FAILED", "Plugin initialization failed in this API replica",
+      );
+    }
+  }
+
   /**
    * Discovers/registers a plugin from its manifest. Validation happens
    * before any state is written; incompatible versions and invalid
@@ -169,25 +214,8 @@ export class PluginsService {
           "Plugin entrypoint does not export an activate function",
         );
       }
-      // Existing v1 settings are platform-global. Until publication-scoped
-      // settings exist, external packages must never receive global secrets.
-      const publicationScoped = this.host.requiresPublicationEnablement?.(claimed) === true;
-      const settings = publicationScoped ? {} : await this.loadPlainSettings(claimed.id);
-      const context: PluginContext = {
-        manifestId: plugin.manifestId,
-        name: plugin.name,
-        version: plugin.version,
-        publicationId: undefined,
-        settings,
-        getSecret: publicationScoped
-          ? async (_key: string) => null
-          : (key: string) => this.getDecryptedSecret(claimed.id, key),
-        log: (message: string, level: "info" | "warn" | "error" = "info") => {
-          console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
-        },
-        hasCapability: (cap: string) => plugin.capabilities.includes(cap),
-      };
-      await module.activate(context);
+      await module.activate(await this.activationContext(claimed));
+      this.initializedHere.set(this.activationKey(claimed), Promise.resolve());
     } catch {
       // Plugin exceptions and filesystem errors may include tokens or operator
       // paths. Never forward those raw messages to callers or domain events.
@@ -252,6 +280,12 @@ export class PluginsService {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not exported");
     }
 
+    await this.ensureInitializedHere(plugin, module);
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (latest?.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    await this.requirePublicationEnabled(latest, publicationId);
     // Legacy v1 executeHook keeps passing the literal hook name. Named events
     // should be delivered through dispatchEvent(), never parsed from payload.
     await module.onEvent(hookName, payload);
@@ -313,6 +347,12 @@ export class PluginsService {
         hasCapability: (capability: string) => plugin.capabilities.includes(capability),
       };
     }
+    await this.ensureInitializedHere(plugin, module);
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (latest?.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    await this.requirePublicationEnabled(latest, publicationId);
     await module.onEvent(eventName, payload, context);
   }
 
@@ -358,6 +398,7 @@ export class PluginsService {
       }
     }
     const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
+    this.initializedHere.delete(this.activationKey(plugin));
     domainEvents.emit("plugin.deactivated", { pluginId: id, actorId });
     return deactivated;
   }
