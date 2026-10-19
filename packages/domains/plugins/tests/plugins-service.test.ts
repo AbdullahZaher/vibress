@@ -142,7 +142,7 @@ describe("PluginsService", () => {
     const hostWith = {
       loadModule: vi.fn(async () => ({
         activate: vi.fn(async () => {
-          throw new Error("boom");
+          throw new Error("/private/operator/plugins/secret-signing-key");
         }),
       })),
     };
@@ -154,6 +154,7 @@ describe("PluginsService", () => {
     const service = makeService({ host: hostWith, pluginRepo: repoWith });
     await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
       code: "PLUGIN_ACTIVATION_FAILED",
+      message: "Plugin activation failed",
     });
     expect(repoWith.updateStatus).toHaveBeenCalledWith("p1", "error");
   });
