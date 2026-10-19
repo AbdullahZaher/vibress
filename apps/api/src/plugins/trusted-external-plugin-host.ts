@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import type { Plugin } from "@vibress/plugins";
@@ -96,14 +95,16 @@ export class TrustedExternalPluginHost {
     }
 
     const bytes = await readFile(canonical);
+    if (bytes.length > MAX_MODULE_BYTES) throw new Error("Trusted plugin module exceeds size limit");
     const digest = createHash("sha256").update(bytes).digest("hex");
     if (digest !== installed.sha256) throw new Error("Trusted plugin module checksum mismatch");
 
-    // The operator supplies a prebuilt and audited ESM module. Node code is trusted;
-    // a digest of one file is not a signature/attestation of transitive imports.
-    const moduleUrl = pathToFileURL(canonical);
-    moduleUrl.searchParams.set("sha256", digest);
-    const exports: unknown = await import(moduleUrl.href);
+    // Import the VERIFIED bytes, not the path: prevents a file replacement
+    // between the checksum and Node's subsequent module file read (TOCTOU).
+    // External plugins must be reviewed, self-contained ESM bundles.
+    // Node builtins/process privileges remain available: this is NOT sandboxing.
+    const verifiedModuleUrl = `data:text/javascript;base64,${bytes.toString("base64")}`;
+    const exports: unknown = await import(verifiedModuleUrl);
     if (typeof exports !== "object" || exports === null) {
       throw new Error("Trusted plugin module has invalid exports");
     }
