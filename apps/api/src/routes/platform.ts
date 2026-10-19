@@ -478,7 +478,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id);
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ? 409 :
+            err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400);
         throw err;
       }
     },
