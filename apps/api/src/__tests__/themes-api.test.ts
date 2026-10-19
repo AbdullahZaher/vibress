@@ -410,6 +410,25 @@ describe("API — External Theme System Integration", () => {
     });
     expect(stillDefault.json().themeId).toBe("vibress-default");
 
+    const preview = await app.inject({
+      method: "POST",
+      url: `${base}/vibress-news-express/preview`,
+      headers,
+    });
+    expect(preview.statusCode).toBe(200);
+    const previewDetail = await app.inject({
+      method: "GET",
+      url: `${base}/preview/${preview.json().previewToken}`,
+    });
+    expect(previewDetail.statusCode).toBe(200);
+    expect(previewDetail.json()).toMatchObject({
+      themeId: "vibress-news-express",
+      themeVersion: "1.0.0",
+      isBuiltIn: false,
+      settings: { accentColor: "#ccaa44" },
+    });
+
+
     const reactivate = await app.inject({
       method: "POST", url: `${base}/vibress-news-express/activate`, headers,
     });
