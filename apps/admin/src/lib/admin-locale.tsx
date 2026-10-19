@@ -30,6 +30,7 @@ const translations: Record<string, string> = {
   "Save Settings": "حفظ الإعدادات",
   "Loading settings...": "جارٍ تحميل الإعدادات...",
   "Theme settings saved.": "تم حفظ إعدادات القالب.",
+  "Failed to open theme preview.": "تعذر فتح معاينة القالب.",
   "Failed to load theme settings.": "تعذر تحميل إعدادات القالب.",
   "Failed to save theme settings.": "تعذر حفظ إعدادات القالب.",
   "Discard unsaved theme settings changes?": "هل تريد تجاهل التغييرات غير المحفوظة لإعدادات القالب؟",
