@@ -232,13 +232,34 @@ export class ThemeService {
     return saved;
   }
 
+  /** Read persisted presentation options for a theme without activating it. */
+  async getThemeSettingsForEditor(
+    themeId: string,
+    schema: ThemeSettingsSchema,
+    publicationId = "pub_default",
+  ): Promise<Record<string, unknown>> {
+    const active = await this.repo.getActive(publicationId);
+    const saved = this.installedRepo
+      ? await this.installedRepo.getThemeSettings(themeId, publicationId)
+      : null;
+    return mergeThemeSettings(
+      schema,
+      saved ?? (active?.themeId === themeId ? active.settings : null),
+    );
+  }
+
   async updateThemeSettings(
     themeId: string,
     input: Record<string, unknown>,
     _actorId: string | null,
     publicationId?: string,
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId, undefined, publicationId);
+    const config = await this.repo.getActive(publicationId);
+    const definition = await this.getTheme(
+      themeId,
+      config?.themeId === themeId ? config.themeVersion : undefined,
+      publicationId,
+    );
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
     }
@@ -255,7 +276,6 @@ export class ThemeService {
       await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
-    const config = await this.repo.getActive(publicationId);
     if (config && config.themeId === themeId) {
       return this.repo.setActive({
         ...config,
