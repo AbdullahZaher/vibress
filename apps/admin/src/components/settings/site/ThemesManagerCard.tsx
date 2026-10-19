@@ -13,6 +13,7 @@ import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import {
@@ -36,6 +37,7 @@ interface ThemesManagerCardProps {
 export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [themes, setThemes] = useState<ApiThemeSummary[]>([]);
   const [active, setActive] = useState<ApiActiveTheme | null>(null);
@@ -77,13 +79,13 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   }, []);
 
   const handleEditorBack = () => {
-    if (editorDirty && !window.confirm("Discard unsaved theme settings changes?")) return;
+    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
     setEditingTheme(null);
     setEditorDirty(false);
   };
 
   const handleCloseDrawer = () => {
-    if (editorDirty && !window.confirm("Discard unsaved theme settings changes?")) return;
+    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
     setEditingTheme(null);
     setEditorDirty(false);
     setIsDrawerOpen(false);
@@ -370,8 +372,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               setEditingTheme(theme);
                             }}
                             className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title="Theme settings"
-                            aria-label={`Settings for ${theme.manifest.name}`}
+                            title={tr("Theme settings")}
+                            aria-label={`${tr("Settings")} ${theme.manifest.name}`}
                           >
                             <Settings2 className="h-3.5 w-3.5" />
                           </Button>
@@ -403,7 +405,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 className="text-xs cursor-pointer"
               >
-                {editingTheme ? "Back to themes" : "Done"}
+                {editingTheme ? tr("Back to themes") : "Done"}
               </Button>
             </div>
           </div>
