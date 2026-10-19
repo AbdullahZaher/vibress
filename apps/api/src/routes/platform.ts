@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
+  requirePlatformPluginOperator,
   validateOrigin,
 } from "../middleware/auth";
 import {
@@ -15,6 +16,16 @@ import {
 } from "@vibress/integrations";
 import { WebhookDomainError } from "@vibress/webhooks";
 import { PluginDomainError } from "@vibress/plugins";
+import { isPlatformPluginOperator } from "@vibress/security";
+import {
+  PluginPublicationParamsSchema,
+  PluginPublicationActivationSchema,
+  PluginPublicationStateSchema,
+  PluginPublicationSettingsUpdateSchema,
+  PluginPublicationSettingsResponseSchema,
+  OperatorTrustedPluginRegisterSchema,
+  PluginLifecycleRecoverySchema,
+} from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 
 type IntegrationCreateBody = {
@@ -399,8 +410,59 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.get("/plugins", {
     preHandler: [requireStaffSession, requirePermission("plugins.read")],
     handler: async (req, reply) => {
-      const plugins = await pluginsService.listPlugins();
-      return reply.status(200).send({ plugins });
+      const plugins = await pluginsService.listPluginsForPublication(
+        req.publicationContext?.publicationId,
+      );
+      return reply.status(200).send({
+        plugins,
+        platformOperator: isPlatformPluginOperator(req.roles, req.permissions),
+      });
+    },
+  });
+
+  fastify.get("/plugins/trusted-available", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.read"),
+      requirePlatformPluginOperator,
+    ],
+    handler: async (req, reply) => {
+      try {
+        const approved = await pluginsService.listOperatorManifests();
+        return reply.status(200).send({ plugins: approved });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id, 503);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.post("/plugins/register-trusted", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const parsed = OperatorTrustedPluginRegisterSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid approved plugin identifier", req.id, 400);
+      }
+      try {
+        const plugin = await pluginsService.registerOperatorPlugin(
+          parsed.data.manifestId, req.user!.id,
+        );
+        return reply.status(201).send({ plugin });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 : 403);
+        }
+        throw err;
+      }
     },
   });
 
@@ -408,6 +470,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -427,7 +490,11 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id);
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ||
+            err.code === "PLUGIN_SETTINGS_SCHEMA_MIGRATION_REQUIRED" ||
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" ? 409 :
+            err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400);
         throw err;
       }
     },
@@ -437,6 +504,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -463,6 +531,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
@@ -472,7 +541,166 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id, 404);
+          return sendError(
+            reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400,
+          );
+        throw err;
+      }
+    },
+  });
+
+  fastify.post("/plugins/:id/recover", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const confirmation = PluginLifecycleRecoverySchema.safeParse(req.body);
+      if (!params.success || !confirmation.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Explicit recovery confirmation required", req.id, 400);
+      }
+      try {
+        const plugin = await pluginsService.recoverPluginLifecycle(
+          params.data.id, req.user!.id, confirmation.data.confirmAllRuntimesStopped,
+        );
+        return reply.status(200).send({ plugin });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(
+            reply,
+            err.code,
+            err.message,
+            req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code.startsWith("PLUGIN_RECOVERY_") ||
+            err.code === "PLUGIN_NOT_IN_TRANSITION" ? 409 : 400,
+          );
+        }
+        throw err;
+      }
+    },
+  });
+
+  // Scoped external-plugin activation. Publication is resolved exclusively
+  // from requireStaffSession, never a caller-controlled tenant ID.
+  fastify.get("/plugins/:id/publication-state", {
+    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin ID", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const enabled = await pluginsService.isPublicationEnabled(params.data.id, publicationId);
+        return reply.status(200).send(PluginPublicationStateSchema.parse({
+          pluginId: params.data.id, publicationId, enabled,
+        }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.patch("/plugins/:id/publication-state", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const body = PluginPublicationActivationSchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid publication activation request", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const enabled = await pluginsService.setPublicationEnabled(
+          params.data.id, publicationId, body.data.enabled,
+        );
+        return reply.status(200).send(PluginPublicationStateSchema.parse({
+          pluginId: params.data.id, publicationId, enabled,
+        }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_INACTIVE" || err.code === "PLUGIN_LEGACY_GLOBAL" ? 409 : 400);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.get("/plugins/:id/publication-settings", {
+    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin ID", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const settings = await pluginsService.listPublicationSettings(
+          params.data.id, publicationId,
+        );
+        return reply.status(200).send(PluginPublicationSettingsResponseSchema.parse({ settings }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.patch("/plugins/:id/publication-settings", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const body = PluginPublicationSettingsUpdateSchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin settings", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        await pluginsService.setPublicationSettings(
+          params.data.id, publicationId, body.data.settings,
+        );
+        return reply.status(200).send({ success: true });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_SETTING_INVALID" || err.code === "PLUGIN_SETTING_UNKNOWN"
+              ? 400 : 409);
+        }
         throw err;
       }
     },
@@ -500,7 +728,10 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id, 404);
+          return sendError(
+            reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409,
+          );
         throw err;
       }
     },
@@ -510,8 +741,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("plugins.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const settings = await pluginsService.listSettings(id);
-      return reply.status(200).send({ settings });
+      try {
+        const settings = await pluginsService.listSettings(id);
+        return reply.status(200).send({ settings });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
     },
   });
 
@@ -519,12 +758,21 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [
       requireStaffSession,
       requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
       validateOrigin,
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await pluginsService.unregisterPlugin(id, req.user!.id);
-      return reply.status(200).send({ success: true });
+      try {
+        await pluginsService.unregisterPlugin(id, req.user!.id);
+        return reply.status(200).send({ success: true });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
     },
   });
 }

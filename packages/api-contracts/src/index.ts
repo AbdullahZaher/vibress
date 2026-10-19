@@ -14,3 +14,4 @@ export * from "./redirects";
 export * from "./content-models";
 export * from "./publication-locales";
 export * from "./translations";
+export * from "./plugins";

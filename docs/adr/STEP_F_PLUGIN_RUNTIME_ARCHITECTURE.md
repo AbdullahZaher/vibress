@@ -1,5 +1,7 @@
 # ADR 0009: Plugin Runtime Architecture & Trust Boundary
 
+> **Superseding interpretation (2026-10-19):** [Accepted external host ADR](2026-10-19-external-extension-host-vnext.md) preserves the trusted-only v1 choice but supersedes overbroad claims that SDK imports forbid trusted in-process code from reading `process.env` or that same-process execution guarantees core availability. Strong malicious-code/crash isolation requires independently supervised process/container controls and a separate security review. This ADR is retained as historical context.
+
 **Status:** Accepted  
 **Date:** September 15, 2026  
 **Author:** Lead Staff Engineer & Security Architect  

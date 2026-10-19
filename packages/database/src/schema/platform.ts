@@ -7,7 +7,10 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { publications } from "./publications";
 
 export const integrations = pgTable("integrations", {
@@ -178,3 +181,66 @@ export const pluginSettings = pgTable(
 
 export type PluginSettingRow = typeof pluginSettings.$inferSelect;
 export type NewPluginSettingRow = typeof pluginSettings.$inferInsert;
+
+/**
+ * Publication activation is additive: legacy global plugin status/settings
+ * are preserved. An absent row means an external plugin is disabled here.
+ */
+export const pluginPublicationStates = pgTable(
+  "plugin_publication_states",
+  {
+    pluginId: text("plugin_id")
+      .notNull()
+      .references(() => plugins.id, { onDelete: "restrict" }),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pluginPublicationUniqueIdx: uniqueIndex("plugin_pub_states_plugin_publication_idx")
+      .on(table.pluginId, table.publicationId),
+    publicationIdx: index("plugin_pub_states_publication_idx").on(table.publicationId),
+  }),
+);
+
+export type PluginPublicationStateRow = typeof pluginPublicationStates.$inferSelect;
+
+/**
+ * Scoped extension settings: independent from legacy global plugin_settings.
+ * Secret values are ciphertext only; all lookups bind both IDs.
+ */
+export const pluginPublicationSettings = pgTable(
+  "plugin_publication_settings",
+  {
+    id: text("id").primaryKey(),
+    pluginId: text("plugin_id").notNull(),
+    publicationId: text("publication_id").notNull(),
+    key: text("key").notNull(),
+    value: text("value"),
+    encryptedValue: text("encrypted_value"),
+    isSecret: boolean("is_secret").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    scopedOwnerFk: foreignKey({
+      name: "plugin_pub_settings_owner_fk",
+      columns: [table.pluginId, table.publicationId],
+      foreignColumns: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
+    }).onDelete("cascade"),
+    uniqueScopedSetting: uniqueIndex("plugin_pub_settings_unique_idx")
+      .on(table.pluginId, table.publicationId, table.key),
+    publicationSettingsIdx: index("plugin_pub_settings_publication_idx")
+      .on(table.publicationId),
+    validSecretStorage: check(
+      "plugin_pub_settings_value_check",
+      sql`(${table.isSecret} = true AND ${table.value} IS NULL AND ${table.encryptedValue} IS NOT NULL)
+        OR (${table.isSecret} = false AND ${table.encryptedValue} IS NULL)`,
+    ),
+  }),
+);
+
+export type PluginPublicationSettingRow = typeof pluginPublicationSettings.$inferSelect;

@@ -21,6 +21,19 @@ describe("Plugin Security & Packaging Guards", () => {
     expect(manifest.capabilities).toContain("events.subscribe");
   });
 
+  it("rejects traversal, absolute, remote and malformed entrypoints or event names", () => {
+    const base = {
+      id: "safe-plugin", name: "Safe plugin", version: "1.0.0",
+      vibressApiVersion: "1.0.0", entrypoint: "dist/index.mjs",
+      capabilities: ["events.subscribe"],
+    };
+    for (const entrypoint of ["../etc/passwd", "/tmp/plugin.mjs", "https://example.test/plugin.mjs", "dist/../bad.mjs", "dist\\\\bad.mjs"]) {
+      expect(() => validateManifest({ ...base, entrypoint })).toThrow(/entrypoint/);
+    }
+    expect(() => validateManifest({ ...base, hooks: [null] })).toThrow(/hooks/);
+    expect(() => validateManifest({ ...base, hooks: [""] })).toThrow(/hooks/);
+  });
+
   it("rejects manifest with unsupported capability", () => {
     expect(() =>
       validateManifest({

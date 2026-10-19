@@ -1,4 +1,5 @@
-export type PluginStatus = "registered" | "active" | "inactive" | "error";
+export type PluginStatus =
+  | "registered" | "activating" | "active" | "deactivating" | "inactive" | "error";
 
 export interface Plugin {
   id: string;
@@ -49,6 +50,12 @@ export interface PluginRepository {
     status: PluginStatus,
     error?: string,
   ): Promise<Plugin>;
+  /** Single conditional DB UPDATE prevents concurrent activation/deactivation claims. */
+  tryTransitionStatus(
+    id: string,
+    expected: readonly PluginStatus[],
+    status: PluginStatus,
+  ): Promise<Plugin | null>;
   updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
@@ -67,4 +74,27 @@ export interface PluginSettingRepository {
   ): Promise<void>;
   listForPlugin(pluginId: string): Promise<PluginSetting[]>;
   getSecret(pluginId: string, key: string): Promise<string | null>;
+}
+
+/** Publication state is explicit for external modules; absent means disabled. */
+export interface PluginPublicationStateRepository {
+  hasAnyState(pluginId: string): Promise<boolean>;
+  isEnabled(pluginId: string, publicationId: string): Promise<boolean>;
+  setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void>;
+}
+
+/** Publication-scoped settings: legacy plugin_settings is not a fallback. */
+export interface PluginPublicationSettingRepository {
+  setMany(
+    pluginId: string,
+    publicationId: string,
+    entries: ReadonlyArray<{
+      key: string;
+      value: string | null;
+      encryptedValue: string | null;
+      isSecret: boolean;
+    }>,
+  ): Promise<void>;
+  listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]>;
+  getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null>;
 }

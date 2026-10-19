@@ -110,6 +110,8 @@ import { DrizzleWebhookRepository, WebhooksService } from "@vibress/webhooks";
 import {
   DrizzlePluginRepository,
   DrizzlePluginSettingRepository,
+  DrizzlePluginPublicationStateRepository,
+  DrizzlePluginPublicationSettingRepository,
   PluginsService,
 } from "@vibress/plugins";
 import { BundledPluginHost } from "./plugins/plugin-host";
@@ -344,6 +346,8 @@ export const pluginsService = new PluginsService(
   new DrizzlePluginRepository(),
   new DrizzlePluginSettingRepository(),
   new BundledPluginHost(),
+  new DrizzlePluginPublicationStateRepository(),
+  new DrizzlePluginPublicationSettingRepository(),
 );
 
 // ---------------- Intelligence: Analytics and Search ----------------

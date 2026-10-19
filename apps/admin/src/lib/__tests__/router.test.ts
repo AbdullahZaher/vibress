@@ -42,6 +42,7 @@ describe("Admin Declarative Router", () => {
     expect(patterns).toContain("/admin/media");
     expect(patterns).toContain("/admin/members");
     expect(patterns).toContain("/admin/settings");
+    expect(patterns).toContain("/admin/plugins");
     expect(patterns).toContain("/admin/settings/advanced/content-models");
     expect(patterns).toContain("/admin/settings/content-models");
     expect(patterns).toContain("/admin/settings/advanced/content-models/new");
@@ -82,6 +83,16 @@ describe("Admin Declarative Router", () => {
     expect(matchRoutePattern("/admin/settings/advanced/content-models/:modelId",
       "/admin/settings/advanced/content-models/book-1", true).params.modelId).toBe("book-1");
     expect(adminRoutes.find((route) => route.pattern === "/admin/settings/content-models/:modelId")?.requiredPermission).toBe("settings.edit");
+  });
+
+  it("routes plugins independently, requires plugins.read and keeps Settings platform alias", () => {
+    const pluginsRoute = adminRoutes.find((route) => route.pattern === "/admin/plugins");
+    expect(pluginsRoute?.exact).toBe(true);
+    expect(pluginsRoute?.requiredPermission).toBe("plugins.read");
+    expect(matchRoutePattern("/admin/plugins", "/admin/plugins", true).matches).toBe(true);
+    const oldSettingsRoute = adminRoutes.find((route) => route.pattern === "/admin/settings/platform");
+    expect(oldSettingsRoute).toBeDefined();
+    expect(oldSettingsRoute?.pattern).toBe("/admin/settings/platform");
   });
 
   it("matches settings localization and language routes", () => {

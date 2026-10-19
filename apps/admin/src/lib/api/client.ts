@@ -24,7 +24,11 @@ export class ApiError extends Error {
 let inMemoryPublicationId: string | null = null;
 
 export function setActivePublicationId(id: string | null): void {
+  const changed = inMemoryPublicationId !== id;
   inMemoryPublicationId = id;
+  if (changed && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("vibress:publication-changed"));
+  }
   if (typeof window !== "undefined") {
     if (id) {
       localStorage.setItem("vibress_active_publication_id", id);

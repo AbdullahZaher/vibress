@@ -104,6 +104,12 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
         p.status = status;
         return p;
       }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        const p = pluginStore.get(id);
+        if (!p || !expected.includes(p.status)) return null;
+        p.status = status;
+        return p;
+      }),
       updateMetadata: vi.fn(async (id, d) => {
         const p = pluginStore.get(id);
         if (!p) throw new Error("not found");
@@ -331,7 +337,7 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
     };
 
     const { service: activatingService } = createTestPluginsService({
-      plugins: [pluginA],
+      plugins: [{ ...pluginA, status: "registered" }],
       hostModule,
     });
 
@@ -675,5 +681,52 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
     expect(() =>
       executeSandboxedPluginCode(fnCode, defaultContext),
     ).toThrow(PluginSecurityViolationError);
+  });
+
+  // ------------------------------------------------------------
+  // 15. Lifecycle Recovery & Stuck State Invariants
+  // ------------------------------------------------------------
+  it("15. RECOVERS stuck transitional lifecycle states and blocks uninstall until recovered", async () => {
+    const { service, pluginStore } = createTestPluginsService();
+
+    const registered = await service.registerPlugin(
+      {
+        id: "stuck-plugin",
+        name: "Stuck Plugin",
+        version: "1.0.0",
+        vibressApiVersion: SDK_VERSION,
+        entrypoint: "index.ts",
+        capabilities: ["events.subscribe"],
+      },
+      "admin-user",
+    );
+
+    // Simulate an abandoned transition to "activating"
+    const p = pluginStore.get(registered.id)!;
+    p.status = "activating";
+    p.updatedAt = new Date(Date.now() - 20 * 60 * 1000);
+
+    // Uninstall must be blocked while in transitional state
+    await expect(
+      service.unregisterPlugin(registered.id, "admin-user"),
+    ).rejects.toMatchObject({
+      code: "PLUGIN_ACTIVE",
+    });
+
+    // Recover from "activating" -> "error"
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+    const recovered = await service.recoverPluginLifecycle(
+      registered.id, "admin-user", true,
+    ).finally(() => { vi.unstubAllEnvs(); });
+    expect(recovered.status).toBe("error");
+
+    // Deactivate from error -> inactive
+    const deactivated = await service.deactivatePlugin(registered.id, "admin-user");
+    expect(deactivated.status).toBe("inactive");
+
+    // Once inactive, uninstall succeeds cleanly
+    await expect(
+      service.unregisterPlugin(registered.id, "admin-user"),
+    ).resolves.toBeUndefined();
   });
 });

@@ -4,8 +4,10 @@ import {
   PluginRow,
   pluginSettings,
   PluginSettingRow,
+  pluginPublicationStates,
+  pluginPublicationSettings,
 } from "@vibress/database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   PluginRepository,
@@ -14,6 +16,8 @@ import {
   PluginSetting,
   RegisterPluginData,
   PluginStatus,
+  PluginPublicationStateRepository,
+  PluginPublicationSettingRepository,
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
@@ -77,6 +81,19 @@ export class DrizzlePluginRepository implements PluginRepository {
     return this.mapToDomain(row);
   }
 
+  async tryTransitionStatus(
+    id: string,
+    expected: readonly PluginStatus[],
+    status: PluginStatus,
+  ): Promise<Plugin | null> {
+    if (expected.length === 0) return null;
+    const [row] = await getDb().update(plugins)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
+      .returning();
+    return row ? this.mapToDomain(row) : null;
+  }
+
   async updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
@@ -85,6 +102,8 @@ export class DrizzlePluginRepository implements PluginRepository {
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
+    if (data.vibressApiVersion !== undefined)
+      payload.vibressApiVersion = data.vibressApiVersion;
     if (data.description !== undefined) payload.description = data.description;
     if (data.entrypoint !== undefined) payload.entrypoint = data.entrypoint;
     if (data.capabilities !== undefined)
@@ -201,5 +220,104 @@ export class DrizzlePluginSettingRepository implements PluginSettingRepository {
       updatedAt: row.updatedAt,
       createdAt: row.createdAt,
     };
+  }
+}
+
+/** No legacy backfill: an absent row is disabled in this publication. */
+export class DrizzlePluginPublicationStateRepository implements PluginPublicationStateRepository {
+  async hasAnyState(pluginId: string): Promise<boolean> {
+    const rows = await getDb().select({ publicationId: pluginPublicationStates.publicationId })
+      .from(pluginPublicationStates)
+      .where(eq(pluginPublicationStates.pluginId, pluginId))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async isEnabled(pluginId: string, publicationId: string): Promise<boolean> {
+    const rows = await getDb().select({ enabled: pluginPublicationStates.enabled })
+      .from(pluginPublicationStates)
+      .where(and(
+        eq(pluginPublicationStates.pluginId, pluginId),
+        eq(pluginPublicationStates.publicationId, publicationId),
+      ))
+      .limit(1);
+    return rows[0]?.enabled === true;
+  }
+
+  async setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void> {
+    await getDb().insert(pluginPublicationStates)
+      .values({ pluginId, publicationId, enabled })
+      .onConflictDoUpdate({
+        target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
+        set: { enabled, updatedAt: new Date() },
+      });
+  }
+}
+
+export class DrizzlePluginPublicationSettingRepository
+  implements PluginPublicationSettingRepository {
+  async setMany(
+    pluginId: string,
+    publicationId: string,
+    entries: ReadonlyArray<{
+      key: string;
+      value: string | null;
+      encryptedValue: string | null;
+      isSecret: boolean;
+    }>,
+  ): Promise<void> {
+    await getDb().transaction(async (tx) => {
+      for (const { key, value, encryptedValue, isSecret } of entries) {
+        await tx.insert(pluginPublicationSettings)
+          .values({
+            id: crypto.randomUUID(),
+            pluginId,
+            publicationId,
+            key,
+            value,
+            encryptedValue,
+            isSecret,
+          })
+          .onConflictDoUpdate({
+            target: [
+              pluginPublicationSettings.pluginId,
+              pluginPublicationSettings.publicationId,
+              pluginPublicationSettings.key,
+            ],
+            set: { value, encryptedValue, isSecret, updatedAt: new Date() },
+          });
+      }
+    });
+  }
+
+  async listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]> {
+    const rows = await getDb().select().from(pluginPublicationSettings)
+      .where(and(
+        eq(pluginPublicationSettings.pluginId, pluginId),
+        eq(pluginPublicationSettings.publicationId, publicationId),
+      ));
+    return rows.map((row) => ({
+      id: row.id,
+      pluginId: row.pluginId,
+      key: row.key,
+      value: row.value,
+      encryptedValue: row.encryptedValue,
+      isSecret: row.isSecret,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }));
+  }
+
+  async getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null> {
+    const rows = await getDb().select({
+      encryptedValue: pluginPublicationSettings.encryptedValue,
+    }).from(pluginPublicationSettings)
+      .where(and(
+        eq(pluginPublicationSettings.pluginId, pluginId),
+        eq(pluginPublicationSettings.publicationId, publicationId),
+        eq(pluginPublicationSettings.key, key),
+        eq(pluginPublicationSettings.isSecret, true),
+      )).limit(1);
+    return rows[0]?.encryptedValue ?? null;
   }
 }

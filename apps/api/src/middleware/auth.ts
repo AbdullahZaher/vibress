@@ -1,6 +1,10 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { authService, workspaceService } from "../services";
-import { hasPermission, PublicationAccessDeniedError } from "@vibress/security";
+import {
+  hasPermission,
+  isPlatformPluginOperator,
+  PublicationAccessDeniedError,
+} from "@vibress/security";
 import { TenantAccessDeniedError } from "@vibress/workspaces";
 import { getConfig } from "@vibress/config";
 
@@ -161,6 +165,26 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
           requestId: req.id,
         },
       ],
+    });
+  }
+}
+
+/**
+ * Package admission and global lifecycle are platform operations, not
+ * publication-local plugin configuration. Global system roles are resolved
+ * from the authenticated Staff session, never from a request header.
+ */
+export async function requirePlatformPluginOperator(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!isPlatformPluginOperator(req.roles, req.permissions)) {
+    return reply.status(403).send({
+      errors: [{
+        code: "PLATFORM_OPERATOR_REQUIRED",
+        message: "Platform operator access required",
+        requestId: req.id,
+      }],
     });
   }
 }

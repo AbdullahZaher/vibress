@@ -72,7 +72,7 @@ import { translationRoutes } from "./routes/translations";
 import { whatsNewRoutes } from "./routes/whats-new";
 import { distributionRoutes } from "./routes/distribution";
 import { openApiDocsRoutes } from "./routes/docs";
-import { storageService, themeService } from "./services";
+import { storageService, themeService, pluginsService } from "./services";
 import { getConfig } from "@vibress/config";
 import {
   SITE_AUTH_COOKIE_NAME,
@@ -416,6 +416,10 @@ export const buildApp = () => {
 
   // Developer Platform OpenAPI 3.1 Documentation & Swagger UI
   fastify.register(openApiDocsRoutes);
+
+  fastify.addHook("onClose", async () => {
+    await pluginsService.shutdown();
+  });
 
   return fastify;
 };

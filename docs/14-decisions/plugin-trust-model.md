@@ -1,5 +1,7 @@
 # ADR-017: Plugin Trust Model
 
+> **Superseding interpretation (2026-10-19):** [External extension host ADR](../adr/2026-10-19-external-extension-host-vnext.md) preserves this trusted-only policy but corrects any suggestion that trusted **in-process** JavaScript cannot degrade/crash core services or cannot access process privileges such as environment secrets. SDK capability checks mediate host APIs; they are not an OS sandbox. This historical ADR remains for context; the new ADR governs those points.
+
 **Status:** Accepted
 **Date:** Batch 12
 

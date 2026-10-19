@@ -281,6 +281,20 @@
       "when": 1792252800000,
       "tag": "0039_posts_featured",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792368000000,
+      "tag": "0040_plugin_publication_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792368000001,
+      "tag": "0041_plugin_publication_settings",
+      "breakpoints": true
     }
   ]
 }

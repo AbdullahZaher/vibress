@@ -54,6 +54,10 @@ export interface AdminPlugin {
   description: string | null;
   capabilities: string[];
   status: string;
+  settingsSchema?: Record<string, unknown>;
+  /** Added for vNext external plugins; undefined on older API servers. */
+  publicationScoped?: boolean;
+  publicationEnabled?: boolean;
 }
 
 export async function listIntegrationsApi(): Promise<{
@@ -138,7 +142,10 @@ export async function listWebhookDeliveriesApi(
   return apiRequest(`/webhook-deliveries${query}`);
 }
 
-export async function listPluginsApi(): Promise<{ plugins: AdminPlugin[] }> {
+export async function listPluginsApi(): Promise<{
+  plugins: AdminPlugin[];
+  platformOperator?: boolean;
+}> {
   return apiRequest("/plugins");
 }
 
@@ -184,4 +191,69 @@ export async function listPluginSettingsApi(
   }>;
 }> {
   return apiRequest(`/plugins/${id}/settings`);
+}
+
+export interface AdminPluginPublicationState {
+  pluginId: string;
+  publicationId: string;
+  enabled: boolean;
+}
+
+export async function getPluginPublicationStateApi(
+  id: string,
+): Promise<AdminPluginPublicationState> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-state`);
+}
+
+export async function setPluginPublicationStateApi(
+  id: string,
+  enabled: boolean,
+): Promise<AdminPluginPublicationState> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-state`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export interface AdminScopedPluginSetting {
+  key: string;
+  value: string | null;
+  isSecret: boolean;
+  masked: boolean;
+}
+
+export async function listPluginPublicationSettingsApi(
+  id: string,
+): Promise<{ settings: AdminScopedPluginSetting[] }> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-settings`);
+}
+
+export async function setPluginPublicationSettingsApi(
+  id: string,
+  settings: Record<string, string | null>,
+): Promise<{ success: boolean }> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-settings`, {
+    method: "PATCH",
+    body: JSON.stringify({ settings }),
+  });
+}
+
+export interface AdminOperatorPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+}
+
+export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminOperatorPlugin[] }> {
+  return apiRequest("/plugins/trusted-available");
+}
+
+export async function registerOperatorTrustedPluginApi(
+  manifestId: string,
+): Promise<{ plugin: AdminPlugin }> {
+  return apiRequest("/plugins/register-trusted", {
+    method: "POST",
+    body: JSON.stringify({ manifestId }),
+  });
 }
