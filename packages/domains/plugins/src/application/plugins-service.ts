@@ -441,7 +441,7 @@ export class PluginsService {
   ): Promise<Record<string, unknown>> {
     if (!this.publicationSettings) return {};
     const data = await this.publicationSettings.listForPlugin(pluginId, publicationId);
-    const settings: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    const settings: Record<string, unknown> = {};
     for (const item of data) {
       if (!item.isSecret && item.value !== null) settings[item.key] = item.value;
     }

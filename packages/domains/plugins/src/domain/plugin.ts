@@ -81,7 +81,7 @@ export interface PluginPublicationSettingRepository {
   setMany(
     pluginId: string,
     publicationId: string,
-    entries: readonly Array<{
+    entries: ReadonlyArray<{
       key: string;
       value: string | null;
       encryptedValue: string | null;
