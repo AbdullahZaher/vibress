@@ -10,7 +10,7 @@
 - Actual lifecycle `activate/deactivate`; explicit named `dispatchEvent` with capability, status, publication checks, and optional scoped SDK context. Legacy `executeHook` remains, but is not a complete worker event bus.
 - Additive `0040` publication activation and `0041` encrypted publication settings migrations, no global secret backfill. DB owner FK and unique scope constraints, plus non-destructive uninstall gate.
 - Staff-only publication enablement and scoped settings APIs guarded with `requireStaffSession`, `requirePermission`, `validateOrigin` for writes, Zod contracts and authoritative staff publication context.
-- Admin panel has per-site enabling, plugin discovery, Arabic translation strings and accessible action labels; relevant unit tests have been **added**, not executed.
+- Admin panel has per-site enabling, plugin discovery, masked per-publication string/secret settings, Arabic translations and accessible labels. Stale settings responses are discarded on site switch; relevant tests have been **added**, not executed.
 
 ## Important limitations and verification gaps
 

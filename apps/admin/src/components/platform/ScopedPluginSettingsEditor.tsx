@@ -77,7 +77,7 @@ export function ScopedPluginSettingsEditor({ plugin, onError }: Props) {
         if (!canceled && requestedGeneration === generation.current) setLoading(false);
       });
     return () => { canceled = true; };
-  }, [open, plugin.id]);
+  }, [open, plugin.id, onError, tr]);
 
   if (fields.length === 0) return null;
   const save = async () => {
