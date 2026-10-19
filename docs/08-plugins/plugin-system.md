@@ -31,29 +31,27 @@ Supported capabilities (v1): `events.subscribe`, `webhooks.register`,
 `settings.read-own`, `settings.write-own`. There is **no** all-access
 capability for ordinary plugins.
 
-## Lifecycle
+## Lifecycle & Multi-Replica Coordination
 
-`registered → active → inactive` with `error` as a visible terminal state on
-activation failure.
+Status progression: `registered → activating → active → deactivating → inactive`, with `error` as a terminal or failure state.
 
-- Register (validate manifest, upsert metadata)
-- Activate (load module via trusted host, run `activate()`, mark active)
-- Deactivate
-- Update metadata (re-register)
-- Unregister (delete)
+- **Atomic CAS Transitions:** Transitions between states (`registered/inactive/error → activating → active`, `active → deactivating → inactive`) use optimistic database-level conditional updates (`tryTransitionStatus`). Competing replicas or concurrent activation calls receive `PLUGIN_TRANSITION_IN_PROGRESS` or idempotently return the target state without double-activation.
+- **Replica Initialization:** When an active plugin receives events on a new replica or worker process, it is locally initialized before the first event and tracked in memory (`initializedHere`).
+- **Graceful Shutdown:** On server termination (`app.close()` / `SIGTERM`), Fastify's `onClose` hook triggers `PluginsService.shutdown()`, which cleanly executes `module.deactivate()` on all locally active plugin instances.
+- **Stuck State Failure Recovery:** If a replica crashes while a plugin is in a transitional status (`activating` or `deactivating`), platform operators can recover the plugin via `POST /api/admin/v1/plugins/:id/recover`:
+  - `activating` transitions safely to `error`
+  - `deactivating` transitions safely to `inactive`
+  - Emits `plugin.recovered` domain event for observability and audit logging.
 
-**Failure handling:** caught activation errors mark the plugin `error` and surface a domain error. The current bundled in-process host is **not** crash isolation: an OOM, blocking loop, fatal error or `process.exit` may still impact the core service. External process/container isolation is a separate design, not a v1 guarantee.
+## Multi-Tenant Publication Isolation (Migrations 0040 & 0041)
 
-## Settings / Secrets
+- External extensions are scoped per publication via `plugin_publication_states` (disabled by default, `REFERENCES plugins(id) ON DELETE RESTRICT`).
+- Plugins cannot be uninstalled while publication state associations exist (`PLUGIN_HAS_PUBLICATIONS`).
+- Publication settings and secrets are partitioned in `plugin_publication_settings` with composite foreign keys cascading on publication removal (`ON DELETE CASCADE`).
+- Secret check constraints enforce at the database layer that secrets cannot contain plaintext and non-secrets cannot contain ciphertext.
 
-- Declarative schema; non-secret values stored plainly.
-- Secret values: encrypted at rest, masked on read, never logged,
-  replace-only on update (empty values keep the existing encrypted secret).
-- Plugins read their own settings and secrets through `PluginContext`
-  (`settings` for plain values, `getSecret(key)` for decrypted secrets).
+## Authorization & Operator Gate
 
-## Admin
-
-- `plugins.read` — list plugins, view settings (masked).
-- `plugins.manage` — register, activate, deactivate, set settings, unregister.
-- 401/403 verified.
+- **Platform Operator Gate:** Global lifecycle operations (`/register`, `/activate`, `/deactivate`, `/recover`) require platform operator authorization (`isPlatformPluginOperator`), requiring global `owner` or `administrator` role with both `plugins.manage` and `system.manage` permissions. Publication-scoped editors or tenant staff are strictly denied (403 `PLATFORM_OPERATOR_REQUIRED`).
+- **Publication Enablement:** Per-publication enablement (`PATCH /plugins/:id/publication-state`) and scoped settings require `plugins.manage` within the authenticated publication session.
+- **CSRF & Origin Verification:** All state-changing plugin endpoints validate Origin/Referer against allowed origins.

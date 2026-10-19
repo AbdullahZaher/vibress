@@ -2,6 +2,7 @@ import {
   PluginRepository,
   PluginSettingRepository,
   Plugin,
+  PluginStatus,
   PluginPublicationStateRepository,
   PluginPublicationSettingRepository,
 } from "../domain/plugin";
@@ -42,6 +43,7 @@ export class PluginsService {
 
   /** An API replica initializes a module locally before its first event. */
   private readonly initializedHere = new Map<string, Promise<void>>();
+  private readonly activeInstances = new Map<string, { plugin: Plugin; module: PluginModule }>();
 
   private activationKey(plugin: Plugin): string {
     return `${plugin.id}:${plugin.version}:${plugin.entrypoint}`;
@@ -72,13 +74,17 @@ export class PluginsService {
     if (!pending) {
       pending = Promise.resolve().then(async () => {
         await module.activate(await this.activationContext(plugin));
+        this.activeInstances.set(key, { plugin, module });
       });
       this.initializedHere.set(key, pending);
     }
     try {
       await pending;
     } catch {
-      if (this.initializedHere.get(key) === pending) this.initializedHere.delete(key);
+      if (this.initializedHere.get(key) === pending) {
+        this.initializedHere.delete(key);
+        this.activeInstances.delete(key);
+      }
       throw new PluginDomainError(
         "PLUGIN_LOCAL_INITIALIZATION_FAILED", "Plugin initialization failed in this API replica",
       );
@@ -215,7 +221,9 @@ export class PluginsService {
         );
       }
       await module.activate(await this.activationContext(claimed));
-      this.initializedHere.set(this.activationKey(claimed), Promise.resolve());
+      const key = this.activationKey(claimed);
+      this.initializedHere.set(key, Promise.resolve());
+      this.activeInstances.set(key, { plugin: claimed, module });
     } catch {
       // Plugin exceptions and filesystem errors may include tokens or operator
       // paths. Never forward those raw messages to callers or domain events.
@@ -398,9 +406,69 @@ export class PluginsService {
       }
     }
     const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
-    this.initializedHere.delete(this.activationKey(plugin));
+    const key = this.activationKey(plugin);
+    this.initializedHere.delete(key);
+    this.activeInstances.delete(key);
     domainEvents.emit("plugin.deactivated", { pluginId: id, actorId });
     return deactivated;
+  }
+
+  /**
+   * Recovers a plugin stuck in a transitional state ('activating' or 'deactivating')
+   * caused by an ungraceful crash or abandoned worker/replica operation.
+   * Atomically transitions stuck states using optimistic locking.
+   */
+  async recoverPluginLifecycle(id: string, actorId: string | null): Promise<Plugin> {
+    const plugin = await this.pluginRepo.findById(id);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status !== "activating" && plugin.status !== "deactivating") {
+      throw new PluginDomainError(
+        "PLUGIN_NOT_IN_TRANSITION",
+        "Plugin is not in a transitional lifecycle state",
+      );
+    }
+    const targetStatus: PluginStatus = plugin.status === "activating" ? "error" : "inactive";
+    const recovered = await this.pluginRepo.tryTransitionStatus(
+      id,
+      [plugin.status],
+      targetStatus,
+    );
+    if (!recovered) {
+      throw new PluginDomainError(
+        "PLUGIN_TRANSITION_IN_PROGRESS",
+        "Plugin status changed concurrently",
+      );
+    }
+    const key = this.activationKey(plugin);
+    this.initializedHere.delete(key);
+    this.activeInstances.delete(key);
+    domainEvents.emit("plugin.recovered", {
+      pluginId: id,
+      previousStatus: plugin.status,
+      status: targetStatus,
+      actorId,
+    });
+    return recovered;
+  }
+
+  /**
+   * Gracefully shuts down plugins initialized in this replica on server close.
+   */
+  async shutdown(): Promise<void> {
+    await Promise.allSettled(Array.from(this.initializedHere.values()));
+    const instances = Array.from(this.activeInstances.values());
+    this.activeInstances.clear();
+    this.initializedHere.clear();
+    for (const { plugin, module } of instances) {
+      try {
+        await module.deactivate?.();
+      } catch (err) {
+        console.error(
+          `[plugins] Error deactivating plugin ${plugin.manifestId} during shutdown:`,
+          err,
+        );
+      }
+    }
   }
 
   async unregisterPlugin(id: string, actorId: string | null): Promise<void> {

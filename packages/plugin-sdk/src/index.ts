@@ -256,7 +256,7 @@ export function validateManifest(manifest: unknown): PluginManifest {
     throw new Error("Manifest entrypoint is required");
   if (
     m.entrypoint.length > 240 ||
-    !/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(m.entrypoint) ||
+    !/^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$/.test(m.entrypoint) ||
     m.entrypoint.split("/").some((part) => part === "." || part === "..") ||
     /^[a-zA-Z]:/.test(m.entrypoint)
   ) {

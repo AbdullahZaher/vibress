@@ -32,7 +32,14 @@ export class BundledPluginHost implements PluginHost {
   async authorizeRegistration(manifest: PluginManifest): Promise<void> {
     const builtin = this.registry.get(manifest.id);
     if (builtin) {
-      if (!isDeepStrictEqual(validateManifest(builtin.manifest), manifest)) {
+      const builtinManifest = validateManifest(builtin.manifest);
+      if (manifest.description === undefined) {
+        manifest.description = builtinManifest.description;
+      }
+      if (manifest.hooks === undefined) {
+        manifest.hooks = builtinManifest.hooks ? [...builtinManifest.hooks] : undefined;
+      }
+      if (!isDeepStrictEqual(builtinManifest, manifest)) {
         throw new Error("Bundled plugin manifest differs from installed module");
       }
       return;

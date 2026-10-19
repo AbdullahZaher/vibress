@@ -549,6 +549,34 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     },
   });
 
+  fastify.post("/plugins/:id/recover", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      requirePlatformPluginOperator,
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const { id } = req.params as { id: string };
+      try {
+        const plugin = await pluginsService.recoverPluginLifecycle(id, req.user!.id);
+        return reply.status(200).send({ plugin });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(
+            reply,
+            err.code,
+            err.message,
+            req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_NOT_IN_TRANSITION" ? 409 : 400,
+          );
+        }
+        throw err;
+      }
+    },
+  });
+
   // Scoped external-plugin activation. Publication is resolved exclusively
   // from requireStaffSession, never a caller-controlled tenant ID.
   fastify.get("/plugins/:id/publication-state", {

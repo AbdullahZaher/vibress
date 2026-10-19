@@ -450,6 +450,79 @@ describe("Batch 12 — Platform Integration & Security", () => {
     expect(res.json().plugin.status).toBe("inactive");
   });
 
+  it("plugin lifecycle recovery: recovers stuck activating plugin to error", async () => {
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/plugins",
+      headers: { cookie: staffCookie },
+    });
+    const plugin = listRes
+      .json()
+      .plugins.find((p: any) => p.manifestId === "vibress-content-metrics");
+
+    // Manually simulate crash during activation
+    const db = getDb();
+    const { plugins } = await import("@vibress/database");
+    await db.update(plugins).set({ status: "activating" }).where(eq(plugins.id, plugin.id));
+
+    const recRes = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/plugins/${plugin.id}/recover`,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+    });
+    expect(recRes.statusCode).toBe(200);
+    expect(recRes.json().plugin.status).toBe("error");
+
+    // Clean up back to inactive
+    await db.update(plugins).set({ status: "inactive" }).where(eq(plugins.id, plugin.id));
+  });
+
+  it("plugin lifecycle recovery: rejects recovery on non-transitional status with 409", async () => {
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/plugins",
+      headers: { cookie: staffCookie },
+    });
+    const plugin = listRes
+      .json()
+      .plugins.find((p: any) => p.manifestId === "vibress-content-metrics");
+
+    const recRes = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/plugins/${plugin.id}/recover`,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+    });
+    expect(recRes.statusCode).toBe(409);
+    expect(recRes.json().errors[0].code).toBe("PLUGIN_NOT_IN_TRANSITION");
+  });
+
+  it("operator gate: editor without platform operator access is denied lifecycle operations", async () => {
+    // Log in as editor
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/login",
+      payload: { email: "editor@vibress.local", password: "DevPassword123!" },
+    });
+    if (loginRes.statusCode === 200) {
+      const editorCookie = (loginRes.headers["set-cookie"] as string).split(";")[0]!;
+      const listRes = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/plugins",
+        headers: { cookie: staffCookie },
+      });
+      const plugin = listRes
+        .json()
+        .plugins.find((p: any) => p.manifestId === "vibress-content-metrics");
+
+      const actRes = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/plugins/${plugin.id}/activate`,
+        headers: { cookie: editorCookie, origin: "http://localhost:7777" },
+      });
+      expect(actRes.statusCode).toBe(403);
+    }
+  });
+
   // ---------------- CSRF ----------------
   it("CSRF: platform state-changing routes require a valid origin", async () => {
     const res = await app.inject({

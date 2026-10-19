@@ -715,4 +715,105 @@ describe("PluginsService", () => {
     // set() must NOT be called (empty value → keep existing)
     expect(settingRepoWith.set).not.toHaveBeenCalled();
   });
+
+  describe("Lifecycle recovery and safe shutdown", () => {
+    it("recovers a plugin stuck in activating to error", async () => {
+      const stuckPlugin = makePlugin({ id: "p-stuck", status: "activating" });
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async (id) => (id === "p-stuck" ? stuckPlugin : null)),
+        tryTransitionStatus: vi.fn(async (id, expected, status) => {
+          if (expected.includes(stuckPlugin.status)) {
+            return makePlugin({ id, status });
+          }
+          return null;
+        }),
+      };
+      const service = makeService({ pluginRepo: repoWith });
+      const recovered = await service.recoverPluginLifecycle("p-stuck", "admin-1");
+      expect(recovered.status).toBe("error");
+      expect(repoWith.tryTransitionStatus).toHaveBeenCalledWith(
+        "p-stuck",
+        ["activating"],
+        "error",
+      );
+    });
+
+    it("recovers a plugin stuck in deactivating to inactive", async () => {
+      const stuckPlugin = makePlugin({ id: "p-deact", status: "deactivating" });
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async (id) => (id === "p-deact" ? stuckPlugin : null)),
+        tryTransitionStatus: vi.fn(async (id, expected, status) => {
+          if (expected.includes(stuckPlugin.status)) {
+            return makePlugin({ id, status });
+          }
+          return null;
+        }),
+      };
+      const service = makeService({ pluginRepo: repoWith });
+      const recovered = await service.recoverPluginLifecycle("p-deact", "admin-1");
+      expect(recovered.status).toBe("inactive");
+      expect(repoWith.tryTransitionStatus).toHaveBeenCalledWith(
+        "p-deact",
+        ["deactivating"],
+        "inactive",
+      );
+    });
+
+    it("rejects recovery when plugin is not in a transitional state", async () => {
+      const activePlugin = makePlugin({ id: "p-active", status: "active" });
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async () => activePlugin),
+      };
+      const service = makeService({ pluginRepo: repoWith });
+      await expect(
+        service.recoverPluginLifecycle("p-active", "admin-1"),
+      ).rejects.toMatchObject({
+        code: "PLUGIN_NOT_IN_TRANSITION",
+      });
+    });
+
+    it("shutdown deactivates all active module instances gracefully", async () => {
+      const deactivateFn1 = vi.fn(async () => undefined);
+      const deactivateFn2 = vi.fn(async () => {
+        throw new Error("Deactivate failed");
+      });
+
+      const p1 = makePlugin({ id: "p1", entrypoint: "index1.ts", status: "registered" });
+      const p2 = makePlugin({ id: "p2", entrypoint: "index2.ts", status: "registered" });
+
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async (id) => (id === "p1" ? p1 : id === "p2" ? p2 : null)),
+        tryTransitionStatus: vi.fn(async (id, _expected, status) => makePlugin({ id, status })),
+        updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+      };
+
+      const hostWith = {
+        loadModule: vi.fn(async (p: Plugin) => {
+          if (p.id === "p1") {
+            return {
+              activate: vi.fn(async () => undefined),
+              deactivate: deactivateFn1,
+            };
+          }
+          return {
+            activate: vi.fn(async () => undefined),
+            deactivate: deactivateFn2,
+          };
+        }),
+      };
+
+      const service = makeService({ pluginRepo: repoWith, host: hostWith });
+      await service.activatePlugin("p1", "admin-1");
+      await service.activatePlugin("p2", "admin-1");
+
+      // Now shut down service: both should be invoked even if one throws
+      await expect(service.shutdown()).resolves.toBeUndefined();
+      expect(deactivateFn1).toHaveBeenCalledTimes(1);
+      expect(deactivateFn2).toHaveBeenCalledTimes(1);
+    });
+  });
 });
