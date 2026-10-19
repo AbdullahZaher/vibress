@@ -148,12 +148,14 @@ export class PluginsService {
       );
     }
 
-    const module = await this.host.loadModule(plugin);
-    if (!module) {
-      throw new PluginDomainError(
-        "PLUGIN_MODULE_NOT_FOUND",
-        `Plugin module for '${plugin.manifestId}' could not be loaded`,
-      );
+    if (hookName !== "onEvent") {
+      throw new PluginDomainError("UNKNOWN_PLUGIN_HOOK", "Unsupported plugin hook");
+    }
+    if (!plugin.capabilities.includes("events.subscribe")) {
+      throw new PluginDomainError("PLUGIN_CAPABILITY_DENIED", "Events capability is not declared");
+    }
+    if (!plugin.hooks.includes("onEvent")) {
+      throw new PluginDomainError("PLUGIN_HOOK_NOT_DECLARED", "Event hook is not declared");
     }
 
     // Tenant boundary: prevent cross-publication access
@@ -167,30 +169,9 @@ export class PluginsService {
       }
     }
 
-    const settings = await this.loadPlainSettings(plugin.id);
-    const _context: PluginContext = {
-      manifestId: plugin.manifestId,
-      name: plugin.name,
-      version: plugin.version,
-      publicationId,
-      settings,
-      getSecret: (key: string) => this.getDecryptedSecret(plugin.id, key),
-      log: (message: string, level: "info" | "warn" | "error" = "info") => {
-        console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
-      },
-      hasCapability: (cap: string) => plugin.capabilities.includes(cap),
-    };
-
-    if (hookName !== "onEvent") {
-      throw new PluginDomainError("UNKNOWN_PLUGIN_HOOK", "Unsupported plugin hook");
-    }
-    if (!plugin.capabilities.includes("events.subscribe")) {
-      throw new PluginDomainError("PLUGIN_CAPABILITY_DENIED", "Events capability is not declared");
-    }
-    if (!plugin.hooks.includes("onEvent")) {
-      throw new PluginDomainError("PLUGIN_HOOK_NOT_DECLARED", "Event hook is not declared");
-    }
-    if (typeof module.onEvent !== "function") {
+    // Policy and tenant scope must be checked before loading/executing plugin code.
+    const module = await this.host.loadModule(plugin);
+    if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not exported");
     }
 
