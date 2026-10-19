@@ -15,6 +15,11 @@ import {
 } from "@vibress/integrations";
 import { WebhookDomainError } from "@vibress/webhooks";
 import { PluginDomainError } from "@vibress/plugins";
+import {
+  PluginPublicationParamsSchema,
+  PluginPublicationActivationSchema,
+  PluginPublicationStateSchema,
+} from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 
 type IntegrationCreateBody = {
@@ -476,6 +481,68 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
             reply, err.code, err.message, req.id,
             err.code === "PLUGIN_NOT_FOUND" ? 404 : 400,
           );
+        throw err;
+      }
+    },
+  });
+
+  // Scoped external-plugin activation. Publication is resolved exclusively
+  // from requireStaffSession, never a caller-controlled tenant ID.
+  fastify.get("/plugins/:id/publication-state", {
+    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin ID", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const enabled = await pluginsService.isPublicationEnabled(params.data.id, publicationId);
+        return reply.status(200).send(PluginPublicationStateSchema.parse({
+          pluginId: params.data.id, publicationId, enabled,
+        }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.patch("/plugins/:id/publication-state", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const body = PluginPublicationActivationSchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid publication activation request", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const enabled = await pluginsService.setPublicationEnabled(
+          params.data.id, publicationId, body.data.enabled,
+        );
+        return reply.status(200).send(PluginPublicationStateSchema.parse({
+          pluginId: params.data.id, publicationId, enabled,
+        }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_INACTIVE" || err.code === "PLUGIN_LEGACY_GLOBAL" ? 409 : 400);
+        }
         throw err;
       }
     },
