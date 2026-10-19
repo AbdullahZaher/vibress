@@ -715,12 +715,9 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
 
     // Recover from "activating" -> "error"
     vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
-    let recovered: Plugin;
-    try {
-      recovered = await service.recoverPluginLifecycle(registered.id, "admin-user", true);
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    const recovered = await service.recoverPluginLifecycle(
+      registered.id, "admin-user", true,
+    ).finally(() => { vi.unstubAllEnvs(); });
     expect(recovered.status).toBe("error");
 
     // Deactivate from error -> inactive
