@@ -6,6 +6,7 @@ import {
   updateThemeSettingsApi,
 } from "../../../lib/api";
 import { Button } from "../../ui/button";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { Input } from "../../ui/input";
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Save } from "lucide-react";
 
@@ -22,6 +23,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   onDirtyChange,
   onSaved,
 }) => {
+  const { tr } = useAdminLocale();
   const idPrefix = useId();
   const [detail, setDetail] = useState<ApiThemeDetail | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
@@ -56,7 +58,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load theme settings.");
+        setError(err instanceof Error ? err.message : tr("Failed to load theme settings."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -84,42 +86,42 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
       setSuccess(true);
       onSaved(values);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save theme settings.");
+      setError(err instanceof Error ? err.message : tr("Failed to save theme settings."));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <section aria-label={`Theme settings for ${theme.manifest.name}`} className="space-y-5">
+    <section aria-label={`${tr("Theme settings for")} ${theme.manifest.name}`} className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={onBack} aria-label="Back to themes">
-            <ArrowLeft className="h-4 w-4" />
+          <Button size="sm" variant="outline" onClick={onBack} aria-label={tr("Back to themes")}>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
           <div>
-            <h4 className="text-sm font-semibold text-foreground">{theme.manifest.name} Settings</h4>
+            <h4 className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
             <p className="text-xs text-muted-foreground">
-              Edit presentation options for this publication. Changes to inactive themes take effect on activation.
+              {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>
           </div>
         </div>
         <Button size="sm" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? tr("Saving...") : tr("Save Settings")}
         </Button>
       </div>
 
       {error && <p role="alert" className="flex gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
-      {success && <p role="status" className="flex gap-2 text-xs text-emerald-600"><CheckCircle2 className="h-4 w-4 shrink-0" />Theme settings saved.</p>}
+      {success && <p role="status" className="flex gap-2 text-xs text-emerald-600"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
 
       {loading ? (
         <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />Loading settings...
+          <Loader2 className="h-4 w-4 animate-spin" />{tr("Loading settings...")}
         </p>
       ) : detail && Object.keys(detail.settingsSchema).length === 0 ? (
         <p className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
-          This theme does not define any customizable fields in settings.json.
+          {tr("This theme does not define any customizable fields in settings.json.")}
         </p>
       ) : detail ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -131,7 +133,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             return (
               <div key={key} className="space-y-1.5 min-w-0">
                 <label htmlFor={inputId} className="block text-xs font-semibold text-foreground">
-                  {definition.label || key}
+                  {tr(definition.label || key)}
                 </label>
                 {definition.description && (
                   <p id={descriptionId} className="text-xs text-muted-foreground">{definition.description}</p>
@@ -164,14 +166,14 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     <input
                       id={inputId}
                       type="color"
-                      aria-label={`Choose ${definition.label || key}`}
+                      aria-label={`${tr("Choose")} ${tr(definition.label || key)}`}
                       aria-describedby={describedBy}
                       value={/^#[0-9a-fA-F]{6}$/.test(String(value)) ? String(value) : "#000000"}
                       onChange={(event) => updateField(key, event.target.value)}
                       className="h-9 w-11 shrink-0 cursor-pointer"
                     />
                     <Input
-                      aria-label={`${definition.label || key} hex value`}
+                      aria-label={`${tr(definition.label || key)} ${tr("hex value")}`}
                       aria-describedby={describedBy}
                       value={String(value ?? "")}
                       maxLength={9}
