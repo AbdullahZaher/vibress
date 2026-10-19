@@ -84,7 +84,10 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
     setError(null);
     setSuccess(false);
     try {
-      const result = await updateThemeSettingsApi(theme.manifest.id, draft);
+      const result = await updateThemeSettingsApi(theme.manifest.id, draft, {
+        themeVersion: detail.manifest.version,
+        settingsSchemaVersion: detail.manifest.settingsSchemaVersion,
+      });
       const values = result.theme.settings;
       setInitial(values);
       setDraft(values);
