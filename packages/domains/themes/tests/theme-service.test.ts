@@ -247,6 +247,23 @@ describe("Theme Domain — Activation & Management", () => {
     expect(activeNordic?.settings.accentColor).toBe("#bf616a");
   });
 
+  it("loads defaults and persists inactive theme settings without switching themes", async () => {
+    const definition = await service.getTheme("custom-nordic");
+    expect(definition).not.toBeNull();
+    if (!definition) throw new Error("Missing test theme");
+
+    expect(await service.getThemeSettingsForEditor("custom-nordic", definition.settingsSchema))
+      .toEqual({ accentColor: "#5e81ac" });
+
+    await service.updateThemeSettings("custom-nordic", { accentColor: "#123abc" }, "user-1");
+    expect(await service.getThemeSettingsForEditor("custom-nordic", definition.settingsSchema))
+      .toEqual({ accentColor: "#123abc" });
+    expect((await service.getActiveTheme())?.manifest.id).toBe("vibress-default");
+
+    await service.activateTheme("custom-nordic", "user-1");
+    expect((await service.getActiveTheme())?.settings.accentColor).toBe("#123abc");
+  });
+
   it("reports legacy storage only for an active external theme with an inherited path", async () => {
     await service.activateTheme("custom-nordic", "user-1", undefined, "pub_alpha");
     // A normal install is not authorized merely because its path looks legacy.
