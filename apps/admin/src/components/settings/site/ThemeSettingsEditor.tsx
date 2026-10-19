@@ -10,6 +10,17 @@ import { useAdminLocale } from "../../../lib/admin-locale";
 import { Input } from "../../ui/input";
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Save } from "lucide-react";
 
+/** Native color inputs support 6-digit RGB only; keep stored alpha/text intact. */
+export function toColorPickerHex(color: unknown): string {
+  if (typeof color !== "string") return "#000000";
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) return color;
+  if (/^#[0-9a-fA-F]{8}$/.test(color)) return color.slice(0, 7);
+  if (/^#[0-9a-fA-F]{3,4}$/.test(color)) {
+    return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+  }
+  return "#000000";
+}
+
 interface ThemeSettingsEditorProps {
   theme: ApiThemeSummary;
   onBack: () => void;
@@ -176,10 +187,11 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     <input
                       id={inputId}
                       type="color"
+                      title={tr("Choosing a color with this picker replaces its alpha value.")}
                       disabled={saving}
                       aria-label={`${tr("Choose")} ${tr(definition.label || key)}`}
                       aria-describedby={describedBy}
-                      value={/^#[0-9a-fA-F]{6}$/.test(String(value)) ? String(value) : "#000000"}
+                      value={toColorPickerHex(value)}
                       onChange={(event) => updateField(key, event.target.value)}
                       className="h-9 w-11 shrink-0 cursor-pointer"
                     />
