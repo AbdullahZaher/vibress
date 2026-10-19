@@ -241,32 +241,38 @@ export class DrizzlePluginPublicationStateRepository implements PluginPublicatio
 
 export class DrizzlePluginPublicationSettingRepository
   implements PluginPublicationSettingRepository {
-  async set(
+  async setMany(
     pluginId: string,
     publicationId: string,
-    key: string,
-    value: string | null,
-    encryptedValue: string | null,
-    isSecret: boolean,
+    entries: readonly Array<{
+      key: string;
+      value: string | null;
+      encryptedValue: string | null;
+      isSecret: boolean;
+    }>,
   ): Promise<void> {
-    await getDb().insert(pluginPublicationSettings)
-      .values({
-        id: crypto.randomUUID(),
-        pluginId,
-        publicationId,
-        key,
-        value,
-        encryptedValue,
-        isSecret,
-      })
-      .onConflictDoUpdate({
-        target: [
-          pluginPublicationSettings.pluginId,
-          pluginPublicationSettings.publicationId,
-          pluginPublicationSettings.key,
-        ],
-        set: { value, encryptedValue, isSecret, updatedAt: new Date() },
-      });
+    await getDb().transaction(async (tx) => {
+      for (const { key, value, encryptedValue, isSecret } of entries) {
+        await tx.insert(pluginPublicationSettings)
+          .values({
+            id: crypto.randomUUID(),
+            pluginId,
+            publicationId,
+            key,
+            value,
+            encryptedValue,
+            isSecret,
+          })
+          .onConflictDoUpdate({
+            target: [
+              pluginPublicationSettings.pluginId,
+              pluginPublicationSettings.publicationId,
+              pluginPublicationSettings.key,
+            ],
+            set: { value, encryptedValue, isSecret, updatedAt: new Date() },
+          });
+      }
+    });
   }
 
   async listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]> {

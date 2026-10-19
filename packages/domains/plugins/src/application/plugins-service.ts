@@ -3,6 +3,7 @@ import {
   PluginSettingRepository,
   Plugin,
   PluginPublicationStateRepository,
+  PluginPublicationSettingRepository,
 } from "../domain/plugin";
 import {
   validateManifest,
@@ -33,6 +34,7 @@ export class PluginsService {
     private settingRepo: PluginSettingRepository,
     private host: PluginHost,
     private publicationStates?: PluginPublicationStateRepository,
+    private publicationSettings?: PluginPublicationSettingRepository,
   ) {}
 
   /**
@@ -221,7 +223,30 @@ export class PluginsService {
     if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not available");
     }
-    await module.onEvent(eventName, payload);
+    const scoped = this.host.requiresPublicationEnablement?.(plugin) === true;
+    let context: PluginContext | undefined;
+    if (scoped) {
+      if (!publicationId) {
+        throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
+      }
+      const scopedSettings = await this.loadPublicationSettings(plugin.id, publicationId);
+      context = {
+        manifestId: plugin.manifestId,
+        name: plugin.name,
+        version: plugin.version,
+        publicationId,
+        settings: scopedSettings,
+        getSecret: (key: string) =>
+          plugin.capabilities.includes("settings.read-own")
+            ? this.getPublicationSecret(plugin.id, publicationId, key)
+            : Promise.resolve(null),
+        log: (message: string, level: "info" | "warn" | "error" = "info") => {
+          console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
+        },
+        hasCapability: (capability: string) => plugin.capabilities.includes(capability),
+      };
+    }
+    await module.onEvent(eventName, payload, context);
   }
 
   async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {
@@ -333,6 +358,108 @@ export class PluginsService {
       throw new PluginDomainError(
         "PLUGIN_PUBLICATION_INACTIVE", "Plugin is not enabled for this publication",
       );
+    }
+  }
+
+  /** Scoped values never read from legacy platform-global plugin_settings. */
+  async setPublicationSettings(
+    pluginId: string,
+    publicationId: string,
+    settings: Record<string, string | null>,
+  ): Promise<void> {
+    if (!publicationId || !this.publicationSettings || !this.publicationStates) {
+      throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication scope is unavailable");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (!this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError("PLUGIN_LEGACY_GLOBAL", "Bundled plugins use legacy global settings");
+    }
+    if (!(await this.publicationStates.isEnabled(pluginId, publicationId))) {
+      throw new PluginDomainError("PLUGIN_PUBLICATION_INACTIVE", "Enable this plugin for the publication first");
+    }
+    const schema = plugin.settingsSchema;
+    const rawDefs: unknown = "properties" in schema ? schema.properties : schema;
+    if (!rawDefs || typeof rawDefs !== "object" || Array.isArray(rawDefs)) {
+      throw new PluginDomainError("PLUGIN_SETTINGS_SCHEMA_INVALID", "Plugin settings schema is invalid");
+    }
+    const defs: Record<string, unknown> = rawDefs as Record<string, unknown>;
+    const entries: Array<{
+      key: string;
+      value: string | null;
+      encryptedValue: string | null;
+      isSecret: boolean;
+    }> = [];
+    for (const [key, value] of Object.entries(settings)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,99}$/.test(key) || !Object.hasOwn(defs, key)) {
+        throw new PluginDomainError("PLUGIN_SETTING_UNKNOWN", "Unknown plugin setting key");
+      }
+      const definition = defs[key];
+      if (!definition || typeof definition !== "object" || Array.isArray(definition) ||
+        !("type" in definition) || definition.type !== "string") {
+        throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Only declared string settings are supported");
+      }
+      if (value !== null && (typeof value !== "string" || value.length > 4096)) {
+        throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Invalid plugin setting value");
+      }
+      const isSecret = "secret" in definition && definition.secret === true;
+      if (isSecret && (value === null || value === "")) continue; // replace only
+      entries.push({
+        key,
+        isSecret,
+        value: isSecret ? null : value,
+        encryptedValue: isSecret && value !== null ? encryptSecret(value) : null,
+      });
+    }
+    if (entries.length > 0) await this.publicationSettings.setMany(pluginId, publicationId, entries);
+  }
+
+  async listPublicationSettings(
+    pluginId: string,
+    publicationId: string,
+  ): Promise<Array<{ key: string; value: string | null; isSecret: boolean; masked: boolean }>> {
+    if (!publicationId || !this.publicationSettings) {
+      throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication scope is unavailable");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (!this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError("PLUGIN_LEGACY_GLOBAL", "Bundled plugins use legacy global settings");
+    }
+    const records = await this.publicationSettings.listForPlugin(pluginId, publicationId);
+    return records.map((record) => ({
+      key: record.key,
+      value: record.isSecret ? "••••••••" : record.value,
+      isSecret: record.isSecret,
+      masked: record.isSecret,
+    }));
+  }
+
+  private async loadPublicationSettings(
+    pluginId: string,
+    publicationId: string,
+  ): Promise<Record<string, unknown>> {
+    if (!this.publicationSettings) return {};
+    const data = await this.publicationSettings.listForPlugin(pluginId, publicationId);
+    const settings: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const item of data) {
+      if (!item.isSecret && item.value !== null) settings[item.key] = item.value;
+    }
+    return settings;
+  }
+
+  private async getPublicationSecret(
+    pluginId: string,
+    publicationId: string,
+    key: string,
+  ): Promise<string | null> {
+    if (!this.publicationSettings || !/^[a-zA-Z][a-zA-Z0-9_.-]{0,99}$/.test(key)) return null;
+    const encrypted = await this.publicationSettings.getSecret(pluginId, publicationId, key);
+    if (!encrypted) return null;
+    try {
+      return decryptSecret(encrypted);
+    } catch {
+      return null;
     }
   }
 
