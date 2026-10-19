@@ -13,22 +13,19 @@ import { TrustedExternalPluginHost } from "./trusted-external-plugin-host";
  */
 export class BundledPluginHost implements PluginHost {
   private readonly external = new TrustedExternalPluginHost();
-  private registry: Record<
-    string,
-    { manifest: unknown; module: PluginModule }
-  > = {
-    "vibress-content-metrics": {
+  private readonly registry = new Map<string, { manifest: unknown; module: PluginModule }>([
+    ["vibress-content-metrics", {
       manifest: contentMetricsManifest,
       module: contentMetricsPlugin,
-    },
-  };
+    }],
+  ]);
 
   requiresPublicationEnablement(plugin: Plugin): boolean {
-    return !(plugin.manifestId in this.registry);
+    return !this.registry.has(plugin.manifestId);
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
-    const entry = this.registry[plugin.manifestId];
+    const entry = this.registry.get(plugin.manifestId);
     if (entry) return entry.module;
     return this.external.loadModule(plugin);
   }
