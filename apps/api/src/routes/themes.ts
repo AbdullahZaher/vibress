@@ -57,9 +57,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
       const theme = await themeService.getTheme(
         id,
-        undefined,
+        active?.themeId === id ? active.themeVersion : undefined,
         req.publicationContext?.publicationId,
       );
       if (!theme) {
@@ -74,10 +75,15 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
+      const settings = await themeService.getThemeSettingsForEditor(
+        id,
+        theme.settingsSchema,
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({
         manifest: theme.manifest,
         settingsSchema: theme.settingsSchema,
+        settings,
         isBuiltIn: theme.isBuiltIn,
         previewImage: theme.previewImage,
         isActive: active?.themeId === theme.manifest.id,
