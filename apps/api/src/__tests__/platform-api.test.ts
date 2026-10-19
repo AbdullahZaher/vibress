@@ -521,14 +521,19 @@ describe("Batch 12 — Platform Integration & Security", () => {
       .json()
       .plugins.find((p: any) => p.manifestId === "vibress-content-metrics");
 
-    const recRes = await app.inject({
-      method: "POST",
-      url: `/api/admin/v1/plugins/${plugin.id}/recover`,
-      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
-      payload: { confirmAllRuntimesStopped: true },
-    });
-    expect(recRes.statusCode).toBe(409);
-    expect(recRes.json().errors[0].code).toBe("PLUGIN_RECOVERY_NOT_QUIESCENT");
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+    try {
+      const recRes = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/plugins/${plugin.id}/recover`,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { confirmAllRuntimesStopped: true },
+      });
+      expect(recRes.statusCode).toBe(409);
+      expect(recRes.json().errors[0].code).toBe("PLUGIN_NOT_IN_TRANSITION");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("operator gate: editor without platform operator access is denied lifecycle operations", async () => {

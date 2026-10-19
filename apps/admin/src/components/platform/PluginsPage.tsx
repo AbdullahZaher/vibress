@@ -11,6 +11,7 @@ export function PluginsPage() {
   const [plugins, setPlugins] = useState<AdminPlugin[]>([]);
   const [platformOperator, setPlatformOperator] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
 
@@ -22,6 +23,7 @@ export function PluginsPage() {
       if (request !== generation.current) return;
       setPlugins(result.plugins);
       setPlatformOperator(result.platformOperator === true);
+      setHasLoaded(true);
       setError(null);
     } catch (err: unknown) {
       if (request !== generation.current) return;
@@ -37,6 +39,7 @@ export function PluginsPage() {
       generation.current += 1;
       setPlugins([]);
       setPlatformOperator(false);
+      setHasLoaded(false);
       setError(null);
       void refresh();
     };
@@ -65,11 +68,12 @@ export function PluginsPage() {
         </Button>
       </header>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {loading ? (
+      {loading && (
         <p role="status" className="text-sm text-muted-foreground">
           {tr("Loading plugins...")}
         </p>
-      ) : (
+      )}
+      {hasLoaded && (
         <PluginsPanel
           plugins={plugins}
           platformOperator={platformOperator}

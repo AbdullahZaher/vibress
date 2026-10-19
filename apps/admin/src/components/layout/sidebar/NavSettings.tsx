@@ -24,6 +24,8 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
   canReadPlugins,
 }) => {
   const { tr } = useAdminLocale();
+  const isPluginsActive =
+    currentPath === "/admin/plugins" || currentPath === "/admin/plugins/";
   const isSettingsActive =
     currentPath.startsWith("/admin/settings") ||
     currentPath.startsWith("/admin/models") ||
@@ -92,8 +94,8 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         <button
           type="button"
           onClick={() => onNavigate("/admin/plugins")}
-          aria-current={currentPath === "/admin/plugins" ? "page" : undefined}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${currentPath === "/admin/plugins"
+          aria-current={isPluginsActive ? "page" : undefined}
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${isPluginsActive
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"}`}
         >
