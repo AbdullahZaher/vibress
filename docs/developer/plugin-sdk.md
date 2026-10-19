@@ -123,6 +123,22 @@ The operator may set `VIBRESS_TRUSTED_PLUGIN_LOCKFILE` to an **absolute path** o
 }
 ```
 
-The runtime verifies the bytes against this **operator-trusted pinned checksum** and evaluates **exactly those verified bytes** (avoiding checksum-to-import file replacement). Build a self-contained single-file ESM bundle with all non-builtin runtime dependencies included; relative module imports from the verified data URL are unsupported. Replace the placeholder with the actual 64-character lowercase hex value. Builtin Node.js APIs still have full process privileges: this initial loader **does not isolate the program**, validate a multi-file release artifact, distribute packages, provide per-publication activation, register routes/Admin views/worker jobs, or sandbox the JavaScript process. Only load packages audited and controlled by the operator. Full independent extension contracts remain tracked by [the approved RFC](../08-plugins/EXTENSION_RFC_APPROVAL.md).
+The runtime verifies the bytes against this **operator-trusted pinned checksum** and evaluates **exactly those verified bytes** (avoiding checksum-to-import file replacement). Build a self-contained single-file ESM bundle with all non-builtin runtime dependencies included; relative module imports from the verified data URL are unsupported. Replace the placeholder with the actual 64-character lowercase hex value. Builtin Node.js APIs still have full process privileges: this initial loader **does not isolate the program**, validate a multi-file release artifact, distribute packages, register generic Admin/Web/Member routes or run worker jobs. It **does** support publication-scoped activation and publication-scoped string settings/secrets through approved Staff APIs. See [implementation status](../08-plugins/external-extensions-implementation-status.md) for gaps. Only load packages audited and controlled by the operator. Full independent extension contracts remain tracked by [the approved RFC](../08-plugins/EXTENSION_RFC_APPROVAL.md).
 
 The package `@vibress/plugin-sdk` is the supported runtime ABI. Do not use the alternate `plugin-core.VibressPlugin` lifecycle class with this host. The bundled v1 API remains compatible; named event dispatch is exposed in the PluginsService domain as `dispatchEvent` for host-owned callers.
+
+## 5. Operator deployment and publication setup (experimental)
+
+See [the optional Docker Compose override](../../compose.extensions.example.yml). Prepare a read-only mount with `trusted.json` and the approved single-file `dist/index.mjs` bundle under the **same** host directory. Compute the pinned checksum from final built bytes:
+
+```bash
+sha256sum ./extensions/trusted/dist/index.mjs
+```
+
+Use the resulting 64-character hash in `trusted.json`. The approved lockfile belongs to the operator and **must not** be modifiable via the Admin UI or an extension runtime. Direct API `POST /plugins/register` refuses external manifests not matching an approved lockfile. Deploy the same read-only bytes across every API replica.
+
+Once running, a Staff user with `plugins.manage` permission may discover and register an operator-approved plugin using **Plugins → Register trusted plugin**, activate it globally, and then **Enable for this publication**. Staff authentication, publication membership, and Origin validation are required on writes. An absent publication activation record is always disabled. Existing official bundled v1 plugins retain their legacy global behavior.
+
+For a publication-enabled external plugin, `GET/PATCH /api/admin/v1/plugins/:id/publication-settings` reads/writes **declared string settings only**. Secret values are encrypted at rest, masked in reads, and blank or null secret updates are replace-only. Values are never copied from legacy global settings. `PluginModule.onEvent(name, payload, context?)` receives an optional context with this publication's settings/secret getter when invoked through an authorized host event path. Existing two-argument v1 handlers still work.
+
+The current system **does not** provide a generic extension endpoint, public page route, registered Studio custom view, safe arbitrary code sandbox, full package manager, runtime Worker queue resolver, cross-node drain guarantee, or trusted source attestation of multiple dependency files. Do not offer these as shipped extension capabilities.

@@ -1,0 +1,15 @@
+# Optional overlay for operator-audited external plugins.
+# Activate explicitly: docker compose -f compose.prod.yml
+#   -f compose.extensions.example.yml up -d
+# The directory ./extensions/trusted must already exist and contain
+# trusted.json and self-contained .mjs bundles, readable by the API user.
+# Do NOT mount writable paths or expose this directory as a public static asset.
+services:
+  api:
+    environment:
+      VIBRESS_TRUSTED_PLUGIN_LOCKFILE: /repo/extensions/trusted.json
+    volumes:
+      - type: bind
+        source: ./extensions/trusted
+        target: /repo/extensions
+        read_only: true
