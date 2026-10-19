@@ -13,10 +13,10 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 | Ticket | Implementation deliverable | Acceptance gate |
 | --- | --- | --- |
-| EXT-001 | Reconcile `docs/developer/plugin-sdk.md` and sample plugin with actual `PluginModule`/`SDK_VERSION`, flag mock isolation | Buildable published example; docs contain no false sandbox claims |
-| EXT-002 | Threat model + ADR for operator-installed trust, plugin admission and extension surface | Security, Architecture, Ops sign-off; arbitrary remote code stays disabled |
-| EXT-003 | Contract inventory of every plugin consumer/route/settings/job + existing migration baseline | Backward-compatibility matrix and negative-test inventory checked in |
-| EXT-004 | RFC contracts reviewed against Next.js routing, API namespace, Studio, storage and billing constraints | Versioned schemas and permission vocabulary approved, no fake capability behavior |
+| EXT-001 | Inventory **both** `@vibress/plugin-sdk.PluginModule` and `plugin-core.VibressPlugin` consumers, repair developer docs/examples, choose canonical runtime ABI | Signed-off SDK adapter mapping; bundled v1 and any supported legacy shapes validated; lifecycle callbacks preserved |
+| EXT-002 | Threat model + ADR for trusted package format, **external release digest/attestation**, plugin admission, UI/worker surfaces | Security/Architecture/Ops agree no circular digest or false JS sandbox claim |
+| EXT-003 | Inspect existing global plugin settings/status plus dual SDKs, hooks, member/public privacy middleware, DB migration baseline | Compatibility matrix, **no automatic cross-publication enable/settings copy**, upgrade and negative-case fixtures checked in |
+| EXT-004 | Approve versioned typed repositories, authority-bound Member/public context, Next.js renderer/assets, SDK package boundaries and billing bridge | Shared schemas compile in independent SDK consumer, Member publication mismatch denied, no `unknown` transaction contract |
 
 **Exit:** platform technical design approved, no implementation assumed.
 
@@ -24,10 +24,10 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 | Ticket | Deliverable | Required tests |
 | --- | --- | --- |
-| EXT-101 | Immutable operator-managed package registry/lockfile and artifact checksum verification; deterministic Docker deployment | Tampered artifact, path escape, unknown package, restart/redeploy |
-| EXT-102 | Host API compatibility negotiation + shared runtime manifest schema; continue accepting legacy bundled manifests with adapter | Unsupported version/capability rejected; existing plugin passes |
-| EXT-103 | `installation` vs `publication enablement` state machine; additive DB schema, backfill & compatibility adapter | Fresh/upgrade with legacy data, concurrent enables, wrong publication |
-| EXT-104 | Enable/disable/upgrade sequencing, lifecycle errors, admission stop and health reporting | Failed activation, duplicate requests, in-flight disable, clean retry |
+| EXT-101 | Immutable trusted artifact + externally pinned digest/signature, deterministic deployment, archive allowlist and admission | Tampered final bytes, self-referential checksum, symlink/path escape, unknown package, multi-node/restart rejected |
+| EXT-102 | Canonical `plugin-sdk` protocol negotiation and explicit `plugin-core` compatibility decision/adapter (only for proven consumers) | Unknown or mixed protocol rejected; `activate/deactivate/onEvent` semantics and SDK v1 plugin verified |
+| EXT-103 | `installation` vs `publication enablement` schema, legacy status/settings adapter and explicit operator enablement | Fresh/upgrade with legacy global plugin/settings data, secrets not copied, no unexpected enablement, concurrency |
+| EXT-104 | Activation/deactivation actual callbacks, event dispatch name, admission stop, drain and health | Correct eventName, hook missing not falsely successful, cleanup invoked, failure/retry/in-flight tests |
 
 **Exit:** independently built sample package can be deployed by operator and enabled for publication A but not B, with no private import or dynamic Admin upload.
 
@@ -36,8 +36,8 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 | Ticket | Deliverable | Required tests |
 | --- | --- | --- |
 | EXT-201 | Admin/member/public namespaced route descriptor registry and shared contracts; host-owned auth + origin + limits | 401/403/404, forged tenant, collision, schema error, rate limits |
-| EXT-202 | Scoped minimal `PluginContext`: principal, publication, locale, request ID, permission and capability services | Mixed staff/member cookies, tenant spoofing, XSS/sensitive fields |
-| EXT-203 | Plugin-owned schema migration registry and namespaced typed data services | Expand/backfill, crash/retry, duplicate migration, large existing DB |
+| EXT-202 | Authority-bound principal/publication, Member-publication equality check, site privacy and per-call capability enforcement | Member from B denied on A, forged ID ignored, mixed cookies, event/job scope and privacy tests |
+| EXT-203 | Namespaced schema migrations + **typed publication-scoped repository contracts**, schema ownership and core Member FK review | No raw transaction/SQL exposed, incompatible member FK rejected, expand/backfill/crash/retry/large data tests |
 | EXT-204 | Versioned, scoped member/entitlement/content read bridges as needed by pilot | No payment authority bypass; wrong member/plan/publication denied |
 
 **Exit:** API can manage plugin-owned course and enrollment through **public SDK only**, not `@vibress/database` or private domain deep imports.
@@ -46,8 +46,8 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 | Ticket | Deliverable | Required tests |
 | --- | --- | --- |
-| EXT-301 | Declarative admin navigation, registered isolated view container, translation catalogue | Staff permission, CSP, keyboard, RTL, long text, disabled plugin |
-| EXT-302 | Reserved public page dispatcher + SEO and locale-aware metadata | Route collisions, 404/private, canonical/hreflang, preview |
+| EXT-301 | Declarative nav, version/hash-addressed admin assets or reviewed iframe, CSP and translations | Forbidden origin/token leak, stale cache/disabled route, keyboard/RTL/long text tests |
+| EXT-302 | Next.js reserved dispatcher, site privacy, theme fallbacks, SSR cache and locale/SEO policy | No private/hydration leak or route collision, 404, canonical/hreflang, preview/disabled tests |
 | EXT-303 | Sanitized view-model/theme slot and accessible fallback | External Liquid + built-in themes, escaping, Arabic/RTL, no slot |
 | EXT-304 | Docs + SDK reference implementation and independent plugin build/test workflow | Docs builds, sample package passes consumer contract CI |
 
@@ -57,7 +57,7 @@ Small additive PRs, one platform concern per ticket; never rewrite released migr
 
 | Ticket | Deliverable | Required tests |
 | --- | --- | --- |
-| EXT-401 | Namespaced worker task/event contracts + idempotency, stop/drain and dead-letter visibility | Retry, replay, crash, out-of-order, disabled plugin |
+| EXT-401 | Versioned worker task/event artifact resolution, real dispatch, idempotency, stop/drain and dead-letter | Named events, process restart, incompatible replica, retry/replay/crash/disable tests |
 | EXT-402 | Settings per publication, encrypted secret rotation, audit and operator views | Masking, cross-publication secret denial, corrupted secret |
 | EXT-403 | Backup/export/purge semantics, upgrade preflight and rollback runbooks | Restore, irreversible schema, uninstall preserves content |
 | EXT-404 | Supply-chain attestation, scanner checks, health/metrics and self-hosted deployment docs | Production image install, no hidden network dependency |

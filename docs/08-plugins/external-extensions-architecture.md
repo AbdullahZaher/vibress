@@ -32,13 +32,13 @@ The smallest useful milestone is a **vertical slice**: install a versioned trust
 | Data | Core Drizzle schemas/migrations, Content Modeler | No plugin-owned migration registry/upgrade lifecycle |
 | Jobs | Existing BullMQ worker and webhooks | No extension-owned namespaced idempotent task registry |
 
-Some registry and developer-guide examples conflict with the runtime SDK; assess, reconcile and test them rather than silently promising compatibility.
+The code contains **two non-equivalent plugin contracts**: `@vibress/plugin-sdk` (`PluginModule.activate/deactivate/onEvent`) and `packages/plugin-core` (`VibressPlugin.onActivate/onDeactivate/onEvent` with a different context). Before vNext, choose canonical SDK and explicitly test compatibility adapters; see [SDK compatibility RFC](external-extensions-sdk-compatibility.md). Existing SDK protocol constant is `1.0.0` even though the npm package version is `1.2.0`. Developer examples and sandbox claims require reconciliation.
 
 ## 3. Deployment and runtime model
 
 `Operator/deployment → verified package artifact → trusted host registry → publication activation → mediated domain services`.
 
-- Stage A: lock trusted package and checksum/signature in an operator-controlled config/lockfile; include compiled JS, static assets and manifest in reproducible Docker images or mounted immutable artifacts. Install/restart is an **operator** action, not a CMS browser upload.
+- Stage A: package all code/assets in one immutable artifact; record the **final archive SHA-256 in an external trusted operator lockfile or detached signed envelope**, not as a self-referential field inside the same archive. Include compiled JS, static assets and manifest in reproducible Docker images or mounted immutable artifacts. Install/restart is an **operator** action, not a CMS browser upload.
 - Stage B: discover the package at startup, validate manifest/schema/API compatibility, allowlist, integrity and dependency constraints; fail closed if unknown/incompatible. No path traversal or mutable remote entrypoints.
 - Stage C: record **installed globally** vs **enabled for publication** as separate states. Registry identifies executable modules only from the resolved, audited deployment manifest. Registration of JSON by itself never loads code.
 - Stage D: dispatch all plugin actions through stable, narrow host services; no private imports. Runtime type enforcement and authenticated scope matter more than TypeScript restrictions.
@@ -61,8 +61,8 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 
 ## 5. Publication and principal model
 
-- Package installation is **platform-scoped**; enablement/settings/data are **publication-scoped by default**. A platform capability (e.g. system storage provider) requires an explicit elevated operator policy.
-- Resolve `publicationId` from authenticated Staff session, Member session, verified public site resolution or queue envelope. Never trust a plugin caller-supplied ID as authorization. All APIs look up resources by compound publication + resource ID; wrong-tenant behavior matches not-found.
+- Package installation is **platform-scoped**; enablement/settings/data are **publication-scoped by default**. Legacy globally active plugins/settings remain on an explicit v1 compatibility path and are never copied or auto-enabled in arbitrary publications. A platform capability (e.g. system storage provider) requires an explicit elevated operator policy.
+- Resolve `publicationId` from authenticated Staff session, verified site resolution or validated queue envelope. A Member session proves Member identity **but does not alone prove requested publication**: match resolved `member.publicationId` against authoritative site/publication context before dispatch; reject if absent/mismatched. Never trust a plugin caller-supplied ID as authorization. All APIs look up resources by compound publication + resource ID; wrong-tenant behavior matches not-found.
 - Staff RBAC (`requireStaffSession` + `requirePermission`), Member identity (`requireMemberSession`), Machine credentials, and anonymous public visitors remain separate principals.
 - A plugin may define namespaced permissions (e.g. `lms.course.manage`); the host maps them to staff roles using a declared, audited permission registry. Member enrollment/instructor status is domain authorization, not Staff RBAC.
 - Do not place full PII or unmasked secrets into event envelopes or logs.
@@ -87,7 +87,11 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 - Uninstall: remove code/contributions after disable, default to **retaining plugin data**. Destructive purge must require explicit separate confirmation, backup/export, and audit.
 - Fresh install and existing install must converge to identical invariants after migration/backfill. No dependency on a provider-managed cloud control plane.
 
-## 8. Explicit decisions pending approval
+## 8. Implementation-blocking specifications
+
+The architecture is not approved for coding until [SDK ABI and legacy adapter](external-extensions-sdk-compatibility.md), [principal publication binding, typed data and legacy migration](external-extensions-identity-data.md) and [immutable release integrity, Admin/Next.js assets and worker lifecycle](external-extensions-package-and-ui.md) have explicit decisions, test fixtures and owners. `packages/theme-core/src/route-contract.ts` does not register extension pages today. `PluginsService.deactivatePlugin` does not call `deactivate()`, and `executeHook` does not forward the actual event name correctly; those are functional blockers for credible lifecycle documentation.
+
+## 9. Explicit decisions pending approval
 
 | Decision | Proposed default | Gate |
 | --- | --- | --- |
@@ -99,7 +103,7 @@ A trusted in-process JS module has effective process privileges even if its SDK 
 | Entitlements | Existing subscription reader (recurring), one-time purchases as later capability | Billing policy |
 | Sandbox | None claimed in trusted v1 | Documented operator trust |
 
-## 9. Architecture acceptance
+## 10. Architecture acceptance
 
 Pass the pilot without editing private core files for the **individual LMS module**, including: two publications with no cross-read/write; authenticated/unauthorized/missing/disabled paths; fresh deployment and upgrade with existing data; rollback decision tested; Arabic+English locale and RTL keyboard navigation; theme fallback; worker crash and retry recovery; ability to reinstall after disable with content intact.
 

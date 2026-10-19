@@ -8,7 +8,7 @@ Trusted extensions run with significant Node/process privileges. Import restrict
 
 ### Package supply chain
 
-- Operator allowlist; pinned semver, lockfile, cryptographic artifact hash and immutable release record; audit dependencies and SBOM before deployment.
+- Operator allowlist; pinned semver, lockfile, cryptographic artifact hash and immutable release record; audit dependencies and SBOM before deployment. Hash the **final immutable archive** and record its digest in an **external trusted lockfile or detached signed envelope**; never validate an archive against a SHA-256 claimed only inside that same archive.
 - Reproducible build; avoid untrusted lifecycle/install scripts in production; reject source/path escaping, malicious symlinks, excessive artifact size, unexpected binaries.
 - Attest publisher and sign releases where supported. Check checksum before loading, not just on manifest registration.
 - Configuration is explicit for Docker and reverse proxies; no hidden hosted registry requirement.
@@ -16,7 +16,7 @@ Trusted extensions run with significant Node/process privileges. Import restrict
 
 ## Authentication and authorization
 
-- Host resolves publication and principal **before** calling any extension handler; an ID in a URL or event is never sufficient authorization.
+- Host resolves publication and principal **before** calling any extension handler; specifically match the authenticated Member's `publicationId` against independently resolved publication context, since `requireMemberSession` alone does not do this. an ID in a URL or event is never sufficient authorization.
 - Admin routes: `requireStaffSession`, `requirePermission`, `validateOrigin` on state changes. Member routes: `requireMemberSession`, own-member checks, CSRF/origin and service-side entitlements. Machine calls require exact scopes; never exchange staff and member cookies.
 - Domain policies must recheck ownership; deny by default and return 404 where resource existence is private.
 - Permit only named capabilities with verified call-site guards; test each denial path and cross-publication access through both API and background jobs.
@@ -26,6 +26,7 @@ Trusted extensions run with significant Node/process privileges. Import restrict
 
 - Core-managed member IDs are publication-owned; plugin rows use explicit `publication_id` and ownership constraints including compound lookups and unique indexes.
 - Plugin migration registry tracks package version and last applied migration; immutable forward-only scripts, retry/backfill behavior, lock footprint for production datasets, dry-run/preflight and recoverable failures.
+- Preserve existing global `plugins` and `plugin_settings` through an explicit legacy adapter. Do **not** automatically propagate legacy activation or settings/secrets to every publication; require authorized operator decisions and test upgrade from populated DBs.
 - Apply a two-phase strategy for breaking schema changes (expand → backfill → switch code → contract after supported older code retires); no schema rollback promise if irreversible.
 - Disable and standard uninstall never delete course, student, billing or settings data. A separate purge requires owner authorization, export, confirmation, audit and recovery procedure.
 - Backups include plugin tables, settings encryption keys and media references; restore a snapshot with an independently pinned matching plugin package; test point-in-time recovery.
@@ -56,6 +57,10 @@ Instrumentation: record plugin ID, artifact release, publication, request/event 
 4. API/worker load tests, retry/duplicate tests, startup without optional plugin, restore and disabled-state behavior.
 5. RTL, keyboard, semantic HTML, long translations, accessible media/player, safe SEO metadata.
 6. CI security audit and Docker self-hosted test. Manual threat-model sign-off before merging the first external runtime.
+
+## Contract and runtime blockers
+
+Before admitting external packages, resolve the two existing plugin ABI shapes, fix actual lifecycle event-name/deactivate dispatch, specify typed repository permissions and Member publication binding, and validate Next.js public-route privacy, versioned UI assets and workers across replicas. See [SDK compatibility](external-extensions-sdk-compatibility.md), [identity/data](external-extensions-identity-data.md), [package/UI/worker](external-extensions-package-and-ui.md). A short Promise timeout is not process sandboxing.
 
 ## Operator-facing runbook (to be implemented)
 
