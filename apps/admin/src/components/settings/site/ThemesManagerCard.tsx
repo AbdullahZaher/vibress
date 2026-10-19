@@ -46,9 +46,11 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingTheme, setEditingTheme] = useState<ApiThemeSummary | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [editorSaving, setEditorSaving] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
+  const uploadControlRef = useRef<HTMLButtonElement>(null);
 
   // Upload modal state inside drawer
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -123,16 +125,23 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   }, []);
 
   const handleEditorBack = () => {
+    if (editorSaving) return;
     if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
     setEditingTheme(null);
     setEditorDirty(false);
   };
 
   const handleCloseDrawer = () => {
+    if (editorSaving) return;
     if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
     setEditingTheme(null);
     setEditorDirty(false);
     setIsDrawerOpen(false);
+  };
+
+  const handleCloseUpload = () => {
+    setIsUploadOpen(false);
+    uploadControlRef.current?.focus();
   };
 
   const handleOpen = () => {
@@ -215,7 +224,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setUploadProgress("success");
       await load();
       setTimeout(() => {
-        setIsUploadOpen(false);
+        handleCloseUpload();
         setUploadFile(null);
         setUploadProgress("idle");
       }, 1200);
@@ -247,7 +256,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       {/* Themes Manager Slide-over Drawer */}
       <SettingsModalPortal
         isOpen={isDrawerOpen}
-        onClose={isUploadOpen ? () => setIsUploadOpen(false) : handleCloseDrawer}
+        onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
         <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
@@ -263,6 +272,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
+                  ref={uploadControlRef}
                   disabled={editingTheme !== null}
                   onClick={() => {
                     setIsUploadOpen(true);
@@ -291,6 +301,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   type="button"
                   aria-label="Close themes drawer"
                   onClick={handleCloseDrawer}
+                  disabled={editorSaving}
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -320,6 +331,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   theme={editingTheme}
                   onBack={handleEditorBack}
                   onDirtyChange={setEditorDirty}
+                  onSavingChange={setEditorSaving}
                   onSaved={(settings) => {
                     setActive((current) => current && current.themeId === editingTheme.manifest.id
                       ? { ...current, settings }
@@ -448,6 +460,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               <Button
                 size="sm"
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
+                disabled={editorSaving}
                 className="text-xs cursor-pointer"
               >
                 {editingTheme ? tr("Back to themes") : "Done"}
@@ -469,7 +482,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsUploadOpen(false)}
+                  onClick={handleCloseUpload}
                   aria-label="Close theme upload"
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md"
                 >
@@ -536,7 +549,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsUploadOpen(false)}
+                  onClick={handleCloseUpload}
                   className="text-xs h-7"
                 >
                   Cancel
