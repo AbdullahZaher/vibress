@@ -113,14 +113,15 @@ export class PluginsService {
         hasCapability: (cap: string) => plugin.capabilities.includes(cap),
       };
       await module.activate(context);
-    } catch (err: unknown) {
-      const errMsg = (err as Error).message || "activation failed";
+    } catch {
+      // Plugin exceptions and filesystem errors may include tokens or operator
+      // paths. Never forward those raw messages to callers or domain events.
       await this.pluginRepo.updateStatus(id, "error");
       domainEvents.emit("plugin.activation_failed", {
         pluginId: id,
-        error: errMsg,
+        error: "Plugin activation failed",
       });
-      throw new PluginDomainError("PLUGIN_ACTIVATION_FAILED", errMsg);
+      throw new PluginDomainError("PLUGIN_ACTIVATION_FAILED", "Plugin activation failed");
     }
 
     const activated = await this.pluginRepo.updateStatus(id, "active");
