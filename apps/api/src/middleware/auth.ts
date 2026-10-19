@@ -1,6 +1,10 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { authService, workspaceService } from "../services";
-import { hasPermission, PublicationAccessDeniedError } from "@vibress/security";
+import {
+  hasPermission,
+  isPlatformPluginOperator,
+  PublicationAccessDeniedError,
+} from "@vibress/security";
 import { TenantAccessDeniedError } from "@vibress/workspaces";
 import { getConfig } from "@vibress/config";
 
@@ -170,17 +174,6 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
  * publication-local plugin configuration. Global system roles are resolved
  * from the authenticated Staff session, never from a request header.
  */
-export function isPlatformPluginOperator(
-  roles: readonly string[] | undefined,
-  permissions: readonly string[] | undefined,
-): boolean {
-  return Boolean(
-    roles?.some((role) => role === "owner" || role === "administrator") &&
-      permissions?.includes("system.manage") &&
-      permissions?.includes("plugins.manage"),
-  );
-}
-
 export async function requirePlatformPluginOperator(
   req: FastifyRequest,
   reply: FastifyReply,

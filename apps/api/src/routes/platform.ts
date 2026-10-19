@@ -3,7 +3,6 @@ import {
   requireStaffSession,
   requirePermission,
   requirePlatformPluginOperator,
-  isPlatformPluginOperator,
   validateOrigin,
 } from "../middleware/auth";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@vibress/integrations";
 import { WebhookDomainError } from "@vibress/webhooks";
 import { PluginDomainError } from "@vibress/plugins";
+import { isPlatformPluginOperator } from "@vibress/security";
 import {
   PluginPublicationParamsSchema,
   PluginPublicationActivationSchema,
@@ -420,7 +420,11 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get("/plugins/trusted-available", {
-    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.read"),
+      requirePlatformPluginOperator,
+    ],
     handler: async (req, reply) => {
       try {
         const approved = await pluginsService.listOperatorManifests();

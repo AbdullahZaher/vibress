@@ -131,3 +131,19 @@ export function hasResourcePermission(
   return isPrimaryAuthor || isCoAuthor;
 }
 
+
+/**
+ * Platform-wide plugin install/lifecycle privileges are distinct from a
+ * publication's plugins.manage permission. Never infer operator authority
+ * from a publication ID or membership alone.
+ */
+export function isPlatformPluginOperator(
+  globalRoles: readonly string[] | undefined,
+  globalPermissions: readonly string[] | undefined,
+): boolean {
+  return Boolean(
+    globalRoles?.some((role) => role === "owner" || role === "administrator") &&
+      globalPermissions?.includes("system.manage") &&
+      globalPermissions?.includes("plugins.manage"),
+  );
+}
