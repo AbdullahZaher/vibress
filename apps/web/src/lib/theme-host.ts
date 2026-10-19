@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { ThemePreviewResolvedDtoSchema } from "@vibress/api-contracts";
 import {
   getTheme,
   getFallbackTheme,
@@ -65,9 +66,41 @@ export async function resolveThemeHostState(
     settings = info.settings || {};
   }
 
+  let verifiedPreview = false;
   if (isPreview && previewThemeId) {
-    activeThemeId = previewThemeId;
-    isBuiltIn = getTheme(previewThemeId) !== null;
+    // The preview token is forwarded only by middleware after host-scoped
+    // validation. Re-resolve server-side instead of trusting a theme ID or
+    // copying the active theme's version and settings.
+    try {
+      const hs = await headers();
+      const token = hs.get("x-vibress-preview-token");
+      if (token && /^[a-f0-9]{64}$/.test(token)) {
+        const host = hs.get("x-forwarded-host") || hs.get("host");
+        const baseUrl = process.env.API_URL || "http://127.0.0.1:7780";
+        const response = await fetch(
+          `${baseUrl}/api/admin/v1/themes/preview/${token}`,
+          {
+            cache: "no-store",
+            headers: {
+              Accept: "application/json",
+              ...(host ? { "x-forwarded-host": host } : {}),
+            },
+          },
+        );
+        if (response.ok) {
+          const parsed = ThemePreviewResolvedDtoSchema.safeParse(await response.json());
+          if (parsed.success && parsed.data.themeId === previewThemeId) {
+            activeThemeId = parsed.data.themeId;
+            activeThemeVersion = parsed.data.themeVersion;
+            isBuiltIn = parsed.data.isBuiltIn;
+            settings = parsed.data.settings;
+            verifiedPreview = true;
+          }
+        }
+      }
+    } catch {
+      // Failed or expired previews never adopt untrusted theme selections.
+    }
   }
 
   const builtinTheme = getTheme(activeThemeId) || getFallbackTheme();
@@ -89,7 +122,7 @@ export async function resolveThemeHostState(
     isBuiltIn,
     theme: builtinTheme,
     settings: merged,
-    isPreview,
+    isPreview: verifiedPreview,
   };
 }
 
