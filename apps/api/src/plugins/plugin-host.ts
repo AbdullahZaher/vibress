@@ -23,6 +23,10 @@ export class BundledPluginHost implements PluginHost {
     },
   };
 
+  requiresPublicationEnablement(plugin: Plugin): boolean {
+    return !(plugin.manifestId in this.registry);
+  }
+
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
     const entry = this.registry[plugin.manifestId];
     if (entry) return entry.module;

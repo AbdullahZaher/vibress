@@ -2,6 +2,7 @@ import {
   PluginRepository,
   PluginSettingRepository,
   Plugin,
+  PluginPublicationStateRepository,
 } from "../domain/plugin";
 import {
   validateManifest,
@@ -23,6 +24,7 @@ export class PluginDomainError extends Error {
 
 export interface PluginHost {
   loadModule(plugin: Plugin): Promise<PluginModule | null>;
+  requiresPublicationEnablement?(plugin: Plugin): boolean;
 }
 
 export class PluginsService {
@@ -30,6 +32,7 @@ export class PluginsService {
     private pluginRepo: PluginRepository,
     private settingRepo: PluginSettingRepository,
     private host: PluginHost,
+    private publicationStates?: PluginPublicationStateRepository,
   ) {}
 
   /**
@@ -148,6 +151,7 @@ export class PluginsService {
         `Plugin '${plugin.manifestId}' is ${plugin.status}. Only active plugins can process hooks.`,
       );
     }
+    await this.requirePublicationEnabled(plugin, publicationId);
 
     if (hookName !== "onEvent") {
       throw new PluginDomainError("UNKNOWN_PLUGIN_HOOK", "Unsupported plugin hook");
@@ -197,6 +201,7 @@ export class PluginsService {
     if (plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin is not active");
     }
+    await this.requirePublicationEnabled(plugin, publicationId);
     if (!plugin.capabilities.includes("events.subscribe") ||
       (!plugin.hooks.includes(eventName) && !plugin.hooks.includes("onEvent"))) {
       throw new PluginDomainError("PLUGIN_CAPABILITY_DENIED", "Event is not declared");
@@ -246,6 +251,57 @@ export class PluginsService {
 
   async getPlugin(id: string): Promise<Plugin | null> {
     return this.pluginRepo.findById(id);
+  }
+
+  /**
+   * Enables a globally installed/activated plugin only in the authoritative
+   * staff publication. Existing bundled v1 plugins retain global semantics.
+   * The caller must have already passed Staff session + plugins.manage.
+   */
+  async setPublicationEnabled(
+    pluginId: string,
+    publicationId: string,
+    enabled: boolean,
+  ): Promise<boolean> {
+    if (!publicationId) {
+      throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (!this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError("PLUGIN_LEGACY_GLOBAL", "Bundled v1 plugins have global activation");
+    }
+    if (!this.publicationStates) {
+      throw new PluginDomainError("PLUGIN_STATE_UNAVAILABLE", "Publication plugin state is unavailable");
+    }
+    if (enabled && plugin.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");
+    }
+    await this.publicationStates.setEnabled(pluginId, publicationId, enabled);
+    domainEvents.emit("plugin.publication_changed", { pluginId, publicationId, enabled });
+    return enabled;
+  }
+
+  async isPublicationEnabled(pluginId: string, publicationId: string): Promise<boolean> {
+    if (!publicationId) {
+      throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status !== "active") return false;
+    if (!this.host.requiresPublicationEnablement?.(plugin)) return true;
+    if (!this.publicationStates) return false;
+    return this.publicationStates.isEnabled(plugin.id, publicationId);
+  }
+
+  private async requirePublicationEnabled(plugin: Plugin, publicationId?: string): Promise<void> {
+    if (!this.host.requiresPublicationEnablement?.(plugin)) return;
+    if (!publicationId || !this.publicationStates ||
+        !(await this.publicationStates.isEnabled(plugin.id, publicationId))) {
+      throw new PluginDomainError(
+        "PLUGIN_PUBLICATION_INACTIVE", "Plugin is not enabled for this publication",
+      );
+    }
   }
 
   // ---------------- Settings ----------------

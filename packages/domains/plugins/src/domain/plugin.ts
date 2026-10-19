@@ -68,3 +68,9 @@ export interface PluginSettingRepository {
   listForPlugin(pluginId: string): Promise<PluginSetting[]>;
   getSecret(pluginId: string, key: string): Promise<string | null>;
 }
+
+/** Publication state is explicit for external modules; absent means disabled. */
+export interface PluginPublicationStateRepository {
+  isEnabled(pluginId: string, publicationId: string): Promise<boolean>;
+  setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void>;
+}

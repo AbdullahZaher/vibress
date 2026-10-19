@@ -4,6 +4,7 @@ import {
   PluginRow,
   pluginSettings,
   PluginSettingRow,
+  pluginPublicationStates,
 } from "@vibress/database";
 import { eq, and } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -14,6 +15,7 @@ import {
   PluginSetting,
   RegisterPluginData,
   PluginStatus,
+  PluginPublicationStateRepository,
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
@@ -201,5 +203,28 @@ export class DrizzlePluginSettingRepository implements PluginSettingRepository {
       updatedAt: row.updatedAt,
       createdAt: row.createdAt,
     };
+  }
+}
+
+/** No legacy backfill: an absent row is disabled in this publication. */
+export class DrizzlePluginPublicationStateRepository implements PluginPublicationStateRepository {
+  async isEnabled(pluginId: string, publicationId: string): Promise<boolean> {
+    const rows = await getDb().select({ enabled: pluginPublicationStates.enabled })
+      .from(pluginPublicationStates)
+      .where(and(
+        eq(pluginPublicationStates.pluginId, pluginId),
+        eq(pluginPublicationStates.publicationId, publicationId),
+      ))
+      .limit(1);
+    return rows[0]?.enabled === true;
+  }
+
+  async setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void> {
+    await getDb().insert(pluginPublicationStates)
+      .values({ pluginId, publicationId, enabled })
+      .onConflictDoUpdate({
+        target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
+        set: { enabled, updatedAt: new Date() },
+      });
   }
 }
