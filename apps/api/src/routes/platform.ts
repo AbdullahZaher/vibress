@@ -404,7 +404,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
   fastify.get("/plugins", {
     preHandler: [requireStaffSession, requirePermission("plugins.read")],
     handler: async (req, reply) => {
-      const plugins = await pluginsService.listPlugins();
+      const plugins = await pluginsService.listPluginsForPublication(
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({ plugins });
     },
   });

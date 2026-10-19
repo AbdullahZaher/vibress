@@ -54,6 +54,9 @@ export interface AdminPlugin {
   description: string | null;
   capabilities: string[];
   status: string;
+  /** Added for vNext external plugins; undefined on older API servers. */
+  publicationScoped?: boolean;
+  publicationEnabled?: boolean;
 }
 
 export async function listIntegrationsApi(): Promise<{
@@ -184,4 +187,26 @@ export async function listPluginSettingsApi(
   }>;
 }> {
   return apiRequest(`/plugins/${id}/settings`);
+}
+
+export interface AdminPluginPublicationState {
+  pluginId: string;
+  publicationId: string;
+  enabled: boolean;
+}
+
+export async function getPluginPublicationStateApi(
+  id: string,
+): Promise<AdminPluginPublicationState> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-state`);
+}
+
+export async function setPluginPublicationStateApi(
+  id: string,
+  enabled: boolean,
+): Promise<AdminPluginPublicationState> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-state`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
 }

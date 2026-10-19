@@ -49,7 +49,10 @@ export function PlatformSettings() {
   };
 
   useEffect(() => {
-    refresh();
+    void refresh();
+    const onPublicationChanged = () => { void refresh(); };
+    window.addEventListener("vibress:publication-changed", onPublicationChanged);
+    return () => window.removeEventListener("vibress:publication-changed", onPublicationChanged);
   }, []);
 
   return (

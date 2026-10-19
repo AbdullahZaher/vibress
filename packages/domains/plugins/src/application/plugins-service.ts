@@ -266,6 +266,21 @@ export class PluginsService {
     return this.pluginRepo.list();
   }
 
+  /** Additive Admin projection; global v1 activation remains unchanged. */
+  async listPluginsForPublication(publicationId?: string): Promise<
+    Array<Plugin & { publicationScoped: boolean; publicationEnabled: boolean }>
+  > {
+    const plugins = await this.pluginRepo.list();
+    return Promise.all(plugins.map(async (plugin) => {
+      const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
+      const publicationEnabled = publicationScoped
+        ? Boolean(publicationId && plugin.status === "active" &&
+            this.publicationStates && await this.publicationStates.isEnabled(plugin.id, publicationId))
+        : plugin.status === "active";
+      return { ...plugin, publicationScoped, publicationEnabled };
+    }));
+  }
+
   async getPlugin(id: string): Promise<Plugin | null> {
     return this.pluginRepo.findById(id);
   }
