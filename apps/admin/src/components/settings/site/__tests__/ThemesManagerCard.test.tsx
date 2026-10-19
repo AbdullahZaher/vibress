@@ -105,6 +105,32 @@ describe("ThemesManagerCard", () => {
     expect(document.querySelector<HTMLSelectElement>("select")?.value).toBe("neon");
   });
 
+  it("keeps keyboard focus inside the drawer and restores the opener after closing", async () => {
+    await act(async () => root.render(<ThemesManagerCard />));
+    const opener = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    expect(opener).toBeDefined();
+    await act(async () => { opener?.focus(); opener?.click(); });
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Themes Manager"]');
+    const close = dialog?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]');
+    expect(dialog).not.toBeNull();
+    expect(document.activeElement).toBe(close);
+
+    const controls = Array.from(dialog?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") || []);
+    const last = controls[controls.length - 1];
+    expect(last).toBeDefined();
+    await act(async () => {
+      last?.focus();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    });
+    expect(document.activeElement).toBe(controls[0]);
+
+    await act(async () => { close?.click(); });
+    expect(document.querySelector('[role="dialog"][aria-label="Themes Manager"]')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("prompts for confirmation before discarding unsaved theme settings", async () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     await act(async () => root.render(<ThemesManagerCard />));
