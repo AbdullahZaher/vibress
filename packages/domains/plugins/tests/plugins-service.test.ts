@@ -310,6 +310,34 @@ describe("PluginsService", () => {
     expect(settingRepoWith.listForPlugin).not.toHaveBeenCalled();
   });
 
+  it("denies legacy global settings and secrets to external plugins", async () => {
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(async () => undefined) })),
+      requiresPublicationEnablement: () => true,
+    };
+    const settingRepoWith = {
+      ...settingRepo,
+      listForPlugin: vi.fn(async () => []),
+      getSecret: vi.fn(async () => "secret"),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin()),
+    };
+    const service = new PluginsService(repoWith, settingRepoWith, moduleHost);
+    await expect(service.setSettings("p1", { apiToken: "unsafe" }))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTINGS_NOT_SCOPED" });
+    await expect(service.listSettings("p1"))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTINGS_NOT_SCOPED" });
+    await service.activatePlugin("p1", "admin");
+    const loaded = await moduleHost.loadModule("unused");
+    expect(loaded?.activate).toHaveBeenCalledOnce();
+    const context = loaded?.activate.mock.calls[0]?.[0];
+    expect(context?.settings).toEqual({});
+    expect(await context?.getSecret("apiToken")).toBeNull();
+    expect(settingRepoWith.getSecret).not.toHaveBeenCalled();
+  });
+
   it("settings: secrets encrypted at rest and masked on read", async () => {
     const settingsStored: PluginSetting[] = [];
     const settingRepoWith: PluginSettingRepository = {
