@@ -472,7 +472,10 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id, 404);
+          return sendError(
+            reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400,
+          );
         throw err;
       }
     },
