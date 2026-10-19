@@ -189,8 +189,15 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
         console.log("REQ FAILED:", req.url(), req.failure()?.errorText),
       );
 
-      await anonPage.goto(`${BASE_URL}/`);
-      await anonPage.waitForURL("**/private**", { timeout: 8000 });
+      // Public middleware caches site settings for up to 10 seconds.
+      // The admin write commits immediately, but the next request may still
+      // observe the prior public configuration until that TTL expires.
+      // Poll the real browser redirect rather than weakening the privacy gate.
+      await expect.poll(async () => {
+        await anonPage.goto(`${BASE_URL}/`);
+        return new URL(anonPage.url()).pathname;
+      }, { timeout: 35000, intervals: [1000, 2000, 3000] })
+        .toBe("/private");
       expect(anonPage.url()).toContain("/private");
       await expect(anonPage.locator("h1")).toContainText(
         "This Site is Private",
