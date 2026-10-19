@@ -11,7 +11,7 @@ import {
   auditService,
   workspaceService,
 } from "../services";
-import { ThemeSettingsUpdateSchema } from "@vibress/api-contracts";
+import { ThemeSettingsUpdateSchema, ThemeSettingsPreconditionSchema } from "@vibress/api-contracts";
 import {
   ThemeNotFoundError,
   ThemeInvalidError,
@@ -23,6 +23,7 @@ import {
   validateThemeId,
   ThemeSecurityError,
   ThemeZipError,
+  ThemeError,
 } from "@vibress/theme-core";
 import { asCodedError, errorMessage } from "../helpers/errors";
 import { getConfig } from "@vibress/config";
@@ -377,11 +378,27 @@ export async function themeRoutes(fastify: FastifyInstance) {
             ? (parseResult.data.settings as Record<string, unknown>)
             : parseResult.data;
 
+        const hasPrecondition =
+          req.headers["x-vibress-theme-version"] !== undefined ||
+          req.headers["x-vibress-theme-schema-version"] !== undefined;
+        const parsedExpected = hasPrecondition
+          ? ThemeSettingsPreconditionSchema.safeParse({
+              themeVersion: req.headers["x-vibress-theme-version"],
+              settingsSchemaVersion: req.headers["x-vibress-theme-schema-version"],
+            })
+          : null;
+        if (parsedExpected && !parsedExpected.success) {
+          return reply.status(400).send({
+            errors: [{ code: "VALIDATION_ERROR", message: "Invalid theme settings version precondition", requestId: req.id }],
+          });
+        }
+
         const config = await themeService.updateThemeSettings(
           id,
           settingsInput,
           req.user!.id,
           req.publicationContext?.publicationId,
+          parsedExpected?.success ? parsedExpected.data : undefined,
         );
 
         await auditService.record({
@@ -404,6 +421,11 @@ export async function themeRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (err) {
+        if (err instanceof ThemeError && err.code === "THEME_SETTINGS_CONFLICT") {
+          return reply.status(409).send({
+            errors: [{ code: err.code, message: err.message, requestId: req.id }],
+          });
+        }
         if (err instanceof ThemeNotFoundError) {
           return reply.status(404).send({
             errors: [
