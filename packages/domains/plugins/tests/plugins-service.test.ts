@@ -123,6 +123,44 @@ describe("PluginsService", () => {
     expect(repoWith.updateMetadata).toHaveBeenCalled();
   });
 
+  it("rejects unapproved manifests before persisting plugin metadata", async () => {
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      authorizeRegistration: vi.fn(async () => { throw new Error("/private/operator/package"); }),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findByManifestId: vi.fn(async () => null),
+      create: vi.fn(async (input) => makePlugin({ manifestId: input.manifestId })),
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith);
+    await expect(service.registerPlugin(validManifest, "staff")).rejects.toMatchObject({
+      code: "PLUGIN_NOT_TRUSTED",
+      message: "Plugin manifest is not approved by the operator",
+    });
+    expect(repoWith.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses active external release changes until lifecycle deactivation", async () => {
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findByManifestId: vi.fn(async () => makePlugin({
+        status: "active", version: "0.9.0", entrypoint: "index.ts",
+      })),
+      updateMetadata: vi.fn(async () => makePlugin()),
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith);
+    await expect(service.registerPlugin(validManifest, "staff")).rejects.toMatchObject({
+      code: "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+    });
+    expect(repoWith.updateMetadata).not.toHaveBeenCalled();
+  });
+
   it("activates a plugin via the host and marks it active", async () => {
     const hostWith = {
       loadModule: vi.fn(async () => ({

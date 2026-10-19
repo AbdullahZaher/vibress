@@ -86,6 +86,16 @@ describe("TrustedExternalPluginHost", () => {
     })).toThrow();
   });
 
+  it("lists only pinned manifests and rejects a symlinked operator lockfile", async () => {
+    const f = await fixture();
+    const approved = await new TrustedExternalPluginHost(f.lockfile).listTrustedManifests();
+    expect(approved.map((m) => m.id)).toEqual([manifest.id]);
+    const linked = path.join(f.dir, "lock-symlink.json");
+    await symlink(f.lockfile, linked);
+    await expect(new TrustedExternalPluginHost(linked).listTrustedManifests())
+      .rejects.toThrow(/lockfile/);
+  });
+
   it("rejects a symlinked module even if its contents match", async () => {
     const f = await fixture();
     const target = path.join(f.dir, "copy.mjs");
