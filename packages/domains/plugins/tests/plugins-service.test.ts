@@ -8,8 +8,9 @@ import {
   PluginSettingRepository,
   Plugin,
   PluginSetting,
+  PluginPublicationSettingRepository,
 } from "../src/domain/plugin";
-import { SDK_VERSION } from "@vibress/plugin-sdk";
+import { SDK_VERSION, type PluginContext } from "@vibress/plugin-sdk";
 import { encryptSecret } from "@vibress/security";
 
 beforeAll(() => {
@@ -198,7 +199,7 @@ describe("PluginsService", () => {
     const service = makeService({ pluginRepo: repoWith, host: moduleHost });
     const payload = { publicationId: "pub-a", eventName: "spoofed" };
     await service.dispatchEvent("p1", "post.published", payload, "pub-a");
-    expect(onEvent).toHaveBeenCalledWith("post.published", payload);
+    expect(onEvent).toHaveBeenCalledWith("post.published", payload, undefined);
     await expect(service.dispatchEvent("p1", "post.published", { publicationId: "pub-b" }, "pub-a"))
       .rejects.toMatchObject({ code: "CROSS_PUBLICATION_VIOLATION" });
     await expect(service.dispatchEvent("p1", "post.deleted", {}, "pub-a"))
@@ -311,8 +312,9 @@ describe("PluginsService", () => {
   });
 
   it("denies legacy global settings and secrets to external plugins", async () => {
+    const activate = vi.fn(async (_context: PluginContext) => undefined);
     const moduleHost = {
-      loadModule: vi.fn(async () => ({ activate: vi.fn(async () => undefined) })),
+      loadModule: vi.fn(async () => ({ activate })),
       requiresPublicationEnablement: () => true,
     };
     const settingRepoWith = {
@@ -330,12 +332,106 @@ describe("PluginsService", () => {
     await expect(service.listSettings("p1"))
       .rejects.toMatchObject({ code: "PLUGIN_SETTINGS_NOT_SCOPED" });
     await service.activatePlugin("p1", "admin");
-    const loaded = await moduleHost.loadModule("unused");
-    expect(loaded?.activate).toHaveBeenCalledOnce();
-    const context = loaded?.activate.mock.calls[0]?.[0];
+    expect(activate).toHaveBeenCalledOnce();
+    const context = activate.mock.calls[0]?.[0];
     expect(context?.settings).toEqual({});
     expect(await context?.getSecret("apiToken")).toBeNull();
     expect(settingRepoWith.getSecret).not.toHaveBeenCalled();
+  });
+
+  it("stores scoped settings atomically, encrypts secrets and passes only owning publication context", async () => {
+    const encryptedByScope = new Map<string, {
+      key: string;
+      value: string | null;
+      encryptedValue: string | null;
+      isSecret: boolean;
+    }[]>();
+    const scopeRepository: PluginPublicationSettingRepository = {
+      setMany: vi.fn(async (pluginId, publicationId, entries) => {
+        encryptedByScope.set(`${pluginId}:${publicationId}`, entries.map((entry) => ({ ...entry })));
+      }),
+      listForPlugin: vi.fn(async (pluginId, publicationId) =>
+        (encryptedByScope.get(`${pluginId}:${publicationId}`) ?? []).map((entry) => ({
+          ...entry,
+          id: "setting-id",
+          pluginId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }))),
+      getSecret: vi.fn(async (pluginId, publicationId, key) =>
+        (encryptedByScope.get(`${pluginId}:${publicationId}`) ?? [])
+          .find((entry) => entry.key === key)?.encryptedValue ?? null),
+    };
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async (_id: string, pub: string) => pub === "pub-a"),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const onEvent = vi.fn(async (_event: string, _payload: unknown, _context?: PluginContext) => undefined);
+    const externalHost = {
+      requiresPublicationEnablement: () => true,
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active",
+        capabilities: ["events.subscribe", "settings.read-own"],
+        hooks: ["onEvent"],
+        settingsSchema: {
+          apiToken: { type: "string", secret: true },
+          displayName: { type: "string" },
+        },
+      })),
+    };
+    const service = new PluginsService(repoWith, settingRepo, externalHost, states, scopeRepository);
+    await service.setPublicationSettings("p1", "pub-a", {
+      apiToken: "secret-in-publication-a",
+      displayName: "Course A",
+    });
+    const recorded = encryptedByScope.get("p1:pub-a");
+    expect(recorded?.find((entry) => entry.key === "apiToken")?.value).toBeNull();
+    expect(recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue)
+      .not.toContain("secret-in-publication-a");
+    const masked = await service.listPublicationSettings("p1", "pub-a");
+    expect(JSON.stringify(masked)).not.toContain("secret-in-publication-a");
+    expect(masked.find((entry) => entry.key === "apiToken")?.masked).toBe(true);
+    await service.dispatchEvent("p1", "post.published", { publicationId: "pub-a" }, "pub-a");
+    const context = onEvent.mock.calls[0]?.[2];
+    expect(context?.publicationId).toBe("pub-a");
+    expect(context?.settings.displayName).toBe("Course A");
+    expect(await context?.getSecret("apiToken")).toBe("secret-in-publication-a");
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-b"))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    expect(await service.listPublicationSettings("p1", "pub-b")).toEqual([]);
+  });
+
+  it("rejects unknown settings before any scoped write and never replaces an empty secret", async () => {
+    const scoped: PluginPublicationSettingRepository = {
+      setMany: vi.fn(async () => undefined),
+      listForPlugin: vi.fn(async () => []),
+      getSecret: vi.fn(async () => null),
+    };
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async () => true),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active",
+        settingsSchema: { token: { type: "string", secret: true } },
+      })),
+    };
+    const hostWith = { loadModule: vi.fn(async () => null), requiresPublicationEnablement: () => true };
+    const service = new PluginsService(repoWith, settingRepo, hostWith, states, scoped);
+    await expect(service.setPublicationSettings("p1", "pub-a", {
+      token: "valid", unsupported: "invalid",
+    })).rejects.toMatchObject({ code: "PLUGIN_SETTING_UNKNOWN" });
+    expect(scoped.setMany).not.toHaveBeenCalled();
+    await service.setPublicationSettings("p1", "pub-a", { token: "" });
+    expect(scoped.setMany).not.toHaveBeenCalled();
   });
 
   it("settings: secrets encrypted at rest and masked on read", async () => {
