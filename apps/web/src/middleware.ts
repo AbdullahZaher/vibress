@@ -48,6 +48,7 @@ function createCspResponse(
     rewriteUrl?: URL;
     redirectUrl?: URL;
     extraHeaders?: Record<string, string>;
+    requestOnlyHeaders?: Record<string, string>;
   },
 ): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString(
@@ -56,12 +57,22 @@ function createCspResponse(
   const cspHeader = buildCsp(nonce);
 
   const requestHeaders = new Headers(request.headers);
+  // Never accept preview-selection headers supplied directly by a caller.
+  requestHeaders.delete("x-vibress-theme");
+  requestHeaders.delete("x-vibress-preview");
+  requestHeaders.delete("x-vibress-preview-token");
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspHeader);
 
   if (options?.extraHeaders) {
     for (const [k, v] of Object.entries(options.extraHeaders)) {
       requestHeaders.set(k, v);
+    }
+  }
+
+  if (options?.requestOnlyHeaders) {
+    for (const [key, value] of Object.entries(options.requestOnlyHeaders)) {
+      requestHeaders.set(key, value);
     }
   }
 
@@ -296,6 +307,9 @@ export async function middleware(request: NextRequest) {
         extraHeaders: {
           "x-vibress-theme": themeId,
           "x-vibress-preview": "true",
+        },
+        requestOnlyHeaders: {
+          "x-vibress-preview-token": token,
         },
       });
     } catch {
