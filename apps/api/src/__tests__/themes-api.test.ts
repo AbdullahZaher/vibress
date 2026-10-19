@@ -258,6 +258,55 @@ describe("API — External Theme System Integration", () => {
     expect(body.theme.settings.headlineFont).toBe("Georgia");
   });
 
+  it("rejects unauthorized and invalid theme settings updates", async () => {
+    const unauthenticated = await app.inject({
+      method: "PATCH",
+      url: "/api/admin/v1/themes/vibress-news-express/settings",
+      payload: { accentColor: "#112233" },
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const invalidSetting = await app.inject({
+      method: "PATCH",
+      url: "/api/admin/v1/themes/vibress-news-express/settings",
+      headers: {
+        cookie: staffCookie,
+        origin: "http://localhost:7777",
+      },
+      payload: {
+        accentColor: "invalid-color-value",
+      },
+    });
+    expect(invalidSetting.statusCode).toBe(400);
+
+    const missingTheme = await app.inject({
+      method: "PATCH",
+      url: "/api/admin/v1/themes/non-existent-theme/settings",
+      headers: {
+        cookie: staffCookie,
+        origin: "http://localhost:7777",
+      },
+      payload: {
+        accentColor: "#112233",
+      },
+    });
+    expect(missingTheme.statusCode).toBe(404);
+
+    const pathTraversal = await app.inject({
+      method: "PATCH",
+      url: "/api/admin/v1/themes/..%2fevil/settings",
+      headers: {
+        cookie: staffCookie,
+        origin: "http://localhost:7777",
+      },
+      payload: {
+        accentColor: "#112233",
+      },
+    });
+    expect(pathTraversal.statusCode).toBe(400);
+    expect(pathTraversal.json().errors[0]?.code).toMatch(/THEME/);
+  });
+
   it("returns saved theme settings to authorized staff only", async () => {
     const path = "/api/admin/v1/themes/vibress-news-express";
     const unauthenticated = await app.inject({ method: "GET", url: path });

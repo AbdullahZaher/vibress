@@ -4,6 +4,8 @@ import {
   ThemeConfiguration,
   ThemeConfigurationRepository,
   ThemeDefinitionRegistry,
+  ThemeNotFoundError,
+  ThemeSettingsInvalidError,
 } from "../src/domain/theme-configuration";
 import {
   InstalledTheme,
@@ -281,6 +283,16 @@ describe("Theme Domain — Activation & Management", () => {
 
     await service.activateTheme("custom-nordic", "user-1");
     expect((await service.getActiveTheme())?.settings.accentColor).toBe("#123abc");
+  });
+
+  it("rejects invalid settings inputs and non-existent themes", async () => {
+    await expect(
+      service.updateThemeSettings("custom-nordic", { accentColor: "not-a-color" }, "user-1"),
+    ).rejects.toThrow(ThemeSettingsInvalidError);
+
+    await expect(
+      service.updateThemeSettings("non-existent-theme", { accentColor: "#123abc" }, "user-1"),
+    ).rejects.toThrow(ThemeNotFoundError);
   });
 
   it("reports legacy storage only for an active external theme with an inherited path", async () => {

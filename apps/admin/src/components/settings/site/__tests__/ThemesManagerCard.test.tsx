@@ -104,4 +104,44 @@ describe("ThemesManagerCard", () => {
     expect(getThemeApi).toHaveBeenCalledWith("retro-creator");
     expect(document.querySelector<HTMLSelectElement>("select")?.value).toBe("neon");
   });
+
+  it("prompts for confirmation before discarding unsaved theme settings", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
+    await act(async () => root.render(<ThemesManagerCard />));
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+
+    const settings = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Settings Retro Creator"]',
+    );
+    await act(async () => { settings?.click(); });
+
+    const select = document.querySelector<HTMLSelectElement>("select");
+    expect(select).not.toBeNull();
+    await act(async () => {
+      if (select) {
+        select.value = "sunshine";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    // 1. Cancel discard -> stays in editor
+    confirmSpy.mockReturnValueOnce(false);
+    const backButton = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Back to themes"]',
+    );
+    expect(backButton).not.toBeNull();
+    await act(async () => { backButton?.click(); });
+
+    expect(confirmSpy).toHaveBeenCalledWith("Discard unsaved theme settings changes?");
+    expect(document.querySelector<HTMLSelectElement>("select")).not.toBeNull();
+
+    // 2. Confirm discard -> returns to theme list
+    confirmSpy.mockReturnValueOnce(true);
+    await act(async () => { backButton?.click(); });
+    expect(document.querySelector<HTMLSelectElement>("select")).toBeNull();
+    expect(document.querySelector('button[aria-label="Settings Retro Creator"]')).not.toBeNull();
+  });
 });
