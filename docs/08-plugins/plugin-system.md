@@ -55,3 +55,25 @@ Status progression: `registered → activating → active → deactivating → i
 - **Platform Operator Gate:** Global lifecycle operations (`/register`, `/activate`, `/deactivate`, `/recover`) require platform operator authorization (`isPlatformPluginOperator`), requiring global `owner` or `administrator` role with both `plugins.manage` and `system.manage` permissions. Publication-scoped editors or tenant staff are strictly denied (403 `PLATFORM_OPERATOR_REQUIRED`).
 - **Publication Enablement:** Per-publication enablement (`PATCH /plugins/:id/publication-state`) and scoped settings require `plugins.manage` within the authenticated publication session.
 - **CSRF & Origin Verification:** All state-changing plugin endpoints validate Origin/Referer against allowed origins.
+
+### Offline lifecycle recovery safety (operator runbook)
+
+The `POST /api/admin/v1/plugins/:id/recover` route is **disabled in normal
+operation**. A trusted platform operator must first shut down and drain **all**
+normal API and worker replicas. Start **one** dedicated maintenance API
+instance with `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`; this instance rejects
+plugin activation, deactivation, and event dispatch. After verifying that
+no other process can still execute plugin code, submit a Staff-authenticated,
+origin-validated request with:
+
+```json
+{"confirmAllRuntimesStopped":true}
+```
+
+The transitional state must be at least 15 minutes old, and the current
+maintenance instance must not have a local active module. A successful
+CAS recovery changes `activating → error` or `deactivating → inactive`.
+Shutdown of API/worker replicas is an **operator responsibility** and cannot
+be proven solely by the HTTP confirmation. The system therefore makes no
+claim of distributed fencing, automatic leases, or sandboxed JavaScript
+termination. Do not enable maintenance recovery on a serving API instance.

@@ -45,6 +45,20 @@ export class PluginsService {
   private readonly initializedHere = new Map<string, Promise<void>>();
   private readonly activeInstances = new Map<string, { plugin: Plugin; module: PluginModule }>();
 
+  /** A maintenance-only replica never runs plugin event handlers or lifecycle hooks. */
+  private get recoveryMaintenance(): boolean {
+    return process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE === "1";
+  }
+
+  private assertRuntimeAllowed(): void {
+    if (this.recoveryMaintenance) {
+      throw new PluginDomainError(
+        "PLUGIN_RECOVERY_MAINTENANCE",
+        "Plugin execution is disabled in recovery maintenance mode",
+      );
+    }
+  }
+
   private activationKey(plugin: Plugin): string {
     return `${plugin.id}:${plugin.version}:${plugin.entrypoint}`;
   }
@@ -192,6 +206,7 @@ export class PluginsService {
    * reported as a domain error. In-process crashes are NOT isolated.
    */
   async activatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+    this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
@@ -249,7 +264,8 @@ export class PluginsService {
     payload: unknown,
     publicationId?: string,
   ): Promise<T> {
-    const plugin = await this.pluginRepo.findById(pluginId);
+    const plugin = await this.pluginRepo.findById(pluginId);    this.assertRuntimeAllowed();
+
     if (!plugin) {
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
     }
@@ -307,7 +323,8 @@ export class PluginsService {
     payload: unknown,
     publicationId?: string,
   ): Promise<void> {
-    if (!eventName || eventName === "onEvent") {
+    if (!eventName || eventName === "onEvent") {    this.assertRuntimeAllowed();
+
       throw new PluginDomainError("INVALID_PLUGIN_EVENT", "A named event is required");
     }
     const plugin = await this.pluginRepo.findById(pluginId);
@@ -365,6 +382,7 @@ export class PluginsService {
   }
 
   async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+    this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
@@ -418,13 +436,42 @@ export class PluginsService {
    * caused by an ungraceful crash or abandoned worker/replica operation.
    * Atomically transitions stuck states using optimistic locking.
    */
-  async recoverPluginLifecycle(id: string, actorId: string | null): Promise<Plugin> {
+  async recoverPluginLifecycle(
+    id: string,
+    actorId: string | null,
+    confirmedQuiescent = false,
+  ): Promise<Plugin> {
+    // HTTP request alone cannot prove other replicas are stopped. Require the
+    // operator to start a dedicated maintenance instance and explicitly attest
+    // that all normal API/worker replicas have been shut down and drained.
+    if (!this.recoveryMaintenance || !confirmedQuiescent) {
+      throw new PluginDomainError(
+        "PLUGIN_RECOVERY_NOT_QUIESCENT",
+        "Recovery requires isolated maintenance mode and confirmed stopped runtimes",
+      );
+    }
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
     if (plugin.status !== "activating" && plugin.status !== "deactivating") {
       throw new PluginDomainError(
         "PLUGIN_NOT_IN_TRANSITION",
         "Plugin is not in a transitional lifecycle state",
+      );
+    }
+    // Prevent accidental interruption of ordinary slow lifecycle operations.
+    // Time passage alone does not prove death; maintenance + attestation remain mandatory.
+    const ageMs = Date.now() - plugin.updatedAt.getTime();
+    if (!Number.isFinite(ageMs) || ageMs < 15 * 60 * 1000) {
+      throw new PluginDomainError(
+        "PLUGIN_RECOVERY_TOO_RECENT",
+        "Wait at least 15 minutes and verify all runtimes have stopped",
+      );
+    }
+    const key = this.activationKey(plugin);
+    if (this.initializedHere.has(key) || this.activeInstances.has(key)) {
+      throw new PluginDomainError(
+        "PLUGIN_RECOVERY_LOCAL_ACTIVE",
+        "This process still holds a plugin lifecycle instance",
       );
     }
     const targetStatus: PluginStatus = plugin.status === "activating" ? "error" : "inactive";
@@ -439,7 +486,6 @@ export class PluginsService {
         "Plugin status changed concurrently",
       );
     }
-    const key = this.activationKey(plugin);
     this.initializedHere.delete(key);
     this.activeInstances.delete(key);
     domainEvents.emit("plugin.recovered", {

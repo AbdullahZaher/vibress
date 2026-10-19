@@ -35,3 +35,11 @@ export const PluginPublicationSettingsResponseSchema = z.object({
 export const OperatorTrustedPluginRegisterSchema = z.object({
   manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(200),
 }).strict();
+
+/**
+ * Online recovery is forbidden by default. An isolated recovery-maintenance
+ * instance accepts operator attestation only after all other runtimes stop.
+ */
+export const PluginLifecycleRecoverySchema = z.object({
+  confirmAllRuntimesStopped: z.literal(true),
+}).strict();

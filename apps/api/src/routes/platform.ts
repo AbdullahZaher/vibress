@@ -24,6 +24,7 @@ import {
   PluginPublicationSettingsUpdateSchema,
   PluginPublicationSettingsResponseSchema,
   OperatorTrustedPluginRegisterSchema,
+  PluginLifecycleRecoverySchema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 
@@ -557,9 +558,15 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       validateOrigin,
     ],
     handler: async (req, reply) => {
-      const { id } = req.params as { id: string };
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const confirmation = PluginLifecycleRecoverySchema.safeParse(req.body);
+      if (!params.success || !confirmation.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Explicit recovery confirmation required", req.id, 400);
+      }
       try {
-        const plugin = await pluginsService.recoverPluginLifecycle(id, req.user!.id);
+        const plugin = await pluginsService.recoverPluginLifecycle(
+          params.data.id, req.user!.id, confirmation.data.confirmAllRuntimesStopped,
+        );
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
@@ -569,6 +576,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
             err.message,
             req.id,
             err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code.startsWith("PLUGIN_RECOVERY_") ||
             err.code === "PLUGIN_NOT_IN_TRANSITION" ? 409 : 400,
           );
         }
