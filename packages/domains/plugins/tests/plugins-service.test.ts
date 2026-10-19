@@ -59,6 +59,7 @@ describe("PluginsService", () => {
     findById: vi.fn(async () => null),
     findByManifestId: vi.fn(async () => null),
     updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+    tryTransitionStatus: vi.fn(async (id, _expected, status) => makePlugin({ id, status })),
     updateMetadata: vi.fn(async (id, d) => makePlugin({ id })),
     list: vi.fn(async () => []),
     delete: vi.fn(async () => undefined),
@@ -159,6 +160,49 @@ describe("PluginsService", () => {
       code: "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
     });
     expect(repoWith.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it("returns an already active plugin without running activate twice", async () => {
+    const runActivate = vi.fn(async () => undefined);
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const hostWith = { loadModule: vi.fn(async () => ({ activate: runActivate })) };
+    const result = await makeService({ pluginRepo: repoWith, host: hostWith })
+      .activatePlugin("p1", "owner");
+    expect(result.status).toBe("active");
+    expect(runActivate).not.toHaveBeenCalled();
+    expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not execute plugin code when a competing activation owns the CAS claim", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "registered" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const hostWith = { loadModule: vi.fn(async () => null) };
+    await expect(makeService({ pluginRepo: repoWith, host: hostWith })
+      .activatePlugin("p1", "owner")).rejects.toMatchObject({
+        code: "PLUGIN_TRANSITION_IN_PROGRESS",
+      });
+    expect(hostWith.loadModule).not.toHaveBeenCalled();
+  });
+
+  it("rejects competing deactivation before calling any cleanup", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const hostWith = { loadModule: vi.fn(async () => null) };
+    await expect(makeService({ pluginRepo: repoWith, host: hostWith })
+      .deactivatePlugin("p1", "owner")).rejects.toMatchObject({
+        code: "PLUGIN_TRANSITION_IN_PROGRESS",
+      });
+    expect(hostWith.loadModule).not.toHaveBeenCalled();
   });
 
   it("activates a plugin via the host and marks it active", async () => {

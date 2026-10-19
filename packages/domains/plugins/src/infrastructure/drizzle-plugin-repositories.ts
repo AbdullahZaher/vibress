@@ -7,7 +7,7 @@ import {
   pluginPublicationStates,
   pluginPublicationSettings,
 } from "@vibress/database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   PluginRepository,
@@ -81,6 +81,19 @@ export class DrizzlePluginRepository implements PluginRepository {
     return this.mapToDomain(row);
   }
 
+  async tryTransitionStatus(
+    id: string,
+    expected: readonly PluginStatus[],
+    status: PluginStatus,
+  ): Promise<Plugin | null> {
+    if (expected.length === 0) return null;
+    const [row] = await getDb().update(plugins)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
+      .returning();
+    return row ? this.mapToDomain(row) : null;
+  }
+
   async updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
@@ -89,6 +102,8 @@ export class DrizzlePluginRepository implements PluginRepository {
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
+    if (data.vibressApiVersion !== undefined)
+      payload.vibressApiVersion = data.vibressApiVersion;
     if (data.description !== undefined) payload.description = data.description;
     if (data.entrypoint !== undefined) payload.entrypoint = data.entrypoint;
     if (data.capabilities !== undefined)

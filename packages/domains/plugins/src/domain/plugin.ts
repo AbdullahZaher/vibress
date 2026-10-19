@@ -1,4 +1,5 @@
-export type PluginStatus = "registered" | "active" | "inactive" | "error";
+export type PluginStatus =
+  | "registered" | "activating" | "active" | "deactivating" | "inactive" | "error";
 
 export interface Plugin {
   id: string;
@@ -49,6 +50,12 @@ export interface PluginRepository {
     status: PluginStatus,
     error?: string,
   ): Promise<Plugin>;
+  /** Single conditional DB UPDATE prevents concurrent activation/deactivation claims. */
+  tryTransitionStatus(
+    id: string,
+    expected: readonly PluginStatus[],
+    status: PluginStatus,
+  ): Promise<Plugin | null>;
   updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,

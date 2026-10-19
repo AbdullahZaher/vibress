@@ -104,6 +104,7 @@ export class PluginsService {
       const updated = await this.pluginRepo.updateMetadata(existing.id, {
         name: manifest.name,
         version: manifest.version,
+        vibressApiVersion: manifest.vibressApiVersion,
         description: manifest.description || null,
         entrypoint: manifest.entrypoint,
         capabilities: manifest.capabilities,
@@ -139,8 +140,25 @@ export class PluginsService {
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
 
+    if (plugin.status === "active") return plugin;
+    if (plugin.status === "activating" || plugin.status === "deactivating") {
+      throw new PluginDomainError(
+        "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+      );
+    }
+    const claimed = await this.pluginRepo.tryTransitionStatus(
+      id, ["registered", "inactive", "error"], "activating",
+    );
+    if (!claimed) {
+      const latest = await this.pluginRepo.findById(id);
+      if (latest?.status === "active") return latest;
+      throw new PluginDomainError(
+        "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+      );
+    }
+
     try {
-      const module = await this.host.loadModule(plugin);
+      const module = await this.host.loadModule(claimed);
       if (!module || typeof module.activate !== "function") {
         throw new Error(
           "Plugin entrypoint does not export an activate function",
@@ -148,8 +166,8 @@ export class PluginsService {
       }
       // Existing v1 settings are platform-global. Until publication-scoped
       // settings exist, external packages must never receive global secrets.
-      const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
-      const settings = publicationScoped ? {} : await this.loadPlainSettings(plugin.id);
+      const publicationScoped = this.host.requiresPublicationEnablement?.(claimed) === true;
+      const settings = publicationScoped ? {} : await this.loadPlainSettings(claimed.id);
       const context: PluginContext = {
         manifestId: plugin.manifestId,
         name: plugin.name,
@@ -158,7 +176,7 @@ export class PluginsService {
         settings,
         getSecret: publicationScoped
           ? async (_key: string) => null
-          : (key: string) => this.getDecryptedSecret(plugin.id, key),
+          : (key: string) => this.getDecryptedSecret(claimed.id, key),
         log: (message: string, level: "info" | "warn" | "error" = "info") => {
           console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
         },
@@ -297,9 +315,25 @@ export class PluginsService {
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status === "inactive") return plugin;
+    if (plugin.status === "activating" || plugin.status === "deactivating") {
+      throw new PluginDomainError(
+        "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+      );
+    }
     if (plugin.status === "active") {
+      const claimed = await this.pluginRepo.tryTransitionStatus(
+        id, ["active"], "deactivating",
+      );
+      if (!claimed) {
+        const latest = await this.pluginRepo.findById(id);
+        if (latest?.status === "inactive") return latest;
+        throw new PluginDomainError(
+          "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+        );
+      }
       try {
-        const module = await this.host.loadModule(plugin);
+        const module = await this.host.loadModule(claimed);
         if (!module) throw new Error("Active plugin module could not be loaded");
         await module.deactivate?.();
       } catch {
@@ -307,6 +341,15 @@ export class PluginsService {
         await this.pluginRepo.updateStatus(id, "error");
         domainEvents.emit("plugin.deactivation_failed", { pluginId: id, actorId });
         throw new PluginDomainError("PLUGIN_DEACTIVATION_FAILED", "Plugin cleanup failed");
+      }
+    } else {
+      const claimed = await this.pluginRepo.tryTransitionStatus(
+        id, ["registered", "error"], "deactivating",
+      );
+      if (!claimed) {
+        throw new PluginDomainError(
+          "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+        );
       }
     }
     const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
