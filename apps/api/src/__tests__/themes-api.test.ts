@@ -353,6 +353,8 @@ describe("API — External Theme System Integration", () => {
 
     expect(resolveRes.statusCode).toBe(200);
     expect(resolveRes.json().themeId).toBe("vibress-minimal");
+    expect(resolveRes.json().themeVersion).toBeDefined();
+    expect(resolveRes.json().settings).toBeDefined();
   });
 
   it("prevents deleting currently active theme", async () => {
