@@ -70,6 +70,10 @@ describe("TrustedExternalPluginHost", () => {
       .rejects.toThrow(/metadata differs/);
     await expect(host.loadModule(plugin({ capabilities: ["events.subscribe", "content.write"] })))
       .rejects.toThrow(/metadata differs/);
+    await expect(host.loadModule(plugin({ settingsSchema: { token: { type: "string", secret: false } } })))
+      .rejects.toThrow(/metadata differs/);
+    await expect(host.loadModule(plugin({ name: "spoofed" })))
+      .rejects.toThrow(/metadata differs/);
   });
 
   it("rejects duplicate IDs, path traversal and invalid checksums", () => {

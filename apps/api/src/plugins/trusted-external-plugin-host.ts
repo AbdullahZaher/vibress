@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -44,13 +45,14 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
 
 function manifestMatchesInstalled(plugin: Plugin, installed: PluginManifest): boolean {
   return plugin.manifestId === installed.id &&
+    plugin.name === installed.name &&
+    plugin.description === (installed.description ?? null) &&
     plugin.version === installed.version &&
     plugin.vibressApiVersion === installed.vibressApiVersion &&
     plugin.entrypoint === installed.entrypoint &&
-    plugin.capabilities.length === installed.capabilities.length &&
-    plugin.capabilities.every((cap) => installed.capabilities.includes(cap)) &&
-    plugin.hooks.length === (installed.hooks ?? []).length &&
-    plugin.hooks.every((hook) => (installed.hooks ?? []).includes(hook));
+    isDeepStrictEqual(plugin.capabilities, installed.capabilities) &&
+    isDeepStrictEqual(plugin.hooks, installed.hooks ?? []) &&
+    isDeepStrictEqual(plugin.settingsSchema, installed.settingsSchema ?? {});
 }
 
 function isPluginModule(value: unknown): value is PluginModule {
