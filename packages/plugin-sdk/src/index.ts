@@ -254,6 +254,14 @@ export function validateManifest(manifest: unknown): PluginManifest {
   if (typeof m.entrypoint !== "string" || !m.entrypoint.trim())
     throw new Error("Manifest entrypoint is required");
   if (
+    m.entrypoint.length > 240 ||
+    !/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(m.entrypoint) ||
+    m.entrypoint.split("/").some((part) => part === "." || part === "..") ||
+    /^[a-zA-Z]:/.test(m.entrypoint)
+  ) {
+    throw new Error("Manifest entrypoint must be a safe relative path");
+  }
+  if (
     typeof m.vibressApiVersion !== "string" ||
     m.vibressApiVersion !== SDK_VERSION
   ) {
@@ -271,8 +279,13 @@ export function validateManifest(manifest: unknown): PluginManifest {
       throw new Error(`Unsupported capability: ${String(cap)}`);
     }
   }
-  if (m.hooks !== undefined && !Array.isArray(m.hooks))
-    throw new Error("Manifest hooks must be an array");
+  if (
+    m.hooks !== undefined &&
+    (!Array.isArray(m.hooks) ||
+      m.hooks.some((hook: unknown) => typeof hook !== "string" || !hook.trim()))
+  ) {
+    throw new Error("Manifest hooks must be an array of non-empty names");
+  }
 
   return {
     id: m.id,
@@ -307,7 +320,7 @@ export function verifyPluginChecksum(
 }
 
 /**
- * Sandboxed timeout guard for plugin execution.
+ * Asynchronous timeout only. It cannot interrupt blocking JS or isolate crashes.
  */
 export async function executeWithTimeout<T>(
   fn: () => Promise<T> | T,

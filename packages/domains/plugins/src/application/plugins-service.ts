@@ -85,7 +85,7 @@ export class PluginsService {
   /**
    * Activates a plugin: loads its module via the trusted host and runs
    * activate(). On failure the plugin is marked 'error' — visible but
-   * isolated from core functionality.
+   * reported as a domain error. In-process crashes are NOT isolated.
    */
   async activatePlugin(id: string, actorId: string | null): Promise<Plugin> {
     const plugin = await this.pluginRepo.findById(id);
@@ -181,18 +181,73 @@ export class PluginsService {
       hasCapability: (cap: string) => plugin.capabilities.includes(cap),
     };
 
-    if (hookName === "onEvent" && typeof module.onEvent === "function") {
-      await module.onEvent(hookName, payload);
-      return { executed: true } as unknown as T;
+    if (hookName !== "onEvent") {
+      throw new PluginDomainError("UNKNOWN_PLUGIN_HOOK", "Unsupported plugin hook");
+    }
+    if (!plugin.capabilities.includes("events.subscribe")) {
+      throw new PluginDomainError("PLUGIN_CAPABILITY_DENIED", "Events capability is not declared");
+    }
+    if (!plugin.hooks.includes("onEvent")) {
+      throw new PluginDomainError("PLUGIN_HOOK_NOT_DECLARED", "Event hook is not declared");
+    }
+    if (typeof module.onEvent !== "function") {
+      throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not exported");
     }
 
+    // Legacy v1 executeHook keeps passing the literal hook name. Named events
+    // should be delivered through dispatchEvent(), never parsed from payload.
+    await module.onEvent(hookName, payload);
     return { executed: true } as unknown as T;
+  }
+
+  /** An explicit named event is never derived from untrusted payload fields. */
+  async dispatchEvent(
+    pluginId: string,
+    eventName: string,
+    payload: unknown,
+    publicationId?: string,
+  ): Promise<void> {
+    if (!eventName || eventName === "onEvent") {
+      throw new PluginDomainError("INVALID_PLUGIN_EVENT", "A named event is required");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin is not active");
+    }
+    if (!plugin.capabilities.includes("events.subscribe") ||
+      (!plugin.hooks.includes(eventName) && !plugin.hooks.includes("onEvent"))) {
+      throw new PluginDomainError("PLUGIN_CAPABILITY_DENIED", "Event is not declared");
+    }
+    if (payload && typeof payload === "object" && "publicationId" in payload) {
+      const declared = payload.publicationId;
+      if (typeof declared !== "string" || !publicationId || declared !== publicationId) {
+        throw new PluginDomainError("CROSS_PUBLICATION_VIOLATION", "Cross-publication violation");
+      }
+    }
+    const module = await this.host.loadModule(plugin);
+    if (!module || typeof module.onEvent !== "function") {
+      throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not available");
+    }
+    await module.onEvent(eventName, payload);
   }
 
   async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status === "active") {
+      try {
+        const module = await this.host.loadModule(plugin);
+        if (!module) throw new Error("Active plugin module could not be loaded");
+        await module.deactivate?.();
+      } catch {
+        // Fail closed: never claim successful cleanup when it failed.
+        await this.pluginRepo.updateStatus(id, "error");
+        domainEvents.emit("plugin.deactivation_failed", { pluginId: id, actorId });
+        throw new PluginDomainError("PLUGIN_DEACTIVATION_FAILED", "Plugin cleanup failed");
+      }
+    }
     const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
     domainEvents.emit("plugin.deactivated", { pluginId: id, actorId });
     return deactivated;

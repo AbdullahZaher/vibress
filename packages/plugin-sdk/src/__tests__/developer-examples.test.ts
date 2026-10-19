@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { validateManifest, SDK_VERSION } from "../index";
 
 describe("Phase 16: Developer Platform Usability & Contract Verification", () => {
   const examplesDir = path.resolve(__dirname, "../../../../docs/developer/examples");
@@ -24,8 +25,9 @@ describe("Phase 16: Developer Platform Usability & Contract Verification", () =>
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     expect(manifest.id).toBe("sample-seo-enhancer");
     expect(manifest.version).toBe("1.0.0");
-    expect(manifest.capabilities).toContain("content:read");
-    expect(manifest.checksum).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(validateManifest(manifest).id).toBe("sample-seo-enhancer");
+    expect(manifest.vibressApiVersion).toBe(SDK_VERSION);
+    expect(manifest.capabilities).toContain("content.read");
   });
 
   it("3. Sample plugin source imports ONLY public @vibress/plugin-sdk contracts and zero private internals", () => {

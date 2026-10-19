@@ -97,9 +97,32 @@ export default class AcmeAnalyticsPlugin implements PluginModule {
 
 ---
 
-## 4. Sandbox Isolation & Resource Limits
+## 4. Trust boundary and optional operator-installed ESM modules
 
-Plugins execute in child process sandboxes with strict CPU, memory, and timeout constraints:
-- **Maximum Execution Timeout**: 5,000ms per invocation.
-- **Maximum Heap Allocation**: 128MB.
-- **Package Integrity**: All plugin archives must match their declared SHA-256 checksum upon installation.
+The original host is **trusted, in-process Node.js code**; it is **not** a child-process sandbox. There is no guaranteed CPU, memory, or crash isolation. `executeWithTimeout` only races asynchronous work and cannot stop a synchronous infinite loop.
+
+The operator may set `VIBRESS_TRUSTED_PLUGIN_LOCKFILE` to an **absolute path** of an operator-maintained JSON lockfile; when unset, only bundled official modules can activate. A lockfile entry is a fully validated v1 `manifest` plus a SHA-256 of its single compiled ESM `.mjs` file. Store this lockfile separately from the compiled file; add no self-referential hash to the module. Example:
+
+```json
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "manifest": {
+        "id": "my-trusted-plugin",
+        "name": "My Trusted Plugin",
+        "version": "1.0.0",
+        "vibressApiVersion": "1.0.0",
+        "entrypoint": "dist/index.mjs",
+        "capabilities": ["events.subscribe"],
+        "hooks": ["onEvent"]
+      },
+      "sha256": "REPLACE_WITH_64_HEX_SHA256_OF_COMPILED_ENTRYPOINT"
+    }
+  ]
+}
+```
+
+The runtime verifies the file bytes against this **operator-trusted pinned checksum before import** and rejects mismatched registration metadata, invalid paths, symlinks and oversized modules. Replace the placeholder with the actual 64-character lowercase hex value. An ESM file may still import other runtime dependencies: this initial loader **does not cryptographically attest the transitive dependency tree**, distribute packages, provide per-publication activation, register routes/Admin views/worker jobs, or sandbox the JavaScript process. Only load packages audited and controlled by the operator. Full independent extension contracts remain tracked by [the approved RFC](../08-plugins/EXTENSION_RFC_APPROVAL.md).
+
+The package `@vibress/plugin-sdk` is the supported runtime ABI. Do not use the alternate `plugin-core.VibressPlugin` lifecycle class with this host. The bundled v1 API remains compatible; named event dispatch is exposed in the PluginsService domain as `dispatchEvent` for host-owned callers.
