@@ -237,7 +237,7 @@ describe("Theme Domain — Activation & Management", () => {
     const catalog = await service.listThemes();
     const selected = catalog.find((t) => t.manifest.id === "custom-nordic");
     expect(selected?.manifest.version).toBe("1.0.0");
-    expect(selected?.settingsSchema.accentColor.default).toBe("#5e81ac");
+    expect(selected?.settingsSchema.accentColor?.default).toBe("#5e81ac");
   });
 
   it("activates an external theme and updates its status", async () => {
