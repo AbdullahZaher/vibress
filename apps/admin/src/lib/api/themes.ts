@@ -99,10 +99,15 @@ export async function activateThemeApi(
 export async function updateThemeSettingsApi(
   id: string,
   settings: Record<string, unknown>,
+  expected?: { themeVersion: string; settingsSchemaVersion: number },
 ): Promise<{ theme: ApiActiveTheme }> {
-  return apiRequest(`/themes/${id}/settings`, {
+  return apiRequest(`/themes/${encodeURIComponent(id)}/settings`, {
     method: "PATCH",
     body: JSON.stringify(settings),
+    ...(expected ? { headers: {
+      "X-Vibress-Theme-Version": expected.themeVersion,
+      "X-Vibress-Theme-Schema-Version": String(expected.settingsSchemaVersion),
+    } } : {}),
   });
 }
 
