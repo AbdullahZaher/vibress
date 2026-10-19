@@ -276,7 +276,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   onBack={handleEditorBack}
                   onDirtyChange={setEditorDirty}
                   onSaved={(settings) => {
-                    setActive((current) => current?.themeId === editingTheme.manifest.id
+                    setActive((current) => current && current.themeId === editingTheme.manifest.id
                       ? { ...current, settings }
                       : current);
                   }}
