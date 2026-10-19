@@ -68,6 +68,20 @@ export class PluginsService {
 
     const existing = await this.pluginRepo.findByManifestId(manifest.id);
     if (existing) {
+      // An external code/version change must never bypass deactivate/activate.
+      if (existing.status === "active" &&
+          this.host.requiresPublicationEnablement?.(existing) === true &&
+          (existing.version !== manifest.version ||
+            existing.entrypoint !== manifest.entrypoint ||
+            existing.vibressApiVersion !== manifest.vibressApiVersion ||
+            existing.capabilities.join("\\0") !== manifest.capabilities.join("\\0") ||
+            existing.hooks.join("\\0") !== (manifest.hooks ?? []).join("\\0") ||
+            JSON.stringify(existing.settingsSchema) !== JSON.stringify(manifest.settingsSchema ?? {}))) {
+        throw new PluginDomainError(
+          "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+          "Deactivate the external plugin before registering a changed release",
+        );
+      }
       // Update metadata (re-registration)
       const updated = await this.pluginRepo.updateMetadata(existing.id, {
         name: manifest.name,
