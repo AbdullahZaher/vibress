@@ -216,6 +216,54 @@ describe("PluginsService", () => {
       .rejects.toMatchObject({ code: "PLUGIN_HOOK_NOT_FOUND" });
   });
 
+  it("keeps external hooks denied by default until enabled in this publication", async () => {
+    const onEvent = vi.fn(async () => undefined);
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })),
+      requiresPublicationEnablement: vi.fn(() => true),
+    };
+    const stateStore = new Map<string, boolean>();
+    const publicationStates = {
+      isEnabled: vi.fn(async (pluginId: string, pub: string) =>
+        stateStore.get(`${pluginId}:${pub}`) === true),
+      setEnabled: vi.fn(async (pluginId: string, pub: string, enabled: boolean) => {
+        stateStore.set(`${pluginId}:${pub}`, enabled);
+      }),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active", hooks: ["onEvent"] })),
+    };
+    const service = new PluginsService(repoWith, settingRepo, moduleHost, publicationStates);
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    expect(moduleHost.loadModule).not.toHaveBeenCalled();
+
+    await service.setPublicationEnabled("p1", "pub-a", true);
+    expect(await service.isPublicationEnabled("p1", "pub-a")).toBe(true);
+    expect(await service.isPublicationEnabled("p1", "pub-b")).toBe(false);
+    await service.dispatchEvent("p1", "post.published", {}, "pub-a");
+    expect(onEvent).toHaveBeenCalledOnce();
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-b"))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    await service.setPublicationEnabled("p1", "pub-a", false);
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+  });
+
+  it("never enables a registered but globally inactive external module", async () => {
+    const hostWith = { loadModule: vi.fn(async () => null), requiresPublicationEnablement: () => true };
+    const stateRepo = { isEnabled: vi.fn(async () => false), setEnabled: vi.fn(async () => undefined) };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "registered" })),
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith, stateRepo);
+    await expect(service.setPublicationEnabled("p1", "pub-a", true))
+      .rejects.toMatchObject({ code: "PLUGIN_INACTIVE" });
+    expect(stateRepo.setEnabled).not.toHaveBeenCalled();
+  });
+
   it("settings: secrets encrypted at rest and masked on read", async () => {
     const settingsStored: PluginSetting[] = [];
     const settingRepoWith: PluginSettingRepository = {
