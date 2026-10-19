@@ -178,3 +178,29 @@ export const pluginSettings = pgTable(
 
 export type PluginSettingRow = typeof pluginSettings.$inferSelect;
 export type NewPluginSettingRow = typeof pluginSettings.$inferInsert;
+
+/**
+ * Publication activation is additive: legacy global plugin status/settings
+ * are preserved. An absent row means an external plugin is disabled here.
+ */
+export const pluginPublicationStates = pgTable(
+  "plugin_publication_states",
+  {
+    pluginId: text("plugin_id")
+      .notNull()
+      .references(() => plugins.id, { onDelete: "restrict" }),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pluginPublicationUniqueIdx: uniqueIndex("plugin_pub_states_plugin_publication_idx")
+      .on(table.pluginId, table.publicationId),
+    publicationIdx: index("plugin_pub_states_publication_idx").on(table.publicationId),
+  }),
+);
+
+export type PluginPublicationStateRow = typeof pluginPublicationStates.$inferSelect;
