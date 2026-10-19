@@ -570,7 +570,10 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
-          return sendError(reply, err.code, err.message, req.id, 404);
+          return sendError(
+            reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409,
+          );
         throw err;
       }
     },
@@ -580,8 +583,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("plugins.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const settings = await pluginsService.listSettings(id);
-      return reply.status(200).send({ settings });
+      try {
+        const settings = await pluginsService.listSettings(id);
+        return reply.status(200).send({ settings });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
     },
   });
 
