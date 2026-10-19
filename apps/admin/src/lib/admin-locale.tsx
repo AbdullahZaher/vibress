@@ -25,10 +25,8 @@ interface AdminLocaleContext {
 const translations: Record<string, string> = {
   "Theme settings": "إعدادات القالب",
   "Theme settings for": "إعدادات القالب",
-  "Settings": "الإعدادات",
   "Back to themes": "العودة إلى القوالب",
   "Save Settings": "حفظ الإعدادات",
-  "Saving...": "جارٍ الحفظ...",
   "Loading settings...": "جارٍ تحميل الإعدادات...",
   "Theme settings saved.": "تم حفظ إعدادات القالب.",
   "Failed to load theme settings.": "تعذر تحميل إعدادات القالب.",
