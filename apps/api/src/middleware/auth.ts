@@ -170,14 +170,22 @@ export async function validateOrigin(req: FastifyRequest, reply: FastifyReply) {
  * publication-local plugin configuration. Global system roles are resolved
  * from the authenticated Staff session, never from a request header.
  */
+export function isPlatformPluginOperator(
+  roles: readonly string[] | undefined,
+  permissions: readonly string[] | undefined,
+): boolean {
+  return Boolean(
+    roles?.some((role) => role === "owner" || role === "administrator") &&
+      permissions?.includes("system.manage") &&
+      permissions?.includes("plugins.manage"),
+  );
+}
+
 export async function requirePlatformPluginOperator(
   req: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const systemOperator = req.roles?.some((role) =>
-    role === "owner" || role === "administrator") === true;
-  if (!systemOperator || !req.permissions ||
-      !hasPermission(req.permissions, "system.manage", req.roles ?? [])) {
+  if (!isPlatformPluginOperator(req.roles, req.permissions)) {
     return reply.status(403).send({
       errors: [{
         code: "PLATFORM_OPERATOR_REQUIRED",

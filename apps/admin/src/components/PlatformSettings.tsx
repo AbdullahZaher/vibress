@@ -24,6 +24,7 @@ export function PlatformSettings() {
   const [apiKeys, setApiKeys] = useState<AdminApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<AdminWebhookEndpoint[]>([]);
   const [plugins, setPlugins] = useState<AdminPlugin[]>([]);
+  const [platformOperator, setPlatformOperator] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function PlatformSettings() {
       setApiKeys(k.keys);
       setWebhooks(w.endpoints);
       setPlugins(p.plugins);
+      setPlatformOperator(p.platformOperator === true);
       setError(null);
     } catch (err: unknown) {
       setError(
@@ -159,6 +161,7 @@ export function PlatformSettings() {
       <div className={tab === "plugins" ? "" : "hidden"}>
         <PluginsPanel
           plugins={plugins}
+          platformOperator={platformOperator}
           onError={setError}
           onChanged={refresh}
         />

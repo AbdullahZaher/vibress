@@ -3,6 +3,7 @@ import {
   requireStaffSession,
   requirePermission,
   requirePlatformPluginOperator,
+  isPlatformPluginOperator,
   validateOrigin,
 } from "../middleware/auth";
 import {
@@ -411,7 +412,10 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       const plugins = await pluginsService.listPluginsForPublication(
         req.publicationContext?.publicationId,
       );
-      return reply.status(200).send({ plugins });
+      return reply.status(200).send({
+        plugins,
+        platformOperator: isPlatformPluginOperator(req.roles, req.permissions),
+      });
     },
   });
 

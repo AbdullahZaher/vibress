@@ -142,7 +142,10 @@ export async function listWebhookDeliveriesApi(
   return apiRequest(`/webhook-deliveries${query}`);
 }
 
-export async function listPluginsApi(): Promise<{ plugins: AdminPlugin[] }> {
+export async function listPluginsApi(): Promise<{
+  plugins: AdminPlugin[];
+  platformOperator?: boolean;
+}> {
   return apiRequest("/plugins");
 }
 

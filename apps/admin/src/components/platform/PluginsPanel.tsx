@@ -17,12 +17,14 @@ import { ScopedPluginSettingsEditor } from "./ScopedPluginSettingsEditor";
 
 interface PluginsPanelProps {
   plugins: AdminPlugin[];
+  platformOperator: boolean;
   onError: (message: string) => void;
   onChanged: () => Promise<void>;
 }
 
 export function PluginsPanel({
   plugins,
+  platformOperator,
   onError,
   onChanged,
 }: PluginsPanelProps) {
@@ -31,12 +33,16 @@ export function PluginsPanel({
   const [approved, setApproved] = useState<AdminOperatorPlugin[]>([]);
 
   useEffect(() => {
+    if (!platformOperator) {
+      setApproved([]);
+      return;
+    }
     let canceled = false;
     void listOperatorTrustedPluginsApi()
       .then((response) => { if (!canceled) setApproved(response.plugins); })
       .catch(() => { if (!canceled) setApproved([]); });
     return () => { canceled = true; };
-  }, [plugins]);
+  }, [plugins, platformOperator]);
 
   const apply = async (id: string, action: () => Promise<unknown>) => {
     if (busyPluginId) return;
@@ -56,7 +62,7 @@ export function PluginsPanel({
 
   return (
     <div className="space-y-4">
-      {available.length > 0 && (
+      {platformOperator && available.length > 0 && (
         <section aria-label={tr("Operator-approved plugins")} className="space-y-2">
           <h3 className="text-sm font-semibold">{tr("Operator-approved plugins")}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -130,17 +136,19 @@ export function PluginsPanel({
                     {siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => apply(plugin.id, () =>
-                    globalActive ? deactivatePluginApi(plugin.id) : activatePluginApi(plugin.id))}
-                  aria-label={`${globalActive ? tr("Deactivate") : tr("Activate")}: ${plugin.name}`}
-                  className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
-                >
-                  {globalActive ? tr("Deactivate") : tr("Activate")}
-                </Button>
+                {platformOperator && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => apply(plugin.id, () =>
+                      globalActive ? deactivatePluginApi(plugin.id) : activatePluginApi(plugin.id))}
+                    aria-label={`${globalActive ? tr("Deactivate") : tr("Activate")}: ${plugin.name}`}
+                    className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
+                  >
+                    {globalActive ? tr("Deactivate") : tr("Activate")}
+                  </Button>
+                )}
               </div>
               {scoped && siteEnabled && (
                 <ScopedPluginSettingsEditor plugin={plugin} onError={onError} />
