@@ -63,7 +63,7 @@ Lists registered themes with manifest, settings schema, and active state.
 
 ### `GET /themes/:id`
 
-Single theme detail. 404 `THEME_NOT_FOUND` if unknown.
+Single theme detail, including the installed theme's settings schema and an additive `settings` object containing the authorized publication's saved values merged with schema defaults. This works for inactive themes as well as the active one without activating them. Returns 404 `THEME_NOT_FOUND` for unknown or uninstalled themes. Requires `themes.read` and the authoritative publication context, not a caller-provided publication ID.
 
 ### `GET /themes/active`
 
@@ -81,7 +81,7 @@ Responses:
 
 ### `PATCH /themes/:id/settings`
 
-Updates saved settings for a theme in the authorized publication. If the theme is currently active, the active configuration is updated too. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
+Updates saved settings for a theme in the authorized publication. Admin's **Settings → Site → Themes → Settings** editor uses `GET /themes/:id` to initialize its draft and sends a plain `{ "settingKey": value }` JSON object here when the user saves. The Settings button appears before Delete in the theme card's actions.  If the theme is currently active, the active configuration is updated too. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
 
 - 200 `{ theme: { ... } }`
 - 404 `THEME_NOT_FOUND` (theme not installed or unknown)
