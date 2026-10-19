@@ -63,7 +63,7 @@ Lists registered themes with manifest, settings schema, and active state.
 
 ### `GET /themes/:id`
 
-Single theme detail. 404 `THEME_NOT_FOUND` if unknown.
+Single theme detail, including the installed theme's settings schema and an additive `settings` object containing the authorized publication's saved values merged with schema defaults. This works for inactive themes as well as the active one without activating them. Returns 404 `THEME_NOT_FOUND` for unknown or uninstalled themes. Requires `themes.read` and the authoritative publication context, not a caller-provided publication ID.
 
 ### `GET /themes/active`
 
@@ -81,11 +81,13 @@ Responses:
 
 ### `PATCH /themes/:id/settings`
 
-Updates saved settings for a theme in the authorized publication. If the theme is currently active, the active configuration is updated too. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
+Updates saved settings for a theme in the authorized publication. Admin's **Settings → Site → Themes → Settings** editor uses `GET /themes/:id` to initialize its draft and sends a plain `{ "settingKey": value }` JSON object here when the user saves. The Settings button appears before Delete in the theme card's actions.  If the theme is currently active, the active configuration is updated too. Body must be a JSON object matching the theme's settings schema. Server-side validation rejects unknown keys, wrong types, invalid enums, invalid hex colors, out-of-bounds numbers, and oversized strings.
 
 - 200 `{ theme: { ... } }`
 - 404 `THEME_NOT_FOUND` (theme not installed or unknown)
 - 400 `THEME_SETTINGS_INVALID` / `VALIDATION_ERROR`
+
+For clients that support optimistic concurrency, send the optional `X-Vibress-Theme-Version` and `X-Vibress-Theme-Schema-Version` request headers using the manifest values returned by `GET /themes/:id`. Both must be sent together. When the installed schema/version has changed, writes fail with **409 `THEME_SETTINGS_CONFLICT`** and clients should reload the editor. Existing clients without these headers continue to work.
 
 ### `POST /themes/:id/preview`
 
@@ -97,7 +99,7 @@ Creates a 15-minute preview token bound to the theme ID and the authenticated pu
 
 ### `GET /themes/preview/:token`
 
-Public-safe token resolution. Returns `{ themeId }` only when the request host resolves to the same publication as the token, or 404 when expired, invalid, or resolved for a different publication. Used by the Web preview middleware; the response shape is unchanged.
+Public-safe token resolution. Returns `{ themeId }` only when the request host resolves to the same publication as the token, or 404 when expired, invalid, or resolved for a different publication. Used by the Web preview middleware; the token-resolved response also includes the theme version, built-in flag, and publication-scoped presentation settings. The preview token is short-lived and must not be included in client-facing response headers or logged. Existing consumers can continue reading only `themeId`.
 
 ## Error Semantics
 

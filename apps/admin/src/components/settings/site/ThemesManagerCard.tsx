@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   ApiThemeSummary,
   ApiActiveTheme,
@@ -12,6 +12,8 @@ import {
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
+import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import {
@@ -22,6 +24,7 @@ import {
   X,
   UploadCloud,
   Trash2,
+  Settings2,
   FileArchive,
   Loader2,
   AlertCircle,
@@ -34,12 +37,21 @@ interface ThemesManagerCardProps {
 export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [themes, setThemes] = useState<ApiThemeSummary[]>([]);
   const [active, setActive] = useState<ApiActiveTheme | null>(null);
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingTheme, setEditingTheme] = useState<ApiThemeSummary | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const uploadDialogRef = useRef<HTMLDivElement>(null);
+  const openingControlRef = useRef<HTMLElement | null>(null);
+  const uploadControlRef = useRef<HTMLButtonElement>(null);
 
   // Upload modal state inside drawer
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -50,6 +62,47 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]')?.focus();
+    return () => {
+      openingControlRef.current?.focus();
+    };
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
+    if (isUploadOpen) {
+      focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
+    }
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !focusRoot) return;
+      const controls = Array.from(
+        focusRoot.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.classList.contains("hidden"));
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) return;
+      if (!focusRoot.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trapTab);
+    return () => document.removeEventListener("keydown", trapTab);
+  }, [isDrawerOpen, isUploadOpen]);
+
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,7 +125,28 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     }
   }, []);
 
+  const handleEditorBack = () => {
+    if (editorSaving) return;
+    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    setEditingTheme(null);
+    setEditorDirty(false);
+  };
+
+  const handleCloseDrawer = () => {
+    if (editorSaving) return;
+    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    setEditingTheme(null);
+    setEditorDirty(false);
+    setIsDrawerOpen(false);
+  };
+
+  const handleCloseUpload = () => {
+    setIsUploadOpen(false);
+    uploadControlRef.current?.focus();
+  };
+
   const handleOpen = () => {
+    openingControlRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsDrawerOpen(true);
     load();
   };
@@ -106,11 +180,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handlePreview = async (themeId: string) => {
+    setPreviewError(null);
     try {
       const res = await createThemePreviewApi(themeId);
-      window.open(`/?preview=${res.previewToken}`, "_blank");
-    } catch {
-      window.open(`/?preview=${themeId}`, "_blank");
+      window.open(`/preview/${encodeURIComponent(res.previewToken)}`, "_blank", "noopener,noreferrer");
+    } catch (error: unknown) {
+      setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     }
   };
 
@@ -151,7 +226,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setUploadProgress("success");
       await load();
       setTimeout(() => {
-        setIsUploadOpen(false);
+        handleCloseUpload();
         setUploadFile(null);
         setUploadProgress("idle");
       }, 1200);
@@ -183,9 +258,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       {/* Themes Manager Slide-over Drawer */}
       <SettingsModalPortal
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
@@ -199,6 +274,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
+                  ref={uploadControlRef}
+                  disabled={editingTheme !== null}
                   onClick={() => {
                     setIsUploadOpen(true);
                     setUploadFile(null);
@@ -213,7 +290,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   size="sm"
                   variant="outline"
                   onClick={load}
-                  disabled={loading}
+                  disabled={loading || editingTheme !== null}
                   className="gap-1.5 text-xs h-8"
                   title="Reload registry themes from backend"
                 >
@@ -225,7 +302,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   aria-label="Close themes drawer"
-                  onClick={() => setIsDrawerOpen(false)}
+                  onClick={handleCloseDrawer}
+                  disabled={editorSaving}
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -235,6 +313,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
             {/* Drawer Body */}
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {previewError && (
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
+              )}
               <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Badge
@@ -249,7 +330,20 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </p>
               </div>
 
-              {loading ? (
+              {editingTheme ? (
+                <ThemeSettingsEditor
+                  key={editingTheme.manifest.id}
+                  theme={editingTheme}
+                  onBack={handleEditorBack}
+                  onDirtyChange={setEditorDirty}
+                  onSavingChange={setEditorSaving}
+                  onSaved={(settings) => {
+                    setActive((current) => current && current.themeId === editingTheme.manifest.id
+                      ? { ...current, settings }
+                      : current);
+                  }}
+                />
+              ) : loading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                   <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                   <p className="text-xs">Loading theme catalog...</p>
@@ -332,6 +426,20 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
 
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditorDirty(false);
+                              setEditingTheme(theme);
+                            }}
+                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            title={tr("Theme settings")}
+                            aria-label={`${tr("Settings")} ${theme.manifest.name}`}
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                          </Button>
+
                           {!theme.isBuiltIn && !isCurrent && (
                             <Button
                               size="sm"
@@ -356,10 +464,11 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
               <Button
                 size="sm"
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
+                disabled={editorSaving}
                 className="text-xs cursor-pointer"
               >
-                Done
+                {editingTheme ? tr("Back to themes") : "Done"}
               </Button>
             </div>
           </div>
@@ -367,7 +476,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
         {/* Inner Upload Modal */}
         {isUploadOpen && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
+          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
             <div className="w-full max-w-md bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                 <div className="flex items-center gap-2">
@@ -378,7 +487,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsUploadOpen(false)}
+                  onClick={handleCloseUpload}
+                  aria-label="Close theme upload"
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md"
                 >
                   <X className="h-4 w-4" />
@@ -444,7 +554,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsUploadOpen(false)}
+                  onClick={handleCloseUpload}
                   className="text-xs h-7"
                 >
                   Cancel

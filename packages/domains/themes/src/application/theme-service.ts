@@ -65,7 +65,13 @@ export class ThemeService {
     // 1. Installed external themes (scoped to publication)
     if (this.installedRepo) {
       const installed = await this.installedRepo.listAll(publicationId);
-      for (const t of installed) {
+      // Keep the listed schema/version in sync with the active pointer when
+      // several versions of an external theme are installed.
+      const activeInstalled = installed.find(
+        (theme) => theme.themeId === activeThemeId && theme.version === active?.themeVersion,
+      );
+      for (const entry of installed) {
+        const t = entry.themeId === activeThemeId ? activeInstalled ?? entry : entry;
         if (!seenIds.has(t.themeId)) {
           seenIds.add(t.themeId);
           results.push({
@@ -232,15 +238,46 @@ export class ThemeService {
     return saved;
   }
 
+  /** Read persisted presentation options for a theme without activating it. */
+  async getThemeSettingsForEditor(
+    themeId: string,
+    schema: ThemeSettingsSchema,
+    publicationId = "pub_default",
+  ): Promise<Record<string, unknown>> {
+    const active = await this.repo.getActive(publicationId);
+    const saved = this.installedRepo
+      ? await this.installedRepo.getThemeSettings(themeId, publicationId)
+      : null;
+    return mergeThemeSettings(
+      schema,
+      saved ?? (active?.themeId === themeId ? active.settings : null),
+    );
+  }
+
   async updateThemeSettings(
     themeId: string,
     input: Record<string, unknown>,
     _actorId: string | null,
     publicationId?: string,
+    expected?: { themeVersion: string; settingsSchemaVersion: number },
   ): Promise<ThemeConfiguration> {
-    const definition = await this.getTheme(themeId, undefined, publicationId);
+    const config = await this.repo.getActive(publicationId);
+    const definition = await this.getTheme(
+      themeId,
+      config?.themeId === themeId ? config.themeVersion : undefined,
+      publicationId,
+    );
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
+    }
+    if (expected && (
+      definition.manifest.version !== expected.themeVersion ||
+      (definition.manifest.settingsSchemaVersion || 1) !== expected.settingsSchemaVersion
+    )) {
+      throw new ThemeError(
+        "THEME_SETTINGS_CONFLICT",
+        "Theme version or settings schema changed. Reload settings before saving.",
+      );
     }
 
     let settings: Record<string, unknown>;
@@ -255,7 +292,6 @@ export class ThemeService {
       await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
-    const config = await this.repo.getActive(publicationId);
     if (config && config.themeId === themeId) {
       return this.repo.setActive({
         ...config,

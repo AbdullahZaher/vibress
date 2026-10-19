@@ -4,6 +4,8 @@ import {
   ThemeConfiguration,
   ThemeConfigurationRepository,
   ThemeDefinitionRegistry,
+  ThemeNotFoundError,
+  ThemeSettingsInvalidError,
 } from "../src/domain/theme-configuration";
 import {
   InstalledTheme,
@@ -221,6 +223,25 @@ describe("Theme Domain — Activation & Management", () => {
     expect(list.some((t) => t.manifest.id === "vibress-default")).toBe(true);
   });
 
+  it("shows the active installed version in the theme catalog", async () => {
+    const first = await installedRepo.findByThemeId("custom-nordic");
+    if (!first) throw new Error("Missing seeded theme");
+    await installedRepo.create({
+      ...first,
+      id: "installed-2",
+      version: "2.0.0",
+      manifest: { ...first.manifest, version: "2.0.0" },
+      settingsSchema: { accentColor: { type: "color", default: "#222222" } },
+      updatedAt: new Date(first.updatedAt.getTime() + 1000),
+    });
+    await service.activateTheme("custom-nordic", "user-1", "1.0.0");
+
+    const catalog = await service.listThemes();
+    const selected = catalog.find((t) => t.manifest.id === "custom-nordic");
+    expect(selected?.manifest.version).toBe("1.0.0");
+    expect(selected?.settingsSchema.accentColor?.default).toBe("#5e81ac");
+  });
+
   it("activates an external theme and updates its status", async () => {
     const activated = await service.activateTheme("custom-nordic", "user-1");
     expect(activated.themeId).toBe("custom-nordic");
@@ -245,6 +266,44 @@ describe("Theme Domain — Activation & Management", () => {
     const activeNordic = await service.getActiveTheme();
     expect(activeNordic?.manifest.id).toBe("custom-nordic");
     expect(activeNordic?.settings.accentColor).toBe("#bf616a");
+  });
+
+  it("loads defaults and persists inactive theme settings without switching themes", async () => {
+    const definition = await service.getTheme("custom-nordic");
+    expect(definition).not.toBeNull();
+    if (!definition) throw new Error("Missing test theme");
+
+    expect(await service.getThemeSettingsForEditor("custom-nordic", definition.settingsSchema))
+      .toEqual({ accentColor: "#5e81ac" });
+
+    await service.updateThemeSettings("custom-nordic", { accentColor: "#123abc" }, "user-1");
+    expect(await service.getThemeSettingsForEditor("custom-nordic", definition.settingsSchema))
+      .toEqual({ accentColor: "#123abc" });
+    expect((await service.getActiveTheme())?.manifest.id).toBe("vibress-default");
+
+    await service.activateTheme("custom-nordic", "user-1");
+    expect((await service.getActiveTheme())?.settings.accentColor).toBe("#123abc");
+  });
+
+  it("rejects invalid settings inputs and non-existent themes", async () => {
+    await expect(
+      service.updateThemeSettings("custom-nordic", { accentColor: "not-a-color" }, "user-1"),
+    ).rejects.toThrow(ThemeSettingsInvalidError);
+
+    await expect(
+      service.updateThemeSettings("non-existent-theme", { accentColor: "#123abc" }, "user-1"),
+    ).rejects.toThrow(ThemeNotFoundError);
+  });
+
+  it("rejects a stale version precondition without persisting any settings", async () => {
+    await expect(service.updateThemeSettings(
+      "custom-nordic",
+      { accentColor: "#112233" },
+      "user-1",
+      undefined,
+      { themeVersion: "9.0.0", settingsSchemaVersion: 1 },
+    )).rejects.toMatchObject({ code: "THEME_SETTINGS_CONFLICT" });
+    expect(await installedRepo.getThemeSettings("custom-nordic")).toBeNull();
   });
 
   it("reports legacy storage only for an active external theme with an inherited path", async () => {

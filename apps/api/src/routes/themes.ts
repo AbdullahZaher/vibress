@@ -11,7 +11,7 @@ import {
   auditService,
   workspaceService,
 } from "../services";
-import { ThemeSettingsUpdateSchema } from "@vibress/api-contracts";
+import { ThemeSettingsUpdateSchema, ThemeSettingsPreconditionSchema } from "@vibress/api-contracts";
 import {
   ThemeNotFoundError,
   ThemeInvalidError,
@@ -23,6 +23,7 @@ import {
   validateThemeId,
   ThemeSecurityError,
   ThemeZipError,
+  ThemeError,
 } from "@vibress/theme-core";
 import { asCodedError, errorMessage } from "../helpers/errors";
 import { getConfig } from "@vibress/config";
@@ -57,9 +58,10 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
       const theme = await themeService.getTheme(
         id,
-        undefined,
+        active?.themeId === id ? active.themeVersion : undefined,
         req.publicationContext?.publicationId,
       );
       if (!theme) {
@@ -74,10 +76,15 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const active = await themeService.getActiveThemeConfiguration(req.publicationContext?.publicationId);
+      const settings = await themeService.getThemeSettingsForEditor(
+        id,
+        theme.settingsSchema,
+        req.publicationContext?.publicationId,
+      );
       return reply.status(200).send({
         manifest: theme.manifest,
         settingsSchema: theme.settingsSchema,
+        settings,
         isBuiltIn: theme.isBuiltIn,
         previewImage: theme.previewImage,
         isActive: active?.themeId === theme.manifest.id,
@@ -371,11 +378,27 @@ export async function themeRoutes(fastify: FastifyInstance) {
             ? (parseResult.data.settings as Record<string, unknown>)
             : parseResult.data;
 
+        const hasPrecondition =
+          req.headers["x-vibress-theme-version"] !== undefined ||
+          req.headers["x-vibress-theme-schema-version"] !== undefined;
+        const parsedExpected = hasPrecondition
+          ? ThemeSettingsPreconditionSchema.safeParse({
+              themeVersion: req.headers["x-vibress-theme-version"],
+              settingsSchemaVersion: req.headers["x-vibress-theme-schema-version"],
+            })
+          : null;
+        if (parsedExpected && !parsedExpected.success) {
+          return reply.status(400).send({
+            errors: [{ code: "VALIDATION_ERROR", message: "Invalid theme settings version precondition", requestId: req.id }],
+          });
+        }
+
         const config = await themeService.updateThemeSettings(
           id,
           settingsInput,
           req.user!.id,
           req.publicationContext?.publicationId,
+          parsedExpected?.success ? parsedExpected.data : undefined,
         );
 
         await auditService.record({
@@ -398,6 +421,11 @@ export async function themeRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (err) {
+        if (err instanceof ThemeError && err.code === "THEME_SETTINGS_CONFLICT") {
+          return reply.status(409).send({
+            errors: [{ code: err.code, message: err.message, requestId: req.id }],
+          });
+        }
         if (err instanceof ThemeNotFoundError) {
           return reply.status(404).send({
             errors: [
@@ -524,7 +552,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // Resolve preview token (public-safe, returns theme id only)
+  // Resolve publication-bound preview token into safe presentation metadata
   fastify.get("/themes/preview/:token", {
     handler: async (req, reply) => {
       const { token } = req.params as { token: string };
@@ -550,13 +578,15 @@ export async function themeRoutes(fastify: FastifyInstance) {
         !getConfig().isProduction &&
         req.headers["x-dev-fallback"] !== "false";
 
+      let publicationId: string;
       try {
         const publication =
           await workspaceService.resolvePublicPublicationContext({
             host,
             isDevFallbackAllowed,
           });
-        if (publication.publicationId !== target.publicationId) {
+        publicationId = publication.publicationId;
+        if (publicationId !== target.publicationId) {
           return reply.status(404).send({
             errors: [
               {
@@ -579,7 +609,31 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return reply.status(200).send({ themeId: target.themeId });
+      // Token possession alone never chooses a publication: the host was
+      // resolved and compared above. Expose presentation values only.
+      const active = await themeService.getActiveThemeConfiguration(publicationId);
+      const theme = await themeService.getTheme(
+        target.themeId,
+        active?.themeId === target.themeId ? active.themeVersion : undefined,
+        publicationId,
+      );
+      if (!theme) {
+        return reply.status(404).send({
+          errors: [{ code: "THEME_PREVIEW_INVALID", message: "Preview theme unavailable", requestId: req.id }],
+        });
+      }
+      const settings = await themeService.getThemeSettingsForEditor(
+        target.themeId,
+        theme.settingsSchema,
+        publicationId,
+      );
+      reply.header("Cache-Control", "private, no-store");
+      return reply.status(200).send({
+        themeId: target.themeId,
+        themeVersion: theme.manifest.version,
+        isBuiltIn: theme.isBuiltIn,
+        settings,
+      });
     },
   });
 }
