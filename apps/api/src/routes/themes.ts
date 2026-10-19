@@ -552,7 +552,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // Resolve preview token (public-safe, returns theme id only)
+  // Resolve publication-bound preview token into safe presentation metadata
   fastify.get("/themes/preview/:token", {
     handler: async (req, reply) => {
       const { token } = req.params as { token: string };
@@ -578,13 +578,15 @@ export async function themeRoutes(fastify: FastifyInstance) {
         !getConfig().isProduction &&
         req.headers["x-dev-fallback"] !== "false";
 
+      let publicationId: string;
       try {
         const publication =
           await workspaceService.resolvePublicPublicationContext({
             host,
             isDevFallbackAllowed,
           });
-        if (publication.publicationId !== target.publicationId) {
+        publicationId = publication.publicationId;
+        if (publicationId !== target.publicationId) {
           return reply.status(404).send({
             errors: [
               {
@@ -607,7 +609,31 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return reply.status(200).send({ themeId: target.themeId });
+      // Token possession alone never chooses a publication: the host was
+      // resolved and compared above. Expose presentation values only.
+      const active = await themeService.getActiveThemeConfiguration(publicationId);
+      const theme = await themeService.getTheme(
+        target.themeId,
+        active?.themeId === target.themeId ? active.themeVersion : undefined,
+        publicationId,
+      );
+      if (!theme) {
+        return reply.status(404).send({
+          errors: [{ code: "THEME_PREVIEW_INVALID", message: "Preview theme unavailable", requestId: req.id }],
+        });
+      }
+      const settings = await themeService.getThemeSettingsForEditor(
+        target.themeId,
+        theme.settingsSchema,
+        publicationId,
+      );
+      reply.header("Cache-Control", "private, no-store");
+      return reply.status(200).send({
+        themeId: target.themeId,
+        themeVersion: theme.manifest.version,
+        isBuiltIn: theme.isBuiltIn,
+        settings,
+      });
     },
   });
 }
