@@ -482,7 +482,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       } catch (err: unknown) {
         if (err instanceof PluginDomainError)
           return sendError(reply, err.code, err.message, req.id,
-            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ? 409 :
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ||
+            err.code === "PLUGIN_SETTINGS_SCHEMA_MIGRATION_REQUIRED" ||
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" ? 409 :
             err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400);
         throw err;
       }

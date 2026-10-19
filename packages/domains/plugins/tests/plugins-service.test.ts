@@ -205,6 +205,80 @@ describe("PluginsService", () => {
     expect(hostWith.loadModule).not.toHaveBeenCalled();
   });
 
+  it("blocks changing active external display metadata rejected by runtime pinning", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findByManifestId: vi.fn(async () => makePlugin({
+        status: "active",
+        name: "Old display name",
+        capabilities: [...validManifest.capabilities],
+        hooks: [...validManifest.hooks],
+      })),
+      updateMetadata: vi.fn(async () => makePlugin()),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .registerPlugin(validManifest, "staff")).rejects.toMatchObject({
+        code: "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+      });
+    expect(repoWith.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it("rejects secret reclassification on inactive external plugins without migration", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findByManifestId: vi.fn(async () => makePlugin({
+        status: "inactive",
+        settingsSchema: { token: { type: "string", secret: false } },
+      })),
+      updateMetadata: vi.fn(async () => makePlugin()),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .registerPlugin({
+        ...validManifest,
+        settingsSchema: { token: { type: "string", secret: true } },
+      }, "staff")).rejects.toMatchObject({
+        code: "PLUGIN_SETTINGS_SCHEMA_MIGRATION_REQUIRED",
+      });
+    expect(repoWith.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it("masks historic plaintext if the declared setting became secret", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active",
+        settingsSchema: { token: { type: "string", secret: true } },
+      })),
+    };
+    const scopedRepository: PluginPublicationSettingRepository = {
+      setMany: vi.fn(async () => undefined),
+      listForPlugin: vi.fn(async () => [{
+        id: "s", pluginId: "p1", key: "token", value: "old-plaintext",
+        encryptedValue: null, isSecret: false,
+        createdAt: new Date(), updatedAt: new Date(),
+      }]),
+      getSecret: vi.fn(async () => null),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith, undefined, scopedRepository);
+    const list = await service.listPublicationSettings("p1", "pub-a");
+    expect(list).toEqual([{ key: "token", value: "••••••••", isSecret: true, masked: true }]);
+    expect(JSON.stringify(list)).not.toContain("old-plaintext");
+  });
+
   it("activates a plugin via the host and marks it active", async () => {
     const hostWith = {
       loadModule: vi.fn(async () => ({

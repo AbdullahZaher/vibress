@@ -69,6 +69,11 @@ export class PluginsService {
 
     const existing = await this.pluginRepo.findByManifestId(manifest.id);
     if (existing) {
+      if (existing.status === "activating" || existing.status === "deactivating") {
+        throw new PluginDomainError(
+          "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+        );
+      }
       // An external code/version change must never bypass deactivate/activate.
       if (this.host.requiresPublicationEnablement?.(existing) === true) {
         const newSchema = manifest.settingsSchema ?? {};
@@ -367,8 +372,11 @@ export class PluginsService {
         "PLUGIN_HAS_PUBLICATIONS", "Disable and review publication installations before uninstall",
       );
     }
-    if (plugin.status === "active") {
-      throw new PluginDomainError("PLUGIN_ACTIVE", "Deactivate the plugin before uninstalling it");
+    if (plugin.status === "active" || plugin.status === "activating" ||
+        plugin.status === "deactivating") {
+      throw new PluginDomainError(
+        "PLUGIN_ACTIVE", "Finish or recover the plugin lifecycle before uninstalling it",
+      );
     }
     await this.pluginRepo.delete(id);
     domainEvents.emit("plugin.unregistered", { pluginId: id, actorId });

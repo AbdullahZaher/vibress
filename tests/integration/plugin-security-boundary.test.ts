@@ -104,6 +104,12 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
         p.status = status;
         return p;
       }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        const p = pluginStore.get(id);
+        if (!p || !expected.includes(p.status)) return null;
+        p.status = status;
+        return p;
+      }),
       updateMetadata: vi.fn(async (id, d) => {
         const p = pluginStore.get(id);
         if (!p) throw new Error("not found");
@@ -331,7 +337,7 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
     };
 
     const { service: activatingService } = createTestPluginsService({
-      plugins: [pluginA],
+      plugins: [{ ...pluginA, status: "registered" }],
       hostModule,
     });
 

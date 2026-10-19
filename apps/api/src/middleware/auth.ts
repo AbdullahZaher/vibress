@@ -177,7 +177,7 @@ export async function requirePlatformPluginOperator(
   const systemOperator = req.roles?.some((role) =>
     role === "owner" || role === "administrator") === true;
   if (!systemOperator || !req.permissions ||
-      !hasPermission(req.permissions, "system.manage", req.roles)) {
+      !hasPermission(req.permissions, "system.manage", req.roles ?? [])) {
     return reply.status(403).send({
       errors: [{
         code: "PLATFORM_OPERATOR_REQUIRED",
