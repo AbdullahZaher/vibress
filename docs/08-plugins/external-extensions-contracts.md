@@ -52,14 +52,14 @@ type ExtensionServices = {
   hasPermission(permission: string): Promise<boolean>;
   members: { getScopedMember(id: string): Promise<unknown | null> };
   entitlements: { hasActiveAccess(input: { memberId: string; productId: string }): Promise<boolean> };
-  // Runtime API undecided: typed repository methods will replace raw transactions.
-  data: { scopedRepository(namespace: string): never }; // NOT IMPLEMENTABLE SAMPLE
+  // Data access is intentionally not declared: approve typed, scoped
+  // repository operations before publishing a callable API.
   jobs: { enqueue(name: string, payload: unknown, idempotencyKey: string): Promise<void> };
   log: { info(message: string, fields?: Record<string, string>): void };
 };
 ```
 
-**No callable data API is specified by this snippet.** The `never` example deliberately prevents using it as executable SDK code. The approved design must expose registered, capability-checked **typed publication-scoped repository operations**, not a raw SQL or Drizzle transaction. See [identity/data RFC](external-extensions-identity-data.md). Reject dangerous coercions, raw SQL and arbitrarily supplied publication-scoped context.
+**No callable data API is specified by this snippet.** It intentionally omits a storage method until reviewed typed repository operations are available. The approved design must expose registered, capability-checked **typed publication-scoped repository operations**, not a raw SQL or Drizzle transaction. See [identity/data RFC](external-extensions-identity-data.md). Reject dangerous coercions, raw SQL and arbitrarily supplied publication-scoped context.
 
 ## 3. Route namespaces / policy
 
