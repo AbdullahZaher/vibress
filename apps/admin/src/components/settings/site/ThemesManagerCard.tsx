@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   ApiThemeSummary,
   ApiActiveTheme,
@@ -46,6 +46,49 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editingTheme, setEditingTheme] = useState<ApiThemeSummary | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const uploadDialogRef = useRef<HTMLDivElement>(null);
+  const openingControlRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]')?.focus();
+    return () => {
+      openingControlRef.current?.focus();
+    };
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
+    if (isUploadOpen) {
+      focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
+    }
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !focusRoot) return;
+      const controls = Array.from(
+        focusRoot.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.classList.contains("hidden"));
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!first || !last) return;
+      if (!focusRoot.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trapTab);
+    return () => document.removeEventListener("keydown", trapTab);
+  }, [isDrawerOpen, isUploadOpen]);
+
 
   // Upload modal state inside drawer
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -92,6 +135,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handleOpen = () => {
+    openingControlRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsDrawerOpen(true);
     load();
   };
@@ -202,9 +246,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       {/* Themes Manager Slide-over Drawer */}
       <SettingsModalPortal
         isOpen={isDrawerOpen}
-        onClose={handleCloseDrawer}
+        onClose={isUploadOpen ? () => setIsUploadOpen(false) : handleCloseDrawer}
       >
-        <div role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
@@ -413,7 +457,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
         {/* Inner Upload Modal */}
         {isUploadOpen && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
+          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
             <div className="w-full max-w-md bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                 <div className="flex items-center gap-2">
@@ -425,6 +469,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsUploadOpen(false)}
+                  aria-label="Close theme upload"
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md"
                 >
                   <X className="h-4 w-4" />
