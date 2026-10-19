@@ -8,7 +8,9 @@ import {
   uniqueIndex,
   jsonb,
   foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { publications } from "./publications";
 
 export const integrations = pgTable("integrations", {
@@ -233,6 +235,11 @@ export const pluginPublicationSettings = pgTable(
       .on(table.pluginId, table.publicationId, table.key),
     publicationSettingsIdx: index("plugin_pub_settings_publication_idx")
       .on(table.publicationId),
+    validSecretStorage: check(
+      "plugin_pub_settings_value_check",
+      sql`(${table.isSecret} = true AND ${table.value} IS NULL AND ${table.encryptedValue} IS NOT NULL)
+        OR (${table.isSecret} = false AND ${table.encryptedValue} IS NULL)`,
+    ),
   }),
 );
 
