@@ -295,6 +295,17 @@ describe("Theme Domain — Activation & Management", () => {
     ).rejects.toThrow(ThemeNotFoundError);
   });
 
+  it("rejects a stale version precondition without persisting any settings", async () => {
+    await expect(service.updateThemeSettings(
+      "custom-nordic",
+      { accentColor: "#112233" },
+      "user-1",
+      undefined,
+      { themeVersion: "9.0.0", settingsSchemaVersion: 1 },
+    )).rejects.toMatchObject({ code: "THEME_SETTINGS_CONFLICT" });
+    expect(await installedRepo.getThemeSettings("custom-nordic")).toBeNull();
+  });
+
   it("reports legacy storage only for an active external theme with an inherited path", async () => {
     await service.activateTheme("custom-nordic", "user-1", undefined, "pub_alpha");
     // A normal install is not authorized merely because its path looks legacy.
