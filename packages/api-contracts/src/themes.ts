@@ -24,6 +24,12 @@ export const ThemeSummaryDtoSchema = z.object({
 });
 export type ThemeSummaryDto = z.infer<typeof ThemeSummaryDtoSchema>;
 
+/** Additive detail field: saved presentation settings for active or inactive themes. */
+export const ThemeDetailDtoSchema = ThemeSummaryDtoSchema.extend({
+  settings: z.record(z.unknown()).optional(),
+});
+export type ThemeDetailDto = z.infer<typeof ThemeDetailDtoSchema>;
+
 export const ActiveThemeDtoSchema = z.object({
   themeId: z.string(),
   themeVersion: z.string(),
