@@ -158,14 +158,61 @@ describe("PluginsService", () => {
     expect(repoWith.updateStatus).toHaveBeenCalledWith("p1", "error");
   });
 
-  it("deactivates a plugin", async () => {
+  it("calls cleanup before completing deactivation", async () => {
+    const deactivate = vi.fn(async () => undefined);
+    const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate })) };
     const repoWith: PluginRepository = {
       ...pluginRepo,
       findById: vi.fn(async () => makePlugin({ status: "active" })),
     };
-    const service = makeService({ pluginRepo: repoWith });
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
     const plugin = await service.deactivatePlugin("p1", "u1");
     expect(plugin.status).toBe("inactive");
+    expect(deactivate).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when cleanup throws", async () => {
+    const deactivate = vi.fn(async () => { throw new Error("cleanup failed"); });
+    const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate })) };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active" })),
+      updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await expect(service.deactivatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_DEACTIVATION_FAILED",
+    });
+    expect(repoWith.updateStatus).toHaveBeenCalledWith("p1", "error");
+    expect(repoWith.updateStatus).not.toHaveBeenCalledWith("p1", "inactive");
+  });
+
+  it("dispatches explicit event names and rejects cross-publication messages", async () => {
+    const onEvent = vi.fn(async () => undefined);
+    const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })) };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active", hooks: ["post.published"] })),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    const payload = { publicationId: "pub-a", eventName: "spoofed" };
+    await service.dispatchEvent("p1", "post.published", payload, "pub-a");
+    expect(onEvent).toHaveBeenCalledWith("post.published", payload);
+    await expect(service.dispatchEvent("p1", "post.published", { publicationId: "pub-b" }, "pub-a"))
+      .rejects.toMatchObject({ code: "CROSS_PUBLICATION_VIOLATION" });
+    await expect(service.dispatchEvent("p1", "post.deleted", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_CAPABILITY_DENIED" });
+  });
+
+  it("never reports success for an unimplemented event hook", async () => {
+    const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn() })) };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active", hooks: ["onEvent"] })),
+    };
+    await expect(makeService({ pluginRepo: repoWith, host: moduleHost })
+      .executeHook("p1", "onEvent", {}))
+      .rejects.toMatchObject({ code: "PLUGIN_HOOK_NOT_FOUND" });
   });
 
   it("settings: secrets encrypted at rest and masked on read", async () => {
