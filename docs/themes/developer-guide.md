@@ -117,7 +117,7 @@ See the [Liquid view-model contract and CSS example](templating.md).
 
 ## 5. Customizable theme settings
 
-Add `settings.json` alongside `theme.json` in the ZIP. The file declares a `{ "fields": [...] }` schema with a required `key`, `type`, and `default` on each entry. Supported types: `string`, `boolean`, `number`, `color`, and `select`; see the [Theme Settings Guide](../../VIBRESS_THEME_DESIGNER_PACKAGE/07-THEME-SETTINGS-GUIDE.md).
+Optionally add `settings.json` alongside `theme.json` in the ZIP. When supplied, the file declares a `{ "fields": [...] }` schema with a required `key`, `type`, and `default` on each entry. Supported types: `string`, `boolean`, `number`, `color`, and `select`; see the [Theme Settings Guide](../../VIBRESS_THEME_DESIGNER_PACKAGE/07-THEME-SETTINGS-GUIDE.md).
 
 An authorized editor opens **Settings → Site → Themes**, chooses **Settings** on a theme card (before **Delete** on removable themes), adjusts the dynamically generated fields, and selects **Save Settings**. Both active and inactive themes can be customized; saved values are scoped to the publication and retained when changing active themes. The live Liquid renderer exposes active theme values as `settings.accentColor`, etc. A setting only affects the site when the theme's templates/CSS actually use it. Never put secrets or user account settings in theme settings; social URLs belong to `site.socialLinks`.
 
