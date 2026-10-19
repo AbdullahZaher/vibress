@@ -21,6 +21,7 @@ import {
   PluginPublicationStateSchema,
   PluginPublicationSettingsUpdateSchema,
   PluginPublicationSettingsResponseSchema,
+  OperatorTrustedPluginRegisterSchema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 
@@ -410,6 +411,47 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         req.publicationContext?.publicationId,
       );
       return reply.status(200).send({ plugins });
+    },
+  });
+
+  fastify.get("/plugins/trusted-available", {
+    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    handler: async (req, reply) => {
+      try {
+        const approved = await pluginsService.listOperatorManifests();
+        return reply.status(200).send({ plugins: approved });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id, 503);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.post("/plugins/register-trusted", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const parsed = OperatorTrustedPluginRegisterSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid approved plugin identifier", req.id, 400);
+      }
+      try {
+        const plugin = await pluginsService.registerOperatorPlugin(
+          parsed.data.manifestId, req.user!.id,
+        );
+        return reply.status(201).send({ plugin });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 : 403);
+        }
+        throw err;
+      }
     },
   });
 

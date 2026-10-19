@@ -28,3 +28,7 @@ export const PluginPublicationSettingsResponseSchema = z.object({
     masked: z.boolean(),
   }).strict()),
 }).strict();
+
+export const OperatorTrustedPluginRegisterSchema = z.object({
+  manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(200),
+}).strict();

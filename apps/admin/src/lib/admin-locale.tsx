@@ -366,6 +366,8 @@ const translations: Record<string, string> = {
   "Code injection": "إضافة الأكواد",
   "Developer platform & integrations": "منصة المطورين والتكاملات",
   "No platform plugins installed.": "لا توجد إضافات مثبتة على المنصة.",
+  "Operator-approved plugins": "الإضافات المعتمدة من مشغّل المنصة",
+  "Register trusted plugin": "تسجيل إضافة موثوقة",
   "Plugin action failed": "تعذّر تنفيذ عملية الإضافة",
   "Manifest ID": "معرّف الإضافة",
   "This publication": "هذا الموقع",

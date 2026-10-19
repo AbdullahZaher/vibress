@@ -233,3 +233,23 @@ export async function setPluginPublicationSettingsApi(
     body: JSON.stringify({ settings }),
   });
 }
+
+export interface AdminOperatorPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+}
+
+export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminOperatorPlugin[] }> {
+  return apiRequest("/plugins/trusted-available");
+}
+
+export async function registerOperatorTrustedPluginApi(
+  manifestId: string,
+): Promise<{ plugin: AdminPlugin }> {
+  return apiRequest("/plugins/register-trusted", {
+    method: "POST",
+    body: JSON.stringify({ manifestId }),
+  });
+}
