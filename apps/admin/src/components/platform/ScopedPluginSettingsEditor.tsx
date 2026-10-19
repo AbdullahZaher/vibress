@@ -51,6 +51,8 @@ export function ScopedPluginSettingsEditor({ plugin, onError }: Props) {
       setOpen(false);
       setSaved([]);
       setDraft({});
+      setLoading(false);
+      setSaving(false);
       setSuccess(false);
     };
     window.addEventListener("vibress:publication-changed", reset);
