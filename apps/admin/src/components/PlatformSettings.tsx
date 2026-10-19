@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AdminIntegration,
   AdminApiKey,
@@ -28,8 +28,10 @@ export function PlatformSettings() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
+  const refreshGeneration = useRef(0);
 
   const refresh = async () => {
+    const generation = ++refreshGeneration.current;
     try {
       const [i, k, w, p] = await Promise.all([
         listIntegrationsApi(),
@@ -37,6 +39,7 @@ export function PlatformSettings() {
         listWebhookEndpointsApi(),
         listPluginsApi(),
       ]);
+      if (generation !== refreshGeneration.current) return;
       setIntegrations(i.integrations);
       setApiKeys(k.keys);
       setWebhooks(w.endpoints);
@@ -44,17 +47,28 @@ export function PlatformSettings() {
       setPlatformOperator(p.platformOperator === true);
       setError(null);
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load platform data",
-      );
+      if (generation === refreshGeneration.current) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load platform data",
+        );
+      }
     }
   };
 
   useEffect(() => {
     void refresh();
-    const onPublicationChanged = () => { void refresh(); };
+    const onPublicationChanged = () => {
+      // Never keep stale plugin/publication state or one-time secrets visible.
+      setPlugins([]);
+      setPlatformOperator(false);
+      setNewSecret(null);
+      void refresh();
+    };
     window.addEventListener("vibress:publication-changed", onPublicationChanged);
-    return () => window.removeEventListener("vibress:publication-changed", onPublicationChanged);
+    return () => {
+      refreshGeneration.current += 1;
+      window.removeEventListener("vibress:publication-changed", onPublicationChanged);
+    };
   }, []);
 
   return (
