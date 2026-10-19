@@ -33,6 +33,10 @@ export interface ApiThemeSummary {
   previewImage?: string | null | undefined;
 }
 
+export interface ApiThemeDetail extends ApiThemeSummary {
+  settings?: Record<string, unknown> | undefined;
+}
+
 export interface ApiActiveTheme {
   themeId: string;
   themeVersion: string;
@@ -44,6 +48,10 @@ export interface ApiActiveTheme {
 
 export async function listThemesApi(): Promise<{ themes: ApiThemeSummary[] }> {
   return apiRequest("/themes");
+}
+
+export async function getThemeApi(id: string): Promise<ApiThemeDetail> {
+  return apiRequest(`/themes/${encodeURIComponent(id)}`);
 }
 
 export async function getActiveThemeApi(): Promise<{
