@@ -50,6 +50,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
 
+  // Upload modal state inside drawer
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<
+    "idle" | "validating" | "installing" | "success" | "error"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!isDrawerOpen) return;
     drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]')?.focus();
@@ -90,15 +100,6 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   }, [isDrawerOpen, isUploadOpen]);
 
 
-  // Upload modal state inside drawer
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<
-    "idle" | "validating" | "installing" | "success" | "error"
-  >("idle");
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
