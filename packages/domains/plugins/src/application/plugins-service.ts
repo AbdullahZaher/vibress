@@ -253,7 +253,9 @@ export class PluginsService {
       if (!publicationId) {
         throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
       }
-      const scopedSettings = await this.loadPublicationSettings(plugin.id, publicationId);
+      const scopedSettings = plugin.capabilities.includes("settings.read-own")
+        ? await this.loadPublicationSettings(plugin.id, publicationId)
+        : {};
       context = {
         manifestId: plugin.manifestId,
         name: plugin.name,
