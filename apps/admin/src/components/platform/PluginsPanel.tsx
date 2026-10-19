@@ -13,6 +13,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Puzzle } from "lucide-react";
+import { ScopedPluginSettingsEditor } from "./ScopedPluginSettingsEditor";
 
 interface PluginsPanelProps {
   plugins: AdminPlugin[];
@@ -141,6 +142,9 @@ export function PluginsPanel({
                   {globalActive ? tr("Deactivate") : tr("Activate")}
                 </Button>
               </div>
+              {scoped && siteEnabled && (
+                <ScopedPluginSettingsEditor plugin={plugin} onError={onError} />
+              )}
             </Card>
           );
         })

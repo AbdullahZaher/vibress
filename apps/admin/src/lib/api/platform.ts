@@ -54,6 +54,7 @@ export interface AdminPlugin {
   description: string | null;
   capabilities: string[];
   status: string;
+  settingsSchema?: Record<string, unknown>;
   /** Added for vNext external plugins; undefined on older API servers. */
   publicationScoped?: boolean;
   publicationEnabled?: boolean;
