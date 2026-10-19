@@ -279,6 +279,51 @@ describe("PluginsService", () => {
     expect(JSON.stringify(list)).not.toContain("old-plaintext");
   });
 
+  it("initializes an already active plugin once per fresh API replica before events", async () => {
+    const activate = vi.fn(async () => undefined);
+    const onEvent = vi.fn(async () => undefined);
+    const hostWith = {
+      loadModule: vi.fn(async () => ({ activate, onEvent })),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active", hooks: ["onEvent"],
+      })),
+    };
+    const firstReplica = new PluginsService(repoWith, settingRepo, hostWith);
+    await Promise.all([
+      firstReplica.dispatchEvent("p1", "post.published", {}, "pub-a"),
+      firstReplica.dispatchEvent("p1", "post.published", {}, "pub-a"),
+    ]);
+    expect(activate).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledTimes(2);
+
+    const restartedReplica = new PluginsService(repoWith, settingRepo, hostWith);
+    await restartedReplica.dispatchEvent("p1", "post.published", {}, "pub-a");
+    expect(activate).toHaveBeenCalledTimes(2);
+    expect(onEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not run events if the plugin becomes inactive during local initialization", async () => {
+    const onEvent = vi.fn(async () => undefined);
+    const activate = vi.fn(async () => undefined);
+    let reads = 0;
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => {
+        reads += 1;
+        return makePlugin({ status: reads === 1 ? "active" : "inactive", hooks: ["onEvent"] });
+      }),
+    };
+    const hostWith = { loadModule: vi.fn(async () => ({ activate, onEvent })) };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .dispatchEvent("p1", "post.published", {}, "pub-a")).rejects.toMatchObject({
+      code: "PLUGIN_INACTIVE",
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   it("activates a plugin via the host and marks it active", async () => {
     const hostWith = {
       loadModule: vi.fn(async () => ({
