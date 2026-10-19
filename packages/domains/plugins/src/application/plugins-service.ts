@@ -264,7 +264,8 @@ export class PluginsService {
     payload: unknown,
     publicationId?: string,
   ): Promise<T> {
-    const plugin = await this.pluginRepo.findById(pluginId);    this.assertRuntimeAllowed();
+    this.assertRuntimeAllowed();
+    const plugin = await this.pluginRepo.findById(pluginId);
 
     if (!plugin) {
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
@@ -323,8 +324,8 @@ export class PluginsService {
     payload: unknown,
     publicationId?: string,
   ): Promise<void> {
-    if (!eventName || eventName === "onEvent") {    this.assertRuntimeAllowed();
-
+    this.assertRuntimeAllowed();
+    if (!eventName || eventName === "onEvent") {
       throw new PluginDomainError("INVALID_PLUGIN_EVENT", "A named event is required");
     }
     const plugin = await this.pluginRepo.findById(pluginId);
