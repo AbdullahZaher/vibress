@@ -23,6 +23,21 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Theme settings": "إعدادات القالب",
+  "Theme settings for": "إعدادات القالب",
+  "Settings": "الإعدادات",
+  "Back to themes": "العودة إلى القوالب",
+  "Save Settings": "حفظ الإعدادات",
+  "Saving...": "جارٍ الحفظ...",
+  "Loading settings...": "جارٍ تحميل الإعدادات...",
+  "Theme settings saved.": "تم حفظ إعدادات القالب.",
+  "Failed to load theme settings.": "تعذر تحميل إعدادات القالب.",
+  "Failed to save theme settings.": "تعذر حفظ إعدادات القالب.",
+  "Discard unsaved theme settings changes?": "هل تريد تجاهل التغييرات غير المحفوظة لإعدادات القالب؟",
+  "Edit presentation options for this publication. Changes to inactive themes take effect on activation.": "عدّل مظهر هذه المطبوعة. تُطبّق تغييرات القوالب غير النشطة عند تفعيلها.",
+  "This theme does not define any customizable fields in settings.json.": "لا يحتوي هذا القالب على حقول قابلة للتخصيص في settings.json.",
+  "Choose": "اختيار",
+  "hex value": "قيمة اللون",
   "Social links": "روابط التواصل الاجتماعي",
   "Connect your publication's profiles. Themes can display them anywhere.": "اربط حسابات موقعك؛ ويمكن للقوالب عرضها في أي موضع.",
   "links": "روابط",
