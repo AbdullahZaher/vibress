@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import {
   type ApiThemeDetail,
   type ApiThemeSummary,
@@ -25,6 +25,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const idPrefix = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [detail, setDetail] = useState<ApiThemeDetail | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [initial, setInitial] = useState<Record<string, unknown>>({});
@@ -33,6 +34,10 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -100,7 +105,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
           <div>
-            <h4 className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
+            <h4 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
             <p className="text-xs text-muted-foreground">
               {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>
