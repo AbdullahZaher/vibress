@@ -47,6 +47,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [editingTheme, setEditingTheme] = useState<ApiThemeSummary | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
@@ -179,11 +180,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handlePreview = async (themeId: string) => {
+    setPreviewError(null);
     try {
       const res = await createThemePreviewApi(themeId);
-      window.open(`/?preview=${res.previewToken}`, "_blank");
-    } catch {
-      window.open(`/?preview=${themeId}`, "_blank");
+      window.open(`/preview/${encodeURIComponent(res.previewToken)}`, "_blank", "noopener,noreferrer");
+    } catch (error: unknown) {
+      setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     }
   };
 
@@ -311,6 +313,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
             {/* Drawer Body */}
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {previewError && (
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
+              )}
               <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Badge
