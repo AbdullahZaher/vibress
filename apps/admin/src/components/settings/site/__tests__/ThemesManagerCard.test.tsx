@@ -10,6 +10,7 @@ import {
   listThemesApi,
   getActiveThemeApi,
   getThemeApi,
+  createThemePreviewApi,
 } from "../../../../lib/api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -129,6 +130,26 @@ describe("ThemesManagerCard", () => {
     await act(async () => { close?.click(); });
     expect(document.querySelector('[role="dialog"][aria-label="Themes Manager"]')).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("opens a validated preview URL instead of query-string theme selection", async () => {
+    const mockOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(createThemePreviewApi).mockResolvedValue({
+      previewToken: "a".repeat(64),
+      expiresAt: new Date().toISOString(),
+      themeId: "retro-creator",
+    });
+    await act(async () => root.render(<ThemesManagerCard />));
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const previewButton = document.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
+    await act(async () => { previewButton?.click(); });
+    expect(mockOpen).toHaveBeenCalledWith(
+      `/preview/${"a".repeat(64)}`, "_blank", "noopener,noreferrer",
+    );
+    mockOpen.mockRestore();
   });
 
   it("prompts for confirmation before discarding unsaved theme settings", async () => {
