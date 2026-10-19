@@ -704,6 +704,7 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
     // Simulate an abandoned transition to "activating"
     const p = pluginStore.get(registered.id)!;
     p.status = "activating";
+    p.updatedAt = new Date(Date.now() - 20 * 60 * 1000);
 
     // Uninstall must be blocked while in transitional state
     await expect(
@@ -713,7 +714,13 @@ describe("SEC-01: Plugin Security Boundary & Adversarial Production Suite (Step 
     });
 
     // Recover from "activating" -> "error"
-    const recovered = await service.recoverPluginLifecycle(registered.id, "admin-user");
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+    let recovered: Plugin;
+    try {
+      recovered = await service.recoverPluginLifecycle(registered.id, "admin-user", true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
     expect(recovered.status).toBe("error");
 
     // Deactivate from error -> inactive

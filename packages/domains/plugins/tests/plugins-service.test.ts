@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import {
   PluginsService,
   PluginDomainError,
@@ -12,6 +12,8 @@ import {
 } from "../src/domain/plugin";
 import { SDK_VERSION, type PluginContext } from "@vibress/plugin-sdk";
 import { encryptSecret } from "@vibress/security";
+
+afterEach(() => { vi.unstubAllEnvs(); });
 
 beforeAll(() => {
   process.env.VIBRESS_ENCRYPTION_KEY =
@@ -718,7 +720,11 @@ describe("PluginsService", () => {
 
   describe("Lifecycle recovery and safe shutdown", () => {
     it("recovers a plugin stuck in activating to error", async () => {
-      const stuckPlugin = makePlugin({ id: "p-stuck", status: "activating" });
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+      const stuckPlugin = makePlugin({
+        id: "p-stuck", status: "activating",
+        updatedAt: new Date(Date.now() - 20 * 60 * 1000),
+      });
       const repoWith: PluginRepository = {
         ...pluginRepo,
         findById: vi.fn(async (id) => (id === "p-stuck" ? stuckPlugin : null)),
@@ -730,7 +736,7 @@ describe("PluginsService", () => {
         }),
       };
       const service = makeService({ pluginRepo: repoWith });
-      const recovered = await service.recoverPluginLifecycle("p-stuck", "admin-1");
+      const recovered = await service.recoverPluginLifecycle("p-stuck", "admin-1", true);
       expect(recovered.status).toBe("error");
       expect(repoWith.tryTransitionStatus).toHaveBeenCalledWith(
         "p-stuck",
@@ -740,7 +746,11 @@ describe("PluginsService", () => {
     });
 
     it("recovers a plugin stuck in deactivating to inactive", async () => {
-      const stuckPlugin = makePlugin({ id: "p-deact", status: "deactivating" });
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+      const stuckPlugin = makePlugin({
+        id: "p-deact", status: "deactivating",
+        updatedAt: new Date(Date.now() - 20 * 60 * 1000),
+      });
       const repoWith: PluginRepository = {
         ...pluginRepo,
         findById: vi.fn(async (id) => (id === "p-deact" ? stuckPlugin : null)),
@@ -752,7 +762,7 @@ describe("PluginsService", () => {
         }),
       };
       const service = makeService({ pluginRepo: repoWith });
-      const recovered = await service.recoverPluginLifecycle("p-deact", "admin-1");
+      const recovered = await service.recoverPluginLifecycle("p-deact", "admin-1", true);
       expect(recovered.status).toBe("inactive");
       expect(repoWith.tryTransitionStatus).toHaveBeenCalledWith(
         "p-deact",
@@ -762,6 +772,7 @@ describe("PluginsService", () => {
     });
 
     it("rejects recovery when plugin is not in a transitional state", async () => {
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
       const activePlugin = makePlugin({ id: "p-active", status: "active" });
       const repoWith: PluginRepository = {
         ...pluginRepo,
@@ -769,10 +780,68 @@ describe("PluginsService", () => {
       };
       const service = makeService({ pluginRepo: repoWith });
       await expect(
-        service.recoverPluginLifecycle("p-active", "admin-1"),
+        service.recoverPluginLifecycle("p-active", "admin-1", true),
       ).rejects.toMatchObject({
         code: "PLUGIN_NOT_IN_TRANSITION",
       });
+    });
+
+    it("rejects online recovery even for a stale status with explicit confirmation", async () => {
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "");
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async () => makePlugin({
+          status: "activating", updatedAt: new Date(Date.now() - 20 * 60 * 1000),
+        })),
+        tryTransitionStatus: vi.fn(async () => makePlugin({ status: "error" })),
+      };
+      const service = makeService({ pluginRepo: repoWith });
+      await expect(service.recoverPluginLifecycle("p1", "operator", true))
+        .rejects.toMatchObject({ code: "PLUGIN_RECOVERY_NOT_QUIESCENT" });
+      expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+    });
+
+    it("requires explicit operator confirmation even in maintenance", async () => {
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async () => makePlugin({
+          status: "activating", updatedAt: new Date(Date.now() - 20 * 60 * 1000),
+        })),
+        tryTransitionStatus: vi.fn(async () => makePlugin({ status: "error" })),
+      };
+      await expect(makeService({ pluginRepo: repoWith })
+        .recoverPluginLifecycle("p1", "operator"))
+        .rejects.toMatchObject({ code: "PLUGIN_RECOVERY_NOT_QUIESCENT" });
+      expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+    });
+
+    it("refuses recovery of a recent transition without touching database state", async () => {
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async () => makePlugin({ status: "deactivating" })),
+        tryTransitionStatus: vi.fn(async () => makePlugin({ status: "inactive" })),
+      };
+      await expect(makeService({ pluginRepo: repoWith })
+        .recoverPluginLifecycle("p1", "operator", true))
+        .rejects.toMatchObject({ code: "PLUGIN_RECOVERY_TOO_RECENT" });
+      expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+    });
+
+    it("does not execute plugin code on a dedicated recovery maintenance instance", async () => {
+      vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+      const repoWith: PluginRepository = {
+        ...pluginRepo,
+        findById: vi.fn(async () => makePlugin({ status: "active" })),
+      };
+      const hostWith = { loadModule: vi.fn(async () => ({ activate: vi.fn() })) };
+      const service = makeService({ pluginRepo: repoWith, host: hostWith });
+      await expect(service.activatePlugin("p1", "operator"))
+        .rejects.toMatchObject({ code: "PLUGIN_RECOVERY_MAINTENANCE" });
+      await expect(service.dispatchEvent("p1", "post.published", {}, "pub-a"))
+        .rejects.toMatchObject({ code: "PLUGIN_RECOVERY_MAINTENANCE" });
+      expect(hostWith.loadModule).not.toHaveBeenCalled();
     });
 
     it("shutdown deactivates all active module instances gracefully", async () => {
