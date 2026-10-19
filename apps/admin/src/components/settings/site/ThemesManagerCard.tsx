@@ -12,6 +12,7 @@ import {
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
+import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import {
@@ -22,6 +23,7 @@ import {
   X,
   UploadCloud,
   Trash2,
+  Settings2,
   FileArchive,
   Loader2,
   AlertCircle,
@@ -40,6 +42,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingTheme, setEditingTheme] = useState<ApiThemeSummary | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
 
   // Upload modal state inside drawer
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -71,6 +75,19 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setLoading(false);
     }
   }, []);
+
+  const handleEditorBack = () => {
+    if (editorDirty && !window.confirm("Discard unsaved theme settings changes?")) return;
+    setEditingTheme(null);
+    setEditorDirty(false);
+  };
+
+  const handleCloseDrawer = () => {
+    if (editorDirty && !window.confirm("Discard unsaved theme settings changes?")) return;
+    setEditingTheme(null);
+    setEditorDirty(false);
+    setIsDrawerOpen(false);
+  };
 
   const handleOpen = () => {
     setIsDrawerOpen(true);
@@ -183,7 +200,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       {/* Themes Manager Slide-over Drawer */}
       <SettingsModalPortal
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={handleCloseDrawer}
       >
         <div className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
@@ -199,6 +216,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={editingTheme !== null}
                   onClick={() => {
                     setIsUploadOpen(true);
                     setUploadFile(null);
@@ -213,7 +231,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   size="sm"
                   variant="outline"
                   onClick={load}
-                  disabled={loading}
+                  disabled={loading || editingTheme !== null}
                   className="gap-1.5 text-xs h-8"
                   title="Reload registry themes from backend"
                 >
@@ -225,7 +243,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   aria-label="Close themes drawer"
-                  onClick={() => setIsDrawerOpen(false)}
+                  onClick={handleCloseDrawer}
                   className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -249,7 +267,19 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </p>
               </div>
 
-              {loading ? (
+              {editingTheme ? (
+                <ThemeSettingsEditor
+                  key={editingTheme.manifest.id}
+                  theme={editingTheme}
+                  onBack={handleEditorBack}
+                  onDirtyChange={setEditorDirty}
+                  onSaved={(settings) => {
+                    setActive((current) => current?.themeId === editingTheme.manifest.id
+                      ? { ...current, settings }
+                      : current);
+                  }}
+                />
+              ) : loading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                   <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                   <p className="text-xs">Loading theme catalog...</p>
@@ -332,6 +362,20 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
 
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditorDirty(false);
+                              setEditingTheme(theme);
+                            }}
+                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            title="Theme settings"
+                            aria-label={`Settings for ${theme.manifest.name}`}
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                          </Button>
+
                           {!theme.isBuiltIn && !isCurrent && (
                             <Button
                               size="sm"
@@ -356,10 +400,10 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
               <Button
                 size="sm"
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 className="text-xs cursor-pointer"
               >
-                Done
+                {editingTheme ? "Back to themes" : "Done"}
               </Button>
             </div>
           </div>
