@@ -210,3 +210,26 @@ export async function setPluginPublicationStateApi(
     body: JSON.stringify({ enabled }),
   });
 }
+
+export interface AdminScopedPluginSetting {
+  key: string;
+  value: string | null;
+  isSecret: boolean;
+  masked: boolean;
+}
+
+export async function listPluginPublicationSettingsApi(
+  id: string,
+): Promise<{ settings: AdminScopedPluginSetting[] }> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-settings`);
+}
+
+export async function setPluginPublicationSettingsApi(
+  id: string,
+  settings: Record<string, string | null>,
+): Promise<{ success: boolean }> {
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/publication-settings`, {
+    method: "PATCH",
+    body: JSON.stringify({ settings }),
+  });
+}

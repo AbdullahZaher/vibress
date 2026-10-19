@@ -19,6 +19,8 @@ import {
   PluginPublicationParamsSchema,
   PluginPublicationActivationSchema,
   PluginPublicationStateSchema,
+  PluginPublicationSettingsUpdateSchema,
+  PluginPublicationSettingsResponseSchema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 
@@ -544,6 +546,65 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           return sendError(reply, err.code, err.message, req.id,
             err.code === "PLUGIN_NOT_FOUND" ? 404 :
             err.code === "PLUGIN_INACTIVE" || err.code === "PLUGIN_LEGACY_GLOBAL" ? 409 : 400);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.get("/plugins/:id/publication-settings", {
+    preHandler: [requireStaffSession, requirePermission("plugins.read")],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin ID", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        const settings = await pluginsService.listPublicationSettings(
+          params.data.id, publicationId,
+        );
+        return reply.status(200).send(PluginPublicationSettingsResponseSchema.parse({ settings }));
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
+    },
+  });
+
+  fastify.patch("/plugins/:id/publication-settings", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const body = PluginPublicationSettingsUpdateSchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin settings", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication required", req.id, 403);
+      }
+      try {
+        await pluginsService.setPublicationSettings(
+          params.data.id, publicationId, body.data.settings,
+        );
+        return reply.status(200).send({ success: true });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_SETTING_INVALID" || err.code === "PLUGIN_SETTING_UNKNOWN"
+              ? 400 : 409);
         }
         throw err;
       }
