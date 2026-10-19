@@ -72,6 +72,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onLogout={onLogout}
         canPublishPosts={canPublishPosts}
         canReadTranslations={can("translations.read")}
+        canReadPlugins={can("plugins.read")}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}

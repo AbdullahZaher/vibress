@@ -9,16 +9,19 @@ import {
   CreditCard,
   Sparkles,
   Cpu,
+  Puzzle,
 } from "lucide-react";
 
 interface NavSettingsProps {
   currentPath: string;
   onNavigate: (path: string) => void;
+  canReadPlugins: boolean;
 }
 
 export const NavSettings: React.FC<NavSettingsProps> = ({
   currentPath,
   onNavigate,
+  canReadPlugins,
 }) => {
   const { tr } = useAdminLocale();
   const isSettingsActive =
@@ -84,6 +87,21 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
 
   return (
     <div className="space-y-0.5 text-[13px]">
+      {/* First-class Plugins management, immediately above Settings. */}
+      {canReadPlugins && (
+        <button
+          type="button"
+          onClick={() => onNavigate("/admin/plugins")}
+          aria-current={currentPath === "/admin/plugins" ? "page" : undefined}
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${currentPath === "/admin/plugins"
+            ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"}`}
+        >
+          <Puzzle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{tr("Plugins")}</span>
+        </button>
+      )}
+
       {/* Settings Trigger */}
       <button
         type="button"

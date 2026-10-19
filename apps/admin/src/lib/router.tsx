@@ -34,6 +34,11 @@ const MediaLibrary = lazy(() =>
 const MembersList = lazy(() =>
   import("../components/MembersList").then((m) => ({ default: m.MembersList })),
 );
+const PluginsPage = lazy(() =>
+  import("../components/platform/PluginsPage").then((m) => ({
+    default: m.PluginsPage,
+  })),
+);
 const SettingsHub = lazy(() =>
   import("../components/settings/SettingsHub").then((m) => ({
     default: m.SettingsHub,
@@ -427,6 +432,13 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/members",
     exact: false,
     render: () => <MembersList />,
+  },
+  // Dedicated Plugins management page (publication permission checked by router).
+  {
+    pattern: "/admin/plugins",
+    exact: true,
+    requiredPermission: "plugins.read",
+    render: () => <PluginsPage />,
   },
   // 5. Settings Hub Routes & Backward-Compatible Aliases
   {

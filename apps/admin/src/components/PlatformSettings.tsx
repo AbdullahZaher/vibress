@@ -3,28 +3,23 @@ import {
   AdminIntegration,
   AdminApiKey,
   AdminWebhookEndpoint,
-  AdminPlugin,
   listIntegrationsApi,
   listApiKeysApi,
   listWebhookEndpointsApi,
-  listPluginsApi,
 } from "../lib/api";
 
-import { Server, Key, Webhook, Puzzle } from "lucide-react";
+import { Server, Key, Webhook } from "lucide-react";
 import { IntegrationsPanel } from "./platform/IntegrationsPanel";
 import { ApiKeysPanel } from "./platform/ApiKeysPanel";
 import { WebhooksPanel } from "./platform/WebhooksPanel";
-import { PluginsPanel } from "./platform/PluginsPanel";
 
-type Tab = "integrations" | "apikeys" | "webhooks" | "plugins";
+type Tab = "integrations" | "apikeys" | "webhooks";
 
 export function PlatformSettings() {
   const [tab, setTab] = useState<Tab>("integrations");
   const [integrations, setIntegrations] = useState<AdminIntegration[]>([]);
   const [apiKeys, setApiKeys] = useState<AdminApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<AdminWebhookEndpoint[]>([]);
-  const [plugins, setPlugins] = useState<AdminPlugin[]>([]);
-  const [platformOperator, setPlatformOperator] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
@@ -33,18 +28,15 @@ export function PlatformSettings() {
   const refresh = async () => {
     const generation = ++refreshGeneration.current;
     try {
-      const [i, k, w, p] = await Promise.all([
+      const [i, k, w] = await Promise.all([
         listIntegrationsApi(),
         listApiKeysApi(),
         listWebhookEndpointsApi(),
-        listPluginsApi(),
       ]);
       if (generation !== refreshGeneration.current) return;
       setIntegrations(i.integrations);
       setApiKeys(k.keys);
       setWebhooks(w.endpoints);
-      setPlugins(p.plugins);
-      setPlatformOperator(p.platformOperator === true);
       setError(null);
     } catch (err: unknown) {
       if (generation === refreshGeneration.current) {
@@ -59,8 +51,6 @@ export function PlatformSettings() {
     void refresh();
     const onPublicationChanged = () => {
       // Never keep stale plugin/publication state or one-time secrets visible.
-      setPlugins([]);
-      setPlatformOperator(false);
       setNewSecret(null);
       void refresh();
     };
@@ -134,16 +124,7 @@ export function PlatformSettings() {
         >
           <Webhook className="h-3.5 w-3.5" /> Webhooks ({webhooks.length})
         </button>
-        <button
-          onClick={() => setTab("plugins")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-            tab === "plugins"
-              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Puzzle className="h-3.5 w-3.5" /> Plugins ({plugins.length})
-        </button>
+
       </div>
 
       {/* Panels stay mounted so form state survives tab switches */}
@@ -172,14 +153,7 @@ export function PlatformSettings() {
           onChanged={refresh}
         />
       </div>
-      <div className={tab === "plugins" ? "" : "hidden"}>
-        <PluginsPanel
-          plugins={plugins}
-          platformOperator={platformOperator}
-          onError={setError}
-          onChanged={refresh}
-        />
-      </div>
+
     </div>
   );
 }
