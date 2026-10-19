@@ -143,9 +143,14 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     // Public Web page renders announcement bar
     const webPage = await page.goto(`${BASE_URL}/`);
     expect(webPage?.status()).toBe(200);
-    const bar = page.locator("#vb-announcement-bar");
-    await expect(bar).toBeVisible();
-    await expect(bar).toContainText(announcementText);
+    // SSR caches public settings for up to 15 seconds to protect the content
+    // API. Re-fetch until the cache naturally expires; never bypass the gate.
+    await expect.poll(async () => {
+      const response = await page.goto(`${BASE_URL}/`);
+      if (response?.status() !== 200) return false;
+      const bar = page.locator("#vb-announcement-bar");
+      return (await bar.isVisible()) && (await bar.innerText()).includes(announcementText);
+    }, { timeout: 35000, intervals: [1000, 2000, 3000] }).toBe(true);
   });
 
   test("4. Site Privacy: End-to-End public protection barrier & unlock flow", async ({
@@ -265,11 +270,14 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       data: { value: footerMarker },
     });
 
-    // Check public site HTML
-    await page.goto(`${BASE_URL}/`);
-    const content = await page.content();
-    expect(content).toContain("e2e-custom-meta");
-    expect(content).toContain("e2e-footer-injected-marker");
+    // Both markers must reach public SSR after its bounded settings cache TTL.
+    await expect.poll(async () => {
+      const response = await page.goto(`${BASE_URL}/`);
+      if (response?.status() !== 200) return false;
+      const content = await page.content();
+      return content.includes("e2e-custom-meta") &&
+        content.includes("e2e-footer-injected-marker");
+    }, { timeout: 35000, intervals: [1000, 2000, 3000] }).toBe(true);
   });
 
   test("7. Advanced Settings: Maintenance operation & Integrity checks", async ({
