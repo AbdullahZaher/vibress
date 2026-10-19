@@ -115,7 +115,15 @@ See the [Liquid view-model contract and CSS example](templating.md).
 
 ---
 
-## 5. Packaging Your Theme
+## 5. Customizable theme settings
+
+Add `settings.json` alongside `theme.json` in the ZIP. The file declares a `{ "fields": [...] }` schema with a required `key`, `type`, and `default` on each entry. Supported types: `string`, `boolean`, `number`, `color`, and `select`; see the [Theme Settings Guide](../../VIBRESS_THEME_DESIGNER_PACKAGE/07-THEME-SETTINGS-GUIDE.md).
+
+An authorized editor opens **Settings → Site → Themes**, chooses **Settings** on a theme card (before **Delete** on removable themes), adjusts the dynamically generated fields, and selects **Save Settings**. Both active and inactive themes can be customized; saved values are scoped to the publication and retained when changing active themes. The live Liquid renderer exposes active theme values as `settings.accentColor`, etc. A setting only affects the site when the theme's templates/CSS actually use it. Never put secrets or user account settings in theme settings; social URLs belong to `site.socialLinks`.
+
+---
+
+## 6. Packaging Your Theme
 
 Zip the contents of your theme folder:
 
@@ -128,11 +136,12 @@ zip -r ../my-theme.zip theme.json settings.json preview.webp templates/ partials
 
 ---
 
-## 6. Installing & Activating in Admin
+## 7. Installing & Activating in Admin
 
 1. Open your Vibress Admin Panel.
-2. Navigate to **Settings &rarr; Themes**.
+2. Navigate to **Settings &rarr; Site &rarr; Themes**.
 3. Click **Upload Theme (.zip)**.
 4. Select `my-theme.zip` and click **Install Theme**.
 5. Click **Preview** to view your theme live with real content.
-6. Click **Activate Theme** to immediately publish it to your live website.
+6. Click **Settings** to customize the theme's declared presentation fields (optional, available before activation).
+7. Click **Activate Theme** to immediately publish it to your live website.
