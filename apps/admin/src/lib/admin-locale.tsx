@@ -23,6 +23,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Themes Manager": "إدارة القوالب",
   "Theme settings": "إعدادات القالب",
   "Theme settings for": "إعدادات القالب",
   "Back to themes": "العودة إلى القوالب",
