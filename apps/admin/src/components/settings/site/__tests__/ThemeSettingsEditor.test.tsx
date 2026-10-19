@@ -4,7 +4,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ThemeSettingsEditor } from "../ThemeSettingsEditor";
+import { ThemeSettingsEditor, toColorPickerHex } from "../ThemeSettingsEditor";
 import {
   type ApiThemeSummary,
   getThemeApi,
@@ -43,6 +43,14 @@ const theme: ApiThemeSummary = {
 };
 
 describe("ThemeSettingsEditor", () => {
+  it("shows short and transparent hexadecimal colors without changing stored values", () => {
+    expect(toColorPickerHex("#abc")).toBe("#aabbcc");
+    expect(toColorPickerHex("#abcd")).toBe("#aabbcc");
+    expect(toColorPickerHex("#11223380")).toBe("#112233");
+    expect(toColorPickerHex("#0a0b0c")).toBe("#0a0b0c");
+    expect(toColorPickerHex("invalid")).toBe("#000000");
+  });
+
   let container: HTMLDivElement;
   let root: Root;
 
@@ -107,6 +115,9 @@ describe("ThemeSettingsEditor", () => {
     expect(updateThemeSettingsApi).toHaveBeenCalledWith("retro-creator", {
       designPreset: "sunshine",
       showBio: false,
+    }, {
+      themeVersion: "1.0.0",
+      settingsSchemaVersion: 1,
     });
     expect(onSaved).toHaveBeenCalledWith({ designPreset: "sunshine", showBio: false });
     expect(onDirtyChange).toHaveBeenCalledWith(true);
