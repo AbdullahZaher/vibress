@@ -58,7 +58,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : tr("Failed to load theme settings."));
+        setError(err instanceof Error ? err.message : "Failed to load theme settings.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -86,7 +86,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
       setSuccess(true);
       onSaved(values);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : tr("Failed to save theme settings."));
+      setError(err instanceof Error ? err.message : "Failed to save theme settings.");
     } finally {
       setSaving(false);
     }
@@ -96,7 +96,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
     <section aria-label={`${tr("Theme settings for")} ${theme.manifest.name}`} className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={onBack} aria-label={tr("Back to themes")}>
+          <Button size="sm" variant="outline" onClick={onBack} disabled={saving} aria-label={tr("Back to themes")}>
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
           <div>
@@ -112,7 +112,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
         </Button>
       </div>
 
-      {error && <p role="alert" className="flex gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
+      {error && <p role="alert" className="flex gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle className="h-4 w-4 shrink-0" />{tr(error)}</p>}
       {success && <p role="status" className="flex gap-2 text-xs text-emerald-600"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
 
       {loading ? (
@@ -136,13 +136,14 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                   {tr(definition.label || key)}
                 </label>
                 {definition.description && (
-                  <p id={descriptionId} className="text-xs text-muted-foreground">{definition.description}</p>
+                  <p id={descriptionId} className="text-xs text-muted-foreground">{tr(definition.description)}</p>
                 )}
                 {definition.type === "boolean" ? (
                   <input
                     id={inputId}
                     type="checkbox"
                     aria-describedby={describedBy}
+                    disabled={saving}
                     checked={value === true}
                     onChange={(event) => updateField(key, event.target.checked)}
                     className="h-4 w-4 accent-primary"
@@ -151,6 +152,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                   <select
                     id={inputId}
                     aria-describedby={describedBy}
+                    disabled={saving}
                     value={String(value ?? "")}
                     onChange={(event) => updateField(key, event.target.value)}
                     className="w-full h-9 rounded-md border border-border bg-card px-2 text-xs text-foreground"
@@ -158,7 +160,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     {(definition.options || []).map((option) => {
                       const optionValue = typeof option === "string" ? option : option.value;
                       const optionLabel = typeof option === "string" ? option : option.label;
-                      return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
+                      return <option key={optionValue} value={optionValue}>{tr(optionLabel)}</option>;
                     })}
                   </select>
                 ) : definition.type === "color" ? (
@@ -166,6 +168,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     <input
                       id={inputId}
                       type="color"
+                      disabled={saving}
                       aria-label={`${tr("Choose")} ${tr(definition.label || key)}`}
                       aria-describedby={describedBy}
                       value={/^#[0-9a-fA-F]{6}$/.test(String(value)) ? String(value) : "#000000"}
@@ -177,6 +180,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                       aria-describedby={describedBy}
                       value={String(value ?? "")}
                       maxLength={9}
+                      disabled={saving}
                       onChange={(event) => updateField(key, event.target.value)}
                       className="h-9 font-mono text-xs"
                     />
@@ -186,6 +190,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     id={inputId}
                     type={definition.type === "number" ? "number" : "text"}
                     aria-describedby={describedBy}
+                    disabled={saving}
                     min={definition.type === "number" ? definition.min : undefined}
                     max={definition.type === "number" ? definition.max : undefined}
                     maxLength={definition.type === "string" ? definition.maxLength : undefined}
