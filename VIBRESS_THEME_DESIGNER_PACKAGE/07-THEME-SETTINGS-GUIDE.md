@@ -20,7 +20,7 @@ When an admin customizes these values:
 > **Theme Settings Scope (Presentation Only)**:
 > Theme settings strictly control **styling, visual options, and presentation flags** (colors, typography choices, layout columns, hero banners, feature toggles). Data querying logic, member access control, and pagination limits are managed exclusively by **Vibress Core**.
 
-An uploaded ZIP must include `settings.json` at the theme package root (alongside `theme.json`); adding or changing a file locally does not update a theme that has already been installed. Install the updated package through Admin. The editor uses the installed, validated schema and loads the publication's existing values or its defaults.
+An uploaded ZIP may include `settings.json` at the theme package root (alongside `theme.json`); adding or changing a file locally does not update a theme that has already been installed. Install the updated package through Admin. The editor uses the installed, validated schema and loads the publication's existing values or its defaults.
 
 ---
 
