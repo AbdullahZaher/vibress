@@ -37,6 +37,7 @@ const translations: Record<string, string> = {
   "This theme does not define any customizable fields in settings.json.": "لا يحتوي هذا القالب على حقول قابلة للتخصيص في settings.json.",
   "Choose": "اختيار",
   "hex value": "قيمة اللون",
+  "Choosing a color with this picker replaces its alpha value.": "اختيار لون باستخدام هذه الأداة يستبدل قيمة الشفافية.",
   "Social links": "روابط التواصل الاجتماعي",
   "Connect your publication's profiles. Themes can display them anywhere.": "اربط حسابات موقعك؛ ويمكن للقوالب عرضها في أي موضع.",
   "links": "روابط",
