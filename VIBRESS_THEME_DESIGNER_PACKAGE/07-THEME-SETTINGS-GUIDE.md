@@ -6,16 +6,21 @@ Vibress allows theme authors to expose customizable configuration options to the
 
 ## 🎨 What is `settings.json`?
 
-`settings.json` defines a schema of editable controls displayed in the **Vibress Admin Panel** (`Settings -> Themes -> Customize`).
+`settings.json` defines a schema of editable controls displayed in the **Vibress Admin Panel** (`Settings → Site → Themes → Settings`).
+
+The **Settings** action sits immediately before **Delete** on external inactive theme cards, and alongside **Preview** on active/built-in cards. Only authorized staff (`themes.manage`) can save changes. You can edit an inactive theme before activating it. If a theme defines no settings fields, the UI shows an explanatory empty state rather than creating arbitrary values.
 
 When an admin customizes these values:
 1. The values are validated against your schema.
 2. The values are saved persistently in the database (`theme_settings`).
-3. The values are injected into the Liquid context under the `settings` object (e.g. `{{ settings.accentColor }}`).
+3. Saved values remain associated with the theme identity within the current publication when another theme is activated.
+4. On an active theme, validated values are injected into the Liquid context under the `settings` object (e.g. `{{ settings.accentColor }}`).
 
 > [!IMPORTANT]
 > **Theme Settings Scope (Presentation Only)**:
 > Theme settings strictly control **styling, visual options, and presentation flags** (colors, typography choices, layout columns, hero banners, feature toggles). Data querying logic, member access control, and pagination limits are managed exclusively by **Vibress Core**.
+
+An uploaded ZIP must include `settings.json` at the theme package root (alongside `theme.json`); adding or changing a file locally does not update a theme that has already been installed. Install the updated package through Admin. The editor uses the installed, validated schema and loads the publication's existing values or its defaults.
 
 ---
 
