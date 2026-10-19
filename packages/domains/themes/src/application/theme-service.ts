@@ -259,6 +259,7 @@ export class ThemeService {
     input: Record<string, unknown>,
     _actorId: string | null,
     publicationId?: string,
+    expected?: { themeVersion: string; settingsSchemaVersion: number },
   ): Promise<ThemeConfiguration> {
     const config = await this.repo.getActive(publicationId);
     const definition = await this.getTheme(
@@ -268,6 +269,15 @@ export class ThemeService {
     );
     if (!definition) {
       throw new ThemeNotFoundError(themeId);
+    }
+    if (expected && (
+      definition.manifest.version !== expected.themeVersion ||
+      (definition.manifest.settingsSchemaVersion || 1) !== expected.settingsSchemaVersion
+    )) {
+      throw new ThemeError(
+        "THEME_SETTINGS_CONFLICT",
+        "Theme version or settings schema changed. Reload settings before saving.",
+      );
     }
 
     let settings: Record<string, unknown>;
