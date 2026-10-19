@@ -287,6 +287,29 @@ describe("PluginsService", () => {
     expect(repoWith.delete).not.toHaveBeenCalled();
   });
 
+  it("rejects global settings and secret reads for external plugins", async () => {
+    const externalHost = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active" })),
+    };
+    const settingRepoWith: PluginSettingRepository = {
+      ...settingRepo,
+      set: vi.fn(async () => undefined),
+      listForPlugin: vi.fn(async () => []),
+    };
+    const service = new PluginsService(repoWith, settingRepoWith, externalHost);
+    await expect(service.setSettings("p1", { token: "should-not-store" }))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTINGS_NOT_SCOPED" });
+    await expect(service.listSettings("p1"))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTINGS_NOT_SCOPED" });
+    expect(settingRepoWith.set).not.toHaveBeenCalled();
+    expect(settingRepoWith.listForPlugin).not.toHaveBeenCalled();
+  });
+
   it("settings: secrets encrypted at rest and masked on read", async () => {
     const settingsStored: PluginSetting[] = [];
     const settingRepoWith: PluginSettingRepository = {
