@@ -224,6 +224,8 @@ describe("PluginsService", () => {
     };
     const stateStore = new Map<string, boolean>();
     const publicationStates = {
+      hasAnyState: vi.fn(async (pluginId: string) =>
+        [...stateStore.keys()].some((key) => key.startsWith(pluginId + ":"))),
       isEnabled: vi.fn(async (pluginId: string, pub: string) =>
         stateStore.get(`${pluginId}:${pub}`) === true),
       setEnabled: vi.fn(async (pluginId: string, pub: string, enabled: boolean) => {
@@ -253,7 +255,11 @@ describe("PluginsService", () => {
 
   it("never enables a registered but globally inactive external module", async () => {
     const hostWith = { loadModule: vi.fn(async () => null), requiresPublicationEnablement: () => true };
-    const stateRepo = { isEnabled: vi.fn(async () => false), setEnabled: vi.fn(async () => undefined) };
+    const stateRepo = {
+      hasAnyState: vi.fn(async () => false),
+      isEnabled: vi.fn(async () => false),
+      setEnabled: vi.fn(async () => undefined),
+    };
     const repoWith: PluginRepository = {
       ...pluginRepo,
       findById: vi.fn(async () => makePlugin({ status: "registered" })),
@@ -262,6 +268,23 @@ describe("PluginsService", () => {
     await expect(service.setPublicationEnabled("p1", "pub-a", true))
       .rejects.toMatchObject({ code: "PLUGIN_INACTIVE" });
     expect(stateRepo.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("prevents uninstall when per-publication records exist, even if disabled", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "inactive" })),
+      delete: vi.fn(async () => undefined),
+    };
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async () => false),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const service = new PluginsService(repoWith, settingRepo, host, states);
+    await expect(service.unregisterPlugin("p1", "staff"))
+      .rejects.toMatchObject({ code: "PLUGIN_HAS_PUBLICATIONS" });
+    expect(repoWith.delete).not.toHaveBeenCalled();
   });
 
   it("settings: secrets encrypted at rest and masked on read", async () => {
