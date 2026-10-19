@@ -87,6 +87,8 @@ Updates saved settings for a theme in the authorized publication. Admin's **Sett
 - 404 `THEME_NOT_FOUND` (theme not installed or unknown)
 - 400 `THEME_SETTINGS_INVALID` / `VALIDATION_ERROR`
 
+For clients that support optimistic concurrency, send the optional `X-Vibress-Theme-Version` and `X-Vibress-Theme-Schema-Version` request headers using the manifest values returned by `GET /themes/:id`. Both must be sent together. When the installed schema/version has changed, writes fail with **409 `THEME_SETTINGS_CONFLICT`** and clients should reload the editor. Existing clients without these headers continue to work.
+
 ### `POST /themes/:id/preview`
 
 Creates a 15-minute preview token bound to the theme ID and the authenticated publication.
@@ -97,7 +99,7 @@ Creates a 15-minute preview token bound to the theme ID and the authenticated pu
 
 ### `GET /themes/preview/:token`
 
-Public-safe token resolution. Returns `{ themeId }` only when the request host resolves to the same publication as the token, or 404 when expired, invalid, or resolved for a different publication. Used by the Web preview middleware; the response shape is unchanged.
+Public-safe token resolution. Returns `{ themeId }` only when the request host resolves to the same publication as the token, or 404 when expired, invalid, or resolved for a different publication. Used by the Web preview middleware; the token-resolved response also includes the theme version, built-in flag, and publication-scoped presentation settings. The preview token is short-lived and must not be included in client-facing response headers or logged. Existing consumers can continue reading only `themeId`.
 
 ## Error Semantics
 
