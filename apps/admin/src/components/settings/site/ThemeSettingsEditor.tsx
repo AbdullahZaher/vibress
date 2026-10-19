@@ -26,6 +26,7 @@ interface ThemeSettingsEditorProps {
   onBack: () => void;
   onDirtyChange: (dirty: boolean) => void;
   onSaved: (settings: Record<string, unknown>) => void;
+  onSavingChange?: (saving: boolean) => void;
 }
 
 export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
@@ -33,6 +34,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   onBack,
   onDirtyChange,
   onSaved,
+  onSavingChange,
 }) => {
   const { tr } = useAdminLocale();
   const idPrefix = useId();
@@ -53,6 +55,9 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    onSavingChange?.(saving);
+  }, [saving, onSavingChange]);
 
   useEffect(() => {
     let cancelled = false;
