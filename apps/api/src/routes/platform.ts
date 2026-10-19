@@ -593,8 +593,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      await pluginsService.unregisterPlugin(id, req.user!.id);
-      return reply.status(200).send({ success: true });
+      try {
+        await pluginsService.unregisterPlugin(id, req.user!.id);
+        return reply.status(200).send({ success: true });
+      } catch (err: unknown) {
+        if (err instanceof PluginDomainError) {
+          return sendError(reply, err.code, err.message, req.id,
+            err.code === "PLUGIN_NOT_FOUND" ? 404 : 409);
+        }
+        throw err;
+      }
     },
   });
 }

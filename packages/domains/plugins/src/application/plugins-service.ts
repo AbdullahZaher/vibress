@@ -241,6 +241,18 @@ export class PluginsService {
   }
 
   async unregisterPlugin(id: string, actorId: string | null): Promise<void> {
+    const plugin = await this.pluginRepo.findById(id);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (this.publicationStates && await this.publicationStates.hasAnyState(id)) {
+      // Keep publication decisions and plugin metadata for safe reactivation.
+      // A future explicit purge must be separate, authorized, backed up and audited.
+      throw new PluginDomainError(
+        "PLUGIN_HAS_PUBLICATIONS", "Disable and review publication installations before uninstall",
+      );
+    }
+    if (plugin.status === "active") {
+      throw new PluginDomainError("PLUGIN_ACTIVE", "Deactivate the plugin before uninstalling it");
+    }
     await this.pluginRepo.delete(id);
     domainEvents.emit("plugin.unregistered", { pluginId: id, actorId });
   }

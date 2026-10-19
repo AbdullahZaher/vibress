@@ -71,6 +71,7 @@ export interface PluginSettingRepository {
 
 /** Publication state is explicit for external modules; absent means disabled. */
 export interface PluginPublicationStateRepository {
+  hasAnyState(pluginId: string): Promise<boolean>;
   isEnabled(pluginId: string, publicationId: string): Promise<boolean>;
   setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void>;
 }

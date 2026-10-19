@@ -208,6 +208,14 @@ export class DrizzlePluginSettingRepository implements PluginSettingRepository {
 
 /** No legacy backfill: an absent row is disabled in this publication. */
 export class DrizzlePluginPublicationStateRepository implements PluginPublicationStateRepository {
+  async hasAnyState(pluginId: string): Promise<boolean> {
+    const rows = await getDb().select({ publicationId: pluginPublicationStates.publicationId })
+      .from(pluginPublicationStates)
+      .where(eq(pluginPublicationStates.pluginId, pluginId))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async isEnabled(pluginId: string, publicationId: string): Promise<boolean> {
     const rows = await getDb().select({ enabled: pluginPublicationStates.enabled })
       .from(pluginPublicationStates)
