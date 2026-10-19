@@ -65,7 +65,13 @@ export class ThemeService {
     // 1. Installed external themes (scoped to publication)
     if (this.installedRepo) {
       const installed = await this.installedRepo.listAll(publicationId);
-      for (const t of installed) {
+      // Keep the listed schema/version in sync with the active pointer when
+      // several versions of an external theme are installed.
+      const activeInstalled = installed.find(
+        (theme) => theme.themeId === activeThemeId && theme.version === active?.themeVersion,
+      );
+      for (const entry of installed) {
+        const t = entry.themeId === activeThemeId ? activeInstalled ?? entry : entry;
         if (!seenIds.has(t.themeId)) {
           seenIds.add(t.themeId);
           results.push({
