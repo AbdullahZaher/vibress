@@ -8,7 +8,7 @@ import {
   MemberAuthService,
 } from "@vibress/members";
 import { normalizeMemberEmail } from "@vibress/members";
-import type { PluginApiRoute } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope } from "@vibress/plugin-sdk";
 import { MEMBER_COOKIE_NAME } from "../middleware/member-auth";
 import { pluginsService, workspaceService } from "../services";
 
@@ -132,13 +132,14 @@ describe("Batch 8 — Member API Integration & Security", () => {
     expect(member.publicationId).toBe("pub_default");
     const cookie = `${MEMBER_COOKIE_NAME}=${sessionToken}`;
 
-    const handle = vi.fn(async (_input: unknown, scope: { publicationId: string; principal: { kind: string } }) => ({
+    const handle = vi.fn(async (_input: unknown, scope: PluginApiScope) => ({
       publication: scope.publicationId,
       principal: scope.principal.kind,
+      storageExposed: Boolean(scope.storage),
     }));
     const route: PluginApiRoute = {
       id: "courses", audience: "member", method: "GET",
-      response: { fields: { publication: "string", principal: "string" } },
+      response: { fields: { publication: "string", principal: "string", storageExposed: "boolean" } },
       handle,
     };
     const resolvePlugin = vi.spyOn(pluginsService, "resolveExtensionApiModule")
@@ -169,7 +170,9 @@ describe("Batch 8 — Member API Integration & Security", () => {
         method: "GET", url, headers: { cookie },
       });
       expect(valid.statusCode).toBe(200);
-      expect(valid.json()).toEqual({ publication: "pub_default", principal: "member" });
+      expect(valid.json()).toEqual({
+        publication: "pub_default", principal: "member", storageExposed: false,
+      });
       expect(resolvePlugin).toHaveBeenCalledWith(
         "independent-courses", "pub_default", "extension.routes.member",
       );
