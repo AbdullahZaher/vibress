@@ -31,6 +31,8 @@ export interface PluginHost {
   loadModule(plugin: Plugin): Promise<PluginModule | null>;
   requiresPublicationEnablement?(plugin: Plugin): boolean;
   getOperatorManifests?(): Promise<PluginManifest[]>;
+  /** Operator-pinned digest identities for caching static Admin descriptors only. */
+  getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
   authorizeRegistration?(manifest: PluginManifest): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
@@ -581,6 +583,15 @@ export class PluginsService {
       throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
     }
     return this.registerPlugin(approved, actorId);
+  }
+
+  /**
+   * This returns only operator-approved artifact identifiers, never runtime
+   * capabilities or a publication authorization decision.
+   */
+  async listOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {
+    this.assertRuntimeAllowed();
+    return this.host.getOperatorAdminFingerprints?.() ?? new Map();
   }
 
   /** Additive Admin projection; global v1 activation remains unchanged. */
