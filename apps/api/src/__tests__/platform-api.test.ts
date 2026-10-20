@@ -678,7 +678,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       });
       expect(mutation.statusCode).toBe(404);
 
-      handler.mockResolvedValue({ title: "Visible", internalSecret: "hidden" });
+      handler.mockResolvedValue(Object.assign({ title: "Visible" }, { internalSecret: "hidden" }));
       const malformedResponse = await app.inject({
         method: "GET", url: `${url}?lang=en`,
         headers: { host: "localhost:7777" },
