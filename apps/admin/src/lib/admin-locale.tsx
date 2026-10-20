@@ -23,6 +23,11 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Plugin pages": "صفحات الإضافات",
+  "Read-only plugin view": "عرض الإضافة للقراءة فقط",
+  "Unable to load plugin view.": "تعذر تحميل صفحة الإضافة.",
+  "Loading plugin view...": "جارٍ تحميل صفحة الإضافة...",
+  "No plugin data available.": "لا تتوفر بيانات للإضافة.",
   "Themes Manager": "إدارة القوالب",
   "Theme settings": "إعدادات القالب",
   "Theme settings for": "إعدادات القالب",
