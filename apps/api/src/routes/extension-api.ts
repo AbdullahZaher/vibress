@@ -55,11 +55,13 @@ async function bindMemberPublication(req: FastifyRequest, reply: FastifyReply) {
   const isDevFallbackAllowed =
     !getConfig().isProduction && req.headers["x-dev-fallback"] !== "false";
   let publicationId: string;
+  let workspaceId: string;
   try {
     const context = await workspaceService.resolvePublicPublicationContext({
       host, isDevFallbackAllowed,
     });
     publicationId = context.publicationId;
+    workspaceId = context.workspaceId;
   } catch {
     return reject(reply, req, "PUBLICATION_NOT_FOUND", 404);
   }
@@ -86,7 +88,7 @@ async function bindMemberPublication(req: FastifyRequest, reply: FastifyReply) {
     }
   }
   req.publicationContext = {
-    publicationId, actorType: "member", isSystemOperation: false,
+    publicationId, workspaceId, actorType: "member", isSystemOperation: false,
   };
 }
 
@@ -112,8 +114,9 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       // host-resolution hook. Staff and members use their respective guards.
       const publicationId = req.publicationContext?.publicationId;
       if (!publicationId) return reject(reply, req, "PUBLICATION_NOT_FOUND", 404);
-      const capability = `extension.routes.${audience}` as
-        "extension.routes.admin" | "extension.routes.member" | "extension.routes.public";
+      const capability = audience === "admin" ? "extension.routes.admin"
+        : audience === "member" ? "extension.routes.member"
+          : "extension.routes.public";
       let module;
       try {
         module = await pluginsService.resolveExtensionApiModule(

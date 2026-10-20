@@ -111,7 +111,7 @@ export function validateExtensionApiObject(
     const expected = Object.hasOwn(fields, key) ? fields[key] : undefined;
     if (!expected || typeof value !== expected ||
         (expected === "string" && (value as string).length > 4096) ||
-        (expected === "number" && !Number.isFinite(value))) return null;
+        (expected === "number" && typeof value === "number" && !Number.isFinite(value))) return null;
   }
   for (const key of shape?.required ?? []) {
     if (!Object.hasOwn(candidate, key)) return null;
