@@ -806,15 +806,20 @@ describe("Batch 12 — Platform Integration & Security", () => {
       });
       expect(approve).toHaveBeenCalledTimes(1);
 
-      for (const localRole of ["author", "contributor", "editor"]) {
+      for (const localRole of ["author", "contributor"]) {
         await db.update(publicationMemberships).set({ role: localRole })
           .where(eq(publicationMemberships.id, localMembershipId));
         const response = await invoke(limitedPubId);
-        expect(response.statusCode).toBe(200);
-        expect(response.json()).toEqual({
-          hasStorage: false, publication: limitedPubId,
-        });
+        expect(response.statusCode).toBe(403);
+        expect(response.json().errors[0].code).toBe("PERMISSION_DENIED");
       }
+      await db.update(publicationMemberships).set({ role: "editor" })
+        .where(eq(publicationMemberships.id, localMembershipId));
+      const editorResponse = await invoke(limitedPubId);
+      expect(editorResponse.statusCode).toBe(200);
+      expect(editorResponse.json()).toEqual({
+        hasStorage: false, publication: limitedPubId,
+      });
       expect(approve).toHaveBeenCalledTimes(1);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
