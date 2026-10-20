@@ -85,6 +85,8 @@ describe("0042 — append-only plugin catalog and forward migration ledger", () 
           INSERT INTO plugin_schema_migrations
             (plugin_id, migration_id, package_version, artifact_sha256, migration_sha256)
           VALUES ('plugin-b', '0001_create_courses', '1.0.0', $1, $1);
+        `, [digest]);
+        await client.query(`
           INSERT INTO plugin_storage_models
             (plugin_id, model_key, migration_id, schema_sha256)
           VALUES ('plugin-b', 'courses', '0001_create_courses', $1);
