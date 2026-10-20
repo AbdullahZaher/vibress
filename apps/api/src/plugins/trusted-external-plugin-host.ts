@@ -128,9 +128,11 @@ export class TrustedExternalPluginHost {
       throw new Error("Invalid trusted plugin lockfile");
     }
     const data: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
-    return new Map([...parseTrustedPluginLockfile(data)].map(([id, approved]) =>
-      [id, approved.sha256],
-    ));
+    const fingerprints = new Map<string, string>();
+    for (const [id, approved] of parseTrustedPluginLockfile(data)) {
+      fingerprints.set(id, approved.sha256);
+    }
+    return fingerprints;
   }
 
   /**
