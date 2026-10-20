@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { PluginApiAudience, PluginApiRoute, PluginApiScope } from "@vibress/plugin-sdk";
+import type { PluginApiAudience, PluginApiRoute, PluginApiScope, PluginModule } from "@vibress/plugin-sdk";
 import {
   ExtensionApiRouteParamsSchema,
   ExtensionApiRouteSchema,
@@ -117,7 +117,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       const capability = audience === "admin" ? "extension.routes.admin"
         : audience === "member" ? "extension.routes.member"
           : "extension.routes.public";
-      let module;
+      let module: PluginModule | null;
       try {
         module = await pluginsService.resolveExtensionApiModule(
           params.data.pluginId, publicationId, capability,
