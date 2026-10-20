@@ -29,8 +29,49 @@ export interface PluginContext {
   hasCapability?(capability: string): boolean;
 }
 
+/**
+ * EXT-201/202: narrow, host-routed HTTP contributions. Never expose Fastify,
+ * cookies, arbitrary tenant selectors, raw SQL, or a mutable host principal.
+ */
+export type PluginApiAudience = "admin" | "member" | "public";
+export type PluginApiMethod = "GET" | "POST";
+export type PluginApiScalar = string | number | boolean;
+export type PluginApiFieldType = "string" | "number" | "boolean";
+export interface PluginApiShape {
+  fields: Record<string, PluginApiFieldType>;
+  required?: readonly string[] | undefined;
+}
+export interface PluginApiScope {
+  readonly publicationId: string;
+  readonly requestId: string;
+  readonly principal:
+    | { readonly kind: "staff"; readonly id: string }
+    | { readonly kind: "member"; readonly id: string }
+    | { readonly kind: "anonymous" };
+}
+export interface PluginApiInput {
+  readonly query: Readonly<Record<string, PluginApiScalar>>;
+  readonly body: Readonly<Record<string, PluginApiScalar>>;
+}
+export interface PluginApiRoute {
+  /** One segment only, e.g. "courses"; host owns all URL prefixes. */
+  readonly id: string;
+  readonly audience: PluginApiAudience;
+  readonly method: PluginApiMethod;
+  /** Mandatory for admin; only a host-supported Staff permission is admitted. */
+  readonly permission?: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit" | undefined;
+  readonly query?: PluginApiShape | undefined;
+  readonly body?: PluginApiShape | undefined;
+  /** Strict declared JSON response projection (no arbitrary object serialization). */
+  readonly response: PluginApiShape;
+  readonly handle: (input: PluginApiInput, scope: PluginApiScope) =>
+    Record<string, PluginApiScalar> | Promise<Record<string, PluginApiScalar>>;
+}
+
 export interface PluginModule {
   activate(context: PluginContext): void | Promise<void>;
+  /** Additive optional contribution: existing SDK v1 modules are unchanged. */
+  readonly routes?: readonly PluginApiRoute[] | undefined;
   deactivate?(): void | Promise<void>;
   /** Third parameter is additive; bundled v1 handlers may ignore it. */
   onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
@@ -219,6 +260,27 @@ export const CAPABILITY_REGISTRY: Record<string, PluginCapabilityDefinition> = {
     publicationBehavior: "global",
     risk: "critical",
     auditRequired: true,
+  },
+  "extension.routes.admin": {
+    id: "extension.routes.admin",
+    name: "Admin Extension API",
+    description: "Host-authorized publication-scoped extension API for Staff",
+    scope: "publication", requiredRole: "editor",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: true,
+  },
+  "extension.routes.member": {
+    id: "extension.routes.member",
+    name: "Member Extension API",
+    description: "Host-authorized publication-scoped extension API for Members",
+    scope: "publication", requiredRole: "member",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: true,
+  },
+  "extension.routes.public": {
+    id: "extension.routes.public",
+    name: "Public Extension API",
+    description: "Host-scoped GET-only extension API with site privacy enforcement",
+    scope: "publication", requiredRole: "public",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: true,
   },
   "admin.navigation": {
     id: "admin.navigation",
