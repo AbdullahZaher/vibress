@@ -20,6 +20,15 @@ export interface PluginStoragePage {
 export interface HostBoundPluginStorageScope {
   readonly pluginId: string;
   readonly publicationId: string;
+  /**
+   * Only an authenticated Host supplies audit identity. B2 internal callers
+   * without this optional context remain compatible; plugin-facing B3
+   * sessions always require it.
+   */
+  readonly audit?: {
+    readonly actorUserId: string;
+    readonly requestId: string;
+  } | undefined;
 }
 export type PluginStorageAction = "read" | "write";
 
