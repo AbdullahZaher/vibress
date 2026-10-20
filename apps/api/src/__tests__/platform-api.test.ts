@@ -6,6 +6,8 @@ import { getDb } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
+import type { PluginApiRoute } from "@vibress/plugin-sdk";
+import { pluginsService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
   const res = await app.inject({
@@ -561,6 +563,151 @@ describe("Batch 12 — Platform Integration & Security", () => {
       });
       expect(actRes.statusCode).toBe(403);
     }
+  });
+
+  // ---------------- Host-routed Extension API (EXT-201/202) ----------------
+  it("extension API fails closed before loading plugin code without Staff/Member session", async () => {
+    const admin = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+    });
+    expect(admin.statusCode).toBe(401);
+    const member = await app.inject({
+      method: "GET",
+      url: "/api/members/v1/extensions/independent-courses/v1/courses",
+    });
+    expect(member.statusCode).toBe(401);
+  });
+
+  it("host validates Staff extension input and returns only declared fields", async () => {
+    const handle = vi.fn(async (
+      input: { body: Readonly<Record<string, string | number | boolean>> },
+      scope: { publicationId: string; principal: { kind: string } },
+    ) => ({
+      id: String(input.body.title),
+      audience: scope.principal.kind,
+      publication: scope.publicationId,
+    }));
+    const descriptor: PluginApiRoute = {
+      id: "courses",
+      audience: "admin",
+      method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: {
+        id: "string", audience: "string", publication: "string",
+      } },
+      handle,
+    };
+    const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    try {
+      const url = "/api/admin/v1/extensions/independent-courses/v1/courses";
+      const anonymous = await app.inject({
+        method: "POST", url, payload: { title: "Course" },
+      });
+      expect(anonymous.statusCode).toBe(401);
+      const noOrigin = await app.inject({
+        method: "POST", url, headers: { cookie: staffCookie },
+        payload: { title: "Course" },
+      });
+      expect(noOrigin.statusCode).toBe(403);
+      const invalid = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course", publicationId: "forged-publication" },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(handle).not.toHaveBeenCalled();
+      const valid = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course" },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json().id).toBe("Course");
+      expect(valid.json().audience).toBe("staff");
+      expect(typeof valid.json().publication).toBe("string");
+      expect(resolved).toHaveBeenCalledWith(
+        "independent-courses", valid.json().publication, "extension.routes.admin",
+      );
+      expect(handle).toHaveBeenCalledTimes(1);
+      expect(prepared).toHaveBeenCalledTimes(1);
+    } finally {
+      prepared.mockRestore();
+      resolved.mockRestore();
+    }
+  });
+
+  it("public extension API is GET-only, host-scoped and validates response projection", async () => {
+    const handler = vi.fn(async () => ({ title: "Available courses" }));
+    const descriptor: PluginApiRoute = {
+      id: "catalog",
+      audience: "public",
+      method: "GET",
+      query: { fields: { lang: "string" }, required: ["lang"] },
+      response: { fields: { title: "string" }, required: ["title"] },
+      handle: handler,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    try {
+      const url = "/api/content/v1/extensions/independent-courses/v1/catalog";
+      const valid = await app.inject({
+        method: "GET", url: `${url}?lang=en`, headers: { host: "localhost:7777" },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json()).toEqual({ title: "Available courses" });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      const forged = await app.inject({
+        method: "GET", url: `${url}?lang=en&publicationId=forged`,
+        headers: { host: "localhost:7777" },
+      });
+      expect(forged.statusCode).toBe(400);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(prepare).toHaveBeenCalledTimes(1);
+
+      const mutation = await app.inject({
+        method: "POST", url, headers: { host: "localhost:7777" },
+        payload: { title: "not allowed" },
+      });
+      expect(mutation.statusCode).toBe(404);
+
+      handler.mockResolvedValue(Object.assign({ title: "Visible" }, { internalSecret: "hidden" }));
+      const malformedResponse = await app.inject({
+        method: "GET", url: `${url}?lang=en`,
+        headers: { host: "localhost:7777" },
+      });
+      expect(malformedResponse.statusCode).toBe(503);
+      expect(malformedResponse.body).not.toContain("hidden");
+    } finally {
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("rejects duplicate extension routes and suppresses handler exceptions", async () => {
+    const descriptor: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "GET",
+      permission: "posts.read", response: { fields: {} },
+      handle: async () => ({}),
+    };
+    const spy = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor, descriptor] });
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+        headers: { cookie: staffCookie },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json().errors[0].code).toBe("EXTENSION_INVALID_ROUTES");
+    } finally { spy.mockRestore(); }
   });
 
   // ---------------- CSRF ----------------

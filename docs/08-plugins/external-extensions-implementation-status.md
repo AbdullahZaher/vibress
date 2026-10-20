@@ -19,7 +19,7 @@
 | Core EXT-001/002/003/004 | Canonical ABI and scoped settings added; verified against bundled v1 and external lockfile hosts |
 | EXT-101 trusted release | **Operator-pinned lockfile ESM:** final-entrypoint SHA-256 and byte verification; single-file ESM vetted by operator |
 | EXT-102/103/104 | **Complete for foundation:** Atomic conditional status transitions (CAS), per-replica lazy initialization, Fastify onClose graceful shutdown, and operator lifecycle recovery endpoint (`/plugins/:id/recover`) |
-| EXT-201/202 | **Next phase:** generic host-registered Admin/Member/Public extension API, member-publication binding and plugin permission descriptors |
+| EXT-201/202 | **Initial implementation in separate branch:** reserved Admin/Member/Public API dispatch, strict shared scalar schemas, publication/Member binding, host Staff permissions, capability checks. Pending CI, cross-publication conformance and independent SDK approval; plugin-owned custom permissions and advanced schemas remain out of scope |
 | EXT-203 | **Next phase:** plugin-owned relational repositories, schema migration ledger, composite course FK/storage contracts; settings rows alone do not supply this |
 | EXT-301/302/303/304 | **Next phase:** plugin-provided isolated Studio views, Next.js public dispatcher, Liquid/theme contracts and external sample conformance |
 | EXT-401/402/403/404 | Scoped secrets verified with database CHECK constraints and AES-256-GCM encryption at rest; backup/restore drill documented |
@@ -35,3 +35,8 @@
 
 - **Plugins** is a dedicated `/admin/plugins` route, permission-checked with `plugins.read`, linked immediately **above Settings** in the sidebar. Legacy `/admin/settings/platform` remains available for integrations, API keys, and webhooks; it no longer duplicates Plugins.
 - **Lifecycle recovery is explicitly offline/maintenance-only.** Normal serving APIs return a conflict even when a transition is stuck. An operator must stop/drain all normal API and worker replicas, start one dedicated API with `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`, verify the transition is at least 15 minutes old, and explicitly send `{"confirmAllRuntimesStopped":true}`. The maintenance instance rejects plugin execution. Recovery still relies on the operator's attestation; it is **not** an automatic distributed fencing or crash-isolation guarantee. See [recovery runbook](plugin-system.md).
+
+## EXT-201/202 incremental contract
+
+- The initial host-routed HTTP API and its limitations are documented in [EXT-201/202 API contract](extension-host-api-ext201-202.md).
+- This status entry does **not** mark the external plugin platform complete or its new SDK shape frozen. The new phase needs CI and security conformance evidence before production acceptance.

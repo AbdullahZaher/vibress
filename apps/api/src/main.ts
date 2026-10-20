@@ -47,6 +47,11 @@ import {
   adminRecommendationRoutes,
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
+import {
+  adminExtensionApiRoutes,
+  memberExtensionApiRoutes,
+  publicExtensionApiRoutes,
+} from "./routes/extension-api";
 import { unsplashRoutes } from "./routes/integrations-unsplash";
 import {
   publicSearchRoutes,
@@ -375,6 +380,7 @@ export const buildApp = () => {
   fastify.register(adminRecommendationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminExtensionApiRoutes, { prefix: "/api/admin/v1" });
   fastify.register(unsplashRoutes, {
     prefix: "/api/admin/v1/integrations/unsplash",
   });
@@ -394,6 +400,7 @@ export const buildApp = () => {
   fastify.register(memberNewsletterRoutes, { prefix: "/api/members/v1" });
   fastify.register(memberCommentRoutes, { prefix: "/api/members/v1" });
   fastify.register(memberNotificationRoutes, { prefix: "/api/members/v1" });
+  fastify.register(memberExtensionApiRoutes, { prefix: "/api/members/v1" });
 
   // Register Public Content Routes
   fastify.register(publicContentRoutes, { prefix: "/api/content/v1" });
@@ -402,6 +409,7 @@ export const buildApp = () => {
   fastify.register(publicRecommendationRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicSearchRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicContentModelRoutes, { prefix: "/api/content/v1" });
+  fastify.register(publicExtensionApiRoutes, { prefix: "/api/content/v1" });
   fastify.register(publicUnsubscribeRoutes, { prefix: "/api/public/v1" });
 
   // Machine API key surface (separate from staff/member sessions)
