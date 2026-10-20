@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginModule } from "@vibress/plugin-sdk";
 import { admitAdminViews } from "../admin-view-registry";
+import { ExtensionAdminNavigationResponseSchema } from "@vibress/api-contracts";
 
 const label = { en: "Courses", ar: "الدورات" };
 function moduleWithView(): PluginModule {
@@ -76,4 +77,17 @@ describe("EXT-301A Admin view admission", () => {
       }],
     })).toBeNull();
   });
+  it("aligns the response cap with the maximum 64 operator modules × 8 pages", () => {
+    const item = {
+      pluginId: "courses", viewId: "courses", routeId: "courses",
+      title: label, label, permission: "plugins.read",
+    };
+    expect(ExtensionAdminNavigationResponseSchema.safeParse({
+      items: Array.from({ length: 512 }, () => item),
+    }).success).toBe(true);
+    expect(ExtensionAdminNavigationResponseSchema.safeParse({
+      items: Array.from({ length: 513 }, () => item),
+    }).success).toBe(false);
+  });
+
 });
