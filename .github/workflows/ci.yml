@@ -212,9 +212,11 @@ jobs:
           # --- Browser + tests ---
           npx playwright install chromium --with-deps
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            # Tests B/C/J use isolated fixtures, unlike media tests that rely
-            # on assets created elsewhere in the full E2E run.
+            # PR gate: gateway health, upload/traversal regressions and a real
+            # authenticated collaboration WebSocket handshake via Nginx.
+            # Keep the complete install/functional suite on main pushes.
             npx playwright test tests/e2e/smoke.test.ts tests/e2e/media-library-storage-integrity.test.ts --grep 'Vibress Foundation Smoke Tests|TEST (B|C|J):'
+            npx playwright test tests/e2e/auth-flow.test.ts tests/e2e/collaboration-websocket-gateway.test.ts tests/e2e/settings-full-suite.test.ts tests/e2e/studio-card-selection.test.ts tests/e2e/studio-media-toolbar.test.ts tests/e2e/collaboration-truncation-regression.test.ts tests/e2e/collaboration-feature-image-isolation.test.ts
           else
             npx playwright test
           fi

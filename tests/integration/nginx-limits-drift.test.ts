@@ -354,6 +354,25 @@ describe("Gateway Nginx & Fastify Body Limit Drift Verification (Dynamic Source 
     describe(`Nginx configuration: ${configName}`, () => {
       const parsed = parseNginxLocations(configPath);
 
+      it("routes collaboration upgrades before the document body-limit regex", () => {
+        const raw = fs.readFileSync(configPath, "utf8");
+        const route = raw.match(
+          /location ~ \^\/api\/admin\/v1\/posts\/\[\^\/\]\+\/collaboration\/ws\$ \{([^}]+)\}/,
+        );
+        expect(route, "Dedicated post collaboration WebSocket location missing").not.toBeNull();
+        const locationBody = route?.[1] ?? "";
+        expect(locationBody).toContain("proxy_http_version 1.1;");
+        expect(locationBody).toContain("proxy_set_header Upgrade $http_upgrade;");
+        expect(locationBody).toContain('proxy_set_header Connection "upgrade";');
+        expect(raw.indexOf(route?.[0] ?? "NOT_PRESENT")).toBeLessThan(
+          raw.indexOf("location ~ ^/api/admin/v1/(posts|pages|"),
+        );
+        const wsPath = "/api/admin/v1/posts/123/collaboration/ws";
+        expect(resolveNginxMaxBodySize(wsPath, parsed).matchedRule)
+          .toBe("~ ^/api/admin/v1/posts/[^/]+/collaboration/ws$");
+        expect(resolveNginxMaxBodySize(wsPath, parsed).limit).toBe(10 * 1024 * 1024);
+      });
+
       it("has a small global client_max_body_size (<= 2MB)", () => {
         expect(parsed.globalClientMaxBodySizeBytes).toBeLessThanOrEqual(2 * 1024 * 1024);
       });
