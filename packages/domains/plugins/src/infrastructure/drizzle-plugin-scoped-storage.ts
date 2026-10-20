@@ -221,7 +221,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
             SELECT 1 FROM pg_constraint con
             WHERE con.conrelid = ${oid}::oid AND con.contype = 'p'
               AND (
-                SELECT array_agg(att.attname ORDER BY keys.ordinality)
+                SELECT array_agg(att.attname::text ORDER BY keys.ordinality)
                 FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
                 JOIN pg_attribute att ON att.attrelid = ${oid}::oid
                   AND att.attnum = keys.attnum
