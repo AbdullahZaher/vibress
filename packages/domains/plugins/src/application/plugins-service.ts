@@ -694,6 +694,34 @@ export class PluginsService {
   }
 
   /**
+   * Member-facing bridge admission only. The Host must first authenticate the
+   * Member AND verify that the site publication equals its session's tenant.
+   * Repository independently rechecks capability, state and member on EVERY
+   * lookup, including after deactivation or member disabling.
+   */
+  async resolveExtensionMemberBinding(
+    manifestId: string,
+    publicationId: string,
+  ): Promise<{ pluginId: string; publicationId: string } | null> {
+    this.assertRuntimeAllowed();
+    if (!publicationId) return null;
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    const allowed = (value: Plugin) =>
+      value.capabilities.some((capability) =>
+        capability === "extension.members.self.read" ||
+        capability === "extension.entitlements.plan.read");
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) || !allowed(plugin)) {
+      return null;
+    }
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" || !allowed(latest)) return null;
+    await this.requirePublicationEnabled(latest, publicationId);
+    return { pluginId: latest.id, publicationId };
+  }
+
+  /**
    * Resolve installed owner and trusted schema for an already authenticated
    * Host endpoint. Plugin-supplied model descriptors are never admitted here.
    * The DB adapter repeats all capability/enablement/ownership checks per call.
