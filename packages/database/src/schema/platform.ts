@@ -306,3 +306,33 @@ export const pluginStorageModels = pgTable(
   }),
 );
 export type PluginStorageModelRow = typeof pluginStorageModels.$inferSelect;
+
+/**
+ * EXT-203B1: immutable owner mapping for operator-created physical
+ * per-model tables; no plugin callable storage API is exposed here.
+ */
+export const pluginPhysicalModels = pgTable(
+  "plugin_storage_physical_models",
+  {
+    pluginId: text("plugin_id").notNull(),
+    modelKey: text("model_key").notNull(),
+    tableName: text("table_name").notNull(),
+    schemaSha256: text("schema_sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    modelFk: foreignKey({
+      name: "plugin_storage_physical_models_owner_fk",
+      columns: [table.pluginId, table.modelKey],
+      foreignColumns: [pluginStorageModels.pluginId, pluginStorageModels.modelKey],
+    }).onDelete("restrict"),
+    ownerUnique: uniqueIndex("plugin_storage_physical_models_owner_idx")
+      .on(table.pluginId, table.modelKey),
+    tableUnique: uniqueIndex("plugin_storage_physical_models_table_idx").on(table.tableName),
+    tableNameValid: check("plugin_storage_physical_models_table_check",
+      sql`${table.tableName} ~ '^ext_[a-f0-9]{40}$'`),
+    schemaDigestValid: check("plugin_storage_physical_models_digest_check",
+      sql`${table.schemaSha256} ~ '^[a-f0-9]{64}$'`),
+  }),
+);
+export type PluginPhysicalModelRow = typeof pluginPhysicalModels.$inferSelect;
