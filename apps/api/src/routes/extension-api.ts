@@ -100,7 +100,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       : [];
 
   fastify.route({
-    method: ["GET", "POST"],
+    method: audience === "public" ? ["GET"] : ["GET", "POST"],
     url: EXTENSION_ROUTE,
     bodyLimit: 64 * 1024,
     config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
