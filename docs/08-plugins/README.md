@@ -6,6 +6,14 @@
 
 **Approved for implementation direction, not shipped:** [RFC review/approval record](EXTENSION_RFC_APPROVAL.md) and [accepted architecture ADR](../adr/2026-10-19-external-extension-host-vnext.md). Conceptual API examples remain unimplemented; production release and SDK contract freeze require the gates below.
 
+## Implemented extension milestones (October 2026)
+
+The roadmap documents the complete target. EXT-201 through EXT-204 have been
+merged; [EXT-301A](extension-admin-views-ext301a.md) is a **partial**
+Host-owned, read-only Studio navigation/view implementation. It is not a
+general executable Admin UI or a declaration of extension platform release
+readiness. The historical baseline below describes the 2026-10-19 design review.
+
 ## Read in this order
 
 1. [External extensions architecture](external-extensions-architecture.md) — production trust boundary, service ownership, lifecycle, tenant model, deployment.
