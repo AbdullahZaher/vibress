@@ -376,19 +376,18 @@ describe("Batch 12 — Platform Integration & Security", () => {
         throw new Error("operator plugin fault: secret must not escape");
       });
     const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
-      .mockResolvedValue(true);
+      .mockImplementation(async () => goodEnabled);
     const discover = () => app.inject({
       method: "GET", url: "/api/admin/v1/extensions/navigation",
       headers: { cookie: staffCookie },
     });
     try {
-      const initial = await discover();
+      const [initial, repeated] = await Promise.all([discover(), discover()]);
       expect(initial.statusCode).toBe(200);
       expect(initial.json().items).toEqual([{
         pluginId: goodId, viewId: "courses", routeId: "course-list",
         title: label, label, permission: "plugins.read",
       }]);
-      const repeated = await discover();
       expect(repeated.statusCode).toBe(200);
       expect(repeated.json()).toEqual(initial.json());
       expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
@@ -407,6 +406,13 @@ describe("Batch 12 — Platform Integration & Security", () => {
       const disabled = await discover();
       expect(disabled.statusCode).toBe(200);
       expect(disabled.json().items).toEqual([]);
+      const forbiddenView = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(forbiddenView.statusCode).toBe(404);
+      expect(handle).toHaveBeenCalledTimes(1);
 
       goodEnabled = true;
       digest = "d".repeat(64);
