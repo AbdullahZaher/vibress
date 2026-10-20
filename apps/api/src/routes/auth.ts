@@ -471,6 +471,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
 
       const tokenHash = hashToken(body.token);
+      const newPassword = body.password;
       try {
         await runInTransaction(async () => {
           const db = getDb();
@@ -528,7 +529,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             );
           }
 
-          const newPasswordHash = await hashPassword(body.password);
+          const newPasswordHash = await hashPassword(newPassword);
           const now = new Date();
           await db
             .update(users)

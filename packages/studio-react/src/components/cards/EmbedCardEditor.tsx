@@ -151,11 +151,17 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         ) : (
           <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
             {externalUrl ? (
-              <a href={externalUrl} target="_blank" rel="noopener noreferrer">
-                Open embedded content
+              <a
+                href={externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="break-all"
+                dir="auto"
+              >
+                {externalUrl}
               </a>
             ) : (
-              <span>Unsupported embed URL</span>
+              <span className="break-all" dir="auto">{cardData.url}</span>
             )}
           </div>
         )}

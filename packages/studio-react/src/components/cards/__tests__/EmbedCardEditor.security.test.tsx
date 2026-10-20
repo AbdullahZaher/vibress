@@ -57,6 +57,6 @@ describe("EmbedCardEditor security boundary", () => {
     const html = preview("javascript:alert(1)");
     expect(html).not.toContain("<iframe");
     expect(html).not.toContain('href="javascript:');
-    expect(html).toContain("Unsupported embed URL");
+    expect(html).toContain("javascript:alert(1)");
   });
 });

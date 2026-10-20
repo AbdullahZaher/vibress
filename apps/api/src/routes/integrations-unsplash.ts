@@ -26,7 +26,7 @@ const UNSPLASH_IMAGE_HOSTS = [
   "unsplash.com",
 ] as const;
 
-function isAllowedUnsplashApiUrl(value: unknown): value is string {
+export function isAllowedUnsplashApiUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
     const url = new URL(value);
@@ -51,7 +51,7 @@ function getUnsplashAccessKey(): string | null {
   }
 }
 
-function isAllowedUnsplashHost(hostname: string): boolean {
+export function isAllowedUnsplashHost(hostname: string): boolean {
   return UNSPLASH_IMAGE_HOSTS.some((allowed) => allowed === hostname.toLowerCase());
 }
 
