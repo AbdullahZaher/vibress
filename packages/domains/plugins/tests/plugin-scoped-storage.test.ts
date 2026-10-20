@@ -298,6 +298,33 @@ describe("EXT-203B2 host-bound typed publication storage", () => {
       expect((await client.query("SELECT count(*)::int AS n FROM audit_events")).rows[0]?.n)
         .toBe(2);
 
+      // DB metadata digest alone cannot detect an out-of-band ALTER.
+      // Reject tampered physical structure, preserving existing rows.
+      await client.query('ALTER TABLE "' + physicalName + '" ADD COLUMN unapproved text');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName + '" DROP COLUMN unapproved');
+      await client.query('ALTER TABLE "' + physicalName +
+        '" DROP CONSTRAINT "' + physicalName + '_pkey"');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName +
+        '" ADD PRIMARY KEY ("publication_id","id")');
+      const foreign = await client.query(
+        'SELECT conname FROM pg_constraint ' +
+        'WHERE conrelid = $1::regclass AND contype = $2',
+        [physicalName, "f"],
+      );
+      const fkName: string = foreign.rows[0]?.conname;
+      expect(fkName).toMatch(/^[a-z0-9_]+$/);
+      await client.query('ALTER TABLE "' + physicalName +
+        '" DROP CONSTRAINT "' + fkName + '"');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName +
+        '" ADD FOREIGN KEY ("publication_id") REFERENCES publications(id) ON DELETE CASCADE');
+      expect((await withAudit.get("courses", "audit-course"))?.version).toBe(2);
+
       const wrongSchema = { ...model, schemaSha256: "b".repeat(64) };
       expect(() => new PluginScopedStorageService(repository,
         { pluginId: "plugin-a", publicationId: "pub-a" }, [wrongSchema]))
