@@ -46,6 +46,32 @@ an arbitrary plugin caller; the caller binding in Admin/Member/Public must
 still enforce the existing route authentication, permissions, Origin/privacy
 checks, and Member-publication equality before constructing the service.
 
+## Security review closure (PR #65)
+
+- The database adapter now independently rejects forged `publication_id`,
+  `id`, `version`, timestamps, unknown columns and invalid field values,
+  even if an internal caller bypasses the service. Both create and update
+  revalidate inputs before generating SQL; record IDs, cursor, update version,
+  model descriptors and 1–50 page limits are checked again at adapter entry.
+- Physical table references are schema-qualified using the namespace of the
+  resolved immutable ownership catalog, not a bare relation from
+  `search_path`. This rejects shadowed tables in alternate schemas while
+  supporting operator-installed models in their existing catalog schema.
+  PostgreSQL identifiers are quoted and values parameterized.
+- The concrete Drizzle adapter is no longer exported from the package root.
+  Its own direct-import tests remain, exercising the defense-in-depth boundary.
+- PostgreSQL regression cases invoke the adapter directly, verify both
+  publications stay unchanged following forged writes, check bounded reads,
+  test a same-named shadow table in an earlier search path and exercise
+  two independent PostgreSQL connections during publication disablement.
+
+**Not yet implemented:** A trusted Host principal-to-scope factory and an
+externally callable Plugin SDK bridge. These must be implemented and separately
+reviewed before exposing CRUD to any extension handler. Full live-schema
+constraint/type drift attestation and operator approval provenance are also
+release gates for a future plugin-callable interface, not claims of this PR.
+Current in-process operator-vetted plugins are NOT sandboxed.
+
 ## Upgrade and compatibility
 
 No database migration, metadata rewrite, historical data backfill, new
