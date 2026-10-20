@@ -4,8 +4,6 @@ import { AppSidebar } from "./layout/sidebar/AppSidebar";
 import { MobileHeader } from "./layout/MobileHeader";
 import { CommandPalette } from "./layout/CommandPalette";
 import { renderAdminRoute } from "../lib/router";
-import { PluginAdminDataView } from "./platform/PluginAdminDataView";
-import { RouteNotFound } from "./common/RouteNotFound";
 import { useAdminLocale } from "../lib/admin-locale";
 
 interface AdminShellProps {
@@ -76,13 +74,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canPublishPosts = can("posts.publish");
-  const extensionPath = /^\/admin\/extensions\/([a-z0-9-]{1,100})\/([a-z][a-z0-9-]{0,63})\/?$/.exec(currentPath);
-  const selectedView = extensionPath
-    ? extensionViews.find((view) =>
-        view.pluginId === extensionPath[1] &&
-        view.viewId === extensionPath[2] &&
-        can(view.permission))
-    : undefined;
+
 
   return (
     <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
@@ -118,18 +110,14 @@ export const AdminShell: React.FC<AdminShellProps> = ({
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}
       <main className="flex-1 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto p-4 sm:p-6 md:p-8">
-        {extensionPath
-          ? extensionViewsLoading
-            ? <p role="status">{locale === "ar" ? "جارٍ تحميل صفحات الإضافات..." : "Loading plugin pages..."}</p>
-            : selectedView
-              ? <PluginAdminDataView key={selectedView.pluginId + ":" + selectedView.viewId} link={selectedView} />
-              : <RouteNotFound path={currentPath} onNavigate={onNavigate} />
-          : renderAdminRoute({
-              pathname: currentPath,
-              user,
-              onNavigate,
-              can,
-            })}
+        {renderAdminRoute({
+          pathname: currentPath,
+          user,
+          onNavigate,
+          can,
+          extensionViews,
+          extensionViewsLoading,
+        })}
       </main>
 
       {/* Global Interactive Command Palette (⌘K) */}
