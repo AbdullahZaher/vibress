@@ -1,16 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useAdminLocale } from "../../../lib/admin-locale";
-import {
-  Settings,
-  ChevronDown,
-  HelpCircle,
-  Sliders,
-  Layout,
-  CreditCard,
-  Sparkles,
-  Cpu,
-  Puzzle,
-} from "lucide-react";
+import { Settings, HelpCircle, Puzzle } from "lucide-react";
 
 interface NavSettingsProps {
   currentPath: string;
@@ -27,65 +17,10 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
   const isPluginsActive =
     currentPath === "/admin/plugins" || currentPath === "/admin/plugins/";
   const isSettingsActive =
-    currentPath.startsWith("/admin/settings") ||
+    currentPath === "/admin/settings" ||
+    currentPath.startsWith("/admin/settings/") ||
     currentPath.startsWith("/admin/models") ||
     currentPath.startsWith("/admin/newsletters");
-
-  const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);
-
-  // Auto-expand settings whenever the current path is inside settings
-  useEffect(() => {
-    if (isSettingsActive) {
-      setSettingsOpen(true);
-    }
-  }, [isSettingsActive]);
-
-  const settingsItems = [
-    {
-      label: tr("General settings"),
-      path: "/admin/settings/general",
-      icon: <Sliders className="h-3.5 w-3.5 shrink-0" />,
-      active:
-        currentPath === "/admin/settings" ||
-        currentPath === "/admin/settings/" ||
-        currentPath.startsWith("/admin/settings/general"),
-    },
-    {
-      label: tr("Site"),
-      path: "/admin/settings/site",
-      icon: <Layout className="h-3.5 w-3.5 shrink-0" />,
-      active:
-        currentPath.startsWith("/admin/settings/site") ||
-        currentPath.startsWith("/admin/settings/themes") ||
-        currentPath.startsWith("/admin/settings/storage"),
-    },
-    {
-      label: tr("Membership"),
-      path: "/admin/settings/membership",
-      icon: <CreditCard className="h-3.5 w-3.5 shrink-0" />,
-      active:
-        currentPath.startsWith("/admin/settings/membership") ||
-        currentPath.startsWith("/admin/settings/billing") ||
-        currentPath.startsWith("/admin/subscriptions"),
-    },
-    {
-      label: tr("Growth"),
-      path: "/admin/settings/growth",
-      icon: <Sparkles className="h-3.5 w-3.5 shrink-0" />,
-      active:
-        currentPath.startsWith("/admin/settings/growth") ||
-        currentPath.startsWith("/admin/newsletters"),
-    },
-    {
-      label: tr("Advanced"),
-      path: "/admin/settings/advanced",
-      icon: <Cpu className="h-3.5 w-3.5 shrink-0" />,
-      active:
-        currentPath.startsWith("/admin/settings/advanced") ||
-        currentPath.startsWith("/admin/settings/platform") ||
-        currentPath.startsWith("/admin/settings/operations"),
-    },
-  ];
 
   return (
     <div className="space-y-0.5 text-[13px]">
@@ -95,56 +30,31 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
           type="button"
           onClick={() => onNavigate("/admin/plugins")}
           aria-current={isPluginsActive ? "page" : undefined}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${isPluginsActive
-            ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"}`}
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+            isPluginsActive
+              ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+          }`}
         >
           <Puzzle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{tr("Plugins")}</span>
         </button>
       )}
 
-      {/* Settings Trigger */}
+      {/* Settings Navigation Item */}
       <button
         type="button"
-        onClick={() => setSettingsOpen(!settingsOpen)}
-        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
-          isSettingsActive && !settingsOpen
+        onClick={() => onNavigate("/admin/settings")}
+        aria-current={isSettingsActive ? "page" : undefined}
+        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+          isSettingsActive
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >
-        <div className="flex items-center gap-2.5">
-          <Settings className="h-4 w-4 shrink-0" />
-          <span>{tr("Settings")}</span>
-        </div>
-        <ChevronDown
-          className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${
-            settingsOpen ? "rotate-180" : ""
-          }`}
-        />
+        <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>{tr("Settings")}</span>
       </button>
-
-      {/* Expanded Settings Menu */}
-      {settingsOpen && (
-        <div className="relative ms-4 ps-3.5 border-s border-sidebar-border/70 space-y-0.5 text-[12px] my-1">
-          {settingsItems.map((item) => (
-            <button
-              key={item.path}
-              type="button"
-              onClick={() => onNavigate(item.path)}
-              className={`w-full flex items-center gap-2.5 text-start py-1.5 px-2 rounded-md transition-colors cursor-pointer font-medium ${
-                item.active
-                  ? "text-foreground font-semibold bg-sidebar-accent/80 shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
-              }`}
-            >
-              {item.icon}
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Help */}
       <button

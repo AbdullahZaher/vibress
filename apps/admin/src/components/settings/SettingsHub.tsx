@@ -9,6 +9,7 @@ import { SettingsCard } from "./SettingsCard";
 import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -148,6 +149,12 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
   return (
     <div className="space-y-6 pb-28">
+      {/* Page Header */}
+      <AdminPageHeader
+        title={tr("Settings")}
+        description={tr("Manage publication preferences, membership, theme, and system options.")}
+      />
+
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 bg-background/95 backdrop-blur-md border border-border/80 rounded-xl shadow-xs">
         {/* Navigation Tabs */}

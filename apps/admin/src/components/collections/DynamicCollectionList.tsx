@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Plus, Edit, Trash2, ArrowLeft, Layers } from "lucide-react";
 import { apiRequest } from "../../lib/api";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 
 export interface CollectionEntryItem {
   id: string;
@@ -92,8 +93,8 @@ export function DynamicCollectionList({
 
   return (
     <section className="mx-auto w-full max-w-7xl space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-3">
+      <AdminPageHeader
+        backAction={
           <button
             type="button"
             aria-label={tr("Back to content models")}
@@ -102,24 +103,21 @@ export function DynamicCollectionList({
           >
             <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Layers className="w-6 h-6 text-primary" />
-              {modelName}
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              Collection: /api/content/v1/collections/{modelSlug}
-            </p>
-          </div>
-        </div>
-        {canEdit && <button
-          onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Plus className="w-4 h-4" />
-          {tr("New Entry")}
-        </button>}
-      </div>
+        }
+        title={modelName}
+        description={`Collection: /api/content/v1/collections/${modelSlug}`}
+        actions={
+          canEdit && (
+            <button
+              onClick={() => onNavigate(`/admin/collections/${modelSlug}/new`)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus className="w-4 h-4" />
+              {tr("New Entry")}
+            </button>
+          )
+        }
+      />
 
       <div className="flex flex-wrap gap-3 items-center" role="search" aria-label={tr("Filter collection entries")}>
         <input

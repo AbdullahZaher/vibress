@@ -7,13 +7,16 @@ import {
 } from "../lib/api";
 
 import { MessageSquare, ShieldAlert, RefreshCw, AlertCircle } from "lucide-react";
+import { useAdminLocale } from "../lib/admin-locale";
 import { Button } from "./ui/button";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { CommentsPanel } from "./community/CommentsPanel";
 import { ReportsPanel } from "./community/ReportsPanel";
 
 type Tab = "comments" | "reports";
 
 export function CommunitySettings() {
+  const { tr } = useAdminLocale();
   const [tab, setTab] = useState<Tab>("comments");
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [reports, setReports] = useState<AdminCommentReport[]>([]);
@@ -48,18 +51,10 @@ export function CommunitySettings() {
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            Comments & Moderation
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Review reported member comments, manage public discussions, and enforce community standards.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+      <AdminPageHeader
+        title={tr("Comments & Moderation")}
+        description={tr("Review reported member comments, manage public discussions, and enforce community standards.")}
+        actions={
           <Button
             variant="outline"
             size="sm"
@@ -68,10 +63,10 @@ export function CommunitySettings() {
             className="h-8 px-3 text-xs gap-1.5 cursor-pointer border-border bg-card hover:bg-accent text-foreground"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            {tr("Refresh")}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Error Banner */}
       {error && (

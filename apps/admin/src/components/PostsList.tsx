@@ -1,6 +1,7 @@
 import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -175,22 +176,18 @@ export const PostsList: React.FC<PostsListProps> = ({
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-            {tr("Posts")}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {tr("Manage editorial articles, revisions, and publication schedules.")}
-          </p>
-        </div>
-        <Button
-          onClick={() => onNavigate("/admin/posts/new")}
-          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" /> {tr("Create Post")}
-        </Button>
-      </div>
+      <AdminPageHeader
+        title={tr("Posts")}
+        description={tr("Manage editorial articles, revisions, and publication schedules.")}
+        actions={
+          <Button
+            onClick={() => onNavigate("/admin/posts/new")}
+            className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="h-4 w-4" /> {tr("Create Post")}
+          </Button>
+        }
+      />
 
       {/* Filter Tabs Bar & Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

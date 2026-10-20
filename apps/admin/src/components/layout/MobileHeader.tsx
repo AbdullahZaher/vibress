@@ -53,6 +53,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
     if (currentPath.startsWith("/admin/settings/platform")) return "Platform";
     if (currentPath.startsWith("/admin/settings/operations"))
       return "Operations";
+    if (currentPath.startsWith("/admin/settings")) return "Settings";
+    if (currentPath.startsWith("/admin/plugins")) return "Plugins";
     if (currentPath.startsWith("/admin/analytics")) return "Intelligence";
     return "Vibress Admin";
   };

@@ -223,8 +223,8 @@ export const ThemesSettings: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <Palette className="h-6 w-6 text-primary" /> Themes & Design
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Themes & Design
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Install, customize, preview, and activate official or external publication themes instantly without restarting.

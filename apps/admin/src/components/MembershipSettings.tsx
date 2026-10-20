@@ -222,8 +222,7 @@ export const MembershipSettings: React.FC<MembershipSettingsProps> = ({
       {/* Header with Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <CreditCard className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Membership & Monetization
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
