@@ -44,8 +44,9 @@ access requires a separate host-controlled scoped repository contract.
    plans using an isolated operator maintenance deployment. No request-time
    DDL or automatic discovery is implemented.
 4. If the process dies before COMMIT, PostgreSQL reverts DDL and ledger. An
-   identical committed plan returns `already_applied`; if a mapping/table
-   was externally tampered with, replay fails closed.
+   identical committed plan returns `already_applied`; missing tables and
+   altered mappings fail closed. A table whose columns were externally
+   altered without removing it requires operator schema-drift inspection.
 5. On a name collision, checksum discrepancy, or failed DDL, stop and
    investigate; never rewrite released migrations, clear the ledger, or
    automatically drop orphaned tables to force admission.
