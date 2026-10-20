@@ -24,6 +24,8 @@ type PluginReadTransaction =
  * live capability + active plugin + publication enablement + member status.
  */
 export class DrizzlePluginMemberAccessRepository implements PluginMemberAccessRepository {
+  constructor(private readonly db: () => ReturnType<typeof getDb> = getDb) {}
+
   private async read<T>(
     scope: HostBoundMemberScope,
     capability: ReadCapability,
@@ -32,7 +34,7 @@ export class DrizzlePluginMemberAccessRepository implements PluginMemberAccessRe
     if (process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE === "1") {
       throw new PluginDomainError("EXTENSION_MEMBER_DENIED", "Member bridge unavailable");
     }
-    return getDb().transaction(async (tx) => {
+    return this.db().transaction(async (tx) => {
       await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
       await tx.execute(sql`SET LOCAL statement_timeout = '15s'`);
       const [plugin] = await tx.select({
