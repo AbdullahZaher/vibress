@@ -121,24 +121,16 @@ describe("EXT-204 Host member bridge", () => {
       const auditRows = await db.select().from(auditEvents)
         .where(eq(auditEvents.requestId, bound.requestId));
       expect(auditRows).toHaveLength(2);
-      expect(auditRows.map((entry) => ({
-        action: entry.action, publicationId: entry.publicationId,
-        requestId: entry.requestId, actorUserId: entry.actorUserId,
-        targetType: entry.targetType,
-        granted: (entry.metadata as { granted?: unknown } | null)?.granted,
-      }))).toEqual([
-        {
-          action: "plugin.member.plan_checked", publicationId: pubA,
-          requestId: bound.requestId, actorUserId: null,
-          targetType: "member.plan", granted: true,
-        },
-        {
-          action: "plugin.member.plan_checked", publicationId: pubA,
-          requestId: bound.requestId, actorUserId: null,
-          targetType: "member.plan", granted: false,
-        },
-      ]);
+      const decisions = auditRows.map((entry) =>
+        (entry.metadata as { granted?: boolean } | null)?.granted,
+      ).sort();
+      expect(decisions).toEqual([false, true]);
       for (const entry of auditRows) {
+        expect(entry).toMatchObject({
+          action: "plugin.member.plan_checked", publicationId: pubA,
+          requestId: bound.requestId, actorUserId: null,
+          targetType: "member.plan",
+        });
         expect(entry.targetId).toMatch(/^[a-f0-9]{64}$/);
       }
       const auditText = JSON.stringify(auditRows);
