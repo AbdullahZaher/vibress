@@ -68,10 +68,12 @@ describe("EXT-301A Admin view admission", () => {
     })).toBeNull();
   });
 
-  it("rejects undeclared or malformed GET response schemas", () => {
+  it("rejects undeclared required fields in GET response schemas", () => {
     const good = moduleWithView();
     expect(admitAdminViews({
-      ...good, routes: [{ ...good.routes![0]!, response: { fields: { secret: "json" } } }],
-    } as PluginModule)).toBeNull();
+      ...good, routes: [{ ...good.routes![0]!,
+        response: { fields: { total: "number" }, required: ["missing"] },
+      }],
+    })).toBeNull();
   });
 });
