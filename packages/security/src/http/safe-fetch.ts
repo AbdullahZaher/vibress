@@ -116,6 +116,8 @@ export interface SafeFetchOptions {
   maxSize?: number;
   /** Optional exact-host allowlist enforced for every redirect hop. */
   allowedHostnames?: readonly string[];
+  /** Require HTTPS on the initial request and every redirect hop. */
+  requireHttps?: boolean;
   headers?: Record<string, string>;
   body?: string | Buffer | undefined;
 }
@@ -178,6 +180,10 @@ async function safeFetchInner(
         "UNSAFE_PROTOCOL",
         "Only http/https protocols are allowed",
       );
+    }
+
+    if (options.requireHttps && parsedUrl.protocol !== "https:") {
+      throw new SafeFetchError("UNSAFE_PROTOCOL", "HTTPS is required");
     }
 
     const hostname = parsedUrl.hostname;

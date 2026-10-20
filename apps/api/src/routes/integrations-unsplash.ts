@@ -126,6 +126,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
 
         const res = await safeFetch(url.toString(), {
           allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
           maxRedirects: 0, // Authorization must never follow a redirect.
           timeout: 10000,
           maxSize: MAX_API_RESPONSE_BYTES,
@@ -264,6 +265,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
           `${UNSPLASH_API_BASE}/photos/${encodeURIComponent(photoId)}`,
           {
             allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
             maxRedirects: 0,
             timeout: 10000,
             maxSize: MAX_API_RESPONSE_BYTES,
@@ -315,6 +317,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
         try {
           const dlRes = await safeFetch(photo.links.download_location, {
             allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
             maxRedirects: 0,
             timeout: 10000,
             maxSize: MAX_API_RESPONSE_BYTES,
@@ -382,6 +385,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
       try {
         const imgRes = await safeFetch(downloadUrl, {
           allowedHostnames: UNSPLASH_IMAGE_HOSTS,
+          requireHttps: true,
           maxRedirects: 3, // All redirect hops remain within approved image hosts.
           timeout: 15000,
           maxSize: MAX_IMAGE_DOWNLOAD_BYTES, // Stream limit: never buffer >20MB.
