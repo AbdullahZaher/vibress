@@ -126,7 +126,7 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     const installed = plugin({ capabilities: privilegedManifest.capabilities });
     expect(await host.getApprovedStorageModels(installed)).toEqual([model]);
-    await expect(host.getApprovedStorageModels(plugin())).rejects.toThrow(/metadata/);
+    await expect(host.getApprovedStorageModels(plugin())).rejects.toThrow(/operator-approved storage manifest/);
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0],
         storageModels: [{ ...model, schemaSha256: "b".repeat(64) }] }],
