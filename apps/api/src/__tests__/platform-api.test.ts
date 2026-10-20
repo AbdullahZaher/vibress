@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import crypto from "node:crypto";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb } from "@vibress/database";
+import { getDb, publications, publicationMemberships, workspaces, users } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
@@ -701,6 +701,99 @@ describe("Batch 12 — Platform Integration & Security", () => {
       approve.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();
+    }
+  });
+
+  it("requires publication-local authority even for a globally privileged owner", async () => {
+    const db = getDb();
+    const [owner] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.email, "owner@example.com")).limit(1);
+    expect(owner).toBeDefined();
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const workspaceId = `ws-storage-${suffix}`;
+    const ownerPubId = `pub-storage-owner-${suffix}`;
+    const limitedPubId = `pub-storage-limited-${suffix}`;
+    const localMembershipId = `membership-storage-${suffix}`;
+    await db.insert(workspaces).values({
+      id: workspaceId, name: "Storage permission test", slug: workspaceId,
+    });
+    const modelColumns = [{ name: "title", type: "text", required: true }] as const;
+    const approvedModel = {
+      key: "courses", columns: modelColumns,
+      schemaSha256: pluginPhysicalModelDigest(modelColumns),
+    };
+    const route: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { hasStorage: "boolean", publication: "string" } },
+      handle: async (_input, scope) => ({
+        hasStorage: Boolean(scope.storage), publication: scope.publicationId,
+      }),
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_id, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [approvedModel],
+      }));
+    const invoke = (publicationId: string) => app.inject({
+      method: "POST",
+      url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+      headers: {
+        cookie: staffCookie, origin: "http://localhost:7777",
+        "x-publication-id": publicationId,
+      },
+      payload: { title: "Publication isolated" },
+    });
+    try {
+      await db.insert(publications).values([
+        { id: ownerPubId, workspaceId, name: "Owner Publication", slug: "owned" },
+        { id: limitedPubId, workspaceId, name: "Limited Publication", slug: "limited" },
+      ]);
+      await db.insert(publicationMemberships).values([
+        {
+          id: `membership-owner-${suffix}`, publicationId: ownerPubId,
+          userId: owner!.id, role: "owner",
+        },
+        {
+          id: localMembershipId, publicationId: limitedPubId,
+          userId: owner!.id, role: "author",
+        },
+      ]);
+
+      const ownerResponse = await invoke(ownerPubId);
+      expect(ownerResponse.statusCode).toBe(200);
+      expect(ownerResponse.json()).toEqual({
+        hasStorage: true, publication: ownerPubId,
+      });
+      expect(approve).toHaveBeenCalledTimes(1);
+
+      for (const localRole of ["author", "contributor", "editor"]) {
+        await db.update(publicationMemberships).set({ role: localRole })
+          .where(eq(publicationMemberships.id, localMembershipId));
+        const response = await invoke(limitedPubId);
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({
+          hasStorage: false, publication: limitedPubId,
+        });
+      }
+      expect(approve).toHaveBeenCalledTimes(1);
+      await db.update(publicationMemberships).set({ role: "admin" })
+        .where(eq(publicationMemberships.id, localMembershipId));
+      const adminResponse = await invoke(limitedPubId);
+      expect(adminResponse.statusCode).toBe(200);
+      expect(adminResponse.json()).toEqual({
+        hasStorage: true, publication: limitedPubId,
+      });
+      expect(approve).toHaveBeenCalledTimes(2);
+    } finally {
+      approve.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+      await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
     }
   });
 
