@@ -419,7 +419,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       const rotated = await discover();
       expect(rotated.statusCode).toBe(200);
       expect(rotated.json().items).toHaveLength(1);
-      expect(resolve).toHaveBeenCalledTimes(5); // one Admin GET + new pinned hash
+      expect(resolve).toHaveBeenCalledTimes(6); // two Admin GETs + new pinned hash
       const forged = await app.inject({
         method: "GET", url: "/api/admin/v1/extensions/navigation",
         headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
