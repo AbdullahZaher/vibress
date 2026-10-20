@@ -521,6 +521,12 @@ export class PluginsService {
   async unregisterPlugin(id: string, actorId: string | null): Promise<void> {
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (await this.pluginRepo.hasAppliedMigrations?.(id)) {
+      throw new PluginDomainError(
+        "PLUGIN_HAS_SCHEMA_MIGRATIONS",
+        "Plugin has irreversible migration history; restore/retire it using an operator-reviewed process",
+      );
+    }
     if (this.publicationStates && await this.publicationStates.hasAnyState(id)) {
       // Keep publication decisions and plugin metadata for safe reactivation.
       // A future explicit purge must be separate, authorized, backed up and audited.
