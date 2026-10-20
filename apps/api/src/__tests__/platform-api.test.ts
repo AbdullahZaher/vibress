@@ -704,6 +704,48 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("never permits a Staff GET extension route to write without Origin validation", async () => {
+    const columns = [{ name: "title", type: "text", required: true }] as const;
+    const model = { key: "courses", columns, schemaSha256: pluginPhysicalModelDigest(columns) };
+    const descriptor: PluginApiRoute = {
+      id: "preview", audience: "admin", method: "GET",
+      permission: "posts.read",
+      response: { fields: { blocked: "boolean" } },
+      handle: async (_input, scope) => {
+        if (!scope.storage) return { blocked: false };
+        try {
+          await scope.storage.create("courses", "csrf-write", { title: "unsafe" });
+          return { blocked: false };
+        } catch (error) {
+          return { blocked: error instanceof Error && "code" in error &&
+            error.code === "PLUGIN_STORAGE_METHOD_DENIED" };
+        }
+      },
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approval = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_id, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [model],
+      }));
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/independent-courses/v1/preview",
+        headers: { cookie: staffCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ blocked: true });
+      expect(approval).toHaveBeenCalledTimes(1);
+    } finally {
+      approval.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
   it("does not grant extension storage to an editor without plugins.manage", async () => {
     const email = `storage-editor-${crypto.randomUUID()}@example.com`;
     const invitation = await app.inject({
