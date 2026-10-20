@@ -704,6 +704,58 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("does not grant extension storage to an editor without plugins.manage", async () => {
+    const email = `storage-editor-${crypto.randomUUID()}@example.com`;
+    const invitation = await app.inject({
+      method: "POST", url: "/api/admin/v1/users/invite",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { email, name: "Storage Editor", roleKey: "editor" },
+    });
+    expect(invitation.statusCode).toBe(201);
+    const accepted = await app.inject({
+      method: "POST", url: "/api/admin/v1/auth/invitation/accept",
+      headers: { origin: "http://localhost:7777" },
+      payload: { token: invitation.json().invitation.token,
+        password: "EditorStoragePassword123!" },
+    });
+    expect(accepted.statusCode).toBe(200);
+    const login = await app.inject({
+      method: "POST", url: "/api/admin/v1/auth/login",
+      payload: { email, password: "EditorStoragePassword123!" },
+    });
+    expect(login.statusCode).toBe(200);
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie) as string;
+    const route: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { storageExposed: "boolean" } },
+      handle: async (_input, scope) => ({ storageExposed: Boolean(scope.storage) }),
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approved = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockRejectedValue(new Error("Unauthorized storage approval lookup"));
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+        headers: { cookie, origin: "http://localhost:7777" },
+        payload: { title: "No secret storage" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ storageExposed: false });
+      expect(approved).not.toHaveBeenCalled();
+    } finally {
+      approved.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
   it("public extension API is GET-only, host-scoped and validates response projection", async () => {
     const handler = vi.fn(async () => ({ title: "Available courses" }));
     const descriptor: PluginApiRoute = {
