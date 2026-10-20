@@ -166,6 +166,9 @@ export function getEmbedProvider(
   } catch {
     return null;
   }
+  if (!["https:", "http:"].includes(u.protocol) || u.username || u.password) {
+    return null;
+  }
   let host = u.hostname.toLowerCase();
   if (host.startsWith("www.")) host = host.slice(4);
   if (host === "youtu.be") {

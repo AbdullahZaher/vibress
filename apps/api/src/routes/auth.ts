@@ -394,18 +394,28 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const db = getDb();
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashToken(rawToken);
       const tokenId = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15m TTL
 
-      await db.insert(passwordResetTokens).values({
-        id: tokenId,
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-        createdAt: new Date(),
+      // Coordinate issuance with redemption using the same per-account lock.
+      // An issuance racing with a password reset is ordered before or after it.
+      await runInTransaction(async () => {
+        const tx = getDb();
+        await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1)
+          .for("update");
+        await tx.insert(passwordResetTokens).values({
+          id: tokenId,
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+          createdAt: new Date(),
+        });
       });
 
       const config = getConfig();

@@ -59,7 +59,7 @@ const INLINE_TYPES = new Set([
   "application/pdf",
 ]);
 
-function getContentDisposition(mimeType: string, filePath: string): string {
+export function getContentDisposition(mimeType: string, filePath: string): string {
   const filename = path.basename(filePath);
   const disposition = INLINE_TYPES.has(mimeType) ? "inline" : "attachment";
   const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_");
