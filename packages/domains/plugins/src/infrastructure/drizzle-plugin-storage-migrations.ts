@@ -18,8 +18,10 @@ import { PluginStorageMigrationError } from "../application/plugin-storage-migra
  * reservations atomically. External modules NEVER receive this transaction.
  */
 export class DrizzlePluginStorageMigrationRepository implements PluginStorageMigrationRepository {
+  constructor(private readonly db: () => ReturnType<typeof getDb> = getDb) {}
+
   async applyApproved(input: ApprovedPluginCatalogMigration): Promise<PluginMigrationStatus> {
-    return getDb().transaction(async (tx) => {
+    return this.db().transaction(async (tx) => {
       // Transaction-scoped PostgreSQL advisory lock is released on COMMIT/ROLLBACK.
       // A stable first key separates this from core/other extension locks.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(
