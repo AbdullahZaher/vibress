@@ -189,6 +189,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
               {
                 pluginId: binding.pluginId, publicationId,
                 actorUserId: req.user.id, requestId: req.id,
+                allowWrites: req.method === "POST",
               },
               binding.models,
             );
