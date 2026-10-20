@@ -60,7 +60,7 @@ function sqlColumns(fields: Readonly<Record<string, PluginStorageFieldValue>>): 
 } {
   const entries = Object.entries(fields);
   return {
-    names: entries.map(([name]) => sql.identifier(name)),
+    names: entries.map(([name]) => sql`${sql.identifier(name)}`),
     values: entries.map(([, value]) => sql`${value}`),
     assignments: entries.map(([name, value]) => sql`${sql.identifier(name)} = ${value}`),
   };
