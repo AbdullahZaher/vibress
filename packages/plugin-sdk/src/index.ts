@@ -261,6 +261,20 @@ export const CAPABILITY_REGISTRY: Record<string, PluginCapabilityDefinition> = {
     risk: "critical",
     auditRequired: true,
   },
+  "extension.storage.read": {
+    id: "extension.storage.read",
+    name: "Read Extension Storage",
+    description: "Read host-scoped, plugin-owned relational models within an enabled publication",
+    scope: "publication", requiredRole: "member",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: true,
+  },
+  "extension.storage.write": {
+    id: "extension.storage.write",
+    name: "Write Extension Storage",
+    description: "Write validated plugin-owned relational models within an authorized publication",
+    scope: "publication", requiredRole: "editor",
+    publicationBehavior: "isolated", risk: "high", auditRequired: true,
+  },
   "extension.routes.admin": {
     id: "extension.routes.admin",
     name: "Admin Extension API",
