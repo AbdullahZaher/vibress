@@ -1,5 +1,6 @@
 import {
   pgTable,
+  primaryKey,
   text,
   timestamp,
   integer,
@@ -244,3 +245,66 @@ export const pluginPublicationSettings = pgTable(
 );
 
 export type PluginPublicationSettingRow = typeof pluginPublicationSettings.$inferSelect;
+
+/**
+ * EXT-203: host-owned plugin model descriptors and data records.
+ * The model FK prevents cross-plugin model spoofing; publication FK ensures
+ * records from different sites never share a storage namespace. Disabling
+ * a plugin does NOT delete records. There is no raw SQL plugin interface.
+ */
+export const pluginDataModels = pgTable("plugin_data_models", {
+  pluginId: text("plugin_id").notNull().references(() => plugins.id, { onDelete: "restrict" }),
+  modelId: text("model_id").notNull(),
+  schemaHash: text("schema_hash").notNull(),
+  fieldSchema: jsonb("field_schema").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primary: primaryKey({ name: "plugin_data_models_pk", columns: [table.pluginId, table.modelId] }),
+  nameCheck: check("plugin_data_model_name_check", sql`${table.modelId} ~ '^[a-z][a-z0-9-]{0,63}$'`),
+  hashCheck: check("plugin_data_model_hash_check", sql`${table.schemaHash} ~ '^[a-f0-9]{64}$'`),
+  schemaCheck: check("plugin_data_model_schema_check", sql`jsonb_typeof(${table.fieldSchema}) = 'object'`),
+}));
+
+export const pluginDataMigrationLedger = pgTable("plugin_data_migration_ledger", {
+  pluginId: text("plugin_id").notNull().references(() => plugins.id, { onDelete: "restrict" }),
+  migrationId: text("migration_id").notNull(),
+  checksum: text("checksum").notNull(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primary: primaryKey({
+    name: "plugin_data_migration_ledger_pk", columns: [table.pluginId, table.migrationId],
+  }),
+  idCheck: check("plugin_data_migration_id_check", sql`${table.migrationId} ~ '^[a-z0-9][a-z0-9_-]{0,99}$'`),
+  checksumCheck: check("plugin_data_migration_checksum_check", sql`${table.checksum} ~ '^[a-f0-9]{64}$'`),
+}));
+
+export const pluginDataRecords = pgTable("plugin_data_records", {
+  pluginId: text("plugin_id").notNull(),
+  publicationId: text("publication_id").notNull()
+    .references(() => publications.id, { onDelete: "cascade" }),
+  modelId: text("model_id").notNull(),
+  recordId: text("record_id").notNull(),
+  version: integer("version").notNull().default(1),
+  data: jsonb("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primary: primaryKey({
+    name: "plugin_data_records_pk",
+    columns: [table.pluginId, table.publicationId, table.modelId, table.recordId],
+  }),
+  modelFk: foreignKey({
+    name: "plugin_data_records_model_fk",
+    columns: [table.pluginId, table.modelId],
+    foreignColumns: [pluginDataModels.pluginId, pluginDataModels.modelId],
+  }).onDelete("restrict"),
+  versionCheck: check("plugin_data_records_version_check", sql`${table.version} > 0`),
+  idCheck: check("plugin_data_records_id_check", sql`length(${table.recordId}) BETWEEN 1 AND 128`),
+  payloadCheck: check("plugin_data_records_payload_check", sql`jsonb_typeof(${table.data}) = 'object'`),
+  scopedListIdx: index("plugin_data_records_pub_model_idx")
+    .on(table.publicationId, table.pluginId, table.modelId, table.createdAt, table.recordId),
+}));
+
+export type PluginDataModelRow = typeof pluginDataModels.$inferSelect;
+export type PluginDataRecordRow = typeof pluginDataRecords.$inferSelect;
+export type PluginDataMigrationRow = typeof pluginDataMigrationLedger.$inferSelect;
