@@ -29,6 +29,10 @@ export class BundledPluginHost implements PluginHost {
     return this.external.listTrustedManifests();
   }
 
+  async getOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {
+    return this.external.listTrustedFingerprints();
+  }
+
   async authorizeRegistration(manifest: PluginManifest): Promise<void> {
     const builtin = this.registry.get(manifest.id);
     if (builtin) {
