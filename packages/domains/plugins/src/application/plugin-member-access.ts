@@ -2,6 +2,7 @@ import type {
   PluginMemberAccessApi, PluginMemberSelf,
 } from "@vibress/plugin-sdk";
 import { PluginDomainError } from "./plugins-service";
+import { DrizzlePluginMemberAccessRepository } from "../infrastructure/drizzle-plugin-member-access";
 
 export interface HostBoundMemberScope {
   readonly pluginId: string;
@@ -24,7 +25,7 @@ const MAX_PENDING_READS = 16;
  */
 export function createHostMemberAccessSession(
   scope: HostBoundMemberScope,
-  repository: PluginMemberAccessRepository,
+  repository: PluginMemberAccessRepository = new DrizzlePluginMemberAccessRepository(),
 ): { readonly memberAccess: PluginMemberAccessApi; close(): Promise<void> } {
   if (!scope || ![scope.pluginId, scope.publicationId, scope.memberId]
     .every((id) => typeof id === "string" && VALID_ID.test(id))) {
