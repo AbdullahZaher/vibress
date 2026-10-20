@@ -13,6 +13,9 @@ type ReadCapability =
   | "extension.members.self.read"
   | "extension.entitlements.plan.read";
 
+type PluginReadTransaction =
+  Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
 /**
  * All data and authority checks occur in the SAME transaction. The Host
  * supplies the member/tenant/plugin scope; an extension only selects an
@@ -23,7 +26,7 @@ export class DrizzlePluginMemberAccessRepository implements PluginMemberAccessRe
   private async read<T>(
     scope: HostBoundMemberScope,
     capability: ReadCapability,
-    fn: (db: ReturnType<typeof getDb>) => Promise<T>,
+    fn: (db: PluginReadTransaction) => Promise<T>,
   ): Promise<T> {
     if (process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE === "1") {
       throw new PluginDomainError("EXTENSION_MEMBER_DENIED", "Member bridge unavailable");
