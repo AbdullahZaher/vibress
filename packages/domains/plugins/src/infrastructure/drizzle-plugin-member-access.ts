@@ -1,8 +1,9 @@
 import {
   getDb, members, plans, products, subscriptions, plugins,
-  pluginPublicationStates,
+  pluginPublicationStates, auditEvents,
 } from "@vibress/database";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
 import type { PluginMemberSelf } from "@vibress/plugin-sdk";
 import { PluginDomainError } from "../application/plugins-service";
 import type {
@@ -104,14 +105,53 @@ export class DrizzlePluginMemberAccessRepository implements PluginMemberAccessRe
           inArray(subscriptions.status, ["active", "trialing"]),
           sql`(${subscriptions.currentPeriodStart} IS NULL OR ${subscriptions.currentPeriodStart} <= now())`,
           sql`(${subscriptions.currentPeriodEnd} IS NULL OR ${subscriptions.currentPeriodEnd} > now())`,
-          // A trial with NO end date is not evidence of an ongoing
-          // entitlement. Require a future trial or billing period end.
-          sql`(${subscriptions.status} <> 'trialing' OR
-            ${subscriptions.trialEnd} > now() OR
-            ${subscriptions.currentPeriodEnd} > now())`,
+          sql`(
+            (${subscriptions.status} = 'trialing' AND (
+              (${subscriptions.trialEnd} IS NOT NULL AND ${subscriptions.trialEnd} > now())
+              OR (${subscriptions.trialEnd} IS NULL AND ${subscriptions.currentPeriodEnd} > now())
+            ))
+            OR
+            (${subscriptions.status} = 'active' AND (
+              ${subscriptions.currentPeriodEnd} > now()
+              OR (
+                ${plans.billingType} = 'free'
+                AND ${plans.amountMinor} = 0
+                AND ${subscriptions.amountMinor} = 0
+                AND ${subscriptions.provider} IS NULL
+                AND ${subscriptions.currentPeriodEnd} IS NULL
+              )
+            ))
+          )`,
           sql`${subscriptions.endedAt} IS NULL`,
         )).limit(1);
-      return Boolean(record);
+      const granted = Boolean(record);
+      // Audit a high-risk plan decision regardless of its boolean outcome.
+      // A stable non-reversible scoped pseudonym supports investigation
+      // without recording member name/email, raw member ID, payment details,
+      // or provider metadata. Audit and decision are in one transaction:
+      // insert failure denies access instead of silently granting it.
+      const subjectRef = createHash("sha256")
+        .update("member-plan-check\\0")
+        .update(scope.publicationId)
+        .update("\\0")
+        .update(scope.memberId)
+        .digest("hex");
+      await db.insert(auditEvents).values({
+        id: randomUUID(),
+        publicationId: scope.publicationId,
+        actorUserId: null,
+        requestId: scope.requestId,
+        action: "plugin.member.plan_checked",
+        targetType: "member.plan",
+        targetId: subjectRef,
+        metadata: {
+          actorKind: "member",
+          pluginId: scope.pluginId,
+          planId,
+          granted,
+        },
+      });
+      return granted;
     });
   }
 }
