@@ -372,6 +372,73 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(newLogin.statusCode).toBe(200);
     });
 
+    it("invalidates all other outstanding tokens for the same account", async () => {
+      const headers = { origin: "http://localhost:7779" };
+      const first = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/forgot-password",
+        headers,
+        payload: { email: staffEmail },
+      });
+      const second = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/forgot-password",
+        headers,
+        payload: { email: staffEmail },
+      });
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      const firstToken: string = first.json().token;
+      const secondToken: string = second.json().token;
+
+      const redeemed = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/reset-password",
+        headers,
+        payload: { token: firstToken, password: "NewAgainPassword123!" },
+      });
+      expect(redeemed.statusCode).toBe(200);
+
+      const blocked = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/reset-password",
+        headers,
+        payload: { token: secondToken, password: "ShouldNotWork123!" },
+      });
+      expect(blocked.statusCode).toBe(400);
+      expect(blocked.json().errors[0].code).toBe("TOKEN_ALREADY_USED");
+    });
+
+    it("serializes simultaneous resets using two different tokens", async () => {
+      const headers = { origin: "http://localhost:7779" };
+      const issue = () => app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/forgot-password",
+        headers,
+        payload: { email: staffEmail },
+      });
+      const [first, second] = await Promise.all([issue(), issue()]);
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      const [a, b] = await Promise.all([
+        app.inject({
+          method: "POST",
+          url: "/api/admin/v1/auth/reset-password",
+          headers,
+          payload: { token: first.json().token, password: "ConcurrentA123!" },
+        }),
+        app.inject({
+          method: "POST",
+          url: "/api/admin/v1/auth/reset-password",
+          headers,
+          payload: { token: second.json().token, password: "ConcurrentB123!" },
+        }),
+      ]);
+      expect([a.statusCode, b.statusCode].sort()).toEqual([200, 400]);
+      const rejected = a.statusCode === 400 ? a : b;
+      expect(rejected.json().errors[0].code).toBe("TOKEN_ALREADY_USED");
+    });
+
     it("rejects reused password reset token (single-use guarantee)", async () => {
       const res = await app.inject({
         method: "POST",

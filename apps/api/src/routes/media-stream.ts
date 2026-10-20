@@ -49,7 +49,6 @@ const INLINE_TYPES = new Set([
   "image/png",
   "image/gif",
   "image/webp",
-  "image/svg+xml",
   "image/x-icon",
   "video/mp4",
   "video/webm",
@@ -261,6 +260,11 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
       const lastModified = stat.mtime.toUTCString();
 
       reply.header("X-Content-Type-Options", "nosniff");
+      if (mimeType === "image/svg+xml") {
+        // SVG is active XML when opened as a document, even when uploaded by a
+        // trusted author. Keep legacy assets addressable but never inline.
+        reply.header("Content-Security-Policy", "sandbox; default-src 'none'");
+      }
       reply.header("Accept-Ranges", "bytes");
       reply.header("Cache-Control", "public, max-age=3600");
       reply.header("ETag", etag);
