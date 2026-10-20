@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
   getDb, workspaces, publications, members, products, plans,
-  subscriptions, plugins, pluginPublicationStates,
+  subscriptions, plugins, pluginPublicationStates, auditEvents,
 } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import {
@@ -12,6 +12,7 @@ import { DrizzlePluginMemberAccessRepository } from "../src/infrastructure/drizz
 
 const scope = {
   pluginId: "plugin-a", publicationId: "pub-a", memberId: "member-a",
+  requestId: "req-member-test",
 };
 
 describe("EXT-204 Host member bridge", () => {
@@ -101,29 +102,69 @@ describe("EXT-204 Host member bridge", () => {
       ]);
       await db.insert(subscriptions).values([
         { id: id("active"), memberId: memberA, productId: productA, planId: planA,
-          status: "active", currency: "USD", amountMinor: 1000, billingInterval: "month" },
+          status: "active", currency: "USD", amountMinor: 1000,
+          billingInterval: "month", currentPeriodEnd: new Date(Date.now() + 3600_000) },
         { id: id("foreign"), memberId: memberB, productId: productB, planId: planB,
-          status: "active", currency: "USD", amountMinor: 1000, billingInterval: "month" },
+          status: "active", currency: "USD", amountMinor: 1000,
+          billingInterval: "month", currentPeriodEnd: new Date(Date.now() + 3600_000) },
       ]);
 
       const repo = new DrizzlePluginMemberAccessRepository();
-      const bound = { pluginId, publicationId: pubA, memberId: memberA };
+      const bound = {
+        pluginId, publicationId: pubA, memberId: memberA,
+        requestId: "req-ext204-" + suffix,
+      };
       expect(await repo.getSelf(bound)).toEqual({ id: memberA, displayName: "الطالب" });
       expect(await repo.hasActivePlan(bound, planA)).toBe(true);
       expect(await repo.hasActivePlan(bound, planB)).toBe(false);
+      const auditRows = await db.select().from(auditEvents)
+        .where(eq(auditEvents.requestId, bound.requestId));
+      expect(auditRows).toHaveLength(2);
+      expect(auditRows.map((entry) => ({
+        action: entry.action, publicationId: entry.publicationId,
+        requestId: entry.requestId, actorUserId: entry.actorUserId,
+        targetType: entry.targetType,
+        granted: (entry.metadata as { granted?: unknown } | null)?.granted,
+      }))).toEqual([
+        {
+          action: "plugin.member.plan_checked", publicationId: pubA,
+          requestId: bound.requestId, actorUserId: null,
+          targetType: "member.plan", granted: true,
+        },
+        {
+          action: "plugin.member.plan_checked", publicationId: pubA,
+          requestId: bound.requestId, actorUserId: null,
+          targetType: "member.plan", granted: false,
+        },
+      ]);
+      for (const entry of auditRows) {
+        expect(entry.targetId).toMatch(/^[a-f0-9]{64}$/);
+      }
+      const auditText = JSON.stringify(auditRows);
+      expect(auditText).not.toContain(memberA);
+      expect(auditText).not.toContain("الطالب");
+      expect(auditText).not.toContain(id("a") + "@example.test");
       await expect(repo.getSelf({ ...bound, memberId: memberB }))
         .rejects.toMatchObject({ code: "EXTENSION_MEMBER_DENIED" });
       await expect(repo.getSelf({ ...bound, publicationId: pubB }))
         .rejects.toMatchObject({ code: "EXTENSION_MEMBER_DENIED" });
 
+      await db.update(subscriptions).set({ currentPeriodEnd: null })
+        .where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(false);
       await db.update(subscriptions).set({
-        status: "past_due",
+        status: "past_due", currentPeriodEnd: new Date(Date.now() + 3600_000),
       }).where(eq(subscriptions.id, id("active")));
       expect(await repo.hasActivePlan(bound, planA)).toBe(false);
       await db.update(subscriptions).set({
         status: "trialing", trialEnd: new Date(Date.now() - 1000),
       }).where(eq(subscriptions.id, id("active")));
+      // A past authoritative trial end defeats a future billing period end.
       expect(await repo.hasActivePlan(bound, planA)).toBe(false);
+      await db.update(subscriptions).set({
+        trialEnd: null, currentPeriodEnd: new Date(Date.now() + 3600_000),
+      }).where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(true);
       await db.update(subscriptions).set({
         status: "trialing", trialEnd: null, currentPeriodEnd: null,
       }).where(eq(subscriptions.id, id("active")));
@@ -136,6 +177,18 @@ describe("EXT-204 Host member bridge", () => {
         status: "active", trialEnd: null,
         currentPeriodEnd: new Date(Date.now() - 1000),
       }).where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(false);
+
+      // Free checkout persists an active subscription with no period end.
+      // Only that specific free/no-provider/zero-cost combination persists.
+      await db.update(plans).set({ billingType: "free", amountMinor: 0 })
+        .where(eq(plans.id, planA));
+      await db.update(subscriptions).set({
+        amountMinor: 0, provider: null, currentPeriodEnd: null,
+      }).where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(true);
+      await db.update(subscriptions).set({ provider: "stripe" })
+        .where(eq(subscriptions.id, id("active")));
       expect(await repo.hasActivePlan(bound, planA)).toBe(false);
 
       await db.update(plugins).set({
@@ -153,6 +206,7 @@ describe("EXT-204 Host member bridge", () => {
       await expect(repo.getSelf(bound))
         .rejects.toMatchObject({ code: "EXTENSION_MEMBER_DENIED" });
     } finally {
+      await db.delete(auditEvents).where(eq(auditEvents.requestId, "req-ext204-" + suffix));
       await db.delete(subscriptions).where(eq(subscriptions.memberId, memberA));
       await db.delete(subscriptions).where(eq(subscriptions.memberId, memberB));
       await db.delete(plans).where(eq(plans.publicationId, pubA));
