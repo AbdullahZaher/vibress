@@ -155,7 +155,7 @@ export const ExtensionAdminNavDtoSchema = z.object({
   permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
 }).strict();
 export const ExtensionAdminNavigationResponseSchema = z.object({
-  items: z.array(ExtensionAdminNavDtoSchema).max(128),
+  items: z.array(ExtensionAdminNavDtoSchema).max(512),
 }).strict();
 export const ExtensionAdminNavigationParamsSchema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
