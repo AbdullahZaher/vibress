@@ -186,7 +186,10 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
           );
           if (binding) {
             storageSession = createHostPluginStorageSession(
-              { pluginId: binding.pluginId, publicationId },
+              {
+                pluginId: binding.pluginId, publicationId,
+                actorUserId: req.user.id, requestId: req.id,
+              },
               binding.models,
             );
           }
