@@ -40,7 +40,16 @@ function record(row: Row, model: ApprovedPluginPhysicalModel): PluginStorageReco
   const fields: Record<string, PluginStorageFieldValue> = {};
   for (const column of model.columns) {
     const raw = row[column.name];
-    const value = raw instanceof Date ? raw.toISOString() : raw;
+    // Raw Drizzle SQL returns PostgreSQL timestamptz as either a Date
+    // or a database-formatted string. Normalize before exposing the API.
+    let value: unknown = raw instanceof Date ? raw.toISOString() : raw;
+    if (column.type === "timestamptz" && typeof value === "string") {
+      const timestamp = new Date(value);
+      if (!Number.isFinite(timestamp.getTime())) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Invalid timestamp stored in model");
+      }
+      value = timestamp.toISOString();
+    }
     if (value === null && !column.required) {
       fields[column.name] = null;
     } else if (
