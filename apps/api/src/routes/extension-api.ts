@@ -14,6 +14,7 @@ import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService } from "../services";
 import { adminExtensionNavigationRoutes } from "./extension-admin-views";
+import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
 
 /** No arbitrary Fastify registration or tenant selectors from plugin modules. */
 const MAX_ROUTES_PER_PLUGIN = 32;
@@ -144,7 +145,8 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
 
       if (audience === "admin" &&
           (!route.permission || !req.permissions || !req.roles ||
-            !hasPermission(req.permissions, route.permission, req.roles))) {
+            !canAccessExtensionAdminRoute(
+              req.permissions, req.roles, req.publicationContext?.role, route.permission))) {
         return reject(reply, req, "PERMISSION_DENIED", 403);
       }
 
