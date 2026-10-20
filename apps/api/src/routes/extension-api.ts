@@ -179,7 +179,13 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       // LMS entitlement/ownership rules require a separate reviewed bridge.
       let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
       try {
+        // Generic storage is more privileged than an extension route. The
+        // session's global roles may contain "owner" even when this user is
+        // only an author in the selected publication: require BOTH the global
+        // capability and the Host-resolved local owner/admin membership.
+        const localRole = req.publicationContext?.role;
         if (audience === "admin" && req.user && req.roles && req.permissions &&
+            (localRole === "owner" || localRole === "admin") &&
             hasPermission(req.permissions, "plugins.manage", req.roles)) {
           const binding = await pluginsService.resolveExtensionStorageBinding(
             params.data.pluginId, publicationId,
