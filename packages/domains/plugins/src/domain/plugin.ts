@@ -62,6 +62,8 @@ export interface PluginRepository {
   ): Promise<Plugin>;
   list(): Promise<Plugin[]>;
   delete(id: string): Promise<void>;
+  /** Prevent accidental uninstall after a forward-only plugin data migration. */
+  hasAppliedMigrations?(id: string): Promise<boolean>;
 }
 
 export interface PluginSettingRepository {

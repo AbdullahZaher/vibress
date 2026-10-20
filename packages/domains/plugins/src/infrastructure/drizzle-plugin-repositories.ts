@@ -6,6 +6,7 @@ import {
   PluginSettingRow,
   pluginPublicationStates,
   pluginPublicationSettings,
+  pluginSchemaMigrations,
 } from "@vibress/database";
 import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -124,6 +125,15 @@ export class DrizzlePluginRepository implements PluginRepository {
     const db = getDb();
     const rows = await db.select().from(plugins).orderBy(plugins.createdAt);
     return rows.map((r) => this.mapToDomain(r));
+  }
+
+  async hasAppliedMigrations(id: string): Promise<boolean> {
+    const rows = await getDb()
+      .select({ pluginId: pluginSchemaMigrations.pluginId })
+      .from(pluginSchemaMigrations)
+      .where(eq(pluginSchemaMigrations.pluginId, id))
+      .limit(1);
+    return rows.length > 0;
   }
 
   async delete(id: string): Promise<void> {
