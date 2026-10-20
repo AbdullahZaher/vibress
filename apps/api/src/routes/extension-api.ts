@@ -13,6 +13,7 @@ import {
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService } from "../services";
+import { adminExtensionNavigationRoutes } from "./extension-admin-views";
 
 /** No arbitrary Fastify registration or tenant selectors from plugin modules. */
 const MAX_ROUTES_PER_PLUGIN = 32;
@@ -256,6 +257,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
 
 export async function adminExtensionApiRoutes(fastify: FastifyInstance) {
   extensionRoutes(fastify, "admin");
+  await fastify.register(adminExtensionNavigationRoutes);
 }
 
 export async function memberExtensionApiRoutes(fastify: FastifyInstance) {
