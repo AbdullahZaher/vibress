@@ -19,7 +19,7 @@ validated by the **host** against `@vibress/api-contracts` on dispatch.
 
 This initial contract has **one route path segment** (`id`, kebab case),
 `GET` or `POST` only, up to 32 descriptors per plugin, and strict
-primitive-only query, body and response field descriptors (max 24 fields,
+string-only query and primitive body/response field descriptors (max 24 fields,
 max 4096 characters per string). The runtime rejects unrecognized fields,
 wrong primitive types, invalid descriptors, duplicate audience/method/id
 tuples, unsafe route names and invalid output. Public routes are **GET-only**.

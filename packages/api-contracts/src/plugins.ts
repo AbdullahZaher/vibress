@@ -88,6 +88,9 @@ export const ExtensionApiRouteSchema = z.object({
   if (route.method === "GET" && route.body) {
     ctx.addIssue({ code: "custom", message: "GET routes cannot accept bodies" });
   }
+  if (Object.values(route.query?.fields ?? {}).some((type) => type !== "string")) {
+    ctx.addIssue({ code: "custom", message: "Query parameters must be strings" });
+  }
 });
 
 export const ExtensionApiRouteParamsSchema = z.object({
