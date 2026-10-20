@@ -8,6 +8,8 @@ export interface HostBoundMemberScope {
   readonly pluginId: string;
   readonly publicationId: string;
   readonly memberId: string;
+  /** Host-generated correlation ID; SDK callers must never supply it. */
+  readonly requestId: string;
 }
 
 export interface PluginMemberAccessRepository {
@@ -28,7 +30,9 @@ export function createHostMemberAccessSession(
   repository: PluginMemberAccessRepository = new DrizzlePluginMemberAccessRepository(),
 ): { readonly memberAccess: PluginMemberAccessApi; close(): Promise<void> } {
   if (!scope || ![scope.pluginId, scope.publicationId, scope.memberId]
-    .every((id) => typeof id === "string" && VALID_ID.test(id))) {
+    .every((id) => typeof id === "string" && VALID_ID.test(id)) ||
+      typeof scope.requestId !== "string" ||
+      !/^[A-Za-z0-9_:-]{1,128}$/.test(scope.requestId)) {
     throw new PluginDomainError("EXTENSION_MEMBER_INVALID", "Invalid Host member binding");
   }
   const bound = Object.freeze({ ...scope });
