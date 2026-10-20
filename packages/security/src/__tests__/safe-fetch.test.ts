@@ -120,6 +120,22 @@ describe("SSRF Protection - IP & URL Validation", () => {
   });
 
   describe("safeFetch integration", () => {
+    it("rejects hosts outside a caller's allowlist before connecting", async () => {
+      await expect(
+        safeFetch("https://example.net/image.jpg", {
+          allowedHostnames: ["images.unsplash.com"],
+        }),
+      ).rejects.toMatchObject({ code: "HOST_NOT_ALLOWED" });
+    });
+
+    it("never treats a hostname suffix as an exact allowlist match", async () => {
+      await expect(
+        safeFetch("https://images.unsplash.com.evil.example/photo", {
+          allowedHostnames: ["images.unsplash.com"],
+        }),
+      ).rejects.toMatchObject({ code: "HOST_NOT_ALLOWED" });
+    });
+
     it("blocks localhost (DNS resolves to loopback)", async () => {
       await expect(safeFetch("http://localhost:1/")).rejects.toThrow(
         /private|BLOCKED/i,

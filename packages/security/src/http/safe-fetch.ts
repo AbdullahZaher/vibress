@@ -114,6 +114,8 @@ export interface SafeFetchOptions {
   timeout?: number;
   maxRedirects?: number;
   maxSize?: number;
+  /** Optional exact-host allowlist enforced for every redirect hop. */
+  allowedHostnames?: readonly string[];
   headers?: Record<string, string>;
   body?: string | Buffer | undefined;
 }
@@ -179,6 +181,17 @@ async function safeFetchInner(
     }
 
     const hostname = parsedUrl.hostname;
+    if (
+      options.allowedHostnames &&
+      !options.allowedHostnames.some(
+        (allowed) => allowed.toLowerCase() === hostname.toLowerCase(),
+      )
+    ) {
+      throw new SafeFetchError(
+        "HOST_NOT_ALLOWED",
+        "Request host is outside the allowed set",
+      );
+    }
 
     // DNS resolution + private IP check (rebinding guard part 1)
     let addresses: string[];
