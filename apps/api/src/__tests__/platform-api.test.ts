@@ -641,6 +641,56 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("public extension API is GET-only, host-scoped and validates response projection", async () => {
+    const handler = vi.fn(async () => ({ title: "Available courses" }));
+    const descriptor: PluginApiRoute = {
+      id: "catalog",
+      audience: "public",
+      method: "GET",
+      query: { fields: { lang: "string" }, required: ["lang"] },
+      response: { fields: { title: "string" }, required: ["title"] },
+      handle: handler,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    try {
+      const url = "/api/content/v1/extensions/independent-courses/v1/catalog";
+      const valid = await app.inject({
+        method: "GET", url: `${url}?lang=en`, headers: { host: "localhost:7777" },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json()).toEqual({ title: "Available courses" });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      const forged = await app.inject({
+        method: "GET", url: `${url}?lang=en&publicationId=forged`,
+        headers: { host: "localhost:7777" },
+      });
+      expect(forged.statusCode).toBe(400);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(prepare).toHaveBeenCalledTimes(1);
+
+      const mutation = await app.inject({
+        method: "POST", url, headers: { host: "localhost:7777" },
+        payload: { title: "not allowed" },
+      });
+      expect(mutation.statusCode).toBe(404);
+
+      handler.mockResolvedValue({ title: "Visible", internalSecret: "hidden" });
+      const malformedResponse = await app.inject({
+        method: "GET", url: `${url}?lang=en`,
+        headers: { host: "localhost:7777" },
+      });
+      expect(malformedResponse.statusCode).toBe(503);
+      expect(malformedResponse.body).not.toContain("hidden");
+    } finally {
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
   it("rejects duplicate extension routes and suppresses handler exceptions", async () => {
     const descriptor: PluginApiRoute = {
       id: "courses", audience: "admin", method: "GET",
