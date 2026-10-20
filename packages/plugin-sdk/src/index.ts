@@ -112,10 +112,37 @@ export interface PluginApiRoute {
     Record<string, PluginApiScalar> | Promise<Record<string, PluginApiScalar>>;
 }
 
+/**
+ * EXT-301A: Host-rendered, read-only Studio view descriptors.
+ * Plugins cannot inject React, HTML, scripts, hrefs or change Admin routing.
+ * The view's GET route remains independently Host-authorized on every request.
+ */
+export type PluginAdminPermission = "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+export interface PluginAdminLocalizedLabel {
+  readonly en: string;
+  readonly ar: string;
+}
+export interface PluginAdminView {
+  /** Stable single URL segment under the Host-owned Admin route. */
+  readonly id: string;
+  /** Must resolve to a declared Admin GET route in this same module. */
+  readonly routeId: string;
+  readonly title: PluginAdminLocalizedLabel;
+}
+export interface PluginAdminNavigationItem {
+  readonly viewId: string;
+  readonly label: PluginAdminLocalizedLabel;
+  /** Must match the linked route permission; the Host checks both. */
+  readonly permission: PluginAdminPermission;
+}
+
 export interface PluginModule {
   activate(context: PluginContext): void | Promise<void>;
   /** Additive optional contribution: existing SDK v1 modules are unchanged. */
   readonly routes?: readonly PluginApiRoute[] | undefined;
+  /** Optional metadata only; never executable UI contributions. */
+  readonly adminViews?: readonly PluginAdminView[] | undefined;
+  readonly adminNavigation?: readonly PluginAdminNavigationItem[] | undefined;
   deactivate?(): void | Promise<void>;
   /** Third parameter is additive; bundled v1 handlers may ignore it. */
   onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
