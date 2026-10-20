@@ -62,10 +62,26 @@ keys/values obtained from the existing Host-authenticated Admin extension API:
 - Discovery returns no routes from legacy bundled modules or disabled external
   plugins. The plugin runtime must be operator-approved and publication enabled.
 - Every actual view GET independently checks Staff auth, CSRF/origin policy,
-  route permission, publication, plugin capability, enablement and response schema.
-  Navigation visibility is **never** an authorization grant.
+  route permission, publication-local Staff role, plugin capability, enablement and
+  response schema. Navigation visibility is **never** an authorization grant.
+  Local publication `owner/admin` may use `plugins.manage`; local `editor`
+  may use `plugins.read` and generic `posts.edit`; local `author/contributor`
+  can only use the read-only `posts.read` route. Both global permission and
+  local role are required. Generic writes cannot infer post ownership.
 - `Cache-Control: no-store` is set on discovery and API responses. Admin clears
   navigation on publication changes and ignores stale discovery responses.
+- Discovery caches **only static Host-validated descriptors** by the
+  operator-pinned SHA-256 and installed module version, coalescing concurrent
+  requests and bounding cache size to 64 modules. It reads the small trusted
+  lockfile on each request but does not re-read/hash/import unchanged plugin
+  modules. Full module bytes are still reverified by the Host for every
+  actual extension API invocation. Cache entries do not store Staff access
+  rights, publication enablement or tenant-specific data; these are rechecked.
+  Invalid modules are negatively cached for 30 seconds and skipped with
+  bounded warning metadata; other valid modules remain visible.
+- Up to 64 operator-approved modules may contribute 8 views each, yielding
+  at most 512 validated navigation records. The first discovery after a new
+  artifact is admitted still incurs a bounded cold-load cost.
 - A disabled plugin may remain in an already-open sidebar until the next
   refresh/site switch; its API content is immediately denied by the Host. Never
   treat the menu as authoritative.
