@@ -117,6 +117,41 @@ describe("EXT-203B2 host-bound typed publication storage", () => {
       await expect(a.create("courses", "same-id", { title: "duplicate" }))
         .rejects.toMatchObject({ code: "PLUGIN_STORAGE_CONFLICT" });
 
+      // SECURITY REGRESSION: invoke the exported DATABASE ADAPTER directly,
+      // bypassing the service guard. A crafted UPDATE must not move content.
+      const bound = { pluginId: "plugin-a", publicationId: "pub-a" };
+      await expect(repository.update(bound, model, "same-id", 1, {
+        publication_id: "pub-b",
+      })).rejects.toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(repository.update(bound, model, "same-id", 1, {
+        id: "renamed-id",
+      })).rejects.toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(repository.update(bound, model, "same-id", 1, {
+        version: 99,
+      })).rejects.toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(repository.create(bound, model, "fake-id", {
+        publication_id: "pub-b", title: "Forged",
+      })).rejects.toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(repository.create(bound, model, "fake-id", {
+        title: "Forged", seats: Number.NaN,
+      })).rejects.toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(repository.get(bound, model, "../bad")).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      await expect(repository.list(bound, model, 1000000)).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      await expect(repository.list(bound, model, -1)).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      await expect(repository.list(bound, model, 2, "../bad")).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      expect((await a.get("courses", "same-id"))?.fields.title).toBe("مقدمة");
+      expect((await b.get("courses", "same-id"))?.fields.title).toBe("Publication B");
+      expect(await b.get("courses", "renamed-id")).toBeNull();
+      expect(await b.get("courses", "fake-id")).toBeNull();
+
       expect((await a.update("courses", "same-id", 1, { title: "Updated" })).version).toBe(2);
       await expect(a.update("courses", "same-id", 1, { title: "stale" }))
         .rejects.toMatchObject({ code: "PLUGIN_STORAGE_CONFLICT" });
@@ -132,6 +167,56 @@ describe("EXT-203B2 host-bound typed publication storage", () => {
       await expect(a.list("courses", 51)).rejects.toMatchObject({
         code: "PLUGIN_STORAGE_INVALID",
       });
+
+      // A hostile search_path can expose an unowned same-named relation.
+      // The adapter must read the physical table in the owner's schema.
+      const physical = await client.query(
+        "SELECT table_name FROM plugin_storage_physical_models " +
+        "WHERE plugin_id='plugin-a' AND model_key='courses'",
+      );
+      const physicalName: string = physical.rows[0]?.table_name;
+      const shadow = "shadow_" + randomUUID().replaceAll("-", "");
+      await client.query('CREATE SCHEMA "' + shadow + '"');
+      try {
+        await client.query('CREATE TABLE "' + shadow + '"."' + physicalName + '" ' +
+          '(publication_id text,id text,version integer,title text,seats integer,' +
+          'visible boolean,starts_at timestamptz)');
+        await client.query('INSERT INTO "' + shadow + '"."' + physicalName + '" ' +
+          '(publication_id,id,version,title) VALUES ($1,$2,$3,$4)',
+          ["pub-a", "same-id", 987, "malicious shadow data"]);
+        await client.query('SET search_path TO "' + shadow + '","' + ns + '"');
+        expect((await a.get("courses", "same-id"))?.fields.title).toBe("Updated");
+        expect((await a.get("courses", "same-id"))?.version).toBe(2);
+      } finally {
+        await client.query('SET search_path TO "' + ns + '"');
+        await client.query('DROP SCHEMA "' + shadow + '" CASCADE');
+      }
+
+      // Two independent PG sessions: disablement wins against a storage read
+      // that is waiting on the locked publication state row.
+      const writer = await getDbPool().connect();
+      try {
+        await writer.query('SET search_path TO "' + ns + '"');
+        await writer.query("BEGIN");
+        await writer.query(
+          "UPDATE plugin_publication_states SET enabled=false " +
+          "WHERE plugin_id='plugin-a' AND publication_id='pub-a'",
+        );
+        const pending = a.get("courses", "same-id");
+        // The publication UPDATE lock is still held until commit.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await writer.query("COMMIT");
+        await expect(pending).rejects.toMatchObject({ code: "PLUGIN_STORAGE_DENIED" });
+      } finally {
+        await writer.query("ROLLBACK");
+        await writer.query("RESET search_path");
+        writer.release();
+      }
+      await client.query(
+        "UPDATE plugin_publication_states SET enabled=true " +
+        "WHERE plugin_id='plugin-a' AND publication_id='pub-a'",
+      );
+      expect((await a.get("courses", "same-id"))?.version).toBe(2);
 
       await client.query(`
         UPDATE plugin_publication_states SET enabled=false
