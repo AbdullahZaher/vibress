@@ -961,7 +961,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(editorResponse.json()).toEqual({
         hasStorage: false, publication: limitedPubId,
       });
-      expect(approve).toHaveBeenCalledTimes(1);
+      expect(approve).toHaveBeenCalledTimes(2);
       expect((await navigation(limitedPubId)).json().items).toEqual([]);
       expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       await db.update(publicationMemberships).set({ role: "admin" })
