@@ -4,6 +4,7 @@ import { Database, Edit, List, Plus, RefreshCw, Search, Trash2 } from "lucide-re
 import { apiRequest } from "../../lib/api";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import {
@@ -120,28 +121,25 @@ export function ContentModelList({
 
   return (
     <section className="mx-auto w-full max-w-7xl space-y-6" aria-labelledby="content-models-title">
-      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="min-w-0">
-          <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-            {tr("Settings / Advanced")}
-          </p>
-          <h1 id="content-models-title" className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-            <Database aria-hidden="true" className="h-5 w-5 text-primary" />
-            {tr("Content Models")}
-          </h1>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {tr("Define reusable content structures, fields, relations, and validation rules.")}
-          </p>
-        </div>
-        {canManage && (
-          <Button type="button" size="sm"
-            onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}
-            className="self-start gap-1.5 sm:self-auto">
-            <Plus className="h-4 w-4" />
-            {tr("Create Model")}
-          </Button>
-        )}
-      </header>
+      <AdminPageHeader
+        breadcrumb={tr("Settings / Advanced")}
+        titleId="content-models-title"
+        title={tr("Content Models")}
+        description={tr("Define reusable content structures, fields, relations, and validation rules.")}
+        actions={
+          canManage && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/new")}
+              className="self-start gap-1.5 sm:self-auto"
+            >
+              <Plus className="h-4 w-4" />
+              {tr("Create Model")}
+            </Button>
+          )
+        }
+      />
 
       {error && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">

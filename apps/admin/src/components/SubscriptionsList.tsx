@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAdminLocale } from "../lib/admin-locale";
 import {
   AdminSubscription,
   listSubscriptionsApi,
@@ -7,6 +8,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import {
@@ -26,6 +28,7 @@ import {
 } from "lucide-react";
 
 export function SubscriptionsList() {
+  const { tr } = useAdminLocale();
   const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
@@ -121,11 +124,10 @@ export function SubscriptionsList() {
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Paid Subscriptions
-        </h1>
-      </div>
+      <AdminPageHeader
+        title={tr("Subscriptions")}
+        description={tr("Manage paid subscriber memberships, billing cycles, and payment statuses.")}
+      />
 
       {error && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">

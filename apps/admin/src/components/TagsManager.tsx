@@ -2,6 +2,7 @@ import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import {
   Card,
   CardHeader,
@@ -101,11 +102,10 @@ export const TagsManager: React.FC = () => {
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          {tr("Tags Management")}
-        </h1>
-      </div>
+      <AdminPageHeader
+        title={tr("Tags Management")}
+        description={tr("Organize and classify posts and editorial content with taxonomies.")}
+      />
 
       {errorMsg && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">

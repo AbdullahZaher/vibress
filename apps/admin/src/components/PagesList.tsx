@@ -1,6 +1,7 @@
 import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -142,22 +143,18 @@ export const PagesList: React.FC<PagesListProps> = ({
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-            {tr("Static Pages")}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {tr("Manage standalone site pages, legal policies, and landing documents.")}
-          </p>
-        </div>
-        <Button
-          onClick={() => onNavigate("/admin/pages/new")}
-          className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" /> {tr("Create Page")}
-        </Button>
-      </div>
+      <AdminPageHeader
+        title={tr("Static Pages")}
+        description={tr("Manage standalone site pages, legal policies, and landing documents.")}
+        actions={
+          <Button
+            onClick={() => onNavigate("/admin/pages/new")}
+            className="h-9 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="h-4 w-4" /> {tr("Create Page")}
+          </Button>
+        }
+      />
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
