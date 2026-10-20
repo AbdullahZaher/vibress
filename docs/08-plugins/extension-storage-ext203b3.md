@@ -33,7 +33,10 @@ Member and Public extension routes **never receive** `scope.storage`.
 The Host closes the request session in `finally`; retaining its SDK object
 for later use rejects operations with `PLUGIN_STORAGE_SESSION_CLOSED`.
 The authenticated Staff `actorUserId` and Host `requestId` are bound to
-the session, never provided by the extension. Successful `create/update`
+the session, never provided by the extension. The Host makes GET-bound
+storage **read-only** because Origin protection does not apply to GET;
+`create/update` reject with `PLUGIN_STORAGE_METHOD_DENIED` except inside
+authorized POST route handlers. Successful `create/update`
 operations write `plugin.storage.create/update` events to the existing
 `audit_events` table **inside the same PostgreSQL transaction**. Audit
 entries include publication, actor, request, plugin/model and record ID but
