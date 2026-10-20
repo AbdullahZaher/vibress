@@ -13,12 +13,25 @@ import { DrizzlePluginScopedStorageRepository } from "../infrastructure/drizzle-
  * Close in finally: handlers cannot retain authority across requests.
  */
 export function createHostPluginStorageSession(
-  scope: { readonly pluginId: string; readonly publicationId: string },
+  scope: {
+    readonly pluginId: string;
+    readonly publicationId: string;
+    readonly actorUserId: string;
+    readonly requestId: string;
+  },
   approvedModels: readonly ApprovedPluginPhysicalModel[],
   repository: PluginScopedStorageRepository = new DrizzlePluginScopedStorageRepository(),
 ): { readonly storage: PluginStorageApi; close(): void } {
+  // Only trusted authenticated Staff host callsites can provide these.
+  if (!scope.actorUserId || !/^[A-Za-z0-9_-]{1,128}$/.test(scope.actorUserId) ||
+      !scope.requestId || !/^[A-Za-z0-9_:-]{1,128}$/.test(scope.requestId)) {
+    throw new PluginScopedStorageError(
+      "PLUGIN_STORAGE_INVALID", "Missing or invalid Host audit principal",
+    );
+  }
   const service = new PluginScopedStorageService(repository, {
     pluginId: scope.pluginId, publicationId: scope.publicationId,
+    audit: Object.freeze({ actorUserId: scope.actorUserId, requestId: scope.requestId }),
   }, approvedModels);
   let closed = false;
   const check = (): void => {
