@@ -20,7 +20,8 @@
 | EXT-101 trusted release | **Operator-pinned lockfile ESM:** final-entrypoint SHA-256 and byte verification; single-file ESM vetted by operator |
 | EXT-102/103/104 | **Complete for foundation:** Atomic conditional status transitions (CAS), per-replica lazy initialization, Fastify onClose graceful shutdown, and operator lifecycle recovery endpoint (`/plugins/:id/recover`) |
 | EXT-201/202 | **Initial implementation in separate branch:** reserved Admin/Member/Public API dispatch, strict shared scalar schemas, publication/Member binding, host Staff permissions, capability checks. Pending CI, cross-publication conformance and independent SDK approval; plugin-owned custom permissions and advanced schemas remain out of scope |
-| EXT-203A | **Foundation in review:** additive append-only migration ledger 0042, operator-only transactional catalog admission, namespaced model ownership. Physical relational storage and plugin-callable typed scoped repositories remain EXT-203B; do not confuse catalog reservations with storage tables |
+| EXT-203A | **Merged:** additive append-only migration ledger 0042, operator-only transactional catalog admission, namespaced model ownership |
+| EXT-203B1 | **Draft:** additive 0043 immutable physical table mapping and operator-only scalar relational schema admission; no plugin-callable scoped repository or SQL access yet |
 | EXT-301/302/303/304 | **Next phase:** plugin-provided isolated Studio views, Next.js public dispatcher, Liquid/theme contracts and external sample conformance |
 | EXT-401/402/403/404 | Scoped secrets verified with database CHECK constraints and AES-256-GCM encryption at rest; backup/restore drill documented |
 | EXT-501..504 | **Next phase:** independent LMS integration pilot, full end-to-end multi-tenant publication drill and public SDK freeze |
