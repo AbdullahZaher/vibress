@@ -40,6 +40,16 @@ entries include publication, actor, request, plugin/model and record ID but
 exclude stored content. An audit insertion failure rolls back the write.
 The older EXT-203B2 internal repository scope remains backward compatible;
 new Staff SDK sessions require the actor and request context.
+
+The PostgreSQL adapter also attests the live physical table on **every**
+operation under a transaction-held relation lock: all approved field
+names/types/NULL rules and the base columns must match, the
+`(publication_id,id)` composite primary key must remain intact, and
+`publication_id` must retain a same-namespace `publications(id)`
+foreign key with `ON DELETE CASCADE`. Unexpected columns or missing
+publication-isolation constraints fail closed with
+`PLUGIN_STORAGE_SCHEMA_DRIFT`. Audit writes target the same operator
+catalog namespace to avoid `search_path` shadow relations.
 No HTML, shared SQL, cross-plugin model selection or callback transaction API
 is exposed. Existing v1 plugins still run without storage.
 
@@ -83,9 +93,10 @@ authority. Do not enable Member/Public generic CRUD to compensate for missing
 LMS domain rules.
 
 Operator-approved physical models must be trialled against a restored,
-populated PostgreSQL staging backup before production rollout. Full live
-physical schema attestation, signature provenance and cross-model atomicity
-remain outstanding. Atomically recorded Staff writes are now audited; this
+populated PostgreSQL staging backup before production rollout. Advanced
+physical-schema drift attestation (defaults, check constraints, indexes,
+triggers), signature provenance and cross-model atomicity remain outstanding.
+Atomically recorded Staff writes are now audited; this
 does not imply that raw SQL run by trusted in-process JavaScript can be
 audited by the Host. Do not consider the independent LMS pilot complete.
 
