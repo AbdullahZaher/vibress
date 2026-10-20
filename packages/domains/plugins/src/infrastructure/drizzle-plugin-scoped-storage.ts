@@ -1,8 +1,8 @@
 import {
-  getDb, plugins, pluginPublicationStates, pluginPhysicalModels,
+  getDb, plugins, pluginPublicationStates, pluginPhysicalModels, auditEvents,
 } from "@vibress/database";
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ApprovedPluginPhysicalModel } from "../application/plugin-storage-migrations";
 import {
   PluginScopedStorageError,
@@ -95,6 +95,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
     model: ApprovedPluginPhysicalModel,
     action: PluginStorageAction,
     fn: (table: SQL, execute: Execute) => Promise<T>,
+    auditMutation?: { readonly operation: "create" | "update"; readonly recordId: string },
   ): Promise<T> {
     // Defense in depth: adapters are exported for internal callers, so service
     // validation is never sufficient authorization or input sanitation.
@@ -103,6 +104,14 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
     }
     validateStorageRecordId(scope.pluginId);
     validateStorageRecordId(scope.publicationId);
+    if (scope.audit) {
+      if (!scope.audit.actorUserId || typeof scope.audit.actorUserId !== "string" ||
+          scope.audit.actorUserId.length > 128 ||
+          !scope.audit.requestId || typeof scope.audit.requestId !== "string" ||
+          scope.audit.requestId.length > 128) {
+        return problem("PLUGIN_STORAGE_INVALID", "Invalid Host audit context");
+      }
+    }
     validateStorageModel(model);
     if (process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE === "1") {
       return problem("PLUGIN_STORAGE_DISABLED", "Storage unavailable during recovery");
@@ -162,7 +171,22 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         return problem("PLUGIN_STORAGE_MODEL_DENIED", "Physical model table is missing or shadowed");
       }
       const physicalTable = sql`${sql.identifier(physical.schema_name)}.${sql.identifier(tableName)}`;
-      return fn(physicalTable, execute);
+      const result = await fn(physicalTable, execute);
+      if (auditMutation && scope.audit) {
+        // The mutation and its actor-bound audit entry commit or roll back
+        // together. Never log model field values or user-provided payloads.
+        await tx.insert(auditEvents).values({
+          id: randomUUID(),
+          publicationId: scope.publicationId,
+          actorUserId: scope.audit.actorUserId,
+          requestId: scope.audit.requestId,
+          action: `plugin.storage.${auditMutation.operation}`,
+          targetType: "plugin.storage",
+          targetId: auditMutation.recordId,
+          metadata: { pluginId: scope.pluginId, modelKey: model.key },
+        });
+      }
+      return result;
     });
   }
   async get(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
@@ -212,7 +236,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         }
         throw error;
       }
-    });
+    }, { operation: "create", recordId: id });
   }
   async update(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
     id: string, expectedVersion: number,
@@ -235,6 +259,6 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         WHERE "publication_id" = ${scope.publicationId} AND "id" = ${id} LIMIT 1`);
       return problem(existing ? "PLUGIN_STORAGE_CONFLICT" : "PLUGIN_STORAGE_NOT_FOUND",
         existing ? "Record was changed or version limit reached" : "Record not found");
-    });
+    }, { operation: "update", recordId: id });
   }
 }
