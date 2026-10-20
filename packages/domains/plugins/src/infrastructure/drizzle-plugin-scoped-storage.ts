@@ -158,7 +158,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       // the owner catalog. A same-named relation earlier on search_path must
       // NEVER shadow an operator-created plugin table.
       const [physical] = await execute(sql`
-        SELECT ns.nspname AS schema_name
+        SELECT ns.nspname AS schema_name, physical_table.oid AS physical_oid
         FROM pg_class owner_catalog
         JOIN pg_namespace ns ON ns.oid = owner_catalog.relnamespace
         JOIN pg_class physical_table ON physical_table.relnamespace = ns.oid
@@ -171,6 +171,77 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         return problem("PLUGIN_STORAGE_MODEL_DENIED", "Physical model table is missing or shadowed");
       }
       const physicalTable = sql`${sql.identifier(physical.schema_name)}.${sql.identifier(tableName)}`;
+      // Hold a physical table lock so out-of-band ALTER/DROP cannot race
+      // catalog attestation and the data operation in this transaction.
+      await execute(sql`LOCK TABLE ${physicalTable} IN ACCESS SHARE MODE`);
+      const oid = physical.physical_oid;
+      if (typeof oid !== "number" || !Number.isSafeInteger(oid) || oid < 1) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Invalid physical table identity");
+      }
+      const columns = await execute(sql`
+        SELECT attr.attname AS column_name, typ.typname AS column_type,
+          attr.attnotnull AS required
+        FROM pg_attribute attr
+        JOIN pg_type typ ON typ.oid = attr.atttypid
+        WHERE attr.attrelid = ${oid}::oid
+          AND attr.attnum > 0 AND NOT attr.attisdropped
+      `);
+      const expected: Record<string, { type: string; required: boolean }> = {
+        publication_id: { type: "text", required: true },
+        id: { type: "text", required: true },
+        version: { type: "int4", required: true },
+        created_at: { type: "timestamptz", required: true },
+        updated_at: { type: "timestamptz", required: true },
+      };
+      const pgType = {
+        text: "text", integer: "int4", boolean: "bool",
+        timestamptz: "timestamptz",
+      } as const;
+      for (const column of model.columns) {
+        expected[column.name] = {
+          type: pgType[column.type], required: column.required,
+        };
+      }
+      if (columns.length !== Object.keys(expected).length ||
+          columns.some((column) => {
+            const spec = typeof column.column_name === "string"
+              ? expected[column.column_name] : undefined;
+            return !spec || column.column_type !== spec.type ||
+              column.required !== spec.required;
+          })) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Physical model columns differ from approval");
+      }
+      const [constraints] = await execute(sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pg_constraint con
+            WHERE con.conrelid = ${oid}::oid AND con.contype = 'p'
+              AND (
+                SELECT array_agg(att.attname ORDER BY keys.ordinality)
+                FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+                JOIN pg_attribute att ON att.attrelid = ${oid}::oid
+                  AND att.attnum = keys.attnum
+              ) = ARRAY['publication_id','id']::text[]
+          ) AS valid_pk,
+          EXISTS (
+            SELECT 1 FROM pg_constraint con
+            JOIN pg_class parent ON parent.oid = con.confrelid
+            JOIN pg_class physical ON physical.oid = ${oid}::oid
+            JOIN pg_attribute src ON src.attrelid = physical.oid
+              AND src.attname = 'publication_id'
+            JOIN pg_attribute target ON target.attrelid = parent.oid
+              AND target.attname = 'id'
+            WHERE con.conrelid = ${oid}::oid AND con.contype = 'f'
+              AND con.confdeltype = 'c'
+              AND parent.relname = 'publications'
+              AND parent.relnamespace = physical.relnamespace
+              AND con.conkey = ARRAY[src.attnum]::smallint[]
+              AND con.confkey = ARRAY[target.attnum]::smallint[]
+          ) AS valid_pub_fk
+      `);
+      if (constraints?.valid_pk !== true || constraints.valid_pub_fk !== true) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Physical model isolation constraints differ from approval");
+      }
       const result = await fn(physicalTable, execute);
       if (auditMutation && scope.audit) {
         // The mutation and its actor-bound audit entry commit or roll back
