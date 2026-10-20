@@ -21,12 +21,15 @@ describe("EXT-203B3 Host-bound storage session", () => {
     }));
     const repo: PluginScopedStorageRepository = { get, list, create, update };
     const session = createHostPluginStorageSession(
-      { pluginId: "p1", publicationId: "pub-a" }, [model], repo,
+      { pluginId: "p1", publicationId: "pub-a",
+        actorUserId: "staff-1", requestId: "req-1" }, [model], repo,
     );
     const saved = await session.storage.create("courses", "row-1", { title: "دورة" });
     expect(saved.fields.title).toBe("دورة");
     expect(create).toHaveBeenCalledWith(
-      { pluginId: "p1", publicationId: "pub-a" }, model, "row-1", { title: "دورة" },
+      { pluginId: "p1", publicationId: "pub-a",
+        audit: { actorUserId: "staff-1", requestId: "req-1" } },
+      model, "row-1", { title: "دورة" },
     );
     await expect(session.storage.create("courses", "row-2", {
       publication_id: "pub-b", title: "forged",
@@ -47,6 +50,27 @@ describe("EXT-203B3 Host-bound storage session", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("rejects a session without an authenticated Staff audit identity", () => {
+    const repo: PluginScopedStorageRepository = {
+      get: async () => null,
+      list: async () => ({ items: [] }),
+      create: async () => ({ id: "x", version: 1, fields: {} }),
+      update: async () => ({ id: "x", version: 1, fields: {} }),
+    };
+    expect(() => createHostPluginStorageSession({
+      pluginId: "p1", publicationId: "pub-a",
+      actorUserId: "", requestId: "req-1",
+    }, [model], repo)).toThrow(expect.objectContaining({
+      code: "PLUGIN_STORAGE_INVALID",
+    }));
+    expect(() => createHostPluginStorageSession({
+      pluginId: "p1", publicationId: "pub-a",
+      actorUserId: "staff-1", requestId: "invalid\\nlog-injection",
+    }, [model], repo)).toThrow(expect.objectContaining({
+      code: "PLUGIN_STORAGE_INVALID",
+    }));
+  });
+
   it("rejects unapproved or checksum-drifted models before exposing storage", () => {
     const repo: PluginScopedStorageRepository = {
       get: async () => null,
@@ -55,7 +79,8 @@ describe("EXT-203B3 Host-bound storage session", () => {
       update: async () => ({ id: "x", version: 1, fields: {} }),
     };
     expect(() => createHostPluginStorageSession(
-      { pluginId: "p1", publicationId: "pub-a" },
+      { pluginId: "p1", publicationId: "pub-a",
+        actorUserId: "staff-1", requestId: "req-1" },
       [{ ...model, schemaSha256: "b".repeat(64) }], repo,
     )).toThrow();
   });
