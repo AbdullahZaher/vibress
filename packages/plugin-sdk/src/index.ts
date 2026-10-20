@@ -41,8 +41,36 @@ export interface PluginApiShape {
   fields: Record<string, PluginApiFieldType>;
   required?: readonly string[] | undefined;
 }
+/**
+ * EXT-203B3: ephemeral, host-created, publication-bound plugin storage.
+ * Callers never provide a tenant ID, SQL or table name. Host may omit this
+ * capability when operator approval or principal authorization is absent.
+ */
+export type PluginStorageValue = string | number | boolean | null;
+export interface PluginStorageItem {
+  readonly id: string;
+  readonly version: number;
+  readonly fields: Readonly<Record<string, PluginStorageValue>>;
+}
+export interface PluginStorageResultPage {
+  readonly items: readonly PluginStorageItem[];
+  readonly nextCursor?: string;
+}
+export interface PluginStorageApi {
+  get(modelKey: string, id: string): Promise<PluginStorageItem | null>;
+  list(modelKey: string, limit?: number, cursor?: string): Promise<PluginStorageResultPage>;
+  create(
+    modelKey: string, id: string, fields: Readonly<Record<string, PluginStorageValue>>,
+  ): Promise<PluginStorageItem>;
+  update(
+    modelKey: string, id: string, expectedVersion: number,
+    fields: Readonly<Record<string, PluginStorageValue>>,
+  ): Promise<PluginStorageItem>;
+}
 export interface PluginApiScope {
   readonly publicationId: string;
+  /** Present only for operator-approved models in an authorized Staff request. */
+  readonly storage?: PluginStorageApi | undefined;
   readonly requestId: string;
   readonly principal:
     | { readonly kind: "staff"; readonly id: string }
