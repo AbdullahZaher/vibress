@@ -27,19 +27,19 @@ export function createHostPluginStorageSession(
     );
   };
   const storage: PluginStorageApi = Object.freeze({
-    get: (modelKey: string, id: string) => {
+    get: async (modelKey: string, id: string) => {
       check();
       return service.get(modelKey, id);
     },
-    list: (modelKey: string, limit?: number, cursor?: string) => {
+    list: async (modelKey: string, limit?: number, cursor?: string) => {
       check();
       return service.list(modelKey, limit, cursor);
     },
-    create: (modelKey: string, id: string, fields: Readonly<Record<string, string | number | boolean | null>>) => {
+    create: async (modelKey: string, id: string, fields: Readonly<Record<string, string | number | boolean | null>>) => {
       check();
       return service.create(modelKey, id, fields);
     },
-    update: (
+    update: async (
       modelKey: string, id: string, expectedVersion: number,
       fields: Readonly<Record<string, string | number | boolean | null>>,
     ) => {
