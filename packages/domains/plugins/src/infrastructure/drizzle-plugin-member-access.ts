@@ -2,7 +2,7 @@ import {
   getDb, members, plans, products, subscriptions, plugins,
   pluginPublicationStates,
 } from "@vibress/database";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { PluginMemberSelf } from "@vibress/plugin-sdk";
 import { PluginDomainError } from "../application/plugins-service";
 import type {
@@ -99,10 +99,16 @@ export class DrizzlePluginMemberAccessRepository implements PluginMemberAccessRe
           eq(subscriptions.planId, planId),
           eq(plans.status, "active"),
           eq(products.status, "active"),
+          isNull(plans.archivedAt),
+          isNull(products.archivedAt),
           inArray(subscriptions.status, ["active", "trialing"]),
           sql`(${subscriptions.currentPeriodStart} IS NULL OR ${subscriptions.currentPeriodStart} <= now())`,
           sql`(${subscriptions.currentPeriodEnd} IS NULL OR ${subscriptions.currentPeriodEnd} > now())`,
-          sql`(${subscriptions.status} <> 'trialing' OR ${subscriptions.trialEnd} IS NULL OR ${subscriptions.trialEnd} > now())`,
+          // A trial with NO end date is not evidence of an ongoing
+          // entitlement. Require a future trial or billing period end.
+          sql`(${subscriptions.status} <> 'trialing' OR
+            ${subscriptions.trialEnd} > now() OR
+            ${subscriptions.currentPeriodEnd} > now())`,
           sql`${subscriptions.endedAt} IS NULL`,
         )).limit(1);
       return Boolean(record);
