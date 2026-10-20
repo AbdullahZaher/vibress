@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
-  getDb, workspaces, publications, members, products, plans,
+  getDb, getDbPool, schema, workspaces, publications, members, products, plans,
   subscriptions, plugins, pluginPublicationStates, auditEvents,
 } from "@vibress/database";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import {
   createHostMemberAccessSession, type PluginMemberAccessRepository,
 } from "../src/application/plugin-member-access";
@@ -144,6 +145,28 @@ describe("EXT-204 Host member bridge", () => {
       expect(auditText).not.toContain(memberA);
       expect(auditText).not.toContain("الطالب");
       expect(auditText).not.toContain(id("a") + "@example.test");
+
+      // An unavailable audit sink must FAIL CLOSED rather than returning
+      // true without creating an audit record. Use one dedicated PG session
+      // with a transaction-local temporary shadow of the audit table.
+      const client = await getDbPool().connect();
+      try {
+        await client.query(`
+          CREATE TEMP TABLE audit_events (
+            LIKE public.audit_events INCLUDING DEFAULTS,
+            CONSTRAINT reject_plan_audits CHECK (false)
+          )
+        `);
+        const withFailedAudit = new DrizzlePluginMemberAccessRepository(
+          () => drizzle(client, { schema }),
+        );
+        await expect(withFailedAudit.hasActivePlan(bound, planA)).rejects.toThrow();
+        expect((await db.select({ id: auditEvents.id }).from(auditEvents)
+          .where(eq(auditEvents.requestId, bound.requestId)))).toHaveLength(2);
+      } finally {
+        await client.query("DROP TABLE IF EXISTS pg_temp.audit_events");
+        client.release();
+      }
       await expect(repo.getSelf({ ...bound, memberId: memberB }))
         .rejects.toMatchObject({ code: "EXTENSION_MEMBER_DENIED" });
       await expect(repo.getSelf({ ...bound, publicationId: pubB }))
