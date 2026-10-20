@@ -67,6 +67,16 @@ describe("EXT-202 route admission and publication state", () => {
       "independent-courses", "pub-a", "extension.routes.member",
     )).toBeTruthy();
     expect(host.loadModule).toHaveBeenCalledTimes(1);
+    // Merely reading the descriptor never executes a plugin.
+    expect(handler).not.toHaveBeenCalled();
+    const module = await service.resolveExtensionApiModule(
+      "independent-courses", "pub-a", "extension.routes.member",
+    );
+    expect(module).not.toBeNull();
+    if (!module) throw new Error("Expected admitted module");
+    expect(await service.prepareExtensionApiExecution(
+      "independent-courses", "pub-a", "extension.routes.member", module,
+    )).toBe(true);
     expect(handler).toHaveBeenCalledTimes(1);
     await expect(service.resolveExtensionApiModule(
       "independent-courses", "pub-b", "extension.routes.member",
@@ -103,10 +113,16 @@ describe("EXT-202 route admission and publication state", () => {
 
   it("rejects deactivation racing with local module initialization", async () => {
     const current = setup();
-    vi.mocked(current.repo.findById).mockResolvedValue({ ...activePlugin, status: "inactive" });
-    expect(await current.service.resolveExtensionApiModule(
+    const module = await current.service.resolveExtensionApiModule(
       "independent-courses", "pub-a", "extension.routes.member",
-    )).toBeNull();
+    );
+    expect(module).not.toBeNull();
+    if (!module) throw new Error("Expected admitted module");
+    vi.mocked(current.repo.findById).mockResolvedValue({ ...activePlugin, status: "inactive" });
+    expect(await current.service.prepareExtensionApiExecution(
+      "independent-courses", "pub-a", "extension.routes.member", module,
+    )).toBe(false);
+    expect(current.handler).not.toHaveBeenCalled();
     await current.service.shutdown();
   });
 });

@@ -653,12 +653,34 @@ export class PluginsService {
     await this.requirePublicationEnabled(plugin, publicationId);
     const module = await this.host.loadModule(plugin);
     if (!module) return null;
-    await this.ensureInitializedHere(plugin, module);
+    // Reading trusted route descriptors must NOT trigger activate() before
+    // host-enforced Staff permission and request validation.
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
         !latest.capabilities.includes(capability)) return null;
     await this.requirePublicationEnabled(latest, publicationId);
     return module;
+  }
+
+  /** Call only after the HTTP host has authorized the route and validated its input. */
+  async prepareExtensionApiExecution(
+    manifestId: string,
+    publicationId: string,
+    capability: "extension.routes.admin" | "extension.routes.member" | "extension.routes.public",
+    module: PluginModule,
+  ): Promise<boolean> {
+    this.assertRuntimeAllowed();
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) ||
+        !plugin.capabilities.includes(capability)) return false;
+    await this.requirePublicationEnabled(plugin, publicationId);
+    await this.ensureInitializedHere(plugin, module);
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" ||
+        !latest.capabilities.includes(capability)) return false;
+    await this.requirePublicationEnabled(latest, publicationId);
+    return true;
   }
 
   private async requirePublicationEnabled(plugin: Plugin, publicationId?: string): Promise<void> {

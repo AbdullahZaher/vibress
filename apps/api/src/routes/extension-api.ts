@@ -149,6 +149,21 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       const body = validateExtensionApiObject(route.body, req.method === "POST" ? req.body ?? {} : {});
       if (!query || !body) return reject(reply, req, "VALIDATION_ERROR", 400);
 
+      // Do not initialize module code for a forbidden or malformed request.
+      // Recheck plugin status/publication enablement after initialization too.
+      try {
+        const allowed = await pluginsService.prepareExtensionApiExecution(
+          params.data.pluginId, publicationId, capability, module,
+        );
+        if (!allowed) return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
+      } catch (err) {
+        if (err instanceof PluginDomainError &&
+            err.code === "PLUGIN_PUBLICATION_INACTIVE") {
+          return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
+        }
+        return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+      }
+
       const scope: PluginApiScope = {
         publicationId,
         requestId: req.id,

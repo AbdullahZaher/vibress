@@ -601,6 +601,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
     };
     const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
       .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
     try {
       const url = "/api/admin/v1/extensions/independent-courses/v1/courses";
       const anonymous = await app.inject({
@@ -632,7 +634,9 @@ describe("Batch 12 — Platform Integration & Security", () => {
         "independent-courses", valid.json().publication, "extension.routes.admin",
       );
       expect(handle).toHaveBeenCalledTimes(1);
+      expect(prepared).toHaveBeenCalledTimes(1);
     } finally {
+      prepared.mockRestore();
       resolved.mockRestore();
     }
   });

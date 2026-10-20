@@ -35,7 +35,7 @@ This design does not promise course/lesson relational storage (EXT-203).
 
 All audiences require the operator-approved plugin to be active and enabled
 for the resolved publication, and the corresponding declared capability.
-Unknown/disabled routes return 404. Invalid request data returns 400.
+Unknown/disabled routes return 404. Route descriptors are read before `activate()`; after Staff permission and input validation, the host initializes the module and rechecks publication enablement before `handle()`. Invalid request data returns 400.
 Plugin faults return a generic 503 with a request ID, not exception internals.
 Handlers are bounded by the host's 64 KiB HTTP body cap and rate limit
 (60 requests per minute per configured limit key). Protected responses use

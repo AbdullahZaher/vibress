@@ -143,6 +143,8 @@ describe("Batch 8 — Member API Integration & Security", () => {
     };
     const resolvePlugin = vi.spyOn(pluginsService, "resolveExtensionApiModule")
       .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
     const resolvePublication = vi.spyOn(workspaceService, "resolvePublicPublicationContext");
     const url = "/api/members/v1/extensions/independent-courses/v1/courses";
     try {
@@ -172,7 +174,9 @@ describe("Batch 8 — Member API Integration & Security", () => {
         "independent-courses", "pub_default", "extension.routes.member",
       );
       expect(handle).toHaveBeenCalledTimes(1);
+      expect(prepared).toHaveBeenCalledTimes(1);
     } finally {
+      prepared.mockRestore();
       resolvePublication.mockRestore();
       resolvePlugin.mockRestore();
     }
