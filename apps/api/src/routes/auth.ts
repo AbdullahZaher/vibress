@@ -1,5 +1,9 @@
 import { FastifyInstance } from "fastify";
-import { LoginRequestSchema } from "@vibress/api-contracts";
+import {
+  ForgotPasswordRequestSchema,
+  LoginRequestSchema,
+  ResetPasswordRequestSchema,
+} from "@vibress/api-contracts";
 import { authService, usersService } from "../services";
 import {
   requireStaffSession,
@@ -369,8 +373,8 @@ export async function authRoutes(fastify: FastifyInstance) {
     },
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as { email?: string } | undefined;
-      if (!body || !body.email) {
+      const parsedEmail = ForgotPasswordRequestSchema.safeParse(req.body);
+      if (!parsedEmail.success) {
         return reply.status(400).send({
           errors: [
             {
@@ -382,7 +386,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const email = normalizeEmail(body.email);
+      const email = normalizeEmail(parsedEmail.data.email);
       const user = await usersService.findByEmail(email);
 
       // Enumeration resistance: if user doesn't exist or is disabled, execute dummy timing and return generic success
@@ -443,10 +447,16 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.post("/reset-password", {
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as
-        | { token?: string; password?: string }
+      const candidate = req.body as
+        | { token?: unknown; password?: unknown }
         | undefined;
-      if (!body || !body.token || !body.password) {
+      if (
+        !candidate ||
+        typeof candidate.token !== "string" ||
+        !candidate.token ||
+        typeof candidate.password !== "string" ||
+        !candidate.password
+      ) {
         return reply.status(400).send({
           errors: [
             {
@@ -458,7 +468,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (body.password.length < 8) {
+      if (candidate.password.length < 8) {
         return reply.status(400).send({
           errors: [
             {
@@ -470,8 +480,19 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const tokenHash = hashToken(body.token);
-      const newPassword = body.password;
+      const parsedReset = ResetPasswordRequestSchema.safeParse(candidate);
+      if (!parsedReset.success) {
+        return reply.status(400).send({
+          errors: [{
+            code: "VALIDATION_ERROR",
+            message: "Invalid password reset request",
+            requestId: req.id,
+          }],
+        });
+      }
+
+      const tokenHash = hashToken(parsedReset.data.token);
+      const newPassword = parsedReset.data.password;
       try {
         await runInTransaction(async () => {
           const db = getDb();

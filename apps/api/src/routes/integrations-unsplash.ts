@@ -430,7 +430,16 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
       }
 
       // 5. Upload via Vibress MediaService (which executes full magic-bytes, limits, and storage upload)
-      const publicationId = req.publicationContext?.publicationId || "pub_default";
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return reply.status(403).send({
+          errors: [{
+            code: "PUBLICATION_ACCESS_DENIED",
+            message: "Publication context is required",
+            requestId: req.id,
+          }],
+        });
+      }
       const mediaAsset = await mediaService.uploadMedia(
         {
           publicationId,

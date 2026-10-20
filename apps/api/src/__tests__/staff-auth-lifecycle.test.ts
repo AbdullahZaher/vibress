@@ -301,6 +301,25 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       staffSessionCookie = Array.isArray(setCookie) ? setCookie[0]! : (setCookie as string);
     });
 
+    it("rejects malformed recovery request data before hashing", async () => {
+      const invalidReset = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/reset-password",
+        headers: { origin: "http://localhost:7779" },
+        payload: { token: ["malformed"], password: { invalid: true } },
+      });
+      expect(invalidReset.statusCode).toBe(400);
+      expect(invalidReset.json().errors[0].code).toBe("VALIDATION_ERROR");
+
+      const invalidEmail = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/forgot-password",
+        headers: { origin: "http://localhost:7779" },
+        payload: { email: ["bad-email"] },
+      });
+      expect(invalidEmail.statusCode).toBe(400);
+    });
+
     it("returns timing-safe generic response for non-existent email (enumeration resistant)", async () => {
       const res = await app.inject({
         method: "POST",
