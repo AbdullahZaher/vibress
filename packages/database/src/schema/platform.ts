@@ -244,3 +244,65 @@ export const pluginPublicationSettings = pgTable(
 );
 
 export type PluginPublicationSettingRow = typeof pluginPublicationSettings.$inferSelect;
+
+/**
+ * EXT-203A: operator-reviewed extension schema migrations. No request-time
+ * DDL, external SQL execution, or automatic activation. Append-only ledger.
+ * Plugin deletion is restricted when an applied migration exists.
+ */
+export const pluginSchemaMigrations = pgTable(
+  "plugin_schema_migrations",
+  {
+    pluginId: text("plugin_id").notNull()
+      .references(() => plugins.id, { onDelete: "restrict" }),
+    migrationId: text("migration_id").notNull(),
+    packageVersion: text("package_version").notNull(),
+    artifactSha256: text("artifact_sha256").notNull(),
+    migrationSha256: text("migration_sha256").notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true })
+      .notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueMigration: uniqueIndex("plugin_schema_migrations_owner_id_idx")
+      .on(table.pluginId, table.migrationId),
+    migrationIdValid: check("plugin_schema_migrations_id_check",
+      sql`${table.migrationId} ~ '^[0-9]{4}_[a-z][a-z0-9_]{0,63}$'`),
+    artifactDigestValid: check("plugin_schema_migrations_artifact_sha_check",
+      sql`${table.artifactSha256} ~ '^[a-f0-9]{64}$'`),
+    migrationDigestValid: check("plugin_schema_migrations_migration_sha_check",
+      sql`${table.migrationSha256} ~ '^[a-f0-9]{64}$'`),
+    packageVersionValid: check("plugin_schema_migrations_package_version_check",
+      sql`length(${table.packageVersion}) BETWEEN 1 AND 128`),
+  }),
+);
+export type PluginSchemaMigrationRow = typeof pluginSchemaMigrations.$inferSelect;
+
+/**
+ * Namespace reservation only. EXT-203B will add reviewed typed relational
+ * tables and scoped repositories. Catalog entries cannot create tables.
+ */
+export const pluginStorageModels = pgTable(
+  "plugin_storage_models",
+  {
+    pluginId: text("plugin_id").notNull(),
+    modelKey: text("model_key").notNull(),
+    migrationId: text("migration_id").notNull(),
+    schemaSha256: text("schema_sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueModel: uniqueIndex("plugin_storage_models_owner_key_idx")
+      .on(table.pluginId, table.modelKey),
+    migrationFk: foreignKey({
+      name: "plugin_storage_models_migration_fk",
+      columns: [table.pluginId, table.migrationId],
+      foreignColumns: [pluginSchemaMigrations.pluginId, pluginSchemaMigrations.migrationId],
+    }).onDelete("restrict"),
+    keyValid: check("plugin_storage_models_key_check",
+      sql`${table.modelKey} ~ '^[a-z][a-z0-9_]{0,63}$'`),
+    digestValid: check("plugin_storage_models_schema_sha_check",
+      sql`${table.schemaSha256} ~ '^[a-f0-9]{64}$'`),
+  }),
+);
+export type PluginStorageModelRow = typeof pluginStorageModels.$inferSelect;
