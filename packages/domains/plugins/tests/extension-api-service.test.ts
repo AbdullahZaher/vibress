@@ -111,14 +111,16 @@ describe("EXT-202 route admission and publication state", () => {
     expect(disabled.host.loadModule).not.toHaveBeenCalled();
   });
 
-  it("rejects deactivation racing with local module initialization", async () => {
+  it("rejects deactivation after route resolution but before initialization", async () => {
     const current = setup();
     const module = await current.service.resolveExtensionApiModule(
       "independent-courses", "pub-a", "extension.routes.member",
     );
     expect(module).not.toBeNull();
     if (!module) throw new Error("Expected admitted module");
-    vi.mocked(current.repo.findById).mockResolvedValue({ ...activePlugin, status: "inactive" });
+    vi.mocked(current.repo.findByManifestId).mockResolvedValue({
+      ...activePlugin, status: "inactive",
+    });
     expect(await current.service.prepareExtensionApiExecution(
       "independent-courses", "pub-a", "extension.routes.member", module,
     )).toBe(false);
