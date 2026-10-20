@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import {
@@ -8,6 +8,9 @@ import {
   MemberAuthService,
 } from "@vibress/members";
 import { normalizeMemberEmail } from "@vibress/members";
+import type { PluginApiRoute } from "@vibress/plugin-sdk";
+import { MEMBER_COOKIE_NAME } from "../middleware/member-auth";
+import { pluginsService, workspaceService } from "../services";
 
 class CaptureMailer {
   sent: Array<{ to: string; magicLinkUrl: string }> = [];
@@ -119,6 +122,60 @@ describe("Batch 8 — Member API Integration & Security", () => {
     await expect(
       authService.verifyAndCreateSession(rawToken),
     ).rejects.toThrow();
+  });
+
+  it("extension member API rejects a member from another publication before plugin execution", async () => {
+    const email = `ext-member-${Date.now()}@example.com`;
+    await authService.requestAuthLink(email);
+    const token = mailer.sent[mailer.sent.length - 1]!.magicLinkUrl.split("token=")[1]!;
+    const { member, sessionToken } = await authService.verifyAndCreateSession(token);
+    expect(member.publicationId).toBe("pub_default");
+    const cookie = `${MEMBER_COOKIE_NAME}=${sessionToken}`;
+
+    const handle = vi.fn(async (_input: unknown, scope: { publicationId: string; principal: { kind: string } }) => ({
+      publication: scope.publicationId,
+      principal: scope.principal.kind,
+    }));
+    const route: PluginApiRoute = {
+      id: "courses", audience: "member", method: "GET",
+      response: { fields: { publication: "string", principal: "string" } },
+      handle,
+    };
+    const resolvePlugin = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const resolvePublication = vi.spyOn(workspaceService, "resolvePublicPublicationContext");
+    const url = "/api/members/v1/extensions/independent-courses/v1/courses";
+    try {
+      // Simulate a legitimate second publication selected by the host;
+      // the authenticated member belongs to pub_default, not pub-other.
+      resolvePublication.mockResolvedValue({
+        publicationId: "pub-other", workspaceId: "ws-other",
+        actorType: "public", isSystemOperation: false,
+      });
+      const wrongPublication = await app.inject({
+        method: "GET", url, headers: { cookie },
+      });
+      expect(wrongPublication.statusCode).toBe(404);
+      expect(resolvePlugin).not.toHaveBeenCalled();
+      expect(handle).not.toHaveBeenCalled();
+
+      resolvePublication.mockResolvedValue({
+        publicationId: "pub_default", workspaceId: "ws_default",
+        actorType: "public", isSystemOperation: false,
+      });
+      const valid = await app.inject({
+        method: "GET", url, headers: { cookie },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json()).toEqual({ publication: "pub_default", principal: "member" });
+      expect(resolvePlugin).toHaveBeenCalledWith(
+        "independent-courses", "pub_default", "extension.routes.member",
+      );
+      expect(handle).toHaveBeenCalledTimes(1);
+    } finally {
+      resolvePublication.mockRestore();
+      resolvePlugin.mockRestore();
+    }
   });
 
   it("unique normalized email enforced at database level", async () => {
