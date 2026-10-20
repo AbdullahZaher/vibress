@@ -17,8 +17,12 @@ following are true:
 1. The extension route was admitted and executed under the existing Admin
    authentication + origin controls, with an authoritative Staff publication
    context and route-specific Staff permission.
-2. The requesting Staff principal independently holds `plugins.manage`
-   for that publication, even if the route's declared permission is weaker.
+2. The requesting Staff principal holds the global `plugins.manage`
+   capability **and** is the Host-resolved `owner` or `admin` of the
+   selected publication/workspace. A global owner with only an
+   `author`/`editor`/`contributor` membership in a second publication
+   is not granted that publication's storage. The route's ordinary
+   permission check remains independent.
 3. The installed plugin is active, scoped to that publication, and declares
    at least one `extension.storage.read/write` capability.
 4. The operator-owned `VIBRESS_TRUSTED_PLUGIN_LOCKFILE` has an optional
@@ -30,8 +34,16 @@ following are true:
    ownership and the approved model schema digest **within each operation**.
 
 Member and Public extension routes **never receive** `scope.storage`.
-The Host closes the request session in `finally`; retaining its SDK object
-for later use rejects operations with `PLUGIN_STORAGE_SESSION_CLOSED`.
+The Host seals the session in `finally` and **awaits its pending SDK
+operations before sending the HTTP response**. Retaining the SDK object
+for later use rejects with `PLUGIN_STORAGE_SESSION_CLOSED`. Outstanding
+writes must settle before the response; a failed detached operation makes
+the Host return `EXTENSION_HANDLER_FAILED` instead of responding success.
+The session caps concurrent operations at 16; the PostgreSQL repository
+uses transaction-local 5-second lock timeouts, 15-second statement timeouts
+and the shared 5-second pool connection acquisition timeout to bound
+normal database stalls. These limits cannot contain arbitrary in-process
+JavaScript outside the SDK.
 The authenticated Staff `actorUserId` and Host `requestId` are bound to
 the session, never provided by the extension. The Host makes GET-bound
 storage **read-only** because Origin protection does not apply to GET;
