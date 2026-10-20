@@ -11,6 +11,9 @@ import { normalizeMemberEmail } from "@vibress/members";
 import type { PluginApiRoute, PluginApiScope } from "@vibress/plugin-sdk";
 import { MEMBER_COOKIE_NAME } from "../middleware/member-auth";
 import { pluginsService, workspaceService } from "../services";
+import { getDb, plugins, pluginPublicationStates } from "@vibress/database";
+import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 
 class CaptureMailer {
   sent: Array<{ to: string; magicLinkUrl: string }> = [];
@@ -182,6 +185,79 @@ describe("Batch 8 — Member API Integration & Security", () => {
       prepared.mockRestore();
       resolvePublication.mockRestore();
       resolvePlugin.mockRestore();
+    }
+  });
+
+  it("supplies self-only member bridge to a verified member on an enabled publication", async () => {
+    const suffix = randomUUID().replaceAll("-", "");
+    const manifestId = "ext204-" + suffix;
+    const pluginId = "plugin-ext204-" + suffix;
+    const email = "member-bridge-" + suffix + "@example.test";
+    await authService.requestAuthLink(email);
+    const token = mailer.sent[mailer.sent.length - 1]!.magicLinkUrl.split("token=")[1]!;
+    const { member, sessionToken } = await authService.verifyAndCreateSession(token);
+    const db = getDb();
+    await db.insert(plugins).values({
+      id: pluginId, manifestId, name: "Member Bridge", version: "1.0.0",
+      vibressApiVersion: "1.0.0", entrypoint: "index.mjs", status: "active",
+      capabilities: ["extension.members.self.read", "extension.entitlements.plan.read"],
+    });
+    await db.insert(pluginPublicationStates).values({
+      pluginId, publicationId: "pub_default", enabled: true,
+    });
+    const route: PluginApiRoute = {
+      id: "membership", audience: "member", method: "GET",
+      response: { fields: {
+        bound: "boolean", own: "boolean", paid: "boolean",
+      } },
+      handle: async (_input, scope) => ({
+        bound: Boolean(scope.memberAccess),
+        own: (await scope.memberAccess?.getSelf())?.id === member.id,
+        paid: await scope.memberAccess?.hasActivePlan("nonexistent-plan") ?? false,
+      }),
+    };
+    const resolvePlugin = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const admission = vi.spyOn(pluginsService, "resolveExtensionMemberBinding")
+      .mockResolvedValue({ pluginId, publicationId: "pub_default" });
+    const resolvePublication = vi.spyOn(workspaceService, "resolvePublicPublicationContext")
+      .mockResolvedValue({
+        publicationId: "pub_default", workspaceId: "ws_default",
+        actorType: "public", isSystemOperation: false,
+      });
+    const url = "/api/members/v1/extensions/" + manifestId + "/v1/membership";
+    try {
+      const unauthenticated = await app.inject({ method: "GET", url });
+      expect(unauthenticated.statusCode).toBe(401);
+      expect(admission).not.toHaveBeenCalled();
+      const authorized = await app.inject({
+        method: "GET", url, headers: {
+          cookie: `${MEMBER_COOKIE_NAME}=${sessionToken}`,
+        },
+      });
+      expect(authorized.statusCode).toBe(200);
+      expect(authorized.json()).toEqual({
+        bound: true, own: true, paid: false,
+      });
+      expect(admission).toHaveBeenCalledWith(manifestId, "pub_default");
+      await db.update(pluginPublicationStates).set({ enabled: false })
+        .where(eq(pluginPublicationStates.pluginId, pluginId));
+      const unavailable = await app.inject({
+        method: "GET", url, headers: {
+          cookie: `${MEMBER_COOKIE_NAME}=${sessionToken}`,
+        },
+      });
+      expect(unavailable.statusCode).toBe(503);
+      expect(JSON.stringify(unavailable.json())).not.toContain(email);
+    } finally {
+      resolvePublication.mockRestore();
+      admission.mockRestore();
+      prepared.mockRestore();
+      resolvePlugin.mockRestore();
+      await db.delete(pluginPublicationStates).where(eq(pluginPublicationStates.pluginId, pluginId));
+      await db.delete(plugins).where(eq(plugins.id, pluginId));
     }
   });
 
