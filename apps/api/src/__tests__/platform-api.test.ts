@@ -6,7 +6,8 @@ import { getDb } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
-import type { PluginApiRoute } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope, PluginStorageApi } from "@vibress/plugin-sdk";
+import { pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -638,6 +639,68 @@ describe("Batch 12 — Platform Integration & Security", () => {
     } finally {
       prepared.mockRestore();
       resolved.mockRestore();
+    }
+  });
+
+  it("binds storage only in authorized Staff requests and closes retained SDK handles", async () => {
+    const columns = [{ name: "title", type: "text", required: true }] as const;
+    const model = { key: "courses", columns, schemaSha256: pluginPhysicalModelDigest(columns) };
+    let retained: PluginStorageApi | undefined;
+    const handle = vi.fn(async (_input: unknown, scope: PluginApiScope) => {
+      retained = scope.storage;
+      return { publication: scope.publicationId, hasStorage: Boolean(scope.storage) };
+    });
+    const descriptor: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { publication: "string", hasStorage: "boolean" } },
+      handle,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_manifestId, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [model],
+      }));
+    const url = "/api/admin/v1/extensions/independent-courses/v1/courses";
+    try {
+      const forbidden = await app.inject({
+        method: "POST", url, headers: { cookie: staffCookie },
+        payload: { title: "Course" },
+      });
+      expect(forbidden.statusCode).toBe(403);
+      expect(approve).not.toHaveBeenCalled();
+      expect(handle).not.toHaveBeenCalled();
+
+      const authorized = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course" },
+      });
+      expect(authorized.statusCode).toBe(200);
+      expect(authorized.json().hasStorage).toBe(true);
+      expect(approve).toHaveBeenCalledWith(
+        "independent-courses", authorized.json().publication,
+      );
+      expect(retained).toBeDefined();
+      await expect(retained!.get("courses", "row-1"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SESSION_CLOSED" });
+
+      approve.mockResolvedValueOnce(null);
+      const absentApproval = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course" },
+      });
+      expect(absentApproval.statusCode).toBe(200);
+      expect(absentApproval.json().hasStorage).toBe(false);
+    } finally {
+      approve.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
     }
   });
 
