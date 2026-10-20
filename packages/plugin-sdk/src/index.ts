@@ -67,8 +67,24 @@ export interface PluginStorageApi {
     fields: Readonly<Record<string, PluginStorageValue>>,
   ): Promise<PluginStorageItem>;
 }
+/**
+ * EXT-204: identity and subscription facts for the authenticated member
+ * owning this request only. A billing plan is NOT an LMS course entitlement.
+ * Never accept member or publication selectors from extension code.
+ */
+export interface PluginMemberSelf {
+  readonly id: string;
+  readonly displayName: string | null;
+}
+export interface PluginMemberAccessApi {
+  getSelf(): Promise<PluginMemberSelf | null>;
+  /** Checks an existing billing plan, NOT course/lesson enrollment rights. */
+  hasActivePlan(planId: string): Promise<boolean>;
+}
 export interface PluginApiScope {
   readonly publicationId: string;
+  /** Member routes only; capabilities are checked independently per method. */
+  readonly memberAccess?: PluginMemberAccessApi | undefined;
   /** Present only for operator-approved models in an authorized Staff request. */
   readonly storage?: PluginStorageApi | undefined;
   readonly requestId: string;
@@ -301,6 +317,20 @@ export const CAPABILITY_REGISTRY: Record<string, PluginCapabilityDefinition> = {
     name: "Write Extension Storage",
     description: "Write validated plugin-owned relational models within an authorized publication",
     scope: "publication", requiredRole: "editor",
+    publicationBehavior: "isolated", risk: "high", auditRequired: true,
+  },
+  "extension.members.self.read": {
+    id: "extension.members.self.read",
+    name: "Read Signed-in Member Profile",
+    description: "Read a minimal profile for the authenticated member in the active publication only",
+    scope: "publication", requiredRole: "member",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: false,
+  },
+  "extension.entitlements.plan.read": {
+    id: "extension.entitlements.plan.read",
+    name: "Check Own Billing Plan",
+    description: "Boolean-only check of the authenticated member's active billing plan, never LMS enrollment",
+    scope: "publication", requiredRole: "member",
     publicationBehavior: "isolated", risk: "high", auditRequired: true,
   },
   "extension.routes.admin": {
