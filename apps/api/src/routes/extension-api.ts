@@ -7,7 +7,9 @@ import {
 } from "@vibress/api-contracts";
 import { hasPermission, SITE_AUTH_COOKIE_NAME, verifySiteAuthToken } from "@vibress/security";
 import { getConfig } from "@vibress/config";
-import { PluginDomainError, createHostPluginStorageSession } from "@vibress/plugins";
+import {
+  PluginDomainError, createHostPluginStorageSession, createHostMemberAccessSession,
+} from "@vibress/plugins";
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService } from "../services";
@@ -178,6 +180,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       // scalar models. Member/public handlers NEVER receive generic CRUD;
       // LMS entitlement/ownership rules require a separate reviewed bridge.
       let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
+      let memberSession: ReturnType<typeof createHostMemberAccessSession> | null = null;
       let handlerFailed = false;
       let validatedResponse: ReturnType<typeof validateExtensionApiObject> = null;
       try {
@@ -203,9 +206,24 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
             );
           }
         }
-        const boundScope: PluginApiScope = storageSession
-          ? { ...scope, storage: storageSession.storage }
-          : scope;
+        if (audience === "member" && req.member &&
+            req.member.publicationId === publicationId) {
+          const binding = await pluginsService.resolveExtensionMemberBinding(
+            params.data.pluginId, publicationId,
+          );
+          if (binding) {
+            memberSession = createHostMemberAccessSession({
+              pluginId: binding.pluginId,
+              publicationId: binding.publicationId,
+              memberId: req.member.id,
+            });
+          }
+        }
+        const boundScope: PluginApiScope = {
+          ...scope,
+          ...(storageSession ? { storage: storageSession.storage } : {}),
+          ...(memberSession ? { memberAccess: memberSession.memberAccess } : {}),
+        };
         const output = await route.handle({ query, body }, boundScope);
         validatedResponse = validateExtensionApiObject(route.response, output);
       } catch {
@@ -216,7 +234,14 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
         // transactions before responding. A detached write must never commit
         // after its HTTP request returned success or failure.
         try {
-          await storageSession?.close();
+          await Promise.allSettled([
+            storageSession?.close(),
+            memberSession?.close(),
+          ]).then((results) => {
+            if (results.some((result) => result.status === "rejected")) {
+              handlerFailed = true;
+            }
+          });
         } catch {
           handlerFailed = true;
         }
