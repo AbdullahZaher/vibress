@@ -23,10 +23,23 @@ Methods:
   The repository compares the subscription member, plan and product publication
   inside one database transaction. Only `active` or `trialing` states grant
   a true result; past_due, unpaid, expired, cancelled, disabled members,
-  plans/products not active, ended subscriptions and elapsed periods do not.
-  A free permanent active plan with no period end remains valid.
+  archived/inactive plans or products, ended subscriptions and elapsed periods do
+  not. A populated `trialEnd` is authoritative for a trial: a later billing
+  period never overrides an expired trial. Recurring active subscriptions MUST
+  have a future `currentPeriodEnd`. The existing free-checkout case is
+  deliberately compatible: an `active`, zero-cost, no-provider subscription
+  on a zero-cost `free` plan may have no end date; recurring paid plans cannot
+  use this exception.
 - No method accepts a Member ID, publication ID, arbitrary SQL or payment action.
 
+The Host binds a trusted request ID alongside member, plugin and
+publication identity. Every authorized `hasActivePlan` decision (true or
+false) writes an `audit_events` entry **in the same PostgreSQL transaction**
+as the lookup. The audit row stores the publication, request ID, plugin/plan
+identifiers and boolean decision, plus a publication-scoped SHA-256 pseudonym
+for the actor; it never stores raw member ID, email, display name or payment
+provider data. Audit insertion failure rolls back the transaction and denies
+the plan check. No Member identity is misrepresented as a Staff `actorUserId`.
 The Host seals access at the end of the HTTP handler and waits for started
 reads before responding; the API retains its `Cache-Control: no-store` and
 Member-Origin validation on writes. There are no new HTTP paths or migrations.
@@ -49,5 +62,7 @@ privacy/security testing and publication-scale conformance.
 ## Acceptance
 
 Test: unauthenticated, wrong publication, disabled member, disabled plugin,
-capability revocation, foreign member/plan, active/expired/trialing/past_due
-subscription, Host session closure, and no content/identity leakage.
+capability revocation, foreign member/plan, paid recurring without an
+end date, expired trial with a later period end, active free no-provider plan,
+authorized true/false plan-decision audit, Host session closure, and no
+content/identity leakage.
