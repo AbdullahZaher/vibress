@@ -18,6 +18,8 @@ export function createHostPluginStorageSession(
     readonly publicationId: string;
     readonly actorUserId: string;
     readonly requestId: string;
+    /** HTTP Host may grant writes only for Origin-validated POST requests. */
+    readonly allowWrites?: boolean;
   },
   approvedModels: readonly ApprovedPluginPhysicalModel[],
   repository: PluginScopedStorageRepository = new DrizzlePluginScopedStorageRepository(),
@@ -34,9 +36,12 @@ export function createHostPluginStorageSession(
     audit: Object.freeze({ actorUserId: scope.actorUserId, requestId: scope.requestId }),
   }, approvedModels);
   let closed = false;
-  const check = (): void => {
+  const check = (write = false): void => {
     if (closed) throw new PluginScopedStorageError(
       "PLUGIN_STORAGE_SESSION_CLOSED", "The authorized host request has ended",
+    );
+    if (write && scope.allowWrites !== true) throw new PluginScopedStorageError(
+      "PLUGIN_STORAGE_METHOD_DENIED", "Storage writes require authorized POST",
     );
   };
   const storage: PluginStorageApi = Object.freeze({
@@ -49,14 +54,14 @@ export function createHostPluginStorageSession(
       return service.list(modelKey, limit, cursor);
     },
     create: async (modelKey: string, id: string, fields: Readonly<Record<string, string | number | boolean | null>>) => {
-      check();
+      check(true);
       return service.create(modelKey, id, fields);
     },
     update: async (
       modelKey: string, id: string, expectedVersion: number,
       fields: Readonly<Record<string, string | number | boolean | null>>,
     ) => {
-      check();
+      check(true);
       return service.update(modelKey, id, expectedVersion, fields);
     },
   });
