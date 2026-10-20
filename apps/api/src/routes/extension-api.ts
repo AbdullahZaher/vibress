@@ -178,6 +178,8 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       // scalar models. Member/public handlers NEVER receive generic CRUD;
       // LMS entitlement/ownership rules require a separate reviewed bridge.
       let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
+      let handlerFailed = false;
+      let validatedResponse: ReturnType<typeof validateExtensionApiObject> = null;
       try {
         // Generic storage is more privileged than an extension route. The
         // session's global roles may contain "owner" even when this user is
@@ -205,16 +207,23 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
           ? { ...scope, storage: storageSession.storage }
           : scope;
         const output = await route.handle({ query, body }, boundScope);
-        const result = validateExtensionApiObject(route.response, output);
-        if (!result) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
-        return reply.status(200).send(result);
+        validatedResponse = validateExtensionApiObject(route.response, output);
       } catch {
         // Trusted code exceptions may embed process state, secrets and paths.
-        return reject(reply, req, "EXTENSION_HANDLER_FAILED", 503);
+        handlerFailed = true;
       } finally {
-        // Invalidate any SDK handle retained by the plugin after the request.
-        storageSession?.close();
+        // Close admission synchronously, then wait for all in-flight storage
+        // transactions before responding. A detached write must never commit
+        // after its HTTP request returned success or failure.
+        try {
+          await storageSession?.close();
+        } catch {
+          handlerFailed = true;
+        }
       }
+      if (handlerFailed) return reject(reply, req, "EXTENSION_HANDLER_FAILED", 503);
+      if (!validatedResponse) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      return reply.status(200).send(validatedResponse);
     },
   });
 }
