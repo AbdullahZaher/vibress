@@ -32,6 +32,14 @@ following are true:
 Member and Public extension routes **never receive** `scope.storage`.
 The Host closes the request session in `finally`; retaining its SDK object
 for later use rejects operations with `PLUGIN_STORAGE_SESSION_CLOSED`.
+The authenticated Staff `actorUserId` and Host `requestId` are bound to
+the session, never provided by the extension. Successful `create/update`
+operations write `plugin.storage.create/update` events to the existing
+`audit_events` table **inside the same PostgreSQL transaction**. Audit
+entries include publication, actor, request, plugin/model and record ID but
+exclude stored content. An audit insertion failure rolls back the write.
+The older EXT-203B2 internal repository scope remains backward compatible;
+new Staff SDK sessions require the actor and request context.
 No HTML, shared SQL, cross-plugin model selection or callback transaction API
 is exposed. Existing v1 plugins still run without storage.
 
@@ -77,7 +85,9 @@ LMS domain rules.
 Operator-approved physical models must be trialled against a restored,
 populated PostgreSQL staging backup before production rollout. Full live
 physical schema attestation, signature provenance and cross-model atomicity
-remain outstanding. Do not consider the independent LMS pilot complete.
+remain outstanding. Atomically recorded Staff writes are now audited; this
+does not imply that raw SQL run by trusted in-process JavaScript can be
+audited by the Host. Do not consider the independent LMS pilot complete.
 
 ## Verification
 
