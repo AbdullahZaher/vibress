@@ -295,6 +295,41 @@ describe("Batch 12 — Platform Integration & Security", () => {
     expect(res.statusCode).toBe(401);
   });
 
+  // ---------------- Host-rendered extension views ----------------
+  it("denies unauthenticated and Member sessions from Studio view discovery", async () => {
+    const url = "/api/admin/v1/extensions/navigation";
+    const unauthenticated = await app.inject({ method: "GET", url });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.json().errors[0].code).toBe("AUTHENTICATION_REQUIRED");
+
+    const memberOnly = await app.inject({
+      method: "GET", url, headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(memberOnly.statusCode).toBe(401);
+  });
+
+  it("returns only Host-filtered Studio navigation without cacheable content", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toHaveProperty("items");
+    expect(Array.isArray(res.json().items)).toBe(true);
+    for (const item of res.json().items) {
+      expect(item).toEqual({
+        pluginId: expect.stringMatching(/^[a-z0-9][a-z0-9-]*$/),
+        viewId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        routeId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        title: { en: expect.any(String), ar: expect.any(String) },
+        label: { en: expect.any(String), ar: expect.any(String) },
+        permission: expect.stringMatching(/^(plugins|posts)\.(read|manage|edit)$/),
+      });
+    }
+  });
+
   // ---------------- Plugins ----------------
   it("registers the official example plugin (valid manifest)", async () => {
     const res = await app.inject({
