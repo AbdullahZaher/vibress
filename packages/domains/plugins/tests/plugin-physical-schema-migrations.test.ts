@@ -134,7 +134,7 @@ describe("EXT-203B1 operator-only physical model table creation", () => {
         migrationSha256: pluginPhysicalMigrationDigest([model, second]),
       };
       await expect(new PluginPhysicalSchemaMigrationService(repo).applyApprovedPhysical(plan))
-        .rejects.toMatchObject({ code: "42P07" });
+        .rejects.toMatchObject({ cause: { code: "42P07" } });
       expect((await client.query(
         "SELECT count(*)::int AS n FROM plugin_schema_migrations",
       )).rows[0]?.n).toBe(0);
