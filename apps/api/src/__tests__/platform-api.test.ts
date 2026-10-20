@@ -863,14 +863,44 @@ describe("Batch 12 — Platform Integration & Security", () => {
         hasStorage: Boolean(scope.storage), publication: scope.publicationId,
       }),
     };
+    const label = { en: "Private management", ar: "الإدارة الخاصة" };
+    const adminRoute: PluginApiRoute = {
+      id: "private-management", audience: "admin", method: "GET",
+      permission: "plugins.manage",
+      response: { fields: { ok: "boolean" } },
+      handle: async () => ({ ok: true }),
+    };
     const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
-      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+      .mockResolvedValue({
+        activate: async () => undefined, routes: [route, adminRoute],
+        adminViews: [{ id: "management", routeId: "private-management", title: label }],
+        adminNavigation: [{ viewId: "management", label, permission: "plugins.manage" }],
+      });
+    const list = vi.spyOn(pluginsService, "listPluginsForPublication")
+      .mockImplementation(async () => [{
+        id: "extension-admission-test", manifestId: "independent-courses",
+        name: "Independent Courses", version: "1.0.0", vibressApiVersion: SDK_VERSION,
+        description: null, entrypoint: "index.mjs", capabilities: ["admin.navigation", "extension.routes.admin"],
+        hooks: [], settingsSchema: {}, status: "active", createdAt: new Date(), updatedAt: new Date(),
+        publicationScoped: true, publicationEnabled: true,
+      }]);
+    const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
+      .mockResolvedValue(new Map([["independent-courses", "f".repeat(64)]]));
     const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
       .mockResolvedValue(true);
     const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
       .mockImplementation(async (_id, publicationId) => ({
         pluginId: "p-approved", publicationId, models: [approvedModel],
       }));
+    const readManagement = (publicationId: string) => app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/independent-courses/v1/private-management",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId },
+    });
+    const navigation = (publicationId: string) => app.inject({
+      method: "GET", url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId },
+    });
     const invoke = (publicationId: string) => app.inject({
       method: "POST",
       url: "/api/admin/v1/extensions/independent-courses/v1/courses",
@@ -902,6 +932,10 @@ describe("Batch 12 — Platform Integration & Security", () => {
         hasStorage: true, publication: ownerPubId,
       });
       expect(approve).toHaveBeenCalledTimes(1);
+      const ownerNav = await navigation(ownerPubId);
+      expect(ownerNav.statusCode).toBe(200);
+      expect(ownerNav.json().items).toHaveLength(1);
+      expect((await readManagement(ownerPubId)).statusCode).toBe(200);
 
       for (const localRole of ["author", "contributor"]) {
         await db.update(publicationMemberships).set({ role: localRole })
@@ -909,6 +943,10 @@ describe("Batch 12 — Platform Integration & Security", () => {
         const response = await invoke(limitedPubId);
         expect(response.statusCode).toBe(403);
         expect(response.json().errors[0].code).toBe("PERMISSION_DENIED");
+        const nav = await navigation(limitedPubId);
+        expect(nav.statusCode).toBe(200);
+        expect(nav.json().items).toEqual([]);
+        expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       }
       await db.update(publicationMemberships).set({ role: "editor" })
         .where(eq(publicationMemberships.id, localMembershipId));
@@ -918,6 +956,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
         hasStorage: false, publication: limitedPubId,
       });
       expect(approve).toHaveBeenCalledTimes(1);
+      expect((await navigation(limitedPubId)).json().items).toEqual([]);
+      expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
       const adminResponse = await invoke(limitedPubId);
@@ -925,8 +965,12 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(adminResponse.json()).toEqual({
         hasStorage: true, publication: limitedPubId,
       });
-      expect(approve).toHaveBeenCalledTimes(2);
+      expect(approve).toHaveBeenCalledTimes(3);
+      expect((await navigation(limitedPubId)).json().items).toHaveLength(1);
+      expect((await readManagement(limitedPubId)).statusCode).toBe(200);
     } finally {
+      fingerprints.mockRestore();
+      list.mockRestore();
       approve.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();
