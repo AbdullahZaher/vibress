@@ -36,9 +36,14 @@ deployment command must verify the operator-pinned artifact and migration
 checksum *before invoking this internal service*.
 
 The repository opens a PostgreSQL transaction, acquires a per-manifest
-transaction-scoped advisory lock, and locks the installed plugin row. A
-migration can be recorded only while the plugin is `registered` or
-`inactive`. Replays of identical applied metadata succeed without writing;
+transaction-scoped advisory lock, and locks the installed plugin row. A **new** migration can be recorded
+only while the plugin is `registered` or `inactive` and its declared
+package version matches the installed plugin's recorded version. Operators
+must register/update the approved installed release before its new catalog
+migrations; the operator deployment orchestration still needs to verify the
+pinned artifact and declaration checksums. Exact historical replays remain
+idempotent even after a subsequent approved package-version upgrade. Replays
+of identical applied metadata succeed without writing;
 checksum or descriptor drift, duplicate model claims, backward IDs, unknown
 plugins, or active plugin status fail closed. Model reservations and the ledger
 commit together or roll back together. App-level uninstall refuses plugins

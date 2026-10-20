@@ -45,12 +45,12 @@ describe("EXT-203A PostgreSQL transaction, replay and upgrade safety", () => {
         CREATE TABLE publications (id text PRIMARY KEY);
         CREATE TABLE plugins (
           id text PRIMARY KEY, manifest_id text NOT NULL UNIQUE,
-          status text NOT NULL
+          status text NOT NULL, version text NOT NULL
         );
         INSERT INTO publications (id) VALUES ('pub-a'), ('pub-b');
-        INSERT INTO plugins (id, manifest_id, status)
-        VALUES ('p-a', 'independent-lms', 'inactive'),
-               ('p-b', 'second-plugin', 'inactive');
+        INSERT INTO plugins (id, manifest_id, status, version)
+        VALUES ('p-a', 'independent-lms', 'inactive', '0.1.0'),
+               ('p-b', 'second-plugin', 'inactive', '0.1.0');
       `);
       for (const sql of migrations) await client.query(sql);
       const db = drizzle(client, { schema });
@@ -79,6 +79,14 @@ describe("EXT-203A PostgreSQL transaction, replay and upgrade safety", () => {
         ...declaration, migrationId: "0000_earlier",
       })).rejects.toMatchObject({ code: "PLUGIN_MIGRATION_OUT_OF_ORDER" });
 
+      await expect(service.registerApprovedCatalog({
+        ...declaration, migrationId: "0002_wrong_release",
+        packageVersion: "0.2.0", migrationSha256: "d".repeat(64), models: [],
+      })).rejects.toMatchObject({ code: "PLUGIN_MIGRATION_VERSION_MISMATCH" });
+      expect((await client.query(
+        "SELECT count(*)::int AS count FROM plugin_schema_migrations WHERE plugin_id='p-a'",
+      )).rows[0]?.count).toBe(1);
+
       // The new ledger row must roll back if ANY model reservation collides.
       await expect(service.registerApprovedCatalog({
         ...declaration,
@@ -106,6 +114,15 @@ describe("EXT-203A PostgreSQL transaction, replay and upgrade safety", () => {
         ...declaration, migrationId: "0002_lessons",
         migrationSha256: "e".repeat(64),
         models: [{ key: "lessons", schemaSha256: "f".repeat(64) }],
+      })).toBe("applied");
+
+      // Historical exact replays remain idempotent after installing a newer
+      // release; only NEW migrations must match that release's version.
+      await client.query("UPDATE plugins SET version='0.2.0' WHERE id='p-a'");
+      expect(await service.registerApprovedCatalog(declaration)).toBe("already_applied");
+      expect(await service.registerApprovedCatalog({
+        ...declaration, migrationId: "0003_upgraded_release",
+        packageVersion: "0.2.0", migrationSha256: "e".repeat(64), models: [],
       })).toBe("applied");
 
       // Logical model names belong to a plugin, never to a global namespace.
@@ -139,10 +156,10 @@ describe("EXT-203A PostgreSQL transaction, replay and upgrade safety", () => {
         CREATE TABLE publications (id text PRIMARY KEY);
         CREATE TABLE plugins (
           id text PRIMARY KEY, manifest_id text NOT NULL UNIQUE,
-          status text NOT NULL
+          status text NOT NULL, version text NOT NULL
         );
-        INSERT INTO plugins (id, manifest_id, status)
-        VALUES ('p-a', 'independent-lms', 'inactive');
+        INSERT INTO plugins (id, manifest_id, status, version)
+        VALUES ('p-a', 'independent-lms', 'inactive', '0.1.0');
       `);
       for (const ddl of migrations) await client1.query(ddl);
       const service1 = new PluginStorageMigrationService(

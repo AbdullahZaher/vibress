@@ -26,6 +26,8 @@ describe("EXT-203A operator-reviewed catalog migration boundary", () => {
       { ...fixture, manifestId: "../outside" },
       { ...fixture, migrationId: "0001_../outside" },
       { ...fixture, artifactSha256: "not-a-digest" },
+      { ...fixture, packageVersion: "   " },
+      { ...fixture, packageVersion: "x".repeat(129) },
       { ...fixture, models: [
         fixture.models[0]!, fixture.models[0]!,
       ] },
@@ -38,6 +40,15 @@ describe("EXT-203A operator-reviewed catalog migration boundary", () => {
       await expect(service.registerApprovedCatalog(input))
         .rejects.toMatchObject({ code: "PLUGIN_MIGRATION_INVALID" });
     }
+    // Runtime validation must reject malformed JS callers despite TS types.
+    const malformed = { ...fixture };
+    Reflect.set(malformed, "packageVersion", 42);
+    await expect(service.registerApprovedCatalog(malformed))
+      .rejects.toMatchObject({ code: "PLUGIN_MIGRATION_INVALID" });
+    Reflect.set(malformed, "packageVersion", fixture.packageVersion);
+    Reflect.set(malformed, "artifactSha256", 42);
+    await expect(service.registerApprovedCatalog(malformed))
+      .rejects.toMatchObject({ code: "PLUGIN_MIGRATION_INVALID" });
     expect(repo.applyApproved).not.toHaveBeenCalled();
     expect(validateApprovedPluginCatalogMigration(fixture)).toBe(fixture);
   });

@@ -41,10 +41,13 @@ const SHA256 = /^[a-f0-9]{64}$/;
 export function validateApprovedPluginCatalogMigration(
   input: ApprovedPluginCatalogMigration,
 ): ApprovedPluginCatalogMigration {
-  if (!MANIFEST_ID.test(input.manifestId) ||
-      !MIGRATION_ID.test(input.migrationId) ||
-      !input.packageVersion || input.packageVersion.length > 128 ||
-      !SHA256.test(input.artifactSha256) || !SHA256.test(input.migrationSha256) ||
+  if (!input || typeof input !== "object" ||
+      typeof input.manifestId !== "string" || !MANIFEST_ID.test(input.manifestId) ||
+      typeof input.migrationId !== "string" || !MIGRATION_ID.test(input.migrationId) ||
+      typeof input.packageVersion !== "string" || !input.packageVersion.trim() ||
+      input.packageVersion.length > 128 ||
+      typeof input.artifactSha256 !== "string" || !SHA256.test(input.artifactSha256) ||
+      typeof input.migrationSha256 !== "string" || !SHA256.test(input.migrationSha256) ||
       !Array.isArray(input.models) || input.models.length > 32) {
     throw new PluginStorageMigrationError(
       "PLUGIN_MIGRATION_INVALID", "Invalid operator-reviewed migration descriptor",

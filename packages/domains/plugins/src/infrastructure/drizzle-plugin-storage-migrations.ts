@@ -31,6 +31,7 @@ export class DrizzlePluginStorageMigrationRepository implements PluginStorageMig
       const [plugin] = await tx.select({
         id: plugins.id,
         status: plugins.status,
+        version: plugins.version,
       }).from(plugins).where(eq(plugins.manifestId, input.manifestId))
         .for("update").limit(1);
 
@@ -76,6 +77,15 @@ export class DrizzlePluginStorageMigrationRepository implements PluginStorageMig
           );
         }
         return "already_applied";
+      }
+
+      // An approved new migration must belong to the installed release.
+      // Historical exact replays above remain valid after a version upgrade.
+      if (plugin.version !== input.packageVersion) {
+        throw new PluginStorageMigrationError(
+          "PLUGIN_MIGRATION_VERSION_MISMATCH",
+          "Migration package version does not match the installed plugin",
+        );
       }
 
       const [latest] = await tx.select({
