@@ -37,8 +37,11 @@ function cachedViews(
       (existing.failureExpiresAt === null || existing.failureExpiresAt > Date.now())) {
     return existing.admitted;
   }
-  const entry = { fingerprint, admitted: Promise.resolve(null) as Promise<readonly AdmittedAdminView[] | null>,
-    failureExpiresAt: null as number | null };
+  const entry: {
+    fingerprint: string;
+    admitted: Promise<readonly AdmittedAdminView[] | null>;
+    failureExpiresAt: number | null;
+  } = { fingerprint, admitted: Promise.resolve(null), failureExpiresAt: null };
   entry.admitted = Promise.resolve().then(load).then((result) => {
     if (result === null) entry.failureExpiresAt = Date.now() + FAILED_ENTRY_TTL_MS;
     return result;
