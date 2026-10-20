@@ -7,7 +7,7 @@ import {
 } from "@vibress/api-contracts";
 import { hasPermission, SITE_AUTH_COOKIE_NAME, verifySiteAuthToken } from "@vibress/security";
 import { getConfig } from "@vibress/config";
-import { PluginDomainError } from "@vibress/plugins";
+import { PluginDomainError, createHostPluginStorageSession } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService } from "../services";
@@ -173,15 +173,57 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
             ? { kind: "member", id: req.member!.id }
             : { kind: "anonymous" },
       };
+      // Storage is privileged independently from the extension route. Only
+      // authenticated Staff with plugins.manage can use operator-admitted
+      // scalar models. Member/public handlers NEVER receive generic CRUD;
+      // LMS entitlement/ownership rules require a separate reviewed bridge.
+      let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
+      let handlerFailed = false;
+      let validatedResponse: ReturnType<typeof validateExtensionApiObject> = null;
       try {
-        const output = await route.handle({ query, body }, scope);
-        const result = validateExtensionApiObject(route.response, output);
-        if (!result) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
-        return reply.status(200).send(result);
+        // Generic storage is more privileged than an extension route. The
+        // session's global roles may contain "owner" even when this user is
+        // only an author in the selected publication: require BOTH the global
+        // capability and the Host-resolved local owner/admin membership.
+        const localRole = req.publicationContext?.role;
+        if (audience === "admin" && req.user && req.roles && req.permissions &&
+            (localRole === "owner" || localRole === "admin") &&
+            hasPermission(req.permissions, "plugins.manage", req.roles)) {
+          const binding = await pluginsService.resolveExtensionStorageBinding(
+            params.data.pluginId, publicationId,
+          );
+          if (binding) {
+            storageSession = createHostPluginStorageSession(
+              {
+                pluginId: binding.pluginId, publicationId,
+                actorUserId: req.user.id, requestId: req.id,
+                allowWrites: req.method === "POST",
+              },
+              binding.models,
+            );
+          }
+        }
+        const boundScope: PluginApiScope = storageSession
+          ? { ...scope, storage: storageSession.storage }
+          : scope;
+        const output = await route.handle({ query, body }, boundScope);
+        validatedResponse = validateExtensionApiObject(route.response, output);
       } catch {
         // Trusted code exceptions may embed process state, secrets and paths.
-        return reject(reply, req, "EXTENSION_HANDLER_FAILED", 503);
+        handlerFailed = true;
+      } finally {
+        // Close admission synchronously, then wait for all in-flight storage
+        // transactions before responding. A detached write must never commit
+        // after its HTTP request returned success or failure.
+        try {
+          await storageSession?.close();
+        } catch {
+          handlerFailed = true;
+        }
       }
+      if (handlerFailed) return reject(reply, req, "EXTENSION_HANDLER_FAILED", 503);
+      if (!validatedResponse) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      return reply.status(200).send(validatedResponse);
     },
   });
 }

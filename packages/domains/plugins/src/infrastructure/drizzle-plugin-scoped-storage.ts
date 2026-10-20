@@ -2,7 +2,7 @@ import {
   getDb, plugins, pluginPublicationStates, pluginPhysicalModels,
 } from "@vibress/database";
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ApprovedPluginPhysicalModel } from "../application/plugin-storage-migrations";
 import {
   PluginScopedStorageError,
@@ -95,6 +95,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
     model: ApprovedPluginPhysicalModel,
     action: PluginStorageAction,
     fn: (table: SQL, execute: Execute) => Promise<T>,
+    auditMutation?: { readonly operation: "create" | "update"; readonly recordId: string },
   ): Promise<T> {
     // Defense in depth: adapters are exported for internal callers, so service
     // validation is never sufficient authorization or input sanitation.
@@ -103,11 +104,24 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
     }
     validateStorageRecordId(scope.pluginId);
     validateStorageRecordId(scope.publicationId);
+    if (scope.audit) {
+      if (!scope.audit.actorUserId || typeof scope.audit.actorUserId !== "string" ||
+          scope.audit.actorUserId.length > 128 ||
+          !scope.audit.requestId || typeof scope.audit.requestId !== "string" ||
+          scope.audit.requestId.length > 128) {
+        return problem("PLUGIN_STORAGE_INVALID", "Invalid Host audit context");
+      }
+    }
     validateStorageModel(model);
     if (process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE === "1") {
       return problem("PLUGIN_STORAGE_DISABLED", "Storage unavailable during recovery");
     }
     return this.db().transaction(async (tx) => {
+      // Request-bound storage must not hold HTTP responses indefinitely while
+      // blocked on a lifecycle row or DDL lock. The shared pool also bounds
+      // connection acquisition to five seconds.
+      await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+      await tx.execute(sql`SET LOCAL statement_timeout = '15s'`);
       const [plugin] = await tx.select({
         id: plugins.id,
         manifestId: plugins.manifestId,
@@ -149,7 +163,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       // the owner catalog. A same-named relation earlier on search_path must
       // NEVER shadow an operator-created plugin table.
       const [physical] = await execute(sql`
-        SELECT ns.nspname AS schema_name
+        SELECT ns.nspname AS schema_name, physical_table.oid AS physical_oid
         FROM pg_class owner_catalog
         JOIN pg_namespace ns ON ns.oid = owner_catalog.relnamespace
         JOIN pg_class physical_table ON physical_table.relnamespace = ns.oid
@@ -162,7 +176,104 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         return problem("PLUGIN_STORAGE_MODEL_DENIED", "Physical model table is missing or shadowed");
       }
       const physicalTable = sql`${sql.identifier(physical.schema_name)}.${sql.identifier(tableName)}`;
-      return fn(physicalTable, execute);
+      // Hold a physical table lock so out-of-band ALTER/DROP cannot race
+      // catalog attestation and the data operation in this transaction.
+      await execute(sql`LOCK TABLE ${physicalTable} IN ACCESS SHARE MODE`);
+      const oidValue = physical.physical_oid;
+      // PostgreSQL drivers can return oid either as int4 or decimal text.
+      const oid = typeof oidValue === "number" ? oidValue :
+        typeof oidValue === "string" && /^[0-9]{1,10}$/.test(oidValue)
+          ? Number(oidValue) : NaN;
+      if (!Number.isSafeInteger(oid) || oid < 1 || oid > 4294967295) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Invalid physical table identity");
+      }
+      const columns = await execute(sql`
+        SELECT attr.attname AS column_name, typ.typname AS column_type,
+          attr.attnotnull AS required
+        FROM pg_attribute attr
+        JOIN pg_type typ ON typ.oid = attr.atttypid
+        WHERE attr.attrelid = ${oid}::oid
+          AND attr.attnum > 0 AND NOT attr.attisdropped
+      `);
+      const expected: Record<string, { type: string; required: boolean }> = {
+        publication_id: { type: "text", required: true },
+        id: { type: "text", required: true },
+        version: { type: "int4", required: true },
+        created_at: { type: "timestamptz", required: true },
+        updated_at: { type: "timestamptz", required: true },
+      };
+      const pgType = {
+        text: "text", integer: "int4", boolean: "bool",
+        timestamptz: "timestamptz",
+      } as const;
+      for (const column of model.columns) {
+        expected[column.name] = {
+          type: pgType[column.type], required: column.required,
+        };
+      }
+      if (columns.length !== Object.keys(expected).length ||
+          columns.some((column) => {
+            const spec = typeof column.column_name === "string"
+              ? expected[column.column_name] : undefined;
+            return !spec || column.column_type !== spec.type ||
+              column.required !== spec.required;
+          })) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Physical model columns differ from approval");
+      }
+      const [constraints] = await execute(sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pg_constraint con
+            WHERE con.conrelid = ${oid}::oid AND con.contype = 'p'
+              AND (
+                SELECT array_agg(att.attname::text ORDER BY keys.ordinality)
+                FROM unnest(con.conkey) WITH ORDINALITY AS keys(attnum, ordinality)
+                JOIN pg_attribute att ON att.attrelid = ${oid}::oid
+                  AND att.attnum = keys.attnum
+              ) = ARRAY['publication_id','id']::text[]
+          ) AS valid_pk,
+          EXISTS (
+            SELECT 1 FROM pg_constraint con
+            JOIN pg_class parent ON parent.oid = con.confrelid
+            JOIN pg_class physical ON physical.oid = ${oid}::oid
+            JOIN pg_attribute src ON src.attrelid = physical.oid
+              AND src.attname = 'publication_id'
+            JOIN pg_attribute target ON target.attrelid = parent.oid
+              AND target.attname = 'id'
+            WHERE con.conrelid = ${oid}::oid AND con.contype = 'f'
+              AND con.confdeltype = 'c'
+              AND parent.relname = 'publications'
+              AND parent.relnamespace = physical.relnamespace
+              AND con.conkey = ARRAY[src.attnum]::smallint[]
+              AND con.confkey = ARRAY[target.attnum]::smallint[]
+          ) AS valid_pub_fk
+      `);
+      if (constraints?.valid_pk !== true || constraints.valid_pub_fk !== true) {
+        return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Physical model isolation constraints differ from approval");
+      }
+      const result = await fn(physicalTable, execute);
+      if (auditMutation && scope.audit) {
+        // The mutation and its actor-bound audit entry commit or roll back
+        // together. Never log model field values or user-provided payloads.
+        // Keep the audit table in the exact namespace admitted by the
+        // operator, never an earlier same-named search_path relation.
+        const [logged] = await execute(sql`
+          INSERT INTO ${sql.identifier(physical.schema_name)}."audit_events"
+            ("id", "publication_id", "actor_user_id", "request_id",
+              "action", "target_type", "target_id", "metadata")
+          VALUES (
+            ${randomUUID()}, ${scope.publicationId}, ${scope.audit.actorUserId},
+            ${scope.audit.requestId}, ${`plugin.storage.${auditMutation.operation}`},
+            'plugin.storage', ${auditMutation.recordId},
+            ${JSON.stringify({ pluginId: scope.pluginId, modelKey: model.key })}::jsonb
+          )
+          RETURNING "id"
+        `);
+        if (!logged) {
+          return problem("PLUGIN_STORAGE_UNAVAILABLE", "Storage audit write returned no record");
+        }
+      }
+      return result;
     });
   }
   async get(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
@@ -212,7 +323,7 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         }
         throw error;
       }
-    });
+    }, { operation: "create", recordId: id });
   }
   async update(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
     id: string, expectedVersion: number,
@@ -235,6 +346,6 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
         WHERE "publication_id" = ${scope.publicationId} AND "id" = ${id} LIMIT 1`);
       return problem(existing ? "PLUGIN_STORAGE_CONFLICT" : "PLUGIN_STORAGE_NOT_FOUND",
         existing ? "Record was changed or version limit reached" : "Record not found");
-    });
+    }, { operation: "update", recordId: id });
   }
 }

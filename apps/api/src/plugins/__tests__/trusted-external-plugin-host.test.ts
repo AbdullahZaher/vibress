@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
-import type { Plugin } from "@vibress/plugins";
+import { pluginPhysicalModelDigest, type Plugin } from "@vibress/plugins";
 import { TrustedExternalPluginHost, parseTrustedPluginLockfile } from "../trusted-external-plugin-host";
 
 const dirs: string[] = [];
@@ -108,5 +108,48 @@ describe("TrustedExternalPluginHost", () => {
     await symlink(target, f.moduleFile);
     await expect(new TrustedExternalPluginHost(f.lockfile).loadModule(plugin()))
       .rejects.toThrow(/not a regular approved file/);
+  });
+
+  it("loads only operator-approved model schemas and rejects forged digests/owners", async () => {
+    const f = await fixture();
+    const columns = [{ name: "title", type: "text", required: true }] as const;
+    const model = {
+      key: "courses", columns, schemaSha256: pluginPhysicalModelDigest(columns),
+    };
+    const privilegedManifest = {
+      ...manifest, capabilities: [...manifest.capabilities, "extension.storage.read"],
+    };
+    const approved = { schemaVersion: 1, plugins: [{
+      manifest: privilegedManifest, sha256: "a".repeat(64), storageModels: [model],
+    }] };
+    await writeFile(f.lockfile, JSON.stringify(approved));
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    const installed = plugin({ capabilities: privilegedManifest.capabilities });
+    expect(await host.getApprovedStorageModels(installed)).toEqual([model]);
+    await expect(host.getApprovedStorageModels(plugin())).rejects.toThrow(/operator-approved storage manifest/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0],
+        storageModels: [{ ...model, schemaSha256: "b".repeat(64) }] }],
+    })).toThrow(/digest/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0], storageModels: [model, model] }],
+    })).toThrow(/Duplicate approved/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0], manifest,
+        storageModels: [model] }],
+    })).toThrow(/capability/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0],
+        storageModels: [{ ...model, columns: [{
+          name: "publication_id", type: "text", required: true,
+        }] }] }],
+    })).toThrow();
+  });
+
+  it("keeps legacy v1 trusted lockfiles valid without storage approval", async () => {
+    const f = await fixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    expect(await host.getApprovedStorageModels(plugin())).toEqual([]);
+    expect(await host.listTrustedManifests()).toHaveLength(1);
   });
 });

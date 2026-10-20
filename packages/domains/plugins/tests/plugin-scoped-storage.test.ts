@@ -243,6 +243,88 @@ describe("EXT-203B2 host-bound typed publication storage", () => {
         WHERE id='plugin-a';
       `);
       expect((await a.get("courses", "same-id"))?.fields.title).toBe("Updated");
+      // Atomic, actor-bound audit: a failed audit insert MUST roll back
+      // the storage mutation. No plugin field values enter audit metadata.
+      await client.query(`
+        CREATE TABLE audit_events (
+          id text PRIMARY KEY, publication_id text,
+          actor_user_id text NOT NULL CHECK (actor_user_id <> 'staff-denied'),
+          request_id text, action text NOT NULL,
+          target_type text, target_id text, metadata jsonb,
+          created_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      const withAudit = new PluginScopedStorageService(repository, {
+        pluginId: "plugin-a", publicationId: "pub-a",
+        audit: { actorUserId: "staff-1", requestId: "req-1" },
+      }, [model]);
+      const audited = await withAudit.create("courses", "audit-course", {
+        title: "private enrollment content",
+      });
+      expect(audited.version).toBe(1);
+      expect((await withAudit.update("courses", "audit-course", 1, {
+        title: "updated private data",
+      })).version).toBe(2);
+      const audits = await client.query(
+        "SELECT publication_id, actor_user_id, request_id, action, " +
+        "target_id, metadata FROM audit_events ORDER BY created_at, action",
+      );
+      expect(audits.rows).toHaveLength(2);
+      expect(audits.rows.map((row) => row.action).sort()).toEqual([
+        "plugin.storage.create", "plugin.storage.update",
+      ]);
+      for (const row of audits.rows) {
+        expect(row).toMatchObject({
+          publication_id: "pub-a", actor_user_id: "staff-1",
+          request_id: "req-1", target_id: "audit-course",
+          metadata: { pluginId: "plugin-a", modelKey: "courses" },
+        });
+      }
+      expect(JSON.stringify(audits.rows)).not.toContain("private enrollment content");
+      expect(JSON.stringify(audits.rows)).not.toContain("updated private data");
+
+      const failingAudit = new PluginScopedStorageService(repository, {
+        pluginId: "plugin-a", publicationId: "pub-a",
+        audit: { actorUserId: "staff-denied", requestId: "req-2" },
+      }, [model]);
+      await expect(failingAudit.create("courses", "audit-rollback", {
+        title: "Must never persist",
+      })).rejects.toThrow();
+      expect(await withAudit.get("courses", "audit-rollback")).toBeNull();
+      await expect(failingAudit.update("courses", "audit-course", 2, {
+        title: "Must roll back update",
+      })).rejects.toThrow();
+      expect((await withAudit.get("courses", "audit-course"))?.version).toBe(2);
+      expect((await client.query("SELECT count(*)::int AS n FROM audit_events")).rows[0]?.n)
+        .toBe(2);
+
+      // DB metadata digest alone cannot detect an out-of-band ALTER.
+      // Reject tampered physical structure, preserving existing rows.
+      await client.query('ALTER TABLE "' + physicalName + '" ADD COLUMN unapproved text');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName + '" DROP COLUMN unapproved');
+      await client.query('ALTER TABLE "' + physicalName +
+        '" DROP CONSTRAINT "' + physicalName + '_pkey"');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName +
+        '" ADD PRIMARY KEY ("publication_id","id")');
+      const foreign = await client.query(
+        'SELECT conname FROM pg_constraint ' +
+        'WHERE conrelid = $1::regclass AND contype = $2',
+        [physicalName, "f"],
+      );
+      const fkName: string = foreign.rows[0]?.conname;
+      expect(fkName).toMatch(/^[a-z0-9_]+$/);
+      await client.query('ALTER TABLE "' + physicalName +
+        '" DROP CONSTRAINT "' + fkName + '"');
+      await expect(withAudit.get("courses", "audit-course"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SCHEMA_DRIFT" });
+      await client.query('ALTER TABLE "' + physicalName +
+        '" ADD FOREIGN KEY ("publication_id") REFERENCES publications(id) ON DELETE CASCADE');
+      expect((await withAudit.get("courses", "audit-course"))?.version).toBe(2);
+
       const wrongSchema = { ...model, schemaSha256: "b".repeat(64) };
       expect(() => new PluginScopedStorageService(repository,
         { pluginId: "plugin-a", publicationId: "pub-a" }, [wrongSchema]))

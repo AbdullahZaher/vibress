@@ -2,11 +2,12 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import crypto from "node:crypto";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb } from "@vibress/database";
+import { getDb, publications, publicationMemberships, workspaces, users } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
-import type { PluginApiRoute } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope, PluginStorageApi } from "@vibress/plugin-sdk";
+import { pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -638,6 +639,255 @@ describe("Batch 12 — Platform Integration & Security", () => {
     } finally {
       prepared.mockRestore();
       resolved.mockRestore();
+    }
+  });
+
+  it("binds storage only in authorized Staff requests and closes retained SDK handles", async () => {
+    const columns = [{ name: "title", type: "text", required: true }] as const;
+    const model = { key: "courses", columns, schemaSha256: pluginPhysicalModelDigest(columns) };
+    let retained: PluginStorageApi | undefined;
+    const handle = vi.fn(async (_input: unknown, scope: PluginApiScope) => {
+      retained = scope.storage;
+      return { publication: scope.publicationId, hasStorage: Boolean(scope.storage) };
+    });
+    const descriptor: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { publication: "string", hasStorage: "boolean" } },
+      handle,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_manifestId, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [model],
+      }));
+    const url = "/api/admin/v1/extensions/independent-courses/v1/courses";
+    try {
+      const forbidden = await app.inject({
+        method: "POST", url, headers: { cookie: staffCookie },
+        payload: { title: "Course" },
+      });
+      expect(forbidden.statusCode).toBe(403);
+      expect(approve).not.toHaveBeenCalled();
+      expect(handle).not.toHaveBeenCalled();
+
+      const authorized = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course" },
+      });
+      expect(authorized.statusCode).toBe(200);
+      expect(authorized.json().hasStorage).toBe(true);
+      expect(approve).toHaveBeenCalledWith(
+        "independent-courses", authorized.json().publication,
+      );
+      expect(retained).toBeDefined();
+      await expect(retained!.get("courses", "row-1"))
+        .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SESSION_CLOSED" });
+
+      approve.mockResolvedValueOnce(null);
+      const absentApproval = await app.inject({
+        method: "POST", url,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: { title: "Course" },
+      });
+      expect(absentApproval.statusCode).toBe(200);
+      expect(absentApproval.json().hasStorage).toBe(false);
+    } finally {
+      approve.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("requires publication-local authority even for a globally privileged owner", async () => {
+    const db = getDb();
+    const [owner] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.email, "owner@example.com")).limit(1);
+    expect(owner).toBeDefined();
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const workspaceId = `ws-storage-${suffix}`;
+    const ownerPubId = `pub-storage-owner-${suffix}`;
+    const limitedPubId = `pub-storage-limited-${suffix}`;
+    const localMembershipId = `membership-storage-${suffix}`;
+    await db.insert(workspaces).values({
+      id: workspaceId, name: "Storage permission test", slug: workspaceId,
+    });
+    const modelColumns = [{ name: "title", type: "text", required: true }] as const;
+    const approvedModel = {
+      key: "courses", columns: modelColumns,
+      schemaSha256: pluginPhysicalModelDigest(modelColumns),
+    };
+    const route: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { hasStorage: "boolean", publication: "string" } },
+      handle: async (_input, scope) => ({
+        hasStorage: Boolean(scope.storage), publication: scope.publicationId,
+      }),
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_id, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [approvedModel],
+      }));
+    const invoke = (publicationId: string) => app.inject({
+      method: "POST",
+      url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+      headers: {
+        cookie: staffCookie, origin: "http://localhost:7777",
+        "x-publication-id": publicationId,
+      },
+      payload: { title: "Publication isolated" },
+    });
+    try {
+      await db.insert(publications).values([
+        { id: ownerPubId, workspaceId, name: "Owner Publication", slug: "owned" },
+        { id: limitedPubId, workspaceId, name: "Limited Publication", slug: "limited" },
+      ]);
+      await db.insert(publicationMemberships).values([
+        {
+          id: `membership-owner-${suffix}`, publicationId: ownerPubId,
+          userId: owner!.id, role: "owner",
+        },
+        {
+          id: localMembershipId, publicationId: limitedPubId,
+          userId: owner!.id, role: "author",
+        },
+      ]);
+
+      const ownerResponse = await invoke(ownerPubId);
+      expect(ownerResponse.statusCode).toBe(200);
+      expect(ownerResponse.json()).toEqual({
+        hasStorage: true, publication: ownerPubId,
+      });
+      expect(approve).toHaveBeenCalledTimes(1);
+
+      for (const localRole of ["author", "contributor", "editor"]) {
+        await db.update(publicationMemberships).set({ role: localRole })
+          .where(eq(publicationMemberships.id, localMembershipId));
+        const response = await invoke(limitedPubId);
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({
+          hasStorage: false, publication: limitedPubId,
+        });
+      }
+      expect(approve).toHaveBeenCalledTimes(1);
+      await db.update(publicationMemberships).set({ role: "admin" })
+        .where(eq(publicationMemberships.id, localMembershipId));
+      const adminResponse = await invoke(limitedPubId);
+      expect(adminResponse.statusCode).toBe(200);
+      expect(adminResponse.json()).toEqual({
+        hasStorage: true, publication: limitedPubId,
+      });
+      expect(approve).toHaveBeenCalledTimes(2);
+    } finally {
+      approve.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+      await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+    }
+  });
+
+  it("never permits a Staff GET extension route to write without Origin validation", async () => {
+    const columns = [{ name: "title", type: "text", required: true }] as const;
+    const model = { key: "courses", columns, schemaSha256: pluginPhysicalModelDigest(columns) };
+    const descriptor: PluginApiRoute = {
+      id: "preview", audience: "admin", method: "GET",
+      permission: "posts.read",
+      response: { fields: { blocked: "boolean" } },
+      handle: async (_input, scope) => {
+        if (!scope.storage) return { blocked: false };
+        try {
+          await scope.storage.create("courses", "csrf-write", { title: "unsafe" });
+          return { blocked: false };
+        } catch (error) {
+          return { blocked: error instanceof Error && "code" in error &&
+            error.code === "PLUGIN_STORAGE_METHOD_DENIED" };
+        }
+      },
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approval = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockImplementation(async (_id, publicationId) => ({
+        pluginId: "p-approved", publicationId, models: [model],
+      }));
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/independent-courses/v1/preview",
+        headers: { cookie: staffCookie },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ blocked: true });
+      expect(approval).toHaveBeenCalledTimes(1);
+    } finally {
+      approval.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("does not grant extension storage to an editor without plugins.manage", async () => {
+    const email = `storage-editor-${crypto.randomUUID()}@example.com`;
+    const invitation = await app.inject({
+      method: "POST", url: "/api/admin/v1/users/invite",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { email, name: "Storage Editor", roleKey: "editor" },
+    });
+    expect(invitation.statusCode).toBe(201);
+    const accepted = await app.inject({
+      method: "POST", url: "/api/admin/v1/auth/invitation/accept",
+      headers: { origin: "http://localhost:7777" },
+      payload: { token: invitation.json().invitation.token,
+        password: "EditorStoragePassword123!" },
+    });
+    expect(accepted.statusCode).toBe(200);
+    const login = await app.inject({
+      method: "POST", url: "/api/admin/v1/auth/login",
+      payload: { email, password: "EditorStoragePassword123!" },
+    });
+    expect(login.statusCode).toBe(200);
+    const setCookie = login.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie) as string;
+    const route: PluginApiRoute = {
+      id: "courses", audience: "admin", method: "POST",
+      permission: "posts.edit",
+      body: { fields: { title: "string" }, required: ["title"] },
+      response: { fields: { storageExposed: "boolean" } },
+      handle: async (_input, scope) => ({ storageExposed: Boolean(scope.storage) }),
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const approved = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
+      .mockRejectedValue(new Error("Unauthorized storage approval lookup"));
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/extensions/independent-courses/v1/courses",
+        headers: { cookie, origin: "http://localhost:7777" },
+        payload: { title: "No secret storage" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ storageExposed: false });
+      expect(approved).not.toHaveBeenCalled();
+    } finally {
+      approved.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
     }
   });
 

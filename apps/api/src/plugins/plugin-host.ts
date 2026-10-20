@@ -1,4 +1,4 @@
-import { Plugin, PluginHost } from "@vibress/plugins";
+import { Plugin, PluginHost, type ApprovedPluginPhysicalModel } from "@vibress/plugins";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -48,6 +48,12 @@ export class BundledPluginHost implements PluginHost {
     if (!approved || !isDeepStrictEqual(approved, manifest)) {
       throw new Error("Plugin manifest is not operator approved");
     }
+  }
+
+  async getApprovedStorageModels(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]> {
+    // Official v1 modules are intentionally not publication-storage enabled.
+    if (this.registry.has(plugin.manifestId)) return [];
+    return this.external.getApprovedStorageModels(plugin);
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {

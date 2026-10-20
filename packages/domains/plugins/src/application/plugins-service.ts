@@ -15,6 +15,8 @@ import {
 import { encryptSecret, decryptSecret } from "@vibress/security";
 import { domainEvents } from "@vibress/events";
 import { isDeepStrictEqual } from "node:util";
+import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
+import { validateStorageModel } from "./plugin-scoped-storage";
 
 export class PluginDomainError extends Error {
   code: string;
@@ -30,6 +32,8 @@ export interface PluginHost {
   requiresPublicationEnablement?(plugin: Plugin): boolean;
   getOperatorManifests?(): Promise<PluginManifest[]>;
   authorizeRegistration?(manifest: PluginManifest): Promise<void>;
+  /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
+  getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
 }
 
 export class PluginsService {
@@ -687,6 +691,44 @@ export class PluginsService {
         !latest.capabilities.includes(capability)) return false;
     await this.requirePublicationEnabled(latest, publicationId);
     return true;
+  }
+
+  /**
+   * Resolve installed owner and trusted schema for an already authenticated
+   * Host endpoint. Plugin-supplied model descriptors are never admitted here.
+   * The DB adapter repeats all capability/enablement/ownership checks per call.
+   */
+  async resolveExtensionStorageBinding(
+    manifestId: string,
+    publicationId: string,
+  ): Promise<{ pluginId: string; publicationId: string;
+    models: readonly ApprovedPluginPhysicalModel[] } | null> {
+    this.assertRuntimeAllowed();
+    if (!publicationId) return null;
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) ||
+        !plugin.capabilities.some((capability) =>
+          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+      return null;
+    }
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const models = await this.host.getApprovedStorageModels?.(plugin);
+    if (!models?.length || models.length > 16) return null;
+    const unique = new Set<string>();
+    for (const model of models) {
+      validateStorageModel(model);
+      if (unique.has(model.key)) return null;
+      unique.add(model.key);
+    }
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" ||
+        !latest.capabilities.some((capability) =>
+          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+      return null;
+    }
+    await this.requirePublicationEnabled(latest, publicationId);
+    return { pluginId: latest.id, publicationId, models };
   }
 
   private async requirePublicationEnabled(plugin: Plugin, publicationId?: string): Promise<void> {

@@ -4,6 +4,7 @@ import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
+import { validateStorageModel, type ApprovedPluginPhysicalModel } from "@vibress/plugins";
 import type { Plugin } from "@vibress/plugins";
 
 /**
@@ -12,9 +13,21 @@ import type { Plugin } from "@vibress/plugins";
  * The operator-owned lockfile pins the compiled module's exact bytes;
  * transitive code and Node privileges remain a TRUSTED code responsibility.
  */
+const approvedColumnSchema = z.object({
+  name: z.string().regex(/^[a-z][a-z0-9_]{0,47}$/),
+  type: z.enum(["text", "integer", "boolean", "timestamptz"]),
+  required: z.boolean(),
+}).strict();
+const approvedModelSchema = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  schemaSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  columns: z.array(approvedColumnSchema).min(1).max(24),
+}).strict();
 const pinnedPluginSchema = z.object({
   manifest: z.unknown(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  // Optional operator-reviewed descriptors; legacy lockfiles stay valid.
+  storageModels: z.array(approvedModelSchema).max(16).optional(),
 }).strict();
 const lockfileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -27,6 +40,7 @@ const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 type PinnedPlugin = {
   manifest: PluginManifest;
   sha256: string;
+  storageModels: readonly ApprovedPluginPhysicalModel[];
 };
 
 export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, PinnedPlugin> {
@@ -38,7 +52,21 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     if (!/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.mjs$/.test(manifest.entrypoint)) {
       throw new Error("Trusted entrypoint must be a relative .mjs file within the lockfile directory");
     }
-    result.set(manifest.id, { manifest, sha256: entry.sha256.toLowerCase() });
+    const storageModels = entry.storageModels ?? [];
+    const modelKeys = new Set<string>();
+    for (const model of storageModels) {
+      validateStorageModel(model);
+      if (modelKeys.has(model.key)) throw new Error("Duplicate approved storage model key");
+      modelKeys.add(model.key);
+    }
+    if (storageModels.length > 0 &&
+        !manifest.capabilities.some((capability) =>
+          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+      throw new Error("Approved storage models require declared storage capability");
+    }
+    result.set(manifest.id, {
+      manifest, sha256: entry.sha256.toLowerCase(), storageModels,
+    });
   }
   return result;
 }
@@ -83,6 +111,31 @@ export class TrustedExternalPluginHost {
     }
     const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
+  }
+
+  /**
+   * Operator-maintained lockfile is the only source of reviewed field schemas.
+   * A plugin's manifest or HTTP input cannot provide table/column definitions.
+   */
+  async getApprovedStorageModels(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]> {
+    if (!this.lockfilePath) return [];
+    if (!path.isAbsolute(this.lockfilePath)) {
+      throw new Error("Trusted plugin lockfile must use an absolute path");
+    }
+    const file = await lstat(this.lockfilePath);
+    if (!file.isFile() || file.isSymbolicLink() || file.size > MAX_LOCKFILE_BYTES) {
+      throw new Error("Invalid trusted plugin lockfile");
+    }
+    const data: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const approved = parseTrustedPluginLockfile(data).get(plugin.manifestId);
+    if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
+      throw new Error("Installed plugin differs from operator-approved storage manifest");
+    }
+    // Defensive copy: plugin code never gets the operator registry reference.
+    return approved.storageModels.map((model) => ({
+      key: model.key, schemaSha256: model.schemaSha256,
+      columns: model.columns.map((column) => ({ ...column })),
+    }));
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {

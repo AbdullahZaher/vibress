@@ -22,7 +22,8 @@
 | EXT-201/202 | **Initial implementation in separate branch:** reserved Admin/Member/Public API dispatch, strict shared scalar schemas, publication/Member binding, host Staff permissions, capability checks. Pending CI, cross-publication conformance and independent SDK approval; plugin-owned custom permissions and advanced schemas remain out of scope |
 | EXT-203A | **Merged:** additive append-only migration ledger 0042, operator-only transactional catalog admission, namespaced model ownership |
 | EXT-203B1 | **Merged:** additive 0043 immutable physical table mapping and operator-only scalar relational schema admission |
-| EXT-203B2 | **Draft:** internal Host-bound typed, publication-scoped get/list/create/update with independent read/write capabilities and runtime DB authorization; no SDK/route binding yet |
+| EXT-203B2 | **Merged:** internal Host-bound typed, publication-scoped get/list/create/update with independent read/write capabilities and runtime DB authorization |
+| EXT-203B3 | **Draft:** additive optional Staff-authorized Host-routed storage SDK with operator-pinned schema descriptors; no Member/Public CRUD or completed LMS domain bridge |
 | EXT-301/302/303/304 | **Next phase:** plugin-provided isolated Studio views, Next.js public dispatcher, Liquid/theme contracts and external sample conformance |
 | EXT-401/402/403/404 | Scoped secrets verified with database CHECK constraints and AES-256-GCM encryption at rest; backup/restore drill documented |
 | EXT-501..504 | **Next phase:** independent LMS integration pilot, full end-to-end multi-tenant publication drill and public SDK freeze |
