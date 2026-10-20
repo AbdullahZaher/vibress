@@ -117,6 +117,11 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       return problem("PLUGIN_STORAGE_DISABLED", "Storage unavailable during recovery");
     }
     return this.db().transaction(async (tx) => {
+      // Request-bound storage must not hold HTTP responses indefinitely while
+      // blocked on a lifecycle row or DDL lock. The shared pool also bounds
+      // connection acquisition to five seconds.
+      await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+      await tx.execute(sql`SET LOCAL statement_timeout = '15s'`);
       const [plugin] = await tx.select({
         id: plugins.id,
         manifestId: plugins.manifestId,
