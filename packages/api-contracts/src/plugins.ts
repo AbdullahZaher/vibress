@@ -98,7 +98,11 @@ export const ExtensionApiRouteParamsSchema = z.object({
   routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
 }).strict();
 
-type ExtensionShape = z.infer<typeof ExtensionApiShapeSchema>;
+/** Also accepts the SDK's readonly descriptor fields without a cross-package import. */
+type ExtensionShape = {
+  readonly fields: Readonly<Record<string, "string" | "number" | "boolean">>;
+  readonly required?: readonly string[] | undefined;
+};
 
 /** Strict primitive-only contract. Rejects unknown keys and nested raw data. */
 export function validateExtensionApiObject(
