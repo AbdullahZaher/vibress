@@ -125,6 +125,14 @@ describe("EXT-204 Host member bridge", () => {
       }).where(eq(subscriptions.id, id("active")));
       expect(await repo.hasActivePlan(bound, planA)).toBe(false);
       await db.update(subscriptions).set({
+        status: "trialing", trialEnd: null, currentPeriodEnd: null,
+      }).where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(false);
+      await db.update(subscriptions).set({
+        status: "trialing", trialEnd: new Date(Date.now() + 3600_000),
+      }).where(eq(subscriptions.id, id("active")));
+      expect(await repo.hasActivePlan(bound, planA)).toBe(true);
+      await db.update(subscriptions).set({
         status: "active", trialEnd: null,
         currentPeriodEnd: new Date(Date.now() - 1000),
       }).where(eq(subscriptions.id, id("active")));
