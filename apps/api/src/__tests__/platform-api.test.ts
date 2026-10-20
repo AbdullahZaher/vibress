@@ -6,7 +6,7 @@ import { getDb, publications, publicationMemberships, workspaces, users } from "
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
-import type { PluginApiRoute, PluginApiScope, PluginStorageApi } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
@@ -327,6 +327,103 @@ describe("Batch 12 — Platform Integration & Security", () => {
         label: { en: expect.any(String), ar: expect.any(String) },
         permission: expect.stringMatching(/^(plugins|posts)\.(read|manage|edit)$/),
       });
+    }
+  });
+
+  it("isolates broken plugins, caches admitted descriptors and rechecks enablement", async () => {
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const goodId = `good-${suffix}`;
+    const badId = `bad-${suffix}`;
+    const unavailableId = `unavailable-${suffix}`;
+    const plugin = (manifestId: string) => ({
+      id: manifestId, manifestId, name: manifestId, version: "1.0.0",
+      vibressApiVersion: SDK_VERSION, description: null, entrypoint: "index.mjs",
+      capabilities: ["admin.navigation", "extension.routes.admin"],
+      status: "active" as const, settingsSchema: {}, hooks: [],
+      createdAt: new Date(), updatedAt: new Date(),
+      publicationScoped: true, publicationEnabled: true,
+    });
+    const label = { en: "Courses", ar: "الدورات" };
+    const handle = vi.fn(async () => ({ total: 2 }));
+    const working: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: { total: "number" } }, handle,
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const invalid: PluginModule = {
+      ...working,
+      adminNavigation: [{ viewId: "missing", label, permission: "plugins.read" }],
+    };
+    let goodEnabled = true;
+    let digest = "a".repeat(64);
+    const list = vi.spyOn(pluginsService, "listPluginsForPublication")
+      .mockImplementation(async () => [
+        { ...plugin(goodId), publicationEnabled: goodEnabled },
+        plugin(badId), plugin(unavailableId),
+      ]);
+    const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
+      .mockImplementation(async () => new Map([
+        [goodId, digest], [badId, "b".repeat(64)], [unavailableId, "c".repeat(64)],
+      ]));
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockImplementation(async (manifestId) => {
+        if (manifestId === goodId) return working;
+        if (manifestId === badId) return invalid;
+        throw new Error("operator plugin fault: secret must not escape");
+      });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const discover = () => app.inject({
+      method: "GET", url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    try {
+      const initial = await discover();
+      expect(initial.statusCode).toBe(200);
+      expect(initial.json().items).toEqual([{
+        pluginId: goodId, viewId: "courses", routeId: "course-list",
+        title: label, label, permission: "plugins.read",
+      }]);
+      const repeated = await discover();
+      expect(repeated.statusCode).toBe(200);
+      expect(repeated.json()).toEqual(initial.json());
+      expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
+      expect(fingerprints).toHaveBeenCalledTimes(2);
+
+      const view = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(view.statusCode).toBe(200);
+      expect(view.json()).toEqual({ total: 2 });
+      expect(handle).toHaveBeenCalledTimes(1);
+
+      goodEnabled = false;
+      const disabled = await discover();
+      expect(disabled.statusCode).toBe(200);
+      expect(disabled.json().items).toEqual([]);
+
+      goodEnabled = true;
+      digest = "d".repeat(64);
+      const rotated = await discover();
+      expect(rotated.statusCode).toBe(200);
+      expect(rotated.json().items).toHaveLength(1);
+      expect(resolve).toHaveBeenCalledTimes(5); // one Admin GET + new pinned hash
+      const forged = await app.inject({
+        method: "GET", url: "/api/admin/v1/extensions/navigation",
+        headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
+      });
+      expect(forged.statusCode).toBe(403);
+    } finally {
+      prepared.mockRestore();
+      resolve.mockRestore();
+      fingerprints.mockRestore();
+      list.mockRestore();
     }
   });
 
