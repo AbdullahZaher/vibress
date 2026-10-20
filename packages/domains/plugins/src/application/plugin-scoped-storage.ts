@@ -51,7 +51,7 @@ const FIELD_TYPES = new Set(["text", "integer", "boolean", "timestamptz"]);
 function invalid(message: string): never {
   throw new PluginScopedStorageError("PLUGIN_STORAGE_INVALID", message);
 }
-function validateId(value: unknown): string {
+export function validateStorageRecordId(value: unknown): string {
   if (typeof value !== "string" || !IDENTIFIER.test(value)) {
     invalid("Invalid storage record identifier");
   }
@@ -77,7 +77,7 @@ export function validateStorageModel(model: ApprovedPluginPhysicalModel): void {
     invalid("Host-approved model digest mismatch");
   }
 }
-function validateFields(
+export function validateStorageFields(
   model: ApprovedPluginPhysicalModel, input: unknown, partial: boolean,
 ): Readonly<Record<string, PluginStorageFieldValue>> {
   if (!input || typeof input !== "object" || Array.isArray(input) ||
@@ -118,6 +118,25 @@ function validateFields(
   return result;
 }
 
+/** Validate bounded pagination independently of the service and repository entrypoints. */
+export function validateStoragePage(
+  limit: number, cursor?: string,
+): { limit: number; cursor?: string } {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    invalid("Invalid page limit");
+  }
+  return cursor === undefined
+    ? { limit }
+    : { limit, cursor: validateStorageRecordId(cursor) };
+}
+
+export function validateStorageVersion(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value >= 2147483647) {
+    invalid("Invalid record version");
+  }
+  return value;
+}
+
 /**
  * Bound for one request by the trusted host. The public-facing method
  * signatures never accept pluginId, publicationId, table name or SQL.
@@ -131,8 +150,8 @@ export class PluginScopedStorageService {
     private readonly scope: HostBoundPluginStorageScope,
     approvedModels: readonly ApprovedPluginPhysicalModel[],
   ) {
-    validateId(scope.pluginId);
-    validateId(scope.publicationId);
+    validateStorageRecordId(scope.pluginId);
+    validateStorageRecordId(scope.publicationId);
     if (!Array.isArray(approvedModels) || approvedModels.length === 0 ||
         approvedModels.length > 16) invalid("Missing approved storage models");
     const models = new Map<string, ApprovedPluginPhysicalModel>();
@@ -151,26 +170,23 @@ export class PluginScopedStorageService {
     return model;
   }
   async get(modelKey: string, id: string): Promise<PluginStorageRecord | null> {
-    return this.repository.get(this.scope, this.model(modelKey), validateId(id));
+    return this.repository.get(this.scope, this.model(modelKey), validateStorageRecordId(id));
   }
   async list(modelKey: string, limit = 20, cursor?: string): Promise<PluginStoragePage> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 50) invalid("Invalid page limit");
-    return this.repository.list(
-      this.scope, this.model(modelKey), limit, cursor === undefined ? undefined : validateId(cursor),
-    );
+    const page = validateStoragePage(limit, cursor);
+    return this.repository.list(this.scope, this.model(modelKey), page.limit, page.cursor);
   }
   async create(modelKey: string, id: string, fields: unknown): Promise<PluginStorageRecord> {
     const model = this.model(modelKey);
-    return this.repository.create(this.scope, model, validateId(id),
-      validateFields(model, fields, false));
+    return this.repository.create(this.scope, model, validateStorageRecordId(id),
+      validateStorageFields(model, fields, false));
   }
   async update(
     modelKey: string, id: string, expectedVersion: number, patch: unknown,
   ): Promise<PluginStorageRecord> {
-    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1 ||
-        expectedVersion >= 2147483647) invalid("Invalid record version");
+    validateStorageVersion(expectedVersion);
     const model = this.model(modelKey);
-    return this.repository.update(this.scope, model, validateId(id), expectedVersion,
-      validateFields(model, patch, true));
+    return this.repository.update(this.scope, model, validateStorageRecordId(id), expectedVersion,
+      validateStorageFields(model, patch, true));
   }
 }
