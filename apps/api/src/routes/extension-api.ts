@@ -216,6 +216,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
               pluginId: binding.pluginId,
               publicationId: binding.publicationId,
               memberId: req.member.id,
+              requestId: req.id,
             });
           }
         }
