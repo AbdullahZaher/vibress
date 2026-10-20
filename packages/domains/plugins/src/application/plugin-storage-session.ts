@@ -49,42 +49,44 @@ export function createHostPluginStorageSession(
       "PLUGIN_STORAGE_METHOD_DENIED", "Storage writes require authorized POST",
     );
   };
-  const track = <T>(run: () => Promise<T>): Promise<T> => {
-    if (pending.size >= MAX_PENDING_OPERATIONS) {
-      throw new PluginScopedStorageError(
-        "PLUGIN_STORAGE_BUSY", "Too many pending storage operations",
+  const invoke = <T>(write: boolean, run: () => Promise<T>): Promise<T> => {
+    try {
+      check(write);
+      if (pending.size >= MAX_PENDING_OPERATIONS) {
+        throw new PluginScopedStorageError(
+          "PLUGIN_STORAGE_BUSY", "Too many pending storage operations",
+        );
+      }
+      const operation = run();
+      pending.add(operation);
+      // The exact promise returned to the plugin is observed here: do not
+      // introduce an async wrapper that could reject after this observer.
+      void operation.then(
+        () => { pending.delete(operation); },
+        () => { pending.delete(operation); },
       );
+      return operation;
+    } catch (error) {
+      const rejected = Promise.reject<T>(error);
+      // Preserve Promise rejection for callers while avoiding process-level
+      // unhandled rejections from fire-and-forget invalid SDK calls.
+      void rejected.catch(() => undefined);
+      return rejected;
     }
-    const operation = run();
-    pending.add(operation);
-    // Observe both outcomes even when an extension deliberately drops the
-    // returned promise. No unhandled rejection or detached write escapes.
-    void operation.then(
-      () => { pending.delete(operation); },
-      () => { pending.delete(operation); },
-    );
-    return operation;
   };
   const storage: PluginStorageApi = Object.freeze({
-    get: async (modelKey: string, id: string) => {
-      check();
-      return track(() => service.get(modelKey, id));
-    },
-    list: async (modelKey: string, limit?: number, cursor?: string) => {
-      check();
-      return track(() => service.list(modelKey, limit, cursor));
-    },
-    create: async (modelKey: string, id: string, fields: Readonly<Record<string, string | number | boolean | null>>) => {
-      check(true);
-      return track(() => service.create(modelKey, id, fields));
-    },
-    update: async (
+    get: (modelKey: string, id: string) =>
+      invoke(false, () => service.get(modelKey, id)),
+    list: (modelKey: string, limit?: number, cursor?: string) =>
+      invoke(false, () => service.list(modelKey, limit, cursor)),
+    create: (
+      modelKey: string, id: string,
+      fields: Readonly<Record<string, string | number | boolean | null>>,
+    ) => invoke(true, () => service.create(modelKey, id, fields)),
+    update: (
       modelKey: string, id: string, expectedVersion: number,
       fields: Readonly<Record<string, string | number | boolean | null>>,
-    ) => {
-      check(true);
-      return track(() => service.update(modelKey, id, expectedVersion, fields));
-    },
+    ) => invoke(true, () => service.update(modelKey, id, expectedVersion, fields)),
   });
   const close = (): Promise<void> => {
     if (closePromise) return closePromise;
