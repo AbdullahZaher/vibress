@@ -633,6 +633,34 @@ export class PluginsService {
     return this.publicationStates.isEnabled(plugin.id, publicationId);
   }
 
+  /**
+   * Resolve an admitted external module only after host authentication and
+   * host-authoritative publication resolution. Module code stays trusted;
+   * this is NOT process isolation. Legacy bundled modules cannot contribute
+   * publication-scoped routes without explicit external admission.
+   */
+  async resolveExtensionApiModule(
+    manifestId: string,
+    publicationId: string,
+    capability: "extension.routes.admin" | "extension.routes.member" | "extension.routes.public",
+  ): Promise<PluginModule | null> {
+    this.assertRuntimeAllowed();
+    if (!publicationId) return null;
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) ||
+        !plugin.capabilities.includes(capability)) return null;
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const module = await this.host.loadModule(plugin);
+    if (!module) return null;
+    await this.ensureInitializedHere(plugin, module);
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" ||
+        !latest.capabilities.includes(capability)) return null;
+    await this.requirePublicationEnabled(latest, publicationId);
+    return module;
+  }
+
   private async requirePublicationEnabled(plugin: Plugin, publicationId?: string): Promise<void> {
     if (!this.host.requiresPublicationEnablement?.(plugin)) return;
     if (!publicationId || !this.publicationStates ||
