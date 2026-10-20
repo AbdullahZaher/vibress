@@ -22,7 +22,7 @@ describe("EXT-203B3 Host-bound storage session", () => {
     const repo: PluginScopedStorageRepository = { get, list, create, update };
     const session = createHostPluginStorageSession(
       { pluginId: "p1", publicationId: "pub-a",
-        actorUserId: "staff-1", requestId: "req-1" }, [model], repo,
+        actorUserId: "staff-1", requestId: "req-1", allowWrites: true }, [model], repo,
     );
     const saved = await session.storage.create("courses", "row-1", { title: "دورة" });
     expect(saved.fields.title).toBe("دورة");
@@ -48,6 +48,32 @@ describe("EXT-203B3 Host-bound storage session", () => {
     await expect(session.storage.create("courses", "row-2", { title: "retained" }))
       .rejects.toMatchObject({ code: "PLUGIN_STORAGE_SESSION_CLOSED" });
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("never lets a GET-bound session write even with a storage capability", async () => {
+    const get = vi.fn<PluginScopedStorageRepository["get"]>(async () => null);
+    const create = vi.fn<PluginScopedStorageRepository["create"]>(
+      async () => ({ id: "x", version: 1, fields: { title: "x" } }),
+    );
+    const update = vi.fn<PluginScopedStorageRepository["update"]>(
+      async () => ({ id: "x", version: 2, fields: { title: "x" } }),
+    );
+    const repo: PluginScopedStorageRepository = {
+      get, create, update, list: async () => ({ items: [] }),
+    };
+    const session = createHostPluginStorageSession({
+      pluginId: "p1", publicationId: "pub-a",
+      actorUserId: "staff-1", requestId: "req-2",
+      allowWrites: false,
+    }, [model], repo);
+    await expect(session.storage.get("courses", "read-only")).resolves.toBeNull();
+    await expect(session.storage.create("courses", "new", { title: "unsafe" }))
+      .rejects.toMatchObject({ code: "PLUGIN_STORAGE_METHOD_DENIED" });
+    await expect(session.storage.update("courses", "new", 1, { title: "unsafe" }))
+      .rejects.toMatchObject({ code: "PLUGIN_STORAGE_METHOD_DENIED" });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    session.close();
   });
 
   it("rejects a session without an authenticated Staff audit identity", () => {
