@@ -3,6 +3,8 @@
  * Nothing here executes external SQL or becomes a public Plugin SDK method.
  * This records atomic, irreversible ownership reservations for EXT-203B.
  */
+import { createHash } from "node:crypto";
+
 export type PluginMigrationStatus = "applied" | "already_applied";
 
 export interface PluginStorageModelDeclaration {
@@ -79,5 +81,103 @@ export class PluginStorageMigrationService {
     input: ApprovedPluginCatalogMigration,
   ): Promise<PluginMigrationStatus> {
     return this.repository.applyApproved(validateApprovedPluginCatalogMigration(input));
+  }
+}
+
+/**
+ * EXT-203B1: operator-only declarative relational table plan.
+ * This is NOT a public plugin SDK contract or general SQL executor.
+ */
+export interface ApprovedPluginPhysicalColumn {
+  readonly name: string;
+  readonly type: "text" | "integer" | "boolean" | "timestamptz";
+  readonly required: boolean;
+}
+
+export interface ApprovedPluginPhysicalModel extends PluginStorageModelDeclaration {
+  readonly columns: readonly ApprovedPluginPhysicalColumn[];
+}
+
+export interface ApprovedPluginPhysicalMigration
+  extends Omit<ApprovedPluginCatalogMigration, "models"> {
+  readonly models: readonly ApprovedPluginPhysicalModel[];
+}
+
+export interface PluginPhysicalMigrationRepository {
+  applyApprovedPhysical(input: ApprovedPluginPhysicalMigration): Promise<PluginMigrationStatus>;
+}
+
+const PHYSICAL_COLUMN = /^[a-z][a-z0-9_]{0,47}$/;
+const RESERVED_COLUMNS = new Set([
+  "id", "publication_id", "version", "created_at", "updated_at",
+]);
+const COLUMN_TYPES = new Set(["text", "integer", "boolean", "timestamptz"]);
+
+/** Stable canonical SHA-256 of the complete operator-reviewed field descriptor. */
+export function pluginPhysicalModelDigest(
+  columns: readonly ApprovedPluginPhysicalColumn[],
+): string {
+  return createHash("sha256").update(JSON.stringify(columns)).digest("hex");
+}
+
+/** Bind migration history to the ordered model and schema declarations. */
+export function pluginPhysicalMigrationDigest(
+  models: readonly ApprovedPluginPhysicalModel[],
+): string {
+  return createHash("sha256").update(JSON.stringify(models.map((model) => ({
+    key: model.key, schemaSha256: model.schemaSha256,
+  })))).digest("hex");
+}
+
+export function validateApprovedPhysicalMigration(
+  input: ApprovedPluginPhysicalMigration,
+): ApprovedPluginPhysicalMigration {
+  validateApprovedPluginCatalogMigration(input);
+  if (input.models.length === 0 || input.models.length > 16) {
+    throw new PluginStorageMigrationError(
+      "PLUGIN_MIGRATION_INVALID", "Physical migration requires 1-16 declared models",
+    );
+  }
+  for (const model of input.models) {
+    if (!Array.isArray(model.columns) ||
+        model.columns.length < 1 || model.columns.length > 24) {
+      throw new PluginStorageMigrationError(
+        "PLUGIN_MIGRATION_INVALID", "Physical model requires 1-24 declared columns",
+      );
+    }
+    const names = new Set<string>();
+    for (const column of model.columns) {
+      if (!column || typeof column.name !== "string" ||
+          !PHYSICAL_COLUMN.test(column.name) || RESERVED_COLUMNS.has(column.name) ||
+          names.has(column.name) || !COLUMN_TYPES.has(column.type) ||
+          typeof column.required !== "boolean") {
+        throw new PluginStorageMigrationError(
+          "PLUGIN_MIGRATION_INVALID", "Invalid physical field definition",
+        );
+      }
+      names.add(column.name);
+    }
+    if (model.schemaSha256 !== pluginPhysicalModelDigest(model.columns)) {
+      throw new PluginStorageMigrationError(
+        "PLUGIN_MIGRATION_CHECKSUM_CONFLICT", "Model descriptor digest mismatch",
+      );
+    }
+  }
+  if (input.migrationSha256 !== pluginPhysicalMigrationDigest(input.models)) {
+    throw new PluginStorageMigrationError(
+      "PLUGIN_MIGRATION_CHECKSUM_CONFLICT", "Physical migration digest mismatch",
+    );
+  }
+  return input;
+}
+
+export class PluginPhysicalSchemaMigrationService {
+  constructor(private readonly repository: PluginPhysicalMigrationRepository) {}
+
+  /** Only invoked by operator-controlled offline deployment orchestration. */
+  async applyApprovedPhysical(
+    input: ApprovedPluginPhysicalMigration,
+  ): Promise<PluginMigrationStatus> {
+    return this.repository.applyApprovedPhysical(validateApprovedPhysicalMigration(input));
   }
 }

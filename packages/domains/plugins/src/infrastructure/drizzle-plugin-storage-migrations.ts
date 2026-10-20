@@ -3,12 +3,17 @@ import {
   plugins,
   pluginSchemaMigrations,
   pluginStorageModels,
+  pluginPhysicalModels,
 } from "@vibress/database";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import type {
   ApprovedPluginCatalogMigration,
   PluginMigrationStatus,
   PluginStorageMigrationRepository,
+  PluginPhysicalMigrationRepository,
+  ApprovedPluginPhysicalMigration,
+  ApprovedPluginPhysicalModel,
 } from "../application/plugin-storage-migrations";
 import { PluginStorageMigrationError } from "../application/plugin-storage-migrations";
 
@@ -17,10 +22,32 @@ import { PluginStorageMigrationError } from "../application/plugin-storage-migra
  * locks the plugin row against activation and commits ledger + model
  * reservations atomically. External modules NEVER receive this transaction.
  */
-export class DrizzlePluginStorageMigrationRepository implements PluginStorageMigrationRepository {
+const FIELD_TYPES: Readonly<Record<ApprovedPluginPhysicalModel["columns"][number]["type"], string>> = {
+  text: "text", integer: "integer", boolean: "boolean", timestamptz: "timestamptz",
+};
+
+/** Deterministic bounded physical identifier, never raw plugin input. */
+function physicalName(manifestId: string, modelKey: string): string {
+  const digest = createHash("sha256").update(manifestId + ":" + modelKey).digest("hex");
+  return "ext_" + digest.slice(0, 40);
+}
+
+export class DrizzlePluginStorageMigrationRepository
+  implements PluginStorageMigrationRepository, PluginPhysicalMigrationRepository {
   constructor(private readonly db: () => ReturnType<typeof getDb> = getDb) {}
 
   async applyApproved(input: ApprovedPluginCatalogMigration): Promise<PluginMigrationStatus> {
+    return this.apply(input);
+  }
+
+  async applyApprovedPhysical(input: ApprovedPluginPhysicalMigration): Promise<PluginMigrationStatus> {
+    return this.apply(input, input.models);
+  }
+
+  private async apply(
+    input: ApprovedPluginCatalogMigration,
+    physical?: readonly ApprovedPluginPhysicalModel[],
+  ): Promise<PluginMigrationStatus> {
     return this.db().transaction(async (tx) => {
       // Transaction-scoped PostgreSQL advisory lock is released on COMMIT/ROLLBACK.
       // A stable first key separates this from core/other extension locks.
@@ -76,6 +103,28 @@ export class DrizzlePluginStorageMigrationRepository implements PluginStorageMig
             "PLUGIN_MIGRATION_CHECKSUM_CONFLICT", "Applied model descriptor differs",
           );
         }
+        if (physical) {
+          // Refuse an old catalog-only entry; never silently "repair" it.
+          for (const model of physical) {
+            const expectedTable = physicalName(input.manifestId, model.key);
+            const rows = await tx.select().from(pluginPhysicalModels).where(and(
+              eq(pluginPhysicalModels.pluginId, plugin.id),
+              eq(pluginPhysicalModels.modelKey, model.key),
+            ));
+            if (rows.length !== 1 || rows[0]!.tableName !== expectedTable ||
+                rows[0]!.schemaSha256 !== model.schemaSha256) {
+              throw new PluginStorageMigrationError(
+                "PLUGIN_PHYSICAL_SCHEMA_MISSING", "Physical model registration differs",
+              );
+            }
+            const present = await tx.execute(sql`SELECT to_regclass(${expectedTable}) IS NOT NULL AS present`);
+            if (present.rows[0]?.present !== true) {
+              throw new PluginStorageMigrationError(
+                "PLUGIN_PHYSICAL_SCHEMA_MISSING", "Physical model table is missing",
+              );
+            }
+          }
+        }
         return "already_applied";
       }
 
@@ -125,6 +174,35 @@ export class DrizzlePluginStorageMigrationRepository implements PluginStorageMig
           migrationId: input.migrationId,
           schemaSha256: model.schemaSha256,
         });
+      }
+      // All DDL and ledger writes share one transaction. Later CREATE TABLE
+      // failure rolls back any earlier tables, reservations and the ledger.
+      if (physical) {
+        for (const model of physical) {
+          const tableName = physicalName(input.manifestId, model.key);
+          const columnFragments = [
+            sql`"publication_id" text NOT NULL REFERENCES "publications" ("id") ON DELETE CASCADE`,
+            sql`"id" text NOT NULL`,
+            sql`"version" integer NOT NULL DEFAULT 1 CHECK ("version" > 0)`,
+            sql`"created_at" timestamptz NOT NULL DEFAULT now()`,
+            sql`"updated_at" timestamptz NOT NULL DEFAULT now()`,
+            ...model.columns.map((column) =>
+              sql`${sql.identifier(column.name)} ${sql.raw(FIELD_TYPES[column.type])} ${
+                column.required ? sql.raw("NOT NULL") : sql.raw("")
+              }`),
+            sql`PRIMARY KEY ("publication_id", "id")`,
+          ];
+          // No IF NOT EXISTS: an unregistered table collision fails closed.
+          await tx.execute(sql`CREATE TABLE ${sql.identifier(tableName)} (${
+            sql.join(columnFragments, sql`, `)
+          })`);
+          await tx.insert(pluginPhysicalModels).values({
+            pluginId: plugin.id,
+            modelKey: model.key,
+            tableName,
+            schemaSha256: model.schemaSha256,
+          });
+        }
       }
       return "applied";
     });
