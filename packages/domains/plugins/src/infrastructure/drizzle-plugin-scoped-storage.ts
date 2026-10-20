@@ -174,8 +174,12 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       // Hold a physical table lock so out-of-band ALTER/DROP cannot race
       // catalog attestation and the data operation in this transaction.
       await execute(sql`LOCK TABLE ${physicalTable} IN ACCESS SHARE MODE`);
-      const oid = physical.physical_oid;
-      if (typeof oid !== "number" || !Number.isSafeInteger(oid) || oid < 1) {
+      const oidValue = physical.physical_oid;
+      // PostgreSQL drivers can return oid either as int4 or decimal text.
+      const oid = typeof oidValue === "number" ? oidValue :
+        typeof oidValue === "string" && /^[0-9]{1,10}$/.test(oidValue)
+          ? Number(oidValue) : NaN;
+      if (!Number.isSafeInteger(oid) || oid < 1 || oid > 4294967295) {
         return problem("PLUGIN_STORAGE_SCHEMA_DRIFT", "Invalid physical table identity");
       }
       const columns = await execute(sql`
