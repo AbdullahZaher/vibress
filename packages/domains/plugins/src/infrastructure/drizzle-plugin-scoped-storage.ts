@@ -1,5 +1,5 @@
 import {
-  getDb, plugins, pluginPublicationStates, pluginPhysicalModels, auditEvents,
+  getDb, plugins, pluginPublicationStates, pluginPhysicalModels,
 } from "@vibress/database";
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -246,16 +246,23 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       if (auditMutation && scope.audit) {
         // The mutation and its actor-bound audit entry commit or roll back
         // together. Never log model field values or user-provided payloads.
-        await tx.insert(auditEvents).values({
-          id: randomUUID(),
-          publicationId: scope.publicationId,
-          actorUserId: scope.audit.actorUserId,
-          requestId: scope.audit.requestId,
-          action: `plugin.storage.${auditMutation.operation}`,
-          targetType: "plugin.storage",
-          targetId: auditMutation.recordId,
-          metadata: { pluginId: scope.pluginId, modelKey: model.key },
-        });
+        // Keep the audit table in the exact namespace admitted by the
+        // operator, never an earlier same-named search_path relation.
+        const [logged] = await execute(sql`
+          INSERT INTO ${sql.identifier(physical.schema_name)}."audit_events"
+            ("id", "publication_id", "actor_user_id", "request_id",
+              "action", "target_type", "target_id", "metadata")
+          VALUES (
+            ${randomUUID()}, ${scope.publicationId}, ${scope.audit.actorUserId},
+            ${scope.audit.requestId}, ${`plugin.storage.${auditMutation.operation}`},
+            'plugin.storage', ${auditMutation.recordId},
+            ${JSON.stringify({ pluginId: scope.pluginId, modelKey: model.key })}::jsonb
+          )
+          RETURNING "id"
+        `);
+        if (!logged) {
+          return problem("PLUGIN_STORAGE_UNAVAILABLE", "Storage audit write returned no record");
+        }
       }
       return result;
     });
