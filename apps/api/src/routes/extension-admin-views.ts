@@ -5,6 +5,7 @@ import { requireStaffSession } from "../middleware/auth";
 import { pluginsService } from "../services";
 import { admitAdminViews, type AdmittedAdminView } from "../plugins/admin-view-registry";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
+import { appLogger } from "../observability";
 
 function reject(reply: FastifyReply, req: FastifyRequest, code: string, status: number) {
   return reply.status(status).send({
@@ -109,17 +110,23 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
               const module = await pluginsService.resolveExtensionApiModule(
                 plugin.manifestId, publicationId, "extension.routes.admin",
               );
-              return module ? admitAdminViews(module) : null;
+              const admitted = module ? admitAdminViews(module) : null;
+              if (!admitted) {
+                appLogger.warn("Extension Admin navigation contribution unavailable", {
+                  pluginId: plugin.manifestId, requestId: req.id,
+                });
+              }
+              return admitted;
             } catch {
+              // Loader error messages can contain secrets; log bounded metadata
+              // only, once per negatively cached artifact and expiry window.
+              appLogger.warn("Extension Admin navigation contribution unavailable", {
+                pluginId: plugin.manifestId, requestId: req.id,
+              });
               return null;
             }
           });
-          if (!views) {
-            // Do not leak trusted-loader exception text or poison other plugins.
-            req.log.warn({ pluginId: plugin.manifestId, requestId: req.id },
-              "Extension Admin navigation contribution unavailable");
-            continue;
-          }
+          if (!views) continue;
           for (const view of views) {
             if (canAccessExtensionAdminRoute(
               req.permissions, req.roles, req.publicationContext?.role, view.permission,
