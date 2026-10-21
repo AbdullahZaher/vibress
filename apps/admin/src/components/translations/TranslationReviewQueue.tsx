@@ -8,6 +8,7 @@ import {
   TranslationQueueItem,
 } from "../../lib/api";
 import { Button } from "../ui/button";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import {
   Clock,
   AlertTriangle,
@@ -78,28 +79,24 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto px-2 sm:px-4 py-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-5">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onNavigate("/admin/translations")}
-            className="gap-2 cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>{tr("Matrix")}</span>
-          </Button>
-          <div className="h-4 w-[1px] bg-border" />
-          <div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-amber-500" />
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{tr("Editorial Review Queue")}</h1>
-            </div>
-            <p className="text-xs text-muted-foreground">{tr("Prioritized translation tasks: stale published content, review submissions, and missing coverage.")}</p>
+      <AdminPageHeader
+        backAction={
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onNavigate("/admin/translations")}
+              className="gap-2 cursor-pointer"
+            >
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+              <span>{tr("Matrix")}</span>
+            </Button>
+            <div className="h-4 w-[1px] bg-border" />
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
+        }
+        title={tr("Editorial Review Queue")}
+        description={tr("Prioritized translation tasks: stale published content, review submissions, and missing coverage.")}
+        actions={
           <Button
             variant="outline"
             size="sm"
@@ -109,8 +106,8 @@ export const TranslationReviewQueue: React.FC<TranslationReviewQueueProps> = ({
             <RefreshCw className="h-3.5 w-3.5" />
             <span>{tr("Refresh Queue")}</span>
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Queue Tabs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

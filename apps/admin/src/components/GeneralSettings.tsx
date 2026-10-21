@@ -10,7 +10,6 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
-  Sliders,
   Globe,
   FileText,
   CheckCircle2,
@@ -109,8 +108,7 @@ export const GeneralSettings: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <Sliders className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             General Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

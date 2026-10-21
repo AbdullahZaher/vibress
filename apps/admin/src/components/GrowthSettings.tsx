@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Mail, TrendingUp, MessageSquare, Sparkles } from "lucide-react";
+import { Mail, TrendingUp, MessageSquare } from "lucide-react";
 import { NewslettersSettings } from "./NewslettersSettings";
 import { IntelligenceSettings } from "./IntelligenceSettings";
 import { CommunitySettings } from "./CommunitySettings";
@@ -19,8 +19,7 @@ export const GrowthSettings: React.FC<GrowthSettingsProps> = ({
       {/* Header with Tab Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <Sparkles className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Growth & Audience
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

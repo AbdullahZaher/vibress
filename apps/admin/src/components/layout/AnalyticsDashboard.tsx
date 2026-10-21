@@ -12,6 +12,7 @@ import { ApiUser } from "../../lib/api";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import {
   getAnalyticsOverviewApi,
   AnalyticsRange,
@@ -232,11 +233,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Title Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          {tr("Analytics")}
-        </h1>
-      </div>
+      <AdminPageHeader
+        title={tr("Analytics")}
+        description={tr("Monitor publication traffic, readership engagement, and subscriber growth.")}
+      />
 
       {/* Navigation Tabs & Date Filter Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

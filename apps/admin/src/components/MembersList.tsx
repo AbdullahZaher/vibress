@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -107,11 +108,10 @@ export const MembersList: React.FC = () => {
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Publication Members
-        </h1>
-      </div>
+      <AdminPageHeader
+        title={tr("Members")}
+        description={tr("Manage subscriber accounts, access levels, and member subscriptions.")}
+      />
 
       {actionError && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
