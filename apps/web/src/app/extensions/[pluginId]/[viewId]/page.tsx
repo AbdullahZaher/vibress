@@ -23,6 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const h = await headers();
   return publicExtensionMetadata(
     page, site, h.get("host"), process.env.NODE_ENV === "production",
+    h.get("x-vibress-preview") === "true",
   );
 }
 
@@ -31,7 +32,9 @@ export default async function PublicExtensionView({ params }: Props) {
   const page = await getPublicExtensionPage(pluginId, viewId);
   if (!page) notFound();
   const site = await getThemeSiteSettings();
-  if (!matchesPublicExtensionPublication(page, site)) notFound();
+  if (!matchesPublicExtensionPublication(page, site) ||
+      (page.locale && page.locale !== site.locale) ||
+      (page.publishedLocales && !page.publishedLocales.includes(site.locale))) notFound();
   const title = localizedExtensionTitle(page.title, site.locale);
 
   // Fallback-only, server-rendered, escaped, accessible scalar projection.
