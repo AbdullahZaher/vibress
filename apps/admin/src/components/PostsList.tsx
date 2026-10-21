@@ -3,31 +3,9 @@ import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
-import { IconButton } from "./ui/icon-button";
-import { Badge } from "./ui/badge";
+import { EditorialListRow } from "./common/EditorialListRow";
 import { Input } from "./ui/input";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "./ui/table";
-import {
-  Plus,
-  Search,
-  FileText,
-  Edit,
-  Trash2,
-  Globe,
-  EyeOff,
-  Calendar,
-  AlertCircle,
-  RefreshCw,
-  Clock,
-  User,
-} from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw } from "lucide-react";
 
 interface PostSummary {
   id: string;
@@ -39,6 +17,7 @@ interface PostSummary {
   scheduledAt: string | null;
   updatedAt: string;
   authors?: Array<{ name: string; email: string }>;
+  featureImage?: { url: string | null } | null;
 }
 
 interface PostsListProps {
@@ -111,32 +90,6 @@ export const PostsList: React.FC<PostsListProps> = ({
       post.slug.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "published":
-        return (
-          <Badge variant="published" className="text-[11px] font-mono">
-            <Globe className="h-3 w-3" />
-            <span>{tr("Published")}</span>
-          </Badge>
-        );
-      case "scheduled":
-        return (
-          <Badge variant="scheduled" className="text-[11px] font-mono">
-            <Calendar className="h-3 w-3" />
-            <span>{tr("Scheduled")}</span>
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="draft" className="text-[11px] font-mono">
-            <EyeOff className="h-3 w-3" />
-            <span>{tr("Draft")}</span>
-          </Badge>
-        );
-    }
-  };
 
   if (loading) {
     return (
@@ -247,200 +200,34 @@ export const PostsList: React.FC<PostsListProps> = ({
         </div>
       </div>
 
-      {/* 1. Desktop & Tablet Table View */}
-      <div className="hidden sm:block rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="ps-6">{tr("Title")}</TableHead>
-              <TableHead>{tr("Status")}</TableHead>
-              <TableHead>{tr("Author")}</TableHead>
-              <TableHead>{tr("Updated")}</TableHead>
-              <TableHead className="text-end pe-6">{tr("Actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredPosts.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="h-40 text-center text-muted-foreground"
-                >
-                  <div className="flex flex-col items-center justify-center space-y-2 py-4">
-                    <FileText className="h-8 w-8 text-muted-foreground/30" />
-                    <p className="text-xs font-medium text-foreground">
-                      {tr("No posts found")}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {searchQuery
-                        ? "Try adjusting your search query or clear the filter."
-                        : "Start creating your first editorial article."}
-                    </p>
-                    {!searchQuery && (
-                      <Button
-                        size="sm"
-                        onClick={() => onNavigate("/admin/posts/new")}
-                        className="mt-2 text-xs gap-1"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> New Post
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredPosts.map((post) => (
-                <TableRow
-                  key={post.id}
-                  className="hover:bg-muted/40 transition-colors"
-                >
-                  <TableCell className="ps-6 font-medium">
-                    <div className="flex flex-col text-start">
-                      <button
-                        onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                        className="text-start font-semibold text-foreground hover:text-primary transition-colors cursor-pointer text-xs sm:text-sm"
-                      >
-                        {post.title}
-                      </button>
-                      {post.featured && <span className="text-[11px] text-primary">{tr("Featured")}</span>}
-                      <span className="text-[11px] text-muted-foreground font-mono">
-                        /{post.slug}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell>{getStatusBadge(post.status)}</TableCell>
-
-                  <TableCell className="text-xs text-muted-foreground font-medium">
-                    {post.authors?.[0]?.name || "Admin"}
-                  </TableCell>
-
-                  <TableCell className="text-xs text-muted-foreground font-mono tabular-nums">
-                    {new Date(post.updatedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </TableCell>
-
-                  <TableCell className="text-end pe-6">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <IconButton
-                        label={tr("Edit")}
-                        accessibleLabel={`${tr("Edit")}: ${post.title}`}
-                        onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <Edit className="h-3.5 w-3.5" aria-hidden="true" />
-                      </IconButton>
-
-                      {canPublish && (
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => handlePublishToggle(post)}
-                          className="cursor-pointer"
-                        >
-                          {post.status === "published"
-                            ? "Unpublish"
-                            : "Publish"}
-                        </Button>
-                      )}
-
-                      <IconButton
-                        label={tr("Delete")}
-                        accessibleLabel={`${tr("Delete")}: ${post.title}`}
-                        onClick={() => handleDelete(post.id)}
-                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                      </IconButton>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* 2. Mobile Responsive Stacked Card View (<640px) */}
-      <div className="sm:hidden space-y-3">
+      {/* Responsive editorial rows: one layout across desktop, tablet and mobile. */}
+      <div role="list" aria-label={tr("Posts")} className="divide-y divide-border/70">
         {filteredPosts.length === 0 ? (
-          <div className="rounded-xl border border-border/70 bg-card p-6 text-center text-muted-foreground space-y-2">
-            <FileText className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-            <p className="text-xs font-medium text-foreground">{tr("No posts found")}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {searchQuery
-                ? "Try adjusting your search query."
-                : "Start creating your first article."}
-            </p>
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
+            <FileText className="size-9 opacity-40" aria-hidden="true" />
+            <p className="font-medium text-foreground">{tr("No posts found")}</p>
+            <p className="text-sm">{tr("Try a different search or filter.")}</p>
+            {!searchQuery && statusFilter === "all" && (
+              <Button size="sm" onClick={() => onNavigate("/admin/posts/new")}>
+                <Plus className="size-4" aria-hidden="true" />
+                {tr("Create Post")}
+              </Button>
+            )}
           </div>
         ) : (
           filteredPosts.map((post) => (
-            <div
+            <EditorialListRow
               key={post.id}
-              className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1 min-w-0 text-start">
-                  <button
-                    onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                    className="font-semibold text-xs text-foreground hover:text-primary transition-colors cursor-pointer text-start line-clamp-2"
-                  >
-                    {post.title}
-                  </button>
-                  {post.featured && <span className="text-[11px] text-primary block">{tr("Featured")}</span>}
-                  <span className="text-[11px] text-muted-foreground font-mono block truncate">
-                    /{post.slug}
-                  </span>
-                </div>
-                <div className="shrink-0">{getStatusBadge(post.status)}</div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
-                <span className="flex items-center gap-1 font-medium">
-                  <User className="h-3 w-3" />
-                  {post.authors?.[0]?.name || "Admin"}
-                </span>
-                <span className="font-mono tabular-nums flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {new Date(post.updatedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-1.5 pt-1">
-                <IconButton
-                  label={tr("Edit")}
-                  accessibleLabel={`${tr("Edit")}: ${post.title}`}
-                  variant="outline"
-                  onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                >
-                  <Edit className="h-3.5 w-3.5" aria-hidden="true" />
-                </IconButton>
-                {canPublish && (
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => handlePublishToggle(post)}
-                    className="text-xs"
-                  >
-                    {post.status === "published" ? "Unpublish" : "Publish"}
-                  </Button>
-                )}
-                <IconButton
-                  label={tr("Delete")}
-                  accessibleLabel={`${tr("Delete")}: ${post.title}`}
-                  onClick={() => handleDelete(post.id)}
-                  className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                </IconButton>
-              </div>
-            </div>
+              title={post.title}
+              authorName={post.authors?.[0]?.name}
+              date={post.status === "published" && post.publishedAt ? post.publishedAt : post.updatedAt}
+              status={post.status}
+              imageUrl={post.featureImage?.url}
+              featured={post.featured}
+              onEdit={() => onNavigate(`/admin/posts/${post.id}`)}
+              onPublishToggle={canPublish ? () => handlePublishToggle(post) : undefined}
+              onDelete={() => handleDelete(post.id)}
+            />
           ))
         )}
       </div>
