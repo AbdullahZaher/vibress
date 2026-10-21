@@ -179,6 +179,13 @@ export const ExtensionPublicProjectionSchema = z.record(
   z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
 ).refine((data) => Object.keys(data).length <= 24, "Too many extension fields");
 
+/** The SSR response binds descriptor and scalar projection to one Host
+ * publication and one authorized execution. Additive: old v1 APIs remain. */
+export const ExtensionPublicPageResponseSchema = ExtensionPublicViewDtoSchema.extend({
+  publicationId: z.string().min(1).max(200),
+  data: ExtensionPublicProjectionSchema,
+}).strict();
+
 export const ExtensionAdminNavigationParamsSchema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
   viewId: ExtensionAdminSegmentSchema,
