@@ -47,8 +47,12 @@ emailDeliveryWorker.start().catch((err) => {
 });
 
 const pluginEventWorker = new PluginEventWorker();
-pluginEventWorker.start().catch((error: unknown) => {
-  appLogger.error("[PluginEventWorker] Failed to start", {}, error as Error);
+pluginEventWorker.start().catch((_error: unknown) => {
+  // Operator-approved worker admission is mandatory when configured.
+  // Never expose a green readiness endpoint while trusted event delivery
+  // is unavailable; secrets or operator filesystem paths are not logged.
+  appLogger.error("[PluginEventWorker] Approved release admission failed");
+  process.exit(1);
 });
 
 const webhookDeliveryWorker = new WebhookDeliveryWorker();
