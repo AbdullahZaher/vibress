@@ -30,7 +30,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { sign } from "node:crypto";
 const [lockfile, privateKey, output] = process.argv.slice(1);
 const signature = sign(null, readFileSync(lockfile), readFileSync(privateKey));
-writeFileSync(output, signature.toString("base64") + "\\n");
+writeFileSync(output, signature.toString("base64") + "\n");
 ' /absolute/path/trusted-plugins.json operator-private.pem operator.sig
 ```
 
