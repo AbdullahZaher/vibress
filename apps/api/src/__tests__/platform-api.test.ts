@@ -620,12 +620,25 @@ describe("Batch 12 — Platform Integration & Security", () => {
       const first = await issue();
       expect(first.statusCode).toBe(200);
       const src = first.json().src as string;
-      const stolen = await app.inject({ method: "GET", url: src });
-      expect(stolen.statusCode).toBe(401);
-      // Even the valid cookie cannot reuse a stolen/consumed ticket.
+      const crossSite = await app.inject({
+        method: "GET", url: src, headers: { "sec-fetch-site": "cross-site" },
+      });
+      expect(crossSite.statusCode).toBe(404);
+      // SameSite=Lax cookies may be omitted for sandboxed opaque-origin
+      // navigations. The one-use ticket still binds the *live* Staff session.
+      const frameNoCookie = await app.inject({ method: "GET", url: src });
+      expect(frameNoCookie.statusCode).toBe(200);
+      // Even valid cookies cannot reuse the consumed ticket.
       expect((await app.inject({
         method: "GET", url: src, headers: { cookie: staffCookie },
       })).statusCode).toBe(404);
+
+      const wrongSession = await issue();
+      const anotherStaffCookie = await loginStaff(app);
+      expect((await app.inject({
+        method: "GET", url: wrongSession.json().src,
+        headers: { cookie: anotherStaffCookie },
+      })).statusCode).toBe(401);
 
       const second = await issue();
       read.mockResolvedValue("<main>Version B</main>");
