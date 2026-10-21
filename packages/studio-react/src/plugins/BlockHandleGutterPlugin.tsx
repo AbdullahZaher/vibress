@@ -223,6 +223,7 @@ export function BlockHandleGutterPlugin({
       <button
         type="button"
         title="Click to add a block below"
+        aria-label="Click to add a block below"
         onClick={handleInsertBelow}
         style={{
           display: "flex",
@@ -252,6 +253,7 @@ export function BlockHandleGutterPlugin({
       <button
         type="button"
         title="Drag to move, click for options"
+        aria-label="Drag to move, click for options"
         onClick={() => setShowMenu(!showMenu)}
         style={{
           display: "flex",
@@ -414,6 +416,7 @@ export function BlockHandleGutterPlugin({
                   <button
                     key={c.name}
                     title={c.name}
+                    aria-label={c.name}
                     onClick={() => handleApplyColor(c.color, c.bg)}
                     style={{
                       width: "24px",
