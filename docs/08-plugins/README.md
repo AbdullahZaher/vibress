@@ -23,6 +23,21 @@ adds opt-in, Host-authorized and text-only public extension pages; member-privat
 views, published hreflang and full theme slots are still separate release gates.
 The historical baseline below describes the 2026-10-19 design review.
 
+## Pending review on the unified completion branch
+
+The `feat/plugin-platform-completion-phases-1-4-20261021` branch proposes
+published-only extension locales and SEO ([EXT-302B](extension-public-views-ext302a.md)),
+a Host-owned `extension` theme slot with safe fallback
+([sample Liquid template](examples/extension.liquid)),
+an independent [SDK reference plugin](../../examples/plugins/hello-public/README.md),
+and an operator-side [release preflight / recovery runbook](external-extension-operator-runbook.md).
+
+These are **branch changes**, not merged/released contracts. EXT-401 durable
+workers, EXT-402 secret rotation/audit, EXT-403 automated backup/restore
+integration, full EXT-404 artifact signatures and EXT-501–504 pilot gates
+remain separate blockers. Do not describe this branch as production-ready
+without full CI and operator deployment tests.
+
 ## Read in this order
 
 1. [External extensions architecture](external-extensions-architecture.md) — production trust boundary, service ownership, lifecycle, tenant model, deployment.
