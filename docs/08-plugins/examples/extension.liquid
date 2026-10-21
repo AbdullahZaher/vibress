@@ -1,0 +1,16 @@
+{% comment %}
+  Optional operator-owned Liquid template: templates/extension.liquid
+  extension fields are Host-scoped, scalar and HTML-escaped before rendering.
+  Do not use raw HTML bypasses or attempt access to Member/Admin secrets.
+{% endcomment %}
+<main id="main-content" class="extension-view" dir="{{ extension.direction }}">
+  <h1 dir="auto">{{ extension.title }}</h1>
+  <dl>
+    {% for pair in extension.data %}
+      <div>
+        <dt dir="auto">{{ pair[0] }}</dt>
+        <dd dir="auto">{{ pair[1] }}</dd>
+      </div>
+    {% endfor %}
+  </dl>
+</main>
