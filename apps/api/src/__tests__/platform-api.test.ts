@@ -8,7 +8,7 @@ import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
-import { pluginsService, workspaceService } from "../services";
+import { pluginsService, workspaceService, publicationLocaleService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
   const res = await app.inject({
@@ -1509,6 +1509,68 @@ describe("Batch 12 — Platform Integration & Security", () => {
       prepare.mockRestore();
       resolve.mockRestore();
       hostContext.mockRestore();
+    }
+  });
+
+  it("EXT-302B serves only enabled and explicitly published locale variants", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      headline: scope.locale === "ar" ? "الدورات" : "Courses",
+    }));
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { headline: "string" } }, handle: handler,
+    };
+    const module: PluginModule = {
+      activate() {},
+      routes: [route],
+      publicViews: [{
+        id: "courses", routeId: "catalog",
+        title: { en: "Courses", ar: "الدورات" },
+        publishedLocales: ["en", "ar"],
+      }],
+    };
+    const resolver = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en", "ar"],
+        isMultilingual: true, needsReconciliation: false,
+      });
+    const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
+    try {
+      const arabic = await app.inject({
+        method: "GET", url: url + "?locale=ar", headers: { host: "localhost:7777" },
+      });
+      expect(arabic.statusCode).toBe(200);
+      expect(arabic.json().locale).toBe("ar");
+      expect(arabic.json().data).toEqual({ headline: "الدورات" });
+      expect(arabic.json().publishedLocales).toEqual(["en", "ar"]);
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      const disabled = await app.inject({
+        method: "GET", url: url + "?locale=fr", headers: { host: "localhost:7777" },
+      });
+      expect(disabled.statusCode).toBe(404);
+      const invalid = await app.inject({
+        method: "GET", url: url + "?locale=../../admin", headers: { host: "localhost:7777" },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(handler).toHaveBeenCalledTimes(1);
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+      const noLongerEnabled = await app.inject({
+        method: "GET", url: url + "?locale=ar", headers: { host: "localhost:7777" },
+      });
+      expect(noLongerEnabled.statusCode).toBe(404);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepare.mockRestore();
+      resolver.mockRestore();
     }
   });
 
