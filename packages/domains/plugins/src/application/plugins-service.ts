@@ -712,6 +712,10 @@ export class PluginsService {
     // host-enforced Staff permission and request validation.
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
+        latest.version !== plugin.version ||
+        latest.vibressApiVersion !== plugin.vibressApiVersion ||
+        latest.entrypoint !== plugin.entrypoint ||
+        !isDeepStrictEqual(latest.capabilities, plugin.capabilities) ||
         !latest.capabilities.includes(capability)) return null;
     await this.requirePublicationEnabled(latest, publicationId);
     return module;
@@ -733,6 +737,10 @@ export class PluginsService {
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
+        latest.version !== plugin.version ||
+        latest.vibressApiVersion !== plugin.vibressApiVersion ||
+        latest.entrypoint !== plugin.entrypoint ||
+        !isDeepStrictEqual(latest.capabilities, plugin.capabilities) ||
         !latest.capabilities.includes(capability)) return false;
     await this.requirePublicationEnabled(latest, publicationId);
     return true;

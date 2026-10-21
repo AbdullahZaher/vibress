@@ -132,6 +132,31 @@ describe("EXT-202 route admission and publication state", () => {
     await current.service.shutdown();
   });
 
+  it("rejects a version or capability rotation during public route admission", async () => {
+    const rotating = setup({ capabilities: ["extension.routes.public"] });
+    vi.mocked(rotating.repo.findById).mockResolvedValue({
+      ...activePlugin, capabilities: ["extension.routes.public"], version: "2.0.0",
+    });
+    expect(await rotating.service.resolveExtensionApiModule(
+      "independent-courses", "pub-a", "extension.routes.public",
+    )).toBeNull();
+
+    const duringInit = setup({ capabilities: ["extension.routes.public"] });
+    const admitted = await duringInit.service.resolveExtensionApiModule(
+      "independent-courses", "pub-a", "extension.routes.public",
+    );
+    expect(admitted).not.toBeNull();
+    if (!admitted) throw new Error("Expected admitted public module");
+    vi.mocked(duringInit.repo.findById).mockResolvedValue({
+      ...activePlugin, capabilities: ["extension.routes.public", "extension.routes.admin"],
+    });
+    expect(await duringInit.service.prepareExtensionApiExecution(
+      "independent-courses", "pub-a", "extension.routes.public", admitted,
+    )).toBe(false);
+    await rotating.service.shutdown();
+    await duringInit.service.shutdown();
+  });
+
   it("rejects deactivation after route resolution but before initialization", async () => {
     const current = setup();
     const module = await current.service.resolveExtensionApiModule(

@@ -8,7 +8,7 @@ import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
-import { pluginsService } from "../services";
+import { pluginsService, workspaceService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
   const res = await app.inject({
@@ -1368,6 +1368,147 @@ describe("Batch 12 — Platform Integration & Security", () => {
       approved.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();
+    }
+  });
+
+  it("EXT-302A resolves only explicitly linked, enabled public SSR views", async () => {
+    const descriptor: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { title: "string", total: "number" } },
+      handle: () => ({ title: "Public courses", total: 3 }),
+    };
+    const title = { en: "Courses", ar: "الدورات" };
+    const module: PluginModule = {
+      activate() {},
+      routes: [descriptor],
+      publicViews: [{ id: "courses", routeId: "catalog", title }],
+    };
+    const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const url = "/api/content/v1/extensions/independent-courses/views/courses";
+    try {
+      const valid = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.headers["cache-control"]).toBe("private, no-store");
+      expect(valid.json()).toEqual({
+        pluginId: "independent-courses", viewId: "courses",
+        routeId: "catalog", title,
+      });
+      expect(prepared).not.toHaveBeenCalled();
+      const page = await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
+      });
+      expect(page.statusCode).toBe(200);
+      expect(page.headers["cache-control"]).toBe("private, no-store");
+      expect(page.json()).toEqual({
+        publicationId: expect.any(String),
+        pluginId: "independent-courses", viewId: "courses",
+        routeId: "catalog", title,
+        data: { title: "Public courses", total: 3 },
+      });
+      expect(prepared).toHaveBeenCalledWith(
+        "independent-courses", expect.any(String), "extension.routes.public", module,
+      );
+      const scalar = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/v1/catalog",
+        headers: { host: "localhost:7777" },
+      });
+      expect(scalar.statusCode).toBe(200);
+      expect(scalar.json()).toEqual({ title: "Public courses", total: 3 });
+
+      expect((await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/views/unknown",
+        headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/views/%2e%2e",
+        headers: { host: "localhost:7777" },
+      })).statusCode).not.toBe(200);
+
+      resolved.mockResolvedValue({ ...module, publicViews: undefined });
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+
+      resolved.mockResolvedValue({ ...module, routes: [{ ...descriptor, audience: "member" }] });
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(503);
+
+      resolved.mockResolvedValue(null);
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+    } finally {
+      prepared.mockRestore();
+      resolved.mockRestore();
+    }
+  });
+
+  it("EXT-302A binds descriptor and data to the same authoritative hostname publication", async () => {
+    const hostContext = vi.spyOn(workspaceService, "resolvePublicPublicationContext")
+      .mockImplementation(async (options) => {
+        const publicationId = options.host?.startsWith("publication-b.")
+          ? "pub_b" : "pub_a";
+        return {
+          publicationId, workspaceId: "workspace_shared",
+          actorType: "public", isSystemOperation: false,
+        };
+      });
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { publication: "string" } },
+      handle: (_input, scope) => ({ publication: scope.publicationId }),
+    };
+    const pluginModule: PluginModule = {
+      activate() {}, routes: [route],
+      publicViews: [{
+        id: "courses", routeId: "catalog",
+        title: { en: "Courses", ar: "الدورات" },
+      }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(pluginModule);
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
+    try {
+      const a = await app.inject({
+        method: "GET", url, headers: { host: "publication-a.example" },
+      });
+      const b = await app.inject({
+        method: "GET", url, headers: { host: "publication-b.example" },
+      });
+      expect(a.statusCode).toBe(200);
+      expect(b.statusCode).toBe(200);
+      expect(a.json().publicationId).toBe("pub_a");
+      expect(b.json().publicationId).toBe("pub_b");
+      expect(a.json().data).toEqual({ publication: "pub_a" });
+      expect(b.json().data).toEqual({ publication: "pub_b" });
+      expect(resolve).toHaveBeenCalledWith(
+        "independent-courses", "pub_a", "extension.routes.public",
+      );
+      expect(resolve).toHaveBeenCalledWith(
+        "independent-courses", "pub_b", "extension.routes.public",
+      );
+      expect(prepare).toHaveBeenCalledTimes(2);
+    } finally {
+      prepare.mockRestore();
+      resolve.mockRestore();
+      hostContext.mockRestore();
     }
   });
 

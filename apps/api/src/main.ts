@@ -82,8 +82,8 @@ import { getConfig } from "@vibress/config";
 import {
   SITE_AUTH_COOKIE_NAME,
   signSiteAuthToken,
-  verifySiteAuthToken,
 } from "@vibress/security";
+import { evaluatePublicSiteAccess } from "./middleware/public-site-privacy";
 import {
   appLogger,
   recordHttpError,
@@ -248,39 +248,28 @@ export const buildApp = () => {
       return;
     }
 
-    let isPrivate: boolean;
-    try {
-      const publicSettings = await settingsService.getPublicSettings(publicationId);
-      isPrivate = Boolean(publicSettings.security?.isPrivate);
-    } catch {
+    const privacy = await evaluatePublicSiteAccess(
+      publicationId,
+      request.cookies?.[SITE_AUTH_COOKIE_NAME] as string | undefined,
+      getSitePrivacySecret(),
+      (id) => settingsService.getPublicSettings(id),
+    );
+    if (privacy === "unavailable") {
       return reply.status(503).send({
-        errors: [
-          {
-            code: "PRIVACY_STATE_UNAVAILABLE",
-            message: "Site privacy state is unavailable",
-            requestId: request.id,
-          },
-        ],
+        errors: [{
+          code: "PRIVACY_STATE_UNAVAILABLE",
+          message: "Site privacy state is unavailable",
+          requestId: request.id,
+        }],
       });
     }
-
-    if (!isPrivate) return;
-
-    const token = request.cookies?.[SITE_AUTH_COOKIE_NAME] as string | undefined;
-    const hasSiteAuth = verifySiteAuthToken(
-      token,
-      getSitePrivacySecret(),
-      publicationId,
-    );
-    if (!hasSiteAuth) {
+    if (privacy === "denied") {
       return reply.status(403).send({
-        errors: [
-          {
-            code: "PRIVATE_SITE_AUTH_REQUIRED",
-            message: "Private site authentication required",
-            requestId: request.id,
-          },
-        ],
+        errors: [{
+          code: "PRIVATE_SITE_AUTH_REQUIRED",
+          message: "Private site authentication required",
+          requestId: request.id,
+        }],
       });
     }
   });
