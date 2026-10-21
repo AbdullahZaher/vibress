@@ -17,11 +17,11 @@ EXT-301B1 admitted optional, operator-reviewed, SHA-256-pinned single-file HTML 
 
 The optional service/host method preserves legacy bundled-plugin and lockfile behavior. No migrations, new capabilities, SDK-major changes, or changes to the existing read-only Studio views are necessary.
 
-## Why the iframe renderer is deferred
+## B2A security constraints (addressed incrementally by B2B)
 
 The current Admin CSP is strict (`script-src 'self'`, `script-src-attr 'none'`, `frame-ancestors 'none'`). A naive same-origin `iframe src` request lacks the active publication header, while rendering HTML using `srcDoc` can inherit the parent CSP and block the plugin's inline scripts. Simply weakening CSP or enabling `allow-same-origin allow-scripts` is unacceptable.
 
-An interactive iframe requires an independently reviewed **opaque-origin document delivery** model with server-set CSP; a request/session token that is short-lived, bound to the authenticated Staff user and selected publication, audience-restricted and resistant to replay/leakage; and a capability-limited bridge. It must not forward ambient cookies, arbitrary fetch privileges or API credentials into plugin execution. This has **not** been implemented and is the follow-on EXT-301B2B task.
+An interactive iframe requires an independently reviewed **opaque-origin document delivery** model with server-set CSP; a request/session token that is short-lived, bound to the authenticated Staff user and selected publication, audience-restricted and resistant to replay/leakage; and a capability-limited bridge. It must not forward ambient cookies, arbitrary fetch privileges or API credentials into plugin execution. B2A did **not** implement these safeguards. The EXT-301B2B section below documents the implemented one-use ticket, opaque-origin renderer and restricted read-only bridge; write operations remain out of scope.
 
 ## Release gates
 
@@ -48,7 +48,7 @@ default-src 'none'; script-src 'unsafe-inline'; script-src-attr 'none';
 style-src 'unsafe-inline'; img-src data:; connect-src 'none';
 font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none';
 object-src 'none'; base-uri 'none'; form-action 'none';
-frame-ancestors 'self'; sandbox allow-scripts
+navigate-to 'none'; frame-ancestors 'self'; sandbox allow-scripts
 ```
 
 The Admin additionally uses `iframe sandbox="allow-scripts"` **without `allow-same-origin`**, `referrerPolicy="no-referrer"`, accessible localized title and a responsive bounding frame. The response applies `Cache-Control: private, no-store`, no-referrer, nosniff, same-origin frame ancestor restriction, and a denied Permissions-Policy for sensitive browser APIs. Scripts are inline only inside the **opaque-origin** document, not the parent Admin.
