@@ -210,6 +210,48 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     expect(authorizedReads).toBe(0);
   });
 
+  test("removes the approved frame after periodic Staff publication permission revocation", async ({ page }) => {
+    await mockPluginNavigation(page);
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ src: ticketPath, bridgeNonce, sha256: documentHash }),
+      }));
+    const sample = await readFile(
+      path.join(process.cwd(), "docs/08-plugins/examples/isolated-courses.html"), "utf8",
+    );
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
+      (route) => route.fulfill({
+        status: 200, contentType: "text/html; charset=utf-8",
+        headers: {
+          "content-security-policy":
+            "default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; " +
+            "form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts",
+        },
+        body: sample + frameBootstrap,
+      }));
+    let checked = 0;
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-status`,
+      (route) => {
+        checked++;
+        return route.fulfill({
+          status: 403, contentType: "application/json",
+          body: JSON.stringify({ errors: [{ code: "PERMISSION_DENIED" }] }),
+        });
+      });
+    await login(page);
+    await page.clock.install();
+    await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
+    const iframe = page.locator('iframe[title="Courses"]');
+    await expect(iframe).toBeVisible();
+    await page.frameLocator('iframe[title="Courses"]')
+      .getByRole("button", { name: "Load courses" }).waitFor({ state: "visible" });
+    await page.clock.fastForward(31_000);
+    await expect(iframe).toHaveCount(0);
+    expect(checked).toBeGreaterThan(0);
+    await expect(page.getByRole("alert")).toBeVisible();
+  });
+
   test("preserves EXT-301A read-only fallback when no approved UI asset exists", async ({ page }) => {
     await mockPluginNavigation(page);
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
