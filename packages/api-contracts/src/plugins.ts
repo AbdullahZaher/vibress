@@ -177,3 +177,31 @@ export const ExtensionAdminFrameTicketResponseSchema = z.object({
     /^\/api\/admin\/v1\/extensions\/[a-z0-9][a-z0-9-]{0,99}\/views\/[a-z][a-z0-9-]{0,63}\/frame\?ticket=[a-f0-9]{64}$/,
   ),
 }).strict();
+
+/**
+ * EXT-301B2B: the opaque-origin iframe may ask Host to read exactly the
+ * linked EXT-301A Admin GET route. It cannot choose URLs, route IDs, methods,
+ * headers, publication IDs or bodies. Privileged writes are NOT bridged.
+ */
+export const ExtensionAdminBridgeReadRequestSchema = z.object({
+  type: z.literal("vibress:extension:read"),
+  version: z.literal(1),
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+}).strict();
+
+export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    type: z.literal("vibress:extension:response"),
+    version: z.literal(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    ok: z.literal(true),
+    data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  }).strict(),
+  z.object({
+    type: z.literal("vibress:extension:response"),
+    version: z.literal(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    ok: z.literal(false),
+    error: z.enum(["DENIED", "UNAVAILABLE", "RATE_LIMITED"]),
+  }).strict(),
+]);
