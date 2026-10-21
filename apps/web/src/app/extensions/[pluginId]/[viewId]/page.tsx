@@ -14,7 +14,7 @@ type Props = {
 function localizedTitle(
   title: { en: string; ar: string }, locale: string,
 ): string {
-  return locale.split("-")[0].toLowerCase() === "ar" ? title.ar : title.en;
+  return /^ar(?:-|$)/i.test(locale) ? title.ar : title.en;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
