@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   ExtensionAdminNavigationParamsSchema,
   ExtensionAdminFrameTicketQuerySchema,
   ExtensionAdminFrameTicketResponseSchema,
+  ExtensionAdminFrameStatusResponseSchema,
 } from "@vibress/api-contracts";
 import { PluginDomainError } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin, COOKIE_NAME } from "../middleware/auth";
@@ -27,7 +28,7 @@ const FRAME_CSP = [
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-  // Defense in depth where supported; browsers differ in navigate-to support.
+  // Defense-in-depth only: some browsers do not implement navigate-to.
   "navigate-to 'none'",
   "frame-ancestors 'self'",
   // Always an opaque origin, including when the URL is opened in a top-level tab.
@@ -104,15 +105,49 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
           pluginId, viewId, publicationId, req.roles, req.permissions, req.publicationContext?.role,
         );
         if ("denied" in admitted) return reject(req, reply, admitted.code, admitted.denied);
+        const bridgeNonce = randomBytes(32).toString("hex");
         const ticket = await adminUiFrameTickets.issue({
           staffId: req.user.id,
           sessionHash: sessionFingerprint(sessionToken),
           publicationId, pluginId, viewId, sha256: admitted.sha256,
+          bridgeNonce,
         });
         // Opaque ticket expires in 45s and is consumed once in Redis. This URL
         // is constructed by Host, never loaded from plugin-controlled metadata.
         const src = `/api/admin/v1/extensions/${pluginId}/views/${viewId}/frame?ticket=${ticket}`;
-        const response = ExtensionAdminFrameTicketResponseSchema.safeParse({ src });
+        const response = ExtensionAdminFrameTicketResponseSchema.safeParse({
+          src, bridgeNonce, sha256: admitted.sha256,
+        });
+        if (!response.success) return reject(req, reply, "EXTENSION_INVALID_UI", 503);
+        return reply.code(200).send(response.data);
+      } catch (error) {
+        return reject(req, reply, "EXTENSION_UNAVAILABLE", denyOnPluginTransition(error));
+      }
+    },
+  });
+
+  // A live Staff-authorized status check allows the parent to remove the
+  // iframe after revocation, even if the extension never requests data.
+  fastify.get("/extensions/:pluginId/views/:viewId/frame-status", {
+    preHandler: [requireStaffSession, validateOrigin],
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
+      if (!params.success) return reject(req, reply, "VALIDATION_ERROR", 400);
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId || !req.user || !req.permissions || !req.roles) {
+        return reject(req, reply, "PUBLICATION_ACCESS_DENIED", 403);
+      }
+      try {
+        const admitted = await authorizedHtml(
+          params.data.pluginId, params.data.viewId, publicationId,
+          req.roles, req.permissions, req.publicationContext?.role,
+        );
+        if ("denied" in admitted) return reject(req, reply, admitted.code, admitted.denied);
+        const response = ExtensionAdminFrameStatusResponseSchema.safeParse({
+          sha256: admitted.sha256,
+        });
         if (!response.success) return reject(req, reply, "EXTENSION_INVALID_UI", 503);
         return reply.code(200).send(response.data);
       } catch (error) {
@@ -189,7 +224,13 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
         reply.header("X-Frame-Options", "SAMEORIGIN");
         reply.header("Permissions-Policy",
           "camera=(), microphone=(), geolocation=(), payment=(), clipboard-read=(), clipboard-write=()");
-        return reply.code(200).send(admitted.html);
+        // The proof is server-injected AFTER hash verification. A redirected
+        // or unrelated iframe document cannot forge the nonce because it is
+        // not present in the URL or extension-controlled route metadata.
+        // An unclosed HTML comment/element can suppress the bootstrap; such
+        // documents fail closed (no bridge) rather than gaining privileges.
+        const readyScript = `<script>window.parent.postMessage({type:"vibress:extension:ready",version:1,bridgeNonce:"${claim.bridgeNonce}"},"*")</script>`;
+        return reply.code(200).send(admitted.html + readyScript);
       } catch (error) {
         return reject(req, reply, "EXTENSION_UNAVAILABLE", denyOnPluginTransition(error));
       }
