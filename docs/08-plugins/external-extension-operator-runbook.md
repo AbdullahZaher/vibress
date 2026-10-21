@@ -25,7 +25,7 @@ include the Ed25519 private key.
 ```bash
 export VIBRESS_PLUGIN_RELEASE_DIR=/srv/vibress/operator-plugins
 docker compose -f compose.prod.yml -f compose.plugins.yml build api
-docker compose -f compose.prod.yml -f compose.plugins.yml \\
+docker compose -f compose.prod.yml -f compose.plugins.yml \
   run --rm --no-deps --entrypoint node api dist/plugins-preflight.js
 # Only after the preflight passes on every intended replica:
 docker compose -f compose.prod.yml -f compose.plugins.yml up -d
