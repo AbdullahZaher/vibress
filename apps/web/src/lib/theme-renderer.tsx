@@ -11,6 +11,7 @@ import { publishedAlternateLanguageUrls, getPublicSiteUrl } from "./seo-helpers"
 import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHydrator";
+import { DefaultExtensionView } from "../components/extensions/DefaultExtensionView";
 
 const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
 const CACHE_TTL_MS = process.env.NODE_ENV === "production" ? 60 * 1000 : 0;
@@ -205,6 +206,12 @@ function loadThemeFilesMap(themeDir: string): Map<string, string> {
   return fileMap;
 }
 
+function escapeExtensionHtml(value: string): string {
+  return value.replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function cleanThemeHtml(html: string): string {
   // If template contains full html document, extract body content
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -239,7 +246,8 @@ export async function renderThemeTemplate(
     | "archive"
     | "404"
     | "collection"
-    | "collection-entry",
+    | "collection-entry"
+    | "extension",
   context: ThemeViewModelContext,
   options: RenderThemeOptions,
 ): Promise<React.ReactElement> {
@@ -249,6 +257,13 @@ export async function renderThemeTemplate(
   if (isBuiltIn || getTheme(themeId)) {
     const builtinTheme = getTheme(themeId) || getFallbackTheme();
     switch (templateName) {
+      case "extension": {
+        if (!context.extension) throw new Error("Missing extension view model");
+        const Component = builtinTheme.components.Extension;
+        return Component
+          ? Component({ extension: context.extension, site, settings })
+          : <DefaultExtensionView extension={context.extension} />;
+      }
       case "home":
         return builtinTheme.components.Home({
           posts: (context.posts || []) as any,
@@ -365,6 +380,13 @@ export async function renderThemeTemplate(
     themeFilesCache.set(cacheKey, { files: fileMap, loadedAt: Date.now() });
   }
 
+  if (templateName === "extension" && context.extension &&
+      (!fileMap.has("extension.liquid") &&
+       !fileMap.has("templates/extension.liquid"))) {
+    // Theme without a plugin slot must not render an unrelated Home template.
+    return <DefaultExtensionView extension={context.extension} />;
+  }
+
   if (fileMap.size === 0) {
     // Fallback to built-in default theme
     const fallbackTheme = getFallbackTheme();
@@ -428,8 +450,19 @@ export async function renderThemeTemplate(
   });
   const currentLang = activeLocale.split("-")[0] || activeLocale;
 
+  const extension = templateName === "extension" && context.extension
+    ? {
+        ...context.extension,
+        // LiquidJS does not auto-escape. Even operator-authored templates
+        // must never receive raw markup from an extension's scalar API.
+        title: escapeExtensionHtml(context.extension.title),
+        data: Object.fromEntries(Object.entries(context.extension.data)
+          .map(([key, value]) => [key,
+            typeof value === "string" ? escapeExtensionHtml(value) : value])),
+      } : context.extension;
   const fullContext: ThemeViewModelContext = {
     ...context,
+    ...(extension ? { extension } : {}),
     site: context.site || mapSiteToViewModel(site),
     settings: { ...settings, ...(context.settings || {}) },
     locale: activeLocale,
