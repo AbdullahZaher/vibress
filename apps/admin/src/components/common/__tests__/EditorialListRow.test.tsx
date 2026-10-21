@@ -40,6 +40,35 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).toHaveBeenCalledOnce();
   });
 
+  it("navigates when the row background is clicked, and exposes a keyboard-accessible row action", () => {
+    act(() => root.render(<EditorialListRow {...base} />));
+    const rowAction = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Edit: Hello there"]',
+    );
+    expect(rowAction?.className).toContain("inset-0");
+    act(() => rowAction?.click());
+    expect(base.onEdit).toHaveBeenCalledOnce();
+    expect(container.querySelector('[role="listitem"] h3')?.textContent).toBe("Hello there");
+  });
+
+  it("opens analytics for published content without triggering the row editor", () => {
+    const onStatistics = vi.fn();
+    act(() => root.render(<EditorialListRow {...base} status="published" onStatistics={onStatistics} />));
+    const analytics = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Analytics Dashboard: Hello there"]',
+    );
+    expect(analytics).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Edit: Hello there"]')).not.toBeNull();
+    act(() => analytics?.click());
+    expect(onStatistics).toHaveBeenCalledOnce();
+    expect(base.onEdit).not.toHaveBeenCalled();
+  });
+
+  it("does not show analytics without an authorized handler, even when published", () => {
+    act(() => root.render(<EditorialListRow {...base} status="published" />));
+    expect(container.querySelector('button[aria-label="Analytics Dashboard: Hello there"]')).toBeNull();
+  });
+
   it("preserves publish and delete actions behind an accessible menu", () => {
     const onPublishToggle = vi.fn();
     act(() => root.render(<EditorialListRow {...base} status="published" onPublishToggle={onPublishToggle} />));
@@ -51,12 +80,14 @@ describe("EditorialListRow", () => {
     const unpublish = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(b => b.textContent?.includes("Unpublish"));
     act(() => unpublish?.click());
     expect(onPublishToggle).toHaveBeenCalledOnce();
+    expect(base.onEdit).not.toHaveBeenCalled();
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
     act(() => trigger?.click());
     const remove = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"] button'))
       .find(b => b.textContent?.includes("Delete"));
     act(() => remove?.click());
     expect(base.onDelete).toHaveBeenCalledOnce();
+    expect(base.onEdit).not.toHaveBeenCalled();
   });
 
   it("hides publication controls without permission and shows a missing image fallback", () => {

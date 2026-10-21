@@ -23,12 +23,14 @@ interface PostSummary {
 interface PostsListProps {
   onNavigate: (path: string) => void;
   canPublish: boolean;
+  canViewAnalytics?: boolean;
   filterStatus?: string;
 }
 
 export const PostsList: React.FC<PostsListProps> = ({
   onNavigate,
   canPublish,
+  canViewAnalytics = false,
   filterStatus,
 }) => {
   const { tr } = useAdminLocale();
@@ -225,6 +227,7 @@ export const PostsList: React.FC<PostsListProps> = ({
               imageUrl={post.featureImage?.url}
               featured={post.featured}
               onEdit={() => onNavigate(`/admin/posts/${post.id}`)}
+              onStatistics={canViewAnalytics && post.status === "published" ? () => onNavigate("/admin") : undefined}
               onPublishToggle={canPublish ? () => handlePublishToggle(post) : undefined}
               onDelete={() => handleDelete(post.id)}
             />

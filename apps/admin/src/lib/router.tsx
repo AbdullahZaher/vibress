@@ -208,7 +208,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts",
     exact: true,
     render: ({ onNavigate, can }) => (
-      <PostsList onNavigate={onNavigate} canPublish={can("posts.publish")} />
+      <PostsList onNavigate={onNavigate} canPublish={can("posts.publish")} canViewAnalytics={can("analytics.read")} />
     ),
   },
   {
@@ -218,6 +218,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
+        canViewAnalytics={can("analytics.read")}
         filterStatus="draft"
       />
     ),
@@ -229,6 +230,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
+        canViewAnalytics={can("analytics.read")}
         filterStatus="scheduled"
       />
     ),
@@ -240,6 +242,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
+        canViewAnalytics={can("analytics.read")}
         filterStatus="published"
       />
     ),
@@ -272,7 +275,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/pages",
     exact: true,
     render: ({ onNavigate, can }) => (
-      <PagesList onNavigate={onNavigate} canPublish={can("pages.publish")} />
+      <PagesList onNavigate={onNavigate} canPublish={can("pages.publish")} canViewAnalytics={can("analytics.read")} />
     ),
   },
   {

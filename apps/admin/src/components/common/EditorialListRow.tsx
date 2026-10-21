@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ImageIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, ImageIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { IconButton } from "../ui/icon-button";
 
@@ -11,6 +11,8 @@ export interface EditorialListRowProps {
   imageUrl?: string | null | undefined;
   featured?: boolean | undefined;
   onEdit: () => void;
+  /** Opens existing analytics dashboard, if the user has analytics.read permission. */
+  onStatistics?: (() => void) | undefined;
   onPublishToggle?: (() => void) | undefined;
   onDelete: () => void;
 }
@@ -18,7 +20,7 @@ export interface EditorialListRowProps {
 /** Shared, responsive editorial row for posts and pages. Actions remain explicit and permission-driven. */
 export function EditorialListRow({
   title, authorName, date, status, imageUrl, featured = false,
-  onEdit, onPublishToggle, onDelete,
+  onEdit, onStatistics, onPublishToggle, onDelete,
 }: EditorialListRowProps) {
   const { tr, formatDate } = useAdminLocale();
   const [imageFailed, setImageFailed] = useState(false);
@@ -72,8 +74,15 @@ export function EditorialListRow({
         : "text-primary";
 
   return (
-    <div role="listitem" className="relative flex items-center gap-3 py-5 sm:gap-5 sm:py-6 hover:bg-muted/20 focus-within:z-20 transition-colors">
-      <div className="flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/70 text-muted-foreground/60 sm:h-24 sm:w-36">
+    <div role="listitem" className="group relative flex items-center gap-3 px-1 py-3 transition-colors hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20 sm:gap-4 sm:py-3.5">
+      {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`${tr("Edit")}: ${displayTitle}`}
+        className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+      />
+      <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/70 text-muted-foreground/60 sm:h-20 sm:w-28">
         {imageUrl && !imageFailed ? (
           <img
             src={imageUrl}
@@ -84,27 +93,22 @@ export function EditorialListRow({
             className="h-full w-full object-cover"
           />
         ) : (
-          <ImageIcon className="size-7 sm:size-8" aria-hidden="true" />
+          <ImageIcon className="size-5 sm:size-6" aria-hidden="true" />
         )}
       </div>
 
-      <div className="min-w-0 flex-1 space-y-1 text-start">
+      <div className="min-w-0 flex-1 space-y-0.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <button
-            type="button"
-            onClick={onEdit}
-            dir="auto"
-            className="max-w-full break-words text-start text-base font-semibold leading-snug text-foreground hover:text-primary focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-lg"
-          >
+          <h3 dir="auto" className="max-w-full break-words text-start text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary sm:text-base">
             {displayTitle}
-          </button>
+          </h3>
           {featured && (
             <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
               {tr("Featured")}
             </span>
           )}
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           {authorName && (
             <>
               {tr("By")} <span dir="auto">{authorName}</span>
@@ -113,21 +117,33 @@ export function EditorialListRow({
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
         </p>
-        <p className={`text-xs font-medium sm:text-sm ${statusColor}`}>
+        <p className={`text-xs font-medium ${statusColor}`}>
           {statusLabels[status] ?? tr("Draft")}
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <IconButton
-          label={tr("Edit")}
-          accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
-          variant="outline"
-          onClick={onEdit}
-          className="h-10 w-10 rounded-lg sm:h-11 sm:w-11"
-        >
-          <Pencil className="size-4 sm:size-5" aria-hidden="true" />
-        </IconButton>
+      <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
+        {isPublished && onStatistics ? (
+          <IconButton
+            label={tr("Analytics Dashboard")}
+            accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
+            variant="outline"
+            onClick={onStatistics}
+            className="h-9 w-9 rounded-lg"
+          >
+            <BarChart3 className="size-4" aria-hidden="true" />
+          </IconButton>
+        ) : (
+          <IconButton
+            label={tr("Edit")}
+            accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
+            variant="outline"
+            onClick={onEdit}
+            className="h-9 w-9 rounded-lg"
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+          </IconButton>
+        )}
         <div ref={actionsRef} className="relative">
           <button
             ref={triggerRef}
@@ -137,9 +153,9 @@ export function EditorialListRow({
             aria-controls={actionsId}
             title={tr("More actions")}
             onClick={() => setActionsOpen((open) => !open)}
-            className="inline-flex h-10 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:h-11"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           >
-            <MoreHorizontal className="size-5" aria-hidden="true" />
+            <MoreHorizontal className="size-4" aria-hidden="true" />
           </button>
           {actionsOpen && (
             <div

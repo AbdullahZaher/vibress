@@ -20,11 +20,13 @@ interface PageSummary {
 interface PagesListProps {
   onNavigate: (path: string) => void;
   canPublish: boolean;
+  canViewAnalytics?: boolean;
 }
 
 export const PagesList: React.FC<PagesListProps> = ({
   onNavigate,
   canPublish,
+  canViewAnalytics = false,
 }) => {
   const { tr } = useAdminLocale();
   const [pages, setPages] = useState<PageSummary[]>([]);
@@ -209,6 +211,7 @@ export const PagesList: React.FC<PagesListProps> = ({
               status={page.status}
               
               onEdit={() => onNavigate(`/admin/pages/${page.id}`)}
+              onStatistics={canViewAnalytics && page.status === "published" ? () => onNavigate("/admin") : undefined}
               onPublishToggle={canPublish ? () => handlePublishToggle(page) : undefined}
               onDelete={() => handleDelete(page.id)}
             />
