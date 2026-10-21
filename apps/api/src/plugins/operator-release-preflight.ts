@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseTrustedPluginLockfile } from "./trusted-external-plugin-host";
+import { readTrustedPluginLockfile } from "./trusted-release-attestation";
 
-const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_HTML_BYTES = 256 * 1024;
 
@@ -19,14 +19,7 @@ export interface VerifiedExternalRelease {
 export async function verifyTrustedPluginRelease(
   lockfilePath: string,
 ): Promise<readonly VerifiedExternalRelease[]> {
-  if (!path.isAbsolute(lockfilePath)) throw new Error("INVALID_LOCKFILE_PATH");
-  const lockInfo = await lstat(lockfilePath);
-  if (!lockInfo.isFile() || lockInfo.isSymbolicLink() ||
-      lockInfo.size > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
-  const lockBytes = await readFile(lockfilePath);
-  // Recheck after read: a changed file must not bypass the lstat size gate.
-  if (lockBytes.byteLength > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
-  const input: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(lockBytes));
+  const input = await readTrustedPluginLockfile(lockfilePath);
   const admitted = parseTrustedPluginLockfile(input);
   const root = await realpath(path.dirname(lockfilePath));
 
