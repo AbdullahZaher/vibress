@@ -972,6 +972,49 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("EXT-401 admits plugin events only with Staff, valid Origin and strictly scoped inputs", async () => {
+    const target = "/api/admin/v1/plugins/missing-plugin/events";
+    const eventId = crypto.randomUUID();
+    const payload = { eventId, eventName: "post.published", payload: { count: 1 } };
+    const anonymous = await app.inject({ method: "POST", url: target, payload });
+    expect(anonymous.statusCode).toBe(401);
+
+    const foreignMember = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: "vibress_member_session=forged", origin: "http://localhost:7777" },
+      payload,
+    });
+    expect(foreignMember.statusCode).toBe(401);
+
+    const wrongOrigin = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" }, payload,
+    });
+    expect(wrongOrigin.statusCode).toBe(403);
+
+    for (const malformed of [
+      { ...payload, publicationId: "other-publication" },
+      { ...payload, payload: { nested: { secret: "no" } } },
+      { ...payload, eventId: "not-uuid" },
+    ]) {
+      const response = await app.inject({
+        method: "POST", url: target,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: malformed,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+
+    // No queue admission or plugin code execution for absent registrations.
+    const missing = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload,
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
   // ---------------- Host-routed Extension API (EXT-201/202) ----------------
   it("extension API fails closed before loading plugin code without Staff/Member session", async () => {
     const admin = await app.inject({
