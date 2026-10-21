@@ -14,6 +14,51 @@ install from arbitrary publishers. A trusted plugin installed globally is
    HTML document. Pin them in a `schemaVersion: 1` operator lockfile.
    Keep the lockfile outside writable upload paths and protect it from
    non-operator modifications. Never embed secrets into artifacts.
+### Optional signed release approval (EXT-404, additive)
+
+For deployments requiring an independently authenticated operator approval,
+sign the **exact final lockfile bytes** using a protected Ed25519 private key.
+The key and signature must never be provided by a plugin, CMS user, or artifact
+manifest. Keep the private key offline, outside the container, and never mount
+it into Vibress. For example, on an operator-controlled signing machine:
+
+```bash
+openssl genpkey -algorithm ED25519 -out operator-private.pem
+openssl pkey -in operator-private.pem -pubout -out operator-public.pem
+node --input-type=module -e '
+import { readFileSync, writeFileSync } from "node:fs";
+import { sign } from "node:crypto";
+const [lockfile, privateKey, output] = process.argv.slice(1);
+const signature = sign(null, readFileSync(lockfile), readFileSync(privateKey));
+writeFileSync(output, signature.toString("base64") + "\\n");
+' /absolute/path/trusted-plugins.json operator-private.pem operator.sig
+```
+
+Mount only the public key and detached base64 signature as **read-only operator
+files** on every API replica. Set both environment variables to absolute paths:
+
+```bash
+VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE=/etc/vibress/operator-public.pem
+VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE=/etc/vibress/operator.sig
+```
+
+The existing lockfile environment variable remains mandatory for external
+plugins. The runtime and preflight verify the Ed25519 signature against the
+**same bytes** used to parse the operator lockfile, then verify each pinned
+artifact SHA-256 before loading code. A missing or invalid signature, missing
+half of the configuration, altered lockfile, or substituted public key causes
+admission to fail. If **neither** new variable is set, existing unsigned
+operator-trusted installations continue to work; operators should explicitly
+enable both variables in production where signature enforcement is required.
+
+Regenerate and distribute a new detached signature whenever the lockfile bytes
+change. Deploy the matching signed lockfile, public key and all approved
+artifacts consistently on every replica before enabling traffic. During key
+rotation, replace the trusted public key and signed lockfile together as a
+controlled operator deployment; do not accept a key or signature obtained from
+plugin-controlled content. This signature attests to operator approval, **not**
+malware-free code, independent reproducible builds or process isolation.
+
 3. Deploy identical release bytes to each API replica. Check the exact
    release on **every replica** before traffic or plugin enablement:
 
@@ -73,7 +118,7 @@ install from arbitrary publishers. A trusted plugin installed globally is
 slot, EXT-304 reference SDK sample, and a preflight for EXT-404 are implemented
 as separate changes on a review branch. This is **not** proof that
 EXT-401 durable worker jobs, EXT-402 rotation, EXT-403 backup automation,
-full EXT-404 attestation, or EXT-501–504 LMS pilot/release gates are complete.
+full supply-chain scanning/provenance, or EXT-501–504 LMS pilot/release gates are complete.
 Those features still require code, live testing and signed-off release reviews.
 
 Never weaken Staff/Member authorization, tenant scoping, encryption, signed
