@@ -111,6 +111,10 @@ export function validateSvgSafety(buffer: Buffer): void {
     /<object\b/i,
     /<embed\b/i,
     /<form\b/i,
+    /<foreignobject\b/i,
+    /<!doctype\b/i,
+    /<!entity\b/i,
+    /<\?xml-stylesheet\b/i,
     /javascript:/i,
     /data:text\/html/i,
     /\bon[a-z]+\s*=/i, // inline event handlers (onload=, onerror=, etc.)

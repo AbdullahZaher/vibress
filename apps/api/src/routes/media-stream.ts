@@ -49,7 +49,6 @@ const INLINE_TYPES = new Set([
   "image/png",
   "image/gif",
   "image/webp",
-  "image/svg+xml",
   "image/x-icon",
   "video/mp4",
   "video/webm",
@@ -60,7 +59,7 @@ const INLINE_TYPES = new Set([
   "application/pdf",
 ]);
 
-function getContentDisposition(mimeType: string, filePath: string): string {
+export function getContentDisposition(mimeType: string, filePath: string): string {
   const filename = path.basename(filePath);
   const disposition = INLINE_TYPES.has(mimeType) ? "inline" : "attachment";
   const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_");
@@ -261,6 +260,11 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
       const lastModified = stat.mtime.toUTCString();
 
       reply.header("X-Content-Type-Options", "nosniff");
+      if (mimeType === "image/svg+xml") {
+        // SVG is active XML when opened as a document, even when uploaded by a
+        // trusted author. Keep legacy assets addressable but never inline.
+        reply.header("Content-Security-Policy", "sandbox; default-src 'none'");
+      }
       reply.header("Accept-Ranges", "bytes");
       reply.header("Cache-Control", "public, max-age=3600");
       reply.header("ETag", etag);

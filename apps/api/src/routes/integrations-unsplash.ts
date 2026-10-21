@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getConfig } from "@vibress/config";
+import { safeFetch, SafeFetchError } from "@vibress/security";
 import { getRedisClient } from "@vibress/cache";
 import { mediaService } from "../services";
 import {
@@ -16,6 +17,30 @@ const SelectPhotoInputSchema = z.object({
 
 const UNSPLASH_API_BASE = "https://api.unsplash.com";
 const MAX_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20MB
+const MAX_API_RESPONSE_BYTES = 2 * 1024 * 1024;
+const UNSPLASH_API_HOSTS = ["api.unsplash.com"] as const;
+const UNSPLASH_IMAGE_HOSTS = [
+  "images.unsplash.com",
+  "plus.unsplash.com",
+  "api.unsplash.com",
+  "unsplash.com",
+] as const;
+
+export function isAllowedUnsplashApiUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "api.unsplash.com" &&
+      !url.port &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}
 
 function getUnsplashAccessKey(): string | null {
   try {
@@ -26,37 +51,8 @@ function getUnsplashAccessKey(): string | null {
   }
 }
 
-function isAllowedUnsplashHost(hostname: string): boolean {
-  const allowed = [
-    "unsplash.com",
-    "images.unsplash.com",
-    "plus.unsplash.com",
-    "api.unsplash.com",
-  ];
-  const h = hostname.toLowerCase();
-  return allowed.includes(h) || h.endsWith(".unsplash.com");
-}
-
-function isPrivateIp(hostname: string): boolean {
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname === "0.0.0.0"
-  ) {
-    return true;
-  }
-  const parts = hostname.split(".").map(Number);
-  if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
-    const p0 = parts[0];
-    const p1 = parts[1];
-    if (p0 === 10) return true;
-    if (p0 === 172 && p1 !== undefined && p1 >= 16 && p1 <= 31) return true;
-    if (p0 === 192 && p1 === 168) return true;
-    if (p0 === 169 && p1 === 254) return true;
-    if (p0 === 127) return true;
-  }
-  return false;
+export function isAllowedUnsplashHost(hostname: string): boolean {
+  return UNSPLASH_IMAGE_HOSTS.some((allowed) => allowed === hostname.toLowerCase());
 }
 
 export async function unsplashRoutes(fastify: FastifyInstance) {
@@ -122,26 +118,25 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
         // Cache miss or Redis unavailable
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-
       try {
         const url = new URL(`${UNSPLASH_API_BASE}/search/photos`);
         url.searchParams.set("query", query);
         url.searchParams.set("page", String(page));
         url.searchParams.set("per_page", String(perPage));
 
-        const res = await fetch(url.toString(), {
+        const res = await safeFetch(url.toString(), {
+          allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
+          maxRedirects: 0, // Authorization must never follow a redirect.
+          timeout: 10000,
+          maxSize: MAX_API_RESPONSE_BYTES,
           headers: {
             Authorization: `Client-ID ${key}`,
             "Accept-Version": "v1",
           },
-          signal: controller.signal,
         });
 
-        clearTimeout(timeout);
-
-        if (!res.ok) {
+        if (res.status < 200 || res.status >= 300) {
           const status = res.status;
           req.log.warn({ status, query }, "Unsplash search returned error status");
           if (status === 403) {
@@ -166,7 +161,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const data = (await res.json()) as any;
+        const data = JSON.parse(res.body.toString("utf8"));
         const results = (data.results || []).map((p: any) => ({
           id: p.id,
           width: p.width,
@@ -212,8 +207,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
         }
 
         return reply.status(200).send(responsePayload);
-      } catch (err: any) {
-        clearTimeout(timeout);
+      } catch (err: unknown) {
         req.log.error({ err: errorMessage(err) }, "Unsplash search request failed");
         return reply.status(504).send({
           errors: [
@@ -265,22 +259,22 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
       const { photoId } = parseResult.data;
 
       // 1. Fetch canonical photo metadata directly from Unsplash
-      const metaController = new AbortController();
-      const metaTimeout = setTimeout(() => metaController.abort(), 10000);
-
       let photo: any;
       try {
-        const photoRes = await fetch(
+        const photoRes = await safeFetch(
           `${UNSPLASH_API_BASE}/photos/${encodeURIComponent(photoId)}`,
           {
+            allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
+            maxRedirects: 0,
+            timeout: 10000,
+            maxSize: MAX_API_RESPONSE_BYTES,
             headers: {
               Authorization: `Client-ID ${key}`,
               "Accept-Version": "v1",
             },
-            signal: metaController.signal,
           },
         );
-        clearTimeout(metaTimeout);
 
         if (photoRes.status === 404) {
           return reply.status(404).send({
@@ -293,7 +287,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
             ],
           });
         }
-        if (!photoRes.ok) {
+        if (photoRes.status < 200 || photoRes.status >= 300) {
           return reply.status(502).send({
             errors: [
               {
@@ -304,9 +298,8 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
             ],
           });
         }
-        photo = await photoRes.json();
+        photo = JSON.parse(photoRes.body.toString("utf8"));
       } catch {
-        clearTimeout(metaTimeout);
         return reply.status(504).send({
           errors: [
             {
@@ -320,23 +313,30 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
 
       // 2. Trigger canonical download endpoint per Unsplash API terms
       let downloadUrl = photo.urls?.regular || photo.urls?.full;
-      if (photo.links?.download_location) {
+      if (isAllowedUnsplashApiUrl(photo.links?.download_location)) {
         try {
-          const dlRes = await fetch(photo.links.download_location, {
+          const dlRes = await safeFetch(photo.links.download_location, {
+            allowedHostnames: UNSPLASH_API_HOSTS,
+          requireHttps: true,
+            maxRedirects: 0,
+            timeout: 10000,
+            maxSize: MAX_API_RESPONSE_BYTES,
             headers: {
               Authorization: `Client-ID ${key}`,
               "Accept-Version": "v1",
             },
           });
-          if (dlRes.ok) {
-            const dlData = (await dlRes.json()) as any;
-            if (dlData.url) {
+          if (dlRes.status >= 200 && dlRes.status < 300) {
+            const dlData = JSON.parse(dlRes.body.toString("utf8"));
+            if (typeof dlData.url === "string") {
               downloadUrl = dlData.url;
             }
           }
         } catch (dlErr) {
           req.log.warn({ err: errorMessage(dlErr) }, "Failed to trigger Unsplash download endpoint");
         }
+      } else if (photo.links?.download_location) {
+        req.log.warn("Ignored non-Unsplash download tracking URL");
       }
 
       // 3. Validate downloadUrl against SSRF
@@ -367,7 +367,7 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (!isAllowedUnsplashHost(parsedUrl.hostname) || isPrivateIp(parsedUrl.hostname)) {
+      if (!isAllowedUnsplashHost(parsedUrl.hostname) || parsedUrl.username || parsedUrl.password || parsedUrl.port) {
         return reply.status(400).send({
           errors: [
             {
@@ -380,18 +380,18 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
       }
 
       // 4. Download binary stream with size limit
-      const dlController = new AbortController();
-      const dlTimeout = setTimeout(() => dlController.abort(), 15000);
-
       let imageBuffer: Buffer;
       let detectedMime = "image/jpeg";
       try {
-        const imgRes = await fetch(downloadUrl, {
-          signal: dlController.signal,
+        const imgRes = await safeFetch(downloadUrl, {
+          allowedHostnames: UNSPLASH_IMAGE_HOSTS,
+          requireHttps: true,
+          maxRedirects: 3, // All redirect hops remain within approved image hosts.
+          timeout: 15000,
+          maxSize: MAX_IMAGE_DOWNLOAD_BYTES, // Stream limit: never buffer >20MB.
         });
-        clearTimeout(dlTimeout);
 
-        if (!imgRes.ok) {
+        if (imgRes.status < 200 || imgRes.status >= 300) {
           return reply.status(502).send({
             errors: [
               {
@@ -403,27 +403,25 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const contentType = imgRes.headers.get("content-type");
+        const contentTypeHeader = imgRes.headers["content-type"];
+        const contentType = Array.isArray(contentTypeHeader)
+          ? contentTypeHeader[0]
+          : contentTypeHeader;
         if (contentType) {
           const mimePart = contentType.split(";")[0];
           if (mimePart) detectedMime = mimePart.trim();
         }
-
-        const arrayBuffer = await imgRes.arrayBuffer();
-        if (arrayBuffer.byteLength > MAX_IMAGE_DOWNLOAD_BYTES) {
+        imageBuffer = imgRes.body;
+      } catch (err: unknown) {
+        if (err instanceof SafeFetchError && err.code === "RESPONSE_TOO_LARGE") {
           return reply.status(400).send({
-            errors: [
-              {
-                code: "IMAGE_TOO_LARGE",
-                message: "Downloaded image exceeds 20MB limit",
-                requestId: req.id,
-              },
-            ],
+            errors: [{
+              code: "IMAGE_TOO_LARGE",
+              message: "Downloaded image exceeds 20MB limit",
+              requestId: req.id,
+            }],
           });
         }
-        imageBuffer = Buffer.from(arrayBuffer);
-      } catch {
-        clearTimeout(dlTimeout);
         return reply.status(504).send({
           errors: [
             {
@@ -436,7 +434,16 @@ export async function unsplashRoutes(fastify: FastifyInstance) {
       }
 
       // 5. Upload via Vibress MediaService (which executes full magic-bytes, limits, and storage upload)
-      const publicationId = req.publicationContext?.publicationId || "pub_default";
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) {
+        return reply.status(403).send({
+          errors: [{
+            code: "PUBLICATION_ACCESS_DENIED",
+            message: "Publication context is required",
+            requestId: req.id,
+          }],
+        });
+      }
       const mediaAsset = await mediaService.uploadMedia(
         {
           publicationId,

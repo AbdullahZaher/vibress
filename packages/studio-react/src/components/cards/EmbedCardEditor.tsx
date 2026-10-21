@@ -3,6 +3,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import { NodeKey, $getNodeByKey } from "lexical";
 import { EmbedCardData, StudioCardNode } from "@vibress/studio-cards";
+import { getEmbedProvider, sanitizeStudioHtml } from "@vibress/studio-utils";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
 import { UrlPlaceholder } from "../ui/UrlPlaceholder";
@@ -91,11 +92,11 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
     );
   }
 
-  // Basic embed code handling
-  let src = cardData.url;
-  if (src.includes("youtube.com/watch?v=")) {
-    src = src.replace("youtube.com/watch?v=", "youtube.com/embed/");
-  }
+  // Preview only approved providers, matching the public Studio renderer.
+  const provider = getEmbedProvider(cardData.url);
+  const externalUrl = /^https?:\/\//i.test(cardData.url.trim())
+    ? cardData.url.trim()
+    : null;
 
   const captionStr =
     typeof cardData.caption === "string" ? cardData.caption : "";
@@ -135,17 +136,34 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         {cardData.html ? (
           <div
             className="absolute top-0 left-0 w-full h-full"
-            dangerouslySetInnerHTML={{ __html: cardData.html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeStudioHtml(cardData.html) }}
           />
-        ) : (
+        ) : provider ? (
           <iframe
             className="absolute top-0 left-0 w-full h-full"
-            src={src}
+            src={provider.embedUrl}
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
+            loading="lazy"
             title="Embedded content"
           />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
+            {externalUrl ? (
+              <a
+                href={externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="break-all"
+                dir="auto"
+              >
+                {externalUrl}
+              </a>
+            ) : (
+              <span className="break-all" dir="auto">{cardData.url}</span>
+            )}
+          </div>
         )}
       </div>
       <NestedCaptionEditor

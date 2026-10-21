@@ -1,5 +1,9 @@
 import { FastifyInstance } from "fastify";
-import { LoginRequestSchema } from "@vibress/api-contracts";
+import {
+  ForgotPasswordRequestSchema,
+  LoginRequestSchema,
+  ResetPasswordRequestSchema,
+} from "@vibress/api-contracts";
 import { authService, usersService } from "../services";
 import {
   requireStaffSession,
@@ -17,7 +21,7 @@ import {
   passwordResetTokens,
   users,
 } from "@vibress/database";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashToken, hashPassword, dummyVerifyPassword } from "@vibress/security";
 import { normalizeEmail } from "@vibress/users";
@@ -36,6 +40,16 @@ class InvitationAcceptanceError extends Error {
   ) {
     super(message);
     this.name = "InvitationAcceptanceError";
+  }
+}
+
+class PasswordResetError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "PasswordResetError";
   }
 }
 
@@ -359,8 +373,8 @@ export async function authRoutes(fastify: FastifyInstance) {
     },
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as { email?: string } | undefined;
-      if (!body || !body.email) {
+      const parsedEmail = ForgotPasswordRequestSchema.safeParse(req.body);
+      if (!parsedEmail.success) {
         return reply.status(400).send({
           errors: [
             {
@@ -372,7 +386,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const email = normalizeEmail(body.email);
+      const email = normalizeEmail(parsedEmail.data.email);
       const user = await usersService.findByEmail(email);
 
       // Enumeration resistance: if user doesn't exist or is disabled, execute dummy timing and return generic success
@@ -384,18 +398,28 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const db = getDb();
       const rawToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashToken(rawToken);
       const tokenId = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15m TTL
 
-      await db.insert(passwordResetTokens).values({
-        id: tokenId,
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-        createdAt: new Date(),
+      // Coordinate issuance with redemption using the same per-account lock.
+      // An issuance racing with a password reset is ordered before or after it.
+      await runInTransaction(async () => {
+        const tx = getDb();
+        await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1)
+          .for("update");
+        await tx.insert(passwordResetTokens).values({
+          id: tokenId,
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+          createdAt: new Date(),
+        });
       });
 
       const config = getConfig();
@@ -423,10 +447,16 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.post("/reset-password", {
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
-      const body = req.body as
-        | { token?: string; password?: string }
+      const candidate = req.body as
+        | { token?: unknown; password?: unknown }
         | undefined;
-      if (!body || !body.token || !body.password) {
+      if (
+        !candidate ||
+        typeof candidate.token !== "string" ||
+        !candidate.token ||
+        typeof candidate.password !== "string" ||
+        !candidate.password
+      ) {
         return reply.status(400).send({
           errors: [
             {
@@ -438,7 +468,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (body.password.length < 8) {
+      if (candidate.password.length < 8) {
         return reply.status(400).send({
           errors: [
             {
@@ -450,76 +480,111 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const tokenHash = hashToken(body.token);
-      const db = getDb();
-
-      const tokens = await db
-        .select()
-        .from(passwordResetTokens)
-        .where(eq(passwordResetTokens.tokenHash, tokenHash))
-        .limit(1);
-
-      if (tokens.length === 0) {
+      const parsedReset = ResetPasswordRequestSchema.safeParse(candidate);
+      if (!parsedReset.success) {
         return reply.status(400).send({
-          errors: [
-            {
-              code: "INVALID_OR_EXPIRED_TOKEN",
-              message: "Password reset token is invalid or does not exist",
-              requestId: req.id,
-            },
-          ],
+          errors: [{
+            code: "VALIDATION_ERROR",
+            message: "Invalid password reset request",
+            requestId: req.id,
+          }],
         });
       }
 
-      const tokenRow = tokens[0]!;
+      const tokenHash = hashToken(parsedReset.data.token);
+      const newPassword = parsedReset.data.password;
+      try {
+        await runInTransaction(async () => {
+          const db = getDb();
+          const initial = await db
+            .select({ userId: passwordResetTokens.userId })
+            .from(passwordResetTokens)
+            .where(eq(passwordResetTokens.tokenHash, tokenHash))
+            .limit(1);
 
-      if (tokenRow.usedAt !== null) {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "TOKEN_ALREADY_USED",
-              message: "This password reset token has already been used",
-              requestId: req.id,
-            },
-          ],
+          if (!initial[0]) {
+            throw new PasswordResetError(
+              "INVALID_OR_EXPIRED_TOKEN",
+              "Password reset token is invalid or does not exist",
+            );
+          }
+
+          // Serialize resets of DIFFERENT tokens for the same user, not just
+          // simultaneous uses of one token. Both locks are transaction-scoped.
+          const account = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.id, initial[0].userId))
+            .limit(1)
+            .for("update");
+          if (!account[0]) {
+            throw new PasswordResetError(
+              "INVALID_OR_EXPIRED_TOKEN",
+              "Password reset token is invalid or does not exist",
+            );
+          }
+
+          const tokens = await db
+            .select()
+            .from(passwordResetTokens)
+            .where(eq(passwordResetTokens.tokenHash, tokenHash))
+            .limit(1)
+            .for("update");
+          const tokenRow = tokens[0];
+          if (!tokenRow) {
+            throw new PasswordResetError(
+              "INVALID_OR_EXPIRED_TOKEN",
+              "Password reset token is invalid or does not exist",
+            );
+          }
+          if (tokenRow.usedAt !== null) {
+            throw new PasswordResetError(
+              "TOKEN_ALREADY_USED",
+              "This password reset token has already been used",
+            );
+          }
+          if (new Date(tokenRow.expiresAt).getTime() < Date.now()) {
+            throw new PasswordResetError(
+              "TOKEN_EXPIRED",
+              "This password reset token has expired",
+            );
+          }
+
+          const newPasswordHash = await hashPassword(newPassword);
+          const now = new Date();
+          await db
+            .update(users)
+            .set({ passwordHash: newPasswordHash, updatedAt: now })
+            .where(eq(users.id, tokenRow.userId));
+
+          // Invalidate all outstanding tokens, including those from earlier
+          // recovery emails. Their old hashes remain for single-use auditing.
+          await db
+            .update(passwordResetTokens)
+            .set({ usedAt: now })
+            .where(
+              and(
+                eq(passwordResetTokens.userId, tokenRow.userId),
+                isNull(passwordResetTokens.usedAt),
+              ),
+            );
+
+          // Repositories use getDb() and join the SAME transaction, so session
+          // revocation and audit are rolled back on any failure.
+          await authService.revokeAllUserSessions(tokenRow.userId);
         });
-      }
-
-      if (new Date(tokenRow.expiresAt).getTime() < Date.now()) {
-        return reply.status(400).send({
-          errors: [
-            {
-              code: "TOKEN_EXPIRED",
-              message: "This password reset token has expired",
+      } catch (err: unknown) {
+        if (err instanceof PasswordResetError) {
+          return reply.status(400).send({
+            errors: [{
+              code: err.code,
+              message: err.message,
               requestId: req.id,
-            },
-          ],
-        });
+            }],
+          });
+        }
+        throw err;
       }
-
-      // Hash new password using Argon2id
-      const newPasswordHash = await hashPassword(body.password);
-      const now = new Date();
-
-      // Update password
-      await db
-        .update(users)
-        .set({
-          passwordHash: newPasswordHash,
-          updatedAt: now,
-        })
-        .where(eq(users.id, tokenRow.userId));
-
-      // Mark token used
-      await db
-        .update(passwordResetTokens)
-        .set({
-          usedAt: now,
-        })
-        .where(eq(passwordResetTokens.id, tokenRow.id));
-
-      // Invalidate all active sessions for this user across DB
-      await authService.revokeAllUserSessions(tokenRow.userId);
 
       return reply.status(200).send({
         success: true,

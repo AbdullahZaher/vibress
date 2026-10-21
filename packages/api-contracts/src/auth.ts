@@ -6,6 +6,18 @@ export const LoginRequestSchema = z.object({
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
+// Recovery inputs are runtime-validated in the shared API contracts.
+export const ForgotPasswordRequestSchema = z.object({
+  email: z.string().trim().email().max(255),
+});
+export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
+
+export const ResetPasswordRequestSchema = z.object({
+  token: z.string().min(1).max(256),
+  password: z.string().min(8).max(128),
+});
+export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;
+
 export const UserSummarySchema = z.object({
   id: z.string(),
   email: z.string(),
