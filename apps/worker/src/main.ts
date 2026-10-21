@@ -51,7 +51,7 @@ pluginEventWorker.start().catch((_error: unknown) => {
   // Operator-approved worker admission is mandatory when configured.
   // Never expose a green readiness endpoint while trusted event delivery
   // is unavailable; secrets or operator filesystem paths are not logged.
-  appLogger.error("[PluginEventWorker] Approved release admission failed");
+  appLogger.error("[PluginEventWorker] Approved release admission failed", {});
   process.exit(1);
 });
 
