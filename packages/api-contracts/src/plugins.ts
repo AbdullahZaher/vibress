@@ -157,6 +157,28 @@ export const ExtensionAdminNavDtoSchema = z.object({
 export const ExtensionAdminNavigationResponseSchema = z.object({
   items: z.array(ExtensionAdminNavDtoSchema).max(512),
 }).strict();
+/**
+ * EXT-302A: Host admits only explicit public view-to-GET-route links.
+ * The SDK contribution is metadata, never browser-provided URLs/HTML.
+ */
+export const ExtensionPublicViewSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  title: ExtensionAdminLabelSchema,
+}).strict();
+
+export const ExtensionPublicViewDtoSchema = z.object({
+  pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+  viewId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  title: ExtensionAdminLabelSchema,
+}).strict();
+
+export const ExtensionPublicProjectionSchema = z.record(
+  z.string().regex(/^[a-z][a-zA-Z0-9_]{0,63}$/),
+  z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
+).refine((data) => Object.keys(data).length <= 24, "Too many extension fields");
+
 export const ExtensionAdminNavigationParamsSchema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
   viewId: ExtensionAdminSegmentSchema,
