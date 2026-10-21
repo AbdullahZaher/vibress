@@ -4,6 +4,7 @@ import { closeDbPool, getDbPool } from "@vibress/database";
 import { ContentSchedulerWorker } from "./scheduler";
 import { EmailDeliveryWorker } from "./processors/email-delivery-worker";
 import { WebhookDeliveryWorker } from "./processors/webhook-delivery-worker";
+import { PluginEventWorker } from "./processors/plugin-event-worker";
 import { AnalyticsWorker } from "./processors/analytics-worker";
 import { AnalyticsRetentionSweeper } from "./processors/analytics-retention";
 import { SearchIndexerWorker } from "./processors/search-indexer-worker";
@@ -43,6 +44,11 @@ outboxDispatcher?.start(5000);
 const emailDeliveryWorker = new EmailDeliveryWorker();
 emailDeliveryWorker.start().catch((err) => {
   appLogger.error("[EmailWorker] Failed to start", {}, err as Error);
+});
+
+const pluginEventWorker = new PluginEventWorker();
+pluginEventWorker.start().catch((error: unknown) => {
+  appLogger.error("[PluginEventWorker] Failed to start", {}, error as Error);
 });
 
 const webhookDeliveryWorker = new WebhookDeliveryWorker();
@@ -123,6 +129,7 @@ const shutdown = async (signal: string) => {
     outboxDispatcher?.stop();
     await emailDeliveryWorker.stop();
     await webhookDeliveryWorker.stop();
+    await pluginEventWorker.stop();
     await analyticsWorker.stop();
     await searchIndexerWorker.stop();
     await closeEmailQueue();
