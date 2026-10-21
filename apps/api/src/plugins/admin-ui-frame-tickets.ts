@@ -10,6 +10,8 @@ const FrameTicketSchema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
   viewId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  // Server-issued proof is embedded only into this verified HTML response.
+  bridgeNonce: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
 export type AdminUiFrameClaim = z.infer<typeof FrameTicketSchema>;
