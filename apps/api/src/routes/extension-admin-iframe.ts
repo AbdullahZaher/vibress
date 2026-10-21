@@ -128,6 +128,15 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
       reply.header("Cache-Control", "private, no-store");
       reply.header("Referrer-Policy", "no-referrer");
       reply.header("X-Content-Type-Options", "nosniff");
+      reply.header("Cross-Origin-Resource-Policy", "same-origin");
+      // Browser frame GETs must originate from an embedding page in this
+      // site's Admin shell, not a direct top-level navigation or cross-site
+      // page. Older agents without Fetch Metadata still require a one-use,
+      // Staff-bound ticket; frame-ancestors and XFO also block third parties.
+      const fetchSite = req.headers["sec-fetch-site"];
+      if (fetchSite === "cross-site" || fetchSite === "none") {
+        return reject(req, reply, "EXTENSION_UI_NOT_FOUND", 404);
+      }
       const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
       const query = ExtensionAdminFrameTicketQuerySchema.safeParse(req.query);
       if (!params.success || !query.success) return reject(req, reply, "VALIDATION_ERROR", 400);
@@ -141,14 +150,19 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
           claim.viewId !== params.data.viewId) {
         return reject(req, reply, "EXTENSION_UI_NOT_FOUND", 404);
       }
+      // Sandboxed opaque-origin navigations may not send SameSite=Lax
+      // Staff cookies. A one-use ticket proves the earlier authenticated,
+      // Origin-checked issuance; server-only session hash lookup verifies
+      // that this exact Staff session is STILL active, without serializing
+      // cookies or bearer tokens into extension code.
       const cookieToken = req.cookies?.[COOKIE_NAME];
-      if (typeof cookieToken !== "string" ||
+      if (typeof cookieToken === "string" &&
           sessionFingerprint(cookieToken) !== claim.sessionHash) {
         return reject(req, reply, "AUTHENTICATION_REQUIRED", 401);
       }
 
       try {
-        const session = await authService.resolveSession(cookieToken);
+        const session = await authService.resolveSessionByTokenHash(claim.sessionHash);
         if (!session || session.user.id !== claim.staffId) {
           return reject(req, reply, "AUTHENTICATION_REQUIRED", 401);
         }
