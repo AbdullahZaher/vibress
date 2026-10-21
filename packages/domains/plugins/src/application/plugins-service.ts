@@ -618,6 +618,10 @@ export class PluginsService {
     if (document === null) return null;
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
+        latest.version !== plugin.version ||
+        latest.vibressApiVersion !== plugin.vibressApiVersion ||
+        latest.entrypoint !== plugin.entrypoint ||
+        !isDeepStrictEqual(latest.capabilities, plugin.capabilities) ||
         !latest.capabilities.includes("admin.navigation") ||
         !latest.capabilities.includes("extension.routes.admin")) return null;
     await this.requirePublicationEnabled(latest, publicationId);
