@@ -4,15 +4,19 @@ import { getPublicExtensionPage } from "../public-extension-client";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 
-const descriptor = {
+const approved = {
+  publicationId: "pub_a",
   pluginId: "vibress-lms", viewId: "courses", routeId: "catalog",
   title: { en: "Courses", ar: "الدورات" },
+  data: { title: "Courses", total: 3 },
 };
 
 describe("EXT-302A publication-safe public SSR projection", () => {
   beforeEach(() => {
     vi.mocked(headers).mockResolvedValue(new Headers({
       host: "publication-a.example",
+      "x-forwarded-host": "publication-b.example", // Untrusted browser input.
+      "x-real-ip": "198.51.100.23", // Overwritten by the production gateway.
       cookie: "staff_session=SECRET; vb_site_auth=public-proof; member_session=PRIVATE",
     }));
   });
@@ -21,36 +25,34 @@ describe("EXT-302A publication-safe public SSR projection", () => {
     vi.clearAllMocks();
   });
 
-  it("requests only the Host-admitted public route, no caching or private sessions", async () => {
-    const fetchSpy = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(descriptor), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ title: "Courses", total: 3 }), { status: 200 }));
+  it("uses one publication-scoped request, no caching or Staff/Member cookies", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(approved), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchSpy);
-    expect(await getPublicExtensionPage("vibress-lms", "courses")).toEqual({
-      ...descriptor, data: { title: "Courses", total: 3 },
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    const [descriptorUrl, descriptorOptions] = fetchSpy.mock.calls[0]!;
-    const [contentUrl, contentOptions] = fetchSpy.mock.calls[1]!;
-    expect(String(descriptorUrl)).toContain("/extensions/vibress-lms/views/courses");
-    expect(String(contentUrl)).toContain("/extensions/vibress-lms/v1/catalog");
-    for (const options of [descriptorOptions, contentOptions]) {
-      expect(options.cache).toBe("no-store");
-      expect(options.headers["x-forwarded-host"]).toBe("publication-a.example");
-      expect(options.headers.cookie).toBe("vb_site_auth=public-proof");
-      expect(JSON.stringify(options)).not.toContain("SECRET");
-      expect(JSON.stringify(options)).not.toContain("PRIVATE");
-    }
+    expect(await getPublicExtensionPage("vibress-lms", "courses")).toEqual(approved);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const call = fetchSpy.mock.calls[0];
+    expect(call).toBeDefined();
+    if (!call) throw new Error("Expected a public API request");
+    const [url, options] = call;
+    expect(String(url)).toContain("/extensions/vibress-lms/views/courses/page");
+    expect(options.cache).toBe("no-store");
+    expect(options.headers["x-forwarded-host"]).toBe("publication-a.example");
+    expect(options.headers["x-forwarded-for"]).toBe("198.51.100.23");
+    expect(options.headers.cookie).toBe("vb_site_auth=public-proof");
+    expect(JSON.stringify(options)).not.toContain("SECRET");
+    expect(JSON.stringify(options)).not.toContain("PRIVATE");
+    expect(JSON.stringify(options)).not.toContain("publication-b.example");
   });
 
-  it("fails closed on forged IDs, member data, invalid DTOs and missing views", async () => {
+  it("fails closed on invalid IDs, nested/private data, wrong plugin and missing pages", async () => {
     const fetchSpy = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        ...descriptor, routeId: "../admin",
+        ...approved, pluginId: "../admin",
       }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(descriptor), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        title: "Courses", privilegedMemberEmail: { nested: "secret" },
+        ...approved, data: { email: { nested: "private" } },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response("", { status: 404 }));
     vi.stubGlobal("fetch", fetchSpy);
@@ -61,7 +63,29 @@ describe("EXT-302A publication-safe public SSR projection", () => {
     expect(await getPublicExtensionPage("vibress-lms", "courses")).toBeNull();
   });
 
-  it("does not serve stale HTML or another tenant's fallback when backend is unavailable", async () => {
+  it("does not forward spoofed or malformed client IPs to rate-limit enforcement", async () => {
+    vi.mocked(headers).mockResolvedValue(new Headers({
+      host: "publication-a.example", "x-real-ip": "192.0.2.10, 192.0.2.11",
+    }));
+    const spy = vi.fn().mockResolvedValue(new Response(JSON.stringify(approved), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    expect(await getPublicExtensionPage("vibress-lms", "courses")).not.toBeNull();
+    const call = spy.mock.calls[0];
+    if (!call) throw new Error("Expected a request");
+    expect(call[1].headers["x-forwarded-for"]).toBeUndefined();
+  });
+
+  it("refuses missing Host authority, even when forwarded host is present", async () => {
+    vi.mocked(headers).mockResolvedValue(new Headers({
+      "x-forwarded-host": "publication-b.example",
+    }));
+    const spy = vi.fn();
+    vi.stubGlobal("fetch", spy);
+    await expect(getPublicExtensionPage("vibress-lms", "courses")).rejects.toThrow(/hostname/);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not serve stale responses when the backend is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       new Response("Unavailable", { status: 503 }),
     ));
