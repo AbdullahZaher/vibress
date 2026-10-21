@@ -40,6 +40,20 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).toHaveBeenCalledOnce();
   });
 
+  it("uses compact thumbnails and spacing without shrinking action touch targets", () => {
+    act(() => root.render(<EditorialListRow {...base} />));
+    const row = container.querySelector<HTMLElement>('[role="listitem"]');
+    const thumbnail = row?.querySelector<HTMLElement>("div.rounded-md");
+    const editAction = container.querySelector<HTMLButtonElement>('button[aria-label="Edit: Hello there"]');
+    const moreAction = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
+    expect(row?.className).toContain("py-2");
+    expect(row?.className).toContain("sm:py-2.5");
+    expect(thumbnail?.className).toContain("h-12");
+    expect(thumbnail?.className).toContain("sm:h-14");
+    expect(moreAction?.className).toContain("h-9");
+    expect(editAction).not.toBeNull();
+  });
+
   it("navigates when the row background is clicked, and exposes a keyboard-accessible row action", () => {
     act(() => root.render(<EditorialListRow {...base} />));
     const rowAction = container.querySelector<HTMLButtonElement>(

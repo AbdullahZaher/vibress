@@ -74,7 +74,7 @@ export function EditorialListRow({
         : "text-primary";
 
   return (
-    <div role="listitem" className="group relative flex items-center gap-3 px-1 py-3 transition-colors hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20 sm:gap-4 sm:py-3.5">
+    <div role="listitem" className="group relative flex items-center gap-2 px-1 py-2 transition-colors hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20 sm:gap-3 sm:py-2.5">
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
       <button
         type="button"
@@ -82,7 +82,7 @@ export function EditorialListRow({
         aria-label={`${tr("Edit")}: ${displayTitle}`}
         className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
       />
-      <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/70 text-muted-foreground/60 sm:h-20 sm:w-28">
+      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/70 text-muted-foreground/60 sm:h-14 sm:w-20">
         {imageUrl && !imageFailed ? (
           <img
             src={imageUrl}
@@ -93,22 +93,22 @@ export function EditorialListRow({
             className="h-full w-full object-cover"
           />
         ) : (
-          <ImageIcon className="size-5 sm:size-6" aria-hidden="true" />
+          <ImageIcon className="size-4 sm:size-5" aria-hidden="true" />
         )}
       </div>
 
       <div className="min-w-0 flex-1 space-y-0.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 dir="auto" className="max-w-full break-words text-start text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary sm:text-base">
+          <h3 dir="auto" className="max-w-full break-words text-start text-[13px] font-semibold leading-tight text-foreground transition-colors group-hover:text-primary sm:text-sm">
             {displayTitle}
           </h3>
           {featured && (
-            <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="rounded bg-primary/10 px-1 py-0 text-[10px] font-medium text-primary">
               {tr("Featured")}
             </span>
           )}
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-[11px] leading-4 text-muted-foreground">
           {authorName && (
             <>
               {tr("By")} <span dir="auto">{authorName}</span>
@@ -117,7 +117,7 @@ export function EditorialListRow({
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
         </p>
-        <p className={`text-xs font-medium ${statusColor}`}>
+        <p className={`text-[11px] font-medium leading-4 ${statusColor}`}>
           {statusLabels[status] ?? tr("Draft")}
         </p>
       </div>
