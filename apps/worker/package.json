@@ -35,7 +35,9 @@
     "@vibress/security": "workspace:*",
     "@vibress/tags": "workspace:*",
     "@vibress/settings": "workspace:*",
-    "@vibress/studio-renderer": "workspace:*"
+    "@vibress/studio-renderer": "workspace:*",
+    "@vibress/plugins": "workspace:*",
+    "@vibress/api-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
