@@ -77,6 +77,38 @@ describe("EXT-302A verified public page policy", () => {
     }
   });
 
+  it("advertises hreflang only for explicitly published, enabled variants", () => {
+    const variants = { ...view, locale: "ar", publishedLocales: ["en", "ar", "fr"] };
+    const meta = publicExtensionMetadata(
+      variants, site("pub_a", "https://publication-a.example", "ar"),
+      "publication-a.example", true,
+    );
+    expect(meta.alternates?.languages).toEqual({
+      en: "https://publication-a.example/extensions/vibress-lms/courses",
+      ar: "https://publication-a.example/ar/extensions/vibress-lms/courses",
+      "x-default": "https://publication-a.example/extensions/vibress-lms/courses",
+    });
+    const legacy = publicExtensionMetadata(
+      view, site("pub_a", "https://publication-a.example"),
+      "publication-a.example", true,
+    );
+    expect(legacy.alternates?.languages).toEqual({});
+  });
+
+  it("does not index unpublished locales or previewed extension pages", () => {
+    const unpublished = { ...view, locale: "ar", publishedLocales: ["en"] };
+    const result = publicExtensionMetadata(
+      unpublished, site("pub_a", "https://publication-a.example", "ar"),
+      "publication-a.example", true,
+    );
+    expect(result.robots).toEqual({ index: false, follow: false });
+    const preview = publicExtensionMetadata(
+      view, site("pub_a", "https://publication-a.example"),
+      "publication-a.example", true, true,
+    );
+    expect(preview.robots).toEqual({ index: false, follow: false });
+  });
+
   it("never creates indexable metadata for an unvalidated host or a private site", () => {
     expect(publicExtensionMetadata(
       view, site("pub_a", "https://publication-a.example"), null, true,
