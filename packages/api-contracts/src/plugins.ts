@@ -168,3 +168,12 @@ export const ExtensionAdminUiResponseSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
+/** EXT-301B2B: one-use, Host-bound iframe URL; never plugin-provided. */
+export const ExtensionAdminFrameTicketQuerySchema = z.object({
+  ticket: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+export const ExtensionAdminFrameTicketResponseSchema = z.object({
+  src: z.string().max(400).regex(
+    /^\/api\/admin\/v1\/extensions\/[a-z0-9][a-z0-9-]{0,99}\/views\/[a-z][a-z0-9-]{0,63}\/frame\?ticket=[a-f0-9]{64}$/,
+  ),
+}).strict();
