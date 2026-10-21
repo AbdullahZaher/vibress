@@ -23,7 +23,7 @@ const PLUGIN_SEGMENT = /^[a-z0-9][a-z0-9-]{0,99}$/;
  * supplied directly by a browser on incorrectly configured proxies.
  */
 export function isValidPublicHost(host: string): boolean {
-  if (!host || host.length > 253 || /[,\\s#?]/.test(host) || host.includes("/") || host.includes("\\")) return false;
+  if (!host || host.length > 253 || /\s/.test(host) || /[,#?]/.test(host) || host.includes("/") || host.includes("\\")) return false;
   try {
     const url = new URL(`http://${host}`);
     return url.username === "" && url.password === "" &&
