@@ -12,9 +12,10 @@ import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHydrator";
 import { DefaultExtensionView } from "../components/extensions/DefaultExtensionView";
+import { THEME_CACHE_TTL_MS, getThemeStorageRoot, getThemeAssetRevision } from "./theme-renderer-environment";
 
 const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
-const CACHE_TTL_MS = process.env.NODE_ENV === "production" ? 60 * 1000 : 0;
+
 
 function findThemeDirectory(
   themeId: string,
@@ -40,7 +41,7 @@ function findThemeDirectory(
   const cleanVersion = version;
   const cleanPublicationId = publicationId;
 
-  const explicitRoot = process.env.THEME_STORAGE_ROOT || process.env.CONTENT_DIR;
+  const explicitRoot = getThemeStorageRoot();
 
   const scopedRoots =
     publicationId === "pub_default"
@@ -359,7 +360,7 @@ export async function renderThemeTemplate(
   let fileMap: Map<string, string>;
 
   const cached = themeFilesCache.get(cacheKey);
-  if (cached && Date.now() - cached.loadedAt < CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.loadedAt < THEME_CACHE_TTL_MS) {
     fileMap = cached.files;
   } else {
     const themeDir = publicationId
@@ -493,7 +494,7 @@ export async function renderThemeTemplate(
     ];
     for (const candidate of cssCandidates) {
       if (fileMap.has(candidate)) {
-        const cacheBuster = process.env.GIT_SHA || Date.now().toString();
+        const cacheBuster = getThemeAssetRevision();
         cssHref = `/theme-assets/${themeId}/${themeVersion}/${candidate}?v=${cacheBuster}`;
         break;
       }
