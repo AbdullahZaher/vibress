@@ -29,7 +29,7 @@ const view = {
 function site(publicationId: string, url: string, locale = "en") {
   return {
     publicationId, url, locale, primaryLocale: "en",
-    enabledLocales: ["en", "ar"], title: "Vibress",
+    enabledLocales: ["en", "ar"], title: "Vibress", description: "Test publication",
     security: { isPrivate: false },
   };
 }
