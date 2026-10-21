@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 const BASE = "http://localhost:7777";
 const pluginId = "operator-demo";
@@ -100,6 +102,45 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await expect(view.locator("body")).toHaveAttribute("data-isolated", "true");
     await view.locator("#load").click();
     await expect(view.locator("#remote")).toHaveText("7");
+  });
+
+  test("loads the independent sample HTML through the private view.read bridge", async ({ page }) => {
+    await mockPluginNavigation(page);
+    const sample = await readFile(
+      path.join(process.cwd(), "docs/08-plugins/examples/isolated-courses.html"), "utf8",
+    );
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ src: ticketPath }),
+      }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/v1/course-list`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ total: 9 }),
+      }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
+      (route) => route.fulfill({
+        status: 200, contentType: "text/html; charset=utf-8",
+        headers: {
+          "content-security-policy":
+            "default-src 'none'; script-src 'unsafe-inline'; script-src-attr 'none'; " +
+            "style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; " +
+            "frame-src 'none'; frame-ancestors 'self'; sandbox allow-scripts",
+          "x-frame-options": "SAMEORIGIN",
+          "cache-control": "private, no-store",
+          "referrer-policy": "no-referrer",
+        },
+        body: sample,
+      }));
+    await login(page);
+    await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
+    const view = page.frameLocator('iframe[title="Courses"]');
+    const load = view.getByRole("button", { name: "Load courses" });
+    await expect(load).toBeEnabled();
+    await load.focus();
+    await page.keyboard.press("Enter");
+    await expect(view.locator("output")).toContainText('"total": 9');
   });
 
   test("preserves EXT-301A read-only fallback when no approved UI asset exists", async ({ page }) => {
