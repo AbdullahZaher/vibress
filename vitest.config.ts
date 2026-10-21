@@ -2,6 +2,10 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
+  // The Next.js web app preserves JSX in its TypeScript config. Vitest runs
+  // its own Vite 8 transform pipeline and must compile TSX before import
+  // analysis when exercising server-side React theme rendering.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "jsdom",
     globals: true,
