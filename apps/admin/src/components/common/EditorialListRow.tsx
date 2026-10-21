@@ -5,13 +5,13 @@ import { IconButton } from "../ui/icon-button";
 
 export interface EditorialListRowProps {
   title: string;
-  authorName?: string | null;
+  authorName?: string | null | undefined;
   date: string;
   status: string;
-  imageUrl?: string | null;
-  featured?: boolean;
+  imageUrl?: string | null | undefined;
+  featured?: boolean | undefined;
   onEdit: () => void;
-  onPublishToggle?: () => void;
+  onPublishToggle?: (() => void) | undefined;
   onDelete: () => void;
 }
 
@@ -135,6 +135,7 @@ export function EditorialListRow({
             aria-label={`${tr("More actions")}: ${displayTitle}`}
             aria-expanded={actionsOpen}
             aria-controls={actionsId}
+            title={tr("More actions")}
             onClick={() => setActionsOpen((open) => !open)}
             className="inline-flex h-10 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:h-11"
           >

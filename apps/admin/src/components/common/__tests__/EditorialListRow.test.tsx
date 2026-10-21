@@ -48,12 +48,12 @@ describe("EditorialListRow", () => {
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
     const menu = container.querySelector('[role="group"]');
     expect(menu?.textContent).toContain("Unpublish");
-    const unpublish = Array.from(menu?.querySelectorAll("button") ?? []).find(b => b.textContent?.includes("Unpublish"));
+    const unpublish = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(b => b.textContent?.includes("Unpublish"));
     act(() => unpublish?.click());
     expect(onPublishToggle).toHaveBeenCalledOnce();
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
     act(() => trigger?.click());
-    const remove = Array.from(container.querySelectorAll('[role="group"] button'))
+    const remove = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"] button'))
       .find(b => b.textContent?.includes("Delete"));
     act(() => remove?.click());
     expect(base.onDelete).toHaveBeenCalledOnce();

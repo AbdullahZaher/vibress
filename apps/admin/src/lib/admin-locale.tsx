@@ -24,12 +24,10 @@ interface AdminLocaleContext {
 
 const translations: Record<string, string> = {
   "(Untitled)": "(بدون عنوان)",
-  "By": "بواسطة",
   "More actions": "إجراءات أخرى",
   "In review": "قيد المراجعة",
   "Changes requested": "مطلوب تعديلات",
   "Approved": "معتمد",
-  "Archived": "مؤرشف",
   "Try a different search or filter.": "جرّب بحثًا أو تصفية مختلفة.",
   "Refresh": "تحديث",
   "Copy URL": "نسخ الرابط",
