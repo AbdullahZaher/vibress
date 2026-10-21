@@ -171,7 +171,9 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
       // page. Older agents without Fetch Metadata still require a one-use,
       // Staff-bound ticket; frame-ancestors and XFO also block third parties.
       const fetchSite = req.headers["sec-fetch-site"];
-      if (fetchSite === "cross-site" || fetchSite === "none") {
+      const fetchDestination = req.headers["sec-fetch-dest"];
+      if (fetchSite === "cross-site" || fetchSite === "none" ||
+          (fetchDestination && fetchDestination !== "iframe")) {
         return reject(req, reply, "EXTENSION_UI_NOT_FOUND", 404);
       }
       const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
