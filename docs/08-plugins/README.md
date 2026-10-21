@@ -31,10 +31,16 @@ a Host-owned `extension` theme slot with safe fallback
 ([sample Liquid template](examples/extension.liquid)),
 an independent [SDK reference plugin](../../examples/plugins/hello-public/README.md),
 and an operator-side [release preflight / recovery runbook](external-extension-operator-runbook.md).
+The branch now also adds optional **detached Ed25519 operator lockfile approval**,
+with shared runtime/CLI signature verification, pre-listen API preflight,
+a production-bundled verifier, and an opt-in `compose.plugins.yml`
+read-only deployment override. Unsigned trusted v1 lockfiles still work when
+both signing environment variables are absent; signed mode fails closed if
+only one is configured. This is operator trust, not an untrusted plugin sandbox.
 
 These are **branch changes**, not merged/released contracts. EXT-401 durable
 workers, EXT-402 secret rotation/audit, EXT-403 automated backup/restore
-integration, full EXT-404 artifact signatures and EXT-501–504 pilot gates
+integration, the remaining EXT-404 supply-chain scanner/health/replica acceptance gates and EXT-501–504 pilot gates
 remain separate blockers. Do not describe this branch as production-ready
 without full CI and operator deployment tests.
 
