@@ -61,9 +61,12 @@ serving an HTML route. A disabled plugin, unknown view or missing route
 returns a non-indexable 404. Backend failure fails closed; SSR does not use
 an old cached response to render a different publication.
 
-Next.js uses `cache: "no-store"` for both calls; metadata/page memoization
-is request-local. It forwards only the public-site password cookie
-(`vb_site_auth`), never an Admin Staff or member cookie. Descriptor IDs and
+Next.js uses `cache: "no-store"` for its single Host-bound API call;
+metadata/page memoization is request-local. It forwards only the public-site
+password cookie (`vb_site_auth`), never an Admin Staff or Member cookie.
+Before returning HTML or indexable metadata, the resolved API `publicationId`
+**must match** the publication ID from the public site-settings API; mismatches
+fail closed. Descriptor IDs and
 returned scalar data are runtime-validated against shared
 `@vibress/api-contracts` Zod schemas. The scalar values render exclusively
 as escaped text in semantic `<dl>` elements; plugin HTML, remote images,
@@ -95,3 +98,47 @@ EXT-302B is needed for published-only locale variants, hreflang, preview
 policy, explicit private Member lesson rendering and advanced cache policy.
 No new DB schema/migration, private SDK import or plugin-specific core theme
 change is introduced in EXT-302A.
+
+## Security closure — Host and rate-limit boundaries
+
+The production Nginx gateway **overwrites** `X-Forwarded-Host` with its own
+validated `$host` for every upstream, and already overwrites `X-Real-IP`
+and `X-Forwarded-For` from the immediate client peer. Next SSR prefers the
+Gateway-assigned `Host` and never treats incoming `X-Forwarded-Host` as
+authoritative. Any replacement CDN/load balancer or custom reverse proxy
+**must** preserve the true Host and overwrite these forwarded identity headers
+before exposing the API or Web processes; do not expose their internal ports to
+untrusted clients. No raw tenant ID or query parameter ever authorizes access.
+
+The SSR internal call may forward **only** the gateway-sanitized `X-Real-IP`
+when it is a valid IPv4/IPv6 address. The API's existing trusted-proxy setting
+(`TRUST_PROXY=1` in the reference Docker deployment) then rate-limits by the
+real originating viewer instead of the shared Next.js server address. It still
+rate-limits direct public API callers. No global rate limit has been disabled
+or raised to conceal traffic spikes. Installations missing a trustworthy
+`X-Real-IP` fall back to their existing shared limit and must fix their proxy
+configuration rather than forwarding arbitrary visitor headers.
+
+The public page's canonical URL and Open Graph URL use the **verified current
+publication host**, not the single instance-wide `SITE_URL`; the metadata
+is noindex when the API and site-settings publication identities disagree.
+If the configured site URL does not match the verified request hostname, it
+cannot redirect canonical links off-site. A page from publication A cannot
+inherit publication B's cached SEO settings.
+
+Production's private-site gate now calls an independently tested authorization
+decision. Real signed site-password cookies remain publication-bound. Invalid
+cookies and wrong-publication cookies are denied, settings-service outages
+fail closed; old installations without an explicit `isPrivate` flag remain
+public. The integration test environment retains its existing generic
+privacy-gate bypass, but tests exercise the *same production decision function*
+with valid and forged signed cookies.
+
+## Remaining deployment verification
+
+Perform an integration drill against the actual Nginx, API, Web and two
+domain-mapped publications: inject a forged browser `X-Forwarded-Host`,
+verify each publication keeps its own page identity/Canonical and site
+password, check per-client rate limits under concurrent SSR traffic, inspect
+external CDN/LB headers and ensure cache keys do not cross hosts. CI unit/API
+tests supplement, but do not replace, this reverse-proxy drill.
