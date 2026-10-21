@@ -1,24 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { headers } from "next/headers";
-import { getThemeSiteSettings } from "../theme-host";
-import { getPublicExtensionPage } from "../public-extension-client";
-import PublicExtensionView, {
-  generateMetadata,
-} from "../../app/extensions/[pluginId]/[viewId]/page";
+import { describe, expect, it } from "vitest";
+import {
+  localizedExtensionTitle,
+  matchesPublicExtensionPublication,
+  publicExtensionMetadata,
+  trustedExtensionOrigin,
+} from "../public-extension-page-policy";
 
-vi.mock("next/headers", () => ({ headers: vi.fn() }));
-vi.mock("next/navigation", () => ({
-  notFound: () => { throw new Error("NEXT_PUBLIC_NOT_FOUND"); },
-}));
-vi.mock("../theme-host", () => ({
-  getThemeSiteSettings: vi.fn(),
-}));
-vi.mock("../public-extension-client", () => ({
-  getPublicExtensionPage: vi.fn(),
-  isValidPublicHost: (host: string) => /^publication-[ab]\.example$/.test(host),
-}));
-
-const params = Promise.resolve({ pluginId: "vibress-lms", viewId: "courses" });
 const view = {
   publicationId: "pub_a", pluginId: "vibress-lms",
   viewId: "courses", routeId: "catalog",
@@ -29,26 +16,17 @@ const view = {
 function site(publicationId: string, url: string, locale = "en") {
   return {
     publicationId, url, locale, primaryLocale: "en",
-    enabledLocales: ["en", "ar"], title: "Vibress", description: "Test publication",
+    enabledLocales: ["en", "ar"], title: "Vibress",
     security: { isPrivate: false },
   };
 }
 
-describe("EXT-302A verified canonical and publication-scoped SSR", () => {
-  beforeEach(() => {
-    vi.mocked(headers).mockResolvedValue(new Headers({
-      host: "publication-a.example",
-      "x-forwarded-host": "publication-b.example",
-    }));
-    vi.mocked(getPublicExtensionPage).mockResolvedValue(view);
-    vi.mocked(getThemeSiteSettings).mockResolvedValue(
-      site("pub_a", "https://publication-a.example"),
+describe("EXT-302A verified public page policy", () => {
+  it("uses the verified publication domain for canonical and Open Graph", () => {
+    const result = publicExtensionMetadata(
+      view, site("pub_a", "https://publication-a.example"),
+      "publication-a.example", true,
     );
-  });
-  afterEach(() => vi.clearAllMocks());
-
-  it("uses verified request publication domain, never global SITE_URL", async () => {
-    const result = await generateMetadata({ params });
     expect(result.alternates?.canonical).toBe(
       "https://publication-a.example/extensions/vibress-lms/courses",
     );
@@ -57,41 +35,56 @@ describe("EXT-302A verified canonical and publication-scoped SSR", () => {
     );
   });
 
-  it("generates Arabic canonical independently for the second publication", async () => {
-    vi.mocked(headers).mockResolvedValue(new Headers({
-      host: "publication-b.example",
-      "x-forwarded-host": "publication-a.example",
-    }));
-    vi.mocked(getPublicExtensionPage).mockResolvedValue({
-      ...view, publicationId: "pub_b",
-    });
-    vi.mocked(getThemeSiteSettings).mockResolvedValue(
-      site("pub_b", "https://publication-b.example", "ar"),
+  it("generates Arabic canonical independently for a second publication", () => {
+    const arabicView = { ...view, publicationId: "pub_b" };
+    const result = publicExtensionMetadata(
+      arabicView, site("pub_b", "https://publication-b.example", "ar"),
+      "publication-b.example", true,
     );
-    const result = await generateMetadata({ params });
     expect(result.title).toBe("الدورات");
+    expect(localizedExtensionTitle(view.title, "ar-SA")).toBe("الدورات");
     expect(result.alternates?.canonical).toBe(
       "https://publication-b.example/ar/extensions/vibress-lms/courses",
     );
   });
 
-  it("never renders a descriptor from another publication using stale settings", async () => {
-    vi.mocked(getThemeSiteSettings).mockResolvedValue(
-      site("pub_b", "https://publication-b.example"),
+  it("prevents metadata and SSR from reusing a descriptor across publications", () => {
+    const otherSite = site("pub_b", "https://publication-b.example");
+    expect(matchesPublicExtensionPublication(view, otherSite)).toBe(false);
+    const result = publicExtensionMetadata(
+      view, otherSite, "publication-b.example", true,
     );
-    const metadata = await generateMetadata({ params });
-    expect(metadata.robots).toEqual({ index: false, follow: false });
-    await expect(PublicExtensionView({ params }))
-      .rejects.toThrow("NEXT_PUBLIC_NOT_FOUND");
+    expect(result.robots).toEqual({ index: false, follow: false });
+    expect(result.alternates).toBeUndefined();
+    expect(matchesPublicExtensionPublication(view, site("pub_a", "https://publication-a.example")))
+      .toBe(true);
+    expect(matchesPublicExtensionPublication(view, { publicationId: undefined }))
+      .toBe(false);
   });
 
-  it("does not trust a configured external site URL as the publication canonical", async () => {
-    vi.mocked(getThemeSiteSettings).mockResolvedValue(
-      site("pub_a", "https://external-attacker.example"),
+  it("refuses configured foreign canonical origins and malformed host authority", () => {
+    const result = publicExtensionMetadata(
+      view, site("pub_a", "https://external-attacker.example"),
+      "publication-a.example", true,
     );
-    const metadata = await generateMetadata({ params });
-    expect(metadata.alternates?.canonical).toBe(
+    expect(result.alternates?.canonical).toBe(
       "https://publication-a.example/extensions/vibress-lms/courses",
     );
+    for (const hostileHost of [null, "x@y.example", "a.example,b.example", "a.example/path"]) {
+      expect(trustedExtensionOrigin(
+        hostileHost, "https://publication-a.example", true,
+      )).toBeNull();
+    }
+  });
+
+  it("never creates indexable metadata for an unvalidated host or a private site", () => {
+    expect(publicExtensionMetadata(
+      view, site("pub_a", "https://publication-a.example"), null, true,
+    ).robots).toEqual({ index: false, follow: false });
+    expect(publicExtensionMetadata(
+      view,
+      { ...site("pub_a", "https://publication-a.example"), security: { isPrivate: true } },
+      "publication-a.example", true,
+    ).robots).toEqual({ index: false, follow: false });
   });
 });
