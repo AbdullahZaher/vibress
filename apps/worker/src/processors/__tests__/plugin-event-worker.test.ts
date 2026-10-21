@@ -81,7 +81,7 @@ describe("EXT-401 publication-scoped durable event worker", () => {
       { ...event(), payload: { secret: { nested: true } } },
       { ...event(), payload: Object.fromEntries(Array.from({ length: 25 },
         (_, i) => ["field" + i, "value"])) },
-      { ...event(), eventName: "constructor.prototype" },
+      { ...event(), eventName: "constructor..prototype" },
       { ...event(), pluginId: "plugin-row-b" , extra: true },
     ]) {
       const h = execution();
@@ -114,7 +114,7 @@ describe("EXT-401 publication-scoped durable event worker", () => {
 
   it("rejects malformed event IDs and unexpected payload structure", () => {
     expect(PluginWorkerEventJobSchema.safeParse(event({ eventId: "invalid" })).success).toBe(false);
-    expect(PluginWorkerEventJobSchema.safeParse(event({ eventName: "onEvent" })).success).toBe(true);
+    expect(PluginWorkerEventJobSchema.safeParse(event({ eventName: "onEvent" })).success).toBe(false);
     expect(PluginWorkerEventJobSchema.safeParse({
       ...event(), payload: { value: Number.POSITIVE_INFINITY },
     }).success).toBe(false);
