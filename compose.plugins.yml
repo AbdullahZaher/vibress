@@ -9,6 +9,7 @@ services:
       VIBRESS_TRUSTED_PLUGIN_LOCKFILE: /run/vibress-plugins/trusted-plugins.json
       VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: /run/vibress-plugins/operator-public.pem
       VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: /run/vibress-plugins/operator.sig
+      VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1"
     volumes:
       - type: bind
         source: ${VIBRESS_PLUGIN_RELEASE_DIR:?set an absolute operator-controlled release directory}
@@ -20,6 +21,7 @@ services:
       VIBRESS_TRUSTED_PLUGIN_LOCKFILE: /run/vibress-plugins/trusted-plugins.json
       VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: /run/vibress-plugins/operator-public.pem
       VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: /run/vibress-plugins/operator.sig
+      VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1"
     volumes:
       - type: bind
         source: ${VIBRESS_PLUGIN_RELEASE_DIR:?set an absolute operator-controlled release directory}

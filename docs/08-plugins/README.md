@@ -38,11 +38,17 @@ read-only deployment override. Unsigned trusted v1 lockfiles still work when
 both signing environment variables are absent; signed mode fails closed if
 only one is configured. This is operator trust, not an untrusted plugin sandbox.
 
-These are **branch changes**, not merged/released contracts. EXT-401 durable
-workers, EXT-402 secret rotation/audit, EXT-403 automated backup/restore
-integration, the remaining EXT-404 supply-chain scanner/health/replica acceptance gates and EXT-501–504 pilot gates
-remain separate blockers. Do not describe this branch as production-ready
-without full CI and operator deployment tests.
+These are **branch changes**, not merged/released contracts. EXT-401 now has
+an initial operator-only BullMQ event queue and worker with signed
+release/publication verification, but durable transactional event admission,
+replay, permanent idempotency and operator DLQ controls remain missing.
+EXT-402 adds atomic audit for publication settings and secret revocation
+checks but still needs cryptographic key rotation and operator audit views.
+EXT-403 automated backup/restore integration, a full EXT-301 Admin
+write/UI host contract, further EXT-404 supply-chain scanning,
+cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
+The opt-in production Compose override requires operator release signatures.
+Do not infer production readiness from CI alone.
 
 ## Read in this order
 

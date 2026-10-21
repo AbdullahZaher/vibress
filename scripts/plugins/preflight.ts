@@ -5,6 +5,9 @@ import { verifyTrustedPluginRelease } from "../../apps/api/src/plugins/operator-
 async function main() {
   const lockfile = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
   if (!lockfile) {
+    if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1") {
+      throw new Error("Trusted plugin release mount required");
+    }
     console.info("External plugin preflight: bundled-only mode");
     return;
   }

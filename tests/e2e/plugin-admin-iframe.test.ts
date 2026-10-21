@@ -182,6 +182,7 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
 
   test("never transfers the privileged read port to a redirected or forged iframe", async ({ page }) => {
     let authorizedReads = 0;
+    let redirected = false;
     await mockPluginNavigation(page);
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
       (route) => route.fulfill({
@@ -195,9 +196,12 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
           body: JSON.stringify({ total: 8 }) });
       });
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
-      (route) => route.fulfill({
-        status: 302, headers: { location: "/admin/unapproved-test-document" },
-      }));
+      (route) => {
+        redirected = true;
+        return route.fulfill({
+          status: 302, headers: { location: "/admin/unapproved-test-document" },
+        });
+      });
     await page.route("**/admin/unapproved-test-document", (route) => route.fulfill({
       status: 200, contentType: "text/html",
       body: `<script>window.parent.postMessage({type:"vibress:extension:ready",version:1,bridgeNonce:"${"e".repeat(64)}"},"*");window.addEventListener("message", e=>{if(e.data?.type==="vibress:extension:connect"){document.body.dataset.stolen="true"}})</script><body>Unapproved</body>`,
@@ -205,7 +209,12 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await login(page);
     await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
     const view = page.frameLocator('iframe[title="Courses"]');
-    await expect(view.locator("body")).toContainText("Unapproved");
+    await expect.poll(() => redirected).toBe(true);
+    // Browsers may refuse this sandboxed redirect entirely under CSP,
+    // leaving a blank document. Both refusal and an unapproved document are
+    // safe outcomes; neither may receive a privileged MessagePort.
+    await expect(view.locator("body")).not.toHaveAttribute("data-stolen", "true");
+    await page.waitForTimeout(750); // allow any forged ready/connect messages to settle
     await expect(view.locator("body")).not.toHaveAttribute("data-stolen", "true");
     expect(authorizedReads).toBe(0);
   });

@@ -39,6 +39,25 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     });
   });
 
+  it("requires valid signature files when strict production policy is enabled", async () => {
+    const f = await fixture();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE", "1");
+    try {
+      await expect(readTrustedPluginLockfile(f.lockfile, {}))
+        .rejects.toThrow(/signature is required/);
+      await expect(readTrustedPluginLockfile(f.lockfile, f.options)).resolves.toEqual({
+        schemaVersion: 1, plugins: [],
+      });
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", f.signatureFile);
+      await expect(verifyTrustedPluginRelease(f.lockfile))
+        .rejects.toThrow(/signature is required/);
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", f.keyFile);
+      await expect(verifyTrustedPluginRelease(f.lockfile)).resolves.toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("authenticates the exact operator-approved lockfile bytes", async () => {
     const f = await fixture();
     await expect(readTrustedPluginLockfile(f.lockfile, f.options)).resolves.toEqual({

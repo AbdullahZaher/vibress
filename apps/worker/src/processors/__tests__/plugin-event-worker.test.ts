@@ -5,7 +5,7 @@ import {
   type PluginWorkerEventJob,
 } from "@vibress/api-contracts";
 import {
-  processTrustedPluginEvent, type PluginEventExecution,
+  PluginEventWorker, processTrustedPluginEvent, type PluginEventExecution,
 } from "../plugin-event-worker";
 
 const DIGEST = "a".repeat(64);
@@ -65,6 +65,36 @@ function execution(options: {
 }
 
 describe("EXT-401 publication-scoped durable event worker", () => {
+  it("fails readiness until the trusted event consumer is started", () => {
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_LOCKFILE", "/operator/approved.json");
+    try {
+      expect(new PluginEventWorker().isReady()).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not require a plugin consumer in bundled-only installations", () => {
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_LOCKFILE", "");
+    try {
+      expect(new PluginEventWorker().isReady()).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("rejects signed worker mode without a mounted trusted release", async () => {
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_LOCKFILE", "");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE", "1");
+    try {
+      const worker = new PluginEventWorker();
+      expect(worker.isReady()).toBe(false);
+      await expect(worker.start()).rejects.toThrow(/mount required/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("executes an approved, active and explicitly enabled release with host scope", async () => {
     const h = execution();
     await expect(processTrustedPluginEvent(event(), h)).resolves.toBe("executed");

@@ -52,6 +52,13 @@ export async function readTrustedPluginLockfile(
   if (!path.isAbsolute(lockfilePath)) throw new Error("Invalid trusted plugin lockfile path");
   const lockfileBytes = await readBoundedFile(lockfilePath, MAX_LOCKFILE_BYTES);
   const { publicKeyPath, signaturePath } = options;
+  // Strict deployments must never silently fall back to unsigned v1 approval.
+  // The explicit flag is additive: old operator-controlled unsigned installs
+  // retain compatibility until their operator opts into enforcement.
+  const requireSignature = process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1";
+  if (requireSignature && (!publicKeyPath || !signaturePath)) {
+    throw new Error("Trusted plugin signature is required by operator policy");
+  }
   if (publicKeyPath !== undefined || signaturePath !== undefined) {
     if (!publicKeyPath || !signaturePath) {
       throw new Error("Incomplete trusted plugin lockfile attestation configuration");

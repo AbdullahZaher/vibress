@@ -72,7 +72,16 @@ VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE=/etc/vibress/operator.sig
 ```
 
 The existing lockfile environment variable remains mandatory for external
-plugins. The runtime and preflight verify the Ed25519 signature against the
+plugins. For newly deployed production external plugins, the opt-in
+`compose.plugins.yml` override sets
+`VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1` on both API and Worker.
+This setting **requires** the lockfile mount, public key and detached
+signature and fails closed at API startup, worker startup, CLI preflight and
+every trusted lockfile read. Direct deployments can set the same policy.
+Existing unsigned v1 deployments remain compatible unless their operator
+explicitly enables strict enforcement.
+
+The runtime and preflight verify the Ed25519 signature against the
 **same bytes** used to parse the operator lockfile, then verify each pinned
 artifact SHA-256 before loading code. A missing or invalid signature, missing
 half of the configuration, altered lockfile, or substituted public key causes
@@ -125,6 +134,13 @@ become no-ops. Invalid jobs and handler failures are bounded to 5 retry attempts
 with exponential backoff; failed jobs remain in BullMQ's failed set for
 operator investigation. The worker must start from its operator-mounted
 release directory; it refuses a corrupt signature during admission.
+The worker `/health/ready` includes plugin event-consumer readiness when
+an external release is configured, not just database and Redis reachability.
+Hot-swapping the same semver with a different digest is rejected by a replica
+holding the old local lifecycle state; drain and restart all API/worker
+replicas during operator-approved upgrades. Retained plugin secret-read
+closures recheck live plugin capability and publication enablement, while
+ciphertext corruption is surfaced as an error rather than an absent key.
 
 A platform plugin operator with `plugins.manage` and local publication
 owner/admin access may submit only an explicitly declared event through:

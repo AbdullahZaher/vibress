@@ -11,7 +11,7 @@ import {
   DrizzlePluginSettingRepository,
   DrizzlePluginPublicationStateRepository,
   DrizzlePluginPublicationSettingRepository,
-  TrustedExternalPluginHost,
+  TrustedExternalPluginHost, verifyTrustedPluginRelease,
   type Plugin,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
@@ -71,6 +71,14 @@ export async function processTrustedPluginEvent(
 
 export class PluginEventWorker {
   private worker: Worker<PluginWorkerEventJob> | null = null;
+  private ready = false;
+
+  /** The base DB/Redis health probe alone does not prove event consumption. */
+  isReady(): boolean {
+    return process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE
+      ? this.ready
+      : process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE !== "1";
+  }
   private readonly operatorHost = new TrustedExternalPluginHost();
   private readonly repository = new DrizzlePluginRepository();
   private readonly service = new PluginsService(
@@ -87,8 +95,13 @@ export class PluginEventWorker {
   async start(): Promise<void> {
     // Only replicas with an explicit operator-approved release mount may
     // execute external plugin code. The default worker remains bundled-only.
-    if (!process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) return;
-    await this.operatorHost.listTrustedManifests();
+    if (!process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
+      if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1") {
+        throw new Error("Trusted plugin release mount required");
+      }
+      return;
+    }
+    await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
     this.worker = new Worker<PluginWorkerEventJob>(
       QUEUE_NAMES.PLUGIN_EVENTS,
       tracedProcessor("worker.job.plugin-event", async (job) => {
@@ -109,9 +122,17 @@ export class PluginEventWorker {
       // Do not log plugin-provided payload, secrets, or stack traces.
       console.error("[PluginEventWorker] Failed plugin event", { jobId: job?.id });
     });
+    this.worker.on("error", () => {
+      this.ready = false;
+      console.error("[PluginEventWorker] Queue connection unavailable");
+    });
+    this.worker.on("ready", () => { this.ready = true; });
+    await this.worker.waitUntilReady();
+    this.ready = true;
   }
 
   async stop(): Promise<void> {
+    this.ready = false;
     if (this.worker) {
       await this.worker.close();
       this.worker = null;

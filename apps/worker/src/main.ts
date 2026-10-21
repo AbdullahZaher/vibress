@@ -93,7 +93,8 @@ const server = http.createServer((req, res) => {
       }
 
       const redisStatus = connection.status === "ready" ? "ok" : "not_ready";
-      const isReady = dbStatus === "ok" && redisStatus === "ok";
+      const pluginsStatus = pluginEventWorker.isReady() ? "ok" : "not_ready";
+      const isReady = dbStatus === "ok" && redisStatus === "ok" && pluginsStatus === "ok";
 
       res.writeHead(isReady ? 200 : 503, { "Content-Type": "application/json" });
       res.end(
@@ -102,6 +103,7 @@ const server = http.createServer((req, res) => {
           checks: {
             redis: redisStatus,
             database: dbStatus,
+            pluginEvents: pluginsStatus,
           },
         }),
       );

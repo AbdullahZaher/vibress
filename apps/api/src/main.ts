@@ -434,6 +434,10 @@ const start = async () => {
     // Fail before the HTTP listener opens if this replica has missing, altered,
     // unsigned-when-required, or incompatible operator-approved plugin bytes.
     // Legacy bundled-only installs remain unaffected.
+    if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1" &&
+        !process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
+      throw new Error("Trusted plugin release mount required");
+    }
     if (process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
       const verified = await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
       appLogger.info("External plugin release preflight passed", { approvedReleases: verified.length });
