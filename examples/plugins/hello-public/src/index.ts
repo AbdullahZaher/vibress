@@ -10,7 +10,7 @@ export const manifest: PluginManifest = {
   version: "1.0.0",
   vibressApiVersion: "1.0.0",
   description: "A safe reference for the external extension contribution ABI.",
-  entrypoint: "dist/index.js",
+  entrypoint: "dist/index.mjs",
   capabilities: ["extension.routes.public", "extension.routes.admin", "admin.navigation"],
 };
 
