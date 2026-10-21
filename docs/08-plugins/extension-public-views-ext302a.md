@@ -44,18 +44,23 @@ rather than partially exposed. Admin/member routes are not eligible.
 
 - Reserved public SSR path: `/extensions/:pluginId/:viewId`, with the
   site's existing locale prefix, such as `/ar/extensions/vibress-lms/courses`
-- Host descriptor lookup:
+- Preferred **atomic, Host-scoped SSR** request:
+  `GET /api/content/v1/extensions/:pluginId/views/:viewId/page`.
+  Returns publicationId, the admitted view descriptor and a bounded scalar
+  projection after one publication/context/handler admission.
+- Legacy descriptor lookup (unchanged for existing consumers):
   `GET /api/content/v1/extensions/:pluginId/views/:viewId`
-- Separate Host-authorized scalar execution:
+- Existing public scalar API (unchanged for existing consumers):
   `GET /api/content/v1/extensions/:pluginId/v1/:routeId`
 
 The reserved `/extensions` namespace (including locale-prefixed paths)
 bypasses publication-defined redirect rules, so generic redirects cannot
 shadow an admitted extension page.
 
-Both API requests re-resolve the publication from the authoritative public
-hostname. The API's existing `/api/content/v1` privacy middleware protects
-both, and the handler rechecks activation/enablement before execution. The
+The new SSR call resolves exactly one publication from the authoritative
+public hostname. The existing `/api/content/v1` privacy middleware protects
+all public extension routes; the atomic handler rechecks
+activation/enablement before execution. The
 Next.js middleware also enforces the publication's private-site policy before
 serving an HTML route. A disabled plugin, unknown view or missing route
 returns a non-indexable 404. Backend failure fails closed; SSR does not use
