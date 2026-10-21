@@ -143,7 +143,17 @@ export class AuthService {
 
   async resolveSession(sessionToken: string) {
     if (!sessionToken) return null;
-    const tokenHash = hashToken(sessionToken);
+    return this.resolveSessionByTokenHash(hashToken(sessionToken));
+  }
+
+  /**
+   * Internal, server-only credential lookup for one-use frame tickets.
+   * The SHA-256 digest is never accepted from HTTP callers or returned to
+   * browser extensions. Still revalidates session revocation, user status,
+   * roles and permissions on every call.
+   */
+  async resolveSessionByTokenHash(tokenHash: string) {
+    if (!/^[a-f0-9]{64}$/.test(tokenHash)) return null;
     const session =
       await this.sessionRepo.findActiveSessionByTokenHash(tokenHash);
 
