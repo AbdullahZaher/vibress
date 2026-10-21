@@ -114,6 +114,53 @@ malware-free code, independent reproducible builds or process isolation.
    denied-read counters; external CDN/WAF/proxy logs must redact single-use
    frame-ticket query parameters.
 
+## EXT-401 operator event queue (initial supported increment)
+
+The API and worker share the **same operator-reviewed plugin bundle bytes,
+signed approval and pinned SHA-256** through `compose.plugins.yml`. The worker
+has a dedicated BullMQ queue (`vibress-plugin-events`) and rechecks the
+installed plugin version, active status, declared hook, release digest and
+publication enablement before loading and executing code. Revoked/retired jobs
+become no-ops. Invalid jobs and handler failures are bounded to 5 retry attempts
+with exponential backoff; failed jobs remain in BullMQ's failed set for
+operator investigation. The worker must start from its operator-mounted
+release directory; it refuses a corrupt signature during admission.
+
+A platform plugin operator with `plugins.manage` and local publication
+owner/admin access may submit only an explicitly declared event through:
+
+`POST /api/admin/v1/plugins/:id/events`
+
+with a Staff session, valid same-site Origin, and the API's validated active
+publication context. The only accepted JSON fields are:
+
+```json
+{
+  "eventId": "fd1e743f-4b9d-4b45-925b-80c3765bf3e6",
+  "eventName": "post.published",
+  "payload": { "postId": "published-content-reference" }
+}
+```
+
+The Host, not the request body, binds `publicationId`, installed plugin ID,
+release version and operator artifact digest. Duplicate event IDs use the same
+BullMQ job ID within a plugin/publication. Different data for a retained
+event ID returns HTTP 409. No member/public/direct plugin admission is
+supported. Do not put Member personal data, plaintext secrets, HTML or tokens
+into these scalar-only payloads.
+
+**At-least-once, not exactly-once:** Redis/BullMQ retries after crashes. A
+plugin handler may execute and crash before acknowledging completion, so every
+hook **must be idempotent**. Completed jobs are retained up to 7 days/100,000
+jobs and failures up to 30 days/100,000, after which idempotency keys can be
+reused. Configure persistent Redis storage and include Redis in your operational
+backup/recovery policy. This is NOT a transactional PostgreSQL outbox or
+permanent deduplication ledger. Operator inspection/replay tools, a durable
+cross-service admission ledger, scheduled jobs, formal dead-letter/replay
+workflow and multi-replica crash recovery evidence are still needed to close
+EXT-401 completely. Failed jobs must not be automatically replayed after
+plugin disable, rollback or a changed data schema.
+
 ## Upgrade and rollback
 
 - Before any version change: verify the SDK ABI, verify the release is
@@ -146,7 +193,7 @@ malware-free code, independent reproducible builds or process isolation.
 **Release status:** The EXT-302B locale/SEO policy, EXT-303 theme extension
 slot, EXT-304 reference SDK sample, and a preflight for EXT-404 are implemented
 as separate changes on a review branch. This is **not** proof that
-EXT-401 durable worker jobs, EXT-402 rotation, EXT-403 backup automation,
+full EXT-401 idempotency/operational replay, EXT-402 rotation, EXT-403 backup automation,
 full supply-chain scanning/provenance, or EXT-501–504 LMS pilot/release gates are complete.
 Those features still require code, live testing and signed-off release reviews.
 
