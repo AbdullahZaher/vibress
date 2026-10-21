@@ -256,3 +256,35 @@ export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok",
     error: z.enum(["DENIED", "UNAVAILABLE", "RATE_LIMITED"]),
   }).strict(),
 ]);
+
+
+/**
+ * EXT-401: operator-admitted, publication-bound asynchronous plugin events.
+ * External HTTP input and BullMQ payloads use the same bounded contract.
+ * The job's version and digest are verified AGAIN against the live operator
+ * release approval on the worker before executing trusted plugin code.
+ */
+const PluginEventNameSchema = z.string().regex(/^[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)*$/).max(100);
+const PluginEventPayloadSchema = z.record(
+  z.string().regex(/^[a-z][a-zA-Z0-9_]{0,63}$/),
+  z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
+).refine((fields) => Object.keys(fields).length <= 24, "Too many event fields");
+
+export const PluginEventEnqueueSchema = z.object({
+  eventId: z.string().uuid(),
+  eventName: PluginEventNameSchema,
+  payload: PluginEventPayloadSchema,
+}).strict();
+
+export const PluginWorkerEventJobSchema = PluginEventEnqueueSchema.extend({
+  schemaVersion: z.literal(1),
+  scope: z.literal("publication"),
+  publicationId: z.string().min(1).max(200),
+  pluginId: z.string().min(1).max(200),
+  manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+  pluginVersion: z.string().min(1).max(128),
+  artifactSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  traceparent: z.string().max(128).optional(),
+}).strict();
+
+export type PluginWorkerEventJob = z.infer<typeof PluginWorkerEventJobSchema>;
