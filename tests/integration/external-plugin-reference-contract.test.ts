@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { build } from "esbuild";
 import { resolve } from "node:path";
