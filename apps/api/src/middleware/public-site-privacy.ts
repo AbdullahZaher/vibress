@@ -14,7 +14,12 @@ export async function evaluatePublicSiteAccess(
     const settings = await loadSettings(publicationId);
     // Preserve legacy installations with no explicit security settings:
     // the existing Host policy defaults to public unless isPrivate is true.
-    if (settings.security?.isPrivate !== true) return "allowed";
+    const privacyFlag = settings.security?.isPrivate;
+    if (privacyFlag !== undefined && typeof privacyFlag !== "boolean") {
+      // Corrupt legacy rows must never accidentally turn a private site public.
+      return "unavailable";
+    }
+    if (privacyFlag !== true) return "allowed";
     return verifySiteAuthToken(siteCookie, secret, publicationId)
       ? "allowed" : "denied";
   } catch {
