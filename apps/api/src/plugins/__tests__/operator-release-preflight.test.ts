@@ -60,6 +60,24 @@ describe("EXT-404 operator package integrity preflight", () => {
     await expect(verifyTrustedPluginRelease(g.lock)).rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
   });
 
+  it("rejects invalid UTF-8 and NUL HTML even with a matching operator digest", async () => {
+    for (const bytes of [Buffer.from([0xc3, 0x28]), Buffer.from("bad\u0000html")]) {
+      const f = fixture();
+      fs.writeFileSync(f.asset, bytes);
+      const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+      lock.plugins[0].adminUiAssets[0].sha256 =
+        createHash("sha256").update(bytes).digest("hex");
+      fs.writeFileSync(f.lock, JSON.stringify(lock));
+      await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow();
+    }
+  });
+
+  it("rejects a changed or overlarge lockfile on read", async () => {
+    const f = fixture();
+    fs.appendFileSync(f.lock, " ".repeat(129 * 1024));
+    await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow("INVALID_LOCKFILE");
+  });
+
   it("rejects symlinked operator content even when bytes match", async () => {
     const f = fixture();
     const outside = path.join(f.dir, "elsewhere.html");
