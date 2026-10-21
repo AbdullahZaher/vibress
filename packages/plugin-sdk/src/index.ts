@@ -136,6 +136,19 @@ export interface PluginAdminNavigationItem {
   readonly permission: PluginAdminPermission;
 }
 
+/**
+ * EXT-302A: opt-in Host-rendered, public-only SSR contribution.
+ * The linked GET route must have no caller-defined query/body. No HTML, URL,
+ * React component or private/member principal is sent to the public Web app.
+ */
+export interface PluginPublicView {
+  /** One stable reserved /extensions/:pluginId/:viewId URL segment. */
+  readonly id: string;
+  /** Must resolve to this module's public GET route. */
+  readonly routeId: string;
+  readonly title: PluginAdminLocalizedLabel;
+}
+
 export interface PluginModule {
   activate(context: PluginContext): void | Promise<void>;
   /** Additive optional contribution: existing SDK v1 modules are unchanged. */
@@ -143,6 +156,8 @@ export interface PluginModule {
   /** Optional metadata only; never executable UI contributions. */
   readonly adminViews?: readonly PluginAdminView[] | undefined;
   readonly adminNavigation?: readonly PluginAdminNavigationItem[] | undefined;
+  /** Explicitly declared public SSR views; legacy modules remain unchanged. */
+  readonly publicViews?: readonly PluginPublicView[] | undefined;
   deactivate?(): void | Promise<void>;
   /** Third parameter is additive; bundled v1 handlers may ignore it. */
   onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
