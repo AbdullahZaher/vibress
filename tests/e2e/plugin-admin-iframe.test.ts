@@ -143,6 +143,40 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await expect(view.locator("output")).toContainText('"total": 9');
   });
 
+  test("unmounts an already loaded iframe when its linked Staff GET is revoked", async ({ page }) => {
+    await mockPluginNavigation(page);
+    const sample = await readFile(
+      path.join(process.cwd(), "docs/08-plugins/examples/isolated-courses.html"), "utf8",
+    );
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ src: ticketPath }),
+      }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/v1/course-list`,
+      (route) => route.fulfill({
+        status: 403, contentType: "application/json",
+        body: JSON.stringify({ errors: [{ code: "PERMISSION_DENIED" }] }),
+      }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
+      (route) => route.fulfill({
+        status: 200, contentType: "text/html; charset=utf-8",
+        headers: {
+          "content-security-policy":
+            "default-src 'none'; script-src 'unsafe-inline'; " +
+            "connect-src 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts",
+          "x-frame-options": "SAMEORIGIN",
+        },
+        body: sample,
+      }));
+    await login(page);
+    await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
+    const view = page.frameLocator('iframe[title="Courses"]');
+    await view.getByRole("button", { name: "Load courses" }).click();
+    await expect(page.locator('iframe[title="Courses"]')).toHaveCount(0);
+    await expect(page.getByRole("alert")).toBeVisible();
+  });
+
   test("preserves EXT-301A read-only fallback when no approved UI asset exists", async ({ page }) => {
     await mockPluginNavigation(page);
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
