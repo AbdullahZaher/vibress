@@ -8,7 +8,7 @@ import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
-import { pluginsService } from "../services";
+import { pluginsService, workspaceService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
   const res = await app.inject({
@@ -1455,6 +1455,60 @@ describe("Batch 12 — Platform Integration & Security", () => {
     } finally {
       prepared.mockRestore();
       resolved.mockRestore();
+    }
+  });
+
+  it("EXT-302A binds descriptor and data to the same authoritative hostname publication", async () => {
+    const hostContext = vi.spyOn(workspaceService, "resolvePublicPublicationContext")
+      .mockImplementation(async (options) => {
+        const publicationId = options.host?.startsWith("publication-b.")
+          ? "pub_b" : "pub_a";
+        return {
+          publicationId, workspaceId: "workspace_shared",
+          actorType: "public", isSystemOperation: false,
+        };
+      });
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { publication: "string" } },
+      handle: (_input, scope) => ({ publication: scope.publicationId }),
+    };
+    const pluginModule: PluginModule = {
+      activate() {}, routes: [route],
+      publicViews: [{
+        id: "courses", routeId: "catalog",
+        title: { en: "Courses", ar: "الدورات" },
+      }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(pluginModule);
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
+    try {
+      const a = await app.inject({
+        method: "GET", url, headers: { host: "publication-a.example" },
+      });
+      const b = await app.inject({
+        method: "GET", url, headers: { host: "publication-b.example" },
+      });
+      expect(a.statusCode).toBe(200);
+      expect(b.statusCode).toBe(200);
+      expect(a.json().publicationId).toBe("pub_a");
+      expect(b.json().publicationId).toBe("pub_b");
+      expect(a.json().data).toEqual({ publication: "pub_a" });
+      expect(b.json().data).toEqual({ publication: "pub_b" });
+      expect(resolve).toHaveBeenCalledWith(
+        "independent-courses", "pub_a", "extension.routes.public",
+      );
+      expect(resolve).toHaveBeenCalledWith(
+        "independent-courses", "pub_b", "extension.routes.public",
+      );
+      expect(prepare).toHaveBeenCalledTimes(2);
+    } finally {
+      prepare.mockRestore();
+      resolve.mockRestore();
+      hostContext.mockRestore();
     }
   });
 
