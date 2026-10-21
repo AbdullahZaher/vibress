@@ -644,7 +644,11 @@ describe("PluginsService", () => {
     await service.setPublicationSettings("p1", "pub-a", {
       apiToken: "secret-in-publication-a",
       displayName: "Course A",
-    });
+    }, { actorUserId: "operator-id", requestId: "request-123" });
+    expect(scopeRepository.setMany).toHaveBeenCalledWith(
+      "p1", "pub-a", expect.any(Array),
+      { actorUserId: "operator-id", requestId: "request-123" },
+    );
     const recorded = encryptedByScope.get("p1:pub-a");
     expect(recorded?.find((entry) => entry.key === "apiToken")?.value).toBeNull();
     expect(recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue)
