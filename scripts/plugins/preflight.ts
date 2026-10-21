@@ -1,6 +1,6 @@
 import { verifyTrustedPluginRelease } from "../../apps/api/src/plugins/operator-release-preflight";
 
-/** Run separately on every API/Worker replica before a rolling deployment.
+/** Run on every API replica using its own mounted trusted release before deployment.
  * Nothing is imported/executed from the untrusted artifact paths. */
 async function main() {
   const lockfile = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
