@@ -461,6 +461,12 @@ importers:
 
   apps/worker:
     dependencies:
+      '@vibress/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@vibress/plugins':
+        specifier: workspace:*
+        version: link:../../packages/domains/plugins
       '@vibress/analytics':
         specifier: workspace:*
         version: link:../../packages/domains/analytics
@@ -1086,6 +1092,9 @@ importers:
 
   packages/domains/plugins:
     dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
       '@vibress/database':
         specifier: workspace:*
         version: link:../../database
