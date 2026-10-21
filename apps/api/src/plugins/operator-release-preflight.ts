@@ -4,6 +4,7 @@ import path from "node:path";
 import { parseTrustedPluginLockfile } from "./trusted-external-plugin-host";
 import { readTrustedPluginLockfile } from "./trusted-release-attestation";
 
+const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_HTML_BYTES = 256 * 1024;
 
@@ -19,6 +20,13 @@ export interface VerifiedExternalRelease {
 export async function verifyTrustedPluginRelease(
   lockfilePath: string,
 ): Promise<readonly VerifiedExternalRelease[]> {
+  // Preserve the existing operator CLI error contract while the shared reader
+  // independently rechecks bytes, signature, and size before admission.
+  if (!path.isAbsolute(lockfilePath)) throw new Error("INVALID_LOCKFILE_PATH");
+  const info = await lstat(lockfilePath);
+  if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_LOCKFILE_BYTES) {
+    throw new Error("INVALID_LOCKFILE");
+  }
   const input = await readTrustedPluginLockfile(lockfilePath);
   const admitted = parseTrustedPluginLockfile(input);
   const root = await realpath(path.dirname(lockfilePath));
