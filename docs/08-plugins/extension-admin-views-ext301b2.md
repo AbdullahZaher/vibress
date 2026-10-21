@@ -39,7 +39,7 @@ The Admin first sends an authenticated, Origin-validated `POST /api/admin/v1/ext
 
 The response is a **Host-generated relative frame URL**. The ticket is a cryptographically random, single-use 256-bit value stored in shared Redis for **45 seconds**. Its server-only record binds the issuing Staff ID, hash of the current Staff session token, authoritative publication ID, plugin/view ID and document SHA-256.
 
-The iframe navigates to `GET /api/admin/v1/extensions/:pluginId/views/:viewId/frame?ticket=...`. This GET **atomically consumes** the ticket via Redis GETDEL, re-resolves the actual Staff session, membership, publication-local role and permissions, checks plugin enablement and view registration again and reads the pinned bytes again. A changed artifact hash, revoked permission, invalid/expired/used ticket, unavailable Redis, or disabled plugin fails closed. Different API replicas share ticket state through Redis. The browser never sends an unverified publication query parameter.
+The iframe navigates to `GET /api/admin/v1/extensions/:pluginId/views/:viewId/frame?ticket=...`. This GET **atomically consumes** the ticket via Redis GETDEL, re-resolves the actual Staff session **by the SHA-256 hash stored on the server** (without requiring the iframe's SameSite cookie), membership, publication-local role and permissions, checks plugin enablement and view registration again and reads the pinned bytes again. A changed artifact hash, revoked or logged-out Staff session, revoked permission, invalid/expired/used ticket, unavailable Redis, or disabled plugin fails closed. Different API replicas share ticket state through Redis. The browser never sends an unverified publication query parameter.
 
 Only the frame response has `Content-Type: text/html` and the special CSP:
 
@@ -55,6 +55,31 @@ The Admin additionally uses `iframe sandbox="allow-scripts"` **without `allow-sa
 
 An absent optional asset returns 404 to the ticket request and the Admin falls back to the existing EXT-301A Host-rendered, read-only view. Other failures do not fall back to plugin HTML or grant broader permissions. On publication changes, the embedded frame is removed and a new authorization is requested.
 
-**Security boundary / current limitations:** There is **no parent-iframe message/API bridge**, member access, network fetch, cross-origin resources, parent DOM access, top-level navigation or credential forwarding. This allows self-contained, operator-reviewed interactive widgets (e.g. toggles and local-only calculations), **not** LMS data management yet. Keep all privileged data/actions in Host-authorized Admin routes until a separately reviewed, typed, capability-limited bridge is delivered. No new npm/ZIP install or untrusted plugin sandbox is claimed.
+## Read-only, typed MessagePort bridge
+
+When an approved document has finished loading, the Admin shell transfers an ephemeral `MessagePort` using `window.postMessage`. The **only** available capability is `linked-view.read`, which requests the exact **GET** route linked to the current, admitted EXT-301A view. The plugin cannot choose an HTTP method, URL, route ID, publication, request body or headers.
+
+```js
+window.addEventListener("message", (event) => {
+  if (event.source !== window.parent ||
+      event.data?.type !== "vibress:extension:connect" ||
+      event.data?.version !== 1 || event.ports.length !== 1) return;
+  const port = event.ports[0];
+  port.onmessage = ({ data }) => {
+    if (data?.type !== "vibress:extension:response") return;
+    // Render response scalar fields using textContent, never innerHTML.
+    if (data.ok) document.querySelector("output").textContent = JSON.stringify(data.data);
+  };
+  port.postMessage({
+    type: "vibress:extension:read", version: 1, requestId: "summary-1",
+  });
+});
+```
+
+The Host rejects messages with unknown fields (including caller-chosen tenant IDs and URLs), limits outstanding requests (4) and read attempts (30/minute), rejects duplicate request IDs, and closes the port on route changes or frame teardown. The Admin's existing API client sends the current Host-selected publication; the API performs independent Staff and publication-local permission checks and validates scalar responses. Exceptions are reduced to generic error codes and never leak tokens or private URLs through the port. A navigated iframe is removed instead of receiving a fresh port.
+
+A complete, standalone, Arabic/English keyboard-accessible HTML example is provided in [examples/isolated-courses.html](examples/isolated-courses.html). Operators must build and hash the final **single HTML file**, pin it separately in `adminUiAssets`, and deploy identical approved bytes on all API replicas.
+
+**Current limitations:** The bridge is **read-only**. No arbitrary API proxy, POST/CRUD bridge, member access, secrets, cookies or credentials are available to plugin HTML. A future, explicitly reviewed write capability must be a separate SDK/permission contract with test coverage and auditability. CSP blocks normal fetch/XHR and external subresources; opaque-origin sandboxing blocks parent DOM access and top-level navigation. However, browser support for restricting *self-navigation* is not uniform, so **operator review of executable HTML remains mandatory**; do not treat this iframe as a hardened sandbox for arbitrary hostile code. No runtime npm/ZIP installation or untrusted Node plugin sandboxing is claimed.
 
 **Before production rollout**: pass CI and complete a real browser E2E/staging drill using an independently built approved HTML fixture, verify CSP and header precedence through supported reverse proxies, keyboard focus/RTL, session switch/logout, multi-replica tickets, and plugin disable/artifact rotation. CSP is intentionally locked down; do not loosen it to make arbitrary imported assets work.
