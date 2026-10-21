@@ -23,11 +23,21 @@ const approvedModelSchema = z.object({
   schemaSha256: z.string().regex(/^[a-f0-9]{64}$/),
   columns: z.array(approvedColumnSchema).min(1).max(24),
 }).strict();
+/** EXT-301B1: opt-in, operator-pinned single-file HTML UI artifacts.
+ * This approves bytes only; it does NOT make them executable in Studio.
+ */
+const approvedAdminUiAssetSchema = z.object({
+  viewId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  // No schemes, absolute paths, dot segments, query strings or backslashes.
+  path: z.string().max(240).regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.html$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+}).strict();
 const pinnedPluginSchema = z.object({
   manifest: z.unknown(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
   // Optional operator-reviewed descriptors; legacy lockfiles stay valid.
   storageModels: z.array(approvedModelSchema).max(16).optional(),
+  adminUiAssets: z.array(approvedAdminUiAssetSchema).max(8).optional(),
 }).strict();
 const lockfileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -36,11 +46,17 @@ const lockfileSchema = z.object({
 
 const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
+const MAX_ADMIN_UI_ASSET_BYTES = 256 * 1024;
 
 type PinnedPlugin = {
   manifest: PluginManifest;
   sha256: string;
   storageModels: readonly ApprovedPluginPhysicalModel[];
+  adminUiAssets: readonly {
+    viewId: string;
+    path: string;
+    sha256: string;
+  }[];
 };
 
 export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, PinnedPlugin> {
@@ -64,8 +80,24 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
           capability === "extension.storage.read" || capability === "extension.storage.write")) {
       throw new Error("Approved storage models require declared storage capability");
     }
+    const adminUiAssets = entry.adminUiAssets ?? [];
+    if (adminUiAssets.length > 0 &&
+        (!manifest.capabilities.includes("admin.navigation") ||
+         !manifest.capabilities.includes("extension.routes.admin"))) {
+      throw new Error("Approved Admin UI assets require declared Admin route and navigation capabilities");
+    }
+    const viewIds = new Set<string>();
+    const assetPaths = new Set<string>();
+    for (const asset of adminUiAssets) {
+      if (viewIds.has(asset.viewId) || assetPaths.has(asset.path)) {
+        throw new Error("Duplicate approved Admin UI view ID or asset path");
+      }
+      viewIds.add(asset.viewId);
+      assetPaths.add(asset.path);
+    }
     result.set(manifest.id, {
       manifest, sha256: entry.sha256.toLowerCase(), storageModels,
+      adminUiAssets: adminUiAssets.map((asset) => ({ ...asset, sha256: asset.sha256.toLowerCase() })),
     });
   }
   return result;
@@ -158,6 +190,58 @@ export class TrustedExternalPluginHost {
       key: model.key, schemaSha256: model.schemaSha256,
       columns: model.columns.map((column) => ({ ...column })),
     }));
+  }
+
+  /**
+   * EXT-301B1: read only bytes separately pinned in the operator lockfile.
+   * No HTTP/browser exposure is granted by this method. A future route must
+   * recheck Staff authorization, publication enablement and view admission;
+   * the renderer must use an opaque-origin sandbox and restrictive CSP.
+   * Every read rechecks the on-disk SHA-256 to reject tampering and stale nodes.
+   */
+  async readApprovedAdminUiAsset(plugin: Plugin, viewId: string): Promise<string | null> {
+    if (!this.lockfilePath) return null;
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(viewId)) {
+      throw new Error("Invalid Admin UI view identifier");
+    }
+    if (!path.isAbsolute(this.lockfilePath)) {
+      throw new Error("Trusted plugin lockfile must use an absolute path");
+    }
+    const lockfileStats = await lstat(this.lockfilePath);
+    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
+        lockfileStats.size > MAX_LOCKFILE_BYTES) {
+      throw new Error("Invalid trusted plugin lockfile");
+    }
+    const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const approved = parseTrustedPluginLockfile(json).get(plugin.manifestId);
+    if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
+      throw new Error("Installed plugin differs from operator-approved Admin UI manifest");
+    }
+    const asset = approved.adminUiAssets.find((item) => item.viewId === viewId);
+    if (!asset) return null;
+
+    const root = await realpath(path.dirname(this.lockfilePath));
+    const assetPath = path.resolve(root, asset.path);
+    const canonical = await realpath(assetPath);
+    if (!canonical.startsWith(root + path.sep)) {
+      throw new Error("Approved Admin UI asset escapes its operator directory");
+    }
+    const fileInfo = await lstat(assetPath);
+    const canonicalInfo = await stat(canonical);
+    if (fileInfo.isSymbolicLink() || !fileInfo.isFile() ||
+        !canonicalInfo.isFile() || fileInfo.size > MAX_ADMIN_UI_ASSET_BYTES ||
+        canonicalInfo.size > MAX_ADMIN_UI_ASSET_BYTES) {
+      throw new Error("Approved Admin UI asset is not a bounded regular file");
+    }
+    const bytes = await readFile(canonical);
+    if (bytes.length > MAX_ADMIN_UI_ASSET_BYTES) {
+      throw new Error("Approved Admin UI asset exceeds size limit");
+    }
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (digest !== asset.sha256) throw new Error("Approved Admin UI asset checksum mismatch");
+    const document = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (document.includes("\u0000")) throw new Error("Invalid Admin UI document");
+    return document;
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {

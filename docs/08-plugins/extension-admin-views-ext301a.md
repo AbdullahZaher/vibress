@@ -95,6 +95,8 @@ keys/values obtained from the existing Host-authenticated Admin extension API:
 Interactive independently built Studio bundles, version/hash-addressed assets,
 CSP and source integrity, multi-node asset admission, full invalidation across
 replicas, SDK independent consumer conformance, and dedicated E2E tests are
-**not implemented by this first increment**. Do not deploy external executable
+**not implemented by this first increment**. The next [EXT-301B1](extension-admin-views-ext301b1.md)
+increment covers only the operator-pinned asset validation foundation.
+Do not deploy external executable
 Admin assets under this read-only contract. These remain required before declaring
 EXT-301 or the full external extension platform complete.

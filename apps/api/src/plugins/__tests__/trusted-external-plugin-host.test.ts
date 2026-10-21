@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
@@ -44,6 +44,34 @@ async function fixture() {
   }));
   return { dir, moduleFile, lockfile };
 }
+/** A separately pinned, independently built Admin HTML asset. */
+async function approvedAdminUiFixture() {
+  const f = await fixture();
+  const manifestWithUi = {
+    ...manifest, capabilities: ["admin.navigation", "extension.routes.admin"],
+  };
+  const assetPath = path.join(f.dir, "dist", "admin", "courses.html");
+  await mkdir(path.dirname(assetPath), { recursive: true });
+  const html = '<main lang="ar" dir="rtl"><button type="button">دورات</button></main>';
+  await writeFile(assetPath, html, "utf8");
+  const lockfileData = {
+    schemaVersion: 1,
+    plugins: [{
+      manifest: manifestWithUi,
+      sha256: createHash("sha256").update(await readFile(f.moduleFile)).digest("hex"),
+      adminUiAssets: [{
+        viewId: "courses", path: "dist/admin/courses.html",
+        sha256: createHash("sha256").update(html).digest("hex"),
+      }],
+    }],
+  };
+  await writeFile(f.lockfile, JSON.stringify(lockfileData));
+  return {
+    ...f, html, assetPath, lockfileData,
+    installed: plugin({ capabilities: manifestWithUi.capabilities }),
+  };
+}
+
 describe("TrustedExternalPluginHost", () => {
   it("preserves bundled-only defaults when opt-in is absent", async () => {
     expect(await new TrustedExternalPluginHost("").loadModule(plugin())).toBeNull();
@@ -151,5 +179,99 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     expect(await host.getApprovedStorageModels(plugin())).toEqual([]);
     expect(await host.listTrustedManifests()).toHaveLength(1);
+  });
+});
+
+describe("EXT-301B1 operator-pinned Admin UI asset admission", () => {
+  it("keeps all legacy lockfiles valid and returns no asset when not approved", async () => {
+    const f = await fixture();
+    expect(await new TrustedExternalPluginHost(f.lockfile)
+      .readApprovedAdminUiAsset(plugin(), "courses")).toBeNull();
+    expect(parseTrustedPluginLockfile({
+      schemaVersion: 1,
+      plugins: [{ manifest, sha256: "a".repeat(64) }],
+    }).get(manifest.id)?.adminUiAssets).toEqual([]);
+  });
+
+  it("verifies separately pinned HTML bytes on every read, preserving UTF-8 and RTL", async () => {
+    const f = await approvedAdminUiFixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    expect(await host.readApprovedAdminUiAsset(f.installed, "courses")).toBe(f.html);
+    expect(await host.readApprovedAdminUiAsset(f.installed, "missing")).toBeNull();
+    await writeFile(f.assetPath, "<h1>modified</h1>");
+    await expect(host.readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow(/checksum mismatch/);
+  });
+
+  it("rejects unexpected plugin metadata and malformed view identifiers", async () => {
+    const f = await approvedAdminUiFixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    await expect(host.readApprovedAdminUiAsset(plugin(), "courses"))
+      .rejects.toThrow(/operator-approved Admin UI manifest/);
+    await expect(host.readApprovedAdminUiAsset(f.installed, "../courses"))
+      .rejects.toThrow(/identifier/);
+  });
+
+  it("rejects duplicate IDs, duplicate files, missing capabilities, and unsafe paths", async () => {
+    const f = await approvedAdminUiFixture();
+    const entry = f.lockfileData.plugins[0]!;
+    const asset = entry.adminUiAssets[0]!;
+    const parseAssets = (assets: unknown, capabilities = entry.manifest.capabilities) =>
+      parseTrustedPluginLockfile({
+        schemaVersion: 1,
+        plugins: [{ ...entry, manifest: { ...entry.manifest, capabilities }, adminUiAssets: assets }],
+      });
+    expect(() => parseAssets([asset, asset])).toThrow(/Duplicate/);
+    expect(() => parseAssets([asset, { ...asset, viewId: "extra" }])).toThrow(/Duplicate/);
+    expect(() => parseAssets([asset], ["events.subscribe"])).toThrow(/capabilities/);
+    for (const unsafe of ["../escape.html", "/absolute.html", "https://evil.test/x.html",
+      "dir\\\\escape.html", "dist/./x.html", "ui.mjs", "a.html?x=1"]) {
+      expect(() => parseAssets([{ ...asset, path: unsafe }])).toThrow();
+    }
+    expect(() => parseAssets([{ ...asset, sha256: "invalid" }])).toThrow();
+    expect(() => parseAssets(Array.from({ length: 9 }, (_, i) => ({
+      ...asset, viewId: `item-${i}`, path: `dist/item-${i}.html`,
+    })))).toThrow();
+  });
+
+  it("rejects symbolic-link targets, directory escapes, and oversized HTML assets", async () => {
+    const f = await approvedAdminUiFixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    const target = path.join(f.dir, "trusted-copy.html");
+    await writeFile(target, f.html);
+    await rm(f.assetPath);
+    await symlink(target, f.assetPath);
+    await expect(host.readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow(/regular file/);
+
+    await rm(f.assetPath);
+    await writeFile(f.assetPath, "x".repeat(256 * 1024 + 1));
+    await expect(host.readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow(/regular file/);
+
+    const outside = await mkdtemp(path.join(os.tmpdir(), "vibress-external-ui-"));
+    dirs.push(outside);
+    await writeFile(path.join(outside, "courses.html"), f.html);
+    await rm(path.dirname(f.assetPath), { recursive: true });
+    await symlink(outside, path.dirname(f.assetPath));
+    await expect(host.readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow(/escapes/);
+  });
+
+  it("rejects binary HTML and opt-in artifacts from symlinked lockfiles", async () => {
+    const f = await approvedAdminUiFixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    const bytes = Buffer.from([0xc3, 0x28]);
+    await writeFile(f.assetPath, bytes);
+    f.lockfileData.plugins[0]!.adminUiAssets[0]!.sha256 =
+      createHash("sha256").update(bytes).digest("hex");
+    await writeFile(f.lockfile, JSON.stringify(f.lockfileData));
+    await expect(host.readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow();
+    const symlinked = path.join(f.dir, "linked-lockfile.json");
+    await symlink(f.lockfile, symlinked);
+    await expect(new TrustedExternalPluginHost(symlinked)
+      .readApprovedAdminUiAsset(f.installed, "courses"))
+      .rejects.toThrow(/lockfile/);
   });
 });
