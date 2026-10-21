@@ -9,6 +9,7 @@ import type {
   ThemeManifest,
   ThemeSettingsSchema,
   ThemeSiteSettings,
+  ThemeExtensionViewModel,
 } from "@vibress/theme-core";
 
 export interface ThemePagination {
