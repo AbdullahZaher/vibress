@@ -685,6 +685,11 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await app.inject({
         method: "GET", url: third.json().src, headers: { cookie: staffCookie },
       })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${pluginId}/views/courses/frame-status`,
+        headers: { cookie: staffCookie },
+      })).statusCode).toBe(404);
     } finally {
       read.mockRestore();
       resolve.mockRestore();
