@@ -30,3 +30,31 @@ An interactive iframe requires an independently reviewed **opaque-origin documen
 - When introducing the browser renderer, add focused E2E tests for CSP, locale/RTL, keyboard navigation, fail-closed disable/rotation, same-origin/cookie isolation, and multi-replica release parity before production rollout.
 
 See [EXT-301B1](extension-admin-views-ext301b1.md) and the [accepted implementation roadmap](external-extensions-roadmap.md).
+
+## EXT-301B2B — Opaque-origin interactive iframe (October 2026)
+
+The Host now supports an **optional, separately pinned, self-contained HTML document** for a previously admitted EXT-301A view. No untrusted JavaScript is mounted into the parent Admin document.
+
+The Admin first sends an authenticated, Origin-validated `POST /api/admin/v1/extensions/:pluginId/views/:viewId/frame-ticket` with the existing Host-validated active publication header. Before issuing a ticket, the server checks Staff session, both global and publication-local Staff permissions, plugin admission/status/enablement, linked view ID and separately verified operator-pinned asset bytes.
+
+The response is a **Host-generated relative frame URL**. The ticket is a cryptographically random, single-use 256-bit value stored in shared Redis for **45 seconds**. Its server-only record binds the issuing Staff ID, hash of the current Staff session token, authoritative publication ID, plugin/view ID and document SHA-256.
+
+The iframe navigates to `GET /api/admin/v1/extensions/:pluginId/views/:viewId/frame?ticket=...`. This GET **atomically consumes** the ticket via Redis GETDEL, re-resolves the actual Staff session, membership, publication-local role and permissions, checks plugin enablement and view registration again and reads the pinned bytes again. A changed artifact hash, revoked permission, invalid/expired/used ticket, unavailable Redis, or disabled plugin fails closed. Different API replicas share ticket state through Redis. The browser never sends an unverified publication query parameter.
+
+Only the frame response has `Content-Type: text/html` and the special CSP:
+
+```
+default-src 'none'; script-src 'unsafe-inline'; script-src-attr 'none';
+style-src 'unsafe-inline'; img-src data:; connect-src 'none';
+font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none';
+object-src 'none'; base-uri 'none'; form-action 'none';
+frame-ancestors 'self'; sandbox allow-scripts
+```
+
+The Admin additionally uses `iframe sandbox="allow-scripts"` **without `allow-same-origin`**, `referrerPolicy="no-referrer"`, accessible localized title and a responsive bounding frame. The response applies `Cache-Control: private, no-store`, no-referrer, nosniff, same-origin frame ancestor restriction, and a denied Permissions-Policy for sensitive browser APIs. Scripts are inline only inside the **opaque-origin** document, not the parent Admin.
+
+An absent optional asset returns 404 to the ticket request and the Admin falls back to the existing EXT-301A Host-rendered, read-only view. Other failures do not fall back to plugin HTML or grant broader permissions. On publication changes, the embedded frame is removed and a new authorization is requested.
+
+**Security boundary / current limitations:** There is **no parent-iframe message/API bridge**, member access, network fetch, cross-origin resources, parent DOM access, top-level navigation or credential forwarding. This allows self-contained, operator-reviewed interactive widgets (e.g. toggles and local-only calculations), **not** LMS data management yet. Keep all privileged data/actions in Host-authorized Admin routes until a separately reviewed, typed, capability-limited bridge is delivered. No new npm/ZIP install or untrusted plugin sandbox is claimed.
+
+**Before production rollout**: pass CI and complete a real browser E2E/staging drill using an independently built approved HTML fixture, verify CSP and header precedence through supported reverse proxies, keyboard focus/RTL, session switch/logout, multi-replica tickets, and plugin disable/artifact rotation. CSP is intentionally locked down; do not loosen it to make arbitrary imported assets work.
