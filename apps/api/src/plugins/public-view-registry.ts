@@ -8,6 +8,7 @@ export interface AdmittedPublicView {
   readonly viewId: string;
   readonly routeId: string;
   readonly title: { readonly en: string; readonly ar: string };
+  readonly publishedLocales?: readonly string[] | undefined;
 }
 
 /**
@@ -41,6 +42,11 @@ export function admitPublicViews(module: PluginModule): readonly AdmittedPublicV
     const parsed = ExtensionPublicViewSchema.safeParse(raw);
     if (!parsed.success || seen.has(parsed.data.id) ||
         !parsed.data.title.en.trim() || !parsed.data.title.ar.trim()) return null;
+    const locales = parsed.data.publishedLocales;
+    if (locales && (
+      locales.length === 0 ||
+      new Set(locales.map((locale) => locale.toLowerCase())).size !== locales.length
+    )) return null;
     const linked = module.routes.filter((route) =>
       route.audience === "public" && route.method === "GET" &&
       route.id === parsed.data.routeId && route.query === undefined &&
@@ -50,6 +56,7 @@ export function admitPublicViews(module: PluginModule): readonly AdmittedPublicV
     result.push({
       viewId: parsed.data.id, routeId: parsed.data.routeId,
       title: parsed.data.title,
+      ...(locales ? { publishedLocales: locales } : {}),
     });
   }
   return result;
