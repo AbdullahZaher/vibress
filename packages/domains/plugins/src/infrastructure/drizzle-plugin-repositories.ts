@@ -7,6 +7,7 @@ import {
   pluginPublicationStates,
   pluginPublicationSettings,
   pluginSchemaMigrations,
+  auditEvents,
 } from "@vibress/database";
 import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -19,6 +20,7 @@ import {
   PluginStatus,
   PluginPublicationStateRepository,
   PluginPublicationSettingRepository,
+  type PluginSettingAuditContext,
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
@@ -275,6 +277,7 @@ export class DrizzlePluginPublicationSettingRepository
       encryptedValue: string | null;
       isSecret: boolean;
     }>,
+    audit?: PluginSettingAuditContext,
   ): Promise<void> {
     await getDb().transaction(async (tx) => {
       for (const { key, value, encryptedValue, isSecret } of entries) {
@@ -296,6 +299,23 @@ export class DrizzlePluginPublicationSettingRepository
             ],
             set: { value, encryptedValue, isSecret, updatedAt: new Date() },
           });
+      }
+      if (audit) {
+        // Audit and ciphertext writes commit atomically. No plaintext,
+        // ciphertext or secret key names enter the audit metadata.
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(),
+          publicationId,
+          actorUserId: audit.actorUserId,
+          requestId: audit.requestId,
+          action: "plugin.publication_settings_updated",
+          targetType: "plugin",
+          targetId: pluginId,
+          metadata: {
+            updatedSettingCount: entries.length,
+            replacedSecretCount: entries.filter((entry) => entry.isSecret).length,
+          },
+        });
       }
     });
   }
