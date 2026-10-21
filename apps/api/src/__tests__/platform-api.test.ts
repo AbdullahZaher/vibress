@@ -1371,6 +1371,73 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("EXT-302A resolves only explicitly linked, enabled public SSR views", async () => {
+    const descriptor: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { title: "string", total: "number" } },
+      handle: () => ({ title: "Public courses", total: 3 }),
+    };
+    const title = { en: "Courses", ar: "الدورات" };
+    const module: PluginModule = {
+      activate() {},
+      routes: [descriptor],
+      publicViews: [{ id: "courses", routeId: "catalog", title }],
+    };
+    const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const url = "/api/content/v1/extensions/independent-courses/views/courses";
+    try {
+      const valid = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.headers["cache-control"]).toBe("private, no-store");
+      expect(valid.json()).toEqual({
+        pluginId: "independent-courses", viewId: "courses",
+        routeId: "catalog", title,
+      });
+      expect(prepared).not.toHaveBeenCalled();
+      const scalar = await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/v1/catalog",
+        headers: { host: "localhost:7777" },
+      });
+      expect(scalar.statusCode).toBe(200);
+      expect(scalar.json()).toEqual({ title: "Public courses", total: 3 });
+
+      expect((await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/views/unknown",
+        headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET",
+        url: "/api/content/v1/extensions/independent-courses/views/%2e%2e",
+        headers: { host: "localhost:7777" },
+      })).statusCode).not.toBe(200);
+
+      resolved.mockResolvedValue({ ...module, publicViews: undefined });
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+
+      resolved.mockResolvedValue({ ...module, routes: [{ ...descriptor, audience: "member" }] });
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(503);
+
+      resolved.mockResolvedValue(null);
+      expect((await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+    } finally {
+      prepared.mockRestore();
+      resolved.mockRestore();
+    }
+  });
+
   it("public extension API is GET-only, host-scoped and validates response projection", async () => {
     const handler = vi.fn(async () => ({ title: "Available courses" }));
     const descriptor: PluginApiRoute = {
