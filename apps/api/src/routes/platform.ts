@@ -692,6 +692,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         await pluginsService.setPublicationSettings(
           params.data.id, publicationId, body.data.settings,
+          { actorUserId: req.user!.id, requestId: req.id },
         );
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
