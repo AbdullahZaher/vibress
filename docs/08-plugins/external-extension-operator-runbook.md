@@ -14,6 +14,35 @@ install from arbitrary publishers. A trusted plugin installed globally is
    HTML document. Pin them in a `schemaVersion: 1` operator lockfile.
    Keep the lockfile outside writable upload paths and protect it from
    non-operator modifications. Never embed secrets into artifacts.
+### Docker production: opt-in verified release mount
+
+`compose.plugins.yml` is an optional override. Keep the operator approval
+directory outside CMS content and upload mounts. It must be readable by the
+non-root API process and contain `trusted-plugins.json`, `operator.sig`,
+`operator-public.pem`, and its reviewed artifact subdirectories. Never
+include the Ed25519 private key.
+
+```bash
+export VIBRESS_PLUGIN_RELEASE_DIR=/srv/vibress/operator-plugins
+docker compose -f compose.prod.yml -f compose.plugins.yml build api
+docker compose -f compose.prod.yml -f compose.plugins.yml \\
+  run --rm --no-deps --entrypoint node api dist/plugins-preflight.js
+# Only after the preflight passes on every intended replica:
+docker compose -f compose.prod.yml -f compose.plugins.yml up -d
+```
+
+The standalone preflight is bundled into the production API image. The API
+startup also fails before opening its listener when the approved lockfile,
+signature, bundle or Admin UI bytes are invalid. Runtime admission re-verifies
+the lockfile signature and executable artifact checksum. Do not use the normal
+`compose.prod.yml` alone for a deployment intended to enforce signatures,
+because that file deliberately has no operator-controlled plugin mount.
+
+The override is not a backup: take and retain a matching operator-controlled
+snapshot of the approved bytes, public key and signature separately from the
+database and content backups. Verify the matching snapshot before rolling back.
+The private signing key requires separate secure offline custody.
+
 ### Optional signed release approval (EXT-404, additive)
 
 For deployments requiring an independently authenticated operator approval,
