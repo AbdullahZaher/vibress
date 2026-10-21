@@ -71,6 +71,21 @@ export class PluginsService {
     return `${plugin.id}:${plugin.version}:${plugin.entrypoint}`;
   }
 
+  /** A queued or in-flight event cannot inherit a replacement package or
+   * capabilities after local initialization. Compare the complete immutable
+   * admission snapshot, not just the plugin's status. */
+  private sameExecutionRelease(snapshot: Plugin, current: Plugin): boolean {
+    return current.status === "active" &&
+      current.id === snapshot.id &&
+      current.manifestId === snapshot.manifestId &&
+      current.version === snapshot.version &&
+      current.entrypoint === snapshot.entrypoint &&
+      current.vibressApiVersion === snapshot.vibressApiVersion &&
+      isDeepStrictEqual(current.capabilities, snapshot.capabilities) &&
+      isDeepStrictEqual(current.hooks, snapshot.hooks) &&
+      isDeepStrictEqual(current.settingsSchema, snapshot.settingsSchema);
+  }
+
   private async activationContext(plugin: Plugin): Promise<PluginContext> {
     const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
     const settings = publicationScoped ? {} : await this.loadPlainSettings(plugin.id);
@@ -315,8 +330,11 @@ export class PluginsService {
 
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (latest?.status !== "active") {
-      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    if (!latest || !this.sameExecutionRelease(plugin, latest)) {
+      throw new PluginDomainError(
+        "PLUGIN_RELEASE_CHANGED",
+        "Plugin release or authorization changed during event admission",
+      );
     }
     await this.requirePublicationEnabled(latest, publicationId);
     // Legacy v1 executeHook keeps passing the literal hook name. Named events
@@ -383,8 +401,11 @@ export class PluginsService {
     }
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (latest?.status !== "active") {
-      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    if (!latest || !this.sameExecutionRelease(plugin, latest)) {
+      throw new PluginDomainError(
+        "PLUGIN_RELEASE_CHANGED",
+        "Plugin release or authorization changed during event admission",
+      );
     }
     await this.requirePublicationEnabled(latest, publicationId);
     await module.onEvent(eventName, payload, context);
