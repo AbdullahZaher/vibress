@@ -640,6 +640,22 @@ describe("Batch 12 — Platform Integration & Security", () => {
         headers: { cookie: anotherStaffCookie },
       })).statusCode).toBe(401);
 
+      // A valid one-time ticket cannot revive a logged-out Staff session.
+      const temporaryCookie = await loginStaff(app);
+      const temporary = await app.inject({
+        method: "POST", url,
+        headers: { cookie: temporaryCookie, origin: "http://localhost:7777" },
+      });
+      expect(temporary.statusCode).toBe(200);
+      const logout = await app.inject({
+        method: "POST", url: "/api/admin/v1/auth/logout",
+        headers: { cookie: temporaryCookie, origin: "http://localhost:7777" },
+      });
+      expect(logout.statusCode).toBe(200);
+      expect((await app.inject({
+        method: "GET", url: temporary.json().src,
+      })).statusCode).toBe(401);
+
       const second = await issue();
       read.mockResolvedValue("<main>Version B</main>");
       expect((await app.inject({
