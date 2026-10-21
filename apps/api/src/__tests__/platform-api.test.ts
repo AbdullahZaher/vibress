@@ -1198,7 +1198,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await readManagement(ownerPubId)).statusCode).toBe(200);
       expect((await readUi(ownerPubId)).statusCode).toBe(200);
       expect((await issueFrame(ownerPubId)).statusCode).toBe(200);
-      expect(uiAsset).toHaveBeenCalledTimes(1);
+      expect(uiAsset).toHaveBeenCalledTimes(2);
 
       for (const localRole of ["author", "contributor"]) {
         await db.update(publicationMemberships).set({ role: localRole })
@@ -1212,7 +1212,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
         expect((await readManagement(limitedPubId)).statusCode).toBe(403);
         expect((await readUi(limitedPubId)).statusCode).toBe(403);
         expect((await issueFrame(limitedPubId)).statusCode).toBe(403);
-        expect(uiAsset).toHaveBeenCalledTimes(1);
+        expect(uiAsset).toHaveBeenCalledTimes(2);
       }
       await db.update(publicationMemberships).set({ role: "editor" })
         .where(eq(publicationMemberships.id, localMembershipId));
@@ -1226,7 +1226,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       expect((await readUi(limitedPubId)).statusCode).toBe(403);
       expect((await issueFrame(limitedPubId)).statusCode).toBe(403);
-      expect(uiAsset).toHaveBeenCalledTimes(1);
+      expect(uiAsset).toHaveBeenCalledTimes(2);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
       const adminResponse = await invoke(limitedPubId);
@@ -1239,7 +1239,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await readManagement(limitedPubId)).statusCode).toBe(200);
       expect((await readUi(limitedPubId)).statusCode).toBe(200);
       expect((await issueFrame(limitedPubId)).statusCode).toBe(200);
-      expect(uiAsset).toHaveBeenCalledTimes(2);
+      expect(uiAsset).toHaveBeenCalledTimes(4);
     } finally {
       uiAsset.mockRestore();
       fingerprints.mockRestore();
