@@ -57,6 +57,24 @@ describe("EXT-302A public Host view admission", () => {
     expect(admitPublicViews(moduleWith({ publicViews: [] }))).toBeNull();
   });
 
+  it("admits only explicitly published, unique locale variants", () => {
+    expect(admitPublicViews(moduleWith({
+      publicViews: [{ ...publicView, publishedLocales: ["en", "ar"] }],
+    }))).toEqual([{
+      viewId: "courses", routeId: "catalog", title: publicView.title,
+      publishedLocales: ["en", "ar"],
+    }]);
+    expect(admitPublicViews(moduleWith({
+      publicViews: [{ ...publicView, publishedLocales: ["en", "EN"] }],
+    }))).toBeNull();
+    expect(admitPublicViews(moduleWith({
+      publicViews: [{ ...publicView, publishedLocales: [] }],
+    }))).toBeNull();
+    expect(admitPublicViews(moduleWith({
+      publicViews: [{ ...publicView, publishedLocales: ["../private"] }],
+    }))).toBeNull();
+  });
+
   it("rejects response schemas referencing fields not declared by the route", () => {
     expect(admitPublicViews(moduleWith({
       routes: [{ ...route, response: { fields: { total: "number" }, required: ["missing"] } }],
