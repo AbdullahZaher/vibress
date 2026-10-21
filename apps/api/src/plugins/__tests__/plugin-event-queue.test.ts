@@ -40,6 +40,10 @@ describe("EXT-401 operator event admission", () => {
       eventId: base.eventId, eventName: base.eventName,
       payload: { nested: { publicationId: "pub-b" } },
     }).success).toBe(false);
+    expect(PluginEventEnqueueSchema.safeParse({
+      eventId: base.eventId, eventName: base.eventName,
+      payload: { publicationId: "pub-b" },
+    }).success).toBe(false);
     expect(PluginWorkerEventJobSchema.safeParse({
       ...base, artifactSha256: "tampered",
     }).success).toBe(false);
