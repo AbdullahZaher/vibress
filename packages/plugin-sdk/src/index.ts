@@ -88,6 +88,8 @@ export interface PluginApiScope {
   /** Present only for operator-approved models in an authorized Staff request. */
   readonly storage?: PluginStorageApi | undefined;
   readonly requestId: string;
+  /** Host-verified published locale for public SSR, never a tenant selector. */
+  readonly locale?: string | undefined;
   readonly principal:
     | { readonly kind: "staff"; readonly id: string }
     | { readonly kind: "member"; readonly id: string }
@@ -147,6 +149,8 @@ export interface PluginPublicView {
   /** Must resolve to this module's public GET route. */
   readonly routeId: string;
   readonly title: PluginAdminLocalizedLabel;
+  /** Operator-trusted, explicitly published locale variants; absent means no hreflang. */
+  readonly publishedLocales?: readonly string[] | undefined;
 }
 
 export interface PluginModule {
