@@ -309,6 +309,13 @@
       "when": 1792483200001,
       "tag": "0043_plugin_storage_physical_models",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792620000000,
+      "tag": "0044_plugin_event_receipts",
+      "breakpoints": true
     }
   ]
 }

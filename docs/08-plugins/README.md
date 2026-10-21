@@ -39,11 +39,12 @@ both signing environment variables are absent; signed mode fails closed if
 only one is configured. This is operator trust, not an untrusted plugin sandbox.
 
 These are **branch changes**, not merged/released contracts. EXT-401 now has
-an initial operator-only BullMQ event queue and worker with signed
-release/publication verification, but durable transactional event admission,
-replay, permanent idempotency and operator DLQ controls remain missing.
-EXT-402 adds atomic audit for publication settings and secret revocation
-checks but still needs cryptographic key rotation and operator audit views.
+PostgreSQL-backed operator-only event admission with an immutable scoped
+deduplication ledger, crash-claim reconciliation, BullMQ delivery and release
+checks. Domain-event outbox integration, audited DLQ replay and full operator
+recovery remain pending. EXT-402 now also supports explicit, atomic and
+audited per-publication secret deletion. Cryptographic master-key rotation
+and operator audit views remain separate blockers.
 EXT-403 automated backup/restore integration, a full EXT-301 Admin
 write/UI host contract, further EXT-404 supply-chain scanning,
 cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.

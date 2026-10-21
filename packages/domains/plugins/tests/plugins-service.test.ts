@@ -765,6 +765,48 @@ describe("PluginsService", () => {
     expect(scoped.setMany).not.toHaveBeenCalled();
   });
 
+  it("revokes only a declared secret for one publication with audit identity", async () => {
+    const remove = vi.fn(async () => true);
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async (_id: string, pubId: string) => pubId === "pub-a"),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const scoped: PluginPublicationSettingRepository = {
+      setMany: vi.fn(async () => undefined),
+      getSecret: vi.fn(async () => null),
+      listForPlugin: vi.fn(async () => []),
+      deleteSecret: remove,
+    };
+    const pluginRepoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active",
+        settingsSchema: {
+          accessToken: { type: "string", secret: true },
+          displayName: { type: "string" },
+        },
+      })),
+    };
+    const service = new PluginsService(pluginRepoWith, settingRepo, {
+      requiresPublicationEnablement: () => true,
+      loadModule: vi.fn(async () => null),
+    }, states, scoped);
+    const audit = { actorUserId: "staff-owner", requestId: "request-123" };
+    await expect(service.revokePublicationSecret("p1", "pub-a", "accessToken", audit))
+      .resolves.toBe(true);
+    expect(remove).toHaveBeenCalledWith(
+      "p1", "pub-a", "accessToken", audit,
+    );
+    await expect(service.revokePublicationSecret("p1", "pub-b", "accessToken", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    await expect(service.revokePublicationSecret("p1", "pub-a", "displayName", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTING_INVALID" });
+    await expect(service.revokePublicationSecret("p1", "pub-a", "unknown", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTING_INVALID" });
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
   it("settings: secrets encrypted at rest and masked on read", async () => {
     const settingsStored: PluginSetting[] = [];
     const settingRepoWith: PluginSettingRepository = {

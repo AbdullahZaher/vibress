@@ -71,7 +71,7 @@ export async function adminPluginEventRoutes(fastify: FastifyInstance) {
           artifactSha256,
           ...body.data,
         });
-        return reply.code(202).send({ eventId: body.data.eventId, jobId, status: "queued" });
+        return reply.code(202).send({ eventId: body.data.eventId, jobId, status: "queued", dispatchStatus: "pending" });
       } catch (error) {
         if (error instanceof PluginEventConflictError) {
           return reply.code(409).send({

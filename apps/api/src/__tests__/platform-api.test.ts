@@ -1015,6 +1015,22 @@ describe("Batch 12 — Platform Integration & Security", () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it("EXT-402 secret revocation denies unauthenticated, member and cross-site requests", async () => {
+    const target = "/api/admin/v1/plugins/missing-plugin/publication-settings/accessToken";
+    const anonymous = await app.inject({ method: "DELETE", url: target });
+    expect(anonymous.statusCode).toBe(401);
+    const member = await app.inject({
+      method: "DELETE", url: target,
+      headers: { cookie: "vibress_member_session=forged", origin: "http://localhost:7777" },
+    });
+    expect(member.statusCode).toBe(401);
+    const forged = await app.inject({
+      method: "DELETE", url: target,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" },
+    });
+    expect(forged.statusCode).toBe(403);
+  });
+
   // ---------------- Host-routed Extension API (EXT-201/202) ----------------
   it("extension API fails closed before loading plugin code without Staff/Member session", async () => {
     const admin = await app.inject({

@@ -107,4 +107,9 @@ export interface PluginPublicationSettingRepository {
   ): Promise<void>;
   listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]>;
   getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null>;
+  /** Optional for test adapters; production adapters atomically audit revocation. */
+  deleteSecret?(
+    pluginId: string, publicationId: string, key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean>;
 }

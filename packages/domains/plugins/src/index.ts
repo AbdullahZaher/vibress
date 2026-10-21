@@ -12,3 +12,8 @@ export { readTrustedPluginLockfile } from "./application/trusted-release-attesta
 export type { TrustedPluginAttestationOptions } from "./application/trusted-release-attestation";
 export { verifyTrustedPluginRelease } from "./application/operator-release-preflight";
 export type { VerifiedExternalRelease } from "./application/operator-release-preflight";
+export {
+  DrizzlePluginEventLedger, pluginEventLedger, pluginEventJobId,
+  pluginEventEnvelopeHash, PluginEventConflictError, PluginEventLedgerError,
+} from "./application/plugin-event-ledger";
+export type { ClaimedPluginEvent } from "./application/plugin-event-ledger";

@@ -1092,6 +1092,9 @@ importers:
 
   packages/domains/plugins:
     dependencies:
+      '@vibress/api-contracts':
+        specifier: workspace:*
+        version: link:../../api-contracts
       zod:
         specifier: ^3.23.8
         version: 3.25.76

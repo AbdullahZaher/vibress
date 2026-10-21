@@ -123,32 +123,26 @@ malware-free code, independent reproducible builds or process isolation.
    denied-read counters; external CDN/WAF/proxy logs must redact single-use
    frame-ticket query parameters.
 
-## EXT-401 operator event queue (initial supported increment)
+## EXT-401 PostgreSQL-backed event admission (durable increment)
 
-The API and worker share the **same operator-reviewed plugin bundle bytes,
-signed approval and pinned SHA-256** through `compose.plugins.yml`. The worker
-has a dedicated BullMQ queue (`vibress-plugin-events`) and rechecks the
-installed plugin version, active status, declared hook, release digest and
-publication enablement before loading and executing code. Revoked/retired jobs
-become no-ops. Invalid jobs and handler failures are bounded to 5 retry attempts
-with exponential backoff; failed jobs remain in BullMQ's failed set for
-operator investigation. The worker must start from its operator-mounted
-release directory; it refuses a corrupt signature during admission.
-The worker `/health/ready` includes plugin event-consumer readiness when
-an external release is configured, not just database and Redis reachability.
-Hot-swapping the same semver with a different digest is rejected by a replica
-holding the old local lifecycle state; drain and restart all API/worker
-replicas during operator-approved upgrades. Retained plugin secret-read
-closures recheck live plugin capability and publication enablement, while
-ciphertext corruption is surfaced as an error rather than an absent key.
+**Upgrade first.** Deploy database migration `0044_plugin_event_receipts` before
+starting any newly built API/Worker replica. Drain pre-migration
+`vibress-plugin-events` jobs: older Redis jobs have no PostgreSQL receipt and
+the new worker deliberately refuses to execute them. Take a signed backup
+before upgrading; do not edit past migrations or synthesize authorizations.
 
-A platform plugin operator with `plugins.manage` and local publication
-owner/admin access may submit only an explicitly declared event through:
+API and Worker both require the **same operator-reviewed plugin bundle bytes,
+signature and pinned SHA-256** using `compose.plugins.yml`. The Worker
+preflights the release, rejects an absent receipt, and checks plugin release,
+capabilities, publication state and registered hooks before running code.
+
+A globally authorized plugin operator with `plugins.manage` and local
+publication owner/admin permission may submit a declared event through:
 
 `POST /api/admin/v1/plugins/:id/events`
 
-with a Staff session, valid same-site Origin, and the API's validated active
-publication context. The only accepted JSON fields are:
+using a Staff session, same-site Origin and authoritative publication context.
+Accepted fields are only:
 
 ```json
 {
@@ -158,24 +152,52 @@ publication context. The only accepted JSON fields are:
 }
 ```
 
-The Host, not the request body, binds `publicationId`, installed plugin ID,
-release version and operator artifact digest. Duplicate event IDs use the same
-BullMQ job ID within a plugin/publication. Different data for a retained
-event ID returns HTTP 409. No member/public/direct plugin admission is
-supported. Do not put Member personal data, plaintext secrets, HTML or tokens
-into these scalar-only payloads.
+HTTP 202 `status: "queued", dispatchStatus: "pending"` means the **immutable PostgreSQL receipt is
+committed**, not that BullMQ has already processed or acknowledged it. The Host
+binds plugin ID, publication ID and pinned artifact SHA; clients must never
+supply those fields. `plugin_event_receipts` preserves the event identity and
+envelope hash independently of Redis retention. Reusing the same ID with a
+different release or payload returns HTTP 409; identical retries remain safe.
 
-**At-least-once, not exactly-once:** Redis/BullMQ retries after crashes. A
-plugin handler may execute and crash before acknowledging completion, so every
-hook **must be idempotent**. Completed jobs are retained up to 7 days/100,000
-jobs and failures up to 30 days/100,000, after which idempotency keys can be
-reused. Configure persistent Redis storage and include Redis in your operational
-backup/recovery policy. This is NOT a transactional PostgreSQL outbox or
-permanent deduplication ledger. Operator inspection/replay tools, a durable
-cross-service admission ledger, scheduled jobs, formal dead-letter/replay
-workflow and multi-replica crash recovery evidence are still needed to close
-EXT-401 completely. Failed jobs must not be automatically replayed after
-plugin disable, rollback or a changed data schema.
+The Worker periodically claims pending admissions with `FOR UPDATE SKIP LOCKED`,
+enqueues deterministic job IDs into BullMQ, and reclaims stale dispatch claims
+after two minutes. It conditionally finalizes receipts as `executed` or
+`retired`. Missing or modified PostgreSQL receipts cannot authorize replayed
+or forged Redis jobs. Publication deletion cascades event receipts; installed
+plugin deletion remains restricted by receipts pending a reviewed purge policy.
+
+**At-least-once, not exactly-once:** a handler may perform a side effect and
+crash before the receipt is finalized. Plugin code MUST use its own business
+idempotency where appropriate. Redis retries use five attempts and exponential
+backoff; BullMQ keeps failed jobs for 30 days or up to 100,000 items. Queued
+jobs that exhaust retries are **not** automatically replayed after a failed
+plugin release: inspect the BullMQ failed set and review the data/schema
+before operator-authorized recovery. No Member/public/plugin-direct queue
+admission exists. Never put secrets, member personal data, HTML or session
+tokens in job payloads.
+
+**Remaining EXT-401 gates:** a reviewed operator DLQ/replay UI and safe replay
+protocol, cross-service domain-event transaction integration (currently only
+operator event admission is durable), bounded permanent ledger retention/purge,
+multi-replica crash/recovery drills and queue backlog/age metrics. Signed DB
+backups now include the admission ledger, but the operator still needs a
+coordinated Redis and approved-artifact recovery procedure.
+
+## EXT-402 explicit publication-secret revocation
+
+`DELETE /api/admin/v1/plugins/:id/publication-settings/:key` requires a
+Staff session, `plugins.manage`, valid Origin and owner/admin membership in
+the Host-selected publication. Only a declared secret key can be deleted,
+and the ciphertext deletion and operator audit record commit in a single
+PostgreSQL transaction. Successful revocation is idempotent (204), including
+an already absent secret. The request never accepts a publication ID or
+plaintext secret. `PATCH .../publication-settings` retains its historical
+replace-only semantics for null/empty secrets.
+
+**Still required:** an envelope-encryption key-version model and a tested
+master-key rotation/backfill/rollback plan across upgraded self-hosted
+installations. Revoking a stored secret cannot invalidate credentials
+already copied outside Vibress by a trusted extension.
 
 ## Upgrade and rollback
 

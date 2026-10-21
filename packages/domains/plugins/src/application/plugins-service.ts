@@ -946,6 +946,38 @@ export class PluginsService {
     }
   }
 
+  /** A secret's empty/null update is replace-only; revocation is explicit.
+   * The production adapter deletes and audits in the same DB transaction. */
+  async revokePublicationSecret(
+    pluginId: string,
+    publicationId: string,
+    key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean> {
+    if (!publicationId || !this.publicationSettings || !this.publicationStates ||
+        !this.publicationSettings.deleteSecret) {
+      throw new PluginDomainError("PLUGIN_STATE_UNAVAILABLE", "Scoped secrets unavailable");
+    }
+    if (!audit.actorUserId || !audit.requestId) {
+      throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Audit identity required");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin unavailable");
+    }
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const definitions = this.getSettingDefinitions(plugin.settingsSchema);
+    const definition = Object.hasOwn(definitions, key) ? definitions[key] : undefined;
+    if (!definition || typeof definition !== "object" || Array.isArray(definition) ||
+        !("type" in definition) || definition.type !== "string" ||
+        !("secret" in definition) || definition.secret !== true) {
+      throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Unknown secret setting");
+    }
+    return this.publicationSettings.deleteSecret(pluginId, publicationId, key, audit);
+  }
+
   async listPublicationSettings(
     pluginId: string,
     publicationId: string,

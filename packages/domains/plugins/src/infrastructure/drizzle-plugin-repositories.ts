@@ -338,6 +338,34 @@ export class DrizzlePluginPublicationSettingRepository
     }));
   }
 
+  async deleteSecret(
+    pluginId: string, publicationId: string, key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean> {
+    return getDb().transaction(async (tx) => {
+      // The composite ownership predicate applies to every destructive write.
+      const deleted = await tx.delete(pluginPublicationSettings).where(and(
+        eq(pluginPublicationSettings.pluginId, pluginId),
+        eq(pluginPublicationSettings.publicationId, publicationId),
+        eq(pluginPublicationSettings.key, key),
+        eq(pluginPublicationSettings.isSecret, true),
+      )).returning({ id: pluginPublicationSettings.id });
+      if (deleted.length) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(),
+          publicationId,
+          actorUserId: audit.actorUserId,
+          requestId: audit.requestId,
+          action: "plugin.publication_secret_revoked",
+          targetType: "plugin",
+          targetId: pluginId,
+          metadata: { revokedSecretCount: deleted.length },
+        });
+      }
+      return deleted.length > 0;
+    });
+  }
+
   async getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null> {
     const rows = await getDb().select({
       encryptedValue: pluginPublicationSettings.encryptedValue,

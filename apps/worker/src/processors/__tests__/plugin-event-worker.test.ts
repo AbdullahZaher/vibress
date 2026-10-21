@@ -5,7 +5,8 @@ import {
   type PluginWorkerEventJob,
 } from "@vibress/api-contracts";
 import {
-  PluginEventWorker, processTrustedPluginEvent, type PluginEventExecution,
+  PluginEventWorker, processTrustedPluginEvent, processAdmittedPluginEvent,
+  type PluginEventExecution,
 } from "../plugin-event-worker";
 
 const DIGEST = "a".repeat(64);
@@ -93,6 +94,45 @@ describe("EXT-401 publication-scoped durable event worker", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("never executes Redis messages without an exact PostgreSQL admission", async () => {
+    const h = execution();
+    const receipts = {
+      isAdmitted: vi.fn(async () => false),
+      finalize: vi.fn(async () => undefined),
+    };
+    const id = "plugin-" + "f".repeat(64);
+    await expect(processAdmittedPluginEvent(event(), id, receipts, h))
+      .resolves.toBe("unadmitted");
+    expect(receipts.isAdmitted).not.toHaveBeenCalled();
+    await expect(processAdmittedPluginEvent(event(), undefined, receipts, h))
+      .resolves.toBe("unadmitted");
+    expect(h.dispatchEvent).not.toHaveBeenCalled();
+    expect(receipts.finalize).not.toHaveBeenCalled();
+  });
+
+  it("finalizes only verified successful or retired deliveries", async () => {
+    const { pluginEventJobId } = await import("@vibress/plugins");
+    const id = pluginEventJobId(event());
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const good = execution();
+    await expect(processAdmittedPluginEvent(event(), id, receipts, good))
+      .resolves.toBe("executed");
+    expect(receipts.finalize).toHaveBeenCalledWith(id, "executed");
+
+    const revoked = execution({ enabled: false });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, revoked))
+      .resolves.toBe("retired");
+    expect(receipts.finalize).toHaveBeenCalledWith(id, "retired");
+
+    const broken = execution({ failure: new Error("downstream unavailable") });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, broken))
+      .rejects.toThrow("downstream unavailable");
+    expect(receipts.finalize).toHaveBeenCalledTimes(2);
   });
 
   it("executes an approved, active and explicitly enabled release with host scope", async () => {

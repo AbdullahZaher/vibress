@@ -1,5 +1,5 @@
 import {
-  Worker, QUEUE_NAMES, getBullMqRedisConnection,
+  Worker, Queue, QUEUE_NAMES, getBullMqRedisConnection, enqueueTraced,
 } from "@vibress/queue";
 import {
   PluginWorkerEventJobSchema, type PluginWorkerEventJob,
@@ -12,6 +12,7 @@ import {
   DrizzlePluginPublicationStateRepository,
   DrizzlePluginPublicationSettingRepository,
   TrustedExternalPluginHost, verifyTrustedPluginRelease,
+  pluginEventLedger, pluginEventJobId,
   type Plugin,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
@@ -60,6 +61,8 @@ export async function processTrustedPluginEvent(
       "PLUGIN_INACTIVE",
       "PLUGIN_PUBLICATION_INACTIVE",
       "PLUGIN_RELEASE_CHANGED",
+      "PLUGIN_RESTART_REQUIRED",
+      "PLUGIN_RELEASE_NOT_APPROVED",
       "PLUGIN_CAPABILITY_DENIED",
     ].includes(error.code)) return "retired";
     // Provider outages, transient database failures, and handler errors are
@@ -69,8 +72,34 @@ export async function processTrustedPluginEvent(
   return "executed";
 }
 
+export interface PluginEventReceiptGate {
+  isAdmitted(job: PluginWorkerEventJob): Promise<boolean>;
+  finalize(id: string, outcome: "executed" | "retired"): Promise<void>;
+}
+
+/** Redis jobs may be forged, stale, or restored without their PG admission.
+ * The trusted worker never executes one lacking the matching receipt. */
+export async function processAdmittedPluginEvent(
+  input: unknown,
+  jobId: string | undefined,
+  receipts: PluginEventReceiptGate,
+  execution: PluginEventExecution,
+): Promise<"executed" | "retired" | "unadmitted"> {
+  const parsed = PluginWorkerEventJobSchema.parse(input);
+  if (!jobId || jobId !== pluginEventJobId(parsed) ||
+      !(await receipts.isAdmitted(parsed))) {
+    return "unadmitted";
+  }
+  const outcome = await processTrustedPluginEvent(parsed, execution);
+  await receipts.finalize(jobId, outcome);
+  return outcome;
+}
+
 export class PluginEventWorker {
   private worker: Worker<PluginWorkerEventJob> | null = null;
+  private producer: Queue<PluginWorkerEventJob> | null = null;
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+  private sweep: Promise<void> | null = null;
   private ready = false;
 
   /** The base DB/Redis health probe alone does not prove event consumption. */
@@ -87,6 +116,7 @@ export class PluginEventWorker {
     {
       loadModule: (plugin) => this.operatorHost.loadModule(plugin),
       requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: () => this.operatorHost.listTrustedFingerprints(),
     },
     new DrizzlePluginPublicationStateRepository(),
     new DrizzlePluginPublicationSettingRepository(),
@@ -102,10 +132,13 @@ export class PluginEventWorker {
       return;
     }
     await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+    this.producer = new Queue<PluginWorkerEventJob>(QUEUE_NAMES.PLUGIN_EVENTS, {
+      connection: getBullMqRedisConnection(),
+    });
     this.worker = new Worker<PluginWorkerEventJob>(
       QUEUE_NAMES.PLUGIN_EVENTS,
       tracedProcessor("worker.job.plugin-event", async (job) => {
-        await processTrustedPluginEvent(job.data, {
+        await processAdmittedPluginEvent(job.data, job.id, pluginEventLedger, {
           getPlugin: (id) => this.repository.findById(id),
           approvedDigests: () => this.operatorHost.listTrustedFingerprints(),
           isPublicationEnabled: (id, pubId) => this.service.isPublicationEnabled(id, pubId),
@@ -128,14 +161,66 @@ export class PluginEventWorker {
     });
     this.worker.on("ready", () => { this.ready = true; });
     await this.worker.waitUntilReady();
+    await this.producer.waitUntilReady();
+    await pluginEventLedger.assertReady();
     this.ready = true;
+    // Periodically reconcile PostgreSQL admissions not yet published to
+    // Redis. A crash can leave a claimed receipt: a 2-minute lease reclaims it.
+    this.sweepTimer = setInterval(() => {
+      void this.flushPending().catch(() => {
+        console.error("[PluginEventWorker] Pending event sweep unavailable");
+      });
+    }, 5000);
+    void this.flushPending().catch(() => {
+      console.error("[PluginEventWorker] Initial event sweep unavailable");
+    });
+  }
+
+  private flushPending(): Promise<void> {
+    if (this.sweep) return this.sweep;
+    const pending = this.dispatchPending();
+    this.sweep = pending.finally(() => { this.sweep = null; });
+    return this.sweep;
+  }
+
+  private async dispatchPending(): Promise<void> {
+    if (!this.producer || !this.ready) return;
+    const claims = await pluginEventLedger.claimReady(25);
+    for (const receipt of claims) {
+      try {
+        await enqueueTraced(this.producer, "event", receipt.envelope, {
+          jobId: receipt.id, attempts: 5,
+          backoff: { type: "exponential", delay: 5000 },
+          removeOnComplete: { age: 7 * 24 * 3600, count: 100000 },
+          removeOnFail: { age: 30 * 24 * 3600, count: 100000 },
+        });
+        // A consumer may already have finalized this receipt. Conditional
+        // updates must never change an executed/retired receipt back to queued.
+        await pluginEventLedger.markQueued(receipt.id);
+      } catch {
+        await pluginEventLedger.returnPending(receipt.id);
+        // No plugin payloads/errors are logged; retry through the next sweep.
+        console.error("[PluginEventWorker] Event admission relay unavailable", {
+          jobId: receipt.id,
+        });
+      }
+    }
   }
 
   async stop(): Promise<void> {
     this.ready = false;
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+    if (this.sweep) await this.sweep;
     if (this.worker) {
       await this.worker.close();
       this.worker = null;
+    }
+    if (this.producer) {
+      await this.producer.close();
+      this.producer = null;
     }
     await this.service.shutdown();
   }

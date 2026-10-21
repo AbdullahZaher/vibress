@@ -5,6 +5,10 @@ export const PluginPublicationParamsSchema = z.object({
   id: z.string().min(1).max(200),
 }).strict();
 
+export const PluginPublicationSecretParamsSchema = PluginPublicationParamsSchema.extend({
+  key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_.-]{0,99}$/),
+}).strict();
+
 export const PluginPublicationActivationSchema = z.object({
   enabled: z.boolean(),
 }).strict();
