@@ -229,7 +229,7 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
         // not present in the URL or extension-controlled route metadata.
         // An unclosed HTML comment/element can suppress the bootstrap; such
         // documents fail closed (no bridge) rather than gaining privileges.
-        const readyScript = `<script>window.parent.postMessage({type:"vibress:extension:ready",version:1,bridgeNonce:"${claim.bridgeNonce}"},"*")</script>`;
+        const readyScript = `<script>(function(){const proof={version:1,bridgeNonce:"${claim.bridgeNonce}"};window.parent.postMessage({...proof,type:"vibress:extension:ready"},"*");window.addEventListener("pagehide",function(){window.parent.postMessage({...proof,type:"vibress:extension:gone"},"*")})})()</script>`;
         return reply.code(200).send(admitted.html + readyScript);
       } catch (error) {
         return reject(req, reply, "EXTENSION_UNAVAILABLE", denyOnPluginTransition(error));
