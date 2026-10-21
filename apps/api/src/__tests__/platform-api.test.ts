@@ -1406,6 +1406,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(page.headers["cache-control"]).toBe("private, no-store");
       expect(page.json()).toEqual({
         publicationId: expect.any(String),
+        locale: expect.any(String),
         pluginId: "independent-courses", viewId: "courses",
         routeId: "catalog", title,
         data: { title: "Public courses", total: 3 },
