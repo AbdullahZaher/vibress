@@ -33,6 +33,18 @@ describe("EXT-302A public route Host middleware", () => {
     expect(response.headers.get("x-vibress-locale")).toBe("ar");
   });
 
+  it("never lets a publication redirect shadow reserved extension URLs", async () => {
+    mockSiteApi(false);
+    await middleware(new NextRequest(
+      "https://publication.example/extensions/vibress-lms/courses",
+    ));
+    await middleware(new NextRequest(
+      "https://publication.example/ar/extensions/vibress-lms/courses",
+    ));
+    const calls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(calls.some((url) => url.includes("/redirects/resolve"))).toBe(false);
+  });
+
   it("rejects disabled locale prefixes before extension page rendering", async () => {
     mockSiteApi(false, ["en"]);
     const response = await middleware(new NextRequest(
