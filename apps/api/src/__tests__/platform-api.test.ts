@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
-import { pluginPhysicalModelDigest } from "@vibress/plugins";
+import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -533,6 +533,10 @@ describe("Batch 12 — Platform Integration & Security", () => {
       const failure = await request();
       expect(failure.statusCode).toBe(503);
       expect(JSON.stringify(failure.json())).not.toContain("Operator path with secret");
+      read.mockRejectedValue(new PluginDomainError(
+        "PLUGIN_PUBLICATION_INACTIVE", "Publication disabled during UI read",
+      ));
+      expect((await request()).statusCode).toBe(404);
       read.mockResolvedValue("x".repeat(256 * 1024 + 1));
       expect((await request()).statusCode).toBe(503);
     } finally {
