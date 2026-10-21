@@ -5,6 +5,7 @@ import {
   PluginStatus,
   PluginPublicationStateRepository,
   PluginPublicationSettingRepository,
+  type PluginSettingAuditContext,
 } from "../domain/plugin";
 import {
   validateManifest,
@@ -854,6 +855,7 @@ export class PluginsService {
     pluginId: string,
     publicationId: string,
     settings: Record<string, string | null>,
+    audit?: PluginSettingAuditContext,
   ): Promise<void> {
     if (!publicationId || !this.publicationSettings || !this.publicationStates) {
       throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication scope is unavailable");
@@ -894,7 +896,9 @@ export class PluginsService {
         encryptedValue: isSecret && value !== null ? encryptSecret(value) : null,
       });
     }
-    if (entries.length > 0) await this.publicationSettings.setMany(pluginId, publicationId, entries);
+    if (entries.length > 0) {
+      await this.publicationSettings.setMany(pluginId, publicationId, entries, audit);
+    }
   }
 
   async listPublicationSettings(
