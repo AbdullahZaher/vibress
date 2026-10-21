@@ -79,6 +79,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         if (!data) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
         const parsed = ExtensionPublicPageResponseSchema.safeParse({
           pluginId, viewId, routeId: view.routeId, title: view.title,
+          ...(view.publishedLocales ? { publishedLocales: view.publishedLocales } : {}),
           publicationId, locale, data,
         });
         if (!parsed.success) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
