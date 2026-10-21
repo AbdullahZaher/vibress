@@ -165,6 +165,7 @@ export const ExtensionPublicViewSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   title: ExtensionAdminLabelSchema,
+  publishedLocales: z.array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)).max(12).optional(),
 }).strict();
 
 export const ExtensionPublicViewDtoSchema = z.object({
@@ -172,6 +173,7 @@ export const ExtensionPublicViewDtoSchema = z.object({
   viewId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   title: ExtensionAdminLabelSchema,
+  publishedLocales: z.array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)).max(12).optional(),
 }).strict();
 
 export const ExtensionPublicProjectionSchema = z.record(
