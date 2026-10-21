@@ -640,6 +640,11 @@ describe("Batch 12 — Platform Integration & Security", () => {
         method: "GET", url: src, headers: { "sec-fetch-site": "cross-site" },
       });
       expect(crossSite.statusCode).toBe(404);
+      const topLevel = await app.inject({
+        method: "GET", url: src,
+        headers: { "sec-fetch-site": "same-origin", "sec-fetch-dest": "document" },
+      });
+      expect(topLevel.statusCode).toBe(404);
       // SameSite=Lax cookies may be omitted for sandboxed opaque-origin
       // navigations. The one-use ticket still binds the *live* Staff session.
       const frameNoCookie = await app.inject({ method: "GET", url: src });
