@@ -7,7 +7,7 @@ export async function evaluatePublicSiteAccess(
   siteCookie: string | undefined,
   secret: string,
   loadSettings: (publicationId: string) => Promise<{
-    security?: { isPrivate?: boolean } | null;
+    security?: Record<string, unknown> | null;
   }>,
 ): Promise<"allowed" | "denied" | "unavailable"> {
   try {
