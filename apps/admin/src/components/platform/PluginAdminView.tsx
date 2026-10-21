@@ -67,7 +67,7 @@ export function PluginAdminView({ link }: Props) {
       canceled = true;
       closeBridgeRef.current();
     };
-  }, [link.pluginId, link.viewId, publicationRevision]);
+  }, [link.pluginId, link.viewId, locale, publicationRevision]);
 
   const current = frame.kind === "frame" &&
     frame.publicationId === getActivePublicationId();
