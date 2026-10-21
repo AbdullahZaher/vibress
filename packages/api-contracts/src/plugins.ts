@@ -168,3 +168,54 @@ export const ExtensionAdminUiResponseSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
+/** EXT-301B2B: one-use, Host-bound iframe URL; never plugin-provided. */
+export const ExtensionAdminFrameTicketQuerySchema = z.object({
+  ticket: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+export const ExtensionAdminFrameTicketResponseSchema = z.object({
+  bridgeNonce: z.string().regex(/^[a-f0-9]{64}$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  src: z.string().max(400).regex(
+    /^\/api\/admin\/v1\/extensions\/[a-z0-9][a-z0-9-]{0,99}\/views\/[a-z][a-z0-9-]{0,63}\/frame\?ticket=[a-f0-9]{64}$/,
+  ),
+}).strict();
+
+/** Authorization refresh checks the active plugin, Staff, publication and approved bytes. */
+export const ExtensionAdminFrameStatusResponseSchema = z.object({
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+/** Only the signed-off, server-verified iframe document gets this proof. */
+export const ExtensionAdminFrameProofSchema = z.object({
+  type: z.enum(["vibress:extension:ready", "vibress:extension:gone"]),
+  version: z.literal(1),
+  bridgeNonce: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+/**
+ * EXT-301B2B: the opaque-origin iframe may ask Host to read exactly the
+ * linked EXT-301A Admin GET route. It cannot choose URLs, route IDs, methods,
+ * headers, publication IDs or bodies. Privileged writes are NOT bridged.
+ */
+export const ExtensionAdminBridgeReadRequestSchema = z.object({
+  type: z.literal("vibress:extension:read"),
+  version: z.literal(1),
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+}).strict();
+
+export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    type: z.literal("vibress:extension:response"),
+    version: z.literal(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    ok: z.literal(true),
+    data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  }).strict(),
+  z.object({
+    type: z.literal("vibress:extension:response"),
+    version: z.literal(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    ok: z.literal(false),
+    error: z.enum(["DENIED", "UNAVAILABLE", "RATE_LIMITED"]),
+  }).strict(),
+]);

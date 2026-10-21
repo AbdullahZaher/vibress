@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Courses · Sample Vibress Admin UI</title>
+  <style>
+    :root { color-scheme: light dark; font: 1rem/1.6 system-ui, sans-serif; }
+    body { margin: 1.25rem; }
+    button { padding: .55rem .9rem; font: inherit; border-radius: .5rem; cursor: pointer; }
+    output { display: block; white-space: pre-wrap; padding-block: .8rem; }
+    button:focus-visible { outline: 3px solid Highlight; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 id="heading">Courses</h1>
+    <p id="description">This isolated view can read only its linked GET route.</p>
+    <button id="refresh" type="button" disabled>Load courses</button>
+    <output id="result" role="status" aria-live="polite">Waiting for Vibress Host</output>
+  </main>
+  <script>
+    (() => {
+      // No direct fetch, cookies, localStorage, DOM access to parent, or
+      // administrative URLs. This standalone HTML has no external dependencies.
+      let channel;
+      let sequence = 0;
+      const refresh = document.getElementById("refresh");
+      const result = document.getElementById("result");
+      const heading = document.getElementById("heading");
+      const description = document.getElementById("description");
+      const labels = {
+        en: { heading: "Courses", description: "Host-authorized read-only course summary",
+          refresh: "Load courses", waiting: "Waiting for Vibress Host",
+          failed: "Unable to load courses" },
+        ar: { heading: "الدورات", description: "ملخص الدورات المسموح بعرضه",
+          refresh: "تحميل الدورات", waiting: "جارٍ الاتصال بـVibress",
+          failed: "تعذّر تحميل الدورات" },
+      };
+      let currentLabels = labels.en;
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent ||
+            event.data?.type !== "vibress:extension:connect" ||
+            event.data?.version !== 1 || event.ports.length !== 1 ||
+            channel) return;
+        currentLabels = String(event.data.locale).startsWith("ar") ? labels.ar : labels.en;
+        document.documentElement.lang = currentLabels === labels.ar ? "ar" : "en";
+        document.documentElement.dir = currentLabels === labels.ar ? "rtl" : "ltr";
+        heading.textContent = currentLabels.heading;
+        description.textContent = currentLabels.description;
+        refresh.textContent = currentLabels.refresh;
+        result.textContent = currentLabels.waiting;
+        channel = event.ports[0];
+        channel.onmessage = ({ data }) => {
+          if (data?.type !== "vibress:extension:response" ||
+              data?.version !== 1) return;
+          refresh.disabled = false;
+          result.textContent = data.ok
+            ? JSON.stringify(data.data, null, 2)
+            : currentLabels.failed;
+        };
+        refresh.disabled = false;
+      });
+
+      refresh.addEventListener("click", () => {
+        if (!channel) return;
+        refresh.disabled = true;
+        channel.postMessage({
+          type: "vibress:extension:read",
+          version: 1,
+          requestId: `courses-${++sequence}`,
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

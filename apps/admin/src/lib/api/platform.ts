@@ -156,6 +156,28 @@ export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtens
   return apiRequest("/extensions/navigation", { cache: "no-store" });
 }
 
+/**
+ * B2B: Authorize an optional isolated UI for a Host-admitted plugin view.
+ * Never accepts arbitrary URLs from the plugin or exposes Staff credentials.
+ */
+export async function issueExtensionAdminFrameTicketApi(
+  link: AdminExtensionViewLink,
+): Promise<{ src: string; bridgeNonce: string; sha256: string }> {
+  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/frame-ticket`, {
+    method: "POST",
+    cache: "no-store",
+  });
+}
+
+/** Revalidate Staff membership, plugin admission and artifact every 30 seconds. */
+export async function readExtensionAdminFrameStatusApi(
+  link: AdminExtensionViewLink,
+): Promise<{ sha256: string }> {
+  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/frame-status`, {
+    cache: "no-store",
+  });
+}
+
 export async function readExtensionAdminViewApi(
   link: AdminExtensionViewLink,
 ): Promise<Record<string, string | number | boolean>> {

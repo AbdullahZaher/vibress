@@ -331,7 +331,7 @@ export const buildApp = () => {
     const errObj = error instanceof Error ? error : undefined;
     appLogger.error(
       "request failed",
-      { requestId: request.id, method: request.method, path: request.url },
+      { requestId: request.id, method: request.method, path: request.url.split("?")[0] },
       errObj,
     );
     const e = error as Error & { statusCode?: number; code?: string };

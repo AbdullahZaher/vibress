@@ -14,6 +14,7 @@ import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService } from "../services";
 import { adminExtensionNavigationRoutes } from "./extension-admin-views";
+import { adminExtensionFrameRoutes } from "./extension-admin-iframe";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
 
 /** No arbitrary Fastify registration or tenant selectors from plugin modules. */
@@ -260,6 +261,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
 export async function adminExtensionApiRoutes(fastify: FastifyInstance) {
   extensionRoutes(fastify, "admin");
   await fastify.register(adminExtensionNavigationRoutes);
+  await fastify.register(adminExtensionFrameRoutes);
 }
 
 export async function memberExtensionApiRoutes(fastify: FastifyInstance) {
