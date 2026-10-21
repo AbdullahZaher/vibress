@@ -52,7 +52,12 @@ The two `sha256` placeholders above are explanatory and **will be rejected** unt
 
 The checksum protects asset integrity **at read time**, not plugin process isolation, signature-based publisher authentication, or cross-replica synchronization. Operator-reviewed server-side modules still have Node process privileges, as described in [the trust-model RFC](external-extensions-package-and-ui.md).
 
-## Required next increment: EXT-301B2
+## Required next increments: EXT-301B2A and EXT-301B2B
+
+[EXT-301B2A](extension-admin-views-ext301b2.md) adds authorized JSON delivery but **not**
+a browser renderer. Items below still require the separately reviewed iframe,
+CSP and bridge implementation; the endpoint itself is not proof of isolation.
+
 
 1. Host-authorize asset resolution **per request** using Staff session, Host-resolved publication, local/global Staff permissions, enabled plugin state, admitted view ID and operator-pinned artifact identity.
 2. Deliver only hash/version-addressed assets through an approved serving contract with explicit `Cache-Control` and error handling for stale/disabled instances; verify replica parity on startup/rollouts.
