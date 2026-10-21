@@ -567,8 +567,8 @@ export class PluginsService {
         "Plugin status changed concurrently",
       );
     }
-    this.initializedHere.delete(key);
-    this.activeInstances.delete(key);
+    // Offline recovery admitted no local module state (checked above).
+    // Never clear a lifecycle instance belonging to another release.
     domainEvents.emit("plugin.recovered", {
       pluginId: id,
       previousStatus: plugin.status,
