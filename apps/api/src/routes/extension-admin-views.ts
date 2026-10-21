@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { ExtensionAdminNavigationResponseSchema } from "@vibress/api-contracts";
+import { createHash } from "node:crypto";
+import {
+  ExtensionAdminNavigationResponseSchema, ExtensionAdminNavigationParamsSchema,
+  ExtensionAdminUiResponseSchema,
+} from "@vibress/api-contracts";
 import type { PluginAdminPermission } from "@vibress/plugin-sdk";
-import { requireStaffSession } from "../middleware/auth";
+import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { pluginsService } from "../services";
 import { admitAdminViews, type AdmittedAdminView } from "../plugins/admin-view-registry";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
@@ -65,6 +69,55 @@ function cachedViews(
  * checks origin, Staff permission, plugin capability and publication state.
  */
 export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
+  // Never return a same-origin HTML response: browser consumers must treat
+  // this as inert data and cannot use it as an Admin-origin executable page.
+  fastify.get("/extensions/:pluginId/views/:viewId/ui", {
+    preHandler: [requireStaffSession, validateOrigin],
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("X-Content-Type-Options", "nosniff");
+      reply.header("Referrer-Policy", "no-referrer");
+      const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
+      if (!params.success) return reject(reply, req, "VALIDATION_ERROR", 400);
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId || !req.permissions || !req.roles) {
+        return reject(reply, req, "PUBLICATION_ACCESS_DENIED", 403);
+      }
+      const { pluginId, viewId } = params.data;
+
+      try {
+        // Domain binds module to the active Host publication, global status,
+        // external plugin admission and publication enablement.
+        const module = await pluginsService.resolveExtensionApiModule(
+          pluginId, publicationId, "extension.routes.admin",
+        );
+        if (!module) return reject(reply, req, "EXTENSION_UI_NOT_FOUND", 404);
+        const views = admitAdminViews(module);
+        if (!views) return reject(reply, req, "EXTENSION_INVALID_ADMIN_VIEWS", 503);
+        const view = views.find((item) => item.viewId === viewId);
+        if (!view) return reject(reply, req, "EXTENSION_UI_NOT_FOUND", 404);
+        if (!canAccessExtensionAdminRoute(
+          req.permissions, req.roles, req.publicationContext?.role, view.permission,
+        )) return reject(reply, req, "PERMISSION_DENIED", 403);
+
+        // Repeats lifecycle and publication checks before/after verified file
+        // read. The asset can only be present in the operator-owned lockfile.
+        const html = await pluginsService.readExtensionAdminUiAsset(
+          pluginId, publicationId, viewId,
+        );
+        if (html === null) return reject(reply, req, "EXTENSION_UI_NOT_FOUND", 404);
+        const response = ExtensionAdminUiResponseSchema.safeParse({
+          html, sha256: createHash("sha256").update(html, "utf8").digest("hex"),
+        });
+        if (!response.success) return reject(reply, req, "EXTENSION_INVALID_UI", 503);
+        return reply.status(200).send(response.data);
+      } catch {
+        // Never leak filesystem paths, operator lock contents or plugin errors.
+        return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+      }
+    },
+  });
   fastify.get("/extensions/navigation", {
     preHandler: [requireStaffSession],
     config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
