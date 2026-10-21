@@ -10,6 +10,8 @@ export interface PublicExtensionPage {
   readonly pluginId: string;
   readonly viewId: string;
   readonly routeId: string;
+  readonly locale?: string | undefined;
+  readonly publishedLocales?: readonly string[] | undefined;
   readonly title: { readonly en: string; readonly ar: string };
   readonly data: Readonly<Record<string, string | number | boolean>>;
 }
@@ -49,9 +51,13 @@ async function loadPublicExtensionPage(
   // Use only the gateway-overwritten real IP, never arbitrary browser XFF.
   // Preserves per-visitor API rate limits for internally proxied Next.js SSR.
   const visitorIp = h.get("x-real-ip");
+  const requestedLocale = h.get("x-vibress-locale");
+  const localeQuery = requestedLocale &&
+    /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(requestedLocale)
+    ? `?locale=${encodeURIComponent(requestedLocale)}` : "";
   const base = (process.env.API_URL || "http://127.0.0.1:7780").replace(/\/+$/, "");
   const response = await fetch(
-    `${base}/api/content/v1/extensions/${encodeURIComponent(pluginId)}/views/${encodeURIComponent(viewId)}/page`,
+    `${base}/api/content/v1/extensions/${encodeURIComponent(pluginId)}/views/${encodeURIComponent(viewId)}/page${localeQuery}`,
     {
       cache: "no-store",
       headers: {
