@@ -17,7 +17,11 @@ adds Staff/publication-authorized inert JSON delivery; the EXT-301B2B increment
 introduces an opaque-origin, single-file iframe with single-use Redis tickets,
 strict CSP and a private **read-only** linked-GET MessagePort. There is no
 privileged write/API-proxy bridge. This is **not** a general executable Admin
-UI platform or a declaration of extension platform release readiness. The historical baseline below describes the 2026-10-19 design review.
+UI platform or a declaration of extension platform release readiness.
+The proposed [EXT-302A public SSR dispatcher](extension-public-views-ext302a.md)
+adds opt-in, Host-authorized and text-only public extension pages; member-private
+views, published hreflang and full theme slots are still separate release gates.
+The historical baseline below describes the 2026-10-19 design review.
 
 ## Read in this order
 
