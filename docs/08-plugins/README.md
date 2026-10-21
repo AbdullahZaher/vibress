@@ -13,10 +13,10 @@ merged; [EXT-301A](extension-admin-views-ext301a.md) is a **partial**
 Host-owned, read-only Studio navigation/view implementation. The proposed
 [EXT-301B1](extension-admin-views-ext301b1.md) adds only operator-pinned
 Admin UI asset verification; [EXT-301B2A](extension-admin-views-ext301b2.md)
-adds Staff/publication-authorized inert JSON delivery, not executable Studio
-rendering. It is not a
-general executable Admin UI or a declaration of extension platform release
-readiness. The historical baseline below describes the 2026-10-19 design review.
+adds Staff/publication-authorized inert JSON delivery; the EXT-301B2B increment
+introduces an opaque-origin, single-file iframe with single-use Redis tickets and
+strict CSP, but no Host API bridge. This is **not** a general executable Admin
+UI platform or a declaration of extension platform release readiness. The historical baseline below describes the 2026-10-19 design review.
 
 ## Read in this order
 
