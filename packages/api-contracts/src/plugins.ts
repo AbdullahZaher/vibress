@@ -185,7 +185,13 @@ export const ExtensionPublicProjectionSchema = z.record(
  * publication and one authorized execution. Additive: old v1 APIs remain. */
 export const ExtensionPublicPageResponseSchema = ExtensionPublicViewDtoSchema.extend({
   publicationId: z.string().min(1).max(200),
+  /** Selected from the publication's enabled locale policy at request time. */
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
   data: ExtensionPublicProjectionSchema,
+}).strict();
+
+export const ExtensionPublicPageQuerySchema = z.object({
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
 }).strict();
 
 export const ExtensionAdminNavigationParamsSchema = z.object({
