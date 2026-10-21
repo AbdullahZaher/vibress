@@ -570,6 +570,18 @@ describe("Batch 12 — Platform Integration & Security", () => {
       });
       expect(issue.statusCode).toBe(200);
       expect(issue.headers["cache-control"]).toBe("no-store");
+      expect(issue.json().bridgeNonce).toMatch(/^[a-f0-9]{64}$/);
+      expect(issue.json().sha256).toBe(crypto.createHash("sha256").update(html).digest("hex"));
+      const status = await app.inject({
+        method: "GET", url: base + "/frame-status",
+        headers: { cookie: staffCookie },
+      });
+      expect(status.statusCode).toBe(200);
+      expect(status.headers["cache-control"]).toBe("no-store");
+      expect(status.json()).toEqual({ sha256: issue.json().sha256 });
+      expect((await app.inject({
+        method: "GET", url: base + "/frame-status",
+      })).statusCode).toBe(401);
       const src: unknown = issue.json().src;
       expect(src).toEqual(expect.stringMatching(new RegExp(`^\\/api\\/admin\\/v1\\/extensions\\/${pluginId}\\/views\\/courses\\/frame\\?ticket=[a-f0-9]{64}$`)));
       if (typeof src !== "string") throw new Error("Frame URL not provided");
@@ -585,12 +597,16 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(csp).toContain("frame-ancestors 'self'");
       expect(csp).toContain("form-action 'none'");
       expect(frame.headers["referrer-policy"]).toBe("no-referrer");
-      expect(frame.body).toBe(html);
-      expect(read).toHaveBeenCalledTimes(2);
+      expect(frame.body).toContain(html);
+      expect(frame.body).toContain(issue.json().bridgeNonce);
+      expect(frame.body).toContain("vibress:extension:ready");
+      expect(frame.body).toContain("vibress:extension:gone");
+      expect(frame.body).not.toContain(staffCookie);
+      expect(read).toHaveBeenCalledTimes(3);
       expect((await app.inject({
         method: "GET", url: src, headers: { cookie: staffCookie },
       })).statusCode).toBe(404);
-      expect(read).toHaveBeenCalledTimes(2);
+      expect(read).toHaveBeenCalledTimes(3);
     } finally {
       read.mockRestore();
       resolve.mockRestore();
