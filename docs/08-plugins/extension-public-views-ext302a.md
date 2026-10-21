@@ -49,6 +49,10 @@ rather than partially exposed. Admin/member routes are not eligible.
 - Separate Host-authorized scalar execution:
   `GET /api/content/v1/extensions/:pluginId/v1/:routeId`
 
+The reserved `/extensions` namespace (including locale-prefixed paths)
+bypasses publication-defined redirect rules, so generic redirects cannot
+shadow an admitted extension page.
+
 Both API requests re-resolve the publication from the authoritative public
 hostname. The API's existing `/api/content/v1` privacy middleware protects
 both, and the handler rechecks activation/enablement before execution. The
