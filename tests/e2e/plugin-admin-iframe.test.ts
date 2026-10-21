@@ -36,6 +36,11 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
         status: 200, contentType: "application/json",
         body: JSON.stringify({ src: ticketPath }),
       }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/v1/course-list`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ total: 7 }),
+      }));
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
       (route) => route.fulfill({
         status: 200,
@@ -52,6 +57,8 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
         body: `<!doctype html><html lang="ar" dir="rtl"><body>
           <button id="courses" type="button">الدورات</button>
           <output id="result">0</output>
+          <button id="load" type="button">اقرأ البيانات</button>
+          <output id="remote">waiting</output>
           <script>
             let count = 0;
             document.querySelector('#courses').addEventListener('click', () => {
@@ -60,6 +67,22 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
               try { void window.parent.document.body; }
               catch { isolated = true; }
               document.body.dataset.isolated = String(isolated);
+            });
+            window.addEventListener('message', (event) => {
+              if (event.source !== window.parent ||
+                  event.data?.type !== 'vibress:extension:connect' ||
+                  event.ports.length !== 1) return;
+              const port = event.ports[0];
+              port.onmessage = ({ data }) => {
+                if (data?.type === 'vibress:extension:response' &&
+                    data.requestId === 'request-1') {
+                  document.querySelector('#remote').textContent =
+                    data.ok ? String(data.data.total) : 'denied';
+                }
+              };
+              document.querySelector('#load').addEventListener('click', () =>
+                port.postMessage({ type: 'vibress:extension:read', version: 1,
+                  requestId: 'request-1' }));
             });
           </script></body></html>`,
       }));
@@ -75,6 +98,8 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await page.keyboard.press("Enter");
     await expect(view.locator("#result")).toHaveText("1");
     await expect(view.locator("body")).toHaveAttribute("data-isolated", "true");
+    await view.locator("#load").click();
+    await expect(view.locator("#remote")).toHaveText("7");
   });
 
   test("preserves EXT-301A read-only fallback when no approved UI asset exists", async ({ page }) => {
