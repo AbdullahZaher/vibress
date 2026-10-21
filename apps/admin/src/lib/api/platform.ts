@@ -162,9 +162,18 @@ export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtens
  */
 export async function issueExtensionAdminFrameTicketApi(
   link: AdminExtensionViewLink,
-): Promise<{ src: string }> {
+): Promise<{ src: string; bridgeNonce: string; sha256: string }> {
   return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/frame-ticket`, {
     method: "POST",
+    cache: "no-store",
+  });
+}
+
+/** Revalidate Staff membership, plugin admission and artifact every 30 seconds. */
+export async function readExtensionAdminFrameStatusApi(
+  link: AdminExtensionViewLink,
+): Promise<{ sha256: string }> {
+  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/frame-status`, {
     cache: "no-store",
   });
 }
