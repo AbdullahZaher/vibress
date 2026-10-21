@@ -33,6 +33,8 @@ export interface PluginHost {
   getOperatorManifests?(): Promise<PluginManifest[]>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
   getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
+  /** Optional approved file reader; returns inert bytes, never executable plugin code. */
+  readApprovedAdminUiAsset?(plugin: Plugin, viewId: string): Promise<string | null>;
   authorizeRegistration?(manifest: PluginManifest): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
@@ -592,6 +594,34 @@ export class PluginsService {
   async listOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {
     this.assertRuntimeAllowed();
     return this.host.getOperatorAdminFingerprints?.() ?? new Map();
+  }
+
+  /**
+   * EXT-301B2: internal, publication-scoped approval of a UI artifact.
+   * An HTTP caller must independently check the admitted view and Staff
+   * permission before calling this method. The Host still rechecks plugin
+   * activation, publication enablement and operator artifact approval on both
+   * sides of the filesystem read. Never serve these bytes directly as HTML.
+   */
+  async readExtensionAdminUiAsset(
+    manifestId: string, publicationId: string, viewId: string,
+  ): Promise<string | null> {
+    this.assertRuntimeAllowed();
+    if (!publicationId || !this.host.readApprovedAdminUiAsset) return null;
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) ||
+        !plugin.capabilities.includes("admin.navigation") ||
+        !plugin.capabilities.includes("extension.routes.admin")) return null;
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const document = await this.host.readApprovedAdminUiAsset(plugin, viewId);
+    if (document === null) return null;
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" ||
+        !latest.capabilities.includes("admin.navigation") ||
+        !latest.capabilities.includes("extension.routes.admin")) return null;
+    await this.requirePublicationEnabled(latest, publicationId);
+    return document;
   }
 
   /** Additive Admin projection; global v1 activation remains unchanged. */
