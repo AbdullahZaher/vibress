@@ -23,11 +23,14 @@ export async function verifyTrustedPluginRelease(
   const lockInfo = await lstat(lockfilePath);
   if (!lockInfo.isFile() || lockInfo.isSymbolicLink() ||
       lockInfo.size > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
-  const input: unknown = JSON.parse(await readFile(lockfilePath, "utf8"));
+  const lockBytes = await readFile(lockfilePath);
+  // Recheck after read: a changed file must not bypass the lstat size gate.
+  if (lockBytes.byteLength > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
+  const input: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(lockBytes));
   const admitted = parseTrustedPluginLockfile(input);
   const root = await realpath(path.dirname(lockfilePath));
 
-  async function verifyFile(relative: string, digest: string, maxSize: number) {
+  async function verifyFile(relative: string, digest: string, maxSize: number, html = false) {
     const resolved = path.resolve(root, relative);
     const canonical = await realpath(resolved);
     const withinRoot = path.relative(root, canonical);
@@ -43,13 +46,19 @@ export async function verifyTrustedPluginRelease(
         createHash("sha256").update(bytes).digest("hex") !== digest) {
       throw new Error("APPROVED_ARTIFACT_MISMATCH");
     }
+    if (html) {
+      // Match the runtime Admin UI byte contract before rollout, so the
+      // preflight cannot approve HTML the Host will refuse to load.
+      const document = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (document.includes("\u0000")) throw new Error("INVALID_ADMIN_UI_DOCUMENT");
+    }
   }
 
   const result: VerifiedExternalRelease[] = [];
   for (const approved of admitted.values()) {
     await verifyFile(approved.manifest.entrypoint, approved.sha256, MAX_MODULE_BYTES);
     for (const asset of approved.adminUiAssets) {
-      await verifyFile(asset.path, asset.sha256, MAX_ADMIN_HTML_BYTES);
+      await verifyFile(asset.path, asset.sha256, MAX_ADMIN_HTML_BYTES, true);
     }
     result.push({
       pluginId: approved.manifest.id,
