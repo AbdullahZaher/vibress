@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getThemeSiteSettings } from "../../../../lib/theme-host";
+import {
+  getThemeSiteSettings, resolveThemeHostState, getPreviewThemeIdFromHeaders,
+} from "../../../../lib/theme-host";
+import { renderThemeTemplate } from "../../../../lib/theme-renderer";
+import { mapSiteToViewModel } from "@vibress/theme-core";
+import { getDirection } from "@vibress/i18n";
 import { getPublicExtensionPage } from "../../../../lib/public-extension-client";
 import {
   localizedExtensionTitle,
@@ -36,28 +41,22 @@ export default async function PublicExtensionView({ params }: Props) {
       (page.locale && page.locale !== site.locale) ||
       (page.publishedLocales && !page.publishedLocales.includes(site.locale))) notFound();
   const title = localizedExtensionTitle(page.title, site.locale);
-
-  // Fallback-only, server-rendered, escaped, accessible scalar projection.
-  // External theme slots and rich sanitized view-models belong to EXT-303.
-  return (
-    <main
-      id="main-content"
-      aria-label={title}
-      style={{ maxWidth: "72rem", margin: "0 auto", padding: "clamp(1rem, 4vw, 3rem)" }}
-    >
-      <header style={{ marginBottom: "2rem" }}>
-        <h1 dir="auto">{title}</h1>
-      </header>
-      <dl style={{ display: "grid", gap: "1rem" }}>
-        {Object.entries(page.data).map(([key, value]) => (
-          <div key={key} style={{ minWidth: 0 }}>
-            <dt dir="auto" style={{ fontWeight: 600 }}>{key}</dt>
-            <dd dir="auto" style={{ overflowWrap: "anywhere", marginInlineStart: 0 }}>
-              {String(value)}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </main>
+  const previewThemeId = await getPreviewThemeIdFromHeaders();
+  const theme = await resolveThemeHostState(!!previewThemeId, previewThemeId);
+  return renderThemeTemplate(
+    "extension",
+    {
+      extension: {
+        pluginId, viewId, title, locale: site.locale,
+        direction: getDirection(site.locale),
+        data: { ...page.data },
+      },
+      site: mapSiteToViewModel(site),
+      settings: theme.settings,
+    },
+    {
+      themeId: theme.themeId, themeVersion: theme.themeVersion,
+      isBuiltIn: theme.isBuiltIn, site, settings: theme.settings,
+    },
   );
 }
