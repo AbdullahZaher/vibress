@@ -216,6 +216,7 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
               type: "vibress:extension:ready", version: 1,
               bridgeNonce: "${"e".repeat(64)}",
             }, "*");
+            document.body.dataset.attempted = "true";
           </script></body></html>`,
       }));
     await login(page);
@@ -223,6 +224,7 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     const body = page.frameLocator('iframe[title="Courses"]').locator("body");
     await expect(body).toContainText("Unapproved");
     await expect(body).toHaveAttribute("data-forged", "true");
+    await expect(body).toHaveAttribute("data-attempted", "true");
     await expect(body).not.toHaveAttribute("data-stolen", "true");
     expect(authorizedReads).toBe(0);
   });
