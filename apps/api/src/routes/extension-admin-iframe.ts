@@ -27,6 +27,8 @@ const FRAME_CSP = [
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
+  // Defense in depth where supported; browsers differ in navigate-to support.
+  "navigate-to 'none'",
   "frame-ancestors 'self'",
   // Always an opaque origin, including when the URL is opened in a top-level tab.
   "sandbox allow-scripts",
