@@ -12,7 +12,9 @@ The roadmap documents the complete target. EXT-201 through EXT-204 have been
 merged; [EXT-301A](extension-admin-views-ext301a.md) is a **partial**
 Host-owned, read-only Studio navigation/view implementation. The proposed
 [EXT-301B1](extension-admin-views-ext301b1.md) adds only operator-pinned
-Admin UI asset verification; it does not serve or execute those assets. It is not a
+Admin UI asset verification; [EXT-301B2A](extension-admin-views-ext301b2.md)
+adds Staff/publication-authorized inert JSON delivery, not executable Studio
+rendering. It is not a
 general executable Admin UI or a declaration of extension platform release
 readiness. The historical baseline below describes the 2026-10-19 design review.
 

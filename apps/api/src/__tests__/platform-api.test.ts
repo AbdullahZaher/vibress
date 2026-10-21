@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
-import { pluginPhysicalModelDigest } from "@vibress/plugins";
+import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -430,6 +430,118 @@ describe("Batch 12 — Platform Integration & Security", () => {
       resolve.mockRestore();
       fingerprints.mockRestore();
       list.mockRestore();
+    }
+  });
+
+  // ---------------- EXT-301B2 authorized Admin UI bytes ----------------
+  it("requires Staff auth before reading any Admin UI document", async () => {
+    const url = "/api/admin/v1/extensions/example/views/courses/ui";
+    const unauthenticated = await app.inject({ method: "GET", url });
+    expect(unauthenticated.statusCode).toBe(401);
+    const memberCookie = await app.inject({
+      method: "GET", url, headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(memberCookie.statusCode).toBe(401);
+    const malformed = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/example/views/%2e%2e/ui",
+      headers: { cookie: staffCookie },
+    });
+    expect(malformed.statusCode).not.toBe(200);
+  });
+
+  it("serves operator-verified Admin UI only as no-store inert JSON for an admitted view", async () => {
+    const pluginId = `verified-ui-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const html = '<main lang="ar" dir="rtl"><button type="button">الدورات</button></main>';
+    const module: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: { total: "number" } },
+        handle: () => ({ total: 1 }),
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
+      .mockResolvedValue(html);
+    const url = `/api/admin/v1/extensions/${pluginId}/views/courses/ui`;
+    try {
+      const response = await app.inject({
+        method: "GET", url, headers: { cookie: staffCookie },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("application/json");
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+      expect(response.headers["x-content-type-options"]).toBe("nosniff");
+      expect(response.headers["referrer-policy"]).toBe("no-referrer");
+      expect(response.json()).toEqual({
+        html, sha256: crypto.createHash("sha256").update(html).digest("hex"),
+      });
+      expect(read).toHaveBeenCalledWith(pluginId, expect.any(String), "courses");
+      const wrongView = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${pluginId}/views/other/ui`,
+        headers: { cookie: staffCookie },
+      });
+      expect(wrongView.statusCode).toBe(404);
+      expect(read).toHaveBeenCalledTimes(1);
+      const forgedPublication = await app.inject({
+        method: "GET", url,
+        headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
+      });
+      expect(forgedPublication.statusCode).toBe(403);
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("fails closed on disabled modules, corrupt views, tampered artifacts and oversized output", async () => {
+    const pluginId = `failed-ui-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const good: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: {} },
+        handle: () => ({}),
+      }],
+      adminViews: [{ id: "courses", routeId: "list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(null);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
+      .mockResolvedValue("<main>Approved</main>");
+    const url = `/api/admin/v1/extensions/${pluginId}/views/courses/ui`;
+    const request = () => app.inject({ method: "GET", url, headers: { cookie: staffCookie } });
+    try {
+      expect((await request()).statusCode).toBe(404);
+      expect(read).not.toHaveBeenCalled();
+      resolve.mockResolvedValue({ ...good, adminNavigation: undefined });
+      expect((await request()).statusCode).toBe(503);
+      expect(read).not.toHaveBeenCalled();
+      resolve.mockResolvedValue(good);
+      read.mockResolvedValue(null);
+      expect((await request()).statusCode).toBe(404);
+      read.mockRejectedValue(new Error("Operator path with secret"));
+      const failure = await request();
+      expect(failure.statusCode).toBe(503);
+      expect(JSON.stringify(failure.json())).not.toContain("Operator path with secret");
+      read.mockRejectedValue(new PluginDomainError(
+        "PLUGIN_PUBLICATION_INACTIVE", "Publication disabled during UI read",
+      ));
+      expect((await request()).statusCode).toBe(404);
+      read.mockResolvedValue("x".repeat(256 * 1024 + 1));
+      expect((await request()).statusCode).toBe(503);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
     }
   });
 
@@ -898,6 +1010,13 @@ describe("Batch 12 — Platform Integration & Security", () => {
       .mockImplementation(async (_id, publicationId) => ({
         pluginId: "p-approved", publicationId, models: [approvedModel],
       }));
+    const uiAsset = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
+      .mockResolvedValue("<main>Publication-scoped UI</main>");
+    const readUi = (publicationId: string) => app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/independent-courses/views/management/ui",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId },
+    });
     const readManagement = (publicationId: string) => app.inject({
       method: "GET",
       url: "/api/admin/v1/extensions/independent-courses/v1/private-management",
@@ -942,6 +1061,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(ownerNav.statusCode).toBe(200);
       expect(ownerNav.json().items).toHaveLength(1);
       expect((await readManagement(ownerPubId)).statusCode).toBe(200);
+      expect((await readUi(ownerPubId)).statusCode).toBe(200);
+      expect(uiAsset).toHaveBeenCalledTimes(1);
 
       for (const localRole of ["author", "contributor"]) {
         await db.update(publicationMemberships).set({ role: localRole })
@@ -953,6 +1074,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
         expect(nav.statusCode).toBe(200);
         expect(nav.json().items).toEqual([]);
         expect((await readManagement(limitedPubId)).statusCode).toBe(403);
+        expect((await readUi(limitedPubId)).statusCode).toBe(403);
+        expect(uiAsset).toHaveBeenCalledTimes(1);
       }
       await db.update(publicationMemberships).set({ role: "editor" })
         .where(eq(publicationMemberships.id, localMembershipId));
@@ -964,6 +1087,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(approve).toHaveBeenCalledTimes(2);
       expect((await navigation(limitedPubId)).json().items).toEqual([]);
       expect((await readManagement(limitedPubId)).statusCode).toBe(403);
+      expect((await readUi(limitedPubId)).statusCode).toBe(403);
+      expect(uiAsset).toHaveBeenCalledTimes(1);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
       const adminResponse = await invoke(limitedPubId);
@@ -974,7 +1099,10 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(approve).toHaveBeenCalledTimes(3);
       expect((await navigation(limitedPubId)).json().items).toHaveLength(1);
       expect((await readManagement(limitedPubId)).statusCode).toBe(200);
+      expect((await readUi(limitedPubId)).statusCode).toBe(200);
+      expect(uiAsset).toHaveBeenCalledTimes(2);
     } finally {
+      uiAsset.mockRestore();
       fingerprints.mockRestore();
       list.mockRestore();
       approve.mockRestore();

@@ -161,3 +161,10 @@ export const ExtensionAdminNavigationParamsSchema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
   viewId: ExtensionAdminSegmentSchema,
 }).strict();
+
+/** EXT-301B2: authenticated, inert JSON transport; NEVER an HTML response. */
+export const ExtensionAdminUiResponseSchema = z.object({
+  html: z.string().max(256 * 1024),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+

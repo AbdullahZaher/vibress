@@ -53,6 +53,8 @@ function setup(
   const host = {
     loadModule: vi.fn(async () => module),
     requiresPublicationEnablement: vi.fn(() => true),
+    readApprovedAdminUiAsset: vi.fn(async (_plugin: Plugin, _viewId: string) =>
+      "<main lang=\"ar\" dir=\"rtl\">الدورات</main>"),
   };
   return {
     service: new PluginsService(repo, settings, host, state),
@@ -145,5 +147,71 @@ describe("EXT-202 route admission and publication state", () => {
     )).toBe(false);
     expect(current.handler).not.toHaveBeenCalled();
     await current.service.shutdown();
+  });
+});
+
+describe("EXT-301B2A verified Admin UI lifecycle", () => {
+  const privileged = {
+    capabilities: ["admin.navigation", "extension.routes.admin"],
+  };
+
+  it("reads only from an active, enabled publication-scoped host without running plugin code", async () => {
+    const current = setup(privileged);
+    const html = await current.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    );
+    expect(html).toContain("الدورات");
+    expect(current.host.readApprovedAdminUiAsset)
+      .toHaveBeenCalledWith(expect.objectContaining({ id: "p1" }), "courses");
+    expect(current.handler).not.toHaveBeenCalled();
+    await expect(current.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-b", "courses",
+    )).rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    expect(current.host.readApprovedAdminUiAsset).toHaveBeenCalledTimes(1);
+  });
+
+  it("denies missing capabilities, inactive plugins and bundled legacy modules", async () => {
+    const withoutCapability = setup();
+    expect(await withoutCapability.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).toBeNull();
+    expect(withoutCapability.host.readApprovedAdminUiAsset).not.toHaveBeenCalled();
+    const inactive = setup({ ...privileged, status: "inactive" });
+    expect(await inactive.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).toBeNull();
+    expect(inactive.host.readApprovedAdminUiAsset).not.toHaveBeenCalled();
+    const legacy = setup(privileged);
+    legacy.host.requiresPublicationEnablement.mockReturnValue(false);
+    expect(await legacy.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).toBeNull();
+    expect(legacy.host.readApprovedAdminUiAsset).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the publication disables or a package rotates during read", async () => {
+    const disabled = setup(privileged);
+    vi.mocked(disabled.state.isEnabled)
+      .mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(disabled.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+
+    const rotated = setup(privileged);
+    vi.mocked(rotated.repo.findById).mockResolvedValue({
+      ...activePlugin, ...privileged, version: "2.0.0",
+    });
+    expect(await rotated.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).toBeNull();
+
+    const revoked = setup(privileged);
+    vi.mocked(revoked.repo.findById).mockResolvedValue({
+      ...activePlugin, ...privileged, status: "inactive",
+    });
+    expect(await revoked.service.readExtensionAdminUiAsset(
+      "independent-courses", "pub-a", "courses",
+    )).toBeNull();
+    expect(revoked.handler).not.toHaveBeenCalled();
   });
 });

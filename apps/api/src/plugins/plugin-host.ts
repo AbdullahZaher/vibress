@@ -60,6 +60,12 @@ export class BundledPluginHost implements PluginHost {
     return this.external.getApprovedStorageModels(plugin);
   }
 
+  async readApprovedAdminUiAsset(plugin: Plugin, viewId: string): Promise<string | null> {
+    // Bundled v1 plugins never gain the external asset admission path.
+    if (this.registry.has(plugin.manifestId)) return null;
+    return this.external.readApprovedAdminUiAsset(plugin, viewId);
+  }
+
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
     const entry = this.registry.get(plugin.manifestId);
     if (entry) return entry.module;
