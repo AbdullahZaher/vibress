@@ -307,6 +307,59 @@ describe("PluginsService", () => {
     expect(onEvent).toHaveBeenCalledTimes(3);
   });
 
+  it.each([
+    ["version", { version: "2.0.0" }],
+    ["entrypoint", { entrypoint: "next.mjs" }],
+    ["ABI", { vibressApiVersion: "2.0.0" }],
+    ["capabilities", { capabilities: [] }],
+    ["hooks", { hooks: ["other.event"] }],
+    ["settings schema", { settingsSchema: { changed: true } }],
+  ] as const)("refuses a stale event when %s changes during activation", async (_reason, patch) => {
+    const onEvent = vi.fn(async () => undefined);
+    const activate = vi.fn(async () => undefined);
+    let reads = 0;
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => {
+        reads += 1;
+        return makePlugin({
+          status: "active", hooks: ["onEvent"],
+          ...(reads > 1 ? patch : {}),
+        });
+      }),
+    };
+    const hostWith = { loadModule: vi.fn(async () => ({ activate, onEvent })) };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .dispatchEvent("p1", "post.published", {}, "pub-a")).rejects.toMatchObject({
+      code: "PLUGIN_RELEASE_CHANGED",
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects release changes before the legacy onEvent hook runs", async () => {
+    const onEvent = vi.fn(async () => undefined);
+    let reads = 0;
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => {
+        reads += 1;
+        return makePlugin({
+          status: "active",
+          hooks: ["onEvent"],
+          version: reads > 1 ? "2.0.0" : "1.0.0",
+        });
+      }),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })),
+    };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .executeHook("p1", "onEvent", {}, "pub-a")).rejects.toMatchObject({
+      code: "PLUGIN_RELEASE_CHANGED",
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   it("does not run events if the plugin becomes inactive during local initialization", async () => {
     const onEvent = vi.fn(async () => undefined);
     const activate = vi.fn(async () => undefined);
