@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Puzzle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { type AdminPlugin, listPluginsApi } from "../../lib/api";
 import { Button } from "../ui/button";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import { PluginsPanel } from "./PluginsPanel";
 
 /** First-class admin route: /admin/plugins (requires plugins.read). */
@@ -52,21 +53,17 @@ export function PluginsPage() {
 
   return (
     <section className="w-full max-w-7xl mx-auto space-y-6" aria-labelledby="plugins-page-title">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h1 id="plugins-page-title" className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <Puzzle className="size-5 text-primary" aria-hidden="true" />
-            {tr("Plugins")}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {tr("Manage installed plugins and trusted extensions.")}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" disabled={loading} onClick={() => { void refresh(); }}>
-          <RefreshCw className="me-2 size-4" aria-hidden="true" />
-          {tr("Refresh plugins")}
-        </Button>
-      </header>
+      <AdminPageHeader
+        titleId="plugins-page-title"
+        title={tr("Plugins")}
+        description={tr("Manage installed plugins and trusted extensions.")}
+        actions={
+          <Button variant="outline" size="sm" disabled={loading} onClick={() => { void refresh(); }}>
+            <RefreshCw className="me-2 size-4" aria-hidden="true" />
+            {tr("Refresh plugins")}
+          </Button>
+        }
+      />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {loading && (
         <p role="status" className="text-sm text-muted-foreground">

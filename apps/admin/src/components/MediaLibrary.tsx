@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
@@ -127,21 +128,21 @@ export const MediaLibrary: React.FC = () => {
   return (
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">
-          Media Asset Library
-        </h1>
-
-        <label className="inline-flex items-center justify-center rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 cursor-pointer gap-2 shadow-2xs shrink-0">
-          <Upload className="h-4 w-4" /> Upload Files
-          <input
-            type="file"
-            multiple
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
-      </div>
+      <AdminPageHeader
+        title={tr("Media")}
+        description={tr("Upload, organize, and manage visual assets across your publication.")}
+        actions={
+          <label className="inline-flex items-center justify-center rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 cursor-pointer gap-2 shadow-2xs shrink-0">
+            <Upload className="h-4 w-4" /> {tr("Upload Files")}
+            <input
+              type="file"
+              multiple
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+        }
+      />
 
       {uploadError && (
         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">

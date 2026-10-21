@@ -506,6 +506,15 @@ const translations: Record<string, string> = {
   "Importing...": "جارٍ الاستيراد...",
   "Importing photo...": "جارٍ استيراد الصورة...",
   "Load more photos": "تحميل المزيد من الصور",
+  "Media": "الوسائط",
+  "Upload Files": "رفع الملفات",
+  "Manage publication preferences, membership, theme, and system options.": "إدارة إعدادات الموقع والعضوية والقوالب وخيارات النظام.",
+  "Manage subscriber accounts, access levels, and member subscriptions.": "إدارة حسابات المشتركين ومستويات الوصول واشتراكات الأعضاء.",
+  "Upload, organize, and manage visual assets across your publication.": "رفع وتنظيم وإدارة الوسائط المرئية في موقعك.",
+  "Monitor publication traffic, readership engagement, and subscriber growth.": "متابعة حركة زوار الموقع وتفاعل القراء ونمو المشتركين.",
+  "Organize and classify posts and editorial content with taxonomies.": "تنظيم وتصنيف المقالات والمحتوى التحريري بالتصنيفات والوسوم.",
+  "Review reported member comments, manage public discussions, and enforce community standards.": "مراجعة تعليقات الأعضاء المبلغ عنها وإدارة المناقشات وتطبيق معايير المجتمع.",
+  "Manage paid subscriber memberships, billing cycles, and payment statuses.": "إدارة اشتراكات الأعضاء المدفوعة ودورات الفوترة وحالات الدفع.",
 };
 
 // Reuse already certified shared dictionaries for standard UI labels;

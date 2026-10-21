@@ -103,7 +103,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       </div>
 
       {/* Fixed Bottom Section (Settings + Help above What's New & UserNav) */}
-      <div className="shrink-0 px-4 py-3 space-y-3 bg-sidebar z-20 border-t border-sidebar-border/30">
+      <div className="shrink-0 px-4 py-3 space-y-3 bg-sidebar z-20">
         <NavSettings currentPath={currentPath} onNavigate={handleNavigate} canReadPlugins={canReadPlugins} />
         <AppSidebarBanner onNavigate={handleNavigate} />
         <UserMenu user={user} onLogout={onLogout} onNavigate={handleNavigate} locale={locale} onToggleLocale={onToggleLocale} />

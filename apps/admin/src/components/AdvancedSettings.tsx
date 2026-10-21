@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Cpu, Server, Activity } from "lucide-react";
+import { Server, Activity } from "lucide-react";
 import { PlatformSettings } from "./PlatformSettings";
 import { OperationsSettings } from "./OperationsSettings";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
@@ -18,8 +18,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
       {/* Header with Tab Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <Cpu className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Advanced Platform & Operations
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

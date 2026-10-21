@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Palette, HardDrive, Layout } from "lucide-react";
+import { Palette, HardDrive } from "lucide-react";
 import { ThemesSettings } from "./ThemesSettings";
 import { StorageSettings } from "./StorageSettings";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
@@ -18,8 +18,7 @@ export const SiteSettings: React.FC<SiteSettingsProps> = ({
       {/* Top Header with Tab Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/40 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <Layout className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Site Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

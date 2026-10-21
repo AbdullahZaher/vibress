@@ -10,6 +10,7 @@ import {
 } from "../../lib/api";
 import { TranslationBadge } from "./TranslationBadge";
 import { Button } from "../ui/button";
+import { AdminPageHeader } from "../common/AdminPageHeader";
 import { Input } from "../ui/input";
 import {
   Globe,
@@ -126,52 +127,44 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto px-2 sm:px-4 py-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary">
-              <Globe className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground tabular-nums">{tr("Translation Matrix")}</h1>
-              <p className="text-sm text-muted-foreground">{tr("Manage multilingual content coverage, editorial review workflows, and localization health.")}</p>
-            </div>
+      <AdminPageHeader
+        title={tr("Translation Matrix")}
+        description={tr("Manage multilingual content coverage, editorial review workflows, and localization health.")}
+        actions={
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => onNavigate("/admin/translations/queue")}
+              className="gap-2 cursor-pointer relative"
+            >
+              <Clock className="h-4 w-4 text-amber-500" />
+              <span>{tr("Review Queue")}</span>
+              {healthData && healthData.needsReviewCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                  {healthData.needsReviewCount}
+                </span>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => onNavigate("/admin/settings/localization")}
+              className="gap-2 cursor-pointer"
+            >
+              <Globe className="h-4 w-4 text-primary" />
+              <span>{tr("Manage Locales")}</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => refetch()}
+              className="cursor-pointer"
+              title={tr("Refresh matrix")}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="outline"
-            onClick={() => onNavigate("/admin/translations/queue")}
-            className="gap-2 cursor-pointer relative"
-          >
-            <Clock className="h-4 w-4 text-amber-500" />
-            <span>{tr("Review Queue")}</span>
-            {healthData && healthData.needsReviewCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
-                {healthData.needsReviewCount}
-              </span>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => onNavigate("/admin/settings/localization")}
-            className="gap-2 cursor-pointer"
-          >
-            <Globe className="h-4 w-4 text-primary" />
-            <span>{tr("Manage Locales")}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => refetch()}
-            className="cursor-pointer"
-            title={tr("Refresh matrix")}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Health Overview Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
