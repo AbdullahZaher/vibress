@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readTrustedPluginLockfile } from "../trusted-release-attestation";
+import { TrustedExternalPluginHost } from "../trusted-external-plugin-host";
+import { verifyTrustedPluginRelease } from "../operator-release-preflight";
 
 const dirs: string[] = [];
 async function fixture() {
@@ -42,6 +44,24 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     await expect(readTrustedPluginLockfile(f.lockfile, f.options)).resolves.toEqual({
       schemaVersion: 1, plugins: [],
     });
+  });
+
+  it("enforces exactly the same signature policy in runtime and preflight", async () => {
+    const f = await fixture();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", f.keyFile);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", f.signatureFile);
+    try {
+      const host = new TrustedExternalPluginHost(f.lockfile);
+      await expect(host.listTrustedManifests()).resolves.toEqual([]);
+      await expect(host.listTrustedFingerprints()).resolves.toEqual(new Map());
+      await expect(verifyTrustedPluginRelease(f.lockfile)).resolves.toEqual([]);
+      await writeFile(f.lockfile, f.payload + " ");
+      await expect(host.listTrustedManifests()).rejects.toThrow(/signature verification failed/);
+      await expect(host.listTrustedFingerprints()).rejects.toThrow(/signature verification failed/);
+      await expect(verifyTrustedPluginRelease(f.lockfile)).rejects.toThrow(/signature verification failed/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("fails closed when either operator attestation path is omitted", async () => {
