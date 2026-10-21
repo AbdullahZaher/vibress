@@ -5,6 +5,7 @@ import {
   ExtensionAdminUiResponseSchema,
 } from "@vibress/api-contracts";
 import type { PluginAdminPermission } from "@vibress/plugin-sdk";
+import { PluginDomainError } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { pluginsService } from "../services";
 import { admitAdminViews, type AdmittedAdminView } from "../plugins/admin-view-registry";
@@ -112,7 +113,12 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
         });
         if (!response.success) return reject(reply, req, "EXTENSION_INVALID_UI", 503);
         return reply.status(200).send(response.data);
-      } catch {
+      } catch (error) {
+        if (error instanceof PluginDomainError &&
+            (error.code === "PLUGIN_PUBLICATION_INACTIVE" ||
+             error.code === "PLUGIN_INACTIVE")) {
+          return reject(reply, req, "EXTENSION_UI_NOT_FOUND", 404);
+        }
         // Never leak filesystem paths, operator lock contents or plugin errors.
         return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
       }
