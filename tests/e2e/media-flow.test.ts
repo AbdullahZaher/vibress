@@ -13,7 +13,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
   test("Media Library upload, browse, and details view", async ({ page }) => {
     await page.getByRole("button", { name: "Media", exact: true }).click();
     await expect(page).toHaveURL(/.*\/admin\/media/);
-    await expect(page.locator("h1")).toContainText("Media Asset Library");
+    await expect(page.getByRole("heading", { level: 1, name: "Media", exact: true })).toBeVisible();
 
     // Verify upload button and search input present
     await expect(page.locator('input[type="file"]')).toBeAttached();
