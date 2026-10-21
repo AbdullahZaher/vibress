@@ -173,9 +173,16 @@ export const ExtensionAdminFrameTicketQuerySchema = z.object({
   ticket: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 export const ExtensionAdminFrameTicketResponseSchema = z.object({
+  bridgeNonce: z.string().regex(/^[a-f0-9]{64}$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
   src: z.string().max(400).regex(
     /^\/api\/admin\/v1\/extensions\/[a-z0-9][a-z0-9-]{0,99}\/views\/[a-z][a-z0-9-]{0,63}\/frame\?ticket=[a-f0-9]{64}$/,
   ),
+}).strict();
+
+/** Authorization refresh checks the active plugin, Staff, publication and approved bytes. */
+export const ExtensionAdminFrameStatusResponseSchema = z.object({
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
 /**
