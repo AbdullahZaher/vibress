@@ -1113,6 +1113,11 @@ describe("Batch 12 — Platform Integration & Security", () => {
       }));
     const uiAsset = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
       .mockResolvedValue("<main>Publication-scoped UI</main>");
+    const issueFrame = (publicationId: string) => app.inject({
+      method: "POST",
+      url: "/api/admin/v1/extensions/independent-courses/views/management/frame-ticket",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId, origin: "http://localhost:7777" },
+    });
     const readUi = (publicationId: string) => app.inject({
       method: "GET",
       url: "/api/admin/v1/extensions/independent-courses/views/management/ui",
@@ -1163,6 +1168,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(ownerNav.json().items).toHaveLength(1);
       expect((await readManagement(ownerPubId)).statusCode).toBe(200);
       expect((await readUi(ownerPubId)).statusCode).toBe(200);
+      expect((await issueFrame(ownerPubId)).statusCode).toBe(200);
       expect(uiAsset).toHaveBeenCalledTimes(1);
 
       for (const localRole of ["author", "contributor"]) {
@@ -1176,6 +1182,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
         expect(nav.json().items).toEqual([]);
         expect((await readManagement(limitedPubId)).statusCode).toBe(403);
         expect((await readUi(limitedPubId)).statusCode).toBe(403);
+        expect((await issueFrame(limitedPubId)).statusCode).toBe(403);
         expect(uiAsset).toHaveBeenCalledTimes(1);
       }
       await db.update(publicationMemberships).set({ role: "editor" })
@@ -1189,6 +1196,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await navigation(limitedPubId)).json().items).toEqual([]);
       expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       expect((await readUi(limitedPubId)).statusCode).toBe(403);
+      expect((await issueFrame(limitedPubId)).statusCode).toBe(403);
       expect(uiAsset).toHaveBeenCalledTimes(1);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
@@ -1201,6 +1209,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await navigation(limitedPubId)).json().items).toHaveLength(1);
       expect((await readManagement(limitedPubId)).statusCode).toBe(200);
       expect((await readUi(limitedPubId)).statusCode).toBe(200);
+      expect((await issueFrame(limitedPubId)).statusCode).toBe(200);
       expect(uiAsset).toHaveBeenCalledTimes(2);
     } finally {
       uiAsset.mockRestore();
