@@ -125,6 +125,8 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
             variant="ghost"
             size="icon"
             onClick={onClose}
+            aria-label={tr("Close")}
+            title={tr("Close")}
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />

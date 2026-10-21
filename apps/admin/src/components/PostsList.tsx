@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import {
@@ -324,14 +325,14 @@ export const PostsList: React.FC<PostsListProps> = ({
 
                   <TableCell className="text-end pe-6">
                     <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="xs"
+                      <IconButton
+                        label={tr("Edit")}
+                        accessibleLabel={`${tr("Edit")}: ${post.title}`}
                         onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                        className="gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                        className="text-muted-foreground hover:text-foreground"
                       >
-                        <Edit className="h-3.5 w-3.5" /> Edit
-                      </Button>
+                        <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                      </IconButton>
 
                       {canPublish && (
                         <Button
@@ -346,15 +347,14 @@ export const PostsList: React.FC<PostsListProps> = ({
                         </Button>
                       )}
 
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
+                      <IconButton
+                        label={tr("Delete")}
+                        accessibleLabel={`${tr("Delete")}: ${post.title}`}
                         onClick={() => handleDelete(post.id)}
-                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
-                        title="Delete post"
+                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </IconButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -413,14 +413,14 @@ export const PostsList: React.FC<PostsListProps> = ({
               </div>
 
               <div className="flex items-center justify-end gap-1.5 pt-1">
-                <Button
+                <IconButton
+                  label={tr("Edit")}
+                  accessibleLabel={`${tr("Edit")}: ${post.title}`}
                   variant="outline"
-                  size="xs"
                   onClick={() => onNavigate(`/admin/posts/${post.id}`)}
-                  className="gap-1 text-xs"
                 >
-                  <Edit className="h-3 w-3" /> Edit
-                </Button>
+                  <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                </IconButton>
                 {canPublish && (
                   <Button
                     variant="outline"
@@ -431,14 +431,14 @@ export const PostsList: React.FC<PostsListProps> = ({
                     {post.status === "published" ? "Unpublish" : "Publish"}
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
+                <IconButton
+                  label={tr("Delete")}
+                  accessibleLabel={`${tr("Delete")}: ${post.title}`}
                   onClick={() => handleDelete(post.id)}
                   className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </IconButton>
               </div>
             </div>
           ))

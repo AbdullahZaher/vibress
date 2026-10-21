@@ -23,6 +23,9 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Refresh": "تحديث",
+  "Copy URL": "نسخ الرابط",
+  "Copied": "تم النسخ",
   "Plugin pages": "صفحات الإضافات",
   "Read-only plugin view": "عرض الإضافة للقراءة فقط",
   "Unable to load plugin view.": "تعذر تحميل صفحة الإضافة.",

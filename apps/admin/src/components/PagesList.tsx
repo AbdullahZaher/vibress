@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import {
@@ -307,24 +308,23 @@ export const PagesList: React.FC<PagesListProps> = ({
                         </Button>
                       )}
 
-                      <Button
+                      <IconButton
+                        label={tr("Edit")}
+                        accessibleLabel={`${tr("Edit")}: ${page.title}`}
                         variant="outline"
-                        size="xs"
                         onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                        className="cursor-pointer gap-1"
                       >
-                        <Edit className="h-3.5 w-3.5" /> Edit
-                      </Button>
+                        <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                      </IconButton>
 
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
+                      <IconButton
+                        label={tr("Delete")}
+                        accessibleLabel={`${tr("Delete")}: ${page.title}`}
                         onClick={() => handleDelete(page.id)}
-                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
-                        title="Delete page"
+                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </IconButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -387,14 +387,14 @@ export const PagesList: React.FC<PagesListProps> = ({
                 </span>
 
                 <div className="flex items-center gap-1">
-                  <Button
+                  <IconButton
+                    label={tr("Edit")}
+                    accessibleLabel={`${tr("Edit")}: ${page.title}`}
                     variant="outline"
-                    size="xs"
                     onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                    className="gap-1 text-xs"
                   >
-                    <Edit className="h-3 w-3" /> Edit
-                  </Button>
+                    <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                  </IconButton>
                   {canPublish && (
                     <Button
                       variant="outline"
@@ -405,14 +405,14 @@ export const PagesList: React.FC<PagesListProps> = ({
                       {page.status === "published" ? "Unpublish" : "Publish"}
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
+                  <IconButton
+                    label={tr("Delete")}
+                    accessibleLabel={`${tr("Delete")}: ${page.title}`}
                     onClick={() => handleDelete(page.id)}
                     className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </IconButton>
                 </div>
               </div>
             </div>
