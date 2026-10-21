@@ -1528,6 +1528,13 @@ describe("Batch 12 — Platform Integration & Security", () => {
       .mockResolvedValue(pluginModule);
     const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
       .mockResolvedValue(true);
+    // These tenant IDs are synthetic; mock their publication locale policy
+    // instead of querying actual publication rows from the integration DB.
+    const localePolicy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
     const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
     try {
       const a = await app.inject({
@@ -1550,6 +1557,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       );
       expect(prepare).toHaveBeenCalledTimes(2);
     } finally {
+      localePolicy.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();
       hostContext.mockRestore();
