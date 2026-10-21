@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { z } from "zod";
-import { ExtensionAdminNavigationParamsSchema } from "@vibress/api-contracts";
+import {
+  ExtensionAdminNavigationParamsSchema,
+  ExtensionAdminFrameTicketQuerySchema,
+  ExtensionAdminFrameTicketResponseSchema,
+} from "@vibress/api-contracts";
 import { PluginDomainError } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin, COOKIE_NAME } from "../middleware/auth";
 import { authService, pluginsService, workspaceService } from "../services";
@@ -9,7 +12,6 @@ import { admitAdminViews } from "../plugins/admin-view-registry";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
 import { adminUiFrameTickets, sessionFingerprint } from "../plugins/admin-ui-frame-tickets";
 
-const TicketQuerySchema = z.object({ ticket: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 const MAX_HTML_BYTES = 256 * 1024;
 const FRAME_CSP = [
   "default-src 'none'",
@@ -108,7 +110,9 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
         // Opaque ticket expires in 45s and is consumed once in Redis. This URL
         // is constructed by Host, never loaded from plugin-controlled metadata.
         const src = `/api/admin/v1/extensions/${pluginId}/views/${viewId}/frame?ticket=${ticket}`;
-        return reply.code(200).send({ src });
+        const response = ExtensionAdminFrameTicketResponseSchema.safeParse({ src });
+        if (!response.success) return reject(req, reply, "EXTENSION_INVALID_UI", 503);
+        return reply.code(200).send(response.data);
       } catch (error) {
         return reject(req, reply, "EXTENSION_UNAVAILABLE", denyOnPluginTransition(error));
       }
@@ -125,7 +129,7 @@ export async function adminExtensionFrameRoutes(fastify: FastifyInstance) {
       reply.header("Referrer-Policy", "no-referrer");
       reply.header("X-Content-Type-Options", "nosniff");
       const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
-      const query = TicketQuerySchema.safeParse(req.query);
+      const query = ExtensionAdminFrameTicketQuerySchema.safeParse(req.query);
       if (!params.success || !query.success) return reject(req, reply, "VALIDATION_ERROR", 400);
       let claim;
       try {
