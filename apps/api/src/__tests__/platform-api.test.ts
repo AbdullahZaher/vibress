@@ -1399,6 +1399,20 @@ describe("Batch 12 — Platform Integration & Security", () => {
         routeId: "catalog", title,
       });
       expect(prepared).not.toHaveBeenCalled();
+      const page = await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
+      });
+      expect(page.statusCode).toBe(200);
+      expect(page.headers["cache-control"]).toBe("private, no-store");
+      expect(page.json()).toEqual({
+        publicationId: expect.any(String),
+        pluginId: "independent-courses", viewId: "courses",
+        routeId: "catalog", title,
+        data: { title: "Public courses", total: 3 },
+      });
+      expect(prepared).toHaveBeenCalledWith(
+        "independent-courses", expect.any(String), "extension.routes.public", module,
+      );
       const scalar = await app.inject({
         method: "GET",
         url: "/api/content/v1/extensions/independent-courses/v1/catalog",
@@ -1422,6 +1436,9 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await app.inject({
         method: "GET", url, headers: { host: "localhost:7777" },
       })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
 
       resolved.mockResolvedValue({ ...module, routes: [{ ...descriptor, audience: "member" }] });
       expect((await app.inject({
@@ -1431,6 +1448,9 @@ describe("Batch 12 — Platform Integration & Security", () => {
       resolved.mockResolvedValue(null);
       expect((await app.inject({
         method: "GET", url, headers: { host: "localhost:7777" },
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET", url: url + "/page", headers: { host: "localhost:7777" },
       })).statusCode).toBe(404);
     } finally {
       prepared.mockRestore();
