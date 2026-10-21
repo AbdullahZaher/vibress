@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ApiError, type AdminExtensionViewLink, issueExtensionAdminFrameTicketApi,
+  readExtensionAdminViewApi,
 } from "../../lib/api";
 import { getActivePublicationId } from "../../lib/api/client";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { PluginAdminDataView } from "./PluginAdminDataView";
+import { connectAdminExtensionReadBridge } from "../../lib/extensions/admin-bridge";
 
 interface Props {
   link: AdminExtensionViewLink;
@@ -18,13 +20,17 @@ type FrameState =
 
 /**
  * The iframe has an opaque origin; it cannot access Admin DOM or cookies.
- * Browser plugin code has no API bridge. A missing B2B artifact uses the
+ * Only a linked, read-only Host GET projection can cross the private
+ * MessagePort bridge. A missing B2B artifact uses the
  * unchanged EXT-301A Host-rendered scalar view; other errors fail closed.
  */
 export function PluginAdminView({ link }: Props) {
   const { locale, tr } = useAdminLocale();
   const [publicationRevision, setPublicationRevision] = useState(0);
   const [frame, setFrame] = useState<FrameState>({ kind: "loading" });
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const closeBridgeRef = useRef<() => void>(() => undefined);
+  const loadedFrameUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const onPublicationChanged = () => setPublicationRevision((n) => n + 1);
@@ -34,6 +40,8 @@ export function PluginAdminView({ link }: Props) {
 
   useEffect(() => {
     let canceled = false;
+    closeBridgeRef.current();
+    loadedFrameUrlRef.current = null;
     setFrame({ kind: "loading" });
     const publicationId = getActivePublicationId();
     void issueExtensionAdminFrameTicketApi(link).then(({ src }) => {
@@ -55,11 +63,35 @@ export function PluginAdminView({ link }: Props) {
         setFrame({ kind: "error" });
       }
     });
-    return () => { canceled = true; };
+    return () => {
+      canceled = true;
+      closeBridgeRef.current();
+    };
   }, [link.pluginId, link.viewId, publicationRevision]);
 
   const current = frame.kind === "frame" &&
     frame.publicationId === getActivePublicationId();
+
+  function onFrameLoad() {
+    if (frame.kind !== "frame" || !current || !frameRef.current) return;
+    // A second navigation (including to an external origin) is not admitted.
+    // The private port from the previous document is invalidated immediately.
+    if (loadedFrameUrlRef.current === frame.src) {
+      closeBridgeRef.current();
+      setFrame({ kind: "error" });
+      return;
+    }
+    loadedFrameUrlRef.current = frame.src;
+    const element = frameRef.current;
+    closeBridgeRef.current();
+    closeBridgeRef.current = connectAdminExtensionReadBridge(
+      element, locale,
+      () => element.isConnected && frameRef.current === element &&
+        loadedFrameUrlRef.current === frame.src &&
+        getActivePublicationId() === frame.publicationId,
+      () => readExtensionAdminViewApi(link),
+    );
+  }
 
   if (frame.kind === "legacy") return <PluginAdminDataView link={link} />;
 
@@ -72,6 +104,8 @@ export function PluginAdminView({ link }: Props) {
         <p role="status">{tr("Loading plugin view...")}</p>
       ) : (
         <iframe
+          ref={frameRef}
+          onLoad={onFrameLoad}
           key={frame.src}
           title={link.title[locale]}
           src={frame.src}
