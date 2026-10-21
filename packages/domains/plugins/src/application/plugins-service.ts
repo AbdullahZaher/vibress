@@ -330,7 +330,10 @@ export class PluginsService {
 
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (!latest || !this.sameExecutionRelease(plugin, latest)) {
+    if (!latest || latest.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    if (!this.sameExecutionRelease(plugin, latest)) {
       throw new PluginDomainError(
         "PLUGIN_RELEASE_CHANGED",
         "Plugin release or authorization changed during event admission",
@@ -401,7 +404,10 @@ export class PluginsService {
     }
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (!latest || !this.sameExecutionRelease(plugin, latest)) {
+    if (!latest || latest.status !== "active") {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    if (!this.sameExecutionRelease(plugin, latest)) {
       throw new PluginDomainError(
         "PLUGIN_RELEASE_CHANGED",
         "Plugin release or authorization changed during event admission",
