@@ -619,7 +619,18 @@ export function buildCollectionEntryViewModel(
   return base;
 }
 
+/** Safe, published-only, Host-scoped extension contribution for theme slots. */
+export interface ThemeExtensionViewModel {
+  pluginId: string;
+  viewId: string;
+  title: string;
+  locale: string;
+  direction: "ltr" | "rtl";
+  data: Record<string, string | number | boolean>;
+}
+
 export interface ThemeViewModelContext {
+  extension?: ThemeExtensionViewModel | undefined;
   site?: SiteViewModel | null | undefined;
   settings?: Record<string, unknown> | null | undefined;
   posts?: PostViewModel[] | null | undefined;
