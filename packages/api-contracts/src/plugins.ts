@@ -268,7 +268,9 @@ const PluginEventNameSchema = z.string().regex(/^[a-z][a-z0-9]*(?:[.-][a-z][a-z0
 const PluginEventPayloadSchema = z.record(
   z.string().regex(/^[a-z][a-zA-Z0-9_]{0,63}$/),
   z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
-).refine((fields) => Object.keys(fields).length <= 24, "Too many event fields");
+).refine((fields) => Object.keys(fields).length <= 24, "Too many event fields")
+  .refine((fields) => !["publicationId", "workspaceId", "tenantId", "pluginId", "manifestId"]
+    .some((key) => Object.hasOwn(fields, key)), "Caller cannot select event authority");
 
 export const PluginEventEnqueueSchema = z.object({
   eventId: z.string().uuid(),
