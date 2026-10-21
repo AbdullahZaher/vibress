@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
+import { readTrustedPluginLockfile } from "./trusted-release-attestation";
 import { z } from "zod";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { validateStorageModel, type ApprovedPluginPhysicalModel } from "@vibress/plugins";
@@ -44,7 +45,6 @@ const lockfileSchema = z.object({
   plugins: z.array(pinnedPluginSchema).max(64),
 }).strict();
 
-const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_UI_ASSET_BYTES = 256 * 1024;
 
@@ -133,15 +133,7 @@ export class TrustedExternalPluginHost {
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
   async listTrustedManifests(): Promise<PluginManifest[]> {
     if (!this.lockfilePath) return [];
-    if (!path.isAbsolute(this.lockfilePath)) {
-      throw new Error("Trusted plugin lockfile must use an absolute path");
-    }
-    const lockfileStats = await lstat(this.lockfilePath);
-    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
-      lockfileStats.size > MAX_LOCKFILE_BYTES) {
-      throw new Error("Invalid trusted plugin lockfile");
-    }
-    const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const json = await readTrustedPluginLockfile(this.lockfilePath);
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
   }
 
@@ -152,14 +144,7 @@ export class TrustedExternalPluginHost {
    */
   async listTrustedFingerprints(): Promise<ReadonlyMap<string, string>> {
     if (!this.lockfilePath) return new Map();
-    if (!path.isAbsolute(this.lockfilePath)) {
-      throw new Error("Trusted plugin lockfile must use an absolute path");
-    }
-    const stats = await lstat(this.lockfilePath);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_LOCKFILE_BYTES) {
-      throw new Error("Invalid trusted plugin lockfile");
-    }
-    const data: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const data = await readTrustedPluginLockfile(this.lockfilePath);
     const fingerprints = new Map<string, string>();
     for (const [id, approved] of parseTrustedPluginLockfile(data)) {
       fingerprints.set(id, approved.sha256);
@@ -173,14 +158,7 @@ export class TrustedExternalPluginHost {
    */
   async getApprovedStorageModels(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]> {
     if (!this.lockfilePath) return [];
-    if (!path.isAbsolute(this.lockfilePath)) {
-      throw new Error("Trusted plugin lockfile must use an absolute path");
-    }
-    const file = await lstat(this.lockfilePath);
-    if (!file.isFile() || file.isSymbolicLink() || file.size > MAX_LOCKFILE_BYTES) {
-      throw new Error("Invalid trusted plugin lockfile");
-    }
-    const data: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const data = await readTrustedPluginLockfile(this.lockfilePath);
     const approved = parseTrustedPluginLockfile(data).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
       throw new Error("Installed plugin differs from operator-approved storage manifest");
@@ -204,15 +182,7 @@ export class TrustedExternalPluginHost {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(viewId)) {
       throw new Error("Invalid Admin UI view identifier");
     }
-    if (!path.isAbsolute(this.lockfilePath)) {
-      throw new Error("Trusted plugin lockfile must use an absolute path");
-    }
-    const lockfileStats = await lstat(this.lockfilePath);
-    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
-        lockfileStats.size > MAX_LOCKFILE_BYTES) {
-      throw new Error("Invalid trusted plugin lockfile");
-    }
-    const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const json = await readTrustedPluginLockfile(this.lockfilePath);
     const approved = parseTrustedPluginLockfile(json).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
       throw new Error("Installed plugin differs from operator-approved Admin UI manifest");
@@ -246,14 +216,7 @@ export class TrustedExternalPluginHost {
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
     if (!this.lockfilePath) return null;
-    if (!path.isAbsolute(this.lockfilePath)) throw new Error("Trusted plugin lockfile must use an absolute path");
-
-    const lockfileStats = await lstat(this.lockfilePath);
-    if (!lockfileStats.isFile() || lockfileStats.isSymbolicLink() ||
-      lockfileStats.size > MAX_LOCKFILE_BYTES) {
-      throw new Error("Invalid trusted plugin lockfile");
-    }
-    const json: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const json = await readTrustedPluginLockfile(this.lockfilePath);
     const installed = parseTrustedPluginLockfile(json).get(plugin.manifestId);
     if (!installed) return null;
     if (!manifestMatchesInstalled(plugin, installed.manifest)) {
