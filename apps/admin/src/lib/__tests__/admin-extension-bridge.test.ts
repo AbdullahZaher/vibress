@@ -77,7 +77,10 @@ describe("EXT-301B2B isolated read-only MessagePort", () => {
       { type: "vibress:extension:write", version: 1, requestId: "r3", body: { role: "owner" } },
       { type: "vibress:extension:read", version: 1, requestId: "../../escape" },
     ]) t.port.postMessage(request);
-    await vi.waitFor(() => expect(t.read).toHaveBeenCalledTimes(0));
+    // Allow all queued synthetic MessagePort deliveries to be processed.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(t.read).not.toHaveBeenCalled();
     expect(t.responses).toEqual([]);
     t.disconnect();
   });
