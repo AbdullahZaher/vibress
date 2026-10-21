@@ -57,9 +57,9 @@ describe("EXT-302A public Host view admission", () => {
     expect(admitPublicViews(moduleWith({ publicViews: [] }))).toBeNull();
   });
 
-  it("disallows private response shapes and invalid dynamic route declarations", () => {
+  it("rejects response schemas referencing fields not declared by the route", () => {
     expect(admitPublicViews(moduleWith({
-      routes: [{ ...route, response: { fields: { secret: "object" as "string" } } }],
+      routes: [{ ...route, response: { fields: { total: "number" }, required: ["missing"] } }],
     }))).toBeNull();
   });
 });
