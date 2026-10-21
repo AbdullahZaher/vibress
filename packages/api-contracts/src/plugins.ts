@@ -185,6 +185,13 @@ export const ExtensionAdminFrameStatusResponseSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
+/** Only the signed-off, server-verified iframe document gets this proof. */
+export const ExtensionAdminFrameProofSchema = z.object({
+  type: z.enum(["vibress:extension:ready", "vibress:extension:gone"]),
+  version: z.literal(1),
+  bridgeNonce: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
 /**
  * EXT-301B2B: the opaque-origin iframe may ask Host to read exactly the
  * linked EXT-301A Admin GET route. It cannot choose URLs, route IDs, methods,
