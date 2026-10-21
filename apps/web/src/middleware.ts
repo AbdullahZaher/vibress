@@ -322,7 +322,15 @@ export async function middleware(request: NextRequest) {
   // Redirects are resolved by the API using the public hostname, never a
   // caller-supplied publication ID. Preserve the selected HTTP status.
   // Protected/system paths are deliberately excluded from redirect rules.
+  // Plugin public pages own this reserved namespace, including existing
+  // locale-prefixed routes. Publication redirects must not shadow the Host
+  // dispatcher or hijack plugin URLs before authorization/locale routing.
+  const pathSegments = pathname.split("/").filter(Boolean);
+  const isReservedExtensionPath = pathSegments[0] === "extensions" ||
+    (pathSegments[1] === "extensions" &&
+     /^[a-z]{2,3}(?:-[a-z]{2,4})?$/i.test(pathSegments[0] || ""));
   const isRedirectCandidate =
+    !isReservedExtensionPath &&
     (request.method === "GET" || request.method === "HEAD") &&
     !["/private", "/favicon.ico", "/robots.txt", "/sitemap.xml"].includes(pathname) &&
     !["/_next", "/api", "/admin", "/portal", "/health", "/content", "/assets", "/theme-assets", "/preview"].some(
