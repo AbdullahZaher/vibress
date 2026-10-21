@@ -125,3 +125,39 @@ export function validateExtensionApiObject(
   }
   return candidate as Record<string, string | number | boolean>;
 }
+
+/**
+ * EXT-301A: Host-owned Studio navigation and read-only data views.
+ * Labels are localized plain text. No arbitrary href, HTML, iframe or asset URL.
+ */
+const ExtensionAdminSegmentSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
+const ExtensionAdminLabelSchema = z.object({
+  en: z.string().min(1).max(100),
+  ar: z.string().min(1).max(100),
+}).strict();
+export const ExtensionAdminViewSchema = z.object({
+  id: ExtensionAdminSegmentSchema,
+  routeId: ExtensionAdminSegmentSchema,
+  title: ExtensionAdminLabelSchema,
+}).strict();
+export const ExtensionAdminNavigationItemSchema = z.object({
+  viewId: ExtensionAdminSegmentSchema,
+  label: ExtensionAdminLabelSchema,
+  permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
+}).strict();
+/** Validated Host projection; plugin-supplied URLs never enter the DTO. */
+export const ExtensionAdminNavDtoSchema = z.object({
+  pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+  viewId: ExtensionAdminSegmentSchema,
+  routeId: ExtensionAdminSegmentSchema,
+  label: ExtensionAdminLabelSchema,
+  title: ExtensionAdminLabelSchema,
+  permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
+}).strict();
+export const ExtensionAdminNavigationResponseSchema = z.object({
+  items: z.array(ExtensionAdminNavDtoSchema).max(512),
+}).strict();
+export const ExtensionAdminNavigationParamsSchema = z.object({
+  pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+  viewId: ExtensionAdminSegmentSchema,
+}).strict();

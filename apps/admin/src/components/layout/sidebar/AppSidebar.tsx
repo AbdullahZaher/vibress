@@ -6,6 +6,8 @@ import { NavContent } from "./NavContent";
 import { NavSettings } from "./NavSettings";
 import { AppSidebarBanner } from "./AppSidebarBanner";
 import { UserMenu } from "./UserMenu";
+import { NavExtensionViews } from "./NavExtensionViews";
+import type { AdminExtensionViewLink } from "../../../lib/api";
 
 interface AppSidebarProps {
   user: ApiUser;
@@ -17,6 +19,7 @@ interface AppSidebarProps {
   canPublishPosts: boolean;
   canReadTranslations: boolean;
   canReadPlugins: boolean;
+  extensionViews: readonly AdminExtensionViewLink[];
   isOpen?: boolean | undefined;
   onClose?: (() => void) | undefined;
   onOpenCommandPalette?: (() => void) | undefined;
@@ -34,6 +37,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   canPublishPosts,
   canReadTranslations,
   canReadPlugins,
+  extensionViews,
   isOpen = false,
   onClose,
   onOpenCommandPalette,
@@ -90,6 +94,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           onNavigate={handleNavigate}
           canPublishPosts={canPublishPosts}
           canReadTranslations={canReadTranslations}
+        />
+        <NavExtensionViews
+          items={extensionViews}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
         />
       </div>
 

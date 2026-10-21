@@ -114,6 +114,28 @@ export class TrustedExternalPluginHost {
   }
 
   /**
+   * Small, operator-owned release identities for metadata cache invalidation.
+   * Never expose this map through HTTP. The fingerprint is the pinned final
+   * entrypoint digest, not plugin-authored or supplied by a Staff request.
+   */
+  async listTrustedFingerprints(): Promise<ReadonlyMap<string, string>> {
+    if (!this.lockfilePath) return new Map();
+    if (!path.isAbsolute(this.lockfilePath)) {
+      throw new Error("Trusted plugin lockfile must use an absolute path");
+    }
+    const stats = await lstat(this.lockfilePath);
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_LOCKFILE_BYTES) {
+      throw new Error("Invalid trusted plugin lockfile");
+    }
+    const data: unknown = JSON.parse(await readFile(this.lockfilePath, "utf8"));
+    const fingerprints = new Map<string, string>();
+    for (const [id, approved] of parseTrustedPluginLockfile(data)) {
+      fingerprints.set(id, approved.sha256);
+    }
+    return fingerprints;
+  }
+
+  /**
    * Operator-maintained lockfile is the only source of reviewed field schemas.
    * A plugin's manifest or HTTP input cannot provide table/column definitions.
    */

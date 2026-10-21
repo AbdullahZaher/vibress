@@ -6,7 +6,7 @@ import { getDb, publications, publicationMemberships, workspaces, users } from "
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
-import type { PluginApiRoute, PluginApiScope, PluginStorageApi } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService } from "../services";
 
@@ -293,6 +293,144 @@ describe("Batch 12 — Platform Integration & Security", () => {
       url: "/api/admin/v1/webhook-endpoints",
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  // ---------------- Host-rendered extension views ----------------
+  it("denies unauthenticated and Member sessions from Studio view discovery", async () => {
+    const url = "/api/admin/v1/extensions/navigation";
+    const unauthenticated = await app.inject({ method: "GET", url });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.json().errors[0].code).toBe("AUTHENTICATION_REQUIRED");
+
+    const memberOnly = await app.inject({
+      method: "GET", url, headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(memberOnly.statusCode).toBe(401);
+  });
+
+  it("returns only Host-filtered Studio navigation without cacheable content", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toHaveProperty("items");
+    expect(Array.isArray(res.json().items)).toBe(true);
+    for (const item of res.json().items) {
+      expect(item).toEqual({
+        pluginId: expect.stringMatching(/^[a-z0-9][a-z0-9-]*$/),
+        viewId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        routeId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        title: { en: expect.any(String), ar: expect.any(String) },
+        label: { en: expect.any(String), ar: expect.any(String) },
+        permission: expect.stringMatching(/^(plugins|posts)\.(read|manage|edit)$/),
+      });
+    }
+  });
+
+  it("isolates broken plugins, caches admitted descriptors and rechecks enablement", async () => {
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const goodId = `good-${suffix}`;
+    const badId = `bad-${suffix}`;
+    const unavailableId = `unavailable-${suffix}`;
+    const plugin = (manifestId: string) => ({
+      id: manifestId, manifestId, name: manifestId, version: "1.0.0",
+      vibressApiVersion: SDK_VERSION, description: null, entrypoint: "index.mjs",
+      capabilities: ["admin.navigation", "extension.routes.admin"],
+      status: "active" as const, settingsSchema: {}, hooks: [],
+      createdAt: new Date(), updatedAt: new Date(),
+      publicationScoped: true, publicationEnabled: true,
+    });
+    const label = { en: "Courses", ar: "الدورات" };
+    const handle = vi.fn(async () => ({ total: 2 }));
+    const working: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: { total: "number" } }, handle,
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const invalid: PluginModule = {
+      ...working,
+      adminNavigation: [{ viewId: "missing", label, permission: "plugins.read" }],
+    };
+    let goodEnabled = true;
+    let digest = "a".repeat(64);
+    const list = vi.spyOn(pluginsService, "listPluginsForPublication")
+      .mockImplementation(async () => [
+        { ...plugin(goodId), publicationEnabled: goodEnabled },
+        plugin(badId), plugin(unavailableId),
+      ]);
+    const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
+      .mockImplementation(async () => new Map([
+        [goodId, digest], [badId, "b".repeat(64)], [unavailableId, "c".repeat(64)],
+      ]));
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockImplementation(async (manifestId) => {
+        if (manifestId === goodId) return working;
+        if (manifestId === badId) return invalid;
+        throw new Error("operator plugin fault: secret must not escape");
+      });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockImplementation(async () => goodEnabled);
+    const discover = () => app.inject({
+      method: "GET", url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    try {
+      const [initial, repeated] = await Promise.all([discover(), discover()]);
+      expect(initial.statusCode).toBe(200);
+      expect(initial.json().items).toEqual([{
+        pluginId: goodId, viewId: "courses", routeId: "course-list",
+        title: label, label, permission: "plugins.read",
+      }]);
+      expect(repeated.statusCode).toBe(200);
+      expect(repeated.json()).toEqual(initial.json());
+      expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
+      expect(fingerprints).toHaveBeenCalledTimes(2);
+
+      const view = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(view.statusCode).toBe(200);
+      expect(view.json()).toEqual({ total: 2 });
+      expect(handle).toHaveBeenCalledTimes(1);
+
+      goodEnabled = false;
+      const disabled = await discover();
+      expect(disabled.statusCode).toBe(200);
+      expect(disabled.json().items).toEqual([]);
+      const forbiddenView = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(forbiddenView.statusCode).toBe(404);
+      expect(handle).toHaveBeenCalledTimes(1);
+
+      goodEnabled = true;
+      digest = "d".repeat(64);
+      const rotated = await discover();
+      expect(rotated.statusCode).toBe(200);
+      expect(rotated.json().items).toHaveLength(1);
+      expect(resolve).toHaveBeenCalledTimes(6); // two Admin GETs + new pinned hash
+      const forged = await app.inject({
+        method: "GET", url: "/api/admin/v1/extensions/navigation",
+        headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
+      });
+      expect(forged.statusCode).toBe(403);
+    } finally {
+      prepared.mockRestore();
+      resolve.mockRestore();
+      fingerprints.mockRestore();
+      list.mockRestore();
+    }
   });
 
   // ---------------- Plugins ----------------
@@ -731,14 +869,44 @@ describe("Batch 12 — Platform Integration & Security", () => {
         hasStorage: Boolean(scope.storage), publication: scope.publicationId,
       }),
     };
+    const label = { en: "Private management", ar: "الإدارة الخاصة" };
+    const adminRoute: PluginApiRoute = {
+      id: "private-management", audience: "admin", method: "GET",
+      permission: "plugins.manage",
+      response: { fields: { ok: "boolean" } },
+      handle: async () => ({ ok: true }),
+    };
     const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
-      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+      .mockResolvedValue({
+        activate: async () => undefined, routes: [route, adminRoute],
+        adminViews: [{ id: "management", routeId: "private-management", title: label }],
+        adminNavigation: [{ viewId: "management", label, permission: "plugins.manage" }],
+      });
+    const list = vi.spyOn(pluginsService, "listPluginsForPublication")
+      .mockImplementation(async () => [{
+        id: "extension-admission-test", manifestId: "independent-courses",
+        name: "Independent Courses", version: "1.0.0", vibressApiVersion: SDK_VERSION,
+        description: null, entrypoint: "index.mjs", capabilities: ["admin.navigation", "extension.routes.admin"],
+        hooks: [], settingsSchema: {}, status: "active", createdAt: new Date(), updatedAt: new Date(),
+        publicationScoped: true, publicationEnabled: true,
+      }]);
+    const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
+      .mockResolvedValue(new Map([["independent-courses", "f".repeat(64)]]));
     const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
       .mockResolvedValue(true);
     const approve = vi.spyOn(pluginsService, "resolveExtensionStorageBinding")
       .mockImplementation(async (_id, publicationId) => ({
         pluginId: "p-approved", publicationId, models: [approvedModel],
       }));
+    const readManagement = (publicationId: string) => app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/independent-courses/v1/private-management",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId },
+    });
+    const navigation = (publicationId: string) => app.inject({
+      method: "GET", url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie, "x-publication-id": publicationId },
+    });
     const invoke = (publicationId: string) => app.inject({
       method: "POST",
       url: "/api/admin/v1/extensions/independent-courses/v1/courses",
@@ -770,17 +938,32 @@ describe("Batch 12 — Platform Integration & Security", () => {
         hasStorage: true, publication: ownerPubId,
       });
       expect(approve).toHaveBeenCalledTimes(1);
+      const ownerNav = await navigation(ownerPubId);
+      expect(ownerNav.statusCode).toBe(200);
+      expect(ownerNav.json().items).toHaveLength(1);
+      expect((await readManagement(ownerPubId)).statusCode).toBe(200);
 
-      for (const localRole of ["author", "contributor", "editor"]) {
+      for (const localRole of ["author", "contributor"]) {
         await db.update(publicationMemberships).set({ role: localRole })
           .where(eq(publicationMemberships.id, localMembershipId));
         const response = await invoke(limitedPubId);
-        expect(response.statusCode).toBe(200);
-        expect(response.json()).toEqual({
-          hasStorage: false, publication: limitedPubId,
-        });
+        expect(response.statusCode).toBe(403);
+        expect(response.json().errors[0].code).toBe("PERMISSION_DENIED");
+        const nav = await navigation(limitedPubId);
+        expect(nav.statusCode).toBe(200);
+        expect(nav.json().items).toEqual([]);
+        expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       }
-      expect(approve).toHaveBeenCalledTimes(1);
+      await db.update(publicationMemberships).set({ role: "editor" })
+        .where(eq(publicationMemberships.id, localMembershipId));
+      const editorResponse = await invoke(limitedPubId);
+      expect(editorResponse.statusCode).toBe(200);
+      expect(editorResponse.json()).toEqual({
+        hasStorage: false, publication: limitedPubId,
+      });
+      expect(approve).toHaveBeenCalledTimes(2);
+      expect((await navigation(limitedPubId)).json().items).toEqual([]);
+      expect((await readManagement(limitedPubId)).statusCode).toBe(403);
       await db.update(publicationMemberships).set({ role: "admin" })
         .where(eq(publicationMemberships.id, localMembershipId));
       const adminResponse = await invoke(limitedPubId);
@@ -788,8 +971,12 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(adminResponse.json()).toEqual({
         hasStorage: true, publication: limitedPubId,
       });
-      expect(approve).toHaveBeenCalledTimes(2);
+      expect(approve).toHaveBeenCalledTimes(3);
+      expect((await navigation(limitedPubId)).json().items).toHaveLength(1);
+      expect((await readManagement(limitedPubId)).statusCode).toBe(200);
     } finally {
+      fingerprints.mockRestore();
+      list.mockRestore();
       approve.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ApiUser } from "../lib/api";
+import { type ApiUser, type AdminExtensionViewLink, listExtensionAdminViewsApi } from "../lib/api";
 import { AppSidebar } from "./layout/sidebar/AppSidebar";
 import { MobileHeader } from "./layout/MobileHeader";
 import { CommandPalette } from "./layout/CommandPalette";
@@ -25,6 +25,33 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   const { locale } = useAdminLocale();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [extensionViews, setExtensionViews] = useState<AdminExtensionViewLink[]>([]);
+  const [extensionViewsLoading, setExtensionViewsLoading] = useState(true);
+
+  // Invalidate asynchronous navigation data on every Host publication change.
+  useEffect(() => {
+    let disposed = false;
+    let generation = 0;
+    const refresh = () => {
+      const request = ++generation;
+      setExtensionViews([]);
+      setExtensionViewsLoading(true);
+      void listExtensionAdminViewsApi().then(({ items }) => {
+        if (!disposed && request === generation) setExtensionViews(items);
+      }).catch(() => {
+        if (!disposed && request === generation) setExtensionViews([]);
+      }).finally(() => {
+        if (!disposed && request === generation) setExtensionViewsLoading(false);
+      });
+    };
+    refresh();
+    window.addEventListener("vibress:publication-changed", refresh);
+    return () => {
+      disposed = true;
+      generation += 1;
+      window.removeEventListener("vibress:publication-changed", refresh);
+    };
+  }, [user.id]);
 
   useEffect(() => {
     if (darkMode) {
@@ -47,6 +74,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canPublishPosts = can("posts.publish");
+
 
   return (
     <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
@@ -73,6 +101,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         canPublishPosts={canPublishPosts}
         canReadTranslations={can("translations.read")}
         canReadPlugins={can("plugins.read")}
+        extensionViews={extensionViews.filter((view) => can(view.permission))}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
@@ -86,6 +115,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
           user,
           onNavigate,
           can,
+          extensionViews,
+          extensionViewsLoading,
         })}
       </main>
 

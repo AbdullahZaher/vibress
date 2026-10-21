@@ -1,5 +1,7 @@
 import { ReactNode, Suspense, lazy, useEffect } from "react";
-import { ApiUser } from "./api";
+import { ApiUser, type AdminExtensionViewLink } from "./api";
+import { useAdminLocale } from "./admin-locale";
+import { PluginAdminDataView } from "../components/platform/PluginAdminDataView";
 import { usePublicationLocales } from "./usePublicationLocales";
 import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { PermissionDenied } from "../components/common/PermissionDenied";
@@ -100,6 +102,8 @@ export interface AdminRouteDefinition {
     match: RouteMatch;
     onNavigate: (path: string) => void;
     can: (permissionKey: string) => boolean;
+    extensionViews: readonly AdminExtensionViewLink[];
+    extensionViewsLoading: boolean;
   }) => ReactNode;
 }
 
@@ -170,6 +174,26 @@ function LegacyContentModelRedirect({
     onNavigate(to);
   }, [to, onNavigate]);
   return <RouteLoadingFallback />;
+}
+
+function PluginExtensionRoute({
+  match, onNavigate, can, views, loading,
+}: {
+  match: RouteMatch;
+  onNavigate: (path: string) => void;
+  can: (permissionKey: string) => boolean;
+  views: readonly AdminExtensionViewLink[];
+  loading: boolean;
+}) {
+  const { tr } = useAdminLocale();
+  if (loading) return <p role="status">{tr("Loading plugin view...")}</p>;
+  const link = views.find((item) =>
+    item.pluginId === match.params.pluginId &&
+    item.viewId === match.params.viewId &&
+    can(item.permission));
+  return link
+    ? <PluginAdminDataView link={link} />
+    : <RouteNotFound path={match.pathname} onNavigate={onNavigate} />;
 }
 
 export const adminRoutes: AdminRouteDefinition[] = [
@@ -544,6 +568,20 @@ export const adminRoutes: AdminRouteDefinition[] = [
     exact: false,
     render: ({ can, onNavigate }) => <SettingsHub initialSection="general" can={can} onNavigate={onNavigate} />,
   },
+  // Host-owned extension views; never accept plugin-controlled React routes.
+  {
+    pattern: "/admin/extensions/:pluginId/:viewId",
+    exact: true,
+    render: ({ match, onNavigate, can, extensionViews, extensionViewsLoading }) => (
+      <PluginExtensionRoute
+        match={match}
+        onNavigate={onNavigate}
+        can={can}
+        views={extensionViews}
+        loading={extensionViewsLoading}
+      />
+    ),
+  },
   {
     pattern: "/admin/settings/:section",
     exact: false,
@@ -588,8 +626,10 @@ export function renderAdminRoute(options: {
   user: ApiUser;
   onNavigate: (path: string) => void;
   can: (permissionKey: string) => boolean;
+  extensionViews?: readonly AdminExtensionViewLink[];
+  extensionViewsLoading?: boolean;
 }): ReactNode {
-  const { pathname, user, onNavigate, can } = options;
+  const { pathname, user, onNavigate, can, extensionViews = [], extensionViewsLoading = false } = options;
 
   let currentPathname = pathname;
   let searchParams = new URLSearchParams();
@@ -630,6 +670,8 @@ export function renderAdminRoute(options: {
         match: { pathname: currentPathname, params, searchParams },
         onNavigate,
         can,
+        extensionViews,
+        extensionViewsLoading,
       });
       return (
         <RouteErrorBoundary>

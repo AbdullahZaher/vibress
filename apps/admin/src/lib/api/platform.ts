@@ -142,6 +142,29 @@ export async function listWebhookDeliveriesApi(
   return apiRequest(`/webhook-deliveries${query}`);
 }
 
+/** Host-authorized, localized, read-only Studio view; never an external URL. */
+export interface AdminExtensionViewLink {
+  pluginId: string;
+  viewId: string;
+  routeId: string;
+  label: { en: string; ar: string };
+  title: { en: string; ar: string };
+  permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+}
+
+export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtensionViewLink[] }> {
+  return apiRequest("/extensions/navigation", { cache: "no-store" });
+}
+
+export async function readExtensionAdminViewApi(
+  link: AdminExtensionViewLink,
+): Promise<Record<string, string | number | boolean>> {
+  // Neither path component nor API permission is supplied by plugin UI code.
+  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/v1/${encodeURIComponent(link.routeId)}`, {
+    cache: "no-store",
+  });
+}
+
 export async function listPluginsApi(): Promise<{
   plugins: AdminPlugin[];
   platformOperator?: boolean;
