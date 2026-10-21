@@ -545,6 +545,654 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  // ---------------- EXT-301B2B one-time opaque frame delivery ----------------
+  it("issues one-use Admin frame tickets and serves restrictive-CSP, opaque-origin HTML", async () => {
+    const pluginId = `frame-ui-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const html = '<main lang="ar" dir="rtl"><button id="lesson">الدورات</button><script>document.querySelector("#lesson").addEventListener("click",()=>document.body.dataset.clicked="1")</script></main>';
+    const module: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET", permission: "plugins.read",
+        response: { fields: { total: "number" } }, handle: () => ({ total: 1 }),
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule").mockResolvedValue(module);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset").mockResolvedValue(html);
+    const base = `/api/admin/v1/extensions/${pluginId}/views/courses`;
+    try {
+      expect((await app.inject({ method: "POST", url: base + "/frame-ticket" })).statusCode).toBe(401);
+      const issue = await app.inject({
+        method: "POST", url: base + "/frame-ticket",
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      });
+      expect(issue.statusCode).toBe(200);
+      expect(issue.headers["cache-control"]).toBe("no-store");
+      const src: unknown = issue.json().src;
+      expect(src).toEqual(expect.stringMatching(new RegExp(`^\\/api\\/admin\\/v1\\/extensions\\/${pluginId}\\/views\\/courses\\/frame\\?ticket=[a-f0-9]{64}import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import crypto from "node:crypto";
+import { buildApp } from "../main";
+import { FastifyInstance } from "fastify";
+import { getDb, publications, publicationMemberships, workspaces, users } from "@vibress/database";
+import { eq } from "drizzle-orm";
+import { hashPassword } from "@vibress/security";
+import { SDK_VERSION } from "@vibress/plugin-sdk";
+import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
+import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
+import { pluginsService } from "../services";
+
+async function loginStaff(app: FastifyInstance): Promise<string> {
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/admin/v1/auth/login",
+    payload: { email: "owner@example.com", password: "OwnerPass123!" },
+  });
+  expect(res.statusCode).toBe(200);
+  const setCookie = (res.headers["set-cookie"] as unknown as string) || "";
+  return setCookie.split(";")[0] ?? "";
+}
+
+async function ensureOwner(): Promise<void> {
+  const db = getDb();
+  const { users, userRoles, roles } = await import("@vibress/database");
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, "owner@example.com"))
+    .limit(1);
+  if (rows.length > 0) return;
+  const hash = await hashPassword("OwnerPass123!");
+  const ownerId = crypto.randomUUID();
+  await db
+    .insert(users)
+    .values({
+      id: ownerId,
+      email: "owner@example.com",
+      name: "Owner",
+      slug: "e2e-owner",
+      passwordHash: hash,
+      status: "active",
+    })
+    .onConflictDoNothing();
+  const ownerRole = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.key, "owner"))
+    .limit(1);
+  if (ownerRole[0])
+    await db
+      .insert(userRoles)
+      .values({ userId: ownerId, roleId: ownerRole[0].id });
+}
+
+describe("Batch 12 — Platform Integration & Security", () => {
+  let app: FastifyInstance;
+  let staffCookie: string;
+
+  beforeAll(async () => {
+    process.env.VIBRESS_ENCRYPTION_KEY =
+      process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-12";
+    app = buildApp();
+    await app.ready();
+    await ensureOwner();
+    staffCookie = await loginStaff(app);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  // ---------------- Integrations ----------------
+  it("admin creates an integration (secrets encrypted at rest)", async () => {
+    const key = `ci-${Date.now()}`;
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/integrations",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        key,
+        type: "external",
+        name: "CI Integration",
+        secrets: { apiToken: "top-secret" },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    // Masked — no raw secret in response
+    expect(JSON.stringify(body)).not.toContain("top-secret");
+    expect(body.integration.secrets.apiToken).toBe("••••••••");
+
+    // Encrypted in DB (not plaintext)
+    const db = getDb();
+    const { integrations } = await import("@vibress/database");
+    const rows = await db
+      .select()
+      .from(integrations)
+      .where(eq(integrations.key, key))
+      .limit(1);
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.encryptedSecrets).toBeDefined();
+  });
+
+  it("integration routes require staff auth (401)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/integrations",
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("member cookie cannot access admin platform routes", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/integrations",
+      headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  // ---------------- API Keys ----------------
+  it("creates an API key: raw secret returned once, hash stored", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/api-keys",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { name: "CI token", scopes: ["content.read"] },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.key.secret.startsWith("vk_")).toBe(true);
+    expect(body.key.prefix).toBeTruthy();
+
+    // Raw secret is NOT in the DB — only a hash
+    const db = getDb();
+    const { apiKeys } = await import("@vibress/database");
+    const rows = await db.select().from(apiKeys);
+    expect(rows.length).toBeGreaterThan(0);
+    const serialized = JSON.stringify(rows);
+    expect(serialized).not.toContain(body.key.secret);
+    // The full raw secret has two underscore-separated parts beyond the prefix
+    expect(body.key.secret.split("_").length).toBeGreaterThan(2);
+    const fullSecretParts = body.key.secret.split("_");
+    const secretOnlyPart = fullSecretParts.slice(2).join("_");
+    expect(serialized).not.toContain(secretOnlyPart);
+    // Hash present, raw secret absent
+    expect(serialized).toContain("keyHash");
+  });
+
+  it("machine endpoint authenticates with a valid key", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/api-keys",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { name: "Machine A", scopes: ["content.read"] },
+    });
+    const secret = createRes.json().key.secret;
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/machine/v1/status",
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("machine endpoint rejects an invalid key with a generic response", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/machine/v1/status",
+      headers: { authorization: "Bearer vk_invalid_doesnotexist" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("scope enforcement: key without the required scope gets 403", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/api-keys",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { name: "Limited", scopes: ["webhooks.register"] },
+    });
+    const secret = createRes.json().key.secret;
+
+    // /machine/events requires content.read → denied
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/machine/v1/events",
+      headers: {
+        authorization: `Bearer ${secret}`,
+        "content-type": "application/json",
+      },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().errors[0].code).toBe("SCOPE_DENIED");
+  });
+
+  it("revoked key is rejected", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/api-keys",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: { name: "To revoke", scopes: ["content.read"] },
+    });
+    const keyId = createRes.json().key.id;
+    const secret = createRes.json().key.secret;
+
+    const revokeRes = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/api-keys/${keyId}/revoke`,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+    });
+    expect(revokeRes.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/machine/v1/status",
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("API key routes require RBAC (401 unauth, staff cookie only)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/api-keys",
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  // ---------------- Outbound Webhooks ----------------
+  it("webhook endpoint registration rejects localhost (SSRF)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/webhook-endpoints",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        name: "Bad",
+        url: "http://localhost:9999/hook",
+        eventTypes: ["comment.created"],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().errors[0].code).toBe("UNSAFE_URL");
+  });
+
+  it("webhook endpoint registration rejects private IPs (SSRF)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/webhook-endpoints",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        name: "Bad",
+        url: "http://192.168.1.10/hook",
+        eventTypes: ["comment.created"],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().errors[0].code).toBe("UNSAFE_URL");
+  });
+
+  it("webhook endpoint registration accepts a public URL and encrypts the secret", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/webhook-endpoints",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        name: "Public receiver",
+        url: "https://receiver.example.com/hook",
+        secret: "hook-secret-123",
+        eventTypes: ["comment.created"],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.endpoint.hasSecret).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("hook-secret-123");
+
+    // Encrypted in DB
+    const db = getDb();
+    const { webhookEndpoints } = await import("@vibress/database");
+    const rows = await db.select().from(webhookEndpoints);
+    const serialized = JSON.stringify(rows);
+    expect(serialized).not.toContain("hook-secret-123");
+  });
+
+  it("webhook endpoint routes require RBAC (401 unauth)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/webhook-endpoints",
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  // ---------------- Host-rendered extension views ----------------
+  it("denies unauthenticated and Member sessions from Studio view discovery", async () => {
+    const url = "/api/admin/v1/extensions/navigation";
+    const unauthenticated = await app.inject({ method: "GET", url });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.json().errors[0].code).toBe("AUTHENTICATION_REQUIRED");
+
+    const memberOnly = await app.inject({
+      method: "GET", url, headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(memberOnly.statusCode).toBe(401);
+  });
+
+  it("returns only Host-filtered Studio navigation without cacheable content", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.json()).toHaveProperty("items");
+    expect(Array.isArray(res.json().items)).toBe(true);
+    for (const item of res.json().items) {
+      expect(item).toEqual({
+        pluginId: expect.stringMatching(/^[a-z0-9][a-z0-9-]*$/),
+        viewId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        routeId: expect.stringMatching(/^[a-z][a-z0-9-]*$/),
+        title: { en: expect.any(String), ar: expect.any(String) },
+        label: { en: expect.any(String), ar: expect.any(String) },
+        permission: expect.stringMatching(/^(plugins|posts)\.(read|manage|edit)$/),
+      });
+    }
+  });
+
+  it("isolates broken plugins, caches admitted descriptors and rechecks enablement", async () => {
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const goodId = `good-${suffix}`;
+    const badId = `bad-${suffix}`;
+    const unavailableId = `unavailable-${suffix}`;
+    const plugin = (manifestId: string) => ({
+      id: manifestId, manifestId, name: manifestId, version: "1.0.0",
+      vibressApiVersion: SDK_VERSION, description: null, entrypoint: "index.mjs",
+      capabilities: ["admin.navigation", "extension.routes.admin"],
+      status: "active" as const, settingsSchema: {}, hooks: [],
+      createdAt: new Date(), updatedAt: new Date(),
+      publicationScoped: true, publicationEnabled: true,
+    });
+    const label = { en: "Courses", ar: "الدورات" };
+    const handle = vi.fn(async () => ({ total: 2 }));
+    const working: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: { total: "number" } }, handle,
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const invalid: PluginModule = {
+      ...working,
+      adminNavigation: [{ viewId: "missing", label, permission: "plugins.read" }],
+    };
+    let goodEnabled = true;
+    let digest = "a".repeat(64);
+    const list = vi.spyOn(pluginsService, "listPluginsForPublication")
+      .mockImplementation(async () => [
+        { ...plugin(goodId), publicationEnabled: goodEnabled },
+        plugin(badId), plugin(unavailableId),
+      ]);
+    const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
+      .mockImplementation(async () => new Map([
+        [goodId, digest], [badId, "b".repeat(64)], [unavailableId, "c".repeat(64)],
+      ]));
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockImplementation(async (manifestId) => {
+        if (manifestId === goodId) return working;
+        if (manifestId === badId) return invalid;
+        throw new Error("operator plugin fault: secret must not escape");
+      });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockImplementation(async () => goodEnabled);
+    const discover = () => app.inject({
+      method: "GET", url: "/api/admin/v1/extensions/navigation",
+      headers: { cookie: staffCookie },
+    });
+    try {
+      const [initial, repeated] = await Promise.all([discover(), discover()]);
+      expect(initial.statusCode).toBe(200);
+      expect(initial.json().items).toEqual([{
+        pluginId: goodId, viewId: "courses", routeId: "course-list",
+        title: label, label, permission: "plugins.read",
+      }]);
+      expect(repeated.statusCode).toBe(200);
+      expect(repeated.json()).toEqual(initial.json());
+      expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
+      expect(fingerprints).toHaveBeenCalledTimes(2);
+
+      const view = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(view.statusCode).toBe(200);
+      expect(view.json()).toEqual({ total: 2 });
+      expect(handle).toHaveBeenCalledTimes(1);
+
+      goodEnabled = false;
+      const disabled = await discover();
+      expect(disabled.statusCode).toBe(200);
+      expect(disabled.json().items).toEqual([]);
+      const forbiddenView = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
+        headers: { cookie: staffCookie },
+      });
+      expect(forbiddenView.statusCode).toBe(404);
+      expect(handle).toHaveBeenCalledTimes(1);
+
+      goodEnabled = true;
+      digest = "d".repeat(64);
+      const rotated = await discover();
+      expect(rotated.statusCode).toBe(200);
+      expect(rotated.json().items).toHaveLength(1);
+      expect(resolve).toHaveBeenCalledTimes(6); // two Admin GETs + new pinned hash
+      const forged = await app.inject({
+        method: "GET", url: "/api/admin/v1/extensions/navigation",
+        headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
+      });
+      expect(forged.statusCode).toBe(403);
+    } finally {
+      prepared.mockRestore();
+      resolve.mockRestore();
+      fingerprints.mockRestore();
+      list.mockRestore();
+    }
+  });
+
+  // ---------------- EXT-301B2 authorized Admin UI bytes ----------------
+  it("requires Staff auth before reading any Admin UI document", async () => {
+    const url = "/api/admin/v1/extensions/example/views/courses/ui";
+    const unauthenticated = await app.inject({ method: "GET", url });
+    expect(unauthenticated.statusCode).toBe(401);
+    const memberCookie = await app.inject({
+      method: "GET", url, headers: { cookie: "vibress_member_session=forged" },
+    });
+    expect(memberCookie.statusCode).toBe(401);
+    const malformed = await app.inject({
+      method: "GET",
+      url: "/api/admin/v1/extensions/example/views/%2e%2e/ui",
+      headers: { cookie: staffCookie },
+    });
+    expect(malformed.statusCode).not.toBe(200);
+  });
+
+  it("serves operator-verified Admin UI only as no-store inert JSON for an admitted view", async () => {
+    const pluginId = `verified-ui-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const html = '<main lang="ar" dir="rtl"><button type="button">الدورات</button></main>';
+    const module: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: { total: "number" } },
+        handle: () => ({ total: 1 }),
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
+      .mockResolvedValue(html);
+    const url = `/api/admin/v1/extensions/${pluginId}/views/courses/ui`;
+    try {
+      const response = await app.inject({
+        method: "GET", url, headers: { cookie: staffCookie },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("application/json");
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+      expect(response.headers["x-content-type-options"]).toBe("nosniff");
+      expect(response.headers["referrer-policy"]).toBe("no-referrer");
+      expect(response.json()).toEqual({
+        html, sha256: crypto.createHash("sha256").update(html).digest("hex"),
+      });
+      expect(read).toHaveBeenCalledWith(pluginId, expect.any(String), "courses");
+      const wrongView = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/extensions/${pluginId}/views/other/ui`,
+        headers: { cookie: staffCookie },
+      });
+      expect(wrongView.statusCode).toBe(404);
+      expect(read).toHaveBeenCalledTimes(1);
+      const forgedPublication = await app.inject({
+        method: "GET", url,
+        headers: { cookie: staffCookie, "x-publication-id": crypto.randomUUID() },
+      });
+      expect(forgedPublication.statusCode).toBe(403);
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("fails closed on disabled modules, corrupt views, tampered artifacts and oversized output", async () => {
+    const pluginId = `failed-ui-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const good: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "list", audience: "admin", method: "GET",
+        permission: "plugins.read", response: { fields: {} },
+        handle: () => ({}),
+      }],
+      adminViews: [{ id: "courses", routeId: "list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(null);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset")
+      .mockResolvedValue("<main>Approved</main>");
+    const url = `/api/admin/v1/extensions/${pluginId}/views/courses/ui`;
+    const request = () => app.inject({ method: "GET", url, headers: { cookie: staffCookie } });
+    try {
+      expect((await request()).statusCode).toBe(404);
+      expect(read).not.toHaveBeenCalled();
+      resolve.mockResolvedValue({ ...good, adminNavigation: undefined });
+      expect((await request()).statusCode).toBe(503);
+      expect(read).not.toHaveBeenCalled();
+      resolve.mockResolvedValue(good);
+      read.mockResolvedValue(null);
+      expect((await request()).statusCode).toBe(404);
+      read.mockRejectedValue(new Error("Operator path with secret"));
+      const failure = await request();
+      expect(failure.statusCode).toBe(503);
+      expect(JSON.stringify(failure.json())).not.toContain("Operator path with secret");
+      read.mockRejectedValue(new PluginDomainError(
+        "PLUGIN_PUBLICATION_INACTIVE", "Publication disabled during UI read",
+      ));
+      expect((await request()).statusCode).toBe(404);
+      read.mockResolvedValue("x".repeat(256 * 1024 + 1));
+      expect((await request()).statusCode).toBe(503);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+)));
+      if (typeof src !== "string") throw new Error("Frame URL not provided");
+      const frame = await app.inject({ method: "GET", url: src, headers: { cookie: staffCookie } });
+      expect(frame.statusCode).toBe(200);
+      expect(frame.headers["content-type"]).toContain("text/html");
+      expect(frame.headers["cache-control"]).toBe("private, no-store");
+      expect(frame.headers["x-frame-options"]).toBe("SAMEORIGIN");
+      const csp = String(frame.headers["content-security-policy"]);
+      expect(csp).toContain("sandbox allow-scripts");
+      expect(csp).not.toContain("allow-same-origin");
+      expect(csp).toContain("connect-src 'none'");
+      expect(csp).toContain("frame-ancestors 'self'");
+      expect(csp).toContain("form-action 'none'");
+      expect(frame.headers["referrer-policy"]).toBe("no-referrer");
+      expect(frame.body).toBe(html);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect((await app.inject({
+        method: "GET", url: src, headers: { cookie: staffCookie },
+      })).statusCode).toBe(404);
+      expect(read).toHaveBeenCalledTimes(2);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("rejects stolen frame tickets, changed artifacts and disabled plugin views", async () => {
+    const pluginId = `frame-denial-${crypto.randomUUID().replaceAll("-", "")}`;
+    const label = { en: "Courses", ar: "الدورات" };
+    const module: PluginModule = {
+      activate() {},
+      routes: [{
+        id: "course-list", audience: "admin", method: "GET", permission: "plugins.read",
+        response: { fields: {} }, handle: () => ({}),
+      }],
+      adminViews: [{ id: "courses", routeId: "course-list", title: label }],
+      adminNavigation: [{ viewId: "courses", label, permission: "plugins.read" }],
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule").mockResolvedValue(module);
+    const read = vi.spyOn(pluginsService, "readExtensionAdminUiAsset").mockResolvedValue("<main>Version A</main>");
+    const url = `/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`;
+    const issue = () => app.inject({
+      method: "POST", url,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+    });
+    try {
+      const first = await issue();
+      expect(first.statusCode).toBe(200);
+      const src = first.json().src as string;
+      const stolen = await app.inject({ method: "GET", url: src });
+      expect(stolen.statusCode).toBe(401);
+      // Even the valid cookie cannot reuse a stolen/consumed ticket.
+      expect((await app.inject({
+        method: "GET", url: src, headers: { cookie: staffCookie },
+      })).statusCode).toBe(404);
+
+      const second = await issue();
+      read.mockResolvedValue("<main>Version B</main>");
+      expect((await app.inject({
+        method: "GET", url: second.json().src,
+        headers: { cookie: staffCookie },
+      })).statusCode).toBe(404);
+
+      read.mockResolvedValue("<main>Version A</main>");
+      const third = await issue();
+      resolve.mockResolvedValue(null);
+      expect((await app.inject({
+        method: "GET", url: third.json().src, headers: { cookie: staffCookie },
+      })).statusCode).toBe(404);
+    } finally {
+      read.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
   // ---------------- Plugins ----------------
   it("registers the official example plugin (valid manifest)", async () => {
     const res = await app.inject({
