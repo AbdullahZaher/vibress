@@ -68,7 +68,8 @@ describe("EXT-401 publication-scoped durable event worker", () => {
   it("executes an approved, active and explicitly enabled release with host scope", async () => {
     const h = execution();
     await expect(processTrustedPluginEvent(event(), h)).resolves.toBe("executed");
-    expect(h.dispatchEvent).toHaveBeenCalledExactlyOnceWith(
+    expect(h.dispatchEvent).toHaveBeenCalledOnce();
+    expect(h.dispatchEvent).toHaveBeenCalledWith(
       "plugin-row-a", "post.published",
       { count: 1, publicationId: "publication-a" }, "publication-a",
     );
