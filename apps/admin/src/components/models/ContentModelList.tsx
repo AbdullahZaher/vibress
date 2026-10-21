@@ -4,6 +4,7 @@ import { Database, Edit, List, Plus, RefreshCw, Search, Trash2 } from "lucide-re
 import { apiRequest } from "../../lib/api";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
@@ -95,25 +96,19 @@ export function ContentModelList({
       </Button>
       {canManage && (
         <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={tr("Edit") + " " + model.name}
+          <IconButton label={tr("Edit")}
+            accessibleLabel={tr("Edit") + " " + model.name}
             onClick={() => onNavigate(MODEL_SETTINGS_PATH + "/" + encodeURIComponent(model.id))}
           >
-            <Edit className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={tr("Delete") + " " + model.name}
+            <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+          </IconButton>
+          <IconButton label={tr("Delete")}
+            accessibleLabel={tr("Delete") + " " + model.name}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => void handleDelete(model)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </IconButton>
         </>
       )}
     </div>

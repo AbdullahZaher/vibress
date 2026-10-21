@@ -226,6 +226,7 @@ export function DynamicCollectionList({
                         onClick={() => onNavigate(`/admin/collections/${modelSlug}/${entry.id}`)}
                         className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title={tr("Edit Entry")}
+                        aria-label={tr("Edit Entry")}
                       >
                         <Edit className="w-4 h-4" />
                       </button>}
@@ -233,6 +234,7 @@ export function DynamicCollectionList({
                         onClick={() => handleDelete(entry.id, entry.title)}
                         className="rounded-md p-1.5 text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title={tr("Delete Entry")}
+                        aria-label={tr("Delete Entry")}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>}
