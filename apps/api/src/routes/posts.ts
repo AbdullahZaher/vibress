@@ -79,7 +79,7 @@ export async function postRoutes(fastify: FastifyInstance) {
             p.featureImageId,
             req.publicationContext?.publicationId,
           );
-          return { ...p, authors, tagIds, featureImage };
+          return { ...p, authors, tagIds, featureImage: featureImage ? { url: featureImage.url } : null };
         }),
       );
 

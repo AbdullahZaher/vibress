@@ -197,6 +197,24 @@ describe("API: Post Feature Image & Unsplash Integration", () => {
       expect(data.post.version).toBe(testPostA.version);
     });
 
+    it("returns a publication-scoped image URL without storage metadata in the list", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/posts?limit=100",
+        headers: {
+          cookie: ownerCookie,
+          "x-publication-id": "pub_default",
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const data = JSON.parse(res.body);
+      const listedPost = data.posts.find((post: { id: string }) => post.id === testPostA.id);
+      expect(listedPost).toBeDefined();
+      expect(listedPost.featureImage).toEqual({ url: expect.any(String) });
+      expect(listedPost.featureImage).not.toHaveProperty("storageKey");
+      expect(listedPost.featureImage).not.toHaveProperty("metadata");
+    });
+
     it("REJECTS cross-publication feature image assignment (Tenant Isolation)", async () => {
       const res = await app.inject({
         method: "PATCH",
