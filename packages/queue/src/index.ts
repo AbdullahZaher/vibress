@@ -24,6 +24,7 @@ export const QUEUE_NAMES = {
   WEBHOOK_DELIVERY: "vibress-webhook-delivery",
   SEARCH: "vibress-search",
   ANALYTICS: "vibress-analytics",
+  PLUGIN_EVENTS: "vibress-plugin-events",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
