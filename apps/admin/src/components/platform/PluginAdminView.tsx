@@ -89,7 +89,18 @@ export function PluginAdminView({ link }: Props) {
       () => element.isConnected && frameRef.current === element &&
         loadedFrameUrlRef.current === frame.src &&
         getActivePublicationId() === frame.publicationId,
-      () => readExtensionAdminViewApi(link),
+      () => readExtensionAdminViewApi(link).catch((error: unknown) => {
+        if (error instanceof ApiError &&
+            [401, 403, 404].includes(error.statusCode) &&
+            element.isConnected && frameRef.current === element &&
+            getActivePublicationId() === frame.publicationId) {
+          // A route permission or publication disable was revoked while the
+          // iframe was open. Remove the old UI instead of leaving it running.
+          closeBridgeRef.current();
+          setFrame({ kind: "error" });
+        }
+        throw error;
+      }),
     );
   }
 
