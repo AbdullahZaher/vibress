@@ -47,6 +47,8 @@ import {
   adminRecommendationRoutes,
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
+import { adminPluginEventRoutes } from "./routes/plugin-events";
+import { closePluginEventQueue } from "./plugins/plugin-event-queue";
 import {
   adminExtensionApiRoutes,
   memberExtensionApiRoutes,
@@ -371,6 +373,7 @@ export const buildApp = () => {
   fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminExtensionApiRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminPluginEventRoutes, { prefix: "/api/admin/v1" });
   fastify.register(unsplashRoutes, {
     prefix: "/api/admin/v1/integrations/unsplash",
   });
@@ -416,6 +419,7 @@ export const buildApp = () => {
   fastify.register(openApiDocsRoutes);
 
   fastify.addHook("onClose", async () => {
+    await closePluginEventQueue();
     await pluginsService.shutdown();
   });
 
