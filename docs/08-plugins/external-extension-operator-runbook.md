@@ -357,3 +357,36 @@ Those features still require code, live testing and signed-off release reviews.
 
 Never weaken Staff/Member authorization, tenant scoping, encryption, signed
 backups or test coverage to achieve an accelerated rollout.
+
+## Read-only signed physical-model plan preflight (EXT-503)
+
+Before applying a plugin's operator-approved physical-model migration, verify
+that its standalone migration plan matches the **same pinned signed release**
+and the exact, already-vetted model declarations. This preflight checks the
+Ed25519 signature, all pinned on-disk plugin bytes, manifest/version/artifact
+SHA-256, each model descriptor SHA-256 and the ordered migration digest. It
+rejects arbitrary/extra fields, unapproved columns and changed model order.
+It never imports plugin JavaScript, runs SQL or activates a plugin.
+
+In a *Vibress core checkout* with dependencies installed, stage the immutable
+reviewed release and plan as operator-controlled, non-upload files and run:
+
+```sh
+export VIBRESS_TRUSTED_PLUGIN_LOCKFILE=/absolute/operator/trusted-plugins.json
+export VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1
+export VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE=/absolute/operator/operator-public.pem
+export VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE=/absolute/operator/operator.sig
+pnpm exec tsx scripts/plugins/check-migration-plan.ts \
+  /absolute/operator/operator-migration-plan.json
+```
+
+Use the **merged global signed lockfile**, not a generated Pilot-only example
+that would replace or lose existing plugin approvals. The plan cannot authorize
+itself: it must match the separately authenticated operator lockfile entry.
+A valid result is a **read-only compatibility gate**, not migration admission,
+completed database initialization or release approval. Apply the reviewed
+migration separately using the existing operator-only transaction service
+*while the plugin is inactive*, after a signed backup. Recheck every API
+replica, publication enablement, real Member sessions, restore and rollback
+before production. A missing signature, replaced artifact, schema drift,
+invalid plan, symlink or invalid UTF-8 must stop the procedure.

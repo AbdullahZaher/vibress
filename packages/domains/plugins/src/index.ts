@@ -1,6 +1,8 @@
 export * from "./domain/plugin";
 export * from "./application/plugins-service";
 export * from "./application/plugin-storage-migrations";
+export { checkOperatorPluginMigrationPlan } from "./application/operator-migration-plan-preflight";
+export type { OperatorApprovedMigrationRelease } from "./application/operator-migration-plan-preflight";
 export * from "./infrastructure/drizzle-plugin-repositories";
 export * from "./infrastructure/drizzle-plugin-storage-migrations";
 export * from "./application/plugin-scoped-storage";
