@@ -442,3 +442,38 @@ Before resuming replicas verify `plugin_member_records` migration 0045,
 publication enablement, the pinned release on every node, two-publication
 isolation, signed backup/restore readiness, and the separate LMS HTTP
 acceptance tool. Reenable normal API/Worker replicas only after acceptance.
+
+## EXT-506: Real Vibress LMS Live-Host Integration
+
+The end-to-end integration of the actual compiled `vibress-lms` ESM artifact
+(`dist/pilot-release/vibress-lms-pilot.mjs`) has been verified against a real
+Fastify HTTP host and real PostgreSQL database in `tests/integration/real-lms-pilot-host.test.ts`.
+
+### Verified Acceptance Gates
+
+1. **Preflight Security:** Rejects tampered artifacts and plans; requires valid
+   Ed25519 signature on `trusted-plugins.json`.
+2. **Transactional Migration:** Applies approved physical storage models
+   (`enrollments`, `completions`) to the append-only ledger. Replays return
+   `already_applied`.
+3. **Multi-Publication Scoping:** Tested across two isolated publications
+   (`site-a`, `site-b`) and three distinct Member sessions (`mem-a1`, `mem-a2`, `mem-b1`).
+4. **Member Acceptance (`verifyLiveHost`):**
+   - Free course enrollment and duplicate enrollment idempotency.
+   - Protected lesson access with active enrollment in English and Arabic (RTL).
+   - Atomic lesson completion and progress calculation (50% on 1/2 completed).
+   - Anonymous and cross-tenant access rejection (`401/403/404`).
+   - Cross-origin POST rejection via CSRF/Origin enforcement (`403 Forbidden`).
+5. **Lifecycle & Retention:** Deactivating a publication immediately blocks
+   extension routes while retaining all persisted member records in `plugin_member_records`.
+   Reactivation immediately restores access.
+6. **Restore Readiness:** `assertPluginRestoreReadiness` confirms lockfile,
+   migration ledger, and database consistency.
+
+To run the full host integration suite:
+
+```bash
+pnpm exec vitest run tests/integration/real-lms-pilot-host.test.ts
+```
+
+For full details, see [EXT-506 Architecture & Integration](lms-real-integration-ext506.md).
