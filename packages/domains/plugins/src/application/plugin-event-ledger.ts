@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { getDb, pluginEventReceipts } from "@vibress/database";
+import { getDb, pluginEventReceipts, auditEvents } from "@vibress/database";
 import {
   PluginWorkerEventJobSchema, type PluginWorkerEventJob,
 } from "@vibress/api-contracts";
@@ -25,6 +25,19 @@ export class PluginEventLedgerError extends Error {
 
 export type PluginEventReceiptStatus =
   | "pending" | "dispatching" | "queued" | "executed" | "retired";
+
+function parseReceiptStatus(raw: string): PluginEventReceiptStatus {
+  switch (raw) {
+    case "pending":
+    case "dispatching":
+    case "queued":
+    case "executed":
+    case "retired":
+      return raw;
+    default:
+      throw new PluginEventLedgerError();
+  }
+}
 
 export interface ClaimedPluginEvent {
   readonly id: string;
@@ -61,6 +74,65 @@ export class DrizzlePluginEventLedger {
     if (!saved) throw new PluginEventLedgerError();
     if (saved.envelopeHash !== hash) throw new PluginEventConflictError();
     return id;
+  }
+
+  /** Resolve only an exact publication + plugin + event ID. No caller can
+   * select a foreign tenant by knowing a globally valid event identifier. */
+  async getReceipt(
+    publicationId: string, pluginId: string, eventId: string,
+  ): Promise<{ id: string; status: PluginEventReceiptStatus; job: PluginWorkerEventJob } | null> {
+    const [saved] = await getDb().select({
+      id: pluginEventReceipts.id,
+      status: pluginEventReceipts.status,
+      hash: pluginEventReceipts.envelopeHash,
+      envelope: pluginEventReceipts.envelope,
+    }).from(pluginEventReceipts).where(and(
+      eq(pluginEventReceipts.publicationId, publicationId),
+      eq(pluginEventReceipts.pluginId, pluginId),
+      eq(pluginEventReceipts.eventId, eventId),
+    )).limit(1);
+    if (!saved) return null;
+    const parsed = PluginWorkerEventJobSchema.safeParse(saved.envelope);
+    if (!parsed.success || parsed.data.publicationId !== publicationId ||
+        parsed.data.pluginId !== pluginId || parsed.data.eventId !== eventId ||
+        pluginEventJobId(parsed.data) !== saved.id ||
+        pluginEventEnvelopeHash(parsed.data) !== saved.hash) {
+      throw new PluginEventLedgerError();
+    }
+    const status = parseReceiptStatus(saved.status);
+    return { id: saved.id, status, job: parsed.data };
+  }
+
+  /** Audit the operator's replay intention *before* touching Redis. The
+   * transaction locks this scoped receipt and refuses terminal deliveries.
+   * A Redis outage leaves an audit trail but cannot authorize a new event. */
+  async recordReplayRequest(
+    publicationId: string, pluginId: string, eventId: string,
+    envelopeHash: string,
+    audit: { readonly actorUserId: string; readonly requestId: string },
+  ): Promise<boolean> {
+    if (!audit.actorUserId || !audit.requestId) throw new PluginEventLedgerError();
+    return getDb().transaction(async (tx) => {
+      const [receipt] = await tx.select({
+        id: pluginEventReceipts.id,
+        status: pluginEventReceipts.status,
+        hash: pluginEventReceipts.envelopeHash,
+      }).from(pluginEventReceipts).where(and(
+        eq(pluginEventReceipts.publicationId, publicationId),
+        eq(pluginEventReceipts.pluginId, pluginId),
+        eq(pluginEventReceipts.eventId, eventId),
+      )).for("update").limit(1);
+      if (!receipt || receipt.status !== "queued" || receipt.hash !== envelopeHash) {
+        return false;
+      }
+      await tx.insert(auditEvents).values({
+        id: randomUUID(), publicationId, actorUserId: audit.actorUserId,
+        requestId: audit.requestId, action: "plugin.event_replay_requested",
+        targetType: "plugin_event", targetId: receipt.id,
+        metadata: { pluginId, eventId },
+      });
+      return true;
+    });
   }
 
   async isAdmitted(job: PluginWorkerEventJob): Promise<boolean> {

@@ -276,6 +276,29 @@ const PluginEventPayloadSchema = z.record(
   .refine((fields) => !["publicationId", "workspaceId", "tenantId", "pluginId", "manifestId"]
     .some((key) => Object.hasOwn(fields, key)), "Caller cannot select event authority");
 
+/** EXT-401 operator-only failed-event inspection and audited replay. The
+ * publication is NEVER a caller-controlled field; only Staff context binds it. */
+export const PluginEventRecoveryParamsSchema = PluginPublicationParamsSchema.extend({
+  eventId: z.string().uuid(),
+}).strict();
+export const PluginEventFailureListQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(10000).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(25),
+}).strict();
+export const PluginEventReplayRequestSchema = z.object({
+  confirmAtLeastOnceRisk: z.literal(true),
+}).strict();
+export const PluginEventFailedDtoSchema = z.object({
+  eventId: z.string().uuid(),
+  jobId: z.string().regex(/^plugin-[a-f0-9]{64}$/),
+  attemptsMade: z.number().int().nonnegative(),
+  status: z.literal("failed"),
+}).strict();
+export const PluginEventFailedListResponseSchema = z.object({
+  items: z.array(PluginEventFailedDtoSchema).max(50),
+  nextOffset: z.number().int().nonnegative(),
+}).strict();
+
 export const PluginEventEnqueueSchema = z.object({
   eventId: z.string().uuid(),
   eventName: PluginEventNameSchema,

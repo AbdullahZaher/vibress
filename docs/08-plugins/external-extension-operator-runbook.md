@@ -176,12 +176,46 @@ before operator-authorized recovery. No Member/public/plugin-direct queue
 admission exists. Never put secrets, member personal data, HTML or session
 tokens in job payloads.
 
-**Remaining EXT-401 gates:** a reviewed operator DLQ/replay UI and safe replay
-protocol, cross-service domain-event transaction integration (currently only
-operator event admission is durable), bounded permanent ledger retention/purge,
-multi-replica crash/recovery drills and queue backlog/age metrics. Signed DB
-backups now include the admission ledger, but the operator still needs a
-coordinated Redis and approved-artifact recovery procedure.
+### Failed-event inspection and explicit operator replay
+
+A platform plugin operator with `plugins.manage` and **owner/admin** access
+to the selected publication can inspect the Redis failed set without receiving
+private plugin payloads, stack traces or failure reasons:
+
+- `GET /api/admin/v1/plugins/:id/events/failed?offset=0&limit=25` scans up
+  to 50 failed Redis jobs, returns only events whose immutable PostgreSQL
+  receipts match the **current publication and plugin**, and provides
+  `nextOffset` for the next bounded scan. A sparse result does not mean there
+  are no failed events elsewhere in the queue.
+- `GET /api/admin/v1/plugins/:id/events/:eventId` returns only an exact
+  failed event ID, job ID and attempts count, never plugin-managed data.
+- `POST /api/admin/v1/plugins/:id/events/:eventId/replay` requires same-site
+  Origin and `{"confirmAtLeastOnceRisk":true}`. The Host confirms an exact
+  still-queued receipt, failed BullMQ job, same pinned bundle/version/hook,
+  active global plugin, and current publication enablement. It commits an
+  `plugin.event_replay_requested` audit entry with the authenticated operator
+  and request ID **before** asking BullMQ to retry the existing job.
+
+A request audit means *requested*, not successfully executed. A Redis failure
+may leave an audit request but no replay; an operator may retry the action.
+Concurrent replay requests may race: only the Redis failed-state transition
+can accept a replay, and the Worker still verifies the receipt and
+authorization before execution. A completed/retired receipt, missing failed
+job, revoked release, foreign publication or tampered envelope cannot replay.
+
+**Operator procedure:** back up PostgreSQL and the approved artifact first,
+verify the underlying plugin side effect is safe to repeat, correct the
+outage, review the failed status, then replay only the selected event. Do not
+bulk-reset the queue or edit PostgreSQL receipts. Never treat replay as
+exactly-once: a prior attempt may have completed its side effect before
+crashing. Keep a business idempotency key inside the plugin itself.
+
+**Remaining EXT-401 gates:** independent Studio UI for failed-job operations,
+cross-service domain-event transaction integration (only operator admission is
+durable so far), reviewed ledger retention/purge, multi-replica crash/recovery
+drills and backlog/age metrics. Signed DB backups include the ledger, but a
+coordinated PostgreSQL/Redis/artifact restore runbook and tested restore
+automation are still required.
 
 ## EXT-402 explicit publication-secret revocation
 

@@ -41,8 +41,11 @@ only one is configured. This is operator trust, not an untrusted plugin sandbox.
 These are **branch changes**, not merged/released contracts. EXT-401 now has
 PostgreSQL-backed operator-only event admission with an immutable scoped
 deduplication ledger, crash-claim reconciliation, BullMQ delivery and release
-checks. Domain-event outbox integration, audited DLQ replay and full operator
-recovery remain pending. EXT-402 now also supports explicit, atomic and
+checks. Domain-event outbox integration, dedicated Studio UI, and full operator
+restore/recovery remain pending. Host-authenticated, publication-scoped failed
+job inspection and explicitly confirmed BullMQ replay now record the
+operator's replay request in PostgreSQL before retrying. Replay remains
+at-least-once and must not be presented as exactly-once. EXT-402 now also supports explicit, atomic and
 audited per-publication secret deletion. Cryptographic master-key rotation
 and operator audit views remain separate blockers.
 EXT-403 automated backup/restore integration, a full EXT-301 Admin

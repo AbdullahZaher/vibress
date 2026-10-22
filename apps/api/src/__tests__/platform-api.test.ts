@@ -1031,6 +1031,37 @@ describe("Batch 12 — Platform Integration & Security", () => {
     expect(forged.statusCode).toBe(403);
   });
 
+  it("EXT-401 recovery APIs require Staff and refuse forged Origin and missing replay consent", async () => {
+    const eventId = crypto.randomUUID();
+    const base = `/api/admin/v1/plugins/missing-plugin/events/${eventId}`;
+    for (const url of [base, "/api/admin/v1/plugins/missing-plugin/events/failed"]) {
+      const anonymous = await app.inject({ method: "GET", url });
+      expect(anonymous.statusCode).toBe(401);
+      const forgedMember = await app.inject({
+        method: "GET", url,
+        headers: { cookie: "vibress_member_session=forged" },
+      });
+      expect(forgedMember.statusCode).toBe(401);
+    }
+    const replay = base + "/replay";
+    const badOrigin = await app.inject({
+      method: "POST", url: replay,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" },
+      payload: { confirmAtLeastOnceRisk: true },
+    });
+    expect(badOrigin.statusCode).toBe(403);
+    for (const invalid of [{}, { confirmAtLeastOnceRisk: false },
+      { confirmAtLeastOnceRisk: true, publicationId: "another-publication" }]) {
+      const rejected = await app.inject({
+        method: "POST", url: replay,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: invalid,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+  });
+
   // ---------------- Host-routed Extension API (EXT-201/202) ----------------
   it("extension API fails closed before loading plugin code without Staff/Member session", async () => {
     const admin = await app.inject({
