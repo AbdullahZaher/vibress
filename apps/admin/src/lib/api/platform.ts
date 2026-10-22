@@ -187,6 +187,18 @@ export async function readExtensionAdminViewApi(
   });
 }
 
+/** POST is bound to the exact Host-admitted linked route. No URL, header,
+ * publication, method or principal can be supplied by an extension frame. */
+export async function writeExtensionAdminViewApi(
+  link: AdminExtensionViewLink,
+  body: Readonly<Record<string, string | number | boolean>>,
+): Promise<Record<string, string | number | boolean>> {
+  return apiRequest(
+    `/extensions/${encodeURIComponent(link.pluginId)}/v1/${encodeURIComponent(link.routeId)}`,
+    { method: "POST", body: JSON.stringify(body), cache: "no-store" },
+  );
+}
+
 export async function listPluginsApi(): Promise<{
   plugins: AdminPlugin[];
   platformOperator?: boolean;

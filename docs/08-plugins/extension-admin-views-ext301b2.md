@@ -95,3 +95,41 @@ Frame URLs are **short-lived bearer credentials** even though they work without 
 **Residual execution trust:** Since browser support for `navigate-to` is incomplete, CSP cannot unconditionally forbid self-navigation to attacker endpoints. The sandbox prevents top-level navigation/popups, direct credential access, arbitrary API calls and unapproved MessagePort assignment, but it **cannot make arbitrary malicious JavaScript incapable of leaking data it is intentionally given**. Operators must manually review and pin every HTML artifact, as they already do server-side plugin bundles. The read bridge must only expose an explicitly reviewed Staff-scope scalar projection; do not send secrets, authentication tokens or unrestricted content to it. Before enabling untrusted package marketplaces, replace this operator-trust contract with a separately designed execution and data-capability architecture.
 
 **Verification:** API integration assertions cover 256-bit single-use tickets, live session revocation, permission changes, injected proof and no cookie serialization; a real Redis integration test checks atomic consumption between independent service instances. Playwright includes a redirected/forged-document case that must not acquire a MessagePort, plus idle iframe revocation on a failed status refresh. Real deployed replica/proxy tests, including effective CSP response headers, still gate release. No check is weakened or skipped to admit the change.
+
+
+## EXT-301C — confirmed, linked-route Admin writes (incremental)
+
+The existing opaque-origin Staff iframe remains sandboxed with `allow-scripts`
+only. Its established private MessagePort read contract is unchanged.
+Trusted, operator-pinned HTML may now send:
+
+```json
+{
+  "type": "vibress:extension:write",
+  "version": 1,
+  "requestId": "unique-per-frame-request",
+  "body": { "title": "Course title", "published": false }
+}
+```
+
+Only up to 24 bounded scalar fields are accepted. The frame cannot supply
+a URL, route ID, method, credential, publication ID, Member ID or tenant
+selector. The Host will POST to exactly the view's **existing linked route ID**.
+Each attempted write requires a fresh user confirmation in the trusted
+Admin parent, is limited to five per minute and one concurrent request,
+and is denied after iframe revocation or publication switch. A confirmed
+UI action is **not** authorization: API middleware independently enforces
+the Staff session, Origin, selected publication, plugin activation, schema
+validation, plugin permissions and the write-specific `plugins.manage` or
+`posts.edit` permission. Legacy read-only extensions are unchanged.
+
+The API's direct POST variant receives the same authorization checks;
+it cannot be used to bypass the bridge's read-vs-write permission split.
+The Host never exposes raw cookies, headers, SQL or a general fetch proxy
+to the frame. UI confirmation can be denied by browsers, in which case
+the Host fails closed.
+
+**Remaining gates:** a pilot using actual LMS storage/Member entitlements,
+independent external-package conformance, keyboard/Arabic RTL end-to-end
+testing, and reviewed operator rollout/rollback. This bridge alone is
+not evidence of secure learner enrollment or production readiness.

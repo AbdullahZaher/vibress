@@ -46,6 +46,7 @@ const translations: Record<string, string> = {
   "Load more events": "تحميل أحداث إضافية",
 
   "Read-only plugin view": "عرض الإضافة للقراءة فقط",
+  "Allow this plugin to change data for this publication?": "هل تسمح لهذه الإضافة بتعديل بيانات الموقع الحالي؟",
   "Unable to load plugin view.": "تعذر تحميل صفحة الإضافة.",
   "Loading plugin view...": "جارٍ تحميل صفحة الإضافة...",
   "No plugin data available.": "لا تتوفر بيانات للإضافة.",
