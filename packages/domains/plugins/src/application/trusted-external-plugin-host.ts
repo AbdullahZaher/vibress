@@ -78,7 +78,9 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     }
     if (storageModels.length > 0 &&
         !manifest.capabilities.some((capability) =>
-          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+          capability === "extension.storage.read" || capability === "extension.storage.write" ||
+          capability === "extension.member_storage.read" ||
+          capability === "extension.member_storage.write")) {
       throw new Error("Approved storage models require declared storage capability");
     }
     const adminUiAssets = entry.adminUiAssets ?? [];

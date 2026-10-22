@@ -9,6 +9,7 @@ import { hasPermission, SITE_AUTH_COOKIE_NAME, verifySiteAuthToken } from "@vibr
 import { getConfig } from "@vibress/config";
 import {
   PluginDomainError, createHostPluginStorageSession, createHostMemberAccessSession,
+  createHostPluginMemberStorageSession,
 } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
@@ -194,6 +195,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       // LMS entitlement/ownership rules require a separate reviewed bridge.
       let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
       let memberSession: ReturnType<typeof createHostMemberAccessSession> | null = null;
+      let memberStorageSession: ReturnType<typeof createHostPluginMemberStorageSession> | null = null;
       let handlerFailed = false;
       let validatedResponse: ReturnType<typeof validateExtensionApiObject> = null;
       try {
@@ -233,10 +235,24 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
             });
           }
         }
+        if (audience === "member" && req.member &&
+            req.member.publicationId === publicationId) {
+          const binding = await pluginsService.resolveExtensionMemberStorageBinding(
+            params.data.pluginId, publicationId,
+          );
+          if (binding) {
+            memberStorageSession = createHostPluginMemberStorageSession({
+              pluginId: binding.pluginId, publicationId: binding.publicationId,
+              memberId: req.member.id, requestId: req.id,
+              allowWrites: req.method === "POST",
+            }, binding.models);
+          }
+        }
         const boundScope: PluginApiScope = {
           ...scope,
           ...(storageSession ? { storage: storageSession.storage } : {}),
           ...(memberSession ? { memberAccess: memberSession.memberAccess } : {}),
+          ...(memberStorageSession ? { memberStorage: memberStorageSession.memberStorage } : {}),
         };
         const output = await route.handle({ query, body }, boundScope);
         validatedResponse = validateExtensionApiObject(route.response, output);
@@ -251,6 +267,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
           await Promise.allSettled([
             storageSession?.close(),
             memberSession?.close(),
+            memberStorageSession?.close(),
           ]).then((results) => {
             if (results.some((result) => result.status === "rejected")) {
               handlerFailed = true;
