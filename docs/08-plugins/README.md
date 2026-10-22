@@ -48,8 +48,10 @@ operator's replay request in PostgreSQL before retrying. Replay remains
 at-least-once and must not be presented as exactly-once. EXT-402 now also supports explicit, atomic and
 audited per-publication secret deletion. Cryptographic master-key rotation
 and operator audit views remain separate blockers.
-EXT-403 automated backup/restore integration, a full EXT-301 Admin
-write/UI host contract, further EXT-404 supply-chain scanning,
+EXT-403 now has a read-only, paginated post-restore database/artifact
+compatibility preflight, but coordinated backup/restore automation remains a
+blocker. EXT-404 adds queue/consumer health metrics, but further supply-chain
+scanning, a full EXT-301 Admin write/UI host contract,
 cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
 The opt-in production Compose override requires operator release signatures.
 Do not infer production readiness from CI alone.

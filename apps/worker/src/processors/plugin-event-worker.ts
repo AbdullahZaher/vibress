@@ -16,6 +16,7 @@ import {
   type Plugin,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
+import { metrics } from "@vibress/observability";
 
 export interface PluginEventExecution {
   getPlugin(id: string): Promise<Plugin | null>;
@@ -141,13 +142,16 @@ export class PluginEventWorker {
     this.worker = new Worker<PluginWorkerEventJob>(
       QUEUE_NAMES.PLUGIN_EVENTS,
       tracedProcessor("worker.job.plugin-event", async (job) => {
-        await processAdmittedPluginEvent(job.data, job.id, pluginEventLedger, {
+        const outcome = await processAdmittedPluginEvent(job.data, job.id, pluginEventLedger, {
           getPlugin: (id) => this.repository.findById(id),
           approvedDigests: () => this.operatorHost.listTrustedFingerprints(),
           isPublicationEnabled: (id, pubId) => this.service.isPublicationEnabled(id, pubId),
           dispatchEvent: (id, eventName, payload, pubId) =>
             this.service.dispatchEvent(id, eventName, payload, pubId),
         });
+        // Fixed enumerated outcome labels only: no tenant IDs, event names,
+        // user-supplied payloads or secrets in Prometheus cardinality.
+        metrics.counter("plugin_events_processed", 1, { outcome });
       }),
       {
         connection: getBullMqRedisConnection(),
@@ -156,16 +160,23 @@ export class PluginEventWorker {
     );
     this.worker.on("failed", (job, _error) => {
       // Do not log plugin-provided payload, secrets, or stack traces.
+      metrics.counter("plugin_events_handler_failed");
       console.error("[PluginEventWorker] Failed plugin event", { jobId: job?.id });
     });
     this.worker.on("error", () => {
       this.ready = false;
+      metrics.gauge("plugin_events_consumer_ready", 0);
+      metrics.counter("plugin_events_consumer_connection_errors");
       console.error("[PluginEventWorker] Queue connection unavailable");
     });
-    this.worker.on("ready", () => { this.ready = true; });
+    this.worker.on("ready", () => {
+      this.ready = true;
+      metrics.gauge("plugin_events_consumer_ready", 1);
+    });
     await this.worker.waitUntilReady();
     await this.producer.waitUntilReady();
     this.ready = true;
+    metrics.gauge("plugin_events_consumer_ready", 1);
     // Periodically reconcile PostgreSQL admissions not yet published to
     // Redis. A crash can leave a claimed receipt: a 2-minute lease reclaims it.
     this.sweepTimer = setInterval(() => {
@@ -187,7 +198,20 @@ export class PluginEventWorker {
 
   private async dispatchPending(): Promise<void> {
     if (!this.producer || !this.ready) return;
+    // A bounded Redis status snapshot is useful for operator alerting but
+    // must never block durable PG admission/dispatch if metrics fail.
+    try {
+      const counts = await this.producer.getJobCounts(
+        "waiting", "active", "delayed", "failed",
+      );
+      for (const state of ["waiting", "active", "delayed", "failed"] as const) {
+        metrics.gauge("plugin_events_queue_jobs", counts[state] ?? 0, { state });
+      }
+    } catch {
+      metrics.counter("plugin_events_metrics_collection_failed");
+    }
     const claims = await pluginEventLedger.claimReady(25);
+    metrics.gauge("plugin_events_claimed_per_sweep", claims.length);
     for (const receipt of claims) {
       try {
         await enqueueTraced(this.producer, "event", receipt.envelope, {
@@ -199,8 +223,10 @@ export class PluginEventWorker {
         // A consumer may already have finalized this receipt. Conditional
         // updates must never change an executed/retired receipt back to queued.
         await pluginEventLedger.markQueued(receipt.id);
+        metrics.counter("plugin_events_relay_enqueued");
       } catch {
         await pluginEventLedger.returnPending(receipt.id);
+        metrics.counter("plugin_events_relay_failed");
         // No plugin payloads/errors are logged; retry through the next sweep.
         console.error("[PluginEventWorker] Event admission relay unavailable", {
           jobId: receipt.id,
@@ -211,6 +237,7 @@ export class PluginEventWorker {
 
   async stop(): Promise<void> {
     this.ready = false;
+    metrics.gauge("plugin_events_consumer_ready", 0);
     if (this.sweepTimer) {
       clearInterval(this.sweepTimer);
       this.sweepTimer = null;

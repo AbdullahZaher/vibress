@@ -218,6 +218,53 @@ drills and backlog/age metrics. Signed DB backups include the ledger, but a
 coordinated PostgreSQL/Redis/artifact restore runbook and tested restore
 automation are still required.
 
+## EXT-403 read-only database/artifact restore preflight
+
+Restore a *signed*, consistent PostgreSQL backup and stage the exact approved
+external plugin artifact directory on each API and worker node. **Keep all
+normal API and Worker replicas stopped**, including background/cron execution.
+The database snapshot must include plugin installations, publication settings,
+approved schema-migration ledger and `plugin_event_receipts`. Restore the
+matching Redis queue snapshot separately when applicable; a PostgreSQL-only
+restore cannot recover every in-flight BullMQ job.
+
+On an operator workstation with DB connectivity, the same validated
+environment, and the operator's read-only trusted release mount, run:
+
+```bash
+VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1 \
+  pnpm exec tsx scripts/plugins/check-restore.ts
+```
+
+The read-only command verifies the Ed25519-approved files and digests before
+querying PostgreSQL; it checks all *active, publication-enabled* plugin release
+versions and pages through every pending/dispatching/queued event receipt.
+A missing release, old artifact digest, malformed envelope or changed receipt
+hash stops the recovery. No plugin module is imported or executed and the
+command prints counts, not event payloads, credentials or tenant identities.
+
+This is a **compatibility gate, not a restore or queue-reconstruction tool**.
+Before reopening traffic, perform a restore drill, reconcile Redis jobs and
+pending receipts, verify irreversible plugin schema migrations against the
+approved operator change record, then bring up one worker and API replica at
+a time. Disabled/retired plugins may retain old database content; do not
+silently delete or migrate their tables as part of restore.
+
+## EXT-404 operator metrics for trusted plugin events
+
+When the trusted event worker is configured, its existing private `/metrics`
+endpoint publishes `plugin_events_consumer_ready`,
+`plugin_events_queue_jobs{state="waiting|active|delayed|failed"}`, the
+count of PostgreSQL admission claims per sweep, and counters for processed,
+retired/unadmitted, failed and relayed jobs. The labels are fixed enums; no
+publication IDs or plugin payloads enter observability tags. Enable the
+existing metrics configuration and restrict network access to the monitoring
+system; do **not** publish `/metrics` openly on the Internet. Alert on
+consumer readiness 0, sustained queue backlog, and rising failure counts.
+
+These probes help detect operational faults but do not replace a
+multi-replica canary, release scan, or a tested rollback.
+
 ## EXT-402 explicit publication-secret revocation
 
 `DELETE /api/admin/v1/plugins/:id/publication-settings/:key` requires a

@@ -17,3 +17,5 @@ export {
   pluginEventEnvelopeHash, PluginEventConflictError, PluginEventLedgerError,
 } from "./application/plugin-event-ledger";
 export type { ClaimedPluginEvent } from "./application/plugin-event-ledger";
+export { assertPluginRestoreReadiness } from "./application/plugin-restore-readiness";
+export type { RestoreEnabledPlugin, RestorePendingEvent, RestoreReadinessResult } from "./application/plugin-restore-readiness";
