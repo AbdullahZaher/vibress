@@ -57,6 +57,8 @@ describe("EXT-205 live PostgreSQL Member storage", () => {
           action text NOT NULL,
           target_type text NOT NULL,
           target_id text,
+          ip_address text,
+          user_agent text,
           metadata jsonb,
           created_at timestamptz NOT NULL DEFAULT now()
         );
