@@ -255,6 +255,39 @@ approved operator change record, then bring up one worker and API replica at
 a time. Disabled/retired plugins may retain old database content; do not
 silently delete or migrate their tables as part of restore.
 
+### Read-only PostgreSQL/Redis reconciliation after restore
+
+Once `scripts/plugins/check-restore.ts` has validated the exact signed
+operator release against restored PostgreSQL, **keep all normal API/Worker
+replicas stopped**. Restore the matching Redis snapshot as directed by the
+existing backup procedure. Set `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`
+in an isolated operator CLI environment (never in a live serving replica),
+and run:
+
+```bash
+VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1 \
+  pnpm exec tsx scripts/plugins/check-queue-recovery.ts
+```
+
+The read-only command scans PostgreSQL receipts with `status='queued'`
+using stable keyset pagination. It verifies every receipt's immutable
+event hash, its exact deterministic Redis job ID/envelope and its BullMQ
+state, bounded to at most 100,000 rows. Operators with a larger backlog
+must plan and explicitly extend the reviewed tool rather than treating a
+partial scan as complete.
+
+It prints **aggregate counts only**, and returns a nonzero exit code for
+missing, invalid, terminal, or failed jobs, network/database errors, or
+a scan-limit breach. Failed jobs may require audited operator replay after
+reviewing idempotency and the root cause. Missing jobs may require a
+separate, reviewed durable-ledger reconciliation plan; **do not manually
+fabricate BullMQ jobs or reset ledger state**.
+
+This is an additional *consistency check*, not queue recovery automation;
+it never modifies Redis, PostgreSQL, the plugin filesystem or API state.
+A green read-only preflight does not prove that all plugin side effects
+are reversible or exactly-once.
+
 ## EXT-404 operator metrics for trusted plugin events
 
 When the trusted event worker is configured, its existing private `/metrics`
