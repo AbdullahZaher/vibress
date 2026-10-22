@@ -19,3 +19,8 @@ export {
 export type { ClaimedPluginEvent } from "./application/plugin-event-ledger";
 export { assertPluginRestoreReadiness } from "./application/plugin-restore-readiness";
 export type { RestoreEnabledPlugin, RestorePendingEvent, RestoreReadinessResult } from "./application/plugin-restore-readiness";
+
+export { assessQueueRecovery } from "./application/plugin-queue-recovery";
+export type {
+  QueueRecoveryReceipt, QueueRecoveryJob, QueueRecoveryState,
+} from "./application/plugin-queue-recovery";
