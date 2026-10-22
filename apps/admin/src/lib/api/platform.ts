@@ -302,3 +302,31 @@ export async function registerOperatorTrustedPluginApi(
     body: JSON.stringify({ manifestId }),
   });
 }
+
+/** EXT-401 Host-authorized and publication-scoped failed plugin events. */
+export interface AdminFailedPluginEvent {
+  eventId: string;
+  jobId: string;
+  attemptsMade: number;
+  status: "failed";
+}
+export async function listFailedPluginEventsApi(
+  id: string, offset = 0,
+): Promise<{ items: AdminFailedPluginEvent[]; nextOffset: number }> {
+  const query = new URLSearchParams({ offset: String(offset), limit: "25" });
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/events/failed?${query}`, {
+    cache: "no-store",
+  });
+}
+
+export async function replayFailedPluginEventApi(
+  id: string, eventId: string,
+): Promise<Omit<AdminFailedPluginEvent, "status"> & { status: "requeued" }> {
+  return apiRequest(
+    `/plugins/${encodeURIComponent(id)}/events/${encodeURIComponent(eventId)}/replay`,
+    {
+      method: "POST",
+      body: JSON.stringify({ confirmAtLeastOnceRisk: true }),
+    },
+  );
+}

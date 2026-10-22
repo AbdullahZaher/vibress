@@ -211,8 +211,13 @@ bulk-reset the queue or edit PostgreSQL receipts. Never treat replay as
 exactly-once: a prior attempt may have completed its side effect before
 crashing. Keep a business idempotency key inside the plugin itself.
 
-**Remaining EXT-401 gates:** independent Studio UI for failed-job operations,
-cross-service domain-event transaction integration (only operator admission is
+The Admin **Plugins** panel exposes the same publication-scoped failed-event
+query and replay operations only to an authenticated platform plugin operator.
+It requires two deliberate actions (review, confirm) to replay a selected
+failed job, with visible at-least-once warnings. UI state is cleared on
+publication switches to avoid stale cross-publication event IDs.
+
+**Remaining EXT-401 gates:** deeper cross-service domain-event transaction integration (only operator admission is
 durable so far), reviewed ledger retention/purge, multi-replica crash/recovery
 drills and backlog/age metrics. Signed DB backups include the ledger, but a
 coordinated PostgreSQL/Redis/artifact restore runbook and tested restore

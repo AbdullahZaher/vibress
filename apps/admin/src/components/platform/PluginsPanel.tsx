@@ -14,6 +14,7 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Puzzle } from "lucide-react";
 import { ScopedPluginSettingsEditor } from "./ScopedPluginSettingsEditor";
+import { FailedPluginEventsPanel } from "./FailedPluginEventsPanel";
 
 interface PluginsPanelProps {
   plugins: AdminPlugin[];
@@ -152,6 +153,9 @@ export function PluginsPanel({
               </div>
               {scoped && siteEnabled && (
                 <ScopedPluginSettingsEditor plugin={plugin} onError={onError} />
+              )}
+              {platformOperator && scoped && globalActive && siteEnabled && (
+                <FailedPluginEventsPanel pluginId={plugin.id} onError={onError} />
               )}
             </Card>
           );
