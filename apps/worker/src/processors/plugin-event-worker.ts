@@ -132,6 +132,9 @@ export class PluginEventWorker {
       return;
     }
     await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+    // Reject an unmigrated database before opening the BullMQ consumer:
+    // otherwise unadmitted pre-migration jobs could be silently consumed.
+    await pluginEventLedger.assertReady();
     this.producer = new Queue<PluginWorkerEventJob>(QUEUE_NAMES.PLUGIN_EVENTS, {
       connection: getBullMqRedisConnection(),
     });
@@ -162,7 +165,6 @@ export class PluginEventWorker {
     this.worker.on("ready", () => { this.ready = true; });
     await this.worker.waitUntilReady();
     await this.producer.waitUntilReady();
-    await pluginEventLedger.assertReady();
     this.ready = true;
     // Periodically reconcile PostgreSQL admissions not yet published to
     // Redis. A crash can leave a claimed receipt: a 2-minute lease reclaims it.

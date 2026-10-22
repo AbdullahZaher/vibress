@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   PluginEventEnqueueSchema, PluginPublicationParamsSchema,
   PluginEventRecoveryParamsSchema, PluginEventFailureListQuerySchema,
@@ -104,9 +104,7 @@ export async function adminPluginEventRoutes(fastify: FastifyInstance) {
     requireStaffSession, requirePermission("plugins.manage"),
     requirePlatformPluginOperator,
   ];
-  function scopedPublication(req: {
-    publicationContext?: { publicationId?: string; role?: string } | undefined;
-  }): string | null {
+  function scopedPublication(req: FastifyRequest): string | null {
     const context = req.publicationContext;
     return context?.publicationId &&
       (context.role === "owner" || context.role === "admin")
@@ -125,8 +123,8 @@ export async function adminPluginEventRoutes(fastify: FastifyInstance) {
   }
 
   // No errors, stacktraces or original event payloads are returned to Staff.
-  // Offset refers to a bounded slice of the cross-tenant Redis failed set;
-  // every visible entry must also match an authoritative scoped PG receipt.
+  // Pagination begins with the authorized publication's PostgreSQL receipts.
+  // Foreign-tenant Redis job counts and identifiers are never enumerated.
   fastify.get("/plugins/:id/events/failed", {
     preHandler: operatorAccess,
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },

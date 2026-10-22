@@ -182,11 +182,12 @@ A platform plugin operator with `plugins.manage` and **owner/admin** access
 to the selected publication can inspect the Redis failed set without receiving
 private plugin payloads, stack traces or failure reasons:
 
-- `GET /api/admin/v1/plugins/:id/events/failed?offset=0&limit=25` scans up
-  to 50 failed Redis jobs, returns only events whose immutable PostgreSQL
-  receipts match the **current publication and plugin**, and provides
-  `nextOffset` for the next bounded scan. A sparse result does not mean there
-  are no failed events elsewhere in the queue.
+- `GET /api/admin/v1/plugins/:id/events/failed?offset=0&limit=25`
+  queries up to 50 queued PostgreSQL receipts belonging to the authorized
+  **publication and plugin**, then checks only those Redis job IDs for failed
+  state. The returned `nextOffset` advances through scoped receipts rather
+  than exposing the size of the global Redis failed set. A sparse result
+  means some scoped receipts are not failed, not that there are no more.
 - `GET /api/admin/v1/plugins/:id/events/:eventId` returns only an exact
   failed event ID, job ID and attempts count, never plugin-managed data.
 - `POST /api/admin/v1/plugins/:id/events/:eventId/replay` requires same-site

@@ -62,6 +62,14 @@ describe("EXT-401 scoped failed-event recovery ledger (PostgreSQL)", () => {
       "UPDATE plugin_event_receipts SET status = 'queued' WHERE id = $1",
       [id],
     );
+    expect(await ledger.listQueuedEventIds(publicationId, pluginId, 0, 10))
+      .toEqual([job.eventId]);
+    expect(await ledger.listQueuedEventIds("foreign-publication", pluginId, 0, 10))
+      .toEqual([]);
+    expect(await ledger.listQueuedEventIds(publicationId, "foreign-plugin", 0, 10))
+      .toEqual([]);
+    await expect(ledger.listQueuedEventIds(publicationId, pluginId, 0, 51))
+      .rejects.toThrow();
     const { pluginEventEnvelopeHash } = await import("@vibress/plugins");
     const hash = pluginEventEnvelopeHash(job);
     expect(await ledger.recordReplayRequest(
@@ -78,6 +86,8 @@ describe("EXT-401 scoped failed-event recovery ledger (PostgreSQL)", () => {
     expect(logged.rows[0]?.request_id).toBe(audit.requestId);
     expect(JSON.stringify(logged.rows[0]?.metadata)).not.toContain("sensitive-test-post");
     await ledger.finalize(id, "executed");
+    expect(await ledger.listQueuedEventIds(publicationId, pluginId, 0, 10))
+      .toEqual([]);
     expect(await ledger.recordReplayRequest(
       publicationId, pluginId, job.eventId, hash, audit,
     )).toBe(false);

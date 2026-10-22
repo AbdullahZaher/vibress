@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, asc } from "drizzle-orm";
 import { getDb, pluginEventReceipts, auditEvents } from "@vibress/database";
 import {
   PluginWorkerEventJobSchema, type PluginWorkerEventJob,
@@ -101,6 +101,27 @@ export class DrizzlePluginEventLedger {
     }
     const status = parseReceiptStatus(saved.status);
     return { id: saved.id, status, job: parsed.data };
+  }
+
+  /** Only a publication's own queued receipt IDs can be enumerated.
+   * No cross-publication Redis scans, tenant counts or plugin event payloads. */
+  async listQueuedEventIds(
+    publicationId: string, pluginId: string, offset: number, limit: number,
+  ): Promise<readonly string[]> {
+    if (!Number.isInteger(offset) || offset < 0 || offset > 10000 ||
+        !Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new PluginEventLedgerError();
+    }
+    const receipts = await getDb().select({ eventId: pluginEventReceipts.eventId })
+      .from(pluginEventReceipts)
+      .where(and(
+        eq(pluginEventReceipts.publicationId, publicationId),
+        eq(pluginEventReceipts.pluginId, pluginId),
+        eq(pluginEventReceipts.status, "queued"),
+      ))
+      .orderBy(asc(pluginEventReceipts.createdAt), asc(pluginEventReceipts.id))
+      .limit(limit).offset(offset);
+    return receipts.map((row) => row.eventId);
   }
 
   /** Audit the operator's replay intention *before* touching Redis. The

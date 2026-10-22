@@ -21,10 +21,12 @@ export interface FailedEventJob {
 }
 export interface FailedEventQueue {
   getJob(id: string): Promise<FailedEventJob | undefined | null>;
-  getJobs(types: Array<"failed">, start: number, end: number): Promise<FailedEventJob[]>;
   close(): Promise<void>;
 }
 export interface FailedEventLedger {
+  listQueuedEventIds(
+    publicationId: string, pluginId: string, offset: number, limit: number,
+  ): Promise<readonly string[]>;
   getReceipt(
     publicationId: string, pluginId: string, eventId: string,
   ): Promise<Receipt | null>;
@@ -92,21 +94,18 @@ export class PluginEventRecoveryService {
     return (await this.inspect(publicationId, pluginId, eventId)).dto;
   }
 
-  /** Bounded raw queue scan: every visible entry requires its own exact
-   * publication-scoped PG receipt; no other tenant's error/details can leak. */
+  /** Query authorized tenant receipts first; probe only matching Redis
+   * job IDs. Never enumerate the shared Redis queue across tenants. */
   async listFailed(
     publicationId: string, pluginId: string, offset: number, limit: number,
   ): Promise<{ items: FailedPluginEventDto[]; nextOffset: number }> {
-    const jobs = await this.queue.getJobs(["failed"], offset, offset + limit - 1);
+    const eventIds = await this.ledger.listQueuedEventIds(
+      publicationId, pluginId, offset, limit,
+    );
     const items: FailedPluginEventDto[] = [];
-    for (const job of jobs) {
-      const parsed = PluginWorkerEventJobSchema.safeParse(job.data);
-      if (!parsed.success || parsed.data.publicationId !== publicationId ||
-          parsed.data.pluginId !== pluginId) continue;
+    for (const eventId of eventIds) {
       try {
-        const result = await this.inspect(
-          publicationId, pluginId, parsed.data.eventId, job,
-        );
+        const result = await this.inspect(publicationId, pluginId, eventId);
         items.push(result.dto);
       } catch (error) {
         if (error instanceof PluginEventRecoveryError &&
@@ -114,7 +113,7 @@ export class PluginEventRecoveryService {
         throw error;
       }
     }
-    return { items, nextOffset: offset + jobs.length };
+    return { items, nextOffset: offset + eventIds.length };
   }
 
   async replay(

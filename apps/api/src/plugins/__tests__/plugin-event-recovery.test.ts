@@ -48,6 +48,9 @@ function fixture(options: {
     id, status: options.receiptStatus ?? "queued" as const, job: event,
   };
   const ledger: FailedEventLedger = {
+    listQueuedEventIds: vi.fn(async (pub, pluginId) =>
+      pub === "pub-a" && pluginId === "row-a" && options.receipt !== false
+        ? [event.eventId] : []),
     getReceipt: vi.fn(async (pub, pluginId, eventId) =>
       options.receipt === false || pub !== "pub-a" ||
       pluginId !== "row-a" || eventId !== event.eventId ? null : receipt),
@@ -61,7 +64,6 @@ function fixture(options: {
   };
   const queue: FailedEventQueue = {
     getJob: vi.fn(async () => job),
-    getJobs: vi.fn(async () => [job]),
     close: vi.fn(async () => undefined),
   };
   return { service: new PluginEventRecoveryService(ledger, authority, queue),
@@ -152,8 +154,15 @@ describe("EXT-401 operator failed-event recovery", () => {
     const result = await f.service.listFailed("pub-a", "row-a", 20, 10);
     expect(result.items).toHaveLength(1);
     expect(result.nextOffset).toBe(21);
-    expect(f.queue.getJobs).toHaveBeenCalledWith(["failed"], 20, 29);
+    expect(f.ledger.listQueuedEventIds).toHaveBeenCalledWith(
+      "pub-a", "row-a", 20, 10,
+    );
     const foreign = await f.service.listFailed("pub-b", "row-a", 0, 5);
     expect(foreign.items).toEqual([]);
+    // No Redis job from another publication is ever fetched.
+    expect(f.queue.getJob).toHaveBeenCalledTimes(1);
+    expect(f.ledger.listQueuedEventIds).toHaveBeenCalledWith(
+      "pub-b", "row-a", 0, 5,
+    );
   });
 });
