@@ -1,5 +1,7 @@
 import type { PluginMemberStorageApi } from "@vibress/plugin-sdk";
-import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
+import type {
+  ApprovedPluginPhysicalColumn, ApprovedPluginPhysicalModel,
+} from "./plugin-storage-migrations";
 import {
   PluginScopedStorageError, validateStorageFields, validateStorageModel,
   validateStorageRecordId, validateStorageVersion, validateStoragePage,
@@ -53,7 +55,7 @@ export function createHostPluginMemberStorageSession(
   const models = new Map<string, ApprovedPluginPhysicalModel>();
   for (const model of approvedModels) {
     validateStorageModel(model);
-    if (model.columns.some((column) =>
+    if (model.columns.some((column: ApprovedPluginPhysicalColumn) =>
       ["member_id", "plugin_id", "tenant_id", "publication_id",
         "workspace_id", "user_id", "actor_user_id", "owner_id"].includes(column.name))) {
       throw new PluginScopedStorageError(
