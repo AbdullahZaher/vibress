@@ -13,13 +13,23 @@ import { TrustedExternalPluginHost } from "./trusted-external-plugin-host";
  * No runtime npm install, no remote code, no arbitrary uploaded packages.
  */
 export class BundledPluginHost implements PluginHost {
-  private readonly external = new TrustedExternalPluginHost();
+  private readonly external: TrustedExternalPluginHost;
   private readonly registry = new Map<string, { manifest: unknown; module: PluginModule }>([
     ["vibress-content-metrics", {
       manifest: contentMetricsManifest,
       module: contentMetricsPlugin,
     }],
   ]);
+
+  constructor(external?: TrustedExternalPluginHost | string) {
+    if (external instanceof TrustedExternalPluginHost) {
+      this.external = external;
+    } else if (typeof external === "string") {
+      this.external = new TrustedExternalPluginHost(external);
+    } else {
+      this.external = new TrustedExternalPluginHost();
+    }
+  }
 
   requiresPublicationEnablement(plugin: Plugin): boolean {
     return !this.registry.has(plugin.manifestId);

@@ -131,15 +131,15 @@ function isPluginModule(value: unknown): value is PluginModule {
  * Every load re-checks the pinned checksum BEFORE importing the module.
  */
 export class TrustedExternalPluginHost {
-  constructor(private readonly lockfilePath: string | undefined = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {}
+  private readonly lockfilePath: string | undefined;
 
-  private get effectiveLockfilePath(): string | undefined {
-    return this.lockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+  constructor(lockfilePath?: string) {
+    this.lockfilePath = lockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
   }
 
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
   async listTrustedManifests(): Promise<PluginManifest[]> {
-    const lockfile = this.effectiveLockfilePath;
+    const lockfile = this.lockfilePath;
     if (!lockfile) return [];
     const json = await readTrustedPluginLockfile(lockfile);
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
@@ -151,7 +151,7 @@ export class TrustedExternalPluginHost {
    * entrypoint digest, not plugin-authored or supplied by a Staff request.
    */
   async listTrustedFingerprints(): Promise<ReadonlyMap<string, string>> {
-    const lockfile = this.effectiveLockfilePath;
+    const lockfile = this.lockfilePath;
     if (!lockfile) return new Map();
     const data = await readTrustedPluginLockfile(lockfile);
     const fingerprints = new Map<string, string>();
@@ -166,7 +166,7 @@ export class TrustedExternalPluginHost {
    * A plugin's manifest or HTTP input cannot provide table/column definitions.
    */
   async getApprovedStorageModels(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]> {
-    const lockfile = this.effectiveLockfilePath;
+    const lockfile = this.lockfilePath;
     if (!lockfile) return [];
     const data = await readTrustedPluginLockfile(lockfile);
     const approved = parseTrustedPluginLockfile(data).get(plugin.manifestId);
@@ -188,7 +188,7 @@ export class TrustedExternalPluginHost {
    * Every read rechecks the on-disk SHA-256 to reject tampering and stale nodes.
    */
   async readApprovedAdminUiAsset(plugin: Plugin, viewId: string): Promise<string | null> {
-    const lockfile = this.effectiveLockfilePath;
+    const lockfile = this.lockfilePath;
     if (!lockfile) return null;
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(viewId)) {
       throw new Error("Invalid Admin UI view identifier");
@@ -226,7 +226,7 @@ export class TrustedExternalPluginHost {
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
-    const lockfile = this.effectiveLockfilePath;
+    const lockfile = this.lockfilePath;
     if (!lockfile) return null;
     const json = await readTrustedPluginLockfile(lockfile);
     const installed = parseTrustedPluginLockfile(json).get(plugin.manifestId);

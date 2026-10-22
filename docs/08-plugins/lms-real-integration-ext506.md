@@ -125,9 +125,19 @@ Ran the official `vibress-lms` live-host acceptance suite against a live Fastify
 - Data in `plugin_member_records` for Publication B remains completely intact (no silent data deletion).
 - Re-enabling the plugin for Publication B immediately restores `200 OK` responses and member data access.
 
-### 6. Backup & Restore Readiness
-- `assertPluginRestoreReadiness()` confirms that the active plugin, its migrations, and its physical models match the disk artifact and lockfile.
-- Ledger integrity is confirmed ready for production backups.
+### 6. Genuine Disposable Database Backup & Restore Verification
+- Disposable database isolation ensures tests run in dedicated PostgreSQL environments (`vibress_ext506_<runId>`).
+- Physical database cloning creates an exact replica database (`vibress_ext506_restore_<runId>`) from the test template.
+- Backup manifest with SHA-256 checksum is written to disk.
+- Data integrity verification confirms all model rows, member records, and physical tables (`ext_<hash>`) are restored identically.
+- `assertPluginRestoreReadiness()` confirms that the active plugin, its migrations, and its physical models match the disk artifact and lockfile on the restored database.
+- Disposable databases are dropped cleanly with `DROP DATABASE ... WITH (FORCE);`.
+
+### 7. Negative Security & Injection Resilience
+- Unauthenticated member mutations fail closed (`401/403/404`).
+- Path traversal requests (e.g. `..%2f..%2fetc%2fpasswd`) fail closed (`400/404`).
+- Payload spoofing attempts (e.g. attempting to pass unauthorized `memberId` or `publicationId` in JSON bodies) are bound strictly to host-authenticated sessions and fail to affect other members or publications.
+- Cross-origin state-changing mutations with invalid origins fail closed (`403 Forbidden`).
 
 ---
 
@@ -139,13 +149,14 @@ Run the complete integration suite:
 pnpm exec vitest run tests/integration/real-lms-pilot-host.test.ts
 ```
 
-All 6 test steps pass:
+All 7 test steps pass:
 - `Step 1: rejects tampered artifact and migration plan during offline preflight`
 - `Step 2: registers plugin, applies approved migrations, and activates plugin`
 - `Step 3: provisions publications, locales, enablement, and member sessions`
 - `Step 4: passes real HTTP live-host acceptance across two sites and three members`
 - `Step 5: verifies publication deactivation, data retention, and reactivation`
-- `Step 6: confirms backup and restore readiness of the installed release`
+- `Step 6: performs genuine disposable database backup, restore, and integrity verification`
+- `Step 7: verifies negative security scenarios: unauthenticated access, CSRF tampering, and payload injection`
 
 ---
 

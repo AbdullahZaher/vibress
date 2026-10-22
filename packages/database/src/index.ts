@@ -1,6 +1,7 @@
 import * as schema from "./schema";
 
 export { getDbPool, getDb, closeDbPool } from "./connection";
+export { Client, Pool } from "pg";
 export { schema };
 export * from "./schema";
 export { runMigrations } from "./migrate";

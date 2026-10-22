@@ -467,8 +467,10 @@ Fastify HTTP host and real PostgreSQL database in `tests/integration/real-lms-pi
 5. **Lifecycle & Retention:** Deactivating a publication immediately blocks
    extension routes while retaining all persisted member records in `plugin_member_records`.
    Reactivation immediately restores access.
-6. **Restore Readiness:** `assertPluginRestoreReadiness` confirms lockfile,
-   migration ledger, and database consistency.
+6. **Genuine Backup & Restore:** Creates disposable clone database, verifies
+   row counts, models, and member records, and validates `assertPluginRestoreReadiness`.
+7. **Negative Security:** Rejects unauthenticated access, CSRF origin mismatches,
+   path traversal, and payload spoofing attempts.
 
 To run the full host integration suite:
 
