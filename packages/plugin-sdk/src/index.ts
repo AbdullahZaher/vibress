@@ -81,10 +81,25 @@ export interface PluginMemberAccessApi {
   /** Checks an existing billing plan, NOT course/lesson enrollment rights. */
   hasActivePlan(planId: string): Promise<boolean>;
 }
+
+/** EXT-205: own-member-only records; no member, tenant or SQL selectors. */
+export interface PluginMemberStorageApi {
+  get(modelKey: string, id: string): Promise<PluginStorageItem | null>;
+  list(modelKey: string, limit?: number, cursor?: string): Promise<PluginStorageResultPage>;
+  /** Atomic insert. A duplicate returns CONFLICT, never overwrites a record. */
+  create(modelKey: string, id: string,
+    fields: Readonly<Record<string, PluginStorageValue>>): Promise<PluginStorageItem>;
+  /** Optimistic CAS; rejects stale versions and records owned by anyone else. */
+  update(modelKey: string, id: string, expectedVersion: number,
+    fields: Readonly<Record<string, PluginStorageValue>>): Promise<PluginStorageItem>;
+}
+
 export interface PluginApiScope {
   readonly publicationId: string;
   /** Member routes only; capabilities are checked independently per method. */
   readonly memberAccess?: PluginMemberAccessApi | undefined;
+  /** Member-only, Host-bound storage. Never contains arbitrary owner selectors. */
+  readonly memberStorage?: PluginMemberStorageApi | undefined;
   /** Present only for operator-approved models in an authorized Staff request. */
   readonly storage?: PluginStorageApi | undefined;
   readonly requestId: string;
@@ -363,6 +378,20 @@ export const CAPABILITY_REGISTRY: Record<string, PluginCapabilityDefinition> = {
     name: "Write Extension Storage",
     description: "Write validated plugin-owned relational models within an authorized publication",
     scope: "publication", requiredRole: "editor",
+    publicationBehavior: "isolated", risk: "high", auditRequired: true,
+  },
+  "extension.member_storage.read": {
+    id: "extension.member_storage.read",
+    name: "Read Own Extension Member Records",
+    description: "Read only records belonging to the authenticated Member in the current publication",
+    scope: "publication", requiredRole: "member",
+    publicationBehavior: "isolated", risk: "medium", auditRequired: false,
+  },
+  "extension.member_storage.write": {
+    id: "extension.member_storage.write",
+    name: "Write Own Extension Member Records",
+    description: "Create or compare-and-update only current Member owned records under Host control",
+    scope: "publication", requiredRole: "member",
     publicationBehavior: "isolated", risk: "high", auditRequired: true,
   },
   "extension.members.self.read": {

@@ -25,6 +25,8 @@ export const members = pgTable(
   (table) => {
     return {
       publicationIdIdx: index("members_publication_id_idx").on(table.publicationId),
+      publicationIdentity: uniqueIndex("members_publication_id_id_uq")
+        .on(table.publicationId, table.id),
       publicationEmailIdx: uniqueIndex("members_publication_email_idx").on(
         table.publicationId,
         table.emailNormalized,

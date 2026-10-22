@@ -6,6 +6,7 @@ export * from "./infrastructure/drizzle-plugin-storage-migrations";
 export * from "./application/plugin-scoped-storage";
 export { createHostPluginStorageSession } from "./application/plugin-storage-session";
 export { createHostMemberAccessSession } from "./application/plugin-member-access";
+export { createHostPluginMemberStorageSession } from "./application/plugin-member-storage-session";
 
 export { TrustedExternalPluginHost, parseTrustedPluginLockfile } from "./application/trusted-external-plugin-host";
 export { readTrustedPluginLockfile } from "./application/trusted-release-attestation";

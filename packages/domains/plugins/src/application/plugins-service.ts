@@ -847,6 +847,39 @@ export class PluginsService {
     return { pluginId: latest.id, publicationId };
   }
 
+  /** Optional Member-owned storage: distinct from privileged Staff storage. */
+  async resolveExtensionMemberStorageBinding(
+    manifestId: string, publicationId: string,
+  ): Promise<{ pluginId: string; publicationId: string;
+    models: readonly ApprovedPluginPhysicalModel[] } | null> {
+    this.assertRuntimeAllowed();
+    if (!publicationId) return null;
+    const permitted = (value: Plugin) => value.capabilities.some((capability) =>
+      capability === "extension.member_storage.read" ||
+      capability === "extension.member_storage.write");
+    const plugin = await this.pluginRepo.findByManifestId(manifestId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) || !permitted(plugin)) return null;
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const models = await this.host.getApprovedStorageModels?.(plugin);
+    if (!models?.length || models.length > 16) return null;
+    const keys = new Set<string>();
+    for (const model of models) {
+      validateStorageModel(model);
+      if (keys.has(model.key)) return null;
+      keys.add(model.key);
+    }
+    const latest = await this.pluginRepo.findById(plugin.id);
+    if (!latest || latest.status !== "active" ||
+        latest.version !== plugin.version ||
+        latest.vibressApiVersion !== plugin.vibressApiVersion ||
+        latest.entrypoint !== plugin.entrypoint ||
+        !isDeepStrictEqual(latest.capabilities, plugin.capabilities) ||
+        !permitted(latest)) return null;
+    await this.requirePublicationEnabled(latest, publicationId);
+    return { pluginId: plugin.id, publicationId, models };
+  }
+
   /**
    * Resolve installed owner and trusted schema for an already authenticated
    * Host endpoint. Plugin-supplied model descriptors are never admitted here.

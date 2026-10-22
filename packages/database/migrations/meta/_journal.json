@@ -316,6 +316,13 @@
       "when": 1792620000000,
       "tag": "0044_plugin_event_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792706400000,
+      "tag": "0045_plugin_member_records",
+      "breakpoints": true
     }
   ]
 }

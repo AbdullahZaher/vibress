@@ -32,3 +32,4 @@ export * from "./activitypub";
 export * from "./publications";
 export * from "./enterprise-auth";
 export * from "./plugin-events";
+export * from "./plugin-member-records";
