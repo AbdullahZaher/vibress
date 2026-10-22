@@ -50,6 +50,19 @@ jobs:
       - name: Start infrastructure
         run: docker compose -f compose.dev.yml up -d --wait
 
+      - name: Checkout pinned LMS repository
+        uses: actions/checkout@v7
+        with:
+          repository: AbdullahZaher/vibress-lms
+          ref: 90b771ecc64c58251fac1d8c7fdcf3278a71ea6c
+          path: .lms-source
+
+      - name: Build pinned LMS pilot release
+        run: |
+          cd .lms-source
+          npm install
+          npm run release:pilot
+
       - name: Test
         run: pnpm vitest run --no-file-parallelism
 

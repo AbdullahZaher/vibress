@@ -342,13 +342,17 @@ export const webhooksService = new WebhooksService(
   },
 );
 
-export const pluginsService = new PluginsService(
+export let pluginsService = new PluginsService(
   new DrizzlePluginRepository(),
   new DrizzlePluginSettingRepository(),
   new BundledPluginHost(),
   new DrizzlePluginPublicationStateRepository(),
   new DrizzlePluginPublicationSettingRepository(),
 );
+
+export function setPluginsService(service: PluginsService): void {
+  pluginsService = service;
+}
 
 // ---------------- Intelligence: Analytics and Search ----------------
 export const analyticsService = new AnalyticsService(

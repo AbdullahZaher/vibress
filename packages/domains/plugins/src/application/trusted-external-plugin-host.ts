@@ -109,13 +109,13 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
 function manifestMatchesInstalled(plugin: Plugin, installed: PluginManifest): boolean {
   return plugin.manifestId === installed.id &&
     plugin.name === installed.name &&
-    plugin.description === (installed.description ?? null) &&
+    (plugin.description || null) === (installed.description || null) &&
     plugin.version === installed.version &&
     plugin.vibressApiVersion === installed.vibressApiVersion &&
     plugin.entrypoint === installed.entrypoint &&
-    isDeepStrictEqual(plugin.capabilities, installed.capabilities) &&
-    isDeepStrictEqual(plugin.hooks, installed.hooks ?? []) &&
-    isDeepStrictEqual(plugin.settingsSchema, installed.settingsSchema ?? {});
+    isDeepStrictEqual(plugin.capabilities ?? [], installed.capabilities ?? []) &&
+    isDeepStrictEqual(plugin.hooks ?? [], installed.hooks ?? []) &&
+    isDeepStrictEqual(plugin.settingsSchema ?? {}, installed.settingsSchema ?? {});
 }
 
 function isPluginModule(value: unknown): value is PluginModule {
@@ -131,12 +131,17 @@ function isPluginModule(value: unknown): value is PluginModule {
  * Every load re-checks the pinned checksum BEFORE importing the module.
  */
 export class TrustedExternalPluginHost {
-  constructor(private readonly lockfilePath: string | undefined = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {}
+  private readonly lockfilePath: string | undefined;
+
+  constructor(lockfilePath?: string) {
+    this.lockfilePath = lockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+  }
 
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
   async listTrustedManifests(): Promise<PluginManifest[]> {
-    if (!this.lockfilePath) return [];
-    const json = await readTrustedPluginLockfile(this.lockfilePath);
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return [];
+    const json = await readTrustedPluginLockfile(lockfile);
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
   }
 
@@ -146,8 +151,9 @@ export class TrustedExternalPluginHost {
    * entrypoint digest, not plugin-authored or supplied by a Staff request.
    */
   async listTrustedFingerprints(): Promise<ReadonlyMap<string, string>> {
-    if (!this.lockfilePath) return new Map();
-    const data = await readTrustedPluginLockfile(this.lockfilePath);
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return new Map();
+    const data = await readTrustedPluginLockfile(lockfile);
     const fingerprints = new Map<string, string>();
     for (const [id, approved] of parseTrustedPluginLockfile(data)) {
       fingerprints.set(id, approved.sha256);
@@ -160,8 +166,9 @@ export class TrustedExternalPluginHost {
    * A plugin's manifest or HTTP input cannot provide table/column definitions.
    */
   async getApprovedStorageModels(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]> {
-    if (!this.lockfilePath) return [];
-    const data = await readTrustedPluginLockfile(this.lockfilePath);
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return [];
+    const data = await readTrustedPluginLockfile(lockfile);
     const approved = parseTrustedPluginLockfile(data).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
       throw new Error("Installed plugin differs from operator-approved storage manifest");
@@ -181,11 +188,12 @@ export class TrustedExternalPluginHost {
    * Every read rechecks the on-disk SHA-256 to reject tampering and stale nodes.
    */
   async readApprovedAdminUiAsset(plugin: Plugin, viewId: string): Promise<string | null> {
-    if (!this.lockfilePath) return null;
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return null;
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(viewId)) {
       throw new Error("Invalid Admin UI view identifier");
     }
-    const json = await readTrustedPluginLockfile(this.lockfilePath);
+    const json = await readTrustedPluginLockfile(lockfile);
     const approved = parseTrustedPluginLockfile(json).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
       throw new Error("Installed plugin differs from operator-approved Admin UI manifest");
@@ -193,7 +201,7 @@ export class TrustedExternalPluginHost {
     const asset = approved.adminUiAssets.find((item) => item.viewId === viewId);
     if (!asset) return null;
 
-    const root = await realpath(path.dirname(this.lockfilePath));
+    const root = await realpath(path.dirname(lockfile));
     const assetPath = path.resolve(root, asset.path);
     const canonical = await realpath(assetPath);
     if (!canonical.startsWith(root + path.sep)) {
@@ -218,15 +226,16 @@ export class TrustedExternalPluginHost {
   }
 
   async loadModule(plugin: Plugin): Promise<PluginModule | null> {
-    if (!this.lockfilePath) return null;
-    const json = await readTrustedPluginLockfile(this.lockfilePath);
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return null;
+    const json = await readTrustedPluginLockfile(lockfile);
     const installed = parseTrustedPluginLockfile(json).get(plugin.manifestId);
     if (!installed) return null;
     if (!manifestMatchesInstalled(plugin, installed.manifest)) {
       throw new Error("Registered plugin metadata differs from the trusted operator lockfile");
     }
 
-    const root = await realpath(path.dirname(this.lockfilePath));
+    const root = await realpath(path.dirname(lockfile));
     const entry = path.resolve(root, installed.manifest.entrypoint);
     const canonical = await realpath(entry);
     if (!canonical.startsWith(root + path.sep)) throw new Error("Trusted plugin path escapes its approved directory");
