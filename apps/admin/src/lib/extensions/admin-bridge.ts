@@ -71,6 +71,10 @@ export function connectAdminExtensionReadBridge(
     const read = ExtensionAdminBridgeReadRequestSchema.safeParse(event.data);
     const write = ExtensionAdminBridgeWriteRequestSchema.safeParse(event.data);
     if (!read.success && !write.success) return;
+    // An older read-only iframe must retain the original silent-reject
+    // contract for unsupported writes. Do not reserve a request ID or
+    // disclose a new response type when the Host has no write capability.
+    if (write.success && (!writeLinkedView || !confirmWrite)) return;
     const requestId = write.success ? write.data.requestId
       : read.success ? read.data.requestId : "";
     if (!requestId) return;
