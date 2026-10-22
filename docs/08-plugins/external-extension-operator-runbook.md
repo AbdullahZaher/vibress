@@ -390,3 +390,55 @@ migration separately using the existing operator-only transaction service
 replica, publication enablement, real Member sessions, restore and rollback
 before production. A missing signature, replaced artifact, schema drift,
 invalid plan, symlink or invalid UTF-8 must stop the procedure.
+
+## EXT-504: explicit offline schema-admission command (review branch)
+
+The **read-only** `scripts/plugins/check-migration-plan.ts` remains unchanged in
+its effect: it never connects to PostgreSQL. After **PR #81** and this separately
+reviewed EXT-504 branch have merged, an operator may apply the verified physical
+models using a *different* CLI. Never invoke it during normal API/Worker startup,
+or via HTTP, Admin UI, a plugin hook, or a self-hosted customer request.
+
+1. Back up and verify both PostgreSQL and the exact signed operator release.
+   Quiesce **all** API/Worker replicas; arrange a maintenance window and confirm
+   the target database and publication lifecycle. The plugin must be
+   `registered` or `inactive`; `active` is rejected by the transactional DB
+   migration repository. Never rewrite or replay old changed migrations.
+2. Deploy operator-controlled final `.mjs`, global lockfile, Ed25519 detached
+   signature, public key and reviewed `operator-migration-plan.json`. The
+   signing private key must **never** enter a server container. Run the
+   read-only preflight against those exact files on each target node first.
+3. On a **separate isolated** CLI workstation/container with appropriate DB
+   access (not on a serving replica), require the two independent deliberate
+   operator acknowledgements below. Copy the exact manifest and 64-character
+   migration checksum from the already-reviewed plan; these arguments are not
+   valid authority on their own, only in addition to the signed release.
+
+```sh
+export VIBRESS_TRUSTED_PLUGIN_LOCKFILE=/absolute/operator/trusted-plugins.json
+export VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1
+export VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE=/absolute/operator/operator-public.pem
+export VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE=/absolute/operator/operator.sig
+export VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1
+export VIBRESS_PLUGIN_SCHEMA_APPLY_ACK=1
+pnpm exec tsx scripts/plugins/apply-migration-plan.ts \
+  /absolute/operator/operator-migration-plan.json \
+  --confirm-manifest=vibress-lms-pilot \
+  --confirm-migration-sha256=<approved-64-character-hex-sha256>
+```
+
+**Destructive or production operations require separate operator review.**
+The command uses the existing approved `PluginPhysicalSchemaMigrationService`
+and `DrizzlePluginStorageMigrationRepository` transaction: it reserves the
+immutable migration ledger and physical models atomically and fails closed for
+wrong version, missing installation, already active plugin, duplicate model,
+changed digest or out-of-order migration. Exact replays return
+`already_applied`; no destructive down migration is attempted. This command
+*does* change PostgreSQL: unlike the read-only preflight, do not run it merely
+to test whether a release is acceptable. Never invoke the standalone LMS
+`0001_initial.sql` in the host database.
+
+Before resuming replicas verify `plugin_member_records` migration 0045,
+publication enablement, the pinned release on every node, two-publication
+isolation, signed backup/restore readiness, and the separate LMS HTTP
+acceptance tool. Reenable normal API/Worker replicas only after acceptance.
