@@ -350,6 +350,8 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Bold (Ctrl+B)"
+        aria-label="Bold (Ctrl+B)"
+        aria-pressed={isBold}
         onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold")}
         style={getFormatBtnStyle(isBold)}
       >
@@ -358,6 +360,8 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Italic (Ctrl+I)"
+        aria-label="Italic (Ctrl+I)"
+        aria-pressed={isItalic}
         onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "italic")}
         style={getFormatBtnStyle(isItalic)}
       >
@@ -366,6 +370,8 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Underline (Ctrl+U)"
+        aria-label="Underline (Ctrl+U)"
+        aria-pressed={isUnderline}
         onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "underline")}
         style={getFormatBtnStyle(isUnderline)}
       >
@@ -374,6 +380,8 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Strikethrough"
+        aria-label="Strikethrough"
+        aria-pressed={isStrikethrough}
         onClick={() =>
           editor.dispatchCommand(FORMAT_TEXT_COMMAND, "strikethrough")
         }
@@ -384,6 +392,8 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Inline Code"
+        aria-label="Inline Code"
+        aria-pressed={isCode}
         onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "code")}
         style={getFormatBtnStyle(isCode)}
       >
@@ -392,6 +402,7 @@ export function FloatingFormatToolbarPlugin({
       <button
         type="button"
         title="Add Link"
+        aria-label="Add Link"
         onClick={handleLink}
         style={getFormatBtnStyle(false)}
       >
@@ -412,6 +423,7 @@ export function FloatingFormatToolbarPlugin({
         <button
           type="button"
           title="Text & Highlight Color"
+        aria-label="Text & Highlight Color"
           onClick={() =>
             setOpenDropdown(openDropdown === "color" ? null : "color")
           }
@@ -450,6 +462,7 @@ export function FloatingFormatToolbarPlugin({
               <button
                 key={c.name}
                 title={c.name}
+                aria-label={c.name}
                 onClick={() => handleApplyColor(c.color, c.bg)}
                 style={{
                   width: "26px",

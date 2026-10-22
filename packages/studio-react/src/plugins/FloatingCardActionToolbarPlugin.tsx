@@ -120,24 +120,30 @@ export function FloatingCardActionToolbarPlugin({
         onClick={() => handleWidthChange("regular")}
         style={getBtnStyle(currentWidth === "regular")}
         title="Regular width"
+        aria-label="Regular width"
+        aria-pressed={currentWidth === "regular"}
       >
-        <Minimize2 size={12} /> Regular
+        <Minimize2 size={14} aria-hidden="true" />
       </button>
       <button
         type="button"
         onClick={() => handleWidthChange("wide")}
         style={getBtnStyle(currentWidth === "wide")}
         title="Wide width"
+        aria-label="Wide width"
+        aria-pressed={currentWidth === "wide"}
       >
-        <Move size={12} /> Wide
+        <Move size={14} aria-hidden="true" />
       </button>
       <button
         type="button"
         onClick={() => handleWidthChange("full")}
         style={getBtnStyle(currentWidth === "full")}
         title="Full screen width"
+        aria-label="Full screen width"
+        aria-pressed={currentWidth === "full"}
       >
-        <Maximize2 size={12} /> Full
+        <Maximize2 size={14} aria-hidden="true" />
       </button>
 
       <div
@@ -152,6 +158,7 @@ export function FloatingCardActionToolbarPlugin({
       <button
         type="button"
         onClick={handleDelete}
+        aria-label="Delete card"
         style={{
           background: "transparent",
           border: "none",

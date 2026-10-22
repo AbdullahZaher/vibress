@@ -74,7 +74,12 @@ export async function postRoutes(fastify: FastifyInstance) {
         result.posts.map(async (p) => {
           const authors = await authorsService.getPostAuthors(p.id);
           const tagIds = await postsService.getPostTagIds(p.id);
-          return { ...p, authors, tagIds };
+          // Additive list-view thumbnail, resolved within the authoritative publication.
+          const featureImage = await resolvePostFeatureImage(
+            p.featureImageId,
+            req.publicationContext?.publicationId,
+          );
+          return { ...p, authors, tagIds, featureImage: featureImage ? { url: featureImage.url } : null };
         }),
       );
 

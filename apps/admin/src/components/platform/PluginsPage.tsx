@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { type AdminPlugin, listPluginsApi } from "../../lib/api";
-import { Button } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import { PluginsPanel } from "./PluginsPanel";
 
@@ -58,10 +58,14 @@ export function PluginsPage() {
         title={tr("Plugins")}
         description={tr("Manage installed plugins and trusted extensions.")}
         actions={
-          <Button variant="outline" size="sm" disabled={loading} onClick={() => { void refresh(); }}>
-            <RefreshCw className="me-2 size-4" aria-hidden="true" />
-            {tr("Refresh plugins")}
-          </Button>
+          <IconButton
+            label={tr("Refresh plugins")}
+            variant="outline"
+            disabled={loading}
+            onClick={() => { void refresh(); }}
+          >
+            <RefreshCw className="size-4" aria-hidden="true" />
+          </IconButton>
         }
       />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

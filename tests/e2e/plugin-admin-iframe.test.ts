@@ -180,9 +180,11 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await expect(page.getByRole("alert")).toBeVisible();
   });
 
-  test("never transfers the privileged read port to a redirected or forged iframe", async ({ page }) => {
+  test("denies read bridge to forged first document despite correct iframe URL", async ({ page }) => {
+    // A hostile document *at the approved URL* must not acquire the port.
+    // This avoids depending on whether Chromium blocks a later HTTP 302
+    // through CSP navigate-to or renders its destination as an empty page.
     let authorizedReads = 0;
-    let redirected = false;
     await mockPluginNavigation(page);
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
       (route) => route.fulfill({
@@ -192,30 +194,93 @@ test.describe("EXT-301B2B isolated Admin plugin UI", () => {
     await page.route(`**/api/admin/v1/extensions/${pluginId}/v1/course-list`,
       (route) => {
         authorizedReads++;
-        return route.fulfill({ status: 200, contentType: "application/json",
-          body: JSON.stringify({ total: 8 }) });
+        return route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({ total: 8 }),
+        });
       });
     await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
+      (route) => route.fulfill({
+        status: 200, contentType: "text/html; charset=utf-8",
+        body: `<!doctype html><html><body data-forged="true">Unapproved
+          <script>
+            window.addEventListener("message", (event) => {
+              if (event.data?.type === "vibress:extension:connect") {
+                document.body.dataset.stolen = "true";
+                event.ports[0]?.postMessage({
+                  type: "vibress:extension:read", version: 1, requestId: "stolen",
+                });
+              }
+            });
+            window.parent.postMessage({
+              type: "vibress:extension:ready", version: 1,
+              bridgeNonce: "${"e".repeat(64)}",
+            }, "*");
+            document.body.dataset.attempted = "true";
+          </script></body></html>`,
+      }));
+    await login(page);
+    await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
+    const body = page.frameLocator('iframe[title="Courses"]').locator("body");
+    await expect(body).toContainText("Unapproved");
+    await expect(body).toHaveAttribute("data-forged", "true");
+    await expect(body).toHaveAttribute("data-attempted", "true");
+    await expect(body).not.toHaveAttribute("data-stolen", "true");
+    expect(authorizedReads).toBe(0);
+  });
+
+  test("does not deliver the read bridge to an HTTP-redirected frame", async ({ page }) => {
+    let authorizedReads = 0;
+    await mockPluginNavigation(page);
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame-ticket`,
+      (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ src: ticketPath, bridgeNonce, sha256: documentHash }),
+      }));
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/v1/course-list`,
       (route) => {
-        redirected = true;
+        authorizedReads++;
+        return route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({ total: 8 }),
+        });
+      });
+    let frameRequested = false;
+    await page.route(`**/api/admin/v1/extensions/${pluginId}/views/courses/frame?ticket=*`,
+      (route) => {
+        frameRequested = true;
         return route.fulfill({
           status: 302, headers: { location: "/admin/unapproved-test-document" },
         });
       });
     await page.route("**/admin/unapproved-test-document", (route) => route.fulfill({
       status: 200, contentType: "text/html",
-      body: `<script>window.parent.postMessage({type:"vibress:extension:ready",version:1,bridgeNonce:"${"e".repeat(64)}"},"*");window.addEventListener("message", e=>{if(e.data?.type==="vibress:extension:connect"){document.body.dataset.stolen="true"}})</script><body>Unapproved</body>`,
+      body: `<html><body data-forged="true">Unapproved
+        <script>
+          window.addEventListener("message", (event) => {
+            if (event.data?.type === "vibress:extension:connect") {
+              document.body.dataset.stolen = "true";
+              event.ports[0]?.postMessage({
+                type: "vibress:extension:read", version: 1, requestId: "redirected",
+              });
+            }
+          });
+          window.parent.postMessage({
+            type: "vibress:extension:ready", version: 1,
+            bridgeNonce: "${"e".repeat(64)}",
+          }, "*");
+        </script></body></html>`,
     }));
     await login(page);
     await page.goto(`${BASE}/admin/extensions/${pluginId}/courses`);
-    const view = page.frameLocator('iframe[title="Courses"]');
-    await expect.poll(() => redirected).toBe(true);
-    // Browsers may refuse this sandboxed redirect entirely under CSP,
-    // leaving a blank document. Both refusal and an unapproved document are
-    // safe outcomes; neither may receive a privileged MessagePort.
-    await expect(view.locator("body")).not.toHaveAttribute("data-stolen", "true");
-    await page.waitForTimeout(750); // allow any forged ready/connect messages to settle
-    await expect(view.locator("body")).not.toHaveAttribute("data-stolen", "true");
+    const iframe = page.locator('iframe[title="Courses"]');
+    await expect(iframe).toBeVisible();
+    await expect.poll(() => frameRequested).toBe(true);
+    // Both outcomes are secure: browser CSP may prevent the redirect, leaving
+    // an empty document, or load the destination without a valid proof.
+    await expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+    const body = page.frameLocator('iframe[title="Courses"]').locator("body");
+    await expect(body).not.toHaveAttribute("data-stolen", "true");
     expect(authorizedReads).toBe(0);
   });
 

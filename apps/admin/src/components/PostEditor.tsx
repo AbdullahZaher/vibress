@@ -25,6 +25,7 @@ import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
 import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import {
   ArrowLeft,
   Save,
@@ -936,14 +937,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             {saving ? "Saving..." : postId ? "Update" : "Save Draft"}
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
+          <IconButton
+            label={tr("Settings")}
             onClick={() => setShowSettings(true)}
-            className="ml-1 text-muted-foreground hover:text-foreground"
+            className="ms-1 text-muted-foreground hover:text-foreground"
           >
-            <Settings className="h-5 w-5" />
-          </Button>
+            <Settings className="h-5 w-5" aria-hidden="true" />
+          </IconButton>
         </div>
       </header>
 

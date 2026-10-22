@@ -2,6 +2,7 @@ import { useAdminLocale } from "../lib/admin-locale";
 import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import {
   Card,
@@ -235,22 +236,22 @@ export const TagsManager: React.FC = () => {
 
                     <TableCell className="text-right pr-6">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <IconButton
+                          label={tr("Edit")}
+                          accessibleLabel={`${tr("Edit")}: ${tag.name}`}
                           onClick={() => handleEdit(tag)}
-                          className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground"
                         >
-                          <Edit className="h-3.5 w-3.5" /> Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                          <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                        </IconButton>
+                        <IconButton
+                          label={tr("Delete")}
+                          accessibleLabel={`${tr("Delete")}: ${tag.name}`}
                           onClick={() => handleDelete(tag.id)}
-                          className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                          className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </IconButton>
                       </div>
                     </TableCell>
                   </TableRow>

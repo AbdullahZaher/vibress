@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
@@ -301,22 +302,17 @@ export const MediaLibrary: React.FC = () => {
                     value={selectedAsset.url ?? ""}
                     className="h-8 text-xs font-mono bg-muted/40 border-border"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      selectedAsset.url &&
-                      handleCopyUrl(selectedAsset.url, selectedAsset.id)
-                    }
-                    className="h-8 text-xs shrink-0 border-border bg-card hover:bg-accent"
+                  <IconButton
+                    label={copiedId === selectedAsset.id ? tr("Copied") : tr("Copy URL")}
+                    variant="outline" className="shrink-0"
+                    onClick={() => selectedAsset.url && handleCopyUrl(selectedAsset.url, selectedAsset.id)}
                   >
                     {copiedId === selectedAsset.id ? (
-                      <CheckCircle2 className="h-4 w-4 text-foreground" />
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                     ) : (
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-4 w-4" aria-hidden="true" />
                     )}
-                  </Button>
+                  </IconButton>
                 </div>
               </div>
 

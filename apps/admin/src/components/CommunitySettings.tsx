@@ -9,6 +9,7 @@ import {
 import { MessageSquare, ShieldAlert, RefreshCw, AlertCircle } from "lucide-react";
 import { useAdminLocale } from "../lib/admin-locale";
 import { Button } from "./ui/button";
+import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { CommentsPanel } from "./community/CommentsPanel";
 import { ReportsPanel } from "./community/ReportsPanel";
@@ -55,16 +56,9 @@ export function CommunitySettings() {
         title={tr("Comments & Moderation")}
         description={tr("Review reported member comments, manage public discussions, and enforce community standards.")}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={loading}
-            className="h-8 px-3 text-xs gap-1.5 cursor-pointer border-border bg-card hover:bg-accent text-foreground"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            {tr("Refresh")}
-          </Button>
+          <IconButton label={tr("Refresh")} variant="outline" onClick={refresh} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+          </IconButton>
         }
       />
 

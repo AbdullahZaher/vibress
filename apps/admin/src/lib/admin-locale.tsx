@@ -23,6 +23,15 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "(Untitled)": "(بدون عنوان)",
+  "More actions": "إجراءات أخرى",
+  "In review": "قيد المراجعة",
+  "Changes requested": "مطلوب تعديلات",
+  "Approved": "معتمد",
+  "Try a different search or filter.": "جرّب بحثًا أو تصفية مختلفة.",
+  "Refresh": "تحديث",
+  "Copy URL": "نسخ الرابط",
+  "Copied": "تم النسخ",
   "Plugin pages": "صفحات الإضافات",
   "Read-only plugin view": "عرض الإضافة للقراءة فقط",
   "Unable to load plugin view.": "تعذر تحميل صفحة الإضافة.",

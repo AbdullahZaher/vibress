@@ -6,6 +6,7 @@ import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
+import { IconButton } from "../../ui/icon-button";
 
 interface SocialLinksCardProps {
   links?: SocialLink[] | undefined;
@@ -84,14 +85,14 @@ export const SocialLinksCard: React.FC<SocialLinksCardProps> = ({
                   onChange={(event) => update(link.id, { url: event.target.value })} />
               </label>
               <div className="flex justify-end gap-2">
-                <Button size="sm" type="button" variant="outline" disabled={index === 0}
-                  aria-label={tr("Move link up")} onClick={() => move(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
-                <Button size="sm" type="button" variant="outline" disabled={index === safeLinks.length - 1}
-                  aria-label={tr("Move link down")} onClick={() => move(index, 1)}><ArrowDown className="h-4 w-4" /></Button>
-                <Button size="sm" type="button" variant="outline"
-                  aria-label={tr("Remove social link")} onClick={() => onChange(safeLinks.filter((item) => item.id !== link.id))}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <IconButton label={tr("Move link up")} variant="outline" disabled={index === 0}
+                  onClick={() => move(index, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></IconButton>
+                <IconButton label={tr("Move link down")} variant="outline" disabled={index === safeLinks.length - 1}
+                  onClick={() => move(index, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></IconButton>
+                <IconButton label={tr("Remove social link")} variant="outline"
+                  onClick={() => onChange(safeLinks.filter((item) => item.id !== link.id))}>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </IconButton>
               </div>
             </fieldset>
           ))}

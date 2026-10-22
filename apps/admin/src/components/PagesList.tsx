@@ -3,28 +3,9 @@ import React, { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+import { EditorialListRow } from "./common/EditorialListRow";
 import { Input } from "./ui/input";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "./ui/table";
-import {
-  Plus,
-  Search,
-  FileCode,
-  Edit,
-  Trash2,
-  Globe,
-  EyeOff,
-  AlertCircle,
-  RefreshCw,
-  Clock,
-} from "lucide-react";
+import { Plus, Search, FileCode, AlertCircle, RefreshCw } from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -33,16 +14,19 @@ interface PageSummary {
   status: string;
   publishedAt: string | null;
   updatedAt: string;
+  authors?: Array<{ name: string; email: string }>;
 }
 
 interface PagesListProps {
   onNavigate: (path: string) => void;
   canPublish: boolean;
+  canViewAnalytics?: boolean;
 }
 
 export const PagesList: React.FC<PagesListProps> = ({
   onNavigate,
   canPublish,
+  canViewAnalytics = false,
 }) => {
   const { tr } = useAdminLocale();
   const [pages, setPages] = useState<PageSummary[]>([]);
@@ -203,219 +187,34 @@ export const PagesList: React.FC<PagesListProps> = ({
         </div>
       </div>
 
-      {/* 1. Desktop & Tablet Table View */}
-      <div className="hidden sm:block rounded-xl border border-border/70 bg-card shadow-2xs overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="ps-6">{tr("Title")}</TableHead>
-              <TableHead>{tr("Status")}</TableHead>
-              <TableHead>{tr("Updated")}</TableHead>
-              <TableHead className="text-end pe-6">{tr("Actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredPages.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="h-40 text-center text-muted-foreground"
-                >
-                  <div className="flex flex-col items-center justify-center space-y-2 py-4">
-                    <FileCode className="h-8 w-8 text-muted-foreground/30" />
-                    <p className="text-xs font-medium text-foreground">
-                      {tr("No pages found")}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {searchQuery
-                        ? "Try adjusting your search criteria."
-                        : "Start creating your first static page."}
-                    </p>
-                    {!searchQuery && (
-                      <Button
-                        size="sm"
-                        onClick={() => onNavigate("/admin/pages/new")}
-                        className="mt-2 text-xs gap-1"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> New Page
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredPages.map((page) => (
-                <TableRow
-                  key={page.id}
-                  className="hover:bg-muted/40 transition-colors"
-                >
-                  <TableCell className="ps-6 font-medium">
-                    <div className="flex flex-col text-start">
-                      <button
-                        onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                        className="text-start font-semibold text-xs sm:text-sm text-foreground hover:text-primary transition-colors cursor-pointer"
-                      >
-                        {page.title}
-                      </button>
-                      <span className="text-[11px] text-muted-foreground font-mono">
-                        /{page.slug}
-                      </span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell>
-                    {page.status === "published" ? (
-                      <Badge variant="published" className="text-[11px] font-mono">
-                        <Globe className="h-3 w-3" />
-                        <span>{tr("Published")}</span>
-                      </Badge>
-                    ) : (
-                      <Badge variant="draft" className="text-[11px] font-mono">
-                        <EyeOff className="h-3 w-3" />
-                        <span>{tr("Draft")}</span>
-                      </Badge>
-                    )}
-                  </TableCell>
-
-                  <TableCell className="text-xs text-muted-foreground font-mono tabular-nums">
-                    {new Date(page.updatedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </TableCell>
-
-                  <TableCell className="text-end pe-6">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {canPublish && (
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => handlePublishToggle(page)}
-                          className="text-muted-foreground hover:text-foreground cursor-pointer"
-                          title={
-                            page.status === "published"
-                              ? "Unpublish"
-                              : "Publish"
-                          }
-                        >
-                          {page.status === "published" ? (
-                            <span className="flex items-center gap-1"><EyeOff className="h-3.5 w-3.5" /> Unpublish</span>
-                          ) : (
-                            <span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" /> Publish</span>
-                          )}
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                        className="cursor-pointer gap-1"
-                      >
-                        <Edit className="h-3.5 w-3.5" /> Edit
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(page.id)}
-                        className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
-                        title="Delete page"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* 2. Mobile Responsive Stacked Card View (<640px) */}
-      <div className="sm:hidden space-y-3">
+      {/* Responsive editorial rows: one layout across desktop, tablet and mobile. */}
+      <div role="list" aria-label={tr("Pages")} className="divide-y divide-border/70">
         {filteredPages.length === 0 ? (
-          <div className="rounded-xl border border-border/70 bg-card p-6 text-center text-muted-foreground space-y-2">
-            <FileCode className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-            <p className="text-xs font-medium text-foreground">{tr("No pages found")}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {searchQuery
-                ? "Try adjusting your search query."
-                : "Start creating your first page."}
-            </p>
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
+            <FileCode className="size-9 opacity-40" aria-hidden="true" />
+            <p className="font-medium text-foreground">{tr("No pages found")}</p>
+            <p className="text-sm">{tr("Try a different search or filter.")}</p>
+            {!searchQuery && statusFilter === "all" && (
+              <Button size="sm" onClick={() => onNavigate("/admin/pages/new")}>
+                <Plus className="size-4" aria-hidden="true" />
+                {tr("Create Page")}
+              </Button>
+            )}
           </div>
         ) : (
           filteredPages.map((page) => (
-            <div
+            <EditorialListRow
               key={page.id}
-              className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1 min-w-0 text-start">
-                  <button
-                    onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                    className="font-semibold text-xs text-foreground hover:text-primary transition-colors cursor-pointer text-start line-clamp-2"
-                  >
-                    {page.title}
-                  </button>
-                  <span className="text-[11px] text-muted-foreground font-mono block truncate">
-                    /{page.slug}
-                  </span>
-                </div>
-                <div className="shrink-0">
-                  {page.status === "published" ? (
-                    <Badge variant="published" className="text-[11px] font-mono">
-                      {tr("Published")}
-                    </Badge>
-                  ) : (
-                    <Badge variant="draft" className="text-[11px] font-mono">
-                      {tr("Draft")}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
-                <span className="font-mono tabular-nums flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {new Date(page.updatedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => onNavigate(`/admin/pages/${page.id}`)}
-                    className="gap-1 text-xs"
-                  >
-                    <Edit className="h-3 w-3" /> Edit
-                  </Button>
-                  {canPublish && (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => handlePublishToggle(page)}
-                      className="text-xs"
-                    >
-                      {page.status === "published" ? "Unpublish" : "Publish"}
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => handleDelete(page.id)}
-                    className="text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
+              title={page.title}
+              authorName={page.authors?.[0]?.name}
+              date={page.status === "published" && page.publishedAt ? page.publishedAt : page.updatedAt}
+              status={page.status}
+              
+              onEdit={() => onNavigate(`/admin/pages/${page.id}`)}
+              onStatistics={canViewAnalytics && page.status === "published" ? () => onNavigate("/admin") : undefined}
+              onPublishToggle={canPublish ? () => handlePublishToggle(page) : undefined}
+              onDelete={() => handleDelete(page.id)}
+            />
           ))
         )}
       </div>
