@@ -19,6 +19,7 @@ import { PluginDomainError } from "@vibress/plugins";
 import { isPlatformPluginOperator } from "@vibress/security";
 import {
   PluginPublicationParamsSchema,
+  PluginPublicationSecretParamsSchema,
   PluginPublicationActivationSchema,
   PluginPublicationStateSchema,
   PluginPublicationSettingsUpdateSchema,
@@ -692,6 +693,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         await pluginsService.setPublicationSettings(
           params.data.id, publicationId, body.data.settings,
+          { actorUserId: req.user!.id, requestId: req.id },
         );
         return reply.status(200).send({ success: true });
       } catch (err: unknown) {
@@ -702,6 +704,42 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
               ? 400 : 409);
         }
         throw err;
+      }
+    },
+  });
+
+  // Explicit revocation: PATCH with null/empty means "keep existing secret".
+  // Only a publication-local owner/admin with plugins.manage can revoke.
+  fastify.delete("/plugins/:id/publication-settings/:key", {
+    preHandler: [
+      requireStaffSession,
+      requirePermission("plugins.manage"),
+      validateOrigin,
+    ],
+    handler: async (req, reply) => {
+      const params = PluginPublicationSecretParamsSchema.safeParse(req.params);
+      if (!params.success) {
+        return sendError(reply, "VALIDATION_ERROR", "Invalid plugin secret", req.id, 400);
+      }
+      const publicationId = req.publicationContext?.publicationId;
+      const role = req.publicationContext?.role;
+      if (!publicationId || (role !== "owner" && role !== "admin") || !req.user) {
+        return sendError(reply, "PUBLICATION_ACCESS_DENIED", "Publication owner/admin required", req.id, 403);
+      }
+      try {
+        await pluginsService.revokePublicationSecret(
+          params.data.id, publicationId, params.data.key,
+          { actorUserId: req.user.id, requestId: req.id },
+        );
+        return reply.code(204).send();
+      } catch (error: unknown) {
+        if (error instanceof PluginDomainError) {
+          return sendError(reply, error.code, error.message, req.id,
+            error.code === "PLUGIN_NOT_FOUND" ? 404 :
+              error.code === "PLUGIN_SETTING_INVALID" ? 400 :
+                error.code === "PLUGIN_PUBLICATION_INACTIVE" ? 404 : 409);
+        }
+        throw error;
       }
     },
   });

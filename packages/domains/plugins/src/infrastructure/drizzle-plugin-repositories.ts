@@ -7,6 +7,7 @@ import {
   pluginPublicationStates,
   pluginPublicationSettings,
   pluginSchemaMigrations,
+  auditEvents,
 } from "@vibress/database";
 import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -19,6 +20,7 @@ import {
   PluginStatus,
   PluginPublicationStateRepository,
   PluginPublicationSettingRepository,
+  type PluginSettingAuditContext,
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
@@ -275,6 +277,7 @@ export class DrizzlePluginPublicationSettingRepository
       encryptedValue: string | null;
       isSecret: boolean;
     }>,
+    audit?: PluginSettingAuditContext,
   ): Promise<void> {
     await getDb().transaction(async (tx) => {
       for (const { key, value, encryptedValue, isSecret } of entries) {
@@ -297,6 +300,23 @@ export class DrizzlePluginPublicationSettingRepository
             set: { value, encryptedValue, isSecret, updatedAt: new Date() },
           });
       }
+      if (audit) {
+        // Audit and ciphertext writes commit atomically. No plaintext,
+        // ciphertext or secret key names enter the audit metadata.
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(),
+          publicationId,
+          actorUserId: audit.actorUserId,
+          requestId: audit.requestId,
+          action: "plugin.publication_settings_updated",
+          targetType: "plugin",
+          targetId: pluginId,
+          metadata: {
+            updatedSettingCount: entries.length,
+            replacedSecretCount: entries.filter((entry) => entry.isSecret).length,
+          },
+        });
+      }
     });
   }
 
@@ -316,6 +336,34 @@ export class DrizzlePluginPublicationSettingRepository
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
+  }
+
+  async deleteSecret(
+    pluginId: string, publicationId: string, key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean> {
+    return getDb().transaction(async (tx) => {
+      // The composite ownership predicate applies to every destructive write.
+      const deleted = await tx.delete(pluginPublicationSettings).where(and(
+        eq(pluginPublicationSettings.pluginId, pluginId),
+        eq(pluginPublicationSettings.publicationId, publicationId),
+        eq(pluginPublicationSettings.key, key),
+        eq(pluginPublicationSettings.isSecret, true),
+      )).returning({ id: pluginPublicationSettings.id });
+      if (deleted.length) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(),
+          publicationId,
+          actorUserId: audit.actorUserId,
+          requestId: audit.requestId,
+          action: "plugin.publication_secret_revoked",
+          targetType: "plugin",
+          targetId: pluginId,
+          metadata: { revokedSecretCount: deleted.length },
+        });
+      }
+      return deleted.length > 0;
+    });
   }
 
   async getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null> {

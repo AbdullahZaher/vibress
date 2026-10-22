@@ -307,6 +307,113 @@ describe("PluginsService", () => {
     expect(onEvent).toHaveBeenCalledTimes(3);
   });
 
+  it("rejects a changed signed artifact under the same version until this replica restarts", async () => {
+    let fingerprint = "a".repeat(64);
+    const activate = vi.fn(async () => undefined);
+    const onEvent = vi.fn(async () => undefined);
+    const hostWith = {
+      requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: vi.fn(async () =>
+        new Map([["test-plugin", fingerprint]])),
+      loadModule: vi.fn(async () => ({ activate, onEvent })),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active", hooks: ["onEvent"],
+      })),
+    };
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async () => true),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith, states);
+    await service.dispatchEvent("p1", "post.published", {}, "pub-a");
+    fingerprint = "b".repeat(64);
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
+    expect(activate).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a revoked operator fingerprint before initializing external code", async () => {
+    const activate = vi.fn(async () => undefined);
+    const onEvent = vi.fn(async () => undefined);
+    const hostWith = {
+      requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: vi.fn(async () => new Map<string, string>()),
+      loadModule: vi.fn(async () => ({ activate, onEvent })),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active", hooks: ["onEvent"] })),
+    };
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async () => true),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const service = new PluginsService(repoWith, settingRepo, hostWith, states);
+    await expect(service.dispatchEvent("p1", "post.published", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_RELEASE_NOT_APPROVED" });
+    expect(activate).not.toHaveBeenCalled();
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["version", { version: "2.0.0" }],
+    ["entrypoint", { entrypoint: "next.mjs" }],
+    ["ABI", { vibressApiVersion: "2.0.0" }],
+    ["capabilities", { capabilities: [] }],
+    ["hooks", { hooks: ["other.event"] }],
+    ["settings schema", { settingsSchema: { changed: true } }],
+  ] as const)("refuses a stale event when %s changes during activation", async (_reason, patch) => {
+    const onEvent = vi.fn(async () => undefined);
+    const activate = vi.fn(async () => undefined);
+    let reads = 0;
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => {
+        reads += 1;
+        return makePlugin({
+          status: "active", hooks: ["onEvent"],
+          ...(reads > 1 ? patch : {}),
+        });
+      }),
+    };
+    const hostWith = { loadModule: vi.fn(async () => ({ activate, onEvent })) };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .dispatchEvent("p1", "post.published", {}, "pub-a")).rejects.toMatchObject({
+      code: "PLUGIN_RELEASE_CHANGED",
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects release changes before the legacy onEvent hook runs", async () => {
+    const onEvent = vi.fn(async () => undefined);
+    let reads = 0;
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => {
+        reads += 1;
+        return makePlugin({
+          status: "active",
+          hooks: ["onEvent"],
+          version: reads > 1 ? "2.0.0" : "1.0.0",
+        });
+      }),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })),
+    };
+    await expect(new PluginsService(repoWith, settingRepo, hostWith)
+      .executeHook("p1", "onEvent", {}, "pub-a")).rejects.toMatchObject({
+      code: "PLUGIN_RELEASE_CHANGED",
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   it("does not run events if the plugin becomes inactive during local initialization", async () => {
     const onEvent = vi.fn(async () => undefined);
     const activate = vi.fn(async () => undefined);
@@ -571,8 +678,11 @@ describe("PluginsService", () => {
       setEnabled: vi.fn(async () => undefined),
     };
     const onEvent = vi.fn(async (_event: string, _payload: unknown, _context?: PluginContext) => undefined);
+    let approvedDigest = "a".repeat(64);
     const externalHost = {
       requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: vi.fn(async () =>
+        new Map([["test-plugin", approvedDigest]])),
       loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })),
     };
     const repoWith: PluginRepository = {
@@ -591,7 +701,11 @@ describe("PluginsService", () => {
     await service.setPublicationSettings("p1", "pub-a", {
       apiToken: "secret-in-publication-a",
       displayName: "Course A",
-    });
+    }, { actorUserId: "operator-id", requestId: "request-123" });
+    expect(scopeRepository.setMany).toHaveBeenCalledWith(
+      "p1", "pub-a", expect.any(Array),
+      { actorUserId: "operator-id", requestId: "request-123" },
+    );
     const recorded = encryptedByScope.get("p1:pub-a");
     expect(recorded?.find((entry) => entry.key === "apiToken")?.value).toBeNull();
     expect(recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue)
@@ -604,6 +718,20 @@ describe("PluginsService", () => {
     expect(context?.publicationId).toBe("pub-a");
     expect(context?.settings.displayName).toBe("Course A");
     expect(await context?.getSecret("apiToken")).toBe("secret-in-publication-a");
+    approvedDigest = "b".repeat(64);
+    await expect(context?.getSecret("apiToken"))
+      .rejects.toMatchObject({ code: "PLUGIN_SECRET_ACCESS_REVOKED" });
+    approvedDigest = "a".repeat(64);
+    // A retained Host closure must be invalidated even when no event is active.
+    const encrypted = recorded?.find((entry) => entry.key === "apiToken");
+    if (!encrypted) throw new Error("Missing test encrypted setting");
+    encrypted.encryptedValue = "invalid-ciphertext";
+    await expect(context?.getSecret("apiToken"))
+      .rejects.toMatchObject({ code: "PLUGIN_SECRET_CORRUPT" });
+    states.isEnabled.mockResolvedValue(false);
+    await expect(context?.getSecret("apiToken"))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    states.isEnabled.mockImplementation(async (_id: string, pub: string) => pub === "pub-a");
     await expect(service.dispatchEvent("p1", "post.published", {}, "pub-b"))
       .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
     expect(await service.listPublicationSettings("p1", "pub-b")).toEqual([]);
@@ -635,6 +763,48 @@ describe("PluginsService", () => {
     expect(scoped.setMany).not.toHaveBeenCalled();
     await service.setPublicationSettings("p1", "pub-a", { token: "" });
     expect(scoped.setMany).not.toHaveBeenCalled();
+  });
+
+  it("revokes only a declared secret for one publication with audit identity", async () => {
+    const remove = vi.fn(async () => true);
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async (_id: string, pubId: string) => pubId === "pub-a"),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const scoped: PluginPublicationSettingRepository = {
+      setMany: vi.fn(async () => undefined),
+      getSecret: vi.fn(async () => null),
+      listForPlugin: vi.fn(async () => []),
+      deleteSecret: remove,
+    };
+    const pluginRepoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "active",
+        settingsSchema: {
+          accessToken: { type: "string", secret: true },
+          displayName: { type: "string" },
+        },
+      })),
+    };
+    const service = new PluginsService(pluginRepoWith, settingRepo, {
+      requiresPublicationEnablement: () => true,
+      loadModule: vi.fn(async () => null),
+    }, states, scoped);
+    const audit = { actorUserId: "staff-owner", requestId: "request-123" };
+    await expect(service.revokePublicationSecret("p1", "pub-a", "accessToken", audit))
+      .resolves.toBe(true);
+    expect(remove).toHaveBeenCalledWith(
+      "p1", "pub-a", "accessToken", audit,
+    );
+    await expect(service.revokePublicationSecret("p1", "pub-b", "accessToken", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_PUBLICATION_INACTIVE" });
+    await expect(service.revokePublicationSecret("p1", "pub-a", "displayName", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTING_INVALID" });
+    await expect(service.revokePublicationSecret("p1", "pub-a", "unknown", audit))
+      .rejects.toMatchObject({ code: "PLUGIN_SETTING_INVALID" });
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it("settings: secrets encrypted at rest and masked on read", async () => {

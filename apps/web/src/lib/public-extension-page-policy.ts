@@ -50,8 +50,11 @@ export function publicExtensionMetadata(
     "primaryLocale" | "enabledLocales" | "title" | "security">,
   host: string | null,
   production: boolean,
+  isPreview = false,
 ): Metadata {
-  if (!matchesPublicExtensionPublication(page, site)) {
+  if (!matchesPublicExtensionPublication(page, site) ||
+      (page.locale && page.locale !== site.locale) ||
+      (page.publishedLocales && !page.publishedLocales.includes(site.locale))) {
     return { robots: { index: false, follow: false } };
   }
   const origin = trustedExtensionOrigin(host, site.url, production);
@@ -61,6 +64,19 @@ export function publicExtensionMetadata(
   );
   const title = localizedExtensionTitle(page.title, site.locale);
   const canonical = `${origin}${localePrefix}/extensions/${page.pluginId}/${page.viewId}`;
+  const published = page.publishedLocales?.filter((locale) =>
+    site.enabledLocales?.includes(locale)) ?? [];
+  const alternates: Record<string, string> = {};
+  if (published.length > 1 && published.includes(site.primaryLocale || site.locale)) {
+    for (const locale of published) {
+      const prefix = getLocalePrefix(
+        locale, site.primaryLocale || site.locale, site.enabledLocales,
+      );
+      alternates[locale] = `${origin}${prefix}/extensions/${page.pluginId}/${page.viewId}`;
+    }
+    const primary = alternates[site.primaryLocale || site.locale];
+    if (primary) alternates["x-default"] = primary;
+  }
   return {
     ...buildPageMetadata({
       title,
@@ -68,9 +84,10 @@ export function publicExtensionMetadata(
       canonicalOverride: canonical,
       locale: site.locale,
       ogType: "website",
-      // Only published locale variants may receive hreflang (EXT-302B).
-      alternateLocales: {},
+      // Hreflang requires explicit plugin publication AND enabled site locales.
+      alternateLocales: alternates,
     }),
-    ...(site.security?.isPrivate ? { robots: { index: false, follow: false } } : {}),
+    ...(site.security?.isPrivate || isPreview
+      ? { robots: { index: false, follow: false } } : {}),
   };
 }

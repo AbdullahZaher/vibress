@@ -86,6 +86,13 @@ export interface PluginPublicationStateRepository {
 }
 
 /** Publication-scoped settings: legacy plugin_settings is not a fallback. */
+/** Operator identity is supplied only by an authenticated Host operation.
+ * It never comes from plugin-controlled data or an arbitrary tenant ID. */
+export interface PluginSettingAuditContext {
+  readonly actorUserId: string;
+  readonly requestId: string;
+}
+
 export interface PluginPublicationSettingRepository {
   setMany(
     pluginId: string,
@@ -96,7 +103,13 @@ export interface PluginPublicationSettingRepository {
       encryptedValue: string | null;
       isSecret: boolean;
     }>,
+    audit?: PluginSettingAuditContext,
   ): Promise<void>;
   listForPlugin(pluginId: string, publicationId: string): Promise<PluginSetting[]>;
   getSecret(pluginId: string, publicationId: string, key: string): Promise<string | null>;
+  /** Optional for test adapters; production adapters atomically audit revocation. */
+  deleteSecret?(
+    pluginId: string, publicationId: string, key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean>;
 }

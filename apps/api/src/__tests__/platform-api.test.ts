@@ -8,7 +8,7 @@ import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
 import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
-import { pluginsService, workspaceService } from "../services";
+import { pluginsService, workspaceService, publicationLocaleService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
   const res = await app.inject({
@@ -972,6 +972,96 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("EXT-401 admits plugin events only with Staff, valid Origin and strictly scoped inputs", async () => {
+    const target = "/api/admin/v1/plugins/missing-plugin/events";
+    const eventId = crypto.randomUUID();
+    const payload = { eventId, eventName: "post.published", payload: { count: 1 } };
+    const anonymous = await app.inject({ method: "POST", url: target, payload });
+    expect(anonymous.statusCode).toBe(401);
+
+    const foreignMember = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: "vibress_member_session=forged", origin: "http://localhost:7777" },
+      payload,
+    });
+    expect(foreignMember.statusCode).toBe(401);
+
+    const wrongOrigin = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" }, payload,
+    });
+    expect(wrongOrigin.statusCode).toBe(403);
+
+    for (const malformed of [
+      { ...payload, publicationId: "other-publication" },
+      { ...payload, payload: { nested: { secret: "no" } } },
+      { ...payload, eventId: "not-uuid" },
+    ]) {
+      const response = await app.inject({
+        method: "POST", url: target,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: malformed,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+
+    // No queue admission or plugin code execution for absent registrations.
+    const missing = await app.inject({
+      method: "POST", url: target,
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload,
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it("EXT-402 secret revocation denies unauthenticated, member and cross-site requests", async () => {
+    const target = "/api/admin/v1/plugins/missing-plugin/publication-settings/accessToken";
+    const anonymous = await app.inject({ method: "DELETE", url: target });
+    expect(anonymous.statusCode).toBe(401);
+    const member = await app.inject({
+      method: "DELETE", url: target,
+      headers: { cookie: "vibress_member_session=forged", origin: "http://localhost:7777" },
+    });
+    expect(member.statusCode).toBe(401);
+    const forged = await app.inject({
+      method: "DELETE", url: target,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" },
+    });
+    expect(forged.statusCode).toBe(403);
+  });
+
+  it("EXT-401 recovery APIs require Staff and refuse forged Origin and missing replay consent", async () => {
+    const eventId = crypto.randomUUID();
+    const base = `/api/admin/v1/plugins/missing-plugin/events/${eventId}`;
+    for (const url of [base, "/api/admin/v1/plugins/missing-plugin/events/failed"]) {
+      const anonymous = await app.inject({ method: "GET", url });
+      expect(anonymous.statusCode).toBe(401);
+      const forgedMember = await app.inject({
+        method: "GET", url,
+        headers: { cookie: "vibress_member_session=forged" },
+      });
+      expect(forgedMember.statusCode).toBe(401);
+    }
+    const replay = base + "/replay";
+    const badOrigin = await app.inject({
+      method: "POST", url: replay,
+      headers: { cookie: staffCookie, origin: "https://attacker.invalid" },
+      payload: { confirmAtLeastOnceRisk: true },
+    });
+    expect(badOrigin.statusCode).toBe(403);
+    for (const invalid of [{}, { confirmAtLeastOnceRisk: false },
+      { confirmAtLeastOnceRisk: true, publicationId: "another-publication" }]) {
+      const rejected = await app.inject({
+        method: "POST", url: replay,
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: invalid,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().errors[0].code).toBe("VALIDATION_ERROR");
+    }
+  });
+
   // ---------------- Host-routed Extension API (EXT-201/202) ----------------
   it("extension API fails closed before loading plugin code without Staff/Member session", async () => {
     const admin = await app.inject({
@@ -1406,6 +1496,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(page.headers["cache-control"]).toBe("private, no-store");
       expect(page.json()).toEqual({
         publicationId: expect.any(String),
+        locale: expect.any(String),
         pluginId: "independent-courses", viewId: "courses",
         routeId: "catalog", title,
         data: { title: "Public courses", total: 3 },
@@ -1484,6 +1575,13 @@ describe("Batch 12 — Platform Integration & Security", () => {
       .mockResolvedValue(pluginModule);
     const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
       .mockResolvedValue(true);
+    // These tenant IDs are synthetic; mock their publication locale policy
+    // instead of querying actual publication rows from the integration DB.
+    const localePolicy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
     const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
     try {
       const a = await app.inject({
@@ -1506,9 +1604,72 @@ describe("Batch 12 — Platform Integration & Security", () => {
       );
       expect(prepare).toHaveBeenCalledTimes(2);
     } finally {
+      localePolicy.mockRestore();
       prepare.mockRestore();
       resolve.mockRestore();
       hostContext.mockRestore();
+    }
+  });
+
+  it("EXT-302B serves only enabled and explicitly published locale variants", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      headline: scope.locale === "ar" ? "الدورات" : "Courses",
+    }));
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { headline: "string" } }, handle: handler,
+    };
+    const module: PluginModule = {
+      activate() {},
+      routes: [route],
+      publicViews: [{
+        id: "courses", routeId: "catalog",
+        title: { en: "Courses", ar: "الدورات" },
+        publishedLocales: ["en", "ar"],
+      }],
+    };
+    const resolver = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue(module);
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en", "ar"],
+        isMultilingual: true, needsReconciliation: false,
+      });
+    const url = "/api/content/v1/extensions/independent-courses/views/courses/page";
+    try {
+      const arabic = await app.inject({
+        method: "GET", url: url + "?locale=ar", headers: { host: "localhost:7777" },
+      });
+      expect(arabic.statusCode).toBe(200);
+      expect(arabic.json().locale).toBe("ar");
+      expect(arabic.json().data).toEqual({ headline: "الدورات" });
+      expect(arabic.json().publishedLocales).toEqual(["en", "ar"]);
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      const disabled = await app.inject({
+        method: "GET", url: url + "?locale=fr", headers: { host: "localhost:7777" },
+      });
+      expect(disabled.statusCode).toBe(404);
+      const invalid = await app.inject({
+        method: "GET", url: url + "?locale=../../admin", headers: { host: "localhost:7777" },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(handler).toHaveBeenCalledTimes(1);
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+      const noLongerEnabled = await app.inject({
+        method: "GET", url: url + "?locale=ar", headers: { host: "localhost:7777" },
+      });
+      expect(noLongerEnabled.statusCode).toBe(404);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepare.mockRestore();
+      resolver.mockRestore();
     }
   });
 

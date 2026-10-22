@@ -5,6 +5,10 @@ export const PluginPublicationParamsSchema = z.object({
   id: z.string().min(1).max(200),
 }).strict();
 
+export const PluginPublicationSecretParamsSchema = PluginPublicationParamsSchema.extend({
+  key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_.-]{0,99}$/),
+}).strict();
+
 export const PluginPublicationActivationSchema = z.object({
   enabled: z.boolean(),
 }).strict();
@@ -165,6 +169,7 @@ export const ExtensionPublicViewSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   title: ExtensionAdminLabelSchema,
+  publishedLocales: z.array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)).max(12).optional(),
 }).strict();
 
 export const ExtensionPublicViewDtoSchema = z.object({
@@ -172,6 +177,7 @@ export const ExtensionPublicViewDtoSchema = z.object({
   viewId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   routeId: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   title: ExtensionAdminLabelSchema,
+  publishedLocales: z.array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)).max(12).optional(),
 }).strict();
 
 export const ExtensionPublicProjectionSchema = z.record(
@@ -183,7 +189,13 @@ export const ExtensionPublicProjectionSchema = z.record(
  * publication and one authorized execution. Additive: old v1 APIs remain. */
 export const ExtensionPublicPageResponseSchema = ExtensionPublicViewDtoSchema.extend({
   publicationId: z.string().min(1).max(200),
+  /** Selected from the publication's enabled locale policy at request time. */
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
   data: ExtensionPublicProjectionSchema,
+}).strict();
+
+export const ExtensionPublicPageQuerySchema = z.object({
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
 }).strict();
 
 export const ExtensionAdminNavigationParamsSchema = z.object({
@@ -248,3 +260,60 @@ export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok",
     error: z.enum(["DENIED", "UNAVAILABLE", "RATE_LIMITED"]),
   }).strict(),
 ]);
+
+
+/**
+ * EXT-401: operator-admitted, publication-bound asynchronous plugin events.
+ * External HTTP input and BullMQ payloads use the same bounded contract.
+ * The job's version and digest are verified AGAIN against the live operator
+ * release approval on the worker before executing trusted plugin code.
+ */
+const PluginEventNameSchema = z.string().regex(/^[a-z][a-z0-9]*(?:[.-][a-z][a-z0-9]*)*$/).max(100);
+const PluginEventPayloadSchema = z.record(
+  z.string().regex(/^[a-z][a-zA-Z0-9_]{0,63}$/),
+  z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
+).refine((fields) => Object.keys(fields).length <= 24, "Too many event fields")
+  .refine((fields) => !["publicationId", "workspaceId", "tenantId", "pluginId", "manifestId"]
+    .some((key) => Object.hasOwn(fields, key)), "Caller cannot select event authority");
+
+/** EXT-401 operator-only failed-event inspection and audited replay. The
+ * publication is NEVER a caller-controlled field; only Staff context binds it. */
+export const PluginEventRecoveryParamsSchema = PluginPublicationParamsSchema.extend({
+  eventId: z.string().uuid(),
+}).strict();
+export const PluginEventFailureListQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(10000).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(25),
+}).strict();
+export const PluginEventReplayRequestSchema = z.object({
+  confirmAtLeastOnceRisk: z.literal(true),
+}).strict();
+export const PluginEventFailedDtoSchema = z.object({
+  eventId: z.string().uuid(),
+  jobId: z.string().regex(/^plugin-[a-f0-9]{64}$/),
+  attemptsMade: z.number().int().nonnegative(),
+  status: z.literal("failed"),
+}).strict();
+export const PluginEventFailedListResponseSchema = z.object({
+  items: z.array(PluginEventFailedDtoSchema).max(50),
+  nextOffset: z.number().int().nonnegative(),
+}).strict();
+
+export const PluginEventEnqueueSchema = z.object({
+  eventId: z.string().uuid(),
+  eventName: PluginEventNameSchema,
+  payload: PluginEventPayloadSchema,
+}).strict();
+
+export const PluginWorkerEventJobSchema = PluginEventEnqueueSchema.extend({
+  schemaVersion: z.literal(1),
+  scope: z.literal("publication"),
+  publicationId: z.string().min(1).max(200),
+  pluginId: z.string().min(1).max(200),
+  manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+  pluginVersion: z.string().min(1).max(128),
+  artifactSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  traceparent: z.string().max(128).optional(),
+}).strict();
+
+export type PluginWorkerEventJob = z.infer<typeof PluginWorkerEventJobSchema>;

@@ -47,6 +47,8 @@ import {
   adminRecommendationRoutes,
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
+import { adminPluginEventRoutes } from "./routes/plugin-events";
+import { closePluginEventQueue } from "./plugins/plugin-event-queue";
 import {
   adminExtensionApiRoutes,
   memberExtensionApiRoutes,
@@ -79,6 +81,7 @@ import { distributionRoutes } from "./routes/distribution";
 import { openApiDocsRoutes } from "./routes/docs";
 import { storageService, themeService, pluginsService } from "./services";
 import { getConfig } from "@vibress/config";
+import { verifyTrustedPluginRelease } from "./plugins/operator-release-preflight";
 import {
   SITE_AUTH_COOKIE_NAME,
   signSiteAuthToken,
@@ -370,6 +373,7 @@ export const buildApp = () => {
   fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminExtensionApiRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminPluginEventRoutes, { prefix: "/api/admin/v1" });
   fastify.register(unsplashRoutes, {
     prefix: "/api/admin/v1/integrations/unsplash",
   });
@@ -415,6 +419,7 @@ export const buildApp = () => {
   fastify.register(openApiDocsRoutes);
 
   fastify.addHook("onClose", async () => {
+    await closePluginEventQueue();
     await pluginsService.shutdown();
   });
 
@@ -425,6 +430,18 @@ const start = async () => {
   const app = buildApp();
   try {
     const port = getConfig().ports.api;
+
+    // Fail before the HTTP listener opens if this replica has missing, altered,
+    // unsigned-when-required, or incompatible operator-approved plugin bytes.
+    // Legacy bundled-only installs remain unaffected.
+    if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1" &&
+        !process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
+      throw new Error("Trusted plugin release mount required");
+    }
+    if (process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
+      const verified = await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+      appLogger.info("External plugin release preflight passed", { approvedReleases: verified.length });
+    }
 
     // Initialize clients eagerly on startup
     getDbPool();

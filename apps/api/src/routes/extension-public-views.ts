@@ -4,10 +4,11 @@ import {
   ExtensionAdminNavigationParamsSchema,
   ExtensionPublicViewDtoSchema,
   ExtensionPublicPageResponseSchema,
+  ExtensionPublicPageQuerySchema,
   validateExtensionApiObject,
 } from "@vibress/api-contracts";
 import { PluginDomainError } from "@vibress/plugins";
-import { pluginsService } from "../services";
+import { pluginsService, publicationLocaleService } from "../services";
 import { admitPublicViews } from "../plugins/public-view-registry";
 
 function reject(req: FastifyRequest, reply: FastifyReply, code: string, status: number) {
@@ -33,7 +34,8 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
       reply.header("Cache-Control", "private, no-store");
       reply.header("X-Content-Type-Options", "nosniff");
       const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
-      if (!params.success) return reject(req, reply, "VALIDATION_ERROR", 400);
+      const localeQuery = ExtensionPublicPageQuerySchema.safeParse(req.query);
+      if (!params.success || !localeQuery.success) return reject(req, reply, "VALIDATION_ERROR", 400);
       const publicationId = req.publicationContext?.publicationId;
       if (!publicationId) return reject(req, reply, "PUBLICATION_NOT_FOUND", 404);
       const { pluginId, viewId } = params.data;
@@ -46,6 +48,12 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         if (!views) return reject(req, reply, "EXTENSION_INVALID_PUBLIC_VIEWS", 503);
         const view = views.find((item) => item.viewId === viewId);
         if (!view) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const localePolicy = await publicationLocaleService.getConfiguration(publicationId);
+        const locale = localeQuery.data.locale ?? localePolicy.primaryLocale;
+        if (!localePolicy.enabledLocales.includes(locale) ||
+            (view.publishedLocales && !view.publishedLocales.includes(locale))) {
+          return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        }
         const route = module.routes?.find((item) =>
           item.audience === "public" && item.method === "GET" &&
           item.id === view.routeId && item.query === undefined && item.body === undefined);
@@ -56,7 +64,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         );
         if (!allowed) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
         const scope: PluginApiScope = {
-          publicationId, requestId: req.id, principal: { kind: "anonymous" },
+          publicationId, requestId: req.id, locale, principal: { kind: "anonymous" },
         };
         // Public extension execution never receives privileged storage, member,
         // staff, or tenant selectors from the caller. The Host rechecks
@@ -71,7 +79,8 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         if (!data) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
         const parsed = ExtensionPublicPageResponseSchema.safeParse({
           pluginId, viewId, routeId: view.routeId, title: view.title,
-          publicationId, data,
+          ...(view.publishedLocales ? { publishedLocales: view.publishedLocales } : {}),
+          publicationId, locale, data,
         });
         if (!parsed.success) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
         return reply.status(200).send(parsed.data);

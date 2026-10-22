@@ -9,6 +9,7 @@ import type {
   ThemeManifest,
   ThemeSettingsSchema,
   ThemeSiteSettings,
+  ThemeExtensionViewModel,
 } from "@vibress/theme-core";
 
 export interface ThemePagination {
@@ -54,6 +55,12 @@ export interface ThemeAuthorArchiveProps {
   settings: Record<string, unknown>;
 }
 
+export interface ThemeExtensionProps {
+  extension: ThemeExtensionViewModel;
+  site: ThemeSiteSettings;
+  settings: Record<string, unknown>;
+}
+
 export interface VibressThemeDefinition {
   manifest: ThemeManifest;
   settingsSchema: ThemeSettingsSchema;
@@ -73,6 +80,9 @@ export interface VibressThemeDefinition {
     AuthorArchive: (
       props: ThemeAuthorArchiveProps,
     ) => Promise<React.ReactElement> | React.ReactElement;
+    /** Optional: old built-in themes use the accessible default. */
+    Extension?: ((props: ThemeExtensionProps) =>
+      Promise<React.ReactElement> | React.ReactElement) | undefined;
   };
   cssPath?: string;
 }

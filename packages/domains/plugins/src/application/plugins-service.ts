@@ -5,6 +5,7 @@ import {
   PluginStatus,
   PluginPublicationStateRepository,
   PluginPublicationSettingRepository,
+  type PluginSettingAuditContext,
 } from "../domain/plugin";
 import {
   validateManifest,
@@ -52,6 +53,9 @@ export class PluginsService {
   /** An API replica initializes a module locally before its first event. */
   private readonly initializedHere = new Map<string, Promise<void>>();
   private readonly activeInstances = new Map<string, { plugin: Plugin; module: PluginModule }>();
+  // A running replica must not treat different approved bytes as the same
+  // already-initialized release, even when the operator reuses a semver label.
+  private readonly localReleaseKeys = new Map<string, string>();
 
   /** A maintenance-only replica never runs plugin event handlers or lifecycle hooks. */
   private get recoveryMaintenance(): boolean {
@@ -67,8 +71,45 @@ export class PluginsService {
     }
   }
 
-  private activationKey(plugin: Plugin): string {
-    return `${plugin.id}:${plugin.version}:${plugin.entrypoint}`;
+  private async activationKey(plugin: Plugin): Promise<string> {
+    const isExternal = this.host.requiresPublicationEnablement?.(plugin) === true;
+    const fingerprints = isExternal
+      ? await this.host.getOperatorAdminFingerprints?.()
+      : undefined;
+    const digest = fingerprints?.get(plugin.manifestId);
+    if (isExternal && this.host.getOperatorAdminFingerprints && !digest) {
+      throw new PluginDomainError(
+        "PLUGIN_RELEASE_NOT_APPROVED", "Operator approval is unavailable for this release",
+      );
+    }
+    return JSON.stringify([plugin.id, plugin.version, plugin.entrypoint, digest ?? "bundled"]);
+  }
+
+  private assertLocalRelease(plugin: Plugin, releaseKey: string): void {
+    const prior = this.localReleaseKeys.get(plugin.id);
+    if (prior && prior !== releaseKey) {
+      // Old module instances may retain settings/timers. Never mix them with
+      // a replacement under the same process. Quiesce and restart replicas.
+      throw new PluginDomainError(
+        "PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime",
+      );
+    }
+    this.localReleaseKeys.set(plugin.id, releaseKey);
+  }
+
+  /** A queued or in-flight event cannot inherit a replacement package or
+   * capabilities after local initialization. Compare the complete immutable
+   * admission snapshot, not just the plugin's status. */
+  private sameExecutionRelease(snapshot: Plugin, current: Plugin): boolean {
+    return current.status === "active" &&
+      current.id === snapshot.id &&
+      current.manifestId === snapshot.manifestId &&
+      current.version === snapshot.version &&
+      current.entrypoint === snapshot.entrypoint &&
+      current.vibressApiVersion === snapshot.vibressApiVersion &&
+      isDeepStrictEqual(current.capabilities, snapshot.capabilities) &&
+      isDeepStrictEqual(current.hooks, snapshot.hooks) &&
+      isDeepStrictEqual(current.settingsSchema, snapshot.settingsSchema);
   }
 
   private async activationContext(plugin: Plugin): Promise<PluginContext> {
@@ -91,7 +132,8 @@ export class PluginsService {
   }
 
   private async ensureInitializedHere(plugin: Plugin, module: PluginModule): Promise<void> {
-    const key = this.activationKey(plugin);
+    const key = await this.activationKey(plugin);
+    this.assertLocalRelease(plugin, key);
     let pending = this.initializedHere.get(key);
     if (!pending) {
       pending = Promise.resolve().then(async () => {
@@ -243,8 +285,9 @@ export class PluginsService {
           "Plugin entrypoint does not export an activate function",
         );
       }
+      const key = await this.activationKey(claimed);
+      this.assertLocalRelease(claimed, key);
       await module.activate(await this.activationContext(claimed));
-      const key = this.activationKey(claimed);
       this.initializedHere.set(key, Promise.resolve());
       this.activeInstances.set(key, { plugin: claimed, module });
     } catch {
@@ -315,8 +358,14 @@ export class PluginsService {
 
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (latest?.status !== "active") {
+    if (!latest || latest.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    if (!this.sameExecutionRelease(plugin, latest)) {
+      throw new PluginDomainError(
+        "PLUGIN_RELEASE_CHANGED",
+        "Plugin release or authorization changed during event admission",
+      );
     }
     await this.requirePublicationEnabled(latest, publicationId);
     // Legacy v1 executeHook keeps passing the literal hook name. Named events
@@ -357,6 +406,9 @@ export class PluginsService {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not available");
     }
     const scoped = this.host.requiresPublicationEnablement?.(plugin) === true;
+    // A retained secret reader must retain the identity of the admitted
+    // operator-signed artifact, not just the public semver/entrypoint.
+    const admittedReleaseKey = scoped ? await this.activationKey(plugin) : undefined;
     let context: PluginContext | undefined;
     if (scoped) {
       if (!publicationId) {
@@ -373,7 +425,7 @@ export class PluginsService {
         settings: scopedSettings,
         getSecret: (key: string) =>
           plugin.capabilities.includes("settings.read-own")
-            ? this.getPublicationSecret(plugin.id, publicationId, key)
+            ? this.getPublicationSecret(plugin.id, publicationId, key, admittedReleaseKey)
             : Promise.resolve(null),
         log: (message: string, level: "info" | "warn" | "error" = "info") => {
           console.log(`[plugin:${plugin.manifestId}] [${level}] ${message}`);
@@ -383,8 +435,14 @@ export class PluginsService {
     }
     await this.ensureInitializedHere(plugin, module);
     const latest = await this.pluginRepo.findById(plugin.id);
-    if (latest?.status !== "active") {
+    if (!latest || latest.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin became inactive during initialization");
+    }
+    if (!this.sameExecutionRelease(plugin, latest)) {
+      throw new PluginDomainError(
+        "PLUGIN_RELEASE_CHANGED",
+        "Plugin release or authorization changed during event admission",
+      );
     }
     await this.requirePublicationEnabled(latest, publicationId);
     await module.onEvent(eventName, payload, context);
@@ -402,6 +460,11 @@ export class PluginsService {
       );
     }
     if (plugin.status === "active") {
+      // Deactivation must clean up the very same approved module initialized
+      // in this process, never a hot-swapped artifact under the same semver.
+      if (this.localReleaseKeys.has(plugin.id)) {
+        this.assertLocalRelease(plugin, await this.activationKey(plugin));
+      }
       const claimed = await this.pluginRepo.tryTransitionStatus(
         id, ["active"], "deactivating",
       );
@@ -433,9 +496,15 @@ export class PluginsService {
       }
     }
     const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
-    const key = this.activationKey(plugin);
-    this.initializedHere.delete(key);
-    this.activeInstances.delete(key);
+    const localKey = this.localReleaseKeys.get(id);
+    if (localKey) this.initializedHere.delete(localKey);
+    for (const [key, instance] of this.activeInstances) {
+      if (instance.plugin.id === id) {
+        this.initializedHere.delete(key);
+        this.activeInstances.delete(key);
+      }
+    }
+    this.localReleaseKeys.delete(id);
     domainEvents.emit("plugin.deactivated", { pluginId: id, actorId });
     return deactivated;
   }
@@ -476,8 +545,11 @@ export class PluginsService {
         "Wait at least 15 minutes and verify all runtimes have stopped",
       );
     }
-    const key = this.activationKey(plugin);
-    if (this.initializedHere.has(key) || this.activeInstances.has(key)) {
+    // Maintenance recovery must work even when the operator has removed a
+    // revoked lockfile; rely on this runtime's local ownership instead of
+    // trying to authenticate a new artifact during offline recovery.
+    if (this.localReleaseKeys.has(plugin.id) ||
+        [...this.activeInstances.values()].some((instance) => instance.plugin.id === id)) {
       throw new PluginDomainError(
         "PLUGIN_RECOVERY_LOCAL_ACTIVE",
         "This process still holds a plugin lifecycle instance",
@@ -495,8 +567,8 @@ export class PluginsService {
         "Plugin status changed concurrently",
       );
     }
-    this.initializedHere.delete(key);
-    this.activeInstances.delete(key);
+    // Offline recovery admitted no local module state (checked above).
+    // Never clear a lifecycle instance belonging to another release.
     domainEvents.emit("plugin.recovered", {
       pluginId: id,
       previousStatus: plugin.status,
@@ -514,6 +586,7 @@ export class PluginsService {
     const instances = Array.from(this.activeInstances.values());
     this.activeInstances.clear();
     this.initializedHere.clear();
+    this.localReleaseKeys.clear();
     for (const { plugin, module } of instances) {
       try {
         await module.deactivate?.();
@@ -827,6 +900,7 @@ export class PluginsService {
     pluginId: string,
     publicationId: string,
     settings: Record<string, string | null>,
+    audit?: PluginSettingAuditContext,
   ): Promise<void> {
     if (!publicationId || !this.publicationSettings || !this.publicationStates) {
       throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication scope is unavailable");
@@ -867,7 +941,41 @@ export class PluginsService {
         encryptedValue: isSecret && value !== null ? encryptSecret(value) : null,
       });
     }
-    if (entries.length > 0) await this.publicationSettings.setMany(pluginId, publicationId, entries);
+    if (entries.length > 0) {
+      await this.publicationSettings.setMany(pluginId, publicationId, entries, audit);
+    }
+  }
+
+  /** A secret's empty/null update is replace-only; revocation is explicit.
+   * The production adapter deletes and audits in the same DB transaction. */
+  async revokePublicationSecret(
+    pluginId: string,
+    publicationId: string,
+    key: string,
+    audit: PluginSettingAuditContext,
+  ): Promise<boolean> {
+    if (!publicationId || !this.publicationSettings || !this.publicationStates ||
+        !this.publicationSettings.deleteSecret) {
+      throw new PluginDomainError("PLUGIN_STATE_UNAVAILABLE", "Scoped secrets unavailable");
+    }
+    if (!audit.actorUserId || !audit.requestId) {
+      throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Audit identity required");
+    }
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin) throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
+    if (plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin)) {
+      throw new PluginDomainError("PLUGIN_INACTIVE", "Plugin unavailable");
+    }
+    await this.requirePublicationEnabled(plugin, publicationId);
+    const definitions = this.getSettingDefinitions(plugin.settingsSchema);
+    const definition = Object.hasOwn(definitions, key) ? definitions[key] : undefined;
+    if (!definition || typeof definition !== "object" || Array.isArray(definition) ||
+        !("type" in definition) || definition.type !== "string" ||
+        !("secret" in definition) || definition.secret !== true) {
+      throw new PluginDomainError("PLUGIN_SETTING_INVALID", "Unknown secret setting");
+    }
+    return this.publicationSettings.deleteSecret(pluginId, publicationId, key, audit);
   }
 
   async listPublicationSettings(
@@ -925,15 +1033,44 @@ export class PluginsService {
     pluginId: string,
     publicationId: string,
     key: string,
+    admittedReleaseKey?: string,
   ): Promise<string | null> {
     if (!this.publicationSettings || !/^[a-zA-Z][a-zA-Z0-9_.-]{0,99}$/.test(key)) return null;
+    // An extension can retain a getSecret closure beyond the initial event.
+    // Never let that closure outlive publication enablement or its capability.
+    const plugin = await this.pluginRepo.findById(pluginId);
+    if (!plugin || plugin.status !== "active" ||
+        !this.host.requiresPublicationEnablement?.(plugin) ||
+        !plugin.capabilities.includes("settings.read-own")) {
+      throw new PluginDomainError("PLUGIN_SECRET_ACCESS_REVOKED", "Plugin secret access revoked");
+    }
+    await this.requirePublicationEnabled(plugin, publicationId);
+    if (admittedReleaseKey) {
+      const currentReleaseKey = await this.activationKey(plugin);
+      if (currentReleaseKey !== admittedReleaseKey) {
+        throw new PluginDomainError("PLUGIN_SECRET_ACCESS_REVOKED", "Plugin secret access revoked");
+      }
+    }
     const encrypted = await this.publicationSettings.getSecret(pluginId, publicationId, key);
     if (!encrypted) return null;
+    let plaintext: string;
     try {
-      return decryptSecret(encrypted);
+      plaintext = decryptSecret(encrypted);
     } catch {
-      return null;
+      // Corruption is an operational problem, not a missing setting: fail closed.
+      throw new PluginDomainError("PLUGIN_SECRET_CORRUPT", "Plugin secret cannot be decrypted");
     }
+    const latest = await this.pluginRepo.findById(pluginId);
+    if (!latest || !this.sameExecutionRelease(plugin, latest) ||
+        !latest.capabilities.includes("settings.read-own")) {
+      throw new PluginDomainError("PLUGIN_SECRET_ACCESS_REVOKED", "Plugin secret access revoked");
+    }
+    await this.requirePublicationEnabled(latest, publicationId);
+    if (admittedReleaseKey &&
+        await this.activationKey(latest) !== admittedReleaseKey) {
+      throw new PluginDomainError("PLUGIN_SECRET_ACCESS_REVOKED", "Plugin secret access revoked");
+    }
+    return plaintext;
   }
 
   private getSettingDefinitions(schema: Record<string, unknown>): Record<string, unknown> {

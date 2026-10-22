@@ -4,6 +4,7 @@ import { closeDbPool, getDbPool } from "@vibress/database";
 import { ContentSchedulerWorker } from "./scheduler";
 import { EmailDeliveryWorker } from "./processors/email-delivery-worker";
 import { WebhookDeliveryWorker } from "./processors/webhook-delivery-worker";
+import { PluginEventWorker } from "./processors/plugin-event-worker";
 import { AnalyticsWorker } from "./processors/analytics-worker";
 import { AnalyticsRetentionSweeper } from "./processors/analytics-retention";
 import { SearchIndexerWorker } from "./processors/search-indexer-worker";
@@ -45,6 +46,15 @@ emailDeliveryWorker.start().catch((err) => {
   appLogger.error("[EmailWorker] Failed to start", {}, err as Error);
 });
 
+const pluginEventWorker = new PluginEventWorker();
+pluginEventWorker.start().catch((_error: unknown) => {
+  // Operator-approved worker admission is mandatory when configured.
+  // Never expose a green readiness endpoint while trusted event delivery
+  // is unavailable; secrets or operator filesystem paths are not logged.
+  appLogger.error("[PluginEventWorker] Approved release admission failed", {});
+  process.exit(1);
+});
+
 const webhookDeliveryWorker = new WebhookDeliveryWorker();
 webhookDeliveryWorker.start().catch((err) => {
   appLogger.error("[WebhookWorker] Failed to start", {}, err as Error);
@@ -83,7 +93,8 @@ const server = http.createServer((req, res) => {
       }
 
       const redisStatus = connection.status === "ready" ? "ok" : "not_ready";
-      const isReady = dbStatus === "ok" && redisStatus === "ok";
+      const pluginsStatus = pluginEventWorker.isReady() ? "ok" : "not_ready";
+      const isReady = dbStatus === "ok" && redisStatus === "ok" && pluginsStatus === "ok";
 
       res.writeHead(isReady ? 200 : 503, { "Content-Type": "application/json" });
       res.end(
@@ -92,6 +103,7 @@ const server = http.createServer((req, res) => {
           checks: {
             redis: redisStatus,
             database: dbStatus,
+            pluginEvents: pluginsStatus,
           },
         }),
       );
@@ -123,6 +135,7 @@ const shutdown = async (signal: string) => {
     outboxDispatcher?.stop();
     await emailDeliveryWorker.stop();
     await webhookDeliveryWorker.stop();
+    await pluginEventWorker.stop();
     await analyticsWorker.stop();
     await searchIndexerWorker.stop();
     await closeEmailQueue();

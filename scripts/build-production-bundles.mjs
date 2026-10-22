@@ -37,6 +37,13 @@ async function buildAll() {
       entryPoints: ['apps/api/src/main.ts'],
       outfile: 'apps/api/dist/main.js',
     }),
+    // Operator preflight runs inside the exact production API image without
+    // requiring pnpm, tsx, a writable repository, or a running database.
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['scripts/plugins/preflight.ts'],
+      outfile: 'apps/api/dist/plugins-preflight.js',
+    }),
     // 2. Worker entrypoint
     esbuild.build({
       ...COMMON_CONFIG,

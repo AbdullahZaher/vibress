@@ -23,6 +23,41 @@ adds opt-in, Host-authorized and text-only public extension pages; member-privat
 views, published hreflang and full theme slots are still separate release gates.
 The historical baseline below describes the 2026-10-19 design review.
 
+## Pending review on the unified completion branch
+
+The `feat/plugin-platform-completion-phases-1-4-20261021` branch proposes
+published-only extension locales and SEO ([EXT-302B](extension-public-views-ext302a.md)),
+a Host-owned `extension` theme slot with safe fallback
+([sample Liquid template](examples/extension.liquid)),
+an independent [SDK reference plugin](../../examples/plugins/hello-public/README.md),
+and an operator-side [release preflight / recovery runbook](external-extension-operator-runbook.md).
+The branch now also adds optional **detached Ed25519 operator lockfile approval**,
+with shared runtime/CLI signature verification, pre-listen API preflight,
+a production-bundled verifier, and an opt-in `compose.plugins.yml`
+read-only deployment override. Unsigned trusted v1 lockfiles still work when
+both signing environment variables are absent; signed mode fails closed if
+only one is configured. This is operator trust, not an untrusted plugin sandbox.
+
+These are **branch changes**, not merged/released contracts. EXT-401 now has
+PostgreSQL-backed operator-only event admission with an immutable scoped
+deduplication ledger, crash-claim reconciliation, BullMQ delivery and release
+checks. Domain-event outbox integration, full operator
+restore/recovery and duplicate-delivery acceptance drills remain pending.
+The native Admin Plugins panel now includes an operator-gated, publication-scoped
+failed-event view with explicit second-step replay confirmation. Host-authenticated, publication-scoped failed
+job inspection and explicitly confirmed BullMQ replay now record the
+operator's replay request in PostgreSQL before retrying. Replay remains
+at-least-once and must not be presented as exactly-once. EXT-402 now also supports explicit, atomic and
+audited per-publication secret deletion. Cryptographic master-key rotation
+and operator audit views remain separate blockers.
+EXT-403 now has a read-only, paginated post-restore database/artifact
+compatibility preflight, but coordinated backup/restore automation remains a
+blocker. EXT-404 adds queue/consumer health metrics, but further supply-chain
+scanning, a full EXT-301 Admin write/UI host contract,
+cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
+The opt-in production Compose override requires operator release signatures.
+Do not infer production readiness from CI alone.
+
 ## Read in this order
 
 1. [External extensions architecture](external-extensions-architecture.md) — production trust boundary, service ownership, lifecycle, tenant model, deployment.
