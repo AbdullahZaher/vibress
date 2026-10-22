@@ -36,6 +36,28 @@ describe("EXT-304 independent public SDK reference", () => {
     expect(english).toEqual({ headline: "Hello, world", count: 1 });
   });
 
+  it("declares a separate mutation permission for the linked Admin POST route", async () => {
+    const route = plugin.routes?.find((item) =>
+      item.id === "summary-admin" && item.method === "POST");
+    expect(route?.permission).toBe("plugins.manage");
+    expect(route?.body?.required).toEqual(["label"]);
+    if (!route) throw new Error("Missing linked POST");
+    const staff = await route.handle({
+      query: {}, body: { label: "Course" },
+    }, {
+      publicationId: "publication-a", requestId: "request-a",
+      principal: { kind: "staff", id: "staff-a" },
+    });
+    expect(staff).toEqual({ accepted: true });
+    const anonymous = await route.handle({
+      query: {}, body: { label: "Course" },
+    }, {
+      publicationId: "publication-a", requestId: "request-b",
+      principal: { kind: "anonymous" },
+    });
+    expect(anonymous).toEqual({ accepted: false });
+  });
+
   it("preserves activation/deactivation ABI without private service dependencies", async () => {
     const logger = vi.fn();
     await plugin.activate({

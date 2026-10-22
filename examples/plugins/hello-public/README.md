@@ -37,6 +37,9 @@ enablement. Do not copy another publication's settings, Member data, or secrets.
   projection from the Host-scoped `summary` GET route, with explicit
   English and Arabic published variants.
 - Studio navigation `status` links to a Staff-permission checked Admin GET.
+- Optional linked Admin POST route with its **own** `plugins.manage` permission
+  and bounded scalar schema demonstrates the confirmed write-bridge contract.
+  It is intentionally an echo/acceptance example, not persistent storage.
 - No runtime API fetch from browser JS, no cross-publication selectors, no
   private import, and no publication-wide secrets in the public projection.
 - External Liquid themes may opt in to `templates/extension.liquid`;
