@@ -17,6 +17,7 @@ import { adminExtensionNavigationRoutes } from "./extension-admin-views";
 import { adminExtensionFrameRoutes } from "./extension-admin-iframe";
 import { publicExtensionViewRoutes } from "./extension-public-views";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
+import { isExtensionAdminWritePermission } from "../plugins/admin-write-permission";
 
 /** No arbitrary Fastify registration or tenant selectors from plugin modules. */
 const MAX_ROUTES_PER_PLUGIN = 32;
@@ -151,6 +152,13 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
               req.permissions, req.roles, req.publicationContext?.role, route.permission))) {
         return reject(reply, req, "PERMISSION_DENIED", 403);
       }
+      // A plugin's GET-only permissions cannot authorize mutations. This
+      // guards direct HTTP callers as well as the confirmed iframe write bridge.
+      if (audience === "admin" && req.method === "POST" &&
+          !isExtensionAdminWritePermission(route.permission)) {
+        return reject(reply, req, "PERMISSION_DENIED", 403);
+      }
+
 
       const query = validateExtensionApiObject(route.query, req.query);
       const body = validateExtensionApiObject(route.body, req.method === "POST" ? req.body ?? {} : {});

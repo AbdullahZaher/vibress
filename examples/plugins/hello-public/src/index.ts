@@ -39,6 +39,21 @@ export const plugin: PluginModule = {
       response: { fields: { installed: "boolean" }, required: ["installed"] },
       handle() { return { installed: true }; },
     },
+    {
+      // A bounded write contract must use its own mutation permission even
+      // when sharing the Host-linked view's GET route ID.
+      id: "summary-admin",
+      audience: "admin",
+      method: "POST",
+      permission: "plugins.manage",
+      body: { fields: { label: "string" }, required: ["label"] },
+      response: { fields: { accepted: "boolean" }, required: ["accepted"] },
+      handle(input, scope) {
+        // Reference only: it deliberately does not mutate persisted data.
+        return { accepted: scope.principal.kind === "staff" &&
+          typeof input.body.label === "string" };
+      },
+    },
   ],
   adminViews: [
     { id: "status", routeId: "summary-admin", title: { en: "Plugin status", ar: "حالة الإضافة" } },

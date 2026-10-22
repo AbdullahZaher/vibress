@@ -1,6 +1,8 @@
 # Plugin extensibility: current implementation and proposed platform
 
-**Documentation status: design proposal — 2026-10-19.** These documents do not imply the features are implemented.
+**Documentation status: mixed implementation and release gates — 2026-10-22.**
+PR #77 was merged into `main`; the platform is **not declared generally
+supported for untrusted plugins** or complete for external SDK release.
 
 ## Architecture decision
 
@@ -23,22 +25,23 @@ adds opt-in, Host-authorized and text-only public extension pages; member-privat
 views, published hreflang and full theme slots are still separate release gates.
 The historical baseline below describes the 2026-10-19 design review.
 
-## Pending review on the unified completion branch
+## Merged operator-trusted increments (PR #77)
 
-The `feat/plugin-platform-completion-phases-1-4-20261021` branch proposes
+PR #77 merged into `main` the following increments:
 published-only extension locales and SEO ([EXT-302B](extension-public-views-ext302a.md)),
 a Host-owned `extension` theme slot with safe fallback
 ([sample Liquid template](examples/extension.liquid)),
 an independent [SDK reference plugin](../../examples/plugins/hello-public/README.md),
 and an operator-side [release preflight / recovery runbook](external-extension-operator-runbook.md).
-The branch now also adds optional **detached Ed25519 operator lockfile approval**,
+The merged implementation also adds optional **detached Ed25519 operator lockfile approval**,
 with shared runtime/CLI signature verification, pre-listen API preflight,
 a production-bundled verifier, and an opt-in `compose.plugins.yml`
 read-only deployment override. Unsigned trusted v1 lockfiles still work when
 both signing environment variables are absent; signed mode fails closed if
 only one is configured. This is operator trust, not an untrusted plugin sandbox.
 
-These are **branch changes**, not merged/released contracts. EXT-401 now has
+These features are **merged**, but still not frozen as a supported
+external plugin SDK. EXT-401 now has
 PostgreSQL-backed operator-only event admission with an immutable scoped
 deduplication ledger, crash-claim reconciliation, BullMQ delivery and release
 checks. Domain-event outbox integration, full operator
@@ -57,6 +60,16 @@ scanning, a full EXT-301 Admin write/UI host contract,
 cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
 The opt-in production Compose override requires operator release signatures.
 Do not infer production readiness from CI alone.
+
+**Current additional change under review:** PR #78 proposes a confirmed
+linked-route Admin write bridge (EXT-301C). The existing read-only bridge
+remains compatible. Direct Admin POST mutation permissions are tightened
+under review; see the PR compatibility notice. Member-owned transactional
+enrollment storage is not yet a public Host capability. The independent
+`vibress-lms` integration remains a pilot, not an installable release.
+
+See [external SDK release gates](external-sdk-release-gates.md) for the
+operational test matrix and blockers that prevent announcing a stable SDK.
 
 ## Read in this order
 

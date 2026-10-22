@@ -3,6 +3,7 @@ import { ExtensionAdminFrameProofSchema } from "@vibress/api-contracts";
 import {
   ApiError, type AdminExtensionViewLink, issueExtensionAdminFrameTicketApi,
   readExtensionAdminFrameStatusApi, readExtensionAdminViewApi,
+  writeExtensionAdminViewApi,
 } from "../../lib/api";
 import { getActivePublicationId } from "../../lib/api/client";
 import { useAdminLocale } from "../../lib/admin-locale";
@@ -112,6 +113,11 @@ export function PluginAdminView({ link }: Props) {
           if (error instanceof ApiError && [401, 403, 404].includes(error.statusCode)) revoke();
           throw error;
         }),
+        (body) => writeExtensionAdminViewApi(link, body).catch((error: unknown) => {
+          if (error instanceof ApiError && [401, 403, 404].includes(error.statusCode)) revoke();
+          throw error;
+        }),
+        () => window.confirm(tr("Allow this plugin to change data for this publication?")),
       );
     };
     window.addEventListener("message", onMessage);

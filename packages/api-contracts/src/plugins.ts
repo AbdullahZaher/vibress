@@ -238,6 +238,22 @@ export const ExtensionAdminFrameProofSchema = z.object({
  * linked EXT-301A Admin GET route. It cannot choose URLs, route IDs, methods,
  * headers, publication IDs or bodies. Privileged writes are NOT bridged.
  */
+/** EXT-301 write bridge: fixed linked route only; opaque-origin UI cannot
+ * choose a URL, method, plugin, publication, permission or credentials. */
+export const ExtensionAdminBridgeWriteRequestSchema = z.object({
+  type: z.literal("vibress:extension:write"),
+  version: z.literal(1),
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  body: z.record(
+    z.string().regex(/^[a-z][A-Za-z0-9_]{0,63}$/),
+    z.union([z.string().max(4096), z.number().finite(), z.boolean()]),
+  ).refine((fields) => Object.keys(fields).length <= 24, "Too many fields")
+    .refine((fields) => ![
+      "publicationId", "workspaceId", "tenantId", "pluginId",
+      "actorUserId", "userId", "memberId",
+    ].some((key) => Object.hasOwn(fields, key)), "Authority selectors are forbidden"),
+}).strict();
+
 export const ExtensionAdminBridgeReadRequestSchema = z.object({
   type: z.literal("vibress:extension:read"),
   version: z.literal(1),
