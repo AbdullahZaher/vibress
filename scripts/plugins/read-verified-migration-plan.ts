@@ -2,7 +2,8 @@
  * Operator-only signed migration-plan admission. Shared by read-only preflight
  * and explicit schema-apply commands; neither imports or executes plugin JS.
  */
-import { lstat, readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import {
   checkOperatorPluginMigrationPlan,
@@ -13,6 +14,31 @@ import {
 } from "@vibress/plugins";
 
 const MAX_PLAN_BYTES = 64 * 1024;
+
+/** Read the exact same bounded regular file descriptor we validated. */
+export async function readBoundedOperatorMigrationPlanFile(planPath: string): Promise<unknown> {
+  if (!path.isAbsolute(planPath)) throw new Error("Absolute operator migration plan required");
+  // O_NOFOLLOW prevents a last-component symlink substitution; O_NONBLOCK
+  // avoids waiting on a special device/FIFO before regular-file admission.
+  const file = await open(planPath,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_PLAN_BYTES) {
+      throw new Error("Invalid bounded operator migration plan file");
+    }
+    const bytes = await file.readFile();
+    if (!bytes.byteLength || bytes.byteLength > MAX_PLAN_BYTES) {
+      throw new Error("Invalid operator migration plan size");
+    }
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (text.includes("\u0000")) throw new Error("Invalid migration plan text");
+    const data: unknown = JSON.parse(text);
+    return data;
+  } finally {
+    await file.close();
+  }
+}
 
 export async function readVerifiedOperatorMigrationPlan(
   planPath: string,
@@ -25,18 +51,7 @@ export async function readVerifiedOperatorMigrationPlan(
       !process.env.VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE) {
     throw new Error("Signed operator release and absolute migration plan are required");
   }
-  const info = await lstat(planPath);
-  if (!info.isFile() || info.isSymbolicLink() ||
-      info.size === 0 || info.size > MAX_PLAN_BYTES) {
-    throw new Error("Invalid bounded operator migration plan file");
-  }
-  const bytes = await readFile(planPath);
-  if (!bytes.byteLength || bytes.byteLength > MAX_PLAN_BYTES) {
-    throw new Error("Invalid operator migration plan size");
-  }
-  const utf8 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  if (utf8.includes("\u0000")) throw new Error("Invalid migration plan text");
-  const plan: unknown = JSON.parse(utf8);
+  const plan = await readBoundedOperatorMigrationPlanFile(planPath);
 
   // Verify ALL final approved bytes using the production preflight. Its
   // signature check is reused; never trust the extension's own checksum.
