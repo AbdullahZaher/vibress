@@ -107,7 +107,7 @@ export function connectAdminExtensionReadBridge(
       }
       writeActive = true;
       active++;
-      let consent = false;
+      let consent: boolean;
       try {
         consent = confirmWrite();
       } catch {

@@ -14,15 +14,15 @@ class ChannelStub {
   readonly port2: PortStub = {
     onmessage: null, postMessage: vi.fn(), close: vi.fn(),
   };
-  constructor() { latestChannel = this; }
+  static current: ChannelStub;
+  constructor() { ChannelStub.current = this; }
 }
-let latestChannel: ChannelStub;
 const request = (type: "vibress:extension:read" | "vibress:extension:write",
   body?: Record<string, unknown>, requestId = "request-1") => ({
   type, version: 1, requestId, ...(body ? { body } : {}),
 });
 function deliver(data: unknown) {
-  latestChannel.port1.onmessage?.(new MessageEvent("message", { data }));
+  ChannelStub.current.port1.onmessage?.(new MessageEvent("message", { data }));
 }
 
 describe("EXT-301 bounded and confirmed Admin iframe write bridge", () => {
@@ -48,7 +48,7 @@ describe("EXT-301 bounded and confirmed Admin iframe write bridge", () => {
     expect(read).not.toHaveBeenCalled();
     deliver(request("vibress:extension:read"));
     await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
-    expect(latestChannel.port1.postMessage).toHaveBeenCalledWith(
+    expect(ChannelStub.current.port1.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ ok: true, data: { count: 2 } }),
     );
     close();
@@ -62,7 +62,7 @@ describe("EXT-301 bounded and confirmed Admin iframe write bridge", () => {
     deliver(request("vibress:extension:write", { title: "First" }));
     expect(confirm).toHaveBeenCalledOnce();
     expect(write).not.toHaveBeenCalled();
-    expect(latestChannel.port1.postMessage).toHaveBeenCalledWith(
+    expect(ChannelStub.current.port1.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ ok: false, error: "DENIED" }),
     );
   });
@@ -73,7 +73,7 @@ describe("EXT-301 bounded and confirmed Admin iframe write bridge", () => {
       async () => ({}), write, () => true);
     deliver(request("vibress:extension:write", { title: "Course" }));
     await vi.waitFor(() => expect(write).toHaveBeenCalledWith({ title: "Course" }));
-    await vi.waitFor(() => expect(latestChannel.port1.postMessage).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(ChannelStub.current.port1.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ ok: true, data: { saved: true } }),
     ));
     // The Host bridge rejects duplicate IDs even after completion.
