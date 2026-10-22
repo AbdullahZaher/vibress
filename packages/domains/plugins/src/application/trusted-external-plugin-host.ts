@@ -109,13 +109,13 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
 function manifestMatchesInstalled(plugin: Plugin, installed: PluginManifest): boolean {
   return plugin.manifestId === installed.id &&
     plugin.name === installed.name &&
-    plugin.description === (installed.description ?? null) &&
+    (plugin.description || null) === (installed.description || null) &&
     plugin.version === installed.version &&
     plugin.vibressApiVersion === installed.vibressApiVersion &&
     plugin.entrypoint === installed.entrypoint &&
-    isDeepStrictEqual(plugin.capabilities, installed.capabilities) &&
-    isDeepStrictEqual(plugin.hooks, installed.hooks ?? []) &&
-    isDeepStrictEqual(plugin.settingsSchema, installed.settingsSchema ?? {});
+    isDeepStrictEqual(plugin.capabilities ?? [], installed.capabilities ?? []) &&
+    isDeepStrictEqual(plugin.hooks ?? [], installed.hooks ?? []) &&
+    isDeepStrictEqual(plugin.settingsSchema ?? {}, installed.settingsSchema ?? {});
 }
 
 function isPluginModule(value: unknown): value is PluginModule {

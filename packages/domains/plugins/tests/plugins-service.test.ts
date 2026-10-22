@@ -470,6 +470,27 @@ describe("PluginsService", () => {
     expect(repoWith.updateStatus).toHaveBeenCalledWith("p1", "error");
   });
 
+  it("activation preserves domain errors thrown during lifecycle", async () => {
+    const hostWith = {
+      loadModule: vi.fn(async () => ({
+        activate: vi.fn(async () => {
+          throw new PluginDomainError("PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime");
+        }),
+      })),
+    };
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin()),
+      updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+    };
+    const service = makeService({ host: hostWith, pluginRepo: repoWith });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_RESTART_REQUIRED",
+      message: "Plugin release changed; restart this runtime",
+    });
+    expect(repoWith.updateStatus).toHaveBeenCalledWith("p1", "error");
+  });
+
   it("calls cleanup before completing deactivation", async () => {
     const deactivate = vi.fn(async () => undefined);
     const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate })) };

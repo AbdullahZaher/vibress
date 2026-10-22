@@ -290,7 +290,11 @@ export class PluginsService {
       await module.activate(await this.activationContext(claimed));
       this.initializedHere.set(key, Promise.resolve());
       this.activeInstances.set(key, { plugin: claimed, module });
-    } catch {
+    } catch (err: unknown) {
+      console.error(
+        `[plugins] Plugin activation failed for ${claimed.manifestId} (${id}):`,
+        err,
+      );
       // Plugin exceptions and filesystem errors may include tokens or operator
       // paths. Never forward those raw messages to callers or domain events.
       await this.pluginRepo.updateStatus(id, "error");
@@ -298,6 +302,9 @@ export class PluginsService {
         pluginId: id,
         error: "Plugin activation failed",
       });
+      if (err instanceof PluginDomainError) {
+        throw err;
+      }
       throw new PluginDomainError("PLUGIN_ACTIVATION_FAILED", "Plugin activation failed");
     }
 
