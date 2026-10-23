@@ -280,8 +280,15 @@ export class PluginsService {
 
     try {
       const module = await this.host.loadModule(claimed);
-      if (!module || typeof module.activate !== "function") {
-        throw new Error(
+      if (!module) {
+        throw new PluginDomainError(
+          "PLUGIN_MODULE_NOT_FOUND",
+          "Plugin module could not be loaded or is not registered in trusted operator lockfile",
+        );
+      }
+      if (typeof module.activate !== "function") {
+        throw new PluginDomainError(
+          "PLUGIN_ENTRYPOINT_INVALID",
           "Plugin entrypoint does not export an activate function",
         );
       }
@@ -295,6 +302,12 @@ export class PluginsService {
         `[plugins] Plugin activation failed for ${claimed.manifestId} (${id}):`,
         err,
       );
+      // Clean up any partial local state on activation failure
+      const localKey = this.localReleaseKeys.get(id);
+      if (localKey) {
+        this.initializedHere.delete(localKey);
+        this.activeInstances.delete(localKey);
+      }
       // Plugin exceptions and filesystem errors may include tokens or operator
       // paths. Never forward those raw messages to callers or domain events.
       await this.pluginRepo.updateStatus(id, "error");
@@ -483,13 +496,23 @@ export class PluginsService {
         );
       }
       try {
-        const module = await this.host.loadModule(claimed);
-        if (!module) throw new Error("Active plugin module could not be loaded");
+        const localKey = this.localReleaseKeys.get(id);
+        const existing = localKey ? this.activeInstances.get(localKey) : undefined;
+        const module = existing?.module ?? (await this.host.loadModule(claimed));
+        if (!module) {
+          throw new PluginDomainError(
+            "PLUGIN_MODULE_NOT_FOUND",
+            "Active plugin module could not be loaded",
+          );
+        }
         await module.deactivate?.();
-      } catch {
+      } catch (err: unknown) {
         // Fail closed: never claim successful cleanup when it failed.
         await this.pluginRepo.updateStatus(id, "error");
         domainEvents.emit("plugin.deactivation_failed", { pluginId: id, actorId });
+        if (err instanceof PluginDomainError) {
+          throw err;
+        }
         throw new PluginDomainError("PLUGIN_DEACTIVATION_FAILED", "Plugin cleanup failed");
       }
     } else {
@@ -511,7 +534,9 @@ export class PluginsService {
         this.activeInstances.delete(key);
       }
     }
-    this.localReleaseKeys.delete(id);
+    // Note: Do NOT delete this.localReleaseKeys.get(id).
+    // Requirement 3: Preserve immutable release identities and restart requirements
+    // when executable bytes genuinely change.
     domainEvents.emit("plugin.deactivated", { pluginId: id, actorId });
     return deactivated;
   }

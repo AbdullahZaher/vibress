@@ -447,6 +447,119 @@ describe("EXT-506: Real Vibress LMS Installation & Production Integration", () =
     expect(body?.data?.outcome).toBe("published");
   });
 
+  it("Step 5b: verifies full plugin deactivation and repeated reactivation lifecycle with zero data loss", async () => {
+    const db = getDb();
+    const siteA = `http://${domainA}:${serverPort}`;
+    const cookieA1 = `vibress_member_session=${tokenA1}`;
+    const catalogUrl = `${siteA}/api/content/v1/extensions/vibress-lms-pilot/views/catalog/page?locale=en`;
+    const progressUrl = `${siteA}/api/members/v1/extensions/vibress-lms-pilot/v1/progress?courseId=pilot-foundations`;
+    const completeUrl = `${siteA}/api/members/v1/extensions/vibress-lms-pilot/v1/complete`;
+
+    // 1. Snapshot initial member records in DB
+    const initialRecords = await db.select().from(pluginMemberRecords);
+    expect(initialRecords.length).toBeGreaterThan(0);
+
+    // 2. Cycle 1: Deactivate
+    const deactivated1 = await pluginsService.deactivatePlugin(registeredPluginId, "operator-test");
+    expect(deactivated1.status).toBe("inactive");
+
+    // While deactivated, HTTP routes return 404 (extension inactive)
+    const resDeactivatedPub1 = await fetch(catalogUrl);
+    expect(resDeactivatedPub1.status).toBe(404);
+    const resDeactivatedMem1 = await fetch(progressUrl, {
+      headers: { cookie: cookieA1 },
+    });
+    expect(resDeactivatedMem1.status).toBe(404);
+
+    // Member data preserved during deactivation
+    const recordsDuringDeactivation1 = await db.select().from(pluginMemberRecords);
+    expect(recordsDuringDeactivation1.length).toBe(initialRecords.length);
+
+    // Reactivate Cycle 1
+    const reactivated1 = await pluginsService.activatePlugin(registeredPluginId, "operator-test");
+    expect(reactivated1.status).toBe("active");
+
+    // Routes functional again
+    const resReactivatedPub1 = await fetch(catalogUrl);
+    expect(resReactivatedPub1.status).toBe(200);
+    const resReactivatedMem1 = await fetch(progressUrl, {
+      headers: { cookie: cookieA1 },
+    });
+    expect(resReactivatedMem1.status).toBe(200);
+    const progressBody1 = (await resReactivatedMem1.json()) as { completed?: number };
+    expect(progressBody1?.completed).toBe(1);
+
+    // 3. Cycle 2: Deactivate -> Reactivate
+    const deactivated2 = await pluginsService.deactivatePlugin(registeredPluginId, "operator-test");
+    expect(deactivated2.status).toBe("inactive");
+
+    const resDeactivatedPub2 = await fetch(catalogUrl);
+    expect(resDeactivatedPub2.status).toBe(404);
+
+    const reactivated2 = await pluginsService.activatePlugin(registeredPluginId, "operator-test");
+    expect(reactivated2.status).toBe("active");
+
+    const resReactivatedPub2 = await fetch(catalogUrl);
+    expect(resReactivatedPub2.status).toBe(200);
+
+    // 4. Cycle 3: Deactivate -> Reactivate and complete next lesson
+    const deactivated3 = await pluginsService.deactivatePlugin(registeredPluginId, "operator-test");
+    expect(deactivated3.status).toBe("inactive");
+
+    const reactivated3 = await pluginsService.activatePlugin(registeredPluginId, "operator-test");
+    expect(reactivated3.status).toBe("active");
+
+    // Member A1 completes the second lesson ("first-steps") via live HTTP post-reactivation
+    const completeRes = await fetch(completeUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: cookieA1,
+        origin: siteA,
+      },
+      body: JSON.stringify({
+        courseId: "pilot-foundations",
+        lessonId: "first-steps",
+        locale: "en",
+      }),
+    });
+    expect(completeRes.status).toBe(200);
+    const completeBody = (await completeRes.json()) as { outcome?: string; lessonId?: string };
+    expect(completeBody?.outcome).toBe("completed");
+    expect(completeBody?.lessonId).toBe("first-steps");
+
+    // Verify progress is now 2/2 (100%)
+    const resFinalProgress = await fetch(progressUrl, {
+      headers: { cookie: cookieA1 },
+    });
+    expect(resFinalProgress.status).toBe(200);
+    const finalProgressBody = (await resFinalProgress.json()) as { completed?: number; percent?: number };
+    expect(finalProgressBody?.completed).toBe(2);
+    expect(finalProgressBody?.percent).toBe(100);
+
+    // Verify member records increased by exactly 1 completion record
+    const finalRecords = await db.select().from(pluginMemberRecords);
+    expect(finalRecords.length).toBe(initialRecords.length + 1);
+
+    // 5. Verify concurrency protection: when a status transition is in progress, calls are rejected
+    await db.update(plugins).set({ status: "activating" }).where(eq(plugins.id, registeredPluginId));
+
+    await expect(
+      pluginsService.activatePlugin(registeredPluginId, "operator-test"),
+    ).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+
+    await expect(
+      pluginsService.deactivatePlugin(registeredPluginId, "operator-test"),
+    ).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+
+    // Restore to active for subsequent steps
+    await db.update(plugins).set({ status: "active" }).where(eq(plugins.id, registeredPluginId));
+  });
+
   it("Step 6: performs genuine disposable database backup, restore, and integrity verification", async () => {
     // 1. Verify approved release from lockfile
     const approved = await verifyTrustedPluginRelease(lockfilePath);
