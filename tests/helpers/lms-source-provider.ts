@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-export const PINNED_LMS_COMMIT = "90b771ecc64c58251fac1d8c7fdcf3278a71ea6c";
+export const PINNED_LMS_COMMIT = "eccbce6c24b433f3e9356b0c600b7f3cb8f449f8";
 export const LMS_REPO_URL = "https://github.com/AbdullahZaher/vibress-lms.git";
 
 export interface LmsSourceArtifacts {
