@@ -23,10 +23,15 @@ async function fetchCourseData(
   // The linked public view carries the Host-authorized publication identity.
   // Existing signed LMS installs may omit publicationId in /course payloads,
   // so verify the view first and check an optional payload identity too.
-  const view = await getPublicExtensionPage("vibress-lms-authoring", "catalog");
+  let view: Awaited<ReturnType<typeof getPublicExtensionPage>>;
+  try {
+    view = await getPublicExtensionPage("vibress-lms-authoring", "catalog");
+  } catch {
+    return null;
+  }
   if (!view || view.publicationId !== publicationId ||
-      view.locale && view.locale !== locale ||
-      view.publishedLocales && !view.publishedLocales.includes(locale)) return null;
+      (view.locale && view.locale !== locale) ||
+      (view.publishedLocales && !view.publishedLocales.includes(locale))) return null;
   const host = incoming.get("host");
   if (!host || !isValidPublicHost(host)) return null;
   const apiBase = process.env.API_URL || "http://127.0.0.1:7780";
