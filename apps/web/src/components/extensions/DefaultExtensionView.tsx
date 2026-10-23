@@ -7,6 +7,14 @@ interface CatalogCourseItem {
   lessonTitle: string;
 }
 
+function isCatalogCourseItem(value: unknown): value is CatalogCourseItem {
+  return typeof value === "object" && value !== null &&
+    "id" in value && typeof value.id === "string" &&
+    "title" in value && typeof value.title === "string" &&
+    "description" in value && typeof value.description === "string" &&
+    "lessonTitle" in value && typeof value.lessonTitle === "string";
+}
+
 /**
  * Every theme has a safe fallback. Plugin-provided values remain text nodes,
  * never HTML, CSS, URLs, or script instructions.
@@ -16,14 +24,17 @@ interface CatalogCourseItem {
 export function DefaultExtensionView({ extension }: {
   extension: ThemeExtensionViewModel;
 }) {
-  const isCatalog = extension.viewId === "catalog" || typeof extension.data.catalogJson === "string";
+  // A different extension's "catalog" view must retain the generic renderer.
+  const isCatalog = extension.pluginId === "vibress-lms-authoring" &&
+    extension.viewId === "catalog";
   const isArabic = extension.locale?.startsWith("ar");
 
   let courses: CatalogCourseItem[] = [];
   if (isCatalog) {
     if (typeof extension.data.catalogJson === "string") {
       try {
-        courses = JSON.parse(extension.data.catalogJson);
+        const parsed: unknown = JSON.parse(extension.data.catalogJson);
+        courses = Array.isArray(parsed) ? parsed.filter(isCatalogCourseItem) : [];
       } catch {
         courses = [];
       }
