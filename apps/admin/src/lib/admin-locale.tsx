@@ -399,7 +399,7 @@ const translations: Record<string, string> = {
   "Developer platform & integrations": "منصة المطورين والتكاملات",
   "No platform plugins installed.": "لا توجد إضافات مثبتة على المنصة.",
   "Operator-approved plugins": "الإضافات المعتمدة من مشغّل المنصة",
-  "Add Plugin": "إضافة إضافة",
+  "Add Plugin": "إضافة جديدة",
   "Only operator-approved, signed releases can be registered. Registration does not activate plugins or enable publications.": "يمكن تسجيل الإصدارات الموقّعة والمعتمدة من مشغّل المنصة فقط. لا يؤدي التسجيل إلى تفعيل الإضافة أو تمكينها في المواقع.",
   "ZIP uploads and GitHub URLs require offline operator review, signature verification, and migration approval. They cannot be installed directly in Studio.": "تتطلب ملفات ZIP وروابط GitHub مراجعة المشغّل خارج لوحة التحكم، والتحقق من التوقيع واعتماد الترحيلات. لا يمكن تثبيتها مباشرة من الاستوديو.",
   "Unable to load approved plugins.": "تعذّر تحميل الإضافات المعتمدة.",

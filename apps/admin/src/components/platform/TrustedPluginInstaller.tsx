@@ -23,6 +23,7 @@ export function TrustedPluginInstaller({
 }) {
   const { tr } = useAdminLocale();
   const heading = useRef<HTMLHeadingElement>(null);
+  const registeringRef = useRef(false);
   const [approved, setApproved] = useState<AdminOperatorPlugin[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
@@ -43,7 +44,8 @@ export function TrustedPluginInstaller({
   const available = approved.filter((item) => !installedIds.includes(item.id));
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
-    if (!selected || !acknowledged || loading || submitting) return;
+    if (!selected || !acknowledged || loading || submitting || registeringRef.current) return;
+    registeringRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -54,6 +56,7 @@ export function TrustedPluginInstaller({
       // Backend errors can contain operator paths; avoid showing raw messages.
       setError(tr("Unable to register approved plugin."));
     } finally {
+      registeringRef.current = false;
       setSubmitting(false);
     }
   };
