@@ -1697,6 +1697,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(unavailable.statusCode).toBe(503);
       expect(unavailable.json().errors[0].code).toBe("EXTENSION_UNAVAILABLE");
       expect(handler).not.toHaveBeenCalled();
+      expect(prepared).not.toHaveBeenCalled();
 
       policy.mockResolvedValue({
         primaryLocale: "en", enabledLocales: ["en", "ar"],
@@ -1708,6 +1709,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(allowed.statusCode).toBe(200);
       expect(allowed.json()).toEqual({ activeLocale: "ar" });
       expect(handler).toHaveBeenCalledTimes(1);
+      expect(prepared).toHaveBeenCalledTimes(1);
 
       policy.mockResolvedValue({
         primaryLocale: "en", enabledLocales: ["en"],
