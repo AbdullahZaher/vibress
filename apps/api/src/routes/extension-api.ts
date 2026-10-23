@@ -180,30 +180,41 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
         return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
       }
 
-      let resolvedLocale: string | undefined = undefined;
+      let resolvedLocale: string | undefined;
       const queryObj = req.query as Record<string, unknown> | undefined;
-      const rawLocale = typeof queryObj?.locale === "string" ? queryObj.locale.trim() : undefined;
-      if (rawLocale) {
-        try {
-          const canonical = Intl.getCanonicalLocales(rawLocale)[0];
-          if (canonical) {
-            const localePolicy = await publicationLocaleService.getConfiguration(publicationId).catch(() => null);
-            if (!localePolicy) {
-              // A policy lookup failure must not admit an unchecked locale to
-              // public/member extension handlers.
-              if (audience === "public" || audience === "member") {
-                return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
-              }
-            } else if (localePolicy.enabledLocales.includes(canonical)) {
-              resolvedLocale = canonical;
-            } else if (audience === "public" || audience === "member") {
-              return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
-            }
-          }
-        } catch {
-          if (audience === "public" || audience === "member") {
+      // Member mutations declare locale in their validated body, while
+      // read-only routes declare it in the query. Do not bypass policy on POST.
+      const suppliedLocale = queryObj?.locale ??
+        (audience === "member" ? body.locale : undefined);
+      if (audience === "public" || audience === "member") {
+        // Never assume "en" or authorize an unverified language when the
+        // publication policy cannot be read.
+        const policy = await publicationLocaleService.getConfiguration(publicationId)
+          .catch(() => null);
+        if (!policy) return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+        let locale = policy.primaryLocale;
+        if (suppliedLocale !== undefined) {
+          if (typeof suppliedLocale !== "string" || !suppliedLocale.trim()) {
             return reject(reply, req, "VALIDATION_ERROR", 400);
           }
+          try {
+            locale = Intl.getCanonicalLocales(suppliedLocale.trim())[0] ?? "";
+          } catch {
+            return reject(reply, req, "VALIDATION_ERROR", 400);
+          }
+        }
+        if (!policy.enabledLocales.includes(locale)) {
+          return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
+        }
+        resolvedLocale = locale;
+      } else if (typeof queryObj?.locale === "string" && queryObj.locale.trim()) {
+        // Staff routes keep their existing optional-locale behavior.
+        try {
+          const locale = Intl.getCanonicalLocales(queryObj.locale.trim())[0];
+          const policy = await publicationLocaleService.getConfiguration(publicationId).catch(() => null);
+          if (locale && policy?.enabledLocales.includes(locale)) resolvedLocale = locale;
+        } catch {
+          // Invalid optional Staff locale is not admitted into the SDK.
         }
       }
       const scope: PluginApiScope = {
