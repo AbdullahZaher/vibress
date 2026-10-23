@@ -60,12 +60,11 @@ jobs:
           ref: 1127a10503e33c2be309dac9c5355999a3fb76c9
           path: .lms-source
 
-      - name: Build pinned LMS pilot and authoring releases
+      - name: Validate pinned LMS and build both release fixtures
         run: |
           cd .lms-source
           npm install
-          npm run release:pilot
-          npm run release:authoring
+          npm run verify:local
 
       - name: Test
         run: pnpm vitest run --no-file-parallelism
