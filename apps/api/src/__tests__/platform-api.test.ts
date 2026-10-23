@@ -1673,6 +1673,58 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("fails closed on missing publication locale policy before invoking a public extension", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      activeLocale: scope.locale ?? "unbound",
+    }));
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      query: { fields: { locale: "string" }, required: ["locale"] },
+      response: { fields: { activeLocale: "string" } },
+      handle: handler,
+    };
+    const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockRejectedValue(new Error("Locale settings temporarily unavailable"));
+    const url = "/api/content/v1/extensions/independent-courses/v1/catalog?locale=ar";
+    try {
+      const unavailable = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json().errors[0].code).toBe("EXTENSION_UNAVAILABLE");
+      expect(handler).not.toHaveBeenCalled();
+
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en", "ar"],
+        isMultilingual: true, needsReconciliation: false,
+      });
+      const allowed = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.json()).toEqual({ activeLocale: "ar" });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+      const disabled = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(disabled.statusCode).toBe(404);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepared.mockRestore();
+      resolved.mockRestore();
+    }
+  });
+
   it("public extension API is GET-only, host-scoped and validates response projection", async () => {
     const handler = vi.fn(async () => ({ title: "Available courses" }));
     const descriptor: PluginApiRoute = {
