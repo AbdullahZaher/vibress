@@ -188,7 +188,13 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
           const canonical = Intl.getCanonicalLocales(rawLocale)[0];
           if (canonical) {
             const localePolicy = await publicationLocaleService.getConfiguration(publicationId).catch(() => null);
-            if (!localePolicy || localePolicy.enabledLocales.includes(canonical)) {
+            if (!localePolicy) {
+              // A policy lookup failure must not admit an unchecked locale to
+              // public/member extension handlers.
+              if (audience === "public" || audience === "member") {
+                return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+              }
+            } else if (localePolicy.enabledLocales.includes(canonical)) {
               resolvedLocale = canonical;
             } else if (audience === "public" || audience === "member") {
               return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
