@@ -520,6 +520,262 @@ describe("PluginsService", () => {
     expect(repoWith.updateStatus).not.toHaveBeenCalledWith("p1", "inactive");
   });
 
+  it("repeated activate -> deactivate -> activate -> deactivate -> activate lifecycle succeeds without restarting runtime", async () => {
+    let currentStatus: PluginStatus = "registered";
+    const activate = vi.fn(async () => undefined);
+    const deactivate = vi.fn(async () => undefined);
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate, deactivate })),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+
+    // Cycle 1
+    const a1 = await service.activatePlugin("p1", "u1");
+    expect(a1.status).toBe("active");
+    expect(currentStatus).toBe("active");
+    const d1 = await service.deactivatePlugin("p1", "u1");
+    expect(d1.status).toBe("inactive");
+    expect(currentStatus).toBe("inactive");
+
+    // Cycle 2
+    const a2 = await service.activatePlugin("p1", "u1");
+    expect(a2.status).toBe("active");
+    expect(currentStatus).toBe("active");
+    const d2 = await service.deactivatePlugin("p1", "u1");
+    expect(d2.status).toBe("inactive");
+    expect(currentStatus).toBe("inactive");
+
+    // Cycle 3
+    const a3 = await service.activatePlugin("p1", "u1");
+    expect(a3.status).toBe("active");
+    expect(currentStatus).toBe("active");
+    const d3 = await service.deactivatePlugin("p1", "u1");
+    expect(d3.status).toBe("inactive");
+    expect(currentStatus).toBe("inactive");
+
+    expect(activate).toHaveBeenCalledTimes(3);
+    expect(deactivate).toHaveBeenCalledTimes(3);
+  });
+
+  it("deactivation preserves localReleaseKey so changed release bytes require restart on reactivation", async () => {
+    let currentStatus: PluginStatus = "registered";
+    let fingerprint = "a".repeat(64);
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate: vi.fn() })),
+      requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: vi.fn(async () => new Map([["test-plugin", fingerprint]])),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await service.activatePlugin("p1", "u1");
+    expect(currentStatus).toBe("active");
+
+    await service.deactivatePlugin("p1", "u1");
+    expect(currentStatus).toBe("inactive");
+
+    // Change fingerprint while inactive (simulating changed executable bytes on disk)
+    fingerprint = "b".repeat(64);
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_RESTART_REQUIRED",
+    });
+    expect(currentStatus).toBe("error");
+    // A changed release must be denied before the Host can evaluate ESM.
+    expect(moduleHost.loadModule).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows recovery and reactivation from error status", async () => {
+    let currentStatus: PluginStatus = "error";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate: vi.fn() })),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    const reactivated = await service.activatePlugin("p1", "u1");
+    expect(reactivated.status).toBe("active");
+    expect(currentStatus).toBe("active");
+  });
+
+  it("allows deactivation from error status resetting to inactive", async () => {
+    let currentStatus: PluginStatus = "error";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), deactivate: vi.fn() })),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    const deactivated = await service.deactivatePlugin("p1", "u1");
+    expect(deactivated.status).toBe("inactive");
+    expect(currentStatus).toBe("inactive");
+  });
+
+  it("throws PLUGIN_LOCKFILE_UNAVAILABLE when external plugin lockfile is unconfigured", async () => {
+    let currentStatus: PluginStatus = "registered";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_LOCKFILE_UNAVAILABLE",
+    });
+    expect(currentStatus).toBe("error");
+  });
+
+  it("preserves PLUGIN_NOT_TRUSTED when external plugin is not registered in lockfile", async () => {
+    let currentStatus: PluginStatus = "registered";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => {
+        throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not registered in trusted operator lockfile");
+      }),
+      requiresPublicationEnablement: () => true,
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_NOT_TRUSTED",
+    });
+    expect(currentStatus).toBe("error");
+  });
+
+  it("does not leak plugin-supplied domain error text through activation", async () => {
+    const secret = "secret-token-never-log";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const hostWith = { loadModule: vi.fn(async () => ({
+        activate: vi.fn(async () => { throw new PluginDomainError("PLUGIN_RESTART_REQUIRED", secret); }),
+      })) };
+      const repoWith: PluginRepository = {
+        ...pluginRepo, findById: vi.fn(async () => makePlugin()),
+        updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+      };
+      await expect(makeService({ pluginRepo: repoWith, host: hostWith })
+        .activatePlugin("p1", "u1")).rejects.toMatchObject({
+          code: "PLUGIN_RESTART_REQUIRED",
+          message: "Plugin release changed; restart this runtime",
+        });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(secret);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not log raw shutdown exceptions", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const hostWith = { loadModule: vi.fn(async () => ({
+        activate: vi.fn(async () => undefined),
+        deactivate: vi.fn(async () => { throw new Error("secret-key=/private/keys"); }),
+      })) };
+      const repoWith: PluginRepository = {
+        ...pluginRepo, findById: vi.fn(async () => makePlugin()),
+      };
+      const service = makeService({ pluginRepo: repoWith, host: hostWith });
+      await service.activatePlugin("p1", "u1");
+      await service.shutdown();
+      expect(JSON.stringify(warn.mock.calls)).toContain("PLUGIN_SHUTDOWN_DEACTIVATION_FAILED");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-key");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("rejects activation with PLUGIN_TRANSITION_IN_PROGRESS when plugin is transitioning", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: "activating" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: { loadModule: vi.fn() } });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+  });
+
+  it("rejects deactivation with PLUGIN_TRANSITION_IN_PROGRESS when plugin is transitioning", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: "deactivating" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: { loadModule: vi.fn() } });
+    await expect(service.deactivatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+  });
+
   it("dispatches explicit event names and rejects cross-publication messages", async () => {
     const onEvent = vi.fn(async () => undefined);
     const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })) };

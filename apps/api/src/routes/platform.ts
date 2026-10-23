@@ -515,12 +515,17 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
+          const status =
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" || err.code === "PLUGIN_RESTART_REQUIRED" ? 409 :
+            err.code === "PLUGIN_LOCKFILE_UNAVAILABLE" ? 503 :
+            err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400;
           return sendError(
             reply,
             err.code,
             err.message,
             req.id,
-            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400,
+            status,
           );
         }
         throw err;
@@ -541,11 +546,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         const plugin = await pluginsService.deactivatePlugin(id, req.user!.id);
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
-        if (err instanceof PluginDomainError)
+        if (err instanceof PluginDomainError) {
+          const status =
+            err.code === "PLUGIN_NOT_FOUND" ? 404 :
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" || err.code === "PLUGIN_RESTART_REQUIRED" ? 409 :
+            err.code === "PLUGIN_LOCKFILE_UNAVAILABLE" ? 503 :
+            err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400;
           return sendError(
-            reply, err.code, err.message, req.id,
-            err.code === "PLUGIN_NOT_FOUND" ? 404 : 400,
+            reply, err.code, err.message, req.id, status,
           );
+        }
         throw err;
       }
     },

@@ -8,6 +8,7 @@ import { validateManifest, type PluginManifest, type PluginModule } from "@vibre
 import { validateStorageModel } from "./plugin-scoped-storage";
 import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
 import type { Plugin } from "../domain/plugin";
+import { PluginDomainError } from "./plugins-service";
 
 /**
  * Operator-installed trusted, single-file ESM entrypoints.
@@ -131,10 +132,14 @@ function isPluginModule(value: unknown): value is PluginModule {
  * Every load re-checks the pinned checksum BEFORE importing the module.
  */
 export class TrustedExternalPluginHost {
-  private readonly lockfilePath: string | undefined;
+  private readonly explicitLockfilePath: string | undefined;
 
   constructor(lockfilePath?: string) {
-    this.lockfilePath = lockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+    this.explicitLockfilePath = lockfilePath;
+  }
+
+  private get lockfilePath(): string | undefined {
+    return this.explicitLockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
   }
 
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
@@ -171,7 +176,10 @@ export class TrustedExternalPluginHost {
     const data = await readTrustedPluginLockfile(lockfile);
     const approved = parseTrustedPluginLockfile(data).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
-      throw new Error("Installed plugin differs from operator-approved storage manifest");
+      throw new PluginDomainError(
+        "PLUGIN_STORAGE_MODELS_NOT_APPROVED",
+        "Installed plugin differs from operator-approved storage manifest",
+      );
     }
     // Defensive copy: plugin code never gets the operator registry reference.
     return approved.storageModels.map((model) => ({
@@ -191,12 +199,15 @@ export class TrustedExternalPluginHost {
     const lockfile = this.lockfilePath;
     if (!lockfile) return null;
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(viewId)) {
-      throw new Error("Invalid Admin UI view identifier");
+      throw new PluginDomainError("INVALID_ADMIN_VIEW_ID", "Invalid Admin UI view identifier");
     }
     const json = await readTrustedPluginLockfile(lockfile);
     const approved = parseTrustedPluginLockfile(json).get(plugin.manifestId);
     if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
-      throw new Error("Installed plugin differs from operator-approved Admin UI manifest");
+      throw new PluginDomainError(
+        "PLUGIN_ADMIN_UI_NOT_APPROVED",
+        "Installed plugin differs from operator-approved Admin UI manifest",
+      );
     }
     const asset = approved.adminUiAssets.find((item) => item.viewId === viewId);
     if (!asset) return null;
@@ -205,51 +216,103 @@ export class TrustedExternalPluginHost {
     const assetPath = path.resolve(root, asset.path);
     const canonical = await realpath(assetPath);
     if (!canonical.startsWith(root + path.sep)) {
-      throw new Error("Approved Admin UI asset escapes its operator directory");
+      throw new PluginDomainError(
+        "PLUGIN_PATH_ESCAPES_ROOT",
+        "Approved Admin UI asset escapes its operator directory",
+      );
     }
     const fileInfo = await lstat(assetPath);
     const canonicalInfo = await stat(canonical);
     if (fileInfo.isSymbolicLink() || !fileInfo.isFile() ||
         !canonicalInfo.isFile() || fileInfo.size > MAX_ADMIN_UI_ASSET_BYTES ||
         canonicalInfo.size > MAX_ADMIN_UI_ASSET_BYTES) {
-      throw new Error("Approved Admin UI asset is not a bounded regular file");
+      throw new PluginDomainError(
+        "PLUGIN_FILE_INVALID",
+        "Approved Admin UI asset is not a bounded regular file",
+      );
     }
     const bytes = await readFile(canonical);
     if (bytes.length > MAX_ADMIN_UI_ASSET_BYTES) {
-      throw new Error("Approved Admin UI asset exceeds size limit");
+      throw new PluginDomainError(
+        "PLUGIN_SIZE_LIMIT_EXCEEDED",
+        "Approved Admin UI asset exceeds size limit",
+      );
     }
     const digest = createHash("sha256").update(bytes).digest("hex");
-    if (digest !== asset.sha256) throw new Error("Approved Admin UI asset checksum mismatch");
+    if (digest !== asset.sha256) {
+      throw new PluginDomainError(
+        "PLUGIN_CHECKSUM_MISMATCH",
+        "Approved Admin UI asset checksum mismatch",
+      );
+    }
     const document = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (document.includes("\u0000")) throw new Error("Invalid Admin UI document");
+    if (document.includes("\u0000")) {
+      throw new PluginDomainError("INVALID_ADMIN_UI_DOCUMENT", "Invalid Admin UI document");
+    }
     return document;
   }
 
-  async loadModule(plugin: Plugin): Promise<PluginModule | null> {
+  async loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null> {
     const lockfile = this.lockfilePath;
     if (!lockfile) return null;
     const json = await readTrustedPluginLockfile(lockfile);
     const installed = parseTrustedPluginLockfile(json).get(plugin.manifestId);
-    if (!installed) return null;
+    if (!installed) {
+      throw new PluginDomainError(
+        "PLUGIN_NOT_TRUSTED",
+        `Plugin '${plugin.manifestId}' is not registered in trusted operator lockfile`,
+      );
+    }
     if (!manifestMatchesInstalled(plugin, installed.manifest)) {
-      throw new Error("Registered plugin metadata differs from the trusted operator lockfile");
+      throw new PluginDomainError(
+        "PLUGIN_MANIFEST_MISMATCH",
+        "Registered plugin metadata differs from the trusted operator lockfile",
+      );
+    }
+    // Revalidate the release admitted before loading: even a newly signed
+    // replacement must never evaluate ESM code before the restart guard.
+    if (expectedReleaseKey !== undefined &&
+        expectedReleaseKey !== JSON.stringify([
+          plugin.id, plugin.version, plugin.entrypoint, installed.sha256,
+        ])) {
+      throw new PluginDomainError(
+        "PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime",
+      );
     }
 
     const root = await realpath(path.dirname(lockfile));
     const entry = path.resolve(root, installed.manifest.entrypoint);
     const canonical = await realpath(entry);
-    if (!canonical.startsWith(root + path.sep)) throw new Error("Trusted plugin path escapes its approved directory");
+    if (!canonical.startsWith(root + path.sep)) {
+      throw new PluginDomainError(
+        "PLUGIN_PATH_ESCAPES_ROOT",
+        "Trusted plugin path escapes its approved directory",
+      );
+    }
     const fileInfo = await lstat(entry);
     const canonicalInfo = await stat(canonical);
     if (fileInfo.isSymbolicLink() || !fileInfo.isFile() ||
       !canonicalInfo.isFile() || canonicalInfo.size > MAX_MODULE_BYTES) {
-      throw new Error("Trusted plugin module is not a regular approved file");
+      throw new PluginDomainError(
+        "PLUGIN_FILE_INVALID",
+        "Trusted plugin module is not a regular approved file",
+      );
     }
 
     const bytes = await readFile(canonical);
-    if (bytes.length > MAX_MODULE_BYTES) throw new Error("Trusted plugin module exceeds size limit");
+    if (bytes.length > MAX_MODULE_BYTES) {
+      throw new PluginDomainError(
+        "PLUGIN_SIZE_LIMIT_EXCEEDED",
+        "Trusted plugin module exceeds size limit",
+      );
+    }
     const digest = createHash("sha256").update(bytes).digest("hex");
-    if (digest !== installed.sha256) throw new Error("Trusted plugin module checksum mismatch");
+    if (digest !== installed.sha256) {
+      throw new PluginDomainError(
+        "PLUGIN_CHECKSUM_MISMATCH",
+        "Trusted plugin module checksum mismatch",
+      );
+    }
 
     // Import the VERIFIED bytes, not the path: prevents a file replacement
     // between the checksum and Node's subsequent module file read (TOCTOU).
@@ -258,10 +321,18 @@ export class TrustedExternalPluginHost {
     const verifiedModuleUrl = `data:text/javascript;base64,${bytes.toString("base64")}`;
     const exports: unknown = await import(verifiedModuleUrl);
     if (typeof exports !== "object" || exports === null) {
-      throw new Error("Trusted plugin module has invalid exports");
+      throw new PluginDomainError(
+        "PLUGIN_ENTRYPOINT_INVALID",
+        "Trusted plugin module has invalid exports",
+      );
     }
     const candidate = "default" in exports ? exports.default : exports;
-    if (!isPluginModule(candidate)) throw new Error("Trusted plugin module must export activate()");
+    if (!isPluginModule(candidate)) {
+      throw new PluginDomainError(
+        "PLUGIN_ENTRYPOINT_INVALID",
+        "Trusted plugin module must export activate()",
+      );
+    }
     return candidate;
   }
 }
