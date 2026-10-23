@@ -1725,6 +1725,46 @@ describe("Batch 12 — Platform Integration & Security", () => {
     }
   });
 
+  it("defaults to the enabled primary locale when public caller omits locale", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      activeLocale: scope.locale ?? "unbound",
+    }));
+    const descriptor: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { activeLocale: "string" } },
+      handle: handler,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "ar", enabledLocales: ["ar"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+    try {
+      const url = "/api/content/v1/extensions/independent-courses/v1/catalog";
+      const success = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(success.statusCode).toBe(200);
+      expect(success.json()).toEqual({ activeLocale: "ar" });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      policy.mockRejectedValueOnce(new Error("Locale policy unavailable"));
+      const unavailable = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(unavailable.statusCode).toBe(503);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
   it("public extension API is GET-only, host-scoped and validates response projection", async () => {
     const handler = vi.fn(async () => ({ title: "Available courses" }));
     const descriptor: PluginApiRoute = {
