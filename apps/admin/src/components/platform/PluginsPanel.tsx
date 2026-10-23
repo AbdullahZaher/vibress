@@ -1,12 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AdminPlugin,
   activatePluginApi,
   deactivatePluginApi,
   setPluginPublicationStateApi,
-  listOperatorTrustedPluginsApi,
-  registerOperatorTrustedPluginApi,
-  type AdminOperatorPlugin,
 } from "../../lib/api";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
@@ -31,20 +28,6 @@ export function PluginsPanel({
 }: PluginsPanelProps) {
   const { tr } = useAdminLocale();
   const [busyPluginId, setBusyPluginId] = useState<string | null>(null);
-  const [approved, setApproved] = useState<AdminOperatorPlugin[]>([]);
-
-  useEffect(() => {
-    if (!platformOperator) {
-      setApproved([]);
-      return;
-    }
-    let canceled = false;
-    void listOperatorTrustedPluginsApi()
-      .then((response) => { if (!canceled) setApproved(response.plugins); })
-      .catch(() => { if (!canceled) setApproved([]); });
-    return () => { canceled = true; };
-  }, [plugins, platformOperator]);
-
   const apply = async (id: string, action: () => Promise<unknown>) => {
     if (busyPluginId) return;
     setBusyPluginId(id);
@@ -58,38 +41,8 @@ export function PluginsPanel({
     }
   };
 
-  const available = approved.filter((candidate) =>
-    !plugins.some((plugin) => plugin.manifestId === candidate.id));
-
   return (
     <div className="space-y-4">
-      {platformOperator && available.length > 0 && (
-        <section aria-label={tr("Operator-approved plugins")} className="space-y-2">
-          <h3 className="text-sm font-semibold">{tr("Operator-approved plugins")}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {available.map((candidate) => (
-              <Card key={candidate.id} className="p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold break-words" dir="auto">{candidate.name}</p>
-                  <p className="text-xs text-muted-foreground" dir="auto">
-                    {candidate.id} · {candidate.version}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busyPluginId !== null}
-                  onClick={() => apply(candidate.id, () =>
-                    registerOperatorTrustedPluginApi(candidate.id))}
-                  aria-label={`${tr("Register trusted plugin")}: ${candidate.name}`}
-                >
-                  {tr("Register trusted plugin")}
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {plugins.length === 0 ? (
         <div className="col-span-2 p-8 text-center text-xs text-muted-foreground border border-dashed border-border rounded-lg">
