@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getThemeSiteSettings } from "../../../lib/theme-host";
 import { getDirection } from "@vibress/i18n";
+import { getPublicExtensionPage, isValidPublicHost } from "../../../lib/public-extension-client";
+import { isPublishedLmsCourse } from "../../../lib/lms-course-policy";
+import { LmsStudentPortal } from "../../../components/extensions/LmsStudentPortal";
 
 export const revalidate = 0;
 
@@ -10,19 +13,41 @@ type Props = {
   params: Promise<{ courseId: string }>;
 };
 
-async function fetchCourseData(courseId: string, locale: string, hostHeader?: string | null) {
+async function fetchCourseData(
+  courseId: string,
+  locale: string,
+  publicationId: string | undefined,
+  incoming: Headers,
+) {
+  if (!publicationId) return null;
+  // The linked public view carries the Host-authorized publication identity.
+  // Existing signed LMS installs may omit publicationId in /course payloads,
+  // so verify the view first and check an optional payload identity too.
+  const view = await getPublicExtensionPage("vibress-lms-authoring", "catalog");
+  if (!view || view.publicationId !== publicationId ||
+      view.locale && view.locale !== locale ||
+      view.publishedLocales && !view.publishedLocales.includes(locale)) return null;
+  const host = incoming.get("host");
+  if (!host || !isValidPublicHost(host)) return null;
   const apiBase = process.env.API_URL || "http://127.0.0.1:7780";
-  const reqHeaders: Record<string, string> = {};
-  if (hostHeader) reqHeaders.Host = hostHeader;
+  const privateSiteCookie = incoming.get("cookie")?.split(";").map((value) => value.trim())
+    .find((value) => value.startsWith("vb_site_auth="));
 
   try {
     const res = await fetch(
-      `${apiBase}/api/content/v1/extensions/vibress-lms-authoring/v1/course?courseId=${encodeURIComponent(courseId)}&locale=${encodeURIComponent(locale)}`,
-      { headers: reqHeaders, cache: "no-store" },
+      apiBase + "/api/content/v1/extensions/vibress-lms-authoring/v1/course?courseId=" +
+        encodeURIComponent(courseId) + "&locale=" + encodeURIComponent(locale),
+      {
+        headers: {
+          "x-forwarded-host": host,
+          ...(privateSiteCookie ? { cookie: privateSiteCookie } : {}),
+        },
+        cache: "no-store",
+      },
     );
     if (!res.ok) return null;
-    const data = await res.json();
-    return data?.outcome === "published" ? data : null;
+    const value: unknown = await res.json();
+    return isPublishedLmsCourse(value, courseId, publicationId) ? value : null;
   } catch {
     return null;
   }
@@ -32,7 +57,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { courseId } = await params;
   const site = await getThemeSiteSettings();
   const h = await headers();
-  const course = await fetchCourseData(courseId, site.locale, h.get("host"));
+  const course = await fetchCourseData(courseId, site.locale, site.publicationId, h);
   if (!course) return { title: "Course Not Found", robots: { index: false, follow: false } };
   return {
     title: `${course.title} — ${site.title || "Vibress"}`,
@@ -44,8 +69,8 @@ export default async function CourseDetailPage({ params }: Props) {
   const { courseId } = await params;
   const site = await getThemeSiteSettings();
   const h = await headers();
-  const course = await fetchCourseData(courseId, site.locale, h.get("host"));
-  if (!course) notFound();
+  const course = await fetchCourseData(courseId, site.locale, site.publicationId, h);
+  if (!course || !site.publicationId) notFound();
 
   const isArabic = site.locale.startsWith("ar");
   const direction = getDirection(site.locale);
@@ -123,7 +148,7 @@ export default async function CourseDetailPage({ params }: Props) {
           </ul>
         </div>
 
-        {/* Embedded Student Learning Experience iframe */}
+        {/* First-party learner experience: no same-origin sandbox escape. */}
         <div
           style={{
             border: "1px solid rgba(128,128,128,0.2)",
@@ -132,17 +157,8 @@ export default async function CourseDetailPage({ params }: Props) {
             boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
           }}
         >
-          <iframe
-            src={`/theme-assets/student.html?courseId=${encodeURIComponent(course.courseId)}&locale=${encodeURIComponent(site.locale)}`}
-            title={course.title}
-            style={{
-              width: "100%",
-              height: "580px",
-              border: "none",
-              display: "block",
-            }}
-            sandbox="allow-scripts allow-forms allow-same-origin"
-          />
+          <LmsStudentPortal courseId={course.courseId}
+            publicationId={site.publicationId} locale={site.locale} />
         </div>
       </section>
     </main>
