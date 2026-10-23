@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibress LMS — Student Learning Portal</title>
+<style>
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --bg-primary: Canvas;
+  --text-primary: CanvasText;
+  --border-subtle: #8888;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --success: #16a34a;
+  --badge-bg: #e2e8f0;
+  --badge-text: #0f172a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --badge-bg: #1e293b;
+    --badge-text: #f1f5f9;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 1.5rem;
+  max-width: 56rem;
+  margin-inline: auto;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  line-height: 1.6;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+h1, h2, h3, h4 { margin: 0 0 0.5rem 0; line-height: 1.25; }
+.lang-toggle {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-subtle);
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+button.secondary {
+  background: transparent;
+  color: var(--text-primary);
+}
+button:hover:not(:disabled) { background: var(--primary-hover); }
+button.secondary:hover:not(:disabled) { background: var(--border-subtle); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 3px solid Highlight; outline-offset: 2px; }
+.card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  background: rgba(128, 128, 128, 0.04);
+}
+.badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  margin-bottom: 0.5rem;
+}
+.badge.active { background: #dcfce7; color: #14532d; }
+.badge.completed { background: #dbeafe; color: #1e3a8a; }
+.progress-bar-container {
+  width: 100%;
+  height: 0.625rem;
+  background: var(--border-subtle);
+  border-radius: 9999px;
+  overflow: hidden;
+  margin: 0.5rem 0 1rem 0;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--success);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.lesson-body {
+  white-space: pre-wrap;
+  padding: 1rem;
+  background: rgba(128, 128, 128, 0.08);
+  border-radius: 0.375rem;
+  border-left: 4px solid var(--primary);
+  margin: 1rem 0;
+}
+[dir="rtl"] .lesson-body {
+  border-left: none;
+  border-right: 4px solid var(--primary);
+}
+.status-msg {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+.status-msg.error { background: #fee2e2; color: #991b1b; }
+.status-msg.info { background: #e0f2fe; color: #075985; }
+.status-msg.success { background: #dcfce7; color: #14532d; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="page-title" data-en="Learning Portal" data-ar="بوابة التعلّم">Learning Portal</h1>
+    <p style="margin: 0; opacity: 0.8;" data-en="Vibress LMS — Authorized Public Catalog & Protected Lessons" data-ar="نظام إدارة التعلّم فيبرس — الفهرس العام والدروس المحمية">
+      Vibress LMS — Authorized Public Catalog & Protected Lessons
+    </p>
+  </div>
+  <nav class="lang-toggle" aria-label="Language Selector">
+    <button type="button" class="secondary" id="lang-en" aria-pressed="true">English</button>
+    <button type="button" class="secondary" id="lang-ar" aria-pressed="false">العربية</button>
+  </nav>
+</header>
+
+<main id="app">
+  <!-- Course Catalog & Overview -->
+  <section id="catalog-section" class="card">
+    <h2 data-en="Course Catalog" data-ar="دليل الدورات">Course Catalog</h2>
+    <div id="course-info">
+      <div id="course-status-badge" class="badge" data-en="Published" data-ar="منشور">Published</div>
+      <h3 id="course-title">Loading course…</h3>
+      <p id="course-summary"></p>
+      
+      <div id="curriculum-preview" style="margin-top: 1rem;">
+        <h4 data-en="Curriculum Preview" data-ar="معاينة المنهج">Curriculum Preview</h4>
+        <ul>
+          <li id="lesson-preview-title">1 Lesson Available</li>
+        </ul>
+      </div>
+
+      <div class="actions" style="margin-top: 1.25rem; display: flex; gap: 0.75rem; align-items: center;">
+        <button type="button" id="btn-enroll" data-en="Enroll in Course" data-ar="التسجيل في الدورة">Enroll in Course</button>
+        <span id="enrollment-status" style="font-size: 0.9rem; font-weight: 500;"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Progress Tracker -->
+  <section id="progress-section" class="card" style="display: none;">
+    <h2 data-en="Your Progress" data-ar="مستوى تقدّمك">Your Progress</h2>
+    <div class="progress-bar-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+      <div id="progress-fill" class="progress-bar-fill"></div>
+    </div>
+    <p id="progress-text" style="font-size: 0.9rem; margin: 0;" data-en="0% completed" data-ar="0% مكتمل">0% completed</p>
+  </section>
+
+  <!-- Protected Lesson Viewer -->
+  <section id="lesson-section" class="card" style="display: none;">
+    <span class="badge completed" data-en="Protected Member Content" data-ar="محتوى محمي للأعضاء">Protected Member Content</span>
+    <h2 id="lesson-title">Lesson Title</h2>
+    <article id="lesson-body" class="lesson-body">Lesson content will appear here once enrolled.</article>
+
+    <div style="margin-top: 1rem; display: flex; gap: 0.75rem; align-items: center;">
+      <button type="button" id="btn-complete" data-en="Mark Lesson as Completed" data-ar="إكمال الدرس">Mark Lesson as Completed</button>
+      <span id="completion-status" style="font-size: 0.9rem; font-weight: 500;"></span>
+    </div>
+  </section>
+
+  <div id="status-alert" role="status" aria-live="polite"></div>
+</main>
+
+<script>
+(function() {
+  "use strict";
+  let lang = "en";
+  let currentCourseId = "";
+  let isEnrolled = false;
+  let isCompleted = false;
+
+  const el = (id) => document.getElementById(id);
+
+  function setLanguage(newLang) {
+    lang = newLang;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    el("lang-en").setAttribute("aria-pressed", lang === "en");
+    el("lang-ar").setAttribute("aria-pressed", lang === "ar");
+
+    document.querySelectorAll("[data-" + lang + "]").forEach((node) => {
+      node.textContent = node.getAttribute("data-" + lang) || "";
+    });
+
+    if (currentCourseId) {
+      void loadCourse(currentCourseId);
+    }
+  }
+
+  el("lang-en").addEventListener("click", () => setLanguage("en"));
+  el("lang-ar").addEventListener("click", () => setLanguage("ar"));
+
+  function notify(msg, type = "info") {
+    const alert = el("status-alert");
+    alert.className = "status-msg " + type;
+    alert.textContent = msg;
+  }
+
+  // Update learner UI states
+  window.updateLearnerState = function(state) {
+    if (state.courseId) currentCourseId = state.courseId;
+    if (state.title) el("course-title").textContent = state.title;
+    if (state.summary) el("course-summary").textContent = state.summary;
+    if (state.lessonTitle) {
+      el("lesson-preview-title").textContent = state.lessonTitle;
+      el("lesson-title").textContent = state.lessonTitle;
+    }
+
+    if (state.enrolled) {
+      isEnrolled = true;
+      el("btn-enroll").disabled = true;
+      el("enrollment-status").textContent = lang === "ar" ? "أنت مسجل في هذه الدورة ✓" : "Enrolled in course ✓";
+      el("progress-section").style.display = "block";
+      el("lesson-section").style.display = "block";
+    }
+
+    if (state.lessonBody) {
+      el("lesson-body").textContent = state.lessonBody;
+    }
+
+    if (state.completed) {
+      isCompleted = true;
+      el("btn-complete").disabled = true;
+      el("completion-status").textContent = lang === "ar" ? "مكتمل ✓" : "Completed ✓";
+      el("progress-fill").style.width = "100%";
+      el("progress-text").textContent = lang === "ar" ? "100% مكتمل" : "100% completed";
+    }
+  };
+
+  async function loadCourse(courseId) {
+    currentCourseId = courseId;
+    try {
+      const res = await fetch(`/api/content/v1/extensions/vibress-lms-authoring/v1/course?courseId=${encodeURIComponent(courseId)}&locale=${lang}`);
+      if (!res.ok) throw new Error("Course not found");
+      const data = await res.json();
+      if (data.outcome !== "published") throw new Error("Course not published");
+
+      el("course-title").textContent = data.title;
+      el("course-summary").textContent = data.description;
+      el("lesson-preview-title").textContent = data.lessonTitle;
+      el("lesson-title").textContent = data.lessonTitle;
+
+      await checkMemberStatus(courseId);
+    } catch (err) {
+      notify(lang === "ar" ? "تعذر تحميل الدورة" : "Unable to load course", "error");
+    }
+  }
+
+  async function checkMemberStatus(courseId) {
+    try {
+      const progRes = await fetch(`/api/members/v1/extensions/vibress-lms-authoring/v1/progress?courseId=${encodeURIComponent(courseId)}`, {
+        credentials: "include"
+      });
+      if (!progRes.ok) return;
+      const prog = await progRes.json();
+      if (prog.outcome === "available") {
+        isEnrolled = true;
+        el("btn-enroll").disabled = true;
+        el("enrollment-status").textContent = lang === "ar" ? "أنت مسجل في هذه الدورة ✓" : "Enrolled in course ✓";
+        el("progress-section").style.display = "block";
+        el("lesson-section").style.display = "block";
+        el("progress-fill").style.width = prog.percent + "%";
+        el("progress-text").textContent = `${prog.percent}% ${lang === "ar" ? "مكتمل" : "completed"}`;
+
+        if (prog.percent === 100) {
+          isCompleted = true;
+          el("btn-complete").disabled = true;
+          el("completion-status").textContent = lang === "ar" ? "مكتمل ✓" : "Completed ✓";
+        }
+
+        const lessonRes = await fetch(`/api/members/v1/extensions/vibress-lms-authoring/v1/lesson?courseId=${encodeURIComponent(courseId)}&locale=${lang}`, {
+          credentials: "include"
+        });
+        if (lessonRes.ok) {
+          const lessonData = await lessonRes.json();
+          if (lessonData.outcome === "allowed") {
+            el("lesson-title").textContent = lessonData.title;
+            el("lesson-body").textContent = lessonData.body;
+          }
+        }
+      }
+    } catch {
+      // Unauthenticated or not enrolled
+    }
+  }
+
+  el("btn-enroll").addEventListener("click", async () => {
+    if (!currentCourseId || isEnrolled) return;
+    el("btn-enroll").disabled = true;
+    try {
+      const res = await fetch("/api/members/v1/extensions/vibress-lms-authoring/v1/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ courseId: currentCourseId, locale: lang })
+      });
+      if (!res.ok) throw new Error("Enrollment failed");
+      const data = await res.json();
+      if (data.outcome === "created" || data.outcome === "already-enrolled") {
+        notify(lang === "ar" ? "تم التسجيل بنجاح!" : "Enrolled successfully!", "success");
+        await checkMemberStatus(currentCourseId);
+      } else {
+        notify(lang === "ar" ? "تعذر التسجيل" : "Enrollment denied", "error");
+        el("btn-enroll").disabled = false;
+      }
+    } catch {
+      notify(lang === "ar" ? "خطأ أثناء التسجيل" : "Error enrolling in course", "error");
+      el("btn-enroll").disabled = false;
+    }
+  });
+
+  el("btn-complete").addEventListener("click", async () => {
+    if (!currentCourseId || isCompleted) return;
+    el("btn-complete").disabled = true;
+    try {
+      const res = await fetch("/api/members/v1/extensions/vibress-lms-authoring/v1/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ courseId: currentCourseId, locale: lang })
+      });
+      if (!res.ok) throw new Error("Completion failed");
+      const data = await res.json();
+      if (data.outcome === "completed" || data.outcome === "already-completed") {
+        notify(lang === "ar" ? "تهانينا! لقد أكملت الدرس." : "Congratulations! Lesson completed.", "success");
+        await checkMemberStatus(currentCourseId);
+      } else {
+        notify(lang === "ar" ? "تعذر إكمال الدرس" : "Unable to mark completed", "error");
+        el("btn-complete").disabled = false;
+      }
+    } catch {
+      notify(lang === "ar" ? "خطأ في الاتصال" : "Error completing lesson", "error");
+      el("btn-complete").disabled = false;
+    }
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialCourse = urlParams.get("courseId");
+  const initialLocale = urlParams.get("locale") || (navigator.language.startsWith("ar") ? "ar" : "en");
+  setLanguage(initialLocale.startsWith("ar") ? "ar" : "en");
+
+  if (initialCourse) {
+    void loadCourse(initialCourse);
+  } else {
+    fetch(`/api/content/v1/extensions/vibress-lms-authoring/views/catalog/page?locale=${lang}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.data?.courseId) void loadCourse(d.data.courseId);
+      })
+      .catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

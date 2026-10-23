@@ -950,6 +950,7 @@ export class PluginsService {
   async resolveExtensionStorageBinding(
     manifestId: string,
     publicationId: string,
+    requiredCapability: "extension.storage.read" | "extension.storage.write" = "extension.storage.read",
   ): Promise<{ pluginId: string; publicationId: string;
     models: readonly ApprovedPluginPhysicalModel[] } | null> {
     this.assertRuntimeAllowed();
@@ -957,8 +958,7 @@ export class PluginsService {
     const plugin = await this.pluginRepo.findByManifestId(manifestId);
     if (!plugin || plugin.status !== "active" ||
         !this.host.requiresPublicationEnablement?.(plugin) ||
-        !plugin.capabilities.some((capability) =>
-          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+        !plugin.capabilities.includes(requiredCapability)) {
       return null;
     }
     await this.requirePublicationEnabled(plugin, publicationId);
@@ -972,8 +972,7 @@ export class PluginsService {
     }
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
-        !latest.capabilities.some((capability) =>
-          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+        !latest.capabilities.includes(requiredCapability)) {
       return null;
     }
     await this.requirePublicationEnabled(latest, publicationId);

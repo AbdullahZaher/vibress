@@ -64,7 +64,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         );
         if (!allowed) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
         const binding = await pluginsService.resolveExtensionStorageBinding(
-          pluginId, publicationId,
+          pluginId, publicationId, "extension.storage.read",
         ).catch(() => null);
         let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
         if (binding) {
@@ -85,13 +85,19 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         // staff, or tenant selectors from the caller. The Host rechecks
         // publication enablement before invoking the trusted plugin callback.
         let output: unknown;
+        let sessionCloseFailed = false;
         try {
           output = await route.handle({ query: {}, body: {} }, scope);
         } catch {
           return reject(req, reply, "EXTENSION_HANDLER_FAILED", 503);
         } finally {
-          await storageSession?.close().catch(() => undefined);
+          try {
+            await storageSession?.close();
+          } catch {
+            sessionCloseFailed = true;
+          }
         }
+        if (sessionCloseFailed) return reject(req, reply, "EXTENSION_HANDLER_FAILED", 503);
         const data = validateExtensionApiObject(route.response, output);
         if (!data) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
         const parsed = ExtensionPublicPageResponseSchema.safeParse({
