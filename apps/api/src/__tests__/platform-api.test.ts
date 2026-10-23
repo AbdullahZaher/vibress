@@ -1179,7 +1179,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(authorized.statusCode).toBe(200);
       expect(authorized.json().hasStorage).toBe(true);
       expect(approve).toHaveBeenCalledWith(
-        "independent-courses", authorized.json().publication,
+        "independent-courses", authorized.json().publication, "extension.storage.write",
       );
       expect(retained).toBeDefined();
       await expect(retained!.get("courses", "row-1"))
