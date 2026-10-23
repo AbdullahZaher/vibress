@@ -257,7 +257,12 @@ export class TrustedExternalPluginHost {
     if (!lockfile) return null;
     const json = await readTrustedPluginLockfile(lockfile);
     const installed = parseTrustedPluginLockfile(json).get(plugin.manifestId);
-    if (!installed) return null;
+    if (!installed) {
+      throw new PluginDomainError(
+        "PLUGIN_NOT_TRUSTED",
+        `Plugin '${plugin.manifestId}' is not registered in trusted operator lockfile`,
+      );
+    }
     if (!manifestMatchesInstalled(plugin, installed.manifest)) {
       throw new PluginDomainError(
         "PLUGIN_MANIFEST_MISMATCH",

@@ -558,6 +558,44 @@ describe("EXT-506: Real Vibress LMS Installation & Production Integration", () =
 
     // Restore to active for subsequent steps
     await db.update(plugins).set({ status: "active" }).where(eq(plugins.id, registeredPluginId));
+
+    // 6. Test real concurrent deactivation via Promise.allSettled
+    const concurrentDeactivates = await Promise.allSettled([
+      pluginsService.deactivatePlugin(registeredPluginId, "operator-test"),
+      pluginsService.deactivatePlugin(registeredPluginId, "operator-test"),
+    ]);
+    const deactFulfilled = concurrentDeactivates.filter((r) => r.status === "fulfilled");
+    const deactRejected = concurrentDeactivates.filter((r) => r.status === "rejected");
+    expect(deactFulfilled.length).toBeGreaterThanOrEqual(1);
+    expect(deactFulfilled[0].status === "fulfilled" && (deactFulfilled[0] as PromiseFulfilledResult<any>).value.status).toBe("inactive");
+    if (deactRejected.length > 0) {
+      expect((deactRejected[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: "PLUGIN_TRANSITION_IN_PROGRESS",
+      });
+    }
+
+    // 7. Test real concurrent reactivation via Promise.allSettled
+    const concurrentActivates = await Promise.allSettled([
+      pluginsService.activatePlugin(registeredPluginId, "operator-test"),
+      pluginsService.activatePlugin(registeredPluginId, "operator-test"),
+    ]);
+    const actFulfilled = concurrentActivates.filter((r) => r.status === "fulfilled");
+    const actRejected = concurrentActivates.filter((r) => r.status === "rejected");
+    expect(actFulfilled.length).toBeGreaterThanOrEqual(1);
+    expect(actFulfilled[0].status === "fulfilled" && (actFulfilled[0] as PromiseFulfilledResult<any>).value.status).toBe("active");
+    if (actRejected.length > 0) {
+      expect((actRejected[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: "PLUGIN_TRANSITION_IN_PROGRESS",
+      });
+    }
+
+    // Verify catalog and member routes remain 200 after concurrent operations
+    const resPostConcurrentPub = await fetch(catalogUrl);
+    expect(resPostConcurrentPub.status).toBe(200);
+    const resPostConcurrentMem = await fetch(progressUrl, {
+      headers: { cookie: cookieA1 },
+    });
+    expect(resPostConcurrentMem.status).toBe(200);
   });
 
   it("Step 6: performs genuine disposable database backup, restore, and integrity verification", async () => {

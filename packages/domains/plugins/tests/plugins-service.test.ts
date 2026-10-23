@@ -654,6 +654,84 @@ describe("PluginsService", () => {
     expect(currentStatus).toBe("inactive");
   });
 
+  it("throws PLUGIN_LOCKFILE_UNAVAILABLE when external plugin lockfile is unconfigured", async () => {
+    let currentStatus: PluginStatus = "registered";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_LOCKFILE_UNAVAILABLE",
+    });
+    expect(currentStatus).toBe("error");
+  });
+
+  it("preserves PLUGIN_NOT_TRUSTED when external plugin is not registered in lockfile", async () => {
+    let currentStatus: PluginStatus = "registered";
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: currentStatus })),
+      updateStatus: vi.fn(async (id, status) => {
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+      tryTransitionStatus: vi.fn(async (id, expected, status) => {
+        if (!expected.includes(currentStatus)) return null;
+        currentStatus = status;
+        return makePlugin({ id, status });
+      }),
+    };
+    const moduleHost = {
+      loadModule: vi.fn(async () => {
+        throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not registered in trusted operator lockfile");
+      }),
+      requiresPublicationEnablement: () => true,
+    };
+    const service = makeService({ pluginRepo: repoWith, host: moduleHost });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_NOT_TRUSTED",
+    });
+    expect(currentStatus).toBe("error");
+  });
+
+  it("rejects activation with PLUGIN_TRANSITION_IN_PROGRESS when plugin is transitioning", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: "activating" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: { loadModule: vi.fn() } });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+  });
+
+  it("rejects deactivation with PLUGIN_TRANSITION_IN_PROGRESS when plugin is transitioning", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ id: "p1", status: "deactivating" })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith, host: { loadModule: vi.fn() } });
+    await expect(service.deactivatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_TRANSITION_IN_PROGRESS",
+    });
+  });
+
   it("dispatches explicit event names and rejects cross-publication messages", async () => {
     const onEvent = vi.fn(async () => undefined);
     const moduleHost = { loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent })) };

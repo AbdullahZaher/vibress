@@ -550,7 +550,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
           const status =
             err.code === "PLUGIN_NOT_FOUND" ? 404 :
             err.code === "PLUGIN_TRANSITION_IN_PROGRESS" || err.code === "PLUGIN_RESTART_REQUIRED" ? 409 :
-            err.code === "PLUGIN_LOCKFILE_UNAVAILABLE" ? 503 : 400;
+            err.code === "PLUGIN_LOCKFILE_UNAVAILABLE" ? 503 :
+            err.code === "PLUGIN_NOT_TRUSTED" ? 403 : 400;
           return sendError(
             reply, err.code, err.message, req.id, status,
           );

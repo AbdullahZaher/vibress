@@ -281,9 +281,16 @@ export class PluginsService {
     try {
       const module = await this.host.loadModule(claimed);
       if (!module) {
+        const isExternal = this.host.requiresPublicationEnablement?.(claimed) === true;
+        if (isExternal) {
+          throw new PluginDomainError(
+            "PLUGIN_LOCKFILE_UNAVAILABLE",
+            "Trusted operator lockfile path is not configured (VIBRESS_TRUSTED_PLUGIN_LOCKFILE is not set)",
+          );
+        }
         throw new PluginDomainError(
           "PLUGIN_MODULE_NOT_FOUND",
-          "Plugin module could not be loaded or is not registered in trusted operator lockfile",
+          "Plugin module could not be loaded",
         );
       }
       if (typeof module.activate !== "function") {
@@ -298,9 +305,10 @@ export class PluginsService {
       this.initializedHere.set(key, Promise.resolve());
       this.activeInstances.set(key, { plugin: claimed, module });
     } catch (err: unknown) {
-      console.error(
-        `[plugins] Plugin activation failed for ${claimed.manifestId} (${id}):`,
-        err,
+      const errorCode = err instanceof PluginDomainError ? err.code : "PLUGIN_ACTIVATION_ERROR";
+      const safeMessage = err instanceof PluginDomainError ? err.message : "Internal plugin activation failure";
+      console.warn(
+        `[plugins] Plugin activation failed: manifestId=${claimed.manifestId} pluginId=${id} code=${errorCode} message="${safeMessage}"`,
       );
       // Clean up any partial local state on activation failure
       const localKey = this.localReleaseKeys.get(id);
@@ -580,8 +588,10 @@ export class PluginsService {
     // Maintenance recovery must work even when the operator has removed a
     // revoked lockfile; rely on this runtime's local ownership instead of
     // trying to authenticate a new artifact during offline recovery.
-    if (this.localReleaseKeys.has(plugin.id) ||
-        [...this.activeInstances.values()].some((instance) => instance.plugin.id === id)) {
+    const hasActiveInstance = [...this.activeInstances.values()].some(
+      (instance) => instance.plugin.id === id,
+    );
+    if (hasActiveInstance) {
       throw new PluginDomainError(
         "PLUGIN_RECOVERY_LOCAL_ACTIVE",
         "This process still holds a plugin lifecycle instance",
@@ -599,8 +609,8 @@ export class PluginsService {
         "Plugin status changed concurrently",
       );
     }
-    // Offline recovery admitted no local module state (checked above).
-    // Never clear a lifecycle instance belonging to another release.
+    // Offline recovery resets local release key for the recovered plugin
+    this.localReleaseKeys.delete(id);
     domainEvents.emit("plugin.recovered", {
       pluginId: id,
       previousStatus: plugin.status,
@@ -623,9 +633,9 @@ export class PluginsService {
       try {
         await module.deactivate?.();
       } catch (err) {
-        console.error(
-          `[plugins] Error deactivating plugin ${plugin.manifestId} during shutdown:`,
-          err,
+        const safeMessage = err instanceof Error ? err.message : "Unknown shutdown error";
+        console.warn(
+          `[plugins] Plugin shutdown deactivation failed: manifestId=${plugin.manifestId} error="${safeMessage}"`,
         );
       }
     }
