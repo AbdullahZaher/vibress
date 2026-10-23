@@ -180,9 +180,13 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
         return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
       }
 
+      const queryLocale = typeof (req.query as Record<string, unknown> | undefined)?.locale === "string"
+        ? (req.query as Record<string, string>).locale
+        : undefined;
       const scope: PluginApiScope = {
         publicationId,
         requestId: req.id,
+        ...(queryLocale ? { locale: queryLocale } : {}),
         principal: audience === "admin"
           ? { kind: "staff", id: req.user!.id }
           : audience === "member"
@@ -209,13 +213,29 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
             hasPermission(req.permissions, "plugins.manage", req.roles)) {
           const binding = await pluginsService.resolveExtensionStorageBinding(
             params.data.pluginId, publicationId,
-          );
+          ).catch(() => null);
           if (binding) {
             storageSession = createHostPluginStorageSession(
               {
                 pluginId: binding.pluginId, publicationId,
                 actorUserId: req.user.id, requestId: req.id,
                 allowWrites: req.method === "POST",
+              },
+              binding.models,
+            );
+          }
+        } else if ((audience === "member" && req.member && req.member.publicationId === publicationId) ||
+                   audience === "public") {
+          const binding = await pluginsService.resolveExtensionStorageBinding(
+            params.data.pluginId, publicationId,
+          ).catch(() => null);
+          if (binding) {
+            const actorUserId = audience === "member" && req.member ? req.member.id : "anonymous";
+            storageSession = createHostPluginStorageSession(
+              {
+                pluginId: binding.pluginId, publicationId,
+                actorUserId, requestId: req.id,
+                allowWrites: false,
               },
               binding.models,
             );

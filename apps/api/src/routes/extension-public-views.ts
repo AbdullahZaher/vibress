@@ -7,7 +7,7 @@ import {
   ExtensionPublicPageQuerySchema,
   validateExtensionApiObject,
 } from "@vibress/api-contracts";
-import { PluginDomainError } from "@vibress/plugins";
+import { PluginDomainError, createHostPluginStorageSession } from "@vibress/plugins";
 import { pluginsService, publicationLocaleService } from "../services";
 import { admitPublicViews } from "../plugins/public-view-registry";
 
@@ -63,10 +63,25 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
           pluginId, publicationId, "extension.routes.public", module,
         );
         if (!allowed) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const binding = await pluginsService.resolveExtensionStorageBinding(
+          pluginId, publicationId,
+        ).catch(() => null);
+        let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
+        if (binding) {
+          storageSession = createHostPluginStorageSession(
+            {
+              pluginId: binding.pluginId, publicationId,
+              actorUserId: "anonymous", requestId: req.id,
+              allowWrites: false,
+            },
+            binding.models,
+          );
+        }
         const scope: PluginApiScope = {
           publicationId, requestId: req.id, locale, principal: { kind: "anonymous" },
+          ...(storageSession ? { storage: storageSession.storage } : {}),
         };
-        // Public extension execution never receives privileged storage, member,
+        // Public extension execution never receives privileged storage writes, member,
         // staff, or tenant selectors from the caller. The Host rechecks
         // publication enablement before invoking the trusted plugin callback.
         let output: unknown;
@@ -74,6 +89,8 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
           output = await route.handle({ query: {}, body: {} }, scope);
         } catch {
           return reject(req, reply, "EXTENSION_HANDLER_FAILED", 503);
+        } finally {
+          await storageSession?.close().catch(() => undefined);
         }
         const data = validateExtensionApiObject(route.response, output);
         if (!data) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
