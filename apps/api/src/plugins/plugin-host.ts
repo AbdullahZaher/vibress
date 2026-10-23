@@ -76,9 +76,9 @@ export class BundledPluginHost implements PluginHost {
     return this.external.readApprovedAdminUiAsset(plugin, viewId);
   }
 
-  async loadModule(plugin: Plugin): Promise<PluginModule | null> {
+  async loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null> {
     const entry = this.registry.get(plugin.manifestId);
     if (entry) return entry.module;
-    return this.external.loadModule(plugin);
+    return this.external.loadModule(plugin, expectedReleaseKey);
   }
 }

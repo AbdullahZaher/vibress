@@ -252,7 +252,7 @@ export class TrustedExternalPluginHost {
     return document;
   }
 
-  async loadModule(plugin: Plugin): Promise<PluginModule | null> {
+  async loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null> {
     const lockfile = this.lockfilePath;
     if (!lockfile) return null;
     const json = await readTrustedPluginLockfile(lockfile);
@@ -267,6 +267,16 @@ export class TrustedExternalPluginHost {
       throw new PluginDomainError(
         "PLUGIN_MANIFEST_MISMATCH",
         "Registered plugin metadata differs from the trusted operator lockfile",
+      );
+    }
+    // Revalidate the release admitted before loading: even a newly signed
+    // replacement must never evaluate ESM code before the restart guard.
+    if (expectedReleaseKey !== undefined &&
+        expectedReleaseKey !== JSON.stringify([
+          plugin.id, plugin.version, plugin.entrypoint, installed.sha256,
+        ])) {
+      throw new PluginDomainError(
+        "PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime",
       );
     }
 

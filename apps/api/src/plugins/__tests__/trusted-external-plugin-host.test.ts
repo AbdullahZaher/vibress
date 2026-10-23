@@ -83,6 +83,33 @@ describe("TrustedExternalPluginHost", () => {
     expect(loaded?.activate).toBeTypeOf("function");
   });
 
+  it("rejects a different signed release before evaluating ESM top-level code", async () => {
+    const f = await fixture();
+    const hash = createHash("sha256").update(await readFile(f.moduleFile)).digest("hex");
+    const admittedKey = JSON.stringify(["p1", manifest.version, manifest.entrypoint, hash]);
+    const replacement = "globalThis.__replacedModuleExecuted = true; export default { activate() {} };";
+    await writeFile(f.moduleFile, replacement);
+    await writeFile(f.lockfile, JSON.stringify({ schemaVersion: 1, plugins: [{
+      manifest, sha256: createHash("sha256").update(replacement).digest("hex"),
+    }] }));
+    try {
+      await expect(new TrustedExternalPluginHost(f.lockfile).loadModule(plugin(), admittedKey))
+        .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
+      expect((globalThis as { __replacedModuleExecuted?: boolean }).__replacedModuleExecuted)
+        .toBeUndefined();
+    } finally {
+      delete (globalThis as { __replacedModuleExecuted?: boolean }).__replacedModuleExecuted;
+    }
+  });
+
+  it("loads unchanged signed release bytes with an expected identity", async () => {
+    const f = await fixture();
+    const hash = createHash("sha256").update(await readFile(f.moduleFile)).digest("hex");
+    const key = JSON.stringify(["p1", manifest.version, manifest.entrypoint, hash]);
+    expect((await new TrustedExternalPluginHost(f.lockfile).loadModule(plugin(), key))?.activate)
+      .toBeTypeOf("function");
+  });
+
   it("rejects modified code before evaluating it", async () => {
     const f = await fixture();
     await writeFile(f.moduleFile, "globalThis.__untrusted = true; export default { activate() {} };");

@@ -604,6 +604,8 @@ describe("PluginsService", () => {
       code: "PLUGIN_RESTART_REQUIRED",
     });
     expect(currentStatus).toBe("error");
+    // A changed release must be denied before the Host can evaluate ESM.
+    expect(moduleHost.loadModule).toHaveBeenCalledTimes(1);
   });
 
   it("allows recovery and reactivation from error status", async () => {
@@ -706,6 +708,48 @@ describe("PluginsService", () => {
       code: "PLUGIN_NOT_TRUSTED",
     });
     expect(currentStatus).toBe("error");
+  });
+
+  it("does not leak plugin-supplied domain error text through activation", async () => {
+    const secret = "secret-token-never-log";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const hostWith = { loadModule: vi.fn(async () => ({
+        activate: vi.fn(async () => { throw new PluginDomainError("PLUGIN_RESTART_REQUIRED", secret); }),
+      })) };
+      const repoWith: PluginRepository = {
+        ...pluginRepo, findById: vi.fn(async () => makePlugin()),
+        updateStatus: vi.fn(async (id, status) => makePlugin({ id, status })),
+      };
+      await expect(makeService({ pluginRepo: repoWith, host: hostWith })
+        .activatePlugin("p1", "u1")).rejects.toMatchObject({
+          code: "PLUGIN_RESTART_REQUIRED",
+          message: "Plugin release changed; restart this runtime",
+        });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(secret);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not log raw shutdown exceptions", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const hostWith = { loadModule: vi.fn(async () => ({
+        activate: vi.fn(async () => undefined),
+        deactivate: vi.fn(async () => { throw new Error("secret-key=/private/keys"); }),
+      })) };
+      const repoWith: PluginRepository = {
+        ...pluginRepo, findById: vi.fn(async () => makePlugin()),
+      };
+      const service = makeService({ pluginRepo: repoWith, host: hostWith });
+      await service.activatePlugin("p1", "u1");
+      await service.shutdown();
+      expect(JSON.stringify(warn.mock.calls)).toContain("PLUGIN_SHUTDOWN_DEACTIVATION_FAILED");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-key");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("rejects activation with PLUGIN_TRANSITION_IN_PROGRESS when plugin is transitioning", async () => {

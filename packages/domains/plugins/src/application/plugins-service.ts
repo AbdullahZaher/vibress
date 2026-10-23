@@ -29,7 +29,8 @@ export class PluginDomainError extends Error {
 }
 
 export interface PluginHost {
-  loadModule(plugin: Plugin): Promise<PluginModule | null>;
+  /** Optional release identity checked again immediately before ESM evaluation. */
+  loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null>;
   requiresPublicationEnablement?(plugin: Plugin): boolean;
   getOperatorManifests?(): Promise<PluginManifest[]>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
@@ -39,6 +40,28 @@ export interface PluginHost {
   authorizeRegistration?(manifest: PluginManifest): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
+}
+
+/** Lifecycle error text must be platform-owned, never obtained from plugin code. */
+const lifecycleMessages: Readonly<Record<string, string>> = {
+  PLUGIN_RESTART_REQUIRED: "Plugin release changed; restart this runtime",
+  PLUGIN_LOCKFILE_UNAVAILABLE: "Trusted operator lockfile is unavailable",
+  PLUGIN_NOT_TRUSTED: "Plugin release is not operator approved",
+  PLUGIN_RELEASE_NOT_APPROVED: "Operator approval is unavailable for this release",
+  PLUGIN_MODULE_NOT_FOUND: "Plugin module could not be loaded",
+  PLUGIN_ENTRYPOINT_INVALID: "Plugin entrypoint is invalid",
+  PLUGIN_MANIFEST_MISMATCH: "Registered plugin metadata differs from the trusted operator lockfile",
+  PLUGIN_CHECKSUM_MISMATCH: "Trusted plugin checksum mismatch",
+  PLUGIN_PATH_ESCAPES_ROOT: "Trusted plugin path escapes its approved directory",
+  PLUGIN_FILE_INVALID: "Trusted plugin file is invalid",
+  PLUGIN_SIZE_LIMIT_EXCEEDED: "Trusted plugin file exceeds its size limit",
+};
+function safeLifecycleFailure(err: unknown, fallback: "PLUGIN_ACTIVATION_FAILED" | "PLUGIN_DEACTIVATION_FAILED"): PluginDomainError {
+  if (err instanceof PluginDomainError && Object.hasOwn(lifecycleMessages, err.code)) {
+    return new PluginDomainError(err.code, lifecycleMessages[err.code]!);
+  }
+  return new PluginDomainError(fallback,
+    fallback === "PLUGIN_ACTIVATION_FAILED" ? "Plugin activation failed" : "Plugin cleanup failed");
 }
 
 export class PluginsService {
@@ -279,7 +302,13 @@ export class PluginsService {
     }
 
     try {
-      const module = await this.host.loadModule(claimed);
+      // Importing ESM runs its top-level code. Reject an incompatible local
+      // release before calling loadModule, not after importing the replacement.
+      const key = await this.activationKey(claimed);
+      this.assertLocalRelease(claimed, key);
+      // The host checks the same key against the signed lockfile at the import
+      // boundary, protecting against an approval change during this operation.
+      const module = await this.host.loadModule(claimed, key);
       if (!module) {
         const isExternal = this.host.requiresPublicationEnablement?.(claimed) === true;
         if (isExternal) {
@@ -299,16 +328,13 @@ export class PluginsService {
           "Plugin entrypoint does not export an activate function",
         );
       }
-      const key = await this.activationKey(claimed);
-      this.assertLocalRelease(claimed, key);
       await module.activate(await this.activationContext(claimed));
       this.initializedHere.set(key, Promise.resolve());
       this.activeInstances.set(key, { plugin: claimed, module });
     } catch (err: unknown) {
-      const errorCode = err instanceof PluginDomainError ? err.code : "PLUGIN_ACTIVATION_ERROR";
-      const safeMessage = err instanceof PluginDomainError ? err.message : "Internal plugin activation failure";
+      const safeError = safeLifecycleFailure(err, "PLUGIN_ACTIVATION_FAILED");
       console.warn(
-        `[plugins] Plugin activation failed: manifestId=${claimed.manifestId} pluginId=${id} code=${errorCode} message="${safeMessage}"`,
+        `[plugins] Plugin activation failed: manifestId=${claimed.manifestId} pluginId=${id} code=${safeError.code}`,
       );
       // Clean up any partial local state on activation failure
       const localKey = this.localReleaseKeys.get(id);
@@ -323,10 +349,7 @@ export class PluginsService {
         pluginId: id,
         error: "Plugin activation failed",
       });
-      if (err instanceof PluginDomainError) {
-        throw err;
-      }
-      throw new PluginDomainError("PLUGIN_ACTIVATION_FAILED", "Plugin activation failed");
+      throw safeError;
     }
 
     const activated = await this.pluginRepo.updateStatus(id, "active");
@@ -518,10 +541,7 @@ export class PluginsService {
         // Fail closed: never claim successful cleanup when it failed.
         await this.pluginRepo.updateStatus(id, "error");
         domainEvents.emit("plugin.deactivation_failed", { pluginId: id, actorId });
-        if (err instanceof PluginDomainError) {
-          throw err;
-        }
-        throw new PluginDomainError("PLUGIN_DEACTIVATION_FAILED", "Plugin cleanup failed");
+        throw safeLifecycleFailure(err, "PLUGIN_DEACTIVATION_FAILED");
       }
     } else {
       const claimed = await this.pluginRepo.tryTransitionStatus(
@@ -632,10 +652,10 @@ export class PluginsService {
     for (const { plugin, module } of instances) {
       try {
         await module.deactivate?.();
-      } catch (err) {
-        const safeMessage = err instanceof Error ? err.message : "Unknown shutdown error";
+      } catch {
+        // Raw plugin exceptions may include secrets, stack traces or paths.
         console.warn(
-          `[plugins] Plugin shutdown deactivation failed: manifestId=${plugin.manifestId} error="${safeMessage}"`,
+          `[plugins] Plugin shutdown deactivation failed: manifestId=${plugin.manifestId} code=PLUGIN_SHUTDOWN_DEACTIVATION_FAILED`,
         );
       }
     }
