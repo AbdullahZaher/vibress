@@ -57,6 +57,8 @@ export interface AdminPlugin {
   settingsSchema?: Record<string, unknown>;
   /** Added for vNext external plugins; undefined on older API servers. */
   publicationScoped?: boolean;
+  /** Host ABI comparison only, not proof of artifact approval or isolation. */
+  hostCompatible?: boolean;
   publicationEnabled?: boolean;
 }
 

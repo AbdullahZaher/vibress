@@ -34,9 +34,9 @@ export function PluginsPage() {
       setPlatformOperator(result.platformOperator === true);
       setHasLoaded(true);
       setError(null);
-    } catch (err: unknown) {
+    } catch {
       if (request !== generation.current) return;
-      setError(err instanceof Error ? err.message : tr("Failed to load plugins"));
+      setError(tr("Failed to load plugins"));
     } finally {
       if (request === generation.current) setLoading(false);
     }

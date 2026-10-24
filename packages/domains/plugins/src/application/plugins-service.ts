@@ -9,6 +9,7 @@ import {
 } from "../domain/plugin";
 import {
   validateManifest,
+  SDK_VERSION,
   PluginManifest,
   PluginContext,
   PluginModule,
@@ -807,7 +808,7 @@ export class PluginsService {
 
   /** Additive Admin projection; global v1 activation remains unchanged. */
   async listPluginsForPublication(publicationId?: string): Promise<
-    Array<Plugin & { publicationScoped: boolean; publicationEnabled: boolean }>
+    Array<Plugin & { publicationScoped: boolean; publicationEnabled: boolean; hostCompatible: boolean }>
   > {
     const plugins = await this.pluginRepo.list();
     return Promise.all(plugins.map(async (plugin) => {
@@ -816,7 +817,8 @@ export class PluginsService {
         ? Boolean(publicationId && plugin.status === "active" &&
             this.publicationStates && await this.publicationStates.isEnabled(plugin.id, publicationId))
         : plugin.status === "active";
-      return { ...plugin, publicationScoped, publicationEnabled };
+      return { ...plugin, publicationScoped, publicationEnabled,
+        hostCompatible: plugin.vibressApiVersion === SDK_VERSION };
     }));
   }
 
