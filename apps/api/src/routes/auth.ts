@@ -71,7 +71,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             {
               code: "VALIDATION_ERROR",
               message:
-                parseResult.error.errors[0]?.message ||
+                parseResult.error.issues[0]?.message ||
                 "Invalid login request payload",
               requestId: req.id,
             },
