@@ -181,6 +181,19 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     const installed = plugin({ capabilities: privilegedManifest.capabilities });
     expect(await host.getApprovedStorageModels(installed)).toEqual([model]);
+    expect(await host.getApprovedAudienceReadModels(installed, "public")).toBeNull();
+    await writeFile(f.lockfile, JSON.stringify({
+      ...approved, plugins: [{ ...approved.plugins[0],
+        publicReadModels: ["courses"], memberReadModels: [] }],
+    }));
+    expect(await host.getApprovedAudienceReadModels(installed, "public")).toEqual(["courses"]);
+    expect(await host.getApprovedAudienceReadModels(installed, "member")).toEqual([]);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0], publicReadModels: ["other"] }],
+    })).toThrow(/allowlist/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0], publicReadModels: ["courses", "courses"] }],
+    })).toThrow(/allowlist/);
     await expect(host.getApprovedStorageModels(plugin())).rejects.toThrow(/operator-approved storage manifest/);
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0],
