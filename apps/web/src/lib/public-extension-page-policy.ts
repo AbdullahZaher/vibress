@@ -64,8 +64,12 @@ export function publicExtensionMetadata(
   );
   const title = localizedExtensionTitle(page.title, site.locale);
   const canonical = `${origin}${localePrefix}/extensions/${page.pluginId}/${page.viewId}`;
-  const published = site.enabledLocales?.filter((locale) =>
-    supportsPublishedExtensionLocale(page.publishedLocales, locale)) ?? [];
+  // Legacy public views omit publishedLocales. They remain routable for
+  // compatibility, but must not advertise unverified hreflang alternates.
+  const published = page.publishedLocales
+    ? (site.enabledLocales?.filter((locale) =>
+        supportsPublishedExtensionLocale(page.publishedLocales, locale)) ?? [])
+    : [];
   const alternates: Record<string, string> = {};
   if (published.length > 1 && published.includes(site.primaryLocale || site.locale)) {
     for (const locale of published) {
