@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { OperatorTrustedPluginCatalogResponseSchema } from "../plugins";
+import {
+  OperatorTrustedPluginCatalogResponseSchema,
+  OperatorTrustedPluginRegisterSchema,
+} from "../plugins";
 
 const digest = "a".repeat(64);
 const entry = {
@@ -27,6 +30,20 @@ const entry = {
 };
 
 describe("P0-2 operator trusted release catalog API response", () => {
+  it("accepts legacy clients but validates exact release pins on modern registration", () => {
+    expect(OperatorTrustedPluginRegisterSchema.safeParse({
+      manifestId: "hello-public",
+    }).success).toBe(true);
+    expect(OperatorTrustedPluginRegisterSchema.safeParse({
+      manifestId: "hello-public", expectedReleaseId: entry.approvalId,
+      acknowledgeUpgrade: true,
+    }).success).toBe(true);
+    for (const bad of ["../../evil", "hello-public@2.0.0:invalid", "http://evil"]) {
+      expect(OperatorTrustedPluginRegisterSchema.safeParse({
+        manifestId: "hello-public", expectedReleaseId: bad,
+      }).success).toBe(false);
+    }
+  });
   it("admits an additive, path-free release summary", () => {
     const payload = { plugins: [entry] };
     expect(OperatorTrustedPluginCatalogResponseSchema.parse(payload)).toEqual(payload);

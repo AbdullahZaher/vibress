@@ -826,6 +826,9 @@ export class PluginsService {
         const installed = await this.pluginRepo.findByManifestId(manifestId);
         if (installed) {
           const changes = installed.version !== approved.version ||
+            installed.name !== approved.name ||
+            installed.description !== (approved.description ?? null) ||
+            installed.entrypoint !== approved.entrypoint ||
             installed.vibressApiVersion !== approved.vibressApiVersion ||
             !isDeepStrictEqual(installed.capabilities, approved.capabilities) ||
             !isDeepStrictEqual(installed.hooks, approved.hooks ?? []) ||
