@@ -4,7 +4,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getThemeSiteSettings } from "../../../lib/theme-host";
-import { getDirection } from "@vibress/i18n";
+import { getDirection, supportsPublishedExtensionLocale } from "@vibress/i18n";
 import { getPublicExtensionPage, isValidPublicHost } from "../../../lib/public-extension-client";
 import { isPublishedLmsCourse } from "../../../lib/lms-course-policy";
 import { LmsStudentPortal } from "../../../components/extensions/LmsStudentPortal";
@@ -33,7 +33,7 @@ const fetchCourseData = cache(async (
   }
   if (!view || view.publicationId !== publicationId ||
       (view.locale && view.locale !== locale) ||
-      (view.publishedLocales && !view.publishedLocales.includes(locale))) return null;
+      !supportsPublishedExtensionLocale(view.publishedLocales, locale)) return null;
   const host = incoming.get("host");
   if (!host || !isValidPublicHost(host)) return null;
   const apiBase = process.env.API_URL || "http://127.0.0.1:7780";
