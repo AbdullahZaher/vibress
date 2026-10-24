@@ -255,3 +255,5 @@ export * from "./coverage-reporter";
 export * from "./translation-types";
 export * from "./glossary";
 export * from "./structured-ai-translation";
+
+export { supportsPublishedExtensionLocale } from "./extension-published-locale";
