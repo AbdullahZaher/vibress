@@ -723,6 +723,29 @@ describe("Batch 12 — Platform Integration & Security", () => {
     expect(noSession.statusCode).toBe(401);
   });
 
+  it("maps reviewed release conflicts to HTTP 409 without disclosing internals", async () => {
+    const spy = vi.spyOn(pluginsService, "registerOperatorPlugin").mockRejectedValueOnce(
+      new PluginDomainError("PLUGIN_RELEASE_CHANGED", "Approved plugin release changed; reload and review it"),
+    );
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/plugins/register-trusted",
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: {
+          manifestId: "example-plugin",
+          expectedReleaseId: `example-plugin@1.0.0:${"a".repeat(64)}`,
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PLUGIN_RELEASE_CHANGED");
+      expect(spy).toHaveBeenCalledOnce();
+      expect(JSON.stringify(res.json())).not.toContain("/operator/private");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("atomically refuses plugin metadata replacement during activation", async () => {
     const repo = new DrizzlePluginRepository();
     const id = crypto.randomUUID();
@@ -759,6 +782,21 @@ describe("Batch 12 — Platform Integration & Security", () => {
       }, snapshot);
       expect(stale).toBeNull();
       expect((await repo.findById(id))?.version).toBe("2.0.0");
+      // Same-version metadata updates also advance the optimistic timestamp,
+      // so the earlier read can never win a later write.
+      const newest = await repo.findById(id);
+      if (!newest) throw new Error("Missing updated plugin");
+      const revision = await repo.tryUpdateMetadataIfInactive(id, {
+        name: "CAS Fixture Updated",
+      }, newest);
+      expect(revision?.updatedAt.getTime()).toBeGreaterThan(newest.updatedAt.getTime());
+      await expect(repo.findById(id)).resolves.toMatchObject({
+        name: "CAS Fixture Updated",
+      });
+      const staleSameVersion = await repo.tryUpdateMetadataIfInactive(id, {
+        name: "CAS Fixture Stale",
+      }, newest);
+      expect(staleSameVersion).toBeNull();
     } finally {
       await repo.delete(id);
     }

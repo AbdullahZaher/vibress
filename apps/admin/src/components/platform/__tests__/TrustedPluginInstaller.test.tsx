@@ -203,6 +203,22 @@ describe("Operator-approved Add Plugin", () => {
     expect(submit.disabled).toBe(true);
   });
 
+  it("does not offer a blind version update when an older server omits upgrade review", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [{
+      ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+    }] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "inactive" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("No operator-approved plugins available.");
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
+  });
+
   it("does not list already registered releases", async () => {
     await render([plugin.id]);
     expect(container.textContent).toContain("No operator-approved plugins available.");

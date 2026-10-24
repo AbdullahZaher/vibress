@@ -49,13 +49,16 @@ export function TrustedPluginInstaller({
     // Existing installations are offered only when the release version advances.
     // Same-version artifact replacement requires separate operator handling.
     const installed = installedPlugins.find((plugin) => plugin.manifestId === item.id);
-    return Boolean(installed && installed.version !== item.version);
+    return Boolean(installed && item.upgradeReview &&
+      item.upgradeReview.installedVersion === installed.version &&
+      installed.version !== item.version);
   });
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
     if (!selected || !selected.approvalId || !Array.isArray(selected.capabilities) ||
         !acknowledged || loading || submitting || registeringRef.current ||
-        (selected.upgradeReview?.installedStatus === "active")) return;
+        (selected.upgradeReview?.installedStatus === "active") ||
+        (installedIds.includes(selected.id) && !selected.upgradeReview)) return;
     registeringRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -201,7 +204,8 @@ export function TrustedPluginInstaller({
             </Button>
             <Button type="button" onClick={() => { void register(); }}
               disabled={!selected.approvalId || !Array.isArray(selected.capabilities) || !acknowledged ||
-                selected.upgradeReview?.installedStatus === "active" || submitting}>
+                selected.upgradeReview?.installedStatus === "active" ||
+                (installedIds.includes(selected.id) && !selected.upgradeReview) || submitting}>
               {submitting ? tr("Registering plugin...") :
                 selected.upgradeReview ? tr("Register reviewed update") : tr("Register trusted plugin")}
             </Button>
