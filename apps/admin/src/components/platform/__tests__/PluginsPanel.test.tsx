@@ -79,16 +79,30 @@ describe("P0-4 plugin lifecycle status and recovery UX", () => {
   });
 
   it("blocks activation during transitions, failures and ABI incompatibility", async () => {
-    for (const status of ["activating", "deactivating", "error"]) {
+    for (const status of ["activating", "deactivating"]) {
       await render(status);
       expect(button(container, "Activate")?.disabled).toBe(true);
       expect(button(container, "Enable for this publication")?.disabled).toBe(true);
     }
     await render("error");
-    expect(container.textContent).toContain("Recovery requires maintenance");
+    expect(container.textContent).toContain("Activation failed");
+    expect(button(container, "Retry activation")?.disabled).toBe(false);
     await render("registered", { hostCompatible: false });
     expect(container.textContent).toContain("Incompatible Host API version");
     expect(button(container, "Activate")?.disabled).toBe(true);
+  });
+
+  it("shows dormant saved publication preference and permits revocation while inactive", async () => {
+    await render("inactive", {
+      publicationEnabled: false, publicationConfiguredEnabled: true,
+    });
+    expect(container.textContent).toContain("This publication: Disabled");
+    expect(container.textContent).toContain("Saved site setting: Enabled");
+    expect(button(container, "Disable for this publication")?.disabled).toBe(false);
+    vi.mocked(setPluginPublicationStateApi).mockResolvedValue({ pluginId: "db-1",
+      publicationId: "pub-a", enabled: false });
+    await act(async () => { button(container, "Disable for this publication")?.click(); });
+    expect(setPluginPublicationStateApi).toHaveBeenCalledWith("db-1", false);
   });
 
   it("still permits safe disable/deactivate when an active plugin becomes incompatible", async () => {

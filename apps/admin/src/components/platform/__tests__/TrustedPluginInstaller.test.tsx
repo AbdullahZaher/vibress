@@ -22,6 +22,8 @@ const plugin = {
   description: "Pilot LMS",
   capabilities: ["extension.routes.member", "extension.member_storage.write"],
   signatureVerified: true,
+  approvalId: `vibress-lms-pilot@1.0.0:${"a".repeat(64)}`,
+  readiness: "verification_required" as const,
 };
 
 describe("Operator-approved Add Plugin", () => {
@@ -68,7 +70,7 @@ describe("Operator-approved Add Plugin", () => {
   it("requires selection and explicit acknowledgement before registering", async () => {
     await render();
     expect(container.textContent).toContain("extension.member_storage.write");
-    expect(container.textContent).toContain("Available for registration");
+    expect(container.textContent).toContain("integrity verification required before registration");
     expect(container.textContent).toContain("Detached Ed25519 operator approval verified.");
     expect(container.textContent).toContain("signature verification is not sandbox isolation.");
     expect(container.textContent).toContain("They cannot be installed directly in Studio.");
@@ -83,7 +85,7 @@ describe("Operator-approved Add Plugin", () => {
     await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
     await click("Register trusted plugin");
     expect(registerOperatorTrustedPluginApi).toHaveBeenCalledOnce();
-    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id);
+    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id, plugin.approvalId);
     expect(onRegistered).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -122,6 +124,20 @@ describe("Operator-approved Add Plugin", () => {
     await render();
     expect(container.textContent).toContain("Legacy unsigned operator approval");
     expect(container.textContent).not.toContain("Detached Ed25519 operator approval verified.");
+  });
+
+  it("refuses a registry entry without an immutable approval ID", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ ...plugin, approvalId: undefined }],
+    });
+    await render();
+    expect(container.textContent).toContain("Immutable release identity unavailable");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const register = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(register.disabled).toBe(true);
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
   });
 
   it("does not allow blind registration when an older server omits capabilities", async () => {

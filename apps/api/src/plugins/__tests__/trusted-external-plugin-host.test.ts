@@ -101,7 +101,9 @@ describe("TrustedExternalPluginHost", () => {
     const f = await fixture();
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([
-      { manifest, signatureVerified: false },
+      { manifest, signatureVerified: false,
+        approvalId: `${manifest.id}@${manifest.version}:${createHash("sha256")
+          .update(await readFile(f.moduleFile)).digest("hex")}` },
     ]);
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
     const keyPath = path.join(f.dir, "operator.pub");
@@ -112,7 +114,9 @@ describe("TrustedExternalPluginHost", () => {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", keyPath);
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", signaturePath);
     await expect(host.listTrustedCatalog()).resolves.toEqual([
-      { manifest, signatureVerified: true },
+      { manifest, signatureVerified: true,
+        approvalId: `${manifest.id}@${manifest.version}:${createHash("sha256")
+          .update(await readFile(f.moduleFile)).digest("hex")}` },
     ]);
     await writeFile(f.lockfile, (await readFile(f.lockfile, "utf8")) + " ");
     await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
@@ -128,6 +132,7 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([{
       manifest, signatureVerified: false,
+      approvalId: release.releaseId,
       release: {
         releaseId: release.releaseId,
         publisher: release.publisher,

@@ -9,6 +9,8 @@ const entry = {
   description: null,
   capabilities: ["extension.routes.public"],
   signatureVerified: true,
+  approvalId: `hello-public@1.0.0:${digest}`,
+  readiness: "verification_required",
   release: {
     releaseId: `hello-public@1.0.0:${digest}`,
     publisher: { id: "reviewed", name: "Reviewed publisher" },
@@ -34,6 +36,15 @@ describe("P0-2 operator trusted release catalog API response", () => {
     expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
       plugins: [{ ...entry, signatureVerified: null, release: undefined }],
     }).success).toBe(true);
+  });
+
+  it("rejects invalid immutable identities and readiness statuses", () => {
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, approvalId: "../outside" }],
+    }).success).toBe(false);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, readiness: "verified" }],
+    }).success).toBe(false);
   });
 
   it("rejects operator file paths and unrecognized executable-install fields", () => {
