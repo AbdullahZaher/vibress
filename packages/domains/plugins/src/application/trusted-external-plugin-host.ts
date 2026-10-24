@@ -25,6 +25,7 @@ const approvedModelSchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
   schemaSha256: z.string().regex(/^[a-f0-9]{64}$/),
   columns: z.array(approvedColumnSchema).min(1).max(24),
+  indexedTextFields: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,47}$/)).max(4).optional(),
 }).strict();
 /** EXT-301B1: opt-in, operator-pinned single-file HTML UI artifacts.
  * This approves bytes only; it does NOT make them executable in Studio.
@@ -200,6 +201,7 @@ export class TrustedExternalPluginHost {
     return approved.storageModels.map((model) => ({
       key: model.key, schemaSha256: model.schemaSha256,
       columns: model.columns.map((column) => ({ ...column })),
+      ...(model.indexedTextFields ? { indexedTextFields: [...model.indexedTextFields] } : {}),
     }));
   }
 
