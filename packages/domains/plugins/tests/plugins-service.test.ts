@@ -237,6 +237,44 @@ describe("PluginsService", () => {
     expect(states.setEnabled).toHaveBeenCalledWith("p1", "pub-a", false);
   });
 
+  it("reviews changes against the installed version before a pinned update", async () => {
+    const approvedId = `test-plugin@2.0.0:${"a".repeat(64)}`;
+    const upgraded = { ...validManifest, version: "2.0.0",
+      capabilities: [...validManifest.capabilities, "extension.routes.public"] };
+    const installed = makePlugin({ status: "inactive", version: "1.0.0",
+      capabilities: [...validManifest.capabilities] });
+    const repo: PluginRepository = {
+      ...pluginRepo,
+      list: vi.fn(async () => [installed]),
+      findByManifestId: vi.fn(async () => installed),
+      updateMetadata: vi.fn(async () => makePlugin({ version: "2.0.0" })),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () =>
+        [{ manifest: upgraded, signatureVerified: true, approvalId: approvedId }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const service = makeService({ host: hostWith, pluginRepo: repo });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: upgraded.id, name: upgraded.name, version: upgraded.version,
+      description: null, capabilities: upgraded.capabilities, signatureVerified: true,
+      approvalId: approvedId, readiness: "verification_required",
+      upgradeReview: {
+        installedVersion: "1.0.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true,
+      },
+    }]);
+    await expect(service.registerOperatorPlugin(upgraded.id, "operator", approvedId))
+      .rejects.toMatchObject({ code: "PLUGIN_UPGRADE_REVIEW_REQUIRED" });
+    expect(repo.updateMetadata).not.toHaveBeenCalled();
+    await service.registerOperatorPlugin(upgraded.id, "operator", approvedId, true);
+    expect(repo.updateMetadata).toHaveBeenCalledOnce();
+  });
+
   it("registers a valid plugin manifest", async () => {
     const service = makeService();
     const plugin = await service.registerPlugin(validManifest, "u1");

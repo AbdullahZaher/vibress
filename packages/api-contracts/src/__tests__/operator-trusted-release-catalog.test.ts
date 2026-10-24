@@ -38,6 +38,25 @@ describe("P0-2 operator trusted release catalog API response", () => {
     }).success).toBe(true);
   });
 
+  it("admits bounded operator-owned upgrade diffs without secrets", () => {
+    const withUpgrade = {
+      ...entry,
+      upgradeReview: {
+        installedVersion: "0.9.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true,
+      },
+    };
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [withUpgrade],
+    }).success).toBe(true);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...withUpgrade, upgradeReview: {
+        ...withUpgrade.upgradeReview, secret: "leaked",
+      } }],
+    }).success).toBe(false);
+  });
+
   it("rejects invalid immutable identities and readiness statuses", () => {
     expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
       plugins: [{ ...entry, approvalId: "../outside" }],

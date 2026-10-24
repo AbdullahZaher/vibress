@@ -156,6 +156,53 @@ describe("Operator-approved Add Plugin", () => {
     expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
   });
 
+  it("previews an inactive upgrade and requires explicit review of added capabilities", async () => {
+    const update = { ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+      upgradeReview: { installedVersion: "1.0.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true },
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [update] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "inactive" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("Added capabilities");
+    expect(container.textContent).toContain("extension.routes.public");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    await click("Register reviewed update");
+    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(
+      plugin.id, update.approvalId, true,
+    );
+  });
+
+  it("does not allow re-registration of an active upgrade from the UI", async () => {
+    const update = { ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+      upgradeReview: { installedVersion: "1.0.0", installedStatus: "active",
+        addedCapabilities: [], removedCapabilities: [], metadataChanged: true },
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [update] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "active" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("Deactivate globally before registering");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const submit = [...container.querySelectorAll("button")]
+      .find((b) => b.textContent?.includes("Register reviewed update")) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
   it("does not list already registered releases", async () => {
     await render([plugin.id]);
     expect(container.textContent).toContain("No operator-approved plugins available.");
