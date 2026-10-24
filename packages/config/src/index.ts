@@ -236,7 +236,7 @@ export function getConfig(): AppConfig {
 export function loadConfig(env: EnvSource): AppConfig {
   const parsed = envSchema.safeParse(env);
   if (!parsed.success) {
-    const issues = parsed.error.errors.map(
+    const issues = parsed.error.issues.map(
       (issue) => `${issue.path.join(".")}: ${issue.message}`,
     );
     throw new ConfigError(
