@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import { verifyTrustedPluginRelease, type VerifiedExternalRelease } from "./operator-release-preflight";
 import { parseTrustedPluginLockfile } from "./trusted-external-plugin-host";
@@ -23,12 +24,19 @@ export interface OperatorReleaseAdmissionReceipt {
 
 async function lockfileDigest(lockfilePath: string): Promise<string> {
   if (!path.isAbsolute(lockfilePath)) throw new Error("INVALID_LOCKFILE_PATH");
-  const info = await lstat(lockfilePath);
-  if (!info.isFile() || info.isSymbolicLink() ||
-      info.size > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
-  const bytes = await readFile(lockfilePath);
-  if (bytes.length > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
-  return createHash("sha256").update(bytes).digest("hex");
+  const file = await open(lockfilePath,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > MAX_LOCKFILE_BYTES) {
+      throw new Error("INVALID_LOCKFILE");
+    }
+    const bytes = await file.readFile();
+    if (bytes.length > MAX_LOCKFILE_BYTES) throw new Error("INVALID_LOCKFILE");
+    return createHash("sha256").update(bytes).digest("hex");
+  } finally {
+    await file.close();
+  }
 }
 
 /**

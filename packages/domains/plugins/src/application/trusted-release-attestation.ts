@@ -63,6 +63,15 @@ export async function readTrustedPluginLockfileWithVerification(
 }> {
   if (!path.isAbsolute(lockfilePath)) throw new Error("Invalid trusted plugin lockfile path");
   const lockfileBytes = await readBoundedFile(lockfilePath, MAX_LOCKFILE_BYTES);
+  // A signed but revoked older lockfile is not enough: deployments pin the
+  // exact expected digest outside all plugin-controlled files.
+  const expectedRelease = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256;
+  if (expectedRelease !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(expectedRelease) ||
+        createHash("sha256").update(lockfileBytes).digest("hex") !== expectedRelease) {
+      throw new Error("OPERATOR_RELEASE_REPLICA_MISMATCH");
+    }
+  }
   const { publicKeyPath, signaturePath } = options;
   // Strict deployments must never silently fall back to unsigned v1 approval.
   // The explicit flag is additive: old operator-controlled unsigned installs

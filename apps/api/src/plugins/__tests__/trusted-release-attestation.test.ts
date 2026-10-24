@@ -70,6 +70,22 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     }
   });
 
+  it("rejects replayed, even validly signed old lockfiles after operator pin update", async () => {
+    const f = await fixture();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256",
+      createHash("sha256").update(f.payload).digest("hex"));
+    try {
+      await expect(readTrustedPluginLockfile(f.lockfile, f.options)).resolves.toEqual({
+        schemaVersion: 1, plugins: [],
+      });
+      await writeFile(f.lockfile, f.payload + " ");
+      await expect(readTrustedPluginLockfile(f.lockfile, f.options))
+        .rejects.toThrow("OPERATOR_RELEASE_REPLICA_MISMATCH");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("requires valid signature files when strict production policy is enabled", async () => {
     const f = await fixture();
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE", "1");

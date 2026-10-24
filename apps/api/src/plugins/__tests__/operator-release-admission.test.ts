@@ -136,6 +136,14 @@ describe("P0-3 offline operator release admission", () => {
       .rejects.toThrow("OPERATOR_TRUST_ROOT_MISMATCH");
   });
 
+  it("rejects a signature-valid but operator-revoked lockfile digest", async () => {
+    const f = await fixture();
+    f.configureSignature();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", "b".repeat(64));
+    await expect(verifyOperatorReleaseAdmission(f.lockfile))
+      .rejects.toThrow("OPERATOR_RELEASE_REPLICA_MISMATCH");
+  });
+
   it("refuses mismatched replicas and modified artifacts", async () => {
     const f = await fixture();
     f.configureSignature();
