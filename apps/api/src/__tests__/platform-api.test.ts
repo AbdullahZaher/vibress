@@ -342,6 +342,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       status: "active" as const, settingsSchema: {}, hooks: [],
       createdAt: new Date(), updatedAt: new Date(),
       publicationScoped: true, publicationEnabled: true,
+      publicationConfiguredEnabled: true, hostCompatible: true,
     });
     const label = { en: "Courses", ar: "الدورات" };
     const handle = vi.fn(async () => ({ total: 2 }));
@@ -1349,6 +1350,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
         description: null, entrypoint: "index.mjs", capabilities: ["admin.navigation", "extension.routes.admin"],
         hooks: [], settingsSchema: {}, status: "active", createdAt: new Date(), updatedAt: new Date(),
         publicationScoped: true, publicationEnabled: true,
+        publicationConfiguredEnabled: true, hostCompatible: true,
       }]);
     const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
       .mockResolvedValue(new Map([["independent-courses", "f".repeat(64)]]));

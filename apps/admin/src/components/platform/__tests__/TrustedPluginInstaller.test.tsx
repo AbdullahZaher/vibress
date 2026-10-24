@@ -128,7 +128,9 @@ describe("Operator-approved Add Plugin", () => {
 
   it("refuses a registry entry without an immutable approval ID", async () => {
     vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
-      plugins: [{ ...plugin, approvalId: undefined }],
+      plugins: [{ id: plugin.id, name: plugin.name, version: plugin.version,
+        description: plugin.description, capabilities: plugin.capabilities,
+        signatureVerified: plugin.signatureVerified, readiness: plugin.readiness }],
     });
     await render();
     expect(container.textContent).toContain("Immutable release identity unavailable");
