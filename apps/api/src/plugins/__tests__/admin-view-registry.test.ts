@@ -36,7 +36,21 @@ describe("EXT-301A Admin view admission", () => {
     expect(admitAdminViews({ ...good, adminViews: [good.adminViews![0]!, good.adminViews![0]!] })).toBeNull();
   });
 
-  it("fails closed if the linked route has mismatched permission, wrong audience, POST, or query input", () => {
+  it("admits bounded optional read selectors but rejects required/authority selectors", () => {
+    const good = moduleWithView();
+    expect(admitAdminViews({ ...good,
+      routes: [{ ...good.routes![0]!, query: { fields: { courseId: "string", cursor: "string" } } }],
+    })).not.toBeNull();
+    expect(admitAdminViews({ ...good,
+      routes: [{ ...good.routes![0]!,
+        query: { fields: { courseId: "string" }, required: ["courseId"] } }],
+    })).toBeNull();
+    expect(admitAdminViews({ ...good,
+      routes: [{ ...good.routes![0]!, query: { fields: { publicationId: "string" } } }],
+    })).toBeNull();
+  });
+
+  it("fails closed on mismatched permissions, wrong audience, POST, or duplicate routes", () => {
     const good = moduleWithView();
     expect(admitAdminViews({
       ...good, adminNavigation: [{ viewId: "courses", label, permission: "plugins.manage" }],
@@ -46,9 +60,6 @@ describe("EXT-301A Admin view admission", () => {
     })).toBeNull();
     expect(admitAdminViews({
       ...good, routes: [{ ...good.routes![0]!, method: "POST" }],
-    })).toBeNull();
-    expect(admitAdminViews({
-      ...good, routes: [{ ...good.routes![0]!, query: { fields: { term: "string" } } }],
     })).toBeNull();
     expect(admitAdminViews({
       ...good, routes: [good.routes![0]!, good.routes![0]!],
