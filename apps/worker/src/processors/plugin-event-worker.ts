@@ -11,7 +11,7 @@ import {
   DrizzlePluginSettingRepository,
   DrizzlePluginPublicationStateRepository,
   DrizzlePluginPublicationSettingRepository,
-  TrustedExternalPluginHost, verifyTrustedPluginRelease,
+  TrustedExternalPluginHost, verifyTrustedPluginRelease, verifyOperatorReleaseAdmission,
   pluginEventLedger, pluginEventJobId,
   type Plugin,
 } from "@vibress/plugins";
@@ -126,13 +126,24 @@ export class PluginEventWorker {
   async start(): Promise<void> {
     // Only replicas with an explicit operator-approved release mount may
     // execute external plugin code. The default worker remains bundled-only.
+    const policy = process.env.VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY;
+    if (policy !== undefined && policy !== "strict") {
+      throw new Error("Unsupported trusted plugin admission policy");
+    }
     if (!process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
-      if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1") {
+      if (process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1" ||
+          policy === "strict") {
         throw new Error("Trusted plugin release mount required");
       }
       return;
     }
-    await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+    if (policy === "strict") {
+      const expected = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256;
+      if (!expected) throw new Error("Strict operator admission requires pinned release");
+      await verifyOperatorReleaseAdmission(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE, expected);
+    } else {
+      await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+    }
     // Reject an unmigrated database before opening the BullMQ consumer:
     // otherwise unadmitted pre-migration jobs could be silently consumed.
     await pluginEventLedger.assertReady();
