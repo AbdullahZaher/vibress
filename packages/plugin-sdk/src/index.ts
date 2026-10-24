@@ -59,6 +59,12 @@ export interface PluginStorageResultPage {
 export interface PluginStorageApi {
   get(modelKey: string, id: string): Promise<PluginStorageItem | null>;
   list(modelKey: string, limit?: number, cursor?: string): Promise<PluginStorageResultPage>;
+  /** Optional additive host-only text equality selector. Models/fields must
+   * be operator approved; publication scope never comes from plugin input.
+   * Old host runtimes can omit this capability. */
+  listByText?(
+    modelKey: string, field: string, value: string, limit?: number, cursor?: string,
+  ): Promise<PluginStorageResultPage>;
   create(
     modelKey: string, id: string, fields: Readonly<Record<string, PluginStorageValue>>,
   ): Promise<PluginStorageItem>;
