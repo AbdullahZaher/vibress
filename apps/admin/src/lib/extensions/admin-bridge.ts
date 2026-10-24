@@ -19,7 +19,7 @@ export function connectAdminExtensionReadBridge(
   frame: HTMLIFrameElement,
   locale: string,
   isCurrent: () => boolean,
-  readLinkedView: () => Promise<Record<string, Scalar>>,
+  readLinkedView: (query?: Readonly<Record<string, Scalar>>) => Promise<Record<string, Scalar>>,
   writeLinkedView?: (body: Readonly<Record<string, Scalar>>) => Promise<Record<string, Scalar>>,
   confirmWrite?: () => boolean,
 ): () => void {
@@ -134,7 +134,7 @@ export function connectAdminExtensionReadBridge(
       return;
     }
     active++;
-    void readLinkedView().then((data) => {
+    void readLinkedView(read.data.query).then((data) => {
       respond(requestId, { ok: true, data });
     }).catch(() => {
       respond(requestId, { ok: false, error: "UNAVAILABLE" });
