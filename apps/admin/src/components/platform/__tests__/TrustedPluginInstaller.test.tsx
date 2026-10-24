@@ -85,7 +85,7 @@ describe("Operator-approved Add Plugin", () => {
     await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
     await click("Register trusted plugin");
     expect(registerOperatorTrustedPluginApi).toHaveBeenCalledOnce();
-    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id, plugin.approvalId);
+    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id, plugin.approvalId, false);
     expect(onRegistered).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });
