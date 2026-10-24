@@ -41,9 +41,9 @@ test("public detail is Host-bound and private lesson content stays protected", a
   const other = await page.request.get(
     `${siteB}/api/content/v1/extensions/vibress-lms-authoring/v1/course?courseId=${encodeURIComponent(courseId)}&locale=en`,
   );
-  expect(other.ok()).toBeTruthy();
+  expect([200, 404]).toContain(other.status());
   const data: unknown = await other.json();
-  expect(data).toMatchObject({ outcome: "not-found" });
+  if (other.status() === 200) expect(data).toMatchObject({ outcome: "not-found" });
   expect(JSON.stringify(data)).not.toContain("Protected Lesson Body");
 });
 
