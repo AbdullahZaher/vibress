@@ -15,7 +15,7 @@
     "@lexical/utils": "0.52.0",
     "@vibress/studio-utils": "workspace:*",
     "lexical": "0.13.1",
-    "zod": "^3.23.8"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/react": "^18.3.31",
