@@ -505,16 +505,71 @@ Never deploy a new LMS package onto an earlier Core runtime that still
 rejects the new optional Admin GET query shape. Disabling LMS must
 preserve authored courses, enrollments, and progress.
 
-The present public catalog performs a bounded scan of course storage
-(maximum 64 pages of 50 records) because the existing generic storage
-API has no indexed published-only listing. Beyond that budget the
-public handler fails closed with `unavailable`, not a misleading
-empty catalog. Large installations require a reviewed, indexed,
-publication-scoped published-course projection before this can be
-treated as an unlimited catalog. Do not raise the scan limit blindly.
+**Catalog performance:** On Core versions supporting optional SDK
+`listByText`, the Host resolves the signed `courses` model and executes a
+publication-scoped PostgreSQL equality filter on `status = 'published'`,
+rather than scanning draft records. LMS retains the prior bounded cursor
+scan on older Core installations for compatibility. Both paths stop
+after 64 pages of 50 records, returning `unavailable` instead of
+silently hiding records if that bound is exceeded. The 4-KB HTML
+projection remains bounded; a future cursor-based public presentation
+contract is needed to show more course cards without truncation.
+
+For **fresh installations**, the operator-signed `indexedTextFields:
+["status"]` creates the matching `(publication_id, status, id)` index on
+the new, empty course table inside its approved physical migration.
+
+For **populated upgrades**, never run blocking `CREATE INDEX` inside the
+published schema migrations. Verify the operator-signed LMS release,
+take a valid backup, and run the dedicated concurrent-index maintenance
+command from the Core release (requires the signed plan and configured
+PostgreSQL credentials):
+
+```bash
+pnpm exec tsx scripts/plugins/ensure-approved-text-indexes.ts /absolute/path/operator-migration-plan.json
+# Review the dry-run SQL and maintenance window, then explicitly apply:
+pnpm exec tsx scripts/plugins/ensure-approved-text-indexes.ts /absolute/path/operator-migration-plan.json --apply
+```
+
+The command confirms ownership/digest from the authoritative physical
+model catalog and verifies the resulting index is valid. It does not
+rewrite migrations or plugin content. A failed concurrent index build
+must be repaired manually after inspecting `pg_index.indisvalid`; do
+not bypass this check or automatically delete existing indexes.
+The current filtered API works even before indexing, but may use a
+sequential PostgreSQL scan until maintenance completes.
 
 After upgrading Zod 3 to Zod 4, run typecheck, contract tests, the
 existing populated-install/migration tests, production dependency audit,
 and a browser drill that covers actual signed LMS installation,
 enrollment, protected lesson reads, and course completion. CI's generic
 Playwright PR suite does not by itself constitute that LMS drill.
+
+
+### Real-browser signed LMS staging acceptance
+
+After Core-first upgrade, enabling the **verified signed LMS release**,
+creating a uniquely named published test course in publication A, and
+provisioning a fresh test Member, run the dedicated browser suite
+against two real gateway-hosted publications. Publication B must not
+contain this test course ID. Do not use live paying Member cookies,
+production data, or an arbitrary third-party plugin package.
+
+```bash
+export VIBRESS_LMS_ACCEPTANCE_SITE_A="https://site-a-staging.example/"
+export VIBRESS_LMS_ACCEPTANCE_SITE_B="https://site-b-staging.example/"
+export VIBRESS_LMS_ACCEPTANCE_COURSE_ID="staging-course-unique"
+export VIBRESS_LMS_ACCEPTANCE_MEMBER_COOKIE_A="member_cookie_name=secret"
+# Optional, after explicitly enabling the regional Arabic locale:
+export VIBRESS_LMS_ACCEPTANCE_ARABIC_DETAIL_PATH="/ar/courses/staging-course-unique"
+pnpm exec playwright test --config tests/acceptance/playwright.config.ts
+```
+
+The suite checks public/Member isolation, same-origin enrollment,
+literal-text protected lessons, completion, and optional RTL. It is an
+**operator acceptance gate**, not a mocked PR E2E replacement. Its config
+disables traces/screenshots/video so authenticated cookies are not
+persisted in artifacts. The secret environment variables are not
+printed. Staff create/save/publish, active-session revocation and
+backup/restore still require the preceding Fastify integration tests
+and the production reverse-proxy canary drill.
