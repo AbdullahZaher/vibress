@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
-import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
+import { DrizzlePluginRepository, PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService, workspaceService, publicationLocaleService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -721,6 +721,36 @@ describe("Batch 12 — Platform Integration & Security", () => {
       payload: { manifestId: "vibress-content-metrics" },
     });
     expect(noSession.statusCode).toBe(401);
+  });
+
+  it("atomically refuses plugin metadata replacement during activation", async () => {
+    const repo = new DrizzlePluginRepository();
+    const id = crypto.randomUUID();
+    const manifestId = `cas-plugin-${id}`;
+    await repo.create({
+      id,
+      manifestId,
+      name: "CAS Fixture",
+      version: "1.0.0",
+      vibressApiVersion: SDK_VERSION,
+      entrypoint: "index.ts",
+      capabilities: [],
+      hooks: [],
+      settingsSchema: {},
+    });
+    try {
+      await repo.tryTransitionStatus(id, ["registered"], "active");
+      const denied = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" });
+      expect(denied).toBeNull();
+      expect((await repo.findById(id))?.version).toBe("1.0.0");
+
+      await repo.tryTransitionStatus(id, ["active"], "inactive");
+      const allowed = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" });
+      expect(allowed?.version).toBe("2.0.0");
+      expect(allowed?.status).toBe("inactive");
+    } finally {
+      await repo.delete(id);
+    }
   });
 
   it("registers the official example plugin (valid manifest)", async () => {
