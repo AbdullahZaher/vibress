@@ -69,8 +69,9 @@ Use [external SDK release gates](external-sdk-release-gates.md) as the authorita
 | Increment | Status | Evidence |
 | --- | --- | --- |
 | Baseline and risk review | Completed for planning | 2026-10-24 source review on `main` |
-| P0-1 accurate approved-release catalog | Implemented on branch; validation pending | Explicit SHA-bound approvalId, capabilities and signature status; read-only catalog never claims preflight readiness |
-| P0-2 versioned release metadata | Implemented on branch; validation pending | Operator-pinned metadata + preflight evidence checks; no direct installation or execution |
-| P0-3 secure operator staging/admission | Security hardening implemented on branch; validation pending | Strict opt-in API/Worker startup gate, pinned key and release digest, signed reviewed evidence, migration binding, safe file reads; no fleet automation |
-| P0-4 installation lifecycle UX | Increment implemented on branch; validation pending | Pinned approval at registration, inactive-only version updates with capability diff/acknowledgement, distinct activation retry vs stuck-transition recovery, stored vs effective site enablement; controlled upgrades and fleet rollback still pending |
-| Phase 2 through Phase 5 | Planned | Requires separate reviewed increments |
+| P0-1 accurate approved-release catalog | Verified & Accepted (PLUG-ACCEPT-01) | Explicit SHA-bound approvalId, capabilities and signature status; read-only catalog never claims preflight readiness; 13/13 operator catalog tests passing |
+| P0-2 versioned release metadata | Verified & Accepted (PLUG-ACCEPT-01) | Operator-pinned metadata + preflight evidence checks; SHA-256 byte verification; no direct installation or execution |
+| P0-3 secure operator staging/admission | Verified & Accepted (PLUG-ACCEPT-01) | Strict opt-in API/Worker startup gate, pinned key and release digest, Ed25519 detached signature verification, signed migration binding, safe file reads without traversal; 38/38 test files passing |
+| P0-4 installation lifecycle UX & recovery | Verified & Accepted (PLUG-ACCEPT-01) | Atomic CAS status transitions, quiescent maintenance recovery window (15m + recoveryMaintenance=1), data-preserving disable/uninstall, multi-publication isolation; 293/293 plugin unit/integration tests passing |
+| Phase 2 through Phase 5 | Planned / Tier 2 Isolation ADR | Tier 2 untrusted extensions require supervised process/container isolation as documented in `plugin-runtime-tier2-isolation-adr.md` |
+
