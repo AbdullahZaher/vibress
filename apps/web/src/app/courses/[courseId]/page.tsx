@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { isIP } from "node:net";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getThemeSiteSettings } from "../../../lib/theme-host";
@@ -13,13 +15,13 @@ type Props = {
   params: Promise<{ courseId: string }>;
 };
 
-async function fetchCourseData(
+const fetchCourseData = cache(async (
   courseId: string,
   locale: string,
   publicationId: string | undefined,
-  incoming: Headers,
-) {
+) => {
   if (!publicationId) return null;
+  const incoming = await headers();
   // The linked public view carries the Host-authorized publication identity.
   // Existing signed LMS installs may omit publicationId in /course payloads,
   // so verify the view first and check an optional payload identity too.
@@ -37,6 +39,8 @@ async function fetchCourseData(
   const apiBase = process.env.API_URL || "http://127.0.0.1:7780";
   const privateSiteCookie = incoming.get("cookie")?.split(";").map((value) => value.trim())
     .find((value) => value.startsWith("vb_site_auth="));
+  // Accept only the gateway-overwritten address, never untrusted X-Forwarded-For.
+  const gatewayVisitorIp = incoming.get("x-real-ip");
 
   try {
     const res = await fetch(
@@ -45,6 +49,8 @@ async function fetchCourseData(
       {
         headers: {
           "x-forwarded-host": host,
+          ...(gatewayVisitorIp && isIP(gatewayVisitorIp) !== 0
+            ? { "x-forwarded-for": gatewayVisitorIp } : {}),
           ...(privateSiteCookie ? { cookie: privateSiteCookie } : {}),
         },
         cache: "no-store",
@@ -56,13 +62,12 @@ async function fetchCourseData(
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { courseId } = await params;
   const site = await getThemeSiteSettings();
-  const h = await headers();
-  const course = await fetchCourseData(courseId, site.locale, site.publicationId, h);
+  const course = await fetchCourseData(courseId, site.locale, site.publicationId);
   if (!course) return { title: "Course Not Found", robots: { index: false, follow: false } };
   return {
     title: `${course.title} — ${site.title || "Vibress"}`,
@@ -73,8 +78,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CourseDetailPage({ params }: Props) {
   const { courseId } = await params;
   const site = await getThemeSiteSettings();
-  const h = await headers();
-  const course = await fetchCourseData(courseId, site.locale, site.publicationId, h);
+  const course = await fetchCourseData(courseId, site.locale, site.publicationId);
   if (!course || !site.publicationId) notFound();
 
   const isArabic = site.locale.startsWith("ar");
