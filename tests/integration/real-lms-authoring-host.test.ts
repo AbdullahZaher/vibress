@@ -512,6 +512,32 @@ describe("LMS-104: Production-Quality Public Course Catalog, Protected Lessons &
     const siteA = `http://${domainA}:${serverPort}`;
     const siteB = `http://${domainB}:${serverPort}`;
 
+    // Detail-page view identity must not execute a catalog scan or return
+    // plugin storage data. The Host independently checks publication and locale.
+    const identityA = await fetch(
+      `${siteA}/api/content/v1/extensions/vibress-lms-authoring/views/catalog/identity?locale=en`,
+    );
+    expect(identityA.status).toBe(200);
+    expect(identityA.headers.get("cache-control")).toContain("no-store");
+    const boundIdentity = (await identityA.json()) as Record<string, unknown>;
+    expect(boundIdentity.publicationId).toBe(pubAId);
+    expect(boundIdentity.locale).toBe("en");
+    expect(boundIdentity.routeId).toBe("catalog");
+    expect(boundIdentity.data).toBeUndefined();
+    const identityB = await fetch(
+      `${siteB}/api/content/v1/extensions/vibress-lms-authoring/views/catalog/identity?locale=en`,
+    );
+    expect(identityB.status).toBe(200);
+    expect(((await identityB.json()) as { publicationId: string }).publicationId).toBe(pubBId);
+    const invalidLocale = await fetch(
+      `${siteA}/api/content/v1/extensions/vibress-lms-authoring/views/catalog/identity?locale=fr`,
+    );
+    expect(invalidLocale.status).toBe(404);
+    const invalidPlugin = await fetch(
+      `${siteA}/api/content/v1/extensions/other-plugin/views/catalog/identity?locale=en`,
+    );
+    expect(invalidPlugin.status).toBe(404);
+
     // English public SSR catalog
     const catEnRes = await fetch(
       `${siteA}/api/content/v1/extensions/vibress-lms-authoring/views/catalog/page?locale=en`,
