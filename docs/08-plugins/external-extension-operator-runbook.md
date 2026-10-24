@@ -479,3 +479,42 @@ pnpm exec vitest run tests/integration/real-lms-pilot-host.test.ts
 ```
 
 For full details, see [EXT-506 Architecture & Integration](lms-real-integration-ext506.md).
+
+
+## LMS-104 safe upgrade and audience-scoped read grants
+
+The operator-signed lockfile accepts the **optional**, additive
+`publicReadModels` and `memberReadModels` model-key arrays. Both are
+validated against `storageModels` at admission. An explicit empty array
+denies that audience's generic model storage session. Legacy signed
+lockfiles without either field continue to work with their existing
+model grants until the operator reviews and re-signs them; absence is
+not a least-privilege default.
+
+For LMS-104, sign both lists as `["courses"]`. Enrollment and completion
+records remain accessible only through the separate, member-bound storage
+session, not generic public/member model grants.
+
+**Upgrade in this order:** deploy and migrate a backed-up Core release
+that understands the optional Admin read selectors and these operator
+read grants; verify publication authorization, Member sessions, and
+the public extension host; then deploy the signed LMS authoring release
+pinned by SHA-256. Verify the final .mjs and HTML digests, apply the
+unchanged forward-only LMS models, then enable a canary publication.
+Never deploy a new LMS package onto an earlier Core runtime that still
+rejects the new optional Admin GET query shape. Disabling LMS must
+preserve authored courses, enrollments, and progress.
+
+The present public catalog performs a bounded scan of course storage
+(maximum 64 pages of 50 records) because the existing generic storage
+API has no indexed published-only listing. Beyond that budget the
+public handler fails closed with `unavailable`, not a misleading
+empty catalog. Large installations require a reviewed, indexed,
+publication-scoped published-course projection before this can be
+treated as an unlimited catalog. Do not raise the scan limit blindly.
+
+After upgrading Zod 3 to Zod 4, run typecheck, contract tests, the
+existing populated-install/migration tests, production dependency audit,
+and a browser drill that covers actual signed LMS installation,
+enrollment, protected lesson reads, and course completion. CI's generic
+Playwright PR suite does not by itself constitute that LMS drill.
