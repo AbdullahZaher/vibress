@@ -69,6 +69,6 @@ Use [external SDK release gates](external-sdk-release-gates.md) as the authorita
 | Increment | Status | Evidence |
 | --- | --- | --- |
 | Baseline and risk review | Completed for planning | 2026-10-24 source review on `main` |
-| P0-1 accurate approved-release catalog | In progress | Implementation branch `feat/plugin-platform-trust-catalog-20261024` |
+| P0-1 accurate approved-release catalog | Implemented on branch; not release-certified | `feat/plugin-platform-trust-catalog-20261024` (signed/legacy metadata, capability display, regression tests; validation pending) |
 | P0-2 through P0-4 | Planned | No implementation claim |
 | Phase 2 through Phase 5 | Planned | Requires separate reviewed increments |

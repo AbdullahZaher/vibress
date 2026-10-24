@@ -97,7 +97,10 @@ describe("Operator-approved Add Plugin", () => {
   });
 
   it("does not allow blind registration when an older server omits capabilities", async () => {
-    const { capabilities: _capabilities, ...legacy } = plugin;
+    const legacy = {
+      id: plugin.id, name: plugin.name, version: plugin.version,
+      description: plugin.description, signatureVerified: true,
+    };
     vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [legacy] });
     await render();
     expect(container.textContent).toContain("Capabilities unavailable");

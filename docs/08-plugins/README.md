@@ -1,7 +1,7 @@
 # Plugin extensibility: current implementation and proposed platform
 
-**Documentation status: mixed implementation and release gates — 2026-10-22.**
-PR #77 was merged into `main`; the platform is **not declared generally
+**Documentation status: historical milestone narrative (2026-10-22), supplemented by the active 2026-10-24 plan.**
+PR #77, PR #78 and PR #86 are now merged into `main`; the platform is **not declared generally
 supported for untrusted plugins** or complete for external SDK release.
 
 ## Active platform completion program (2026-10-24)
@@ -21,8 +21,9 @@ Host-owned, read-only Studio navigation/view implementation. The proposed
 Admin UI asset verification; [EXT-301B2A](extension-admin-views-ext301b2.md)
 adds Staff/publication-authorized inert JSON delivery; the EXT-301B2B increment
 introduces an opaque-origin, single-file iframe with single-use Redis tickets,
-strict CSP and a private **read-only** linked-GET MessagePort. There is no
-privileged write/API-proxy bridge. This is **not** a general executable Admin
+strict CSP and a private **read-only** linked-GET MessagePort. These early milestones
+had no write bridge; later merged PR #78 added a narrowly Host-confirmed linked
+write flow, **not** an arbitrary privileged API proxy. This is **not** a general executable Admin
 UI platform or a declaration of extension platform release readiness.
 The proposed [EXT-302A public SSR dispatcher](extension-public-views-ext302a.md)
 adds opt-in, Host-authorized and text-only public extension pages; member-private
@@ -65,12 +66,12 @@ cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
 The opt-in production Compose override requires operator release signatures.
 Do not infer production readiness from CI alone.
 
-**Current additional change under review:** PR #78 proposes a confirmed
-linked-route Admin write bridge (EXT-301C). The existing read-only bridge
-remains compatible. Direct Admin POST mutation permissions are tightened
-under review; see the PR compatibility notice. Member-owned transactional
-enrollment storage is not yet a public Host capability. The independent
-`vibress-lms` integration remains a pilot, not an installable release.
+**Later merged increments:** PR #78 added the confirmed linked-route Admin write
+bridge (EXT-301C) with direct Admin POST permission restrictions while
+preserving the read-only bridge. PR #86 added Host-mediated member/public
+read-only storage wiring; check the current Host contracts before concluding
+that a specific plugin can use those capabilities. The independent
+`vibress-lms` integration is still a pilot, and LMS feature work is paused.
 
 See [external SDK release gates](external-sdk-release-gates.md) for the
 operational test matrix and blockers that prevent announcing a stable SDK.

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ import { TrustedExternalPluginHost, parseTrustedPluginLockfile } from "../truste
 const dirs: string[] = [];
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+  vi.unstubAllEnvs();
 });
 const manifest = {
   id: "operator-approved",
@@ -75,6 +76,27 @@ async function approvedAdminUiFixture() {
 describe("TrustedExternalPluginHost", () => {
   it("preserves bundled-only defaults when opt-in is absent", async () => {
     expect(await new TrustedExternalPluginHost("").loadModule(plugin())).toBeNull();
+  });
+
+  it("discovers exact manifest capabilities and truthfully reports signed and unsigned approvals", async () => {
+    const f = await fixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([
+      { manifest, signatureVerified: false },
+    ]);
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+    const keyPath = path.join(f.dir, "operator.pub");
+    const signaturePath = path.join(f.dir, "operator.sig");
+    await writeFile(keyPath, publicKey.export({ format: "pem", type: "spki" }));
+    await writeFile(signaturePath,
+      sign(null, await readFile(f.lockfile), privateKey).toString("base64") + "\n");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", keyPath);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", signaturePath);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([
+      { manifest, signatureVerified: true },
+    ]);
+    await writeFile(f.lockfile, (await readFile(f.lockfile, "utf8")) + " ");
+    await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
   });
 
   it("loads a pinned operator-controlled ESM module", async () => {
