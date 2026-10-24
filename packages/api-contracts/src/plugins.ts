@@ -38,7 +38,7 @@ export const PluginPublicationSettingsResponseSchema = z.object({
 
 /** Host-owned trusted release catalog; no executable paths or remote URLs. */
 export const OperatorTrustedReleaseSummarySchema = z.object({
-  releaseId: z.string().min(1).max(240),
+  releaseId: z.string().min(1).max(330),
   publisher: z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
     name: z.string().min(1).max(120),
@@ -62,7 +62,7 @@ export const OperatorTrustedPluginCatalogResponseSchema = z.object({
     description: z.string().nullable(),
     capabilities: z.array(z.string()),
     signatureVerified: z.boolean().nullable(),
-    approvalId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/).optional(),
+    approvalId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,199}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/).optional(),
     readiness: z.literal("verification_required").optional(),
     upgradeReview: z.object({
       installedVersion: z.string().min(1).max(128),
@@ -78,7 +78,7 @@ export const OperatorTrustedPluginCatalogResponseSchema = z.object({
 export const OperatorTrustedPluginRegisterSchema = z.object({
   manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(200),
   expectedReleaseId: z.string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/)
+    .regex(/^[a-z0-9][a-z0-9-]{0,199}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/)
     .optional(),
   acknowledgeUpgrade: z.boolean().optional(),
 }).strict();

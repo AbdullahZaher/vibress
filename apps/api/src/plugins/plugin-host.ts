@@ -43,7 +43,7 @@ export class BundledPluginHost implements PluginHost {
   async getOperatorManifestCatalog(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
-    approvalId: string;
+    approvalId?: string;
     release?: OperatorTrustedReleaseSummary;
   }>> {
     return this.external.listTrustedCatalog();

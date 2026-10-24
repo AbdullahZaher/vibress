@@ -48,7 +48,7 @@ const releaseEvidenceSchema = z.object({
 }).strict();
 const releaseMetadataSchema = z.object({
   schemaVersion: z.literal(1),
-  releaseId: z.string().min(1).max(240),
+  releaseId: z.string().min(1).max(330),
   publisher: z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
     name: z.string().trim().min(1).max(120),
@@ -84,6 +84,7 @@ const lockfileSchema = z.object({
   plugins: z.array(pinnedPluginSchema).max(64),
 }).strict();
 
+const APPROVAL_ID = /^[a-z0-9][a-z0-9-]{0,199}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_UI_ASSET_BYTES = 256 * 1024;
 
@@ -243,7 +244,7 @@ export class TrustedExternalPluginHost {
   async listTrustedCatalog(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
-    approvalId: string;
+    approvalId?: string;
     release?: OperatorTrustedReleaseSummary;
   }>> {
     const lockfile = this.lockfilePath;
@@ -252,9 +253,10 @@ export class TrustedExternalPluginHost {
       await readTrustedPluginLockfileWithVerification(lockfile);
     return [...parseTrustedPluginLockfile(data).values()].map((approved) => {
       const release = approved.release;
+      const approvalId = `${approved.manifest.id}@${approved.manifest.version}:${approved.sha256}`;
       return {
         manifest: approved.manifest, signatureVerified,
-        approvalId: `${approved.manifest.id}@${approved.manifest.version}:${approved.sha256}`,
+        ...(APPROVAL_ID.test(approvalId) ? { approvalId } : {}),
         ...(release ? { release: {
           releaseId: release.releaseId,
           publisher: { ...release.publisher },
