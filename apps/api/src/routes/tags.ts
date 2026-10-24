@@ -64,7 +64,7 @@ export async function tagRoutes(fastify: FastifyInstance) {
             {
               code: "VALIDATION_ERROR",
               message:
-                parseResult.error.errors[0]?.message || "Invalid tag payload",
+                parseResult.error.issues[0]?.message || "Invalid tag payload",
               requestId: req.id,
             },
           ],
@@ -95,7 +95,7 @@ export async function tagRoutes(fastify: FastifyInstance) {
             {
               code: "VALIDATION_ERROR",
               message:
-                parseResult.error.errors[0]?.message || "Invalid tag payload",
+                parseResult.error.issues[0]?.message || "Invalid tag payload",
               requestId: req.id,
             },
           ],

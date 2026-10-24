@@ -1,13 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PluginApiScope } from "@vibress/plugin-sdk";
+import { supportsPublishedExtensionLocale } from "@vibress/i18n";
 import {
   ExtensionAdminNavigationParamsSchema,
   ExtensionPublicViewDtoSchema,
+  ExtensionPublicViewIdentitySchema,
   ExtensionPublicPageResponseSchema,
   ExtensionPublicPageQuerySchema,
   validateExtensionApiObject,
 } from "@vibress/api-contracts";
-import { PluginDomainError } from "@vibress/plugins";
+import { PluginDomainError, createHostPluginStorageSession } from "@vibress/plugins";
 import { pluginsService, publicationLocaleService } from "../services";
 import { admitPublicViews } from "../plugins/public-view-registry";
 
@@ -23,6 +25,57 @@ function reject(req: FastifyRequest, reply: FastifyReply, code: string, status: 
  * The descriptor never renders plugin HTML or calls the plugin GET handler.
  */
 export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
+  /** Lightweight public view admission: never invokes the linked plugin GET
+   * handler or opens a storage session. The publication is resolved by the
+   * public Host middleware, not caller-supplied IDs.
+   * Old /page and /views/:id routes remain unchanged. */
+  fastify.get("/extensions/:pluginId/views/:viewId/identity", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("X-Content-Type-Options", "nosniff");
+      const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
+      const localeQuery = ExtensionPublicPageQuerySchema.safeParse(req.query);
+      if (!params.success || !localeQuery.success) return reject(req, reply, "VALIDATION_ERROR", 400);
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) return reject(req, reply, "PUBLICATION_NOT_FOUND", 404);
+      const { pluginId, viewId } = params.data;
+      try {
+        const module = await pluginsService.resolveExtensionApiModule(
+          pluginId, publicationId, "extension.routes.public",
+        );
+        if (!module) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const views = admitPublicViews(module);
+        if (!views) return reject(req, reply, "EXTENSION_INVALID_PUBLIC_VIEWS", 503);
+        const view = views.find((entry) => entry.viewId === viewId);
+        if (!view) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const policy = await publicationLocaleService.getConfiguration(publicationId);
+        const locale = localeQuery.data.locale ?? policy.primaryLocale;
+        if (!policy.enabledLocales.includes(locale) ||
+            !supportsPublishedExtensionLocale(view.publishedLocales, locale)) {
+          return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        }
+        const approved = await pluginsService.prepareExtensionApiExecution(
+          pluginId, publicationId, "extension.routes.public", module,
+        );
+        if (!approved) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const result = ExtensionPublicViewIdentitySchema.safeParse({
+          pluginId, viewId, routeId: view.routeId, publicationId, locale,
+          title: view.title,
+          ...(view.publishedLocales ? { publishedLocales: view.publishedLocales } : {}),
+        });
+        if (!result.success) return reject(req, reply, "EXTENSION_INVALID_PUBLIC_VIEWS", 503);
+        return reply.status(200).send(result.data);
+      } catch (error) {
+        if (error instanceof PluginDomainError &&
+            (error.code === "PLUGIN_PUBLICATION_INACTIVE" ||
+             error.code === "PLUGIN_INACTIVE")) {
+          return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        }
+        return reject(req, reply, "EXTENSION_UNAVAILABLE", 503);
+      }
+    },
+  });
   /**
    * One Host-publication snapshot for descriptor, route admission, initialization,
    * and scalar data. The previous descriptor/v1 route endpoints are retained for
@@ -51,7 +104,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         const localePolicy = await publicationLocaleService.getConfiguration(publicationId);
         const locale = localeQuery.data.locale ?? localePolicy.primaryLocale;
         if (!localePolicy.enabledLocales.includes(locale) ||
-            (view.publishedLocales && !view.publishedLocales.includes(locale))) {
+            !supportsPublishedExtensionLocale(view.publishedLocales, locale)) {
           return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
         }
         const route = module.routes?.find((item) =>
@@ -63,18 +116,41 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
           pluginId, publicationId, "extension.routes.public", module,
         );
         if (!allowed) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const binding = await pluginsService.resolveExtensionStorageBinding(
+          pluginId, publicationId, "extension.storage.read", "public",
+        ).catch(() => null);
+        let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
+        if (binding) {
+          storageSession = createHostPluginStorageSession(
+            {
+              pluginId: binding.pluginId, publicationId,
+              actorUserId: "anonymous", requestId: req.id,
+              allowWrites: false,
+            },
+            binding.models,
+          );
+        }
         const scope: PluginApiScope = {
           publicationId, requestId: req.id, locale, principal: { kind: "anonymous" },
+          ...(storageSession ? { storage: storageSession.storage } : {}),
         };
-        // Public extension execution never receives privileged storage, member,
+        // Public extension execution never receives privileged storage writes, member,
         // staff, or tenant selectors from the caller. The Host rechecks
         // publication enablement before invoking the trusted plugin callback.
         let output: unknown;
+        let sessionCloseFailed = false;
         try {
           output = await route.handle({ query: {}, body: {} }, scope);
         } catch {
           return reject(req, reply, "EXTENSION_HANDLER_FAILED", 503);
+        } finally {
+          try {
+            await storageSession?.close();
+          } catch {
+            sessionCloseFailed = true;
+          }
         }
+        if (sessionCloseFailed) return reject(req, reply, "EXTENSION_HANDLER_FAILED", 503);
         const data = validateExtensionApiObject(route.response, output);
         if (!data) return reject(req, reply, "EXTENSION_INVALID_RESPONSE", 503);
         const parsed = ExtensionPublicPageResponseSchema.safeParse({

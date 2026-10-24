@@ -205,7 +205,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             {
               code: "VALIDATION_ERROR",
               message:
-                parseResult.error.errors[0]?.message || "Invalid query filters",
+                parseResult.error.issues[0]?.message || "Invalid query filters",
               requestId: req.id,
             },
           ],
@@ -278,7 +278,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],

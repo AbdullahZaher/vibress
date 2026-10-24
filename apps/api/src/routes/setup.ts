@@ -166,7 +166,7 @@ export async function setupRoutes(fastify: FastifyInstance) {
             {
               code: "VALIDATION_ERROR",
               message:
-                parseResult.error.errors[0]?.message ||
+                parseResult.error.issues[0]?.message ||
                 "Invalid setup request payload",
               requestId: req.id,
             },

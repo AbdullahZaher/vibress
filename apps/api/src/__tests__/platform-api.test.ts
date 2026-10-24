@@ -1179,7 +1179,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(authorized.statusCode).toBe(200);
       expect(authorized.json().hasStorage).toBe(true);
       expect(approve).toHaveBeenCalledWith(
-        "independent-courses", authorized.json().publication,
+        "independent-courses", authorized.json().publication, "extension.storage.write",
       );
       expect(retained).toBeDefined();
       await expect(retained!.get("courses", "row-1"))
@@ -1670,6 +1670,100 @@ describe("Batch 12 — Platform Integration & Security", () => {
       policy.mockRestore();
       prepare.mockRestore();
       resolver.mockRestore();
+    }
+  });
+
+  it("fails closed on missing publication locale policy before invoking a public extension", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      activeLocale: scope.locale ?? "unbound",
+    }));
+    const route: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      query: { fields: { locale: "string" }, required: ["locale"] },
+      response: { fields: { activeLocale: "string" } },
+      handle: handler,
+    };
+    const resolved = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [route] });
+    const prepared = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockRejectedValue(new Error("Locale settings temporarily unavailable"));
+    const url = "/api/content/v1/extensions/independent-courses/v1/catalog?locale=ar";
+    try {
+      const unavailable = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(unavailable.statusCode).toBe(503);
+      expect(unavailable.json().errors[0].code).toBe("EXTENSION_UNAVAILABLE");
+      expect(handler).not.toHaveBeenCalled();
+      expect(prepared).not.toHaveBeenCalled();
+
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en", "ar"],
+        isMultilingual: true, needsReconciliation: false,
+      });
+      const allowed = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.json()).toEqual({ activeLocale: "ar" });
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(prepared).toHaveBeenCalledTimes(1);
+
+      policy.mockResolvedValue({
+        primaryLocale: "en", enabledLocales: ["en"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+      const disabled = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(disabled.statusCode).toBe(404);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepared.mockRestore();
+      resolved.mockRestore();
+    }
+  });
+
+  it("defaults to the enabled primary locale when public caller omits locale", async () => {
+    const handler = vi.fn((_input, scope: PluginApiScope) => ({
+      activeLocale: scope.locale ?? "unbound",
+    }));
+    const descriptor: PluginApiRoute = {
+      id: "catalog", audience: "public", method: "GET",
+      response: { fields: { activeLocale: "string" } },
+      handle: handler,
+    };
+    const resolve = vi.spyOn(pluginsService, "resolveExtensionApiModule")
+      .mockResolvedValue({ activate: async () => undefined, routes: [descriptor] });
+    const prepare = vi.spyOn(pluginsService, "prepareExtensionApiExecution")
+      .mockResolvedValue(true);
+    const policy = vi.spyOn(publicationLocaleService, "getConfiguration")
+      .mockResolvedValue({
+        primaryLocale: "ar", enabledLocales: ["ar"],
+        isMultilingual: false, needsReconciliation: false,
+      });
+    try {
+      const url = "/api/content/v1/extensions/independent-courses/v1/catalog";
+      const success = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(success.statusCode).toBe(200);
+      expect(success.json()).toEqual({ activeLocale: "ar" });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      policy.mockRejectedValueOnce(new Error("Locale policy unavailable"));
+      const unavailable = await app.inject({
+        method: "GET", url, headers: { host: "localhost:7777" },
+      });
+      expect(unavailable.statusCode).toBe(503);
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      policy.mockRestore();
+      prepare.mockRestore();
+      resolve.mockRestore();
     }
   });
 

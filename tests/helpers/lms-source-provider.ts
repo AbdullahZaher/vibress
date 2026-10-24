@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-export const PINNED_LMS_COMMIT = "90b771ecc64c58251fac1d8c7fdcf3278a71ea6c";
+export const PINNED_LMS_COMMIT = "31773154e5a3244a55369a847e05b15e083787d0";
 export const LMS_REPO_URL = "https://github.com/AbdullahZaher/vibress-lms.git";
 
 export interface LmsSourceArtifacts {
@@ -113,3 +113,67 @@ export async function resolveAndBuildLmsArtifacts(): Promise<LmsSourceArtifacts>
     liveHostAcceptancePath,
   };
 }
+
+export interface LmsAuthoringArtifacts {
+  lmsDir: string;
+  releaseDir: string;
+  artifactPath: string;
+  planPath: string;
+  lockfilePath: string;
+  adminHtmlPath: string;
+  studentHtmlPath: string;
+}
+
+export async function resolveAndBuildLmsAuthoringArtifacts(): Promise<LmsAuthoringArtifacts> {
+  const lmsDir = resolveLmsDirectory();
+  const releaseDir = path.join(lmsDir, "dist", "authoring-release");
+  const artifactPath = path.join(releaseDir, "vibress-lms-authoring.mjs");
+  const planPath = path.join(releaseDir, "operator-migration-plan.json");
+  const lockfilePath = path.join(releaseDir, "trusted-plugins.json");
+  const adminHtmlPath = path.join(releaseDir, "courses.html");
+  const studentHtmlPath = path.join(releaseDir, "student.html");
+
+  const nodeModulesDir = path.join(lmsDir, "node_modules");
+  if (!existsSync(nodeModulesDir)) {
+    console.info(`[lms-source-provider] Installing LMS dependencies in ${lmsDir}...`);
+    const hasLockfile = existsSync(path.join(lmsDir, "package-lock.json"));
+    execSync(hasLockfile ? "npm ci" : "npm install", { cwd: lmsDir, stdio: "inherit" });
+  }
+
+  let needsBuild = false;
+  if (!existsSync(artifactPath) || !existsSync(planPath) || !existsSync(lockfilePath)) {
+    needsBuild = true;
+  } else {
+    const artifactMtime = statSync(artifactPath).mtimeMs;
+    const srcDir = path.join(lmsDir, "src");
+    const packageJsonPath = path.join(lmsDir, "package.json");
+    const latestSrcMtime = Math.max(
+      getLatestMtime(srcDir),
+      existsSync(packageJsonPath) ? statSync(packageJsonPath).mtimeMs : 0,
+    );
+    if (latestSrcMtime > artifactMtime) {
+      console.info(`[lms-source-provider] Source files newer than authoring artifact. Rebuilding...`);
+      needsBuild = true;
+    }
+  }
+
+  if (needsBuild) {
+    console.info(`[lms-source-provider] Building LMS authoring release in ${lmsDir}...`);
+    execSync("npm run release:authoring", { cwd: lmsDir, stdio: "inherit" });
+  }
+
+  if (!existsSync(artifactPath) || !existsSync(planPath) || !existsSync(lockfilePath)) {
+    throw new Error(`Failed to build or locate LMS authoring release artifacts in ${releaseDir}`);
+  }
+
+  return {
+    lmsDir,
+    releaseDir,
+    artifactPath,
+    planPath,
+    lockfilePath,
+    adminHtmlPath,
+    studentHtmlPath,
+  };
+}
+

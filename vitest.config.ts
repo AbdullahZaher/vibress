@@ -19,6 +19,12 @@ export default defineConfig({
       "references/**",
       "**/references/**",
       "tests/e2e/**",
+      // Real Playwright acceptance tests need staging secrets, not Vitest.
+      "tests/acceptance/**",
+      // LMS is tested by its own node:test runner as a pinned source fixture.
+      // Do not accidentally discover those .test.mjs files as Core Vitest tests.
+      ".lms-source/**",
+      "**/.lms-source/**",
     ],
   },
   resolve: {

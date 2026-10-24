@@ -196,6 +196,15 @@ export class DrizzlePluginStorageMigrationRepository
           await tx.execute(sql`CREATE TABLE ${sql.identifier(tableName)} (${
             sql.join(columnFragments, sql`, `)
           })`);
+          // Only newly created, empty physical tables are indexed inside this
+          // transaction. Upgrades of existing populated tables must install
+          // these indexes CONCURRENTLY via the operator maintenance procedure.
+          for (const field of model.indexedTextFields ?? []) {
+            const indexDigest = createHash("sha256").update(field).digest("hex").slice(0, 12);
+            const indexName = `${tableName}_i_${indexDigest}`;
+            await tx.execute(sql`CREATE INDEX ${sql.identifier(indexName)}
+              ON ${sql.identifier(tableName)} ("publication_id", ${sql.identifier(field)}, "id")`);
+          }
           await tx.insert(pluginPhysicalModels).values({
             pluginId: plugin.id,
             modelKey: model.key,

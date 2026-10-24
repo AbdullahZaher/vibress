@@ -37,6 +37,11 @@ export interface PluginScopedStorageRepository {
     Promise<PluginStorageRecord | null>;
   list(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
     limit: number, cursor?: string): Promise<PluginStoragePage>;
+  /** Additive: only operator-reviewed text fields can be filtered. */
+  listByText?(
+    scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
+    field: string, value: string, limit: number, cursor?: string,
+  ): Promise<PluginStoragePage>;
   create(scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
     id: string, fields: Readonly<Record<string, PluginStorageFieldValue>>):
     Promise<PluginStorageRecord>;
@@ -139,6 +144,17 @@ export function validateStoragePage(
     : { limit, cursor: validateStorageRecordId(cursor) };
 }
 
+export function validateStorageTextFilter(
+  model: ApprovedPluginPhysicalModel, field: string, value: string,
+): void {
+  validateStorageModel(model);
+  const descriptor = model.columns.find((column) => column.name === field);
+  if (!descriptor || descriptor.type !== "text" ||
+      typeof value !== "string" || value.length < 1 || value.length > 256) {
+    invalid("Only declared text fields with bounded scalar values can be filtered");
+  }
+}
+
 export function validateStorageVersion(value: number): number {
   if (!Number.isSafeInteger(value) || value < 1 || value >= 2147483647) {
     invalid("Invalid record version");
@@ -184,6 +200,21 @@ export class PluginScopedStorageService {
   async list(modelKey: string, limit = 20, cursor?: string): Promise<PluginStoragePage> {
     const page = validateStoragePage(limit, cursor);
     return this.repository.list(this.scope, this.model(modelKey), page.limit, page.cursor);
+  }
+  async listByText(
+    modelKey: string, field: string, value: string, limit = 20, cursor?: string,
+  ): Promise<PluginStoragePage> {
+    const model = this.model(modelKey);
+    validateStorageTextFilter(model, field, value);
+    const page = validateStoragePage(limit, cursor);
+    if (!this.repository.listByText) {
+      throw new PluginScopedStorageError(
+        "PLUGIN_STORAGE_UNAVAILABLE", "Filtered storage reads are not available",
+      );
+    }
+    return this.repository.listByText(
+      this.scope, model, field, value, page.limit, page.cursor,
+    );
   }
   async create(modelKey: string, id: string, fields: unknown): Promise<PluginStorageRecord> {
     const model = this.model(modelKey);

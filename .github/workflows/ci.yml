@@ -36,7 +36,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit production dependencies
+        id: production_audit
         run: pnpm audit --prod --audit-level moderate
+        # Collect validation results without waiving the mandatory audit gate.
+        continue-on-error: true
 
       - name: Typecheck
         run: pnpm typecheck
@@ -54,14 +57,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: AbdullahZaher/vibress-lms
-          ref: 90b771ecc64c58251fac1d8c7fdcf3278a71ea6c
+          ref: 31773154e5a3244a55369a847e05b15e083787d0
           path: .lms-source
 
-      - name: Build pinned LMS pilot release
+      - name: Validate pinned LMS and build both release fixtures
         run: |
           cd .lms-source
           npm install
-          npm run release:pilot
+          npm run verify:local
 
       - name: Test
         run: pnpm vitest run --no-file-parallelism
@@ -75,11 +78,16 @@ jobs:
       - name: Verify clean Git tree
         run: pnpm verify:clean-tree
 
+      - name: Enforce production dependency audit
+        if: always()
+        run: test "${{ steps.production_audit.outcome }}" = "success"
+
   container-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     needs: build
-    if: github.event_name != 'pull_request'
+    # Image vulnerability gates must run BEFORE merging, on the exact PR head.
+    # Continue to run on main pushes to validate the released runtime images.
 
     steps:
       - uses: actions/checkout@v7
@@ -134,7 +142,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    # An audit finding still fails build and blocks merging. Run the browser
+    # smoke gate to collect independent functional evidence in that case.
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request') && (needs.build.result == 'success' || needs.build.result == 'failure')
 
     steps:
       - uses: actions/checkout@v7

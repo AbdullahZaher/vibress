@@ -21,7 +21,7 @@ export const PluginPublicationStateSchema = z.object({
 
 /** Only declared string keys may be updated; domain validates declarations. */
 export const PluginPublicationSettingsUpdateSchema = z.object({
-  settings: z.record(z.string().max(4096).nullable()).refine(
+  settings: z.record(z.string(), z.string().max(4096).nullable()).refine(
     (value) => Object.keys(value).length <= 64,
     "Too many plugin settings",
   ),
@@ -187,6 +187,14 @@ export const ExtensionPublicProjectionSchema = z.record(
 
 /** The SSR response binds descriptor and scalar projection to one Host
  * publication and one authorized execution. Additive: old v1 APIs remain. */
+/** An authenticated-by-Host publication/locale admission proof which does
+ * not execute the plugin's catalog handler or read plugin storage. Additive
+ * endpoint for detailed extension pages; never a bearer authorization token. */
+export const ExtensionPublicViewIdentitySchema = ExtensionPublicViewDtoSchema.extend({
+  publicationId: z.string().min(1).max(200),
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/),
+}).strict();
+
 export const ExtensionPublicPageResponseSchema = ExtensionPublicViewDtoSchema.extend({
   publicationId: z.string().min(1).max(200),
   /** Selected from the publication's enabled locale policy at request time. */
@@ -258,6 +266,17 @@ export const ExtensionAdminBridgeReadRequestSchema = z.object({
   type: z.literal("vibress:extension:read"),
   version: z.literal(1),
   requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  // Optional scalar selectors for the already-bound GET route. No arbitrary
+  // URLs, tenant identities or credentials are accepted from plugin HTML.
+  query: z.record(
+    z.string().regex(/^[a-z][A-Za-z0-9_]{0,63}$/),
+    z.union([z.string().max(256), z.number().finite(), z.boolean()]),
+  ).refine((fields) => Object.keys(fields).length <= 4, "Too many read selectors")
+    .refine((fields) => ![
+      "publicationId", "workspaceId", "tenantId", "pluginId",
+      "actorUserId", "userId", "memberId",
+    ].some((key) => Object.hasOwn(fields, key)), "Authority selectors are forbidden")
+    .optional(),
 }).strict();
 
 export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok", [

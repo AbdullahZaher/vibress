@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vibress/plugin-sdk";
+import type { PluginApiShape, PluginModule } from "@vibress/plugin-sdk";
 import {
   ExtensionAdminNavigationItemSchema,
   ExtensionAdminViewSchema,
@@ -14,6 +14,23 @@ export interface AdmittedAdminView {
 }
 
 const MAX_VIEWS_PER_PLUGIN = 8;
+
+const FORBIDDEN_READ_SELECTORS = new Set([
+  "publicationId", "workspaceId", "tenantId", "pluginId",
+  "actorUserId", "userId", "memberId",
+]);
+
+function admittedReadQuery(
+  query: PluginApiShape | undefined,
+): boolean {
+  if (!query) return true;
+  if (query.required?.length) return false;
+  const keys = Object.keys(query.fields);
+  return keys.length <= 4 && keys.every((key) =>
+    !FORBIDDEN_READ_SELECTORS.has(key) &&
+    /^[a-z][A-Za-z0-9_]{0,63}$/.test(key));
+}
+
 
 /**
  * Reject the ENTIRE contribution for broken links, duplicate IDs, dynamic
@@ -45,8 +62,8 @@ export function admitAdminViews(module: PluginModule): readonly AdmittedAdminVie
     seen.add(parsed.data.viewId);
     const view = viewMap.get(parsed.data.viewId);
     if (!view) return null;
-    // A Host-rendered data view can only call one permission-checked GET
-    // handler with no dynamic query or request body.
+    // A Host-rendered view can only call its single permission-checked GET
+    // handler. Optional bounded scalar queries are validated again by HTTP.
     const routes = module.routes?.filter((route) =>
       route?.audience === "admin" && route.method === "GET" && route.id === view.routeId) ?? [];
     if (routes.length !== 1 || routes[0] === undefined ||
@@ -57,7 +74,7 @@ export function admitAdminViews(module: PluginModule): readonly AdmittedAdminVie
       permission: route.permission, query: route.query, body: route.body,
       response: route.response,
     });
-    if (!descriptor.success || route.query !== undefined ||
+    if (!descriptor.success || !admittedReadQuery(route.query) ||
         route.permission !== parsed.data.permission) return null;
     result.push({
       viewId: view.id, routeId: view.routeId, title: view.title,

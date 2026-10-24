@@ -97,7 +97,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -149,7 +149,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -338,7 +338,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -427,7 +427,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -597,7 +597,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -664,7 +664,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],
@@ -738,7 +738,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
           errors: [
             {
               code: "VALIDATION_ERROR",
-              message: parseResult.error.errors[0]?.message || "Invalid input",
+              message: parseResult.error.issues[0]?.message || "Invalid input",
               requestId: req.id,
             },
           ],

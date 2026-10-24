@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers } from "next/headers";
-import { getPublicExtensionPage } from "../public-extension-client";
+import { getPublicExtensionPage, getPublicExtensionIdentity } from "../public-extension-client";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 
@@ -44,6 +44,45 @@ describe("EXT-302A publication-safe public SSR projection", () => {
     expect(JSON.stringify(options)).not.toContain("SECRET");
     expect(JSON.stringify(options)).not.toContain("PRIVATE");
     expect(JSON.stringify(options)).not.toContain("publication-b.example");
+  });
+
+  it("checks the lightweight bound identity without fetching the public catalog", async () => {
+    const identity = {
+      pluginId: "vibress-lms", viewId: "courses", routeId: "catalog",
+      publicationId: "pub_a", locale: "ar-SA",
+      publishedLocales: ["ar"], title: { en: "Courses", ar: "الدورات" },
+    };
+    const spy = vi.fn().mockResolvedValue(new Response(JSON.stringify(identity), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    expect(await getPublicExtensionIdentity("vibress-lms", "courses", "ar-SA")).toEqual(identity);
+    const call = spy.mock.calls[0];
+    if (!call) throw new Error("Expected an identity request");
+    expect(String(call[0])).toContain("/views/courses/identity?locale=ar-SA");
+    expect(String(call[0])).not.toContain("/page");
+    expect(call[1].headers.cookie).toBe("vb_site_auth=public-proof");
+    expect(call[1].headers["x-forwarded-host"]).toBe("publication-a.example");
+    expect(call[1].headers["x-forwarded-for"]).toBe("198.51.100.23");
+    expect(JSON.stringify(call)).not.toContain("PRIVATE");
+    expect(JSON.stringify(call)).not.toContain("SECRET");
+  });
+
+  it("rejects spoofed or invalid public view identities", async () => {
+    const valid = {
+      pluginId: "vibress-lms", viewId: "courses", routeId: "catalog",
+      publicationId: "pub_a", locale: "en",
+      title: { en: "Courses", ar: "الدورات" },
+    };
+    const spy = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...valid, publicationId: "" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...valid, pluginId: "another" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...valid, locale: "ar" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", spy);
+    expect(await getPublicExtensionIdentity("../admin", "courses", "en")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    for (let i = 0; i < 4; i++) {
+      expect(await getPublicExtensionIdentity("vibress-lms", "courses", "en")).toBeNull();
+    }
   });
 
   it("fails closed on invalid IDs, nested/private data, wrong plugin and missing pages", async () => {

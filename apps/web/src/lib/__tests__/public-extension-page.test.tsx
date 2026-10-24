@@ -95,6 +95,22 @@ describe("EXT-302A verified public page policy", () => {
     expect(legacy.alternates?.languages).toEqual({});
   });
 
+  it("advertises explicitly published base-language content for enabled regional locales", () => {
+    const regional = { ...site("pub_a", "https://publication-a.example", "ar-SA"),
+      enabledLocales: ["en", "ar-SA"] };
+    const page = { ...view, locale: "ar-SA", publishedLocales: ["en", "ar"] };
+    const meta = publicExtensionMetadata(page, regional, "publication-a.example", true);
+    expect(meta.robots).toBeUndefined();
+    expect(meta.alternates?.languages).toEqual({
+      en: "https://publication-a.example/extensions/vibress-lms/courses",
+      "ar-SA": "https://publication-a.example/ar/extensions/vibress-lms/courses",
+      "x-default": "https://publication-a.example/extensions/vibress-lms/courses",
+    });
+    const notPublished = { ...page, publishedLocales: ["en"] };
+    expect(publicExtensionMetadata(notPublished, regional,
+      "publication-a.example", true).robots).toEqual({ index: false, follow: false });
+  });
+
   it("does not index unpublished locales or previewed extension pages", () => {
     const unpublished = { ...view, locale: "ar", publishedLocales: ["en"] };
     const result = publicExtensionMetadata(

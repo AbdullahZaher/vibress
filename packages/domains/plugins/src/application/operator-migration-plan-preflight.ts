@@ -21,6 +21,7 @@ const modelSchema = z.object({
   key: z.string(),
   schemaSha256: z.string(),
   columns: z.array(columnSchema).min(1).max(24),
+  indexedTextFields: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,47}$/)).max(4).optional(),
 }).strict();
 const planSchema = z.object({
   manifestId: z.string(),

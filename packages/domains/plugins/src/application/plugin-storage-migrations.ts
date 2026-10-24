@@ -96,6 +96,8 @@ export interface ApprovedPluginPhysicalColumn {
 
 export interface ApprovedPluginPhysicalModel extends PluginStorageModelDeclaration {
   readonly columns: readonly ApprovedPluginPhysicalColumn[];
+  /** Optional operator-reviewed text equality indexes; metadata only, not a stored field. */
+  readonly indexedTextFields?: readonly string[] | undefined;
 }
 
 export interface ApprovedPluginPhysicalMigration
@@ -156,6 +158,17 @@ export function validateApprovedPhysicalMigration(
         );
       }
       names.add(column.name);
+    }
+    if (model.indexedTextFields !== undefined) {
+      if (!Array.isArray(model.indexedTextFields) ||
+          model.indexedTextFields.length > 4 ||
+          new Set(model.indexedTextFields).size !== model.indexedTextFields.length ||
+          model.indexedTextFields.some((field) =>
+            !model.columns.some((column) => column.name === field && column.type === "text"))) {
+        throw new PluginStorageMigrationError(
+          "PLUGIN_MIGRATION_INVALID", "Index must target a unique operator-approved text field",
+        );
+      }
     }
     if (model.schemaSha256 !== pluginPhysicalModelDigest(model.columns)) {
       throw new PluginStorageMigrationError(

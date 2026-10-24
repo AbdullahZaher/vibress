@@ -25,7 +25,7 @@ export const CreateContentModelSchema = z.object({
   slug: z.string().max(255).optional(),
   description: z.string().max(10000).optional(),
   fields: z.array(ContentModelFieldSchema).max(100).optional(),
-  settings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 export const UpdateContentModelSchema = CreateContentModelSchema.partial();
 export const PreviewContentModelSchema = z.object({
@@ -34,13 +34,13 @@ export const PreviewContentModelSchema = z.object({
 export const CreateCollectionEntrySchema = z.object({
   title: z.string().trim().min(1).max(255),
   slug: z.string().max(255).optional(),
-  data: z.record(z.unknown()).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["draft", "published"]).optional(),
 }).passthrough();
 export const UpdateCollectionEntrySchema = z.object({
   title: z.string().trim().min(1).max(255).optional(),
   slug: z.string().max(255).optional(),
-  data: z.record(z.unknown()).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(["draft", "published", "archived"]).optional(),
   expectedVersion: z.number().int().positive().optional(),
 }).passthrough();

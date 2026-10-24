@@ -52,6 +52,7 @@ describe("AdminLocale & Arabic UI Localization (LOC-004)", () => {
     expect(captured!.tr("Media Library")).toBe("مكتبة الوسائط");
     expect(captured!.tr("Settings")).toBe("الإعدادات");
     expect(captured!.tr("General Settings")).toBe("الإعدادات العامة");
+    expect(captured!.tr("Add Plugin")).toBe("إضافة جديدة");
 
     // Post Settings Sidebar
     expect(captured!.tr("Post Settings")).toBe("إعدادات المقال");

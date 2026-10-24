@@ -5,7 +5,7 @@ export const ThemeManifestDtoSchema = z.object({
   name: z.string(),
   version: z.string(),
   description: z.string().optional(),
-  author: z.union([z.string(), z.record(z.unknown())]).optional(),
+  author: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
   homepage: z.string().optional(),
   license: z.string().optional(),
   previewImage: z.string().optional(),
@@ -17,7 +17,7 @@ export type ThemeManifestDto = z.infer<typeof ThemeManifestDtoSchema>;
 
 export const ThemeSummaryDtoSchema = z.object({
   manifest: ThemeManifestDtoSchema,
-  settingsSchema: z.record(z.unknown()),
+  settingsSchema: z.record(z.string(), z.unknown()),
   isActive: z.boolean(),
   isBuiltIn: z.boolean().optional(),
   previewImage: z.string().optional(),
@@ -26,14 +26,14 @@ export type ThemeSummaryDto = z.infer<typeof ThemeSummaryDtoSchema>;
 
 /** Additive detail field: saved presentation settings for active or inactive themes. */
 export const ThemeDetailDtoSchema = ThemeSummaryDtoSchema.extend({
-  settings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 });
 export type ThemeDetailDto = z.infer<typeof ThemeDetailDtoSchema>;
 
 export const ActiveThemeDtoSchema = z.object({
   themeId: z.string(),
   themeVersion: z.string(),
-  settings: z.record(z.unknown()),
+  settings: z.record(z.string(), z.unknown()),
   settingsSchemaVersion: z.number(),
   isBuiltIn: z.boolean().optional(),
   previewImage: z.string().optional(),
@@ -51,10 +51,10 @@ export const ThemePreviewResolvedDtoSchema = z.object({
   themeId: z.string(),
   themeVersion: z.string(),
   isBuiltIn: z.boolean(),
-  settings: z.record(z.unknown()),
+  settings: z.record(z.string(), z.unknown()),
 });
 
-export const ThemeSettingsUpdateSchema = z.record(z.unknown());
+export const ThemeSettingsUpdateSchema = z.record(z.string(), z.unknown());
 export type ThemeSettingsUpdateInput = z.infer<
   typeof ThemeSettingsUpdateSchema
 >;
@@ -77,7 +77,7 @@ export const ThemeUploadResponseSchema = z.object({
     author: z.string().nullable().optional(),
     previewImage: z.string().nullable().optional(),
     manifest: ThemeManifestDtoSchema,
-    settingsSchema: z.record(z.unknown()),
+    settingsSchema: z.record(z.string(), z.unknown()),
     status: z.string(),
     isBuiltIn: z.boolean(),
   }),

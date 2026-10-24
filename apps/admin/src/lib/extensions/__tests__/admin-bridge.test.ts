@@ -54,6 +54,20 @@ describe("EXT-301 bounded and confirmed Admin iframe write bridge", () => {
     close();
   });
 
+  it("forwards only validated scalar selectors to the bound Admin GET", async () => {
+    const read = vi.fn(async () => ({ outcome: "available" }));
+    connectAdminExtensionReadBridge(iframe, "ar", () => true, read);
+    deliver({ type: "vibress:extension:read", version: 1,
+      requestId: "selected", query: { courseId: "course-01" } });
+    await vi.waitFor(() => expect(read).toHaveBeenCalledWith({ courseId: "course-01" }));
+    deliver({ type: "vibress:extension:read", version: 1,
+      requestId: "forged", query: { publicationId: "foreign" } });
+    expect(read).toHaveBeenCalledTimes(1);
+    deliver({ type: "vibress:extension:read", version: 1,
+      requestId: "nested", query: { courseId: { id: "course-02" } } });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it("does not issue POST without explicit Host-controlled confirmation", async () => {
     const write = vi.fn(async () => ({ saved: true }));
     const confirm = vi.fn(() => false);

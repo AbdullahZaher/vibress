@@ -13,7 +13,7 @@ import {
 } from "@vibress/plugins";
 import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
-import { pluginsService, workspaceService, settingsService } from "../services";
+import { pluginsService, workspaceService, settingsService, publicationLocaleService } from "../services";
 import { adminExtensionNavigationRoutes } from "./extension-admin-views";
 import { adminExtensionFrameRoutes } from "./extension-admin-iframe";
 import { publicExtensionViewRoutes } from "./extension-public-views";
@@ -165,6 +165,44 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       const body = validateExtensionApiObject(route.body, req.method === "POST" ? req.body ?? {} : {});
       if (!query || !body) return reject(reply, req, "VALIDATION_ERROR", 400);
 
+      let resolvedLocale: string | undefined;
+      const queryObj = req.query as Record<string, unknown> | undefined;
+      // Member mutations declare locale in their validated body, while
+      // read-only routes declare it in the query. Do not bypass policy on POST.
+      const suppliedLocale = queryObj?.locale ??
+        (audience === "member" ? body.locale : undefined);
+      if (audience === "public" || audience === "member") {
+        // Never assume "en" or authorize an unverified language when the
+        // publication policy cannot be read.
+        const policy = await publicationLocaleService.getConfiguration(publicationId)
+          .catch(() => null);
+        if (!policy) return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+        let locale = policy.primaryLocale;
+        if (suppliedLocale !== undefined) {
+          if (typeof suppliedLocale !== "string" || !suppliedLocale.trim()) {
+            return reject(reply, req, "VALIDATION_ERROR", 400);
+          }
+          try {
+            locale = Intl.getCanonicalLocales(suppliedLocale.trim())[0] ?? "";
+          } catch {
+            return reject(reply, req, "VALIDATION_ERROR", 400);
+          }
+        }
+        if (!policy.enabledLocales.includes(locale)) {
+          return reject(reply, req, "EXTENSION_ROUTE_NOT_FOUND", 404);
+        }
+        resolvedLocale = locale;
+      } else if (typeof queryObj?.locale === "string" && queryObj.locale.trim()) {
+        // Staff routes keep their existing optional-locale behavior.
+        try {
+          const locale = Intl.getCanonicalLocales(queryObj.locale.trim())[0];
+          const policy = await publicationLocaleService.getConfiguration(publicationId).catch(() => null);
+          if (locale && policy?.enabledLocales.includes(locale)) resolvedLocale = locale;
+        } catch {
+          // Invalid optional Staff locale is not admitted into the SDK.
+        }
+      }
+
       // Do not initialize module code for a forbidden or malformed request.
       // Recheck plugin status/publication enablement after initialization too.
       try {
@@ -183,6 +221,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
       const scope: PluginApiScope = {
         publicationId,
         requestId: req.id,
+        ...(resolvedLocale ? { locale: resolvedLocale } : {}),
         principal: audience === "admin"
           ? { kind: "staff", id: req.user!.id }
           : audience === "member"
@@ -207,15 +246,32 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
         if (audience === "admin" && req.user && req.roles && req.permissions &&
             (localRole === "owner" || localRole === "admin") &&
             hasPermission(req.permissions, "plugins.manage", req.roles)) {
+          const requiredCap = req.method === "POST" ? "extension.storage.write" : "extension.storage.read";
           const binding = await pluginsService.resolveExtensionStorageBinding(
-            params.data.pluginId, publicationId,
-          );
+            params.data.pluginId, publicationId, requiredCap,
+          ).catch(() => null);
           if (binding) {
             storageSession = createHostPluginStorageSession(
               {
                 pluginId: binding.pluginId, publicationId,
                 actorUserId: req.user.id, requestId: req.id,
                 allowWrites: req.method === "POST",
+              },
+              binding.models,
+            );
+          }
+        } else if ((audience === "member" && req.member && req.member.publicationId === publicationId) ||
+                   audience === "public") {
+          const binding = await pluginsService.resolveExtensionStorageBinding(
+            params.data.pluginId, publicationId, "extension.storage.read", audience,
+          ).catch(() => null);
+          if (binding) {
+            const actorUserId = audience === "member" && req.member ? req.member.id : "anonymous";
+            storageSession = createHostPluginStorageSession(
+              {
+                pluginId: binding.pluginId, publicationId,
+                actorUserId, requestId: req.id,
+                allowWrites: false,
               },
               binding.models,
             );

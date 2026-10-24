@@ -40,6 +40,7 @@ export interface PluginHost {
   authorizeRegistration?(manifest: PluginManifest): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
+  getApprovedAudienceReadModels?(plugin: Plugin, audience: "public" | "member"): Promise<readonly string[] | null>;
 }
 
 /** Lifecycle error text must be platform-owned, never obtained from plugin code. */
@@ -950,6 +951,8 @@ export class PluginsService {
   async resolveExtensionStorageBinding(
     manifestId: string,
     publicationId: string,
+    requiredCapability: "extension.storage.read" | "extension.storage.write" = "extension.storage.read",
+    audience: "staff" | "public" | "member" = "staff",
   ): Promise<{ pluginId: string; publicationId: string;
     models: readonly ApprovedPluginPhysicalModel[] } | null> {
     this.assertRuntimeAllowed();
@@ -957,8 +960,7 @@ export class PluginsService {
     const plugin = await this.pluginRepo.findByManifestId(manifestId);
     if (!plugin || plugin.status !== "active" ||
         !this.host.requiresPublicationEnablement?.(plugin) ||
-        !plugin.capabilities.some((capability) =>
-          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+        !plugin.capabilities.includes(requiredCapability)) {
       return null;
     }
     await this.requirePublicationEnabled(plugin, publicationId);
@@ -972,11 +974,20 @@ export class PluginsService {
     }
     const latest = await this.pluginRepo.findById(plugin.id);
     if (!latest || latest.status !== "active" ||
-        !latest.capabilities.some((capability) =>
-          capability === "extension.storage.read" || capability === "extension.storage.write")) {
+        !latest.capabilities.includes(requiredCapability)) {
       return null;
     }
     await this.requirePublicationEnabled(latest, publicationId);
+    if (audience !== "staff" && this.host.getApprovedAudienceReadModels) {
+      const allowed = await this.host.getApprovedAudienceReadModels(latest, audience);
+      if (allowed !== null) {
+        const granted = new Set(allowed);
+        const audienceModels = models.filter((model) => granted.has(model.key));
+        // Never create an unrestricted session from an explicit empty list.
+        if (!audienceModels.length) return null;
+        return { pluginId: latest.id, publicationId, models: audienceModels };
+      }
+    }
     return { pluginId: latest.id, publicationId, models };
   }
 

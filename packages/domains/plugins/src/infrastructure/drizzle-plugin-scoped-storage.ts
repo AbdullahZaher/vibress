@@ -9,6 +9,7 @@ import {
   validateStorageFields,
   validateStorageModel,
   validateStoragePage,
+  validateStorageTextFilter,
   validateStorageRecordId,
   validateStorageVersion,
   type HostBoundPluginStorageScope,
@@ -294,6 +295,29 @@ export class DrizzlePluginScopedStorageRepository implements PluginScopedStorage
       const rows = await execute(sql`SELECT ${projection(model)}
         FROM ${table}
         WHERE "publication_id" = ${scope.publicationId} ${cursorClause}
+        ORDER BY "id" ASC LIMIT ${limit + 1}`);
+      const more = rows.length > limit;
+      const items = rows.slice(0, limit).map((row) => record(row, model));
+      const last = items[items.length - 1];
+      return more && last ? { items, nextCursor: last.id } : { items };
+    });
+  }
+  /** Execute equality filtering in PostgreSQL, not by loading unrelated
+   * draft records in JavaScript. Publication and model attestation stay inside
+   * this single read transaction. The operator may add a matching composite
+   * index concurrently on an existing large table during maintenance. */
+  async listByText(
+    scope: HostBoundPluginStorageScope, model: ApprovedPluginPhysicalModel,
+    field: string, value: string, limit: number, cursor?: string,
+  ): Promise<PluginStoragePage> {
+    validateStorageTextFilter(model, field, value);
+    validateStoragePage(limit, cursor);
+    return this.run(scope, model, "read", async (table, execute) => {
+      const cursorClause = cursor === undefined ? sql`` : sql`AND "id" > ${cursor}`;
+      const rows = await execute(sql`SELECT ${projection(model)}
+        FROM ${table}
+        WHERE "publication_id" = ${scope.publicationId}
+          AND ${sql.identifier(field)} = ${value} ${cursorClause}
         ORDER BY "id" ASC LIMIT ${limit + 1}`);
       const more = rows.length > limit;
       const items = rows.slice(0, limit).map((row) => record(row, model));
