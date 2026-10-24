@@ -91,7 +91,7 @@ async function loadPublicExtensionIdentity(
   const cookie = incoming.get("cookie")?.split(";").map((value) => value.trim())
     .find((value) => value.startsWith("vb_site_auth="));
   const ip = incoming.get("x-real-ip");
-  const base = (process.env.API_URL || "http://127.0.0.1:7780").replace(/\\/+$/, "");
+  const base = (process.env.API_URL || "http://127.0.0.1:7780").replace(/\/+$/, "");
   const response = await fetch(
     `${base}/api/content/v1/extensions/${encodeURIComponent(pluginId)}/views/${encodeURIComponent(viewId)}/identity?locale=${encodeURIComponent(locale)}`,
     {
