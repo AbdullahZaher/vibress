@@ -4,6 +4,10 @@
 PR #77 was merged into `main`; the platform is **not declared generally
 supported for untrusted plugins** or complete for external SDK release.
 
+## Active platform completion program (2026-10-24)
+
+The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
+
 ## Architecture decision
 
 **Approved for implementation direction, not shipped:** [RFC review/approval record](EXTENSION_RFC_APPROVAL.md) and [accepted architecture ADR](../adr/2026-10-19-external-extension-host-vnext.md). Conceptual API examples remain unimplemented; production release and SDK contract freeze require the gates below.
