@@ -52,12 +52,14 @@ export function PluginsPanel({
       ) : (
         plugins.map((plugin) => {
           const globalActive = plugin.status === "active";
-          const registered = plugin.status === "registered" || plugin.status === "inactive";
+          const registered = plugin.status === "registered" || plugin.status === "inactive" || plugin.status === "error";
           const transitioning = plugin.status === "activating" || plugin.status === "deactivating";
           const failed = plugin.status === "error";
           const incompatible = plugin.hostCompatible === false;
           const scoped = plugin.publicationScoped === true;
           const siteEnabled = scoped && plugin.publicationEnabled === true;
+          const siteConfigured = scoped &&
+            (plugin.publicationConfiguredEnabled ?? plugin.publicationEnabled) === true;
           const busy = busyPluginId !== null;
           const statusLabel = globalActive ? tr("Globally active")
             : plugin.status === "registered" ? tr("Registered, awaiting activation")
@@ -93,43 +95,54 @@ export function PluginsPanel({
               {transitioning && (
                 <p role="status" className="text-xs text-muted-foreground">
                   {tr("Lifecycle transition in progress. Refresh before changing state.")}
+                  {" "}
+                  {tr("A stuck transition requires isolated operator maintenance recovery.")}
                 </p>
               )}
               {failed && (
                 <p role="alert" className="text-xs text-destructive">
-                  {tr("Recovery requires maintenance: stop all runtime replicas, inspect the failure, and follow the operator recovery runbook.")}
+                  {tr("Activation failed. Review operator logs and the approved release before retrying.")}
                 </p>
               )}
               {scoped && (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {tr("This publication")}: {siteEnabled ? tr("Enabled") : tr("Disabled")}
-                </p>
+                <>
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {tr("This publication")}: {siteEnabled ? tr("Enabled") : tr("Disabled")}
+                  </p>
+                  {siteConfigured !== siteEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      {tr("Saved site setting")}: {siteConfigured ? tr("Enabled") : tr("Disabled")}
+                      {" — "}
+                      {tr("Currently inactive until global activation.")}
+                    </p>
+                  )}
+                </>
               )}
               <div className="pt-2 border-t border-border flex flex-wrap justify-end gap-2">
                 {scoped && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy || (!globalActive && !siteEnabled) || (incompatible && !siteEnabled)}
+                    disabled={busy || (!globalActive && !siteConfigured) || (incompatible && !siteConfigured)}
                     onClick={() => apply(plugin.id, () =>
-                      setPluginPublicationStateApi(plugin.id, !siteEnabled))}
-                    aria-label={`${siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}: ${plugin.name}`}
+                      setPluginPublicationStateApi(plugin.id, !siteConfigured))}
+                    aria-label={`${siteConfigured ? tr("Disable for this publication") : tr("Enable for this publication")}: ${plugin.name}`}
                     className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
                   >
-                    {siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}
+                    {siteConfigured ? tr("Disable for this publication") : tr("Enable for this publication")}
                   </Button>
                 )}
                 {platformOperator && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy || transitioning || failed || (incompatible && !globalActive) || (!globalActive && !registered)}
+                    disabled={busy || transitioning || (incompatible && !globalActive) || (!globalActive && !registered)}
                     onClick={() => apply(plugin.id, () =>
                       globalActive ? deactivatePluginApi(plugin.id) : activatePluginApi(plugin.id))}
-                    aria-label={`${globalActive ? tr("Deactivate") : tr("Activate")}: ${plugin.name}`}
+                    aria-label={`${globalActive ? tr("Deactivate") : failed ? tr("Retry activation") : tr("Activate")}: ${plugin.name}`}
                     className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
                   >
-                    {globalActive ? tr("Deactivate") : tr("Activate")}
+                    {globalActive ? tr("Deactivate") : failed ? tr("Retry activation") : tr("Activate")}
                   </Button>
                 )}
               </div>

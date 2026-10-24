@@ -6,6 +6,7 @@ import {
   plugin as contentMetricsPlugin,
 } from "./official/example-plugin";
 import { TrustedExternalPluginHost } from "./trusted-external-plugin-host";
+import { verifyTrustedPluginRelease } from "@vibress/plugins";
 
 /**
  * Trusted plugin host: loads only bundled, controlled-source plugins.
@@ -49,7 +50,9 @@ export class BundledPluginHost implements PluginHost {
   }
 
   async verifyOperatorRegistration(): Promise<void> {
-    await this.external.verifyRegistrationReadiness();
+    const lockfile = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+    if (!lockfile) throw new Error("Trusted plugin lockfile is unavailable");
+    await verifyTrustedPluginRelease(lockfile);
   }
 
   async getOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {

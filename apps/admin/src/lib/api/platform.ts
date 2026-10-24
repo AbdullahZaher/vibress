@@ -59,7 +59,10 @@ export interface AdminPlugin {
   publicationScoped?: boolean;
   /** Host ABI comparison only, not proof of artifact approval or isolation. */
   hostCompatible?: boolean;
+  /** Effective: true only when both globally active and site-configured. */
   publicationEnabled?: boolean;
+  /** Persisted preference; can remain true while the plugin is globally inactive. */
+  publicationConfiguredEnabled?: boolean;
 }
 
 export async function listIntegrationsApi(): Promise<{
