@@ -81,6 +81,12 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     const modelKeys = new Set<string>();
     for (const model of storageModels) {
       validateStorageModel(model);
+      const indexes = model.indexedTextFields ?? [];
+      if (new Set(indexes).size !== indexes.length ||
+          indexes.some((field) => !model.columns.some((column) =>
+            column.name === field && column.type === "text"))) {
+        throw new Error("Operator index must reference unique approved text fields");
+      }
       if (modelKeys.has(model.key)) throw new Error("Duplicate approved storage model key");
       modelKeys.add(model.key);
     }
