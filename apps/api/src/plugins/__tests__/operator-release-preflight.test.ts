@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { verifyTrustedPluginRelease } from "../operator-release-preflight";
+import { pluginPhysicalMigrationDigest, pluginPhysicalModelDigest } from "@vibress/plugins";
 
 const temporary: string[] = [];
 const digest = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
@@ -58,9 +59,23 @@ describe("EXT-404 operator package integrity preflight", () => {
     const evidence = {
       sbom: '{"packages":[]}',
       provenance: '{"builder":"local"}',
-      plan: '{"migration":"reviewed"}',
+      plan: "",
     };
     fs.mkdirSync(path.join(f.dir, "migrations"));
+    const columns = [{ name: "title", type: "text" as const, required: true }];
+    const model = { key: "articles", columns,
+      schemaSha256: pluginPhysicalModelDigest(columns) };
+    entry.manifest.capabilities.push("extension.storage.read");
+    entry.storageModels = [model];
+    const migrationPlan = {
+      manifestId: entry.manifest.id,
+      migrationId: "0001_initial",
+      packageVersion: entry.manifest.version,
+      artifactSha256: entry.sha256,
+      migrationSha256: pluginPhysicalMigrationDigest([model]),
+      models: [model],
+    };
+    evidence.plan = JSON.stringify(migrationPlan);
     fs.writeFileSync(path.join(f.dir, "sbom.json"), evidence.sbom);
     fs.writeFileSync(path.join(f.dir, "provenance.json"), evidence.provenance);
     fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), evidence.plan);
@@ -97,6 +112,19 @@ describe("EXT-404 operator package integrity preflight", () => {
     fs.appendFileSync(path.join(f.dir, "migrations", "plan.json"), " ");
     await expect(verifyTrustedPluginRelease(f.lock))
       .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), evidence.plan);
+    const changed = { ...migrationPlan, packageVersion: "2.0.0" };
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), JSON.stringify(changed));
+    entry.release.migrationPlans[0].sha256 = digest(JSON.stringify(changed));
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toMatchObject({ code: "PLUGIN_MIGRATION_RELEASE_MISMATCH" });
+    const wrongId = { ...migrationPlan, migrationId: "0002_other" };
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), JSON.stringify(wrongId));
+    entry.release.migrationPlans[0].sha256 = digest(JSON.stringify(wrongId));
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("PLUGIN_MIGRATION_RELEASE_MISMATCH");
   });
 
   it("rejects invalid pinned evidence JSON even when the digest matches", async () => {

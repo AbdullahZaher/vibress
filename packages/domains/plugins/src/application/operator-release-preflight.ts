@@ -3,6 +3,7 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseTrustedPluginLockfile } from "./trusted-external-plugin-host";
 import { readTrustedPluginLockfile } from "./trusted-release-attestation";
+import { checkOperatorPluginMigrationPlan } from "./operator-migration-plan-preflight";
 
 const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
@@ -61,8 +62,10 @@ export async function verifyTrustedPluginRelease(
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           throw new Error("INVALID_APPROVED_JSON");
         }
+        return parsed;
       }
     }
+    return undefined;
   }
 
   const result: VerifiedExternalRelease[] = [];
@@ -76,7 +79,17 @@ export async function verifyTrustedPluginRelease(
       if (file) await verifyFile(file.path, file.sha256, MAX_RELEASE_EVIDENCE_BYTES, "json");
     }
     for (const migration of approved.release?.migrationPlans ?? []) {
-      await verifyFile(migration.path, migration.sha256, MAX_MIGRATION_PLAN_BYTES, "json");
+      const plan = await verifyFile(
+        migration.path, migration.sha256, MAX_MIGRATION_PLAN_BYTES, "json",
+      );
+      const validated = checkOperatorPluginMigrationPlan(plan, {
+        manifest: approved.manifest,
+        sha256: approved.sha256,
+        storageModels: approved.storageModels,
+      });
+      if (validated.migrationId !== migration.id) {
+        throw new Error("PLUGIN_MIGRATION_RELEASE_MISMATCH");
+      }
     }
     result.push({
       pluginId: approved.manifest.id,
