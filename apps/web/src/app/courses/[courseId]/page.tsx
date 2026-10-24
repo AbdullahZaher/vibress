@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getThemeSiteSettings } from "../../../lib/theme-host";
 import { getDirection, supportsPublishedExtensionLocale } from "@vibress/i18n";
-import { getPublicExtensionPage, isValidPublicHost } from "../../../lib/public-extension-client";
+import { getPublicExtensionIdentity, isValidPublicHost } from "../../../lib/public-extension-client";
 import { isPublishedLmsCourse } from "../../../lib/lms-course-policy";
 import { LmsStudentPortal } from "../../../components/extensions/LmsStudentPortal";
 
@@ -22,12 +22,12 @@ const fetchCourseData = cache(async (
 ) => {
   if (!publicationId) return null;
   const incoming = await headers();
-  // The linked public view carries the Host-authorized publication identity.
+  // Host view admission carries the publication identity without running catalog scans.
   // Existing signed LMS installs may omit publicationId in /course payloads,
   // so verify the view first and check an optional payload identity too.
-  let view: Awaited<ReturnType<typeof getPublicExtensionPage>>;
+  let view: Awaited<ReturnType<typeof getPublicExtensionIdentity>>;
   try {
-    view = await getPublicExtensionPage("vibress-lms-authoring", "catalog");
+    view = await getPublicExtensionIdentity("vibress-lms-authoring", "catalog", locale);
   } catch {
     return null;
   }
