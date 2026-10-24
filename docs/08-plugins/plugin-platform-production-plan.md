@@ -1,7 +1,7 @@
 # Plugin Platform — Production Completion Plan
 
 **Status:** Active engineering plan, not a release certification.  
-**Baseline:** `main` at `9203783d47e056b43f942c133c2ac26b6e5ade94` (2026-10-24), including merged PR #86.  
+**Baseline:** `main` (including merged PR #87).  
 **Owner:** Vibress core platform. **Excluded:** LMS feature development (paused); compatibility checks only.
 
 This is the current work plan for making Vibress plugins a professionally operated, self-hostable product. The existing [implementation roadmap](external-extensions-roadmap.md), [security operations standard](external-extensions-security-operations.md), [SDK release gates](external-sdk-release-gates.md) and [trust-model ADR](../14-decisions/plugin-trust-model.md) remain the detailed contracts. The order below expresses dependencies, **not** committed release dates.
@@ -11,7 +11,7 @@ This is the current work plan for making Vibress plugins a professionally operat
 - Operator-approved ESM release discovery is available at `GET /api/admin/v1/plugins/trusted-available`; registration is available at `POST /api/admin/v1/plugins/register-trusted`. Neither endpoint downloads or installs executable code.
 - The operator controls a v1 lockfile with pinned SHA-256 ESM/Admin UI bytes. Detached Ed25519 lockfile attestation is verified when configured, and mandatory under `VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1`. Legacy unsigned operator lockfiles remain compatible in deployments without that policy.
 - `Add Plugin` is visible to platform plugin operators, not ordinary publication plugin managers. Global activation and publication enablement are distinct.
-- External trusted JavaScript runs inside the API/Worker Node.js process. Package integrity and SDK capabilities **do not sandbox** it. There is no supported untrusted plugin marketplace or browser-based ZIP/GitHub install.
+- External trusted JavaScript runs inside the API/Worker Node.js process. Package integrity and SDK capabilities **do not sandbox** it. In particular, Tier 1 plugins run with host process privileges; they are **not** restricted by network/SSRF mediation or filesystem isolation. There is no supported untrusted plugin marketplace or browser-based ZIP/GitHub install.
 - The SDK is not yet a published stable third-party release. Existing installed plugins, DB migrations, public/member/admin routes, themes and multilingual content are compatibility contracts.
 
 ## Trust tiers and non-negotiable boundaries
@@ -27,7 +27,7 @@ Source discovery (registry/Git URL/ZIP) is **not** executable-code admission. Ev
 1. **P0-1: Accurate approved-release catalog (first increment).** Return the actual operator-reviewed capabilities to Studio and distinguish a verified detached signature from an explicitly legacy unsigned lockfile. Display both truthfully with operator acknowledgement. Preserve older API response compatibility. No remote fetch, DB change or execution.
 2. **P0-2: Immutable distribution metadata.** Introduce a versioned, operator-controlled catalog of release ID, digest, publisher, compatible Host/SDK range, capabilities, provenance/SBOM pointer and approved migrations. Trust roots remain external to artifacts. Design and schema require review before implementation.
 3. **P0-3: Admission workflow.** Operator stages downloaded/build outputs **outside** running API, scans dependencies, verifies signature/checksum and migration plan, then pins and deploys them consistently on API and Worker replicas. Never run npm lifecycle scripts or imported code during inspection.
-4. **P0-4: Installation lifecycle UX.** Expose only operator-approved releases with meaningful status: available → registered → globally active → enabled for current publication. Report disabled, incompatible and failed states, plus safe recovery guidance.
+4. **P0-4: Installation lifecycle UX & recovery.** Expose only operator-approved releases with meaningful status: available → registered → globally active → enabled for current publication. Report disabled, incompatible and failed states. Transition recovery (`recoverPluginLifecycle`) handles stuck transitional states (`activating` and `deactivating`) using optimistic locking under strict operator quiescence (`VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`, `confirmedQuiescent=true`, and transition age >= 15m).
 5. **Exit gate:** Fresh and upgraded installations preserve existing records; tampered/mismatched/unapproved releases fail closed; registration cannot grant publication access; multi-replica deployment preflight matches; staff lacking global operator authority is denied.
 
 ## Phase 2 — P0: Runtime trust and containment
@@ -64,14 +64,16 @@ For each increment: inspect affected consumers → role review (Architect, Secur
 
 Use [external SDK release gates](external-sdk-release-gates.md) as the authoritative production blocker checklist. **A merged PR, green CI or this document alone is not production certification.**
 
-## Progress
+## Progress and Verification Status
 
-| Increment | Status | Evidence |
+| Increment | Technical Status | Scope & Evidence |
 | --- | --- | --- |
 | Baseline and risk review | Completed for planning | 2026-10-24 source review on `main` |
-| P0-1 accurate approved-release catalog | Verified & Accepted (PLUG-ACCEPT-01) | Explicit SHA-bound approvalId, capabilities and signature status; read-only catalog never claims preflight readiness; 13/13 operator catalog tests passing |
-| P0-2 versioned release metadata | Verified & Accepted (PLUG-ACCEPT-01) | Operator-pinned metadata + preflight evidence checks; SHA-256 byte verification; no direct installation or execution |
-| P0-3 secure operator staging/admission | Verified & Accepted (PLUG-ACCEPT-01) | Strict opt-in API/Worker startup gate, pinned key and release digest, Ed25519 detached signature verification, signed migration binding, safe file reads without traversal; 38/38 test files passing |
-| P0-4 installation lifecycle UX & recovery | Verified & Accepted (PLUG-ACCEPT-01) | Atomic CAS status transitions, quiescent maintenance recovery window (15m + recoveryMaintenance=1), data-preserving disable/uninstall, multi-publication isolation; 293/293 plugin unit/integration tests passing |
-| Phase 2 through Phase 5 | Planned / Tier 2 Isolation ADR | Tier 2 untrusted extensions require supervised process/container isolation as documented in `plugin-runtime-tier2-isolation-adr.md` |
+| P0-1 accurate approved-release catalog | Implemented (PR #87); Validated (PR #88) | Explicit SHA-bound `approvalId`, capabilities, signature status; read-only catalog never claims preflight readiness; 13/13 operator catalog tests passing. |
+| P0-2 versioned release metadata | Implemented (PR #87); Validated (PR #88) | Operator-pinned metadata + preflight evidence checks; SHA-256 byte verification; no direct installation or execution. |
+| P0-3 secure operator staging/admission | Implemented (PR #87); Validated (PR #88) | Strict opt-in startup gate, pinned key and release digest, Ed25519 detached signature verification, signed migration binding, safe canonical path checks; 38/38 plugin test files passing. **Limitation:** In-process Tier 1 code retains Node process privileges (no sandbox or outbound network/SSRF restriction). |
+| P0-4 installation lifecycle UX & recovery | Implemented (PR #87); Validated (PR #88) | Atomic CAS status transitions, inactive-only version updates, data-preserving disable/uninstall, multi-publication isolation; stuck transition recovery for `activating` and `deactivating` states under operator maintenance window (`VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1`, `confirmedQuiescent=true`, transition age >= 15m); 293/293 plugin unit/integration tests passing. |
+| Operational Gates ([external-sdk-release-gates.md](external-sdk-release-gates.md)) | Provisional / Pending Operator Drills | Passing CI (2,171/2,171 Vitest tests, build, container-scan, e2e) verifies code correctness; live multi-replica rollout, canary draining, and live DR database restore drills remain operational gates prior to final production sign-off. |
+| Phase 2 through Phase 5 | Planned / Design-gated | Tier 2 untrusted extensions require supervised process/container isolation as documented in `plugin-runtime-tier2-isolation-adr.md`. |
+
 
