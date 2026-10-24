@@ -22,7 +22,7 @@ The [secure operator release admission runbook](secure-operator-release-admissio
 
 ## Security remediation status (2026-10-24)
 
-See [the scoped security closure register](plugin-security-closure-20261024.md) for verified code changes and remaining required execution checks. No unit tests, typecheck, Docker drills or CI runs have been executed for this branch at the time of the register. Do not infer production certification from code/test additions.
+See [the scoped security closure register](plugin-security-closure-20261024.md) for verified code changes and remaining required execution checks. No unit tests, typecheck, Docker drills or CI runs have been executed for this branch at the time of the register. The Host/DB now reject pinned updates while active, and the DB enforces a conditional write so activation cannot race a metadata update. See the [Tier 2 runtime isolation ADR](plugin-runtime-tier2-isolation-adr.md) for the untrusted plugin boundary. Do not infer production certification from code/test additions.
 
 ## Architecture decision
 
