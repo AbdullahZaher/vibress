@@ -77,7 +77,7 @@ async function main(): Promise<void> {
             indexed_columns: string[];
           }>(`
             SELECT ix.indisvalid, ix.indisready, ix.indisunique,
-              (SELECT array_agg(attr.attname ORDER BY col.ordinality)
+              (SELECT array_agg(attr.attname::text ORDER BY col.ordinality)
                FROM unnest(ix.indkey::int2[]) WITH ORDINALITY AS col(attnum, ordinality)
                JOIN pg_attribute attr ON attr.attrelid = ix.indrelid
                  AND attr.attnum = col.attnum) AS indexed_columns
