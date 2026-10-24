@@ -293,7 +293,9 @@ export class PluginsService {
       let updated: Plugin | null;
       if (expectedReleaseId !== undefined &&
           this.host.requiresPublicationEnablement?.(existing) === true) {
-        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata) ?? null;
+        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(
+          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt },
+        ) ?? null;
         if (!updated) {
           throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
             "Plugin activated or changed during release admission");

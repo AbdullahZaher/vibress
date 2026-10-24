@@ -126,9 +126,10 @@ export class DrizzlePluginRepository implements PluginRepository {
   async tryUpdateMetadataIfInactive(
     id: string,
     data: Partial<RegisterPluginData>,
+    expected: Pick<Plugin, "version" | "updatedAt">,
   ): Promise<Plugin | null> {
-    // Restrict metadata mutation to safe lifecycle statuses at the database
-    // write boundary. An activation claimed on another replica wins the race.
+    // Compare read snapshot and lifecycle state in the same UPDATE. A
+    // competing activation or upgrade must not overwrite reviewed metadata.
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
@@ -141,6 +142,8 @@ export class DrizzlePluginRepository implements PluginRepository {
     const [row] = await getDb().update(plugins)
       .set(payload)
       .where(and(eq(plugins.id, id),
+        eq(plugins.version, expected.version),
+        eq(plugins.updatedAt, expected.updatedAt),
         inArray(plugins.status, ["registered", "inactive", "error"])))
       .returning();
     return row ? this.mapToDomain(row) : null;

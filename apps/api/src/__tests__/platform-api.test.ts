@@ -740,14 +740,25 @@ describe("Batch 12 — Platform Integration & Security", () => {
     });
     try {
       await repo.tryTransitionStatus(id, ["registered"], "active");
-      const denied = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" });
+      const initial = await repo.findById(id);
+      if (!initial) throw new Error("Expected registered plugin");
+      const denied = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" }, initial);
       expect(denied).toBeNull();
       expect((await repo.findById(id))?.version).toBe("1.0.0");
 
       await repo.tryTransitionStatus(id, ["active"], "inactive");
-      const allowed = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" });
+      const snapshot = await repo.findById(id);
+      if (!snapshot) throw new Error("Expected current plugin");
+      const allowed = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" }, snapshot);
       expect(allowed?.version).toBe("2.0.0");
       expect(allowed?.status).toBe("inactive");
+      // An operator whose approval was based on the old metadata may not
+      // overwrite the first successful update.
+      const stale = await repo.tryUpdateMetadataIfInactive(id, {
+        version: "3.0.0",
+      }, snapshot);
+      expect(stale).toBeNull();
+      expect((await repo.findById(id))?.version).toBe("2.0.0");
     } finally {
       await repo.delete(id);
     }

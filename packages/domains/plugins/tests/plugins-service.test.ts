@@ -273,7 +273,10 @@ describe("PluginsService", () => {
       .rejects.toMatchObject({ code: "PLUGIN_UPGRADE_REVIEW_REQUIRED" });
     expect(repo.tryUpdateMetadataIfInactive).not.toHaveBeenCalled();
     await service.registerOperatorPlugin(upgraded.id, "operator", approvedId, true);
-    expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledOnce();
+    expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledWith(
+      installed.id, expect.objectContaining({ version: "2.0.0" }),
+      { version: installed.version, updatedAt: installed.updatedAt },
+    );
   });
 
   it("requires review for same-version pinned re-registration without stored digest history", async () => {

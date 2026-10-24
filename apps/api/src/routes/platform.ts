@@ -470,7 +470,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
             err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 :
             err.code === "PLUGIN_RELEASE_CHANGED" ||
             err.code === "PLUGIN_UPGRADE_REVIEW_REQUIRED" ||
-            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ? 409 : 403);
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ||
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" ? 409 : 403);
         }
         throw err;
       }
