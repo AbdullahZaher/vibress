@@ -59,6 +59,7 @@ const releaseMetadataSchema = z.object({
   capabilities: z.array(z.string()).max(64),
   sbom: releaseEvidenceSchema.optional(),
   provenance: releaseEvidenceSchema.optional(),
+  securityReview: releaseEvidenceSchema.optional(),
   migrationPlans: z.array(releaseEvidenceSchema.extend({
     id: z.string().regex(/^[0-9]{4}_[a-z][a-z0-9_]{0,63}$/),
   })).max(16).optional(),
@@ -146,7 +147,9 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
           !isDeepStrictEqual(release.capabilities, manifest.capabilities)) {
         throw new Error("Operator release metadata does not match approved plugin or Host ABI");
       }
-      const evidence = [release.sbom, release.provenance, ...(release.migrationPlans ?? [])]
+      const evidence = [
+        release.sbom, release.provenance, release.securityReview, ...(release.migrationPlans ?? []),
+      ]
         .filter((value) => value !== undefined);
       const paths = evidence.map((item) => item.path);
       const migrationIds = (release.migrationPlans ?? []).map((item) => item.id);

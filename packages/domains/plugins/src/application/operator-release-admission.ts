@@ -17,6 +17,7 @@ export interface OperatorReleaseAdmissionReceipt {
   readonly schemaVersion: 1;
   readonly lockfileSha256: string;
   readonly signatureVerified: true;
+  readonly publicKeySha256: string;
   readonly releases: readonly VerifiedExternalRelease[];
 }
 
@@ -54,9 +55,13 @@ export async function verifyOperatorReleaseAdmission(
     throw new Error("OPERATOR_RELEASE_REPLICA_MISMATCH");
   }
 
-  const { lockfile, signatureVerified } =
+  const { lockfile, signatureVerified, publicKeySha256 } =
     await readTrustedPluginLockfileWithVerification(lockfilePath);
-  if (!signatureVerified) throw new Error("OPERATOR_SIGNATURE_REQUIRED");
+  if (!signatureVerified || !publicKeySha256) throw new Error("OPERATOR_SIGNATURE_REQUIRED");
+  const expectedKey = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256;
+  if (!expectedKey || !SHA256.test(expectedKey) || expectedKey !== publicKeySha256) {
+    throw new Error("OPERATOR_TRUST_ROOT_MISMATCH");
+  }
 
   const approved = parseTrustedPluginLockfile(lockfile);
   if (approved.size === 0) throw new Error("OPERATOR_RELEASE_EMPTY");
@@ -64,7 +69,7 @@ export async function verifyOperatorReleaseAdmission(
   for (const plugin of approved.values()) {
     // Mandatory for *new admissions*, not for legacy runtime lockfile v1.
     const release = plugin.release;
-    if (!release?.sbom || !release.provenance) {
+    if (!release?.sbom || !release.provenance || !release.securityReview) {
       throw new Error("OPERATOR_RELEASE_EVIDENCE_REQUIRED");
     }
     if (plugin.storageModels.length > 0 &&
@@ -84,6 +89,7 @@ export async function verifyOperatorReleaseAdmission(
   }
   const finalApproval = await readTrustedPluginLockfileWithVerification(lockfilePath);
   if (!finalApproval.signatureVerified ||
+      finalApproval.publicKeySha256 !== publicKeySha256 ||
       await lockfileDigest(lockfilePath) !== beforeDigest) {
     throw new Error("OPERATOR_RELEASE_CHANGED_DURING_ADMISSION");
   }
@@ -92,6 +98,7 @@ export async function verifyOperatorReleaseAdmission(
     schemaVersion: 1,
     lockfileSha256: beforeDigest,
     signatureVerified: true,
+    publicKeySha256,
     releases: [...releases].sort((a, b) => a.pluginId.localeCompare(b.pluginId, "en")),
   };
 }
