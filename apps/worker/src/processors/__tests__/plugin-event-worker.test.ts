@@ -6,7 +6,7 @@ import {
 } from "@vibress/api-contracts";
 import {
   PluginEventWorker, processTrustedPluginEvent, processAdmittedPluginEvent,
-  type PluginEventExecution,
+  createTrustedWorkerPluginHost, type PluginEventExecution,
 } from "../plugin-event-worker";
 
 const DIGEST = "a".repeat(64);
@@ -66,6 +66,23 @@ function execution(options: {
 }
 
 describe("EXT-401 publication-scoped durable event worker", () => {
+  it("forwards the release pin through the Worker Host's pre-import boundary", async () => {
+    const loadModule = vi.fn(async (_plugin: Plugin, _key?: string) => null);
+    const listTrustedFingerprints = vi.fn(async () =>
+      new Map([["hello-public", DIGEST]]));
+    const host = createTrustedWorkerPluginHost({ loadModule, listTrustedFingerprints });
+    const expectedReleaseKey = JSON.stringify([
+      "plugin-row-a", "1.0.0", "dist/index.mjs", DIGEST,
+    ]);
+    await host.loadModule(plugin(), expectedReleaseKey);
+    expect(loadModule).toHaveBeenCalledExactlyOnceWith(plugin(), expectedReleaseKey);
+    expect(host.requiresPublicationEnablement?.(plugin())).toBe(true);
+    await expect(host.getOperatorAdminFingerprints?.()).resolves.toEqual(
+      new Map([["hello-public", DIGEST]]),
+    );
+    expect(listTrustedFingerprints).toHaveBeenCalledOnce();
+  });
+
   it("fails readiness until the trusted event consumer is started", () => {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_LOCKFILE", "/operator/approved.json");
     try {

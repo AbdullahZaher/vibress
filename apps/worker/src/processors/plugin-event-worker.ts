@@ -13,7 +13,7 @@ import {
   DrizzlePluginPublicationSettingRepository,
   TrustedExternalPluginHost, verifyTrustedPluginRelease, verifyOperatorReleaseAdmission,
   pluginEventLedger, pluginEventJobId,
-  type Plugin,
+  type Plugin, type PluginHost,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
 import { metrics } from "@vibress/observability";
@@ -104,6 +104,23 @@ export async function processAdmittedPluginEvent(
   return outcome;
 }
 
+/**
+ * The worker's Host adapter must propagate the admitted release identity
+ * through the final trusted import boundary. Silently omitting the second
+ * argument would let a changed lockfile import replacement ESM before the
+ * service detects it. Keep this adapter explicitly unit-testable.
+ */
+export function createTrustedWorkerPluginHost(
+  operatorHost: Pick<TrustedExternalPluginHost, "loadModule" | "listTrustedFingerprints">,
+): PluginHost {
+  return {
+    loadModule: (plugin, expectedReleaseKey) =>
+      operatorHost.loadModule(plugin, expectedReleaseKey),
+    requiresPublicationEnablement: () => true,
+    getOperatorAdminFingerprints: () => operatorHost.listTrustedFingerprints(),
+  };
+}
+
 export class PluginEventWorker {
   private worker: Worker<PluginWorkerEventJob> | null = null;
   private producer: Queue<PluginWorkerEventJob> | null = null;
@@ -122,11 +139,7 @@ export class PluginEventWorker {
   private readonly service = new PluginsService(
     this.repository,
     new DrizzlePluginSettingRepository(),
-    {
-      loadModule: (plugin) => this.operatorHost.loadModule(plugin),
-      requiresPublicationEnablement: () => true,
-      getOperatorAdminFingerprints: () => this.operatorHost.listTrustedFingerprints(),
-    },
+    createTrustedWorkerPluginHost(this.operatorHost),
     new DrizzlePluginPublicationStateRepository(),
     new DrizzlePluginPublicationSettingRepository(),
   );
