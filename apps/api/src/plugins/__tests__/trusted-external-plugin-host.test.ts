@@ -315,12 +315,15 @@ describe("TrustedExternalPluginHost", () => {
     const installed = plugin({ capabilities: privilegedManifest.capabilities });
     expect(await host.getApprovedStorageModels(installed)).toEqual([model]);
     expect(await host.getApprovedAudienceReadModels(installed, "public")).toBeNull();
+    const originalApproval = (await host.listTrustedCatalog())[0]?.approvalId;
     await writeFile(f.lockfile, JSON.stringify({
       ...approved, plugins: [{ ...approved.plugins[0],
         publicReadModels: ["courses"], memberReadModels: [] }],
     }));
     expect(await host.getApprovedAudienceReadModels(installed, "public")).toEqual(["courses"]);
     expect(await host.getApprovedAudienceReadModels(installed, "member")).toEqual([]);
+    // Access rules change without changing ESM: the approval identity must.
+    expect((await host.listTrustedCatalog())[0]?.approvalId).not.toBe(originalApproval);
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0], publicReadModels: ["other"] }],
     })).toThrow(/allowlist/);
