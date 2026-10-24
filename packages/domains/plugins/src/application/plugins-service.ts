@@ -454,8 +454,12 @@ export class PluginsService {
       }
     }
 
-    // Policy and tenant scope must be checked before loading/executing plugin code.
-    const module = await this.host.loadModule(plugin);
+    // On a long-lived replica, a replacement signed module must not even be
+    // imported (its ESM top-level would execute) before we detect a stale
+    // in-process release. Host rechecks the pin at the import boundary.
+    const releaseKey = await this.activationKey(plugin);
+    this.assertLocalRelease(plugin, releaseKey);
+    const module = await this.host.loadModule(plugin, releaseKey);
     if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not exported");
     }
@@ -505,7 +509,11 @@ export class PluginsService {
         throw new PluginDomainError("CROSS_PUBLICATION_VIOLATION", "Cross-publication violation");
       }
     }
-    const module = await this.host.loadModule(plugin);
+    // Reject a mixed-release replica before loading executable module bytes.
+    // Pass the same identity to the Host for its independent import-time check.
+    const releaseKey = await this.activationKey(plugin);
+    this.assertLocalRelease(plugin, releaseKey);
+    const module = await this.host.loadModule(plugin, releaseKey);
     if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not available");
     }

@@ -54,6 +54,24 @@ docker compose -f compose.prod.yml -f compose.plugins.yml -f compose.plugins.str
 
 Run those checks on **each physical/virtual replica**, not only once against shared CI artifacts. Each check re-authenticates the signature and independently verifies its own mounted ESM, UI, evidence and migration-plan bytes. The receipt proves that observed lockfile and files were valid **at verification time**; it does not lock the filesystem or guarantee an atomic cluster rollout. Keep immutable mounts until the coordinated rollout/restart is completed.
 
+### PLUG-OPS-01 multi-replica receipt comparison (offline acceptance)
+
+For the **two-API, two-Worker** acceptance drill, run the existing `dist/plugins-admit.js` inside **each actual replica/image** against its local read-only operator release mount, using the same externally pinned expected lockfile and signer fingerprints. Save its stdout as four distinct JSON receipts in operator-only storage outside plugin writable paths. The evidence must originate from each replica independently; copying the same receipt four times is not an acceptable operational drill.
+
+From a trusted operator workstation with the same environment pins:
+
+```bash
+export VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256='<operator-approved-SPKI-SHA256>'
+export VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256='<operator-approved-lockfile-SHA256>'
+pnpm exec tsx scripts/plugins/check-replica-receipts.ts \
+  api:api-a=/operator-secure/api-a.json \
+  api:api-b=/operator-secure/api-b.json \
+  worker:worker-a=/operator-secure/worker-a.json \
+  worker:worker-b=/operator-secure/worker-b.json
+```
+
+The read-only comparator rejects unsigned/malformed receipt data, duplicate replica labels, fewer than two distinct API or Worker labels, mismatched artifact summaries, trust roots, or lockfile digests. Nonzero exit **blocks rollout**; it never executes a plugin, changes database state, or automatically recovers a deployment. It prints only aggregate counts and pinned public digests. The tool **compares assertions**, and cannot prove that four receipt files were actually produced on four different hosts or that a replica stayed unchanged after checking. Independently retain the signed operator review, raw scanner output, replica identity/command logs and original admission results. Keep mounts immutable, complete draining/restart checks, and obtain operator sign-off before calling the fleet drill accepted.
+
 3. For updates **first** disable affected publication delivery, drain/deactivate the **old active plugin while its old signed lockfile is still mounted**, and safely quiesce Worker/API replicas. Only then replace the operator-owned approved snapshot in all replicas, deploy/restart API and Worker against the new identical snapshot, review/install approved schema migrations through the existing controlled DB process, and register/activate the new plugin globally. Never hot-swap a signed lockfile under an active module: the Host intentionally refuses mismatched release deactivation, and you may need isolated operator recovery. Enable it individually for authorized publications. Do not advance while workers still run the previous ABI/release.
 4. Verify API and Worker startup, queue retry/idempotency and publication isolation; monitor failed events and metrics. A mismatched replica, failed signature, invalid scanner finding or migration conflict blocks deployment.
 

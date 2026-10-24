@@ -126,4 +126,64 @@ describe("P0-4 plugin lifecycle status and recovery UX", () => {
     expect(deactivatePluginApi).not.toHaveBeenCalled();
     expect(setPluginPublicationStateApi).not.toHaveBeenCalled();
   });
+  it("searches name, manifest ID and version without changing plugin permissions", async () => {
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[
+        plugin("active", { id: "a", name: "Alpha", manifestId: "alpha" }),
+        plugin("registered", { id: "b", name: "Beta", manifestId: "beta-addon", version: "2.7.0" }),
+      ]} platformOperator={false} onError={onError} onChanged={onChanged} />);
+    });
+    const search = container.querySelector('input[type="search"]') as HTMLInputElement;
+    expect(search).not.toBeNull();
+    expect(search.labels?.[0]?.textContent).toBe("Search installed plugins");
+    await act(async () => {
+      const setNativeValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype, "value",
+      )?.set;
+      setNativeValue?.call(search, "beta-addon");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Beta");
+    expect(container.textContent).not.toContain("Alpha");
+    expect(button(container, "Activate")).toBeUndefined();
+    expect(activatePluginApi).not.toHaveBeenCalled();
+  });
+
+  it("filters lifecycle states and distinguishes no matches from no installs", async () => {
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[
+        plugin("active", { id: "active", name: "Working" }),
+        plugin("error", { id: "failed", name: "Broken" }),
+        plugin("inactive", { id: "old", name: "Dormant" }),
+        plugin("active", { id: "legacy", name: "Incompatible", hostCompatible: false }),
+      ]} platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    const selector = container.querySelector("select") as HTMLSelectElement;
+    expect(selector.labels?.[0]?.textContent).toBe("Filter plugin status");
+    await act(async () => {
+      selector.value = "attention";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Broken");
+    expect(container.textContent).toContain("Incompatible");
+    expect(container.textContent).not.toContain("Dormant");
+    expect(container.textContent).not.toContain("Working");
+    await act(async () => {
+      selector.value = "inactive";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Dormant");
+    expect(container.textContent).not.toContain("Broken");
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[plugin("active")]}
+        platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    expect(container.textContent).toContain("No plugins match your search or status filter.");
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[]}
+        platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    expect(container.textContent).toContain("No platform plugins installed.");
+  });
+
 });

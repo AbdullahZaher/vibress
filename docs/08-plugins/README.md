@@ -6,6 +6,10 @@ supported for untrusted plugins** or complete for external SDK release.
 
 ## Active platform completion program (2026-10-24)
 
+**Master implementation tracker (M0–M6):** [Plugin Platform Master Execution Plan](plugin-platform-master-execution-plan.md). This is the current execution sequence and milestone/evidence register; the existing production plan and SDK/security documents remain detailed technical references.
+
+**M0 baseline artifacts:** [Source-linked consumer and contract inventory](plugin-platform-m0-compatibility-matrix.md) and [release acceptance/support matrix](plugin-platform-m0-acceptance-matrix.md). They record required checks and outstanding evidence, **not** a completed operational drill.
+
 The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
 
 ## P0-2 operator-trusted release catalog
