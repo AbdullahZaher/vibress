@@ -258,6 +258,17 @@ export const ExtensionAdminBridgeReadRequestSchema = z.object({
   type: z.literal("vibress:extension:read"),
   version: z.literal(1),
   requestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  // Optional scalar selectors for the already-bound GET route. No arbitrary
+  // URLs, tenant identities or credentials are accepted from plugin HTML.
+  query: z.record(
+    z.string().regex(/^[a-z][A-Za-z0-9_]{0,63}$/),
+    z.union([z.string().max(256), z.number().finite(), z.boolean()]),
+  ).refine((fields) => Object.keys(fields).length <= 4, "Too many read selectors")
+    .refine((fields) => ![
+      "publicationId", "workspaceId", "tenantId", "pluginId",
+      "actorUserId", "userId", "memberId",
+    ].some((key) => Object.hasOwn(fields, key)), "Authority selectors are forbidden")
+    .optional(),
 }).strict();
 
 export const ExtensionAdminBridgeReadResponseSchema = z.discriminatedUnion("ok", [
