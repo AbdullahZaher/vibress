@@ -1,0 +1,45 @@
+name: Dependency lockfile refresh
+
+on:
+  push:
+    branches:
+      - feat/lms104-public-catalog-lesson-delivery-20261023
+    paths:
+      - pnpm-workspace.yaml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dependency-lock-refresh-lms104
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    if: github.repository == 'AbdullahZaher/vibress'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Regenerate lockfile with pnpm
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+      - name: Commit generated lockfile to this branch only
+        run: |
+          set -eu
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "Lockfile unchanged"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore(deps): regenerate pnpm lockfile for security fixes"
+          git push origin HEAD:refs/heads/feat/lms104-public-catalog-lesson-delivery-20261023
