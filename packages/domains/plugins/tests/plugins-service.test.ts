@@ -283,6 +283,7 @@ describe("PluginsService", () => {
     const approvedId = `test-plugin@1.0.0:${"a".repeat(64)}`;
     const hostWith = {
       loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
       getOperatorManifestCatalog: vi.fn(async () => [{
         manifest: validManifest, signatureVerified: true, approvalId: approvedId,
       }]),

@@ -20,8 +20,18 @@ const MAX_SIGNATURE_BYTES = 256;
 async function readBoundedFile(filePath: string, maxBytes: number): Promise<Buffer> {
   if (!path.isAbsolute(filePath)) throw new Error("Invalid trusted plugin lockfile attestation path");
   // Inspect and read one inode, not separately resolved path snapshots.
-  const file = await open(filePath,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let file;
+  try {
+    file = await open(filePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error: unknown) {
+    // Expected OS-level rejection of a symlink. Do not leak operator trust
+    // paths through raw ELOOP diagnostics; fail closed without following it.
+    if (error instanceof Error && "code" in error && error.code === "ELOOP") {
+      throw new Error("Invalid trusted plugin lockfile or attestation file");
+    }
+    throw error;
+  }
   try {
     const info = await file.stat();
     if (!info.isFile() || info.size > maxBytes) {
