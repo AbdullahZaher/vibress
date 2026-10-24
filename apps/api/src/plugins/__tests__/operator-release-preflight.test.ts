@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { verifyTrustedPluginRelease } from "../operator-release-preflight";
+import { pluginPhysicalMigrationDigest, pluginPhysicalModelDigest } from "@vibress/plugins";
 
 const temporary: string[] = [];
 const digest = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
@@ -49,6 +50,132 @@ describe("EXT-404 operator package integrity preflight", () => {
       sha256: digest('throw new Error("Preflight executed operator bundle");'),
       adminViewCount: 1,
     }]);
+  });
+
+  it("verifies optional release evidence without evaluating it or changing v1 result", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const entry = lock.plugins[0];
+    const evidence = {
+      sbom: '{"packages":[]}',
+      provenance: '{"builder":"local"}',
+      plan: "",
+    };
+    fs.mkdirSync(path.join(f.dir, "migrations"));
+    const columns = [{ name: "title", type: "text" as const, required: true }];
+    const model = { key: "articles", columns,
+      schemaSha256: pluginPhysicalModelDigest(columns) };
+    entry.manifest.capabilities.push("extension.storage.read");
+    entry.storageModels = [model];
+    const migrationPlan = {
+      manifestId: entry.manifest.id,
+      migrationId: "0001_initial",
+      packageVersion: entry.manifest.version,
+      artifactSha256: entry.sha256,
+      migrationSha256: pluginPhysicalMigrationDigest([model]),
+      models: [model],
+    };
+    evidence.plan = JSON.stringify(migrationPlan);
+    fs.writeFileSync(path.join(f.dir, "sbom.json"), evidence.sbom);
+    fs.writeFileSync(path.join(f.dir, "provenance.json"), evidence.provenance);
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), evidence.plan);
+    entry.release = {
+      schemaVersion: 1,
+      releaseId: `hello-public@1.0.0:${entry.sha256}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0",
+        maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: entry.manifest.capabilities,
+      sbom: { path: "sbom.json", sha256: digest(evidence.sbom) },
+      provenance: { path: "provenance.json", sha256: digest(evidence.provenance) },
+      migrationPlans: [{
+        id: "0001_initial", path: "migrations/plan.json", sha256: digest(evidence.plan),
+      }],
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    const expected = [{ pluginId: "hello-public", version: "1.0.0",
+      sha256: entry.sha256, adminViewCount: 1 }];
+    await expect(verifyTrustedPluginRelease(f.lock)).resolves.toEqual(expected);
+    fs.appendFileSync(path.join(f.dir, "sbom.json"), " ");
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+    fs.writeFileSync(path.join(f.dir, "sbom.json"), evidence.sbom);
+    fs.unlinkSync(path.join(f.dir, "provenance.json"));
+    fs.symlinkSync(path.join(f.dir, "sbom.json"), path.join(f.dir, "provenance.json"));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("INVALID_APPROVED_ARTIFACT");
+    fs.unlinkSync(path.join(f.dir, "provenance.json"));
+    fs.writeFileSync(path.join(f.dir, "provenance.json"), evidence.provenance);
+    fs.appendFileSync(path.join(f.dir, "migrations", "plan.json"), " ");
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), evidence.plan);
+    const changed = { ...migrationPlan, packageVersion: "2.0.0" };
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), JSON.stringify(changed));
+    entry.release.migrationPlans[0].sha256 = digest(JSON.stringify(changed));
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toMatchObject({ code: "PLUGIN_MIGRATION_RELEASE_MISMATCH" });
+    const wrongId = { ...migrationPlan, migrationId: "0002_other" };
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), JSON.stringify(wrongId));
+    entry.release.migrationPlans[0].sha256 = digest(JSON.stringify(wrongId));
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("PLUGIN_MIGRATION_RELEASE_MISMATCH");
+  });
+
+  it("rejects invalid pinned evidence JSON even when the digest matches", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const bad = "not-a-json-object";
+    fs.writeFileSync(path.join(f.dir, "evidence.json"), bad);
+    lock.plugins[0].release = {
+      schemaVersion: 1,
+      releaseId: `hello-public@1.0.0:${lock.plugins[0].sha256}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0",
+        maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: lock.plugins[0].manifest.capabilities,
+      sbom: { path: "evidence.json", sha256: digest(bad) },
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow();
+    fs.writeFileSync(path.join(f.dir, "evidence.json"), "[]");
+    lock.plugins[0].release.sbom.sha256 = digest("[]");
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow("INVALID_APPROVED_JSON");
+  });
+
+  it("refuses signed metadata with a fabricated security scan result", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const entry = lock.plugins[0];
+    const report = JSON.stringify({
+      schemaVersion: 1, artifactSha256: entry.sha256,
+      reviewer: "Security", scanner: "Offline scan",
+      scannedAt: "2026-10-24T12:00:00Z",
+      criticalFindings: 0, highFindings: 1, decision: "approved",
+    });
+    fs.writeFileSync(path.join(f.dir, "security-review.json"), report);
+    entry.release = {
+      schemaVersion: 1, releaseId: `hello-public@1.0.0:${entry.sha256}`,
+      publisher: { id: "operator", name: "Operator" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0", maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: entry.manifest.capabilities,
+      securityReview: { path: "security-review.json", sha256: digest(report) },
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("OPERATOR_SECURITY_REVIEW_REJECTED");
   });
 
   it("rejects tampered bundle and Admin asset bytes", async () => {

@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { readFile, realpath, stat, lstat } from "node:fs/promises";
+import { readFile, realpath, stat, lstat, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
-import { readTrustedPluginLockfile } from "./trusted-release-attestation";
+import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./trusted-release-attestation";
+
 import { z } from "zod";
-import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
+import { SDK_VERSION, validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { validateStorageModel } from "./plugin-scoped-storage";
 import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
 import type { Plugin } from "../domain/plugin";
-import { PluginDomainError } from "./plugins-service";
+import { PluginDomainError, type OperatorTrustedReleaseSummary } from "./plugins-service";
 
 /**
  * Operator-installed trusted, single-file ESM entrypoints.
@@ -36,6 +38,35 @@ const approvedAdminUiAssetSchema = z.object({
   path: z.string().max(240).regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.html$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
 }).strict();
+/**
+ * Versioned optional operator release metadata. The v1 lockfile and existing
+ * release admissions remain compatible; no URL, npm or executable input here.
+ */
+const releaseEvidenceSchema = z.object({
+  path: z.string().max(240).regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.json$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+const releaseMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  releaseId: z.string().min(1).max(330),
+  publisher: z.object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+    name: z.string().trim().min(1).max(120),
+  }).strict(),
+  compatibility: z.object({
+    minVibressApiVersion: z.string().min(1).max(32),
+    maxVibressApiVersion: z.string().min(1).max(32),
+    sdkAbiVersion: z.string().min(1).max(32),
+  }).strict(),
+  capabilities: z.array(z.string()).max(64),
+  sbom: releaseEvidenceSchema.optional(),
+  provenance: releaseEvidenceSchema.optional(),
+  securityReview: releaseEvidenceSchema.optional(),
+  migrationPlans: z.array(releaseEvidenceSchema.extend({
+    id: z.string().regex(/^[0-9]{4}_[a-z][a-z0-9_]{0,63}$/),
+  })).max(16).optional(),
+}).strict();
+
 const pinnedPluginSchema = z.object({
   manifest: z.unknown(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
@@ -46,12 +77,14 @@ const pinnedPluginSchema = z.object({
   publicReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
   memberReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
   adminUiAssets: z.array(approvedAdminUiAssetSchema).max(8).optional(),
+  release: releaseMetadataSchema.optional(),
 }).strict();
 const lockfileSchema = z.object({
   schemaVersion: z.literal(1),
   plugins: z.array(pinnedPluginSchema).max(64),
 }).strict();
 
+const APPROVAL_ID = /^[a-z0-9][a-z0-9-]{0,199}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_UI_ASSET_BYTES = 256 * 1024;
 
@@ -59,6 +92,7 @@ type PinnedPlugin = {
   manifest: PluginManifest;
   sha256: string;
   storageModels: readonly ApprovedPluginPhysicalModel[];
+  release?: z.infer<typeof releaseMetadataSchema>;
   publicReadModels?: readonly string[];
   memberReadModels?: readonly string[];
   adminUiAssets: readonly {
@@ -104,6 +138,31 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
           capability === "extension.member_storage.write")) {
       throw new Error("Approved storage models require declared storage capability");
     }
+    const release = entry.release;
+    if (release) {
+      // Exact Host/SDK ABI support only; do not imply unimplemented ranges.
+      const expectedId = `${manifest.id}@${manifest.version}:${entry.sha256.toLowerCase()}`;
+      if (!/^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/.test(manifest.version) ||
+          release.releaseId !== expectedId ||
+          release.compatibility.minVibressApiVersion !== SDK_VERSION ||
+          release.compatibility.maxVibressApiVersion !== SDK_VERSION ||
+          release.compatibility.sdkAbiVersion !== SDK_VERSION ||
+          !isDeepStrictEqual(release.capabilities, manifest.capabilities)) {
+        throw new Error("Operator release metadata does not match approved plugin or Host ABI");
+      }
+      const evidence = [
+        release.sbom, release.provenance, release.securityReview, ...(release.migrationPlans ?? []),
+      ]
+        .filter((value) => value !== undefined);
+      const paths = evidence.map((item) => item.path);
+      const migrationIds = (release.migrationPlans ?? []).map((item) => item.id);
+      if (new Set(paths).size !== paths.length ||
+          new Set(migrationIds).size !== migrationIds.length ||
+          paths.includes(manifest.entrypoint) ||
+          (entry.adminUiAssets ?? []).some((item) => paths.includes(item.path))) {
+        throw new Error("Duplicate or conflicting operator release evidence");
+      }
+    }
     const adminUiAssets = entry.adminUiAssets ?? [];
     if (adminUiAssets.length > 0 &&
         (!manifest.capabilities.includes("admin.navigation") ||
@@ -121,6 +180,7 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     }
     result.set(manifest.id, {
       manifest, sha256: entry.sha256.toLowerCase(), storageModels,
+      ...(release ? { release } : {}),
       ...(entry.publicReadModels ? { publicReadModels: entry.publicReadModels } : {}),
       ...(entry.memberReadModels ? { memberReadModels: entry.memberReadModels } : {}),
       adminUiAssets: adminUiAssets.map((asset) => ({ ...asset, sha256: asset.sha256.toLowerCase() })),
@@ -164,12 +224,58 @@ export class TrustedExternalPluginHost {
     return this.explicitLockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
   }
 
+  /** The effective operator mount, used only by Host-side admission checks. */
+  getOperatorLockfilePath(): string | undefined {
+    return this.lockfilePath;
+  }
+
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
   async listTrustedManifests(): Promise<PluginManifest[]> {
     const lockfile = this.lockfilePath;
     if (!lockfile) return [];
     const json = await readTrustedPluginLockfile(lockfile);
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
+  }
+
+  /**
+   * One verified lockfile snapshot supplies both displayed capabilities and
+   * detached-signature status. No module bytes are evaluated by discovery.
+   */
+  async listTrustedCatalog(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+    approvalId?: string;
+    release?: OperatorTrustedReleaseSummary;
+  }>> {
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return [];
+    const { lockfile: data, signatureVerified } =
+      await readTrustedPluginLockfileWithVerification(lockfile);
+    return [...parseTrustedPluginLockfile(data).values()].map((approved) => {
+      const release = approved.release;
+      // Bind the operator's *entire permission-bearing approval*, not only
+      // executable ESM. Same bytes may have different storage read allowlists,
+      // approved Admin assets, migration plans or capabilities.
+      const approvalDigest = createHash("sha256").update(JSON.stringify([
+        approved.manifest, approved.sha256, approved.storageModels,
+        approved.publicReadModels ?? [], approved.memberReadModels ?? [],
+        approved.adminUiAssets, approved.release ?? null,
+      ])).digest("hex");
+      const approvalId = `${approved.manifest.id}@${approved.manifest.version}:${approvalDigest}`;
+      return {
+        manifest: approved.manifest, signatureVerified,
+        ...(APPROVAL_ID.test(approvalId) ? { approvalId } : {}),
+        ...(release ? { release: {
+          releaseId: release.releaseId,
+          publisher: { ...release.publisher },
+          artifactSha256: approved.sha256,
+          compatibility: { ...release.compatibility },
+          hasSbom: release.sbom !== undefined,
+          hasProvenance: release.provenance !== undefined,
+          migrationPlanIds: (release.migrationPlans ?? []).map((item) => item.id),
+        } } : {}),
+      };
+    });
   }
 
   /**
@@ -273,7 +379,23 @@ export class TrustedExternalPluginHost {
         "Approved Admin UI asset is not a bounded regular file",
       );
     }
-    const bytes = await readFile(canonical);
+    // Re-check the inode on the descriptor actually read, not on a mutable
+    // pathname that could change after realpath/lstat.
+    const handle = await open(assetPath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    let bytes: Buffer;
+    try {
+      const opened = await handle.stat();
+      if (!opened.isFile() || opened.size > MAX_ADMIN_UI_ASSET_BYTES ||
+          opened.dev !== canonicalInfo.dev || opened.ino !== canonicalInfo.ino) {
+        throw new PluginDomainError(
+          "PLUGIN_FILE_INVALID", "Approved Admin UI asset changed during verification",
+        );
+      }
+      bytes = await handle.readFile();
+    } finally {
+      await handle.close();
+    }
     if (bytes.length > MAX_ADMIN_UI_ASSET_BYTES) {
       throw new PluginDomainError(
         "PLUGIN_SIZE_LIMIT_EXCEEDED",

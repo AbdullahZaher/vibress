@@ -81,11 +81,297 @@ describe("PluginsService", () => {
     );
   }
 
+  it("shows exact operator-reviewed capabilities and signature status without loading code", async () => {
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [
+        { manifest: validManifest, signatureVerified: true },
+      ]),
+    };
+    const service = makeService({ host: catalogHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id,
+      name: validManifest.name,
+      version: validManifest.version,
+      description: null,
+      capabilities: validManifest.capabilities,
+      signatureVerified: true,
+      readiness: "verification_required",
+    }]);
+    expect(catalogHost.loadModule).not.toHaveBeenCalled();
+  });
+
+  it("passes only operator-owned release summary to catalog clients", async () => {
+    const hash = "a".repeat(64);
+    const release = {
+      releaseId: `test-plugin@1.0.0:${hash}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      artifactSha256: hash,
+      compatibility: {
+        minVibressApiVersion: SDK_VERSION,
+        maxVibressApiVersion: SDK_VERSION,
+        sdkAbiVersion: SDK_VERSION,
+      },
+      hasSbom: false, hasProvenance: true,
+      migrationPlanIds: ["0001_initial"],
+    };
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [
+        { manifest: validManifest, signatureVerified: true, release },
+      ]),
+    };
+    const service = makeService({ host: catalogHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id,
+      name: validManifest.name,
+      version: validManifest.version,
+      description: null,
+      capabilities: validManifest.capabilities,
+      signatureVerified: true,
+      readiness: "verification_required",
+      release,
+    }]);
+    expect(catalogHost.loadModule).not.toHaveBeenCalled();
+  });
+
+  it("never invents signature verification for legacy PluginHost consumers", async () => {
+    const legacyHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifests: vi.fn(async () => [validManifest]),
+    };
+    const service = makeService({ host: legacyHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id, name: validManifest.name,
+      version: validManifest.version, description: null,
+      capabilities: validManifest.capabilities, signatureVerified: null,
+      readiness: "verification_required",
+    }]);
+  });
+
+  it("reports Host ABI compatibility without changing the persisted plugin", async () => {
+    const stored = makePlugin({ vibressApiVersion: "0.9.0" });
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      list: vi.fn(async () => [stored]),
+    };
+    const service = makeService({ pluginRepo: repoWith });
+    await expect(service.listPluginsForPublication()).resolves.toEqual([{
+      ...stored, publicationScoped: false, publicationEnabled: false,
+      publicationConfiguredEnabled: false, hostCompatible: false,
+    }]);
+    expect(stored).not.toHaveProperty("hostCompatible");
+  });
+
+  it("rejects changed release identity before writing operator registration", async () => {
+    const approvedId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () =>
+        [{ manifest: validManifest, signatureVerified: true, approvalId: approvedId }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const repository: PluginRepository = {
+      ...pluginRepo,
+      create: vi.fn(async () => makePlugin()),
+    };
+    const service = makeService({ host: catalogHost, pluginRepo: repository });
+    await expect(service.registerOperatorPlugin("test-plugin", "operator",
+      `test-plugin@1.0.0:${"b".repeat(64)}`))
+      .rejects.toMatchObject({ code: "PLUGIN_RELEASE_CHANGED" });
+    expect(catalogHost.verifyOperatorRegistration).not.toHaveBeenCalled();
+    expect(repository.create).not.toHaveBeenCalled();
+
+    await service.registerOperatorPlugin("test-plugin", "operator", approvedId);
+    expect(catalogHost.verifyOperatorRegistration).toHaveBeenCalledOnce();
+    expect(catalogHost.authorizeRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "test-plugin" }), approvedId,
+    );
+    expect(repository.create).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a release changed during the registration preflight", async () => {
+    const originalId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [{
+        manifest: validManifest, signatureVerified: true, approvalId: originalId,
+      }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async (_manifest: unknown, expected?: string) => {
+        if (expected) throw new Error("changed after verification");
+      }),
+    };
+    const repo: PluginRepository = { ...pluginRepo, create: vi.fn(async () => makePlugin()) };
+    await expect(makeService({ host: catalogHost, pluginRepo: repo })
+      .registerOperatorPlugin("test-plugin", "operator", originalId))
+      .rejects.toMatchObject({ code: "PLUGIN_NOT_TRUSTED" });
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps saved publication preference separate from effective activation", async () => {
+    const stored = makePlugin({ status: "inactive" });
+    const states = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async (_pluginId: string, publicationId: string) =>
+        publicationId === "pub-a"),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const externalHost = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+    };
+    const repo: PluginRepository = { ...pluginRepo, list: vi.fn(async () => [stored]),
+      findById: vi.fn(async () => stored) };
+    const service = new PluginsService(repo, settingRepo, externalHost, states);
+    await expect(service.listPluginsForPublication("pub-a")).resolves.toEqual([{
+      ...stored, publicationScoped: true, publicationEnabled: false,
+      publicationConfiguredEnabled: true, hostCompatible: true,
+    }]);
+    await expect(service.listPluginsForPublication("pub-b")).resolves.toEqual([{
+      ...stored, publicationScoped: true, publicationEnabled: false,
+      publicationConfiguredEnabled: false, hostCompatible: true,
+    }]);
+    await service.setPublicationEnabled("p1", "pub-a", false);
+    expect(states.setEnabled).toHaveBeenCalledWith("p1", "pub-a", false);
+  });
+
+  it("reviews changes against the installed version before a pinned update", async () => {
+    const approvedId = `test-plugin@2.0.0:${"a".repeat(64)}`;
+    const upgraded = { ...validManifest, version: "2.0.0",
+      capabilities: [...validManifest.capabilities, "extension.routes.public"] };
+    const installed = makePlugin({ status: "inactive", version: "1.0.0",
+      capabilities: [...validManifest.capabilities] });
+    const repo: PluginRepository = {
+      ...pluginRepo,
+      list: vi.fn(async () => [installed]),
+      findByManifestId: vi.fn(async () => installed),
+      updateMetadata: vi.fn(async () => makePlugin({ version: "2.0.0" })),
+      tryUpdateMetadataIfInactive: vi.fn(async () => makePlugin({ version: "2.0.0" })),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () =>
+        [{ manifest: upgraded, signatureVerified: true, approvalId: approvedId }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const service = makeService({ host: hostWith, pluginRepo: repo });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: upgraded.id, name: upgraded.name, version: upgraded.version,
+      description: null, capabilities: upgraded.capabilities, signatureVerified: true,
+      approvalId: approvedId, readiness: "verification_required",
+      upgradeReview: {
+        installedVersion: "1.0.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true,
+      },
+    }]);
+    await expect(service.registerOperatorPlugin(upgraded.id, "operator", approvedId))
+      .rejects.toMatchObject({ code: "PLUGIN_UPGRADE_REVIEW_REQUIRED" });
+    expect(repo.tryUpdateMetadataIfInactive).not.toHaveBeenCalled();
+    await service.registerOperatorPlugin(upgraded.id, "operator", approvedId, true);
+    expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledWith(
+      installed.id, expect.objectContaining({ version: "2.0.0" }),
+      { version: installed.version, updatedAt: installed.updatedAt },
+    );
+  });
+
+  it("requires review for same-version pinned re-registration without stored digest history", async () => {
+    const approvedId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () => [{
+        manifest: validManifest, signatureVerified: true, approvalId: approvedId,
+      }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const installed = makePlugin({ status: "inactive" });
+    const repo: PluginRepository = { ...pluginRepo,
+      findByManifestId: vi.fn(async () => installed),
+      updateMetadata: vi.fn(async () => installed),
+      tryUpdateMetadataIfInactive: vi.fn(async () => installed) };
+    const service = makeService({ pluginRepo: repo, host: hostWith });
+    await expect(service.registerOperatorPlugin("test-plugin", "operator", approvedId))
+      .rejects.toMatchObject({ code: "PLUGIN_UPGRADE_REVIEW_REQUIRED" });
+    expect(repo.tryUpdateMetadataIfInactive).not.toHaveBeenCalled();
+    await service.registerOperatorPlugin("test-plugin", "operator", approvedId, true);
+    expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledOnce();
+  });
+
+  it("refuses pinned re-registration while a plugin is active even if semver is unchanged", async () => {
+    const approvalId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const installed = makePlugin({ status: "active" });
+    const repo: PluginRepository = { ...pluginRepo,
+      findByManifestId: vi.fn(async () => installed),
+      tryUpdateMetadataIfInactive: vi.fn(async () => null),
+      updateMetadata: vi.fn(async () => installed),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () => [{
+        manifest: validManifest, signatureVerified: true, approvalId,
+      }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    await expect(makeService({ pluginRepo: repo, host: hostWith })
+      .registerOperatorPlugin("test-plugin", "operator", approvalId, true))
+      .rejects.toMatchObject({ code: "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" });
+    expect(repo.tryUpdateMetadataIfInactive).not.toHaveBeenCalled();
+    expect(repo.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it("blocks pinned updates when activation wins the database race", async () => {
+    const approvalId = `test-plugin@2.0.0:${"a".repeat(64)}`;
+    const manifest = { ...validManifest, version: "2.0.0" };
+    const installed = makePlugin({ status: "inactive" });
+    const repo: PluginRepository = { ...pluginRepo,
+      findByManifestId: vi.fn(async () => installed),
+      tryUpdateMetadataIfInactive: vi.fn(async () => null),
+      updateMetadata: vi.fn(async () => installed),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () =>
+        [{ manifest, signatureVerified: true, approvalId }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    await expect(makeService({ pluginRepo: repo, host: hostWith })
+      .registerOperatorPlugin("test-plugin", "operator", approvalId, true))
+      .rejects.toMatchObject({ code: "PLUGIN_TRANSITION_IN_PROGRESS" });
+    expect(repo.updateMetadata).not.toHaveBeenCalled();
+    expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledOnce();
+  });
+
   it("registers a valid plugin manifest", async () => {
     const service = makeService();
     const plugin = await service.registerPlugin(validManifest, "u1");
     expect(plugin.manifestId).toBe("test-plugin");
     expect(plugin.status).toBe("registered");
+  });
+
+  it("blocks activation of persisted Host-incompatible plugins before any transition", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "registered", vibressApiVersion: "0.9.0",
+      })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_INCOMPATIBLE_API_VERSION",
+    });
+    expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+    expect(host.loadModule).not.toHaveBeenCalled();
   });
 
   it("rejects an incompatible Vibress API version", async () => {

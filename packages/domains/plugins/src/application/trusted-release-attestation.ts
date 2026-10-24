@@ -1,5 +1,6 @@
-import { createPublicKey, verify } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { createHash, createPublicKey, verify } from "node:crypto";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 
 /**
@@ -18,13 +19,30 @@ const MAX_SIGNATURE_BYTES = 256;
 
 async function readBoundedFile(filePath: string, maxBytes: number): Promise<Buffer> {
   if (!path.isAbsolute(filePath)) throw new Error("Invalid trusted plugin lockfile attestation path");
-  const info = await lstat(filePath);
-  if (!info.isFile() || info.isSymbolicLink() || info.size > maxBytes) {
-    throw new Error("Invalid trusted plugin lockfile or attestation file");
+  // Inspect and read one inode, not separately resolved path snapshots.
+  let file;
+  try {
+    file = await open(filePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error: unknown) {
+    // Expected OS-level rejection of a symlink. Do not leak operator trust
+    // paths through raw ELOOP diagnostics; fail closed without following it.
+    if (error instanceof Error && "code" in error && error.code === "ELOOP") {
+      throw new Error("Invalid trusted plugin lockfile or attestation file", { cause: error });
+    }
+    throw error;
   }
-  const bytes = await readFile(filePath);
-  if (bytes.byteLength > maxBytes) throw new Error("Invalid trusted plugin lockfile size");
-  return bytes;
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > maxBytes) {
+      throw new Error("Invalid trusted plugin lockfile or attestation file");
+    }
+    const bytes = await file.readFile();
+    if (bytes.byteLength > maxBytes) throw new Error("Invalid trusted plugin lockfile size");
+    return bytes;
+  } finally {
+    await file.close();
+  }
 }
 
 function decodeUtf8(bytes: Buffer): string {
@@ -42,15 +60,28 @@ function decodeUtf8(bytes: Buffer): string {
  * deployments, but supplying only one fails closed. To require signatures,
  * operators must provision both files on every API replica.
  */
-export async function readTrustedPluginLockfile(
+export async function readTrustedPluginLockfileWithVerification(
   lockfilePath: string,
   options: TrustedPluginAttestationOptions = {
     publicKeyPath: process.env.VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE,
     signaturePath: process.env.VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE,
   },
-): Promise<unknown> {
+): Promise<{
+  readonly lockfile: unknown;
+  readonly signatureVerified: boolean;
+  readonly publicKeySha256?: string;
+}> {
   if (!path.isAbsolute(lockfilePath)) throw new Error("Invalid trusted plugin lockfile path");
   const lockfileBytes = await readBoundedFile(lockfilePath, MAX_LOCKFILE_BYTES);
+  // A signed but revoked older lockfile is not enough: deployments pin the
+  // exact expected digest outside all plugin-controlled files.
+  const expectedRelease = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256;
+  if (expectedRelease !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(expectedRelease) ||
+        createHash("sha256").update(lockfileBytes).digest("hex") !== expectedRelease) {
+      throw new Error("OPERATOR_RELEASE_REPLICA_MISMATCH");
+    }
+  }
   const { publicKeyPath, signaturePath } = options;
   // Strict deployments must never silently fall back to unsigned v1 approval.
   // The explicit flag is additive: old operator-controlled unsigned installs
@@ -58,6 +89,14 @@ export async function readTrustedPluginLockfile(
   const requireSignature = process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1";
   if (requireSignature && (!publicKeyPath || !signaturePath)) {
     throw new Error("Trusted plugin signature is required by operator policy");
+  }
+  let publicKeySha256: string | undefined;
+  const expectedKey = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256;
+  if (expectedKey !== undefined && !/^[a-f0-9]{64}$/.test(expectedKey)) {
+    throw new Error("Invalid operator public key fingerprint policy");
+  }
+  if (expectedKey !== undefined && (!publicKeyPath || !signaturePath)) {
+    throw new Error("Expected operator public key requires signed lockfile");
   }
   if (publicKeyPath !== undefined || signaturePath !== undefined) {
     if (!publicKeyPath || !signaturePath) {
@@ -75,6 +114,11 @@ export async function readTrustedPluginLockfile(
     if (publicKey.asymmetricKeyType !== "ed25519") {
       throw new Error("Trusted plugin lockfile requires Ed25519");
     }
+    publicKeySha256 = createHash("sha256")
+      .update(publicKey.export({ format: "der", type: "spki" })).digest("hex");
+    if (expectedKey !== undefined && publicKeySha256 !== expectedKey) {
+      throw new Error("OPERATOR_TRUST_ROOT_MISMATCH");
+    }
     const encoded = decodeUtf8(signatureBytes).trim();
     if (!/^[A-Za-z0-9+/]{86}==$/.test(encoded)) {
       throw new Error("Invalid trusted plugin lockfile signature");
@@ -85,5 +129,20 @@ export async function readTrustedPluginLockfile(
     }
   }
   const parsed: unknown = JSON.parse(decodeUtf8(lockfileBytes));
-  return parsed;
+  return {
+    lockfile: parsed,
+    signatureVerified: Boolean(publicKeyPath && signaturePath),
+    ...(publicKeySha256 ? { publicKeySha256 } : {}),
+  };
+}
+
+/** Preserve the v1 reader contract and all existing verification policies. */
+export async function readTrustedPluginLockfile(
+  lockfilePath: string,
+  options: TrustedPluginAttestationOptions = {
+    publicKeyPath: process.env.VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE,
+    signaturePath: process.env.VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE,
+  },
+): Promise<unknown> {
+  return (await readTrustedPluginLockfileWithVerification(lockfilePath, options)).lockfile;
 }

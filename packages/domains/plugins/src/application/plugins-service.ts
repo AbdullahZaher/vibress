@@ -9,6 +9,7 @@ import {
 } from "../domain/plugin";
 import {
   validateManifest,
+  SDK_VERSION,
   PluginManifest,
   PluginContext,
   PluginModule,
@@ -28,16 +29,40 @@ export class PluginDomainError extends Error {
   }
 }
 
+/** Host-owned, read-only release projection: no operator file paths or URLs. */
+export interface OperatorTrustedReleaseSummary {
+  readonly releaseId: string;
+  readonly publisher: { readonly id: string; readonly name: string };
+  readonly artifactSha256: string;
+  readonly compatibility: {
+    readonly minVibressApiVersion: string;
+    readonly maxVibressApiVersion: string;
+    readonly sdkAbiVersion: string;
+  };
+  readonly hasSbom: boolean;
+  readonly hasProvenance: boolean;
+  readonly migrationPlanIds: readonly string[];
+}
+
 export interface PluginHost {
   /** Optional release identity checked again immediately before ESM evaluation. */
   loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null>;
   requiresPublicationEnablement?(plugin: Plugin): boolean;
   getOperatorManifests?(): Promise<PluginManifest[]>;
+  /** Operator-owned approval metadata; never accepted from an HTTP caller. */
+  getOperatorManifestCatalog?(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+    approvalId?: string;
+    release?: OperatorTrustedReleaseSummary;
+  }>>;
+  /** Admission is rechecked immediately before changing registered metadata. */
+  verifyOperatorRegistration?(): Promise<void>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
   getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
   /** Optional approved file reader; returns inert bytes, never executable plugin code. */
   readApprovedAdminUiAsset?(plugin: Plugin, viewId: string): Promise<string | null>;
-  authorizeRegistration?(manifest: PluginManifest): Promise<void>;
+  authorizeRegistration?(manifest: PluginManifest, expectedReleaseId?: string): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
   getApprovedAudienceReadModels?(plugin: Plugin, audience: "public" | "member"): Promise<readonly string[] | null>;
@@ -187,6 +212,7 @@ export class PluginsService {
   async registerPlugin(
     manifestInput: unknown,
     actorId: string | null,
+    expectedReleaseId?: string,
   ): Promise<Plugin> {
     let manifest: PluginManifest;
     try {
@@ -199,7 +225,7 @@ export class PluginsService {
     }
 
     try {
-      await this.host.authorizeRegistration?.(manifest);
+      await this.host.authorizeRegistration?.(manifest, expectedReleaseId);
     } catch {
       throw new PluginDomainError(
         "PLUGIN_NOT_TRUSTED", "Plugin manifest is not approved by the operator",
@@ -211,6 +237,14 @@ export class PluginsService {
       if (existing.status === "activating" || existing.status === "deactivating") {
         throw new PluginDomainError(
           "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
+        );
+      }
+      // Even a same-version digest swap must not be registered while an old
+      // module is active. Persisted v1 rows do not store the artifact digest.
+      if (expectedReleaseId !== undefined && existing.status === "active") {
+        throw new PluginDomainError(
+          "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+          "Deactivate the external plugin before registering an updated release",
         );
       }
       // An external code/version change must never bypass deactivate/activate.
@@ -244,8 +278,9 @@ export class PluginsService {
           );
         }
       }
-      // Update metadata (re-registration)
-      const updated = await this.pluginRepo.updateMetadata(existing.id, {
+      // Update metadata (re-registration). Pinned external upgrades need a
+      // DB-atomic status guard so simultaneous activation cannot race the write.
+      const metadata = {
         name: manifest.name,
         version: manifest.version,
         vibressApiVersion: manifest.vibressApiVersion,
@@ -254,7 +289,20 @@ export class PluginsService {
         capabilities: manifest.capabilities,
         hooks: manifest.hooks || [],
         settingsSchema: manifest.settingsSchema,
-      });
+      };
+      let updated: Plugin | null;
+      if (expectedReleaseId !== undefined &&
+          this.host.requiresPublicationEnablement?.(existing) === true) {
+        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(
+          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt },
+        ) ?? null;
+        if (!updated) {
+          throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
+            "Plugin activated or changed during release admission");
+        }
+      } else {
+        updated = await this.pluginRepo.updateMetadata(existing.id, metadata);
+      }
       domainEvents.emit("plugin.updated", { pluginId: updated.id, actorId });
       return updated;
     }
@@ -285,6 +333,10 @@ export class PluginsService {
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
 
+    if (plugin.vibressApiVersion !== SDK_VERSION) {
+      throw new PluginDomainError("PLUGIN_INCOMPATIBLE_API_VERSION",
+        "Plugin Host API version is incompatible; operator-approved upgrade required");
+    }
     if (plugin.status === "active") return plugin;
     if (plugin.status === "activating" || plugin.status === "deactivating") {
       throw new PluginDomainError(
@@ -693,34 +745,122 @@ export class PluginsService {
   }
 
   /** Operator-approved external package discovery, no client-provided manifest trust. */
-  async listOperatorManifests(): Promise<
-    Array<{ id: string; name: string; version: string; description: string | null }>
-  > {
+  async listOperatorManifests(): Promise<Array<{
+    id: string;
+    name: string;
+    version: string;
+    description: string | null;
+    capabilities: string[];
+    /** True only when the detached operator Ed25519 lockfile signature was verified. */
+    signatureVerified: boolean | null;
+    /** SHA-256-bound immutable approval identity, including legacy lockfile v1. */
+    approvalId?: string;
+    /** Not a runtime readiness guarantee; checked by the server at registration. */
+    readiness: "verification_required";
+    upgradeReview?: {
+      installedVersion: string;
+      installedStatus: PluginStatus;
+      addedCapabilities: string[];
+      removedCapabilities: string[];
+      metadataChanged: boolean;
+    };
+    release?: OperatorTrustedReleaseSummary;
+  }>> {
     try {
-      const manifests = await this.host.getOperatorManifests?.() ?? [];
-      return manifests.map((manifest) => ({
+      // Keep the catalog optional for older PluginHost implementations.
+      // A legacy host cannot prove a signature, so never claim it is signed.
+      const catalog: Array<{
+        manifest: PluginManifest;
+        signatureVerified: boolean | null;
+        approvalId?: string;
+        release?: OperatorTrustedReleaseSummary;
+      }> = this.host.getOperatorManifestCatalog
+        ? await this.host.getOperatorManifestCatalog()
+        : (await this.host.getOperatorManifests?.() ?? []).map((manifest) => ({
+            manifest, signatureVerified: null,
+          }));
+      const installedByManifestId = new Map(
+        (await this.pluginRepo.list()).map((plugin) => [plugin.manifestId, plugin]),
+      );
+      return catalog.map(({ manifest, signatureVerified, release, approvalId }) => {
+        const existing = installedByManifestId.get(manifest.id);
+        const nextCapabilities = new Set(manifest.capabilities);
+        const previousCapabilities = new Set(existing?.capabilities ?? []);
+        const addedCapabilities = manifest.capabilities.filter((cap) => !previousCapabilities.has(cap));
+        const removedCapabilities = (existing?.capabilities ?? [])
+          .filter((cap) => !nextCapabilities.has(cap));
+        return {
         id: manifest.id,
         name: manifest.name,
         version: manifest.version,
         description: manifest.description ?? null,
-      }));
+        capabilities: [...manifest.capabilities],
+        signatureVerified,
+        readiness: "verification_required" as const,
+        ...(approvalId ? { approvalId } : {}),
+        ...(release ? { release } : {}),
+        ...(existing ? { upgradeReview: {
+          installedVersion: existing.version,
+          installedStatus: existing.status,
+          addedCapabilities,
+          removedCapabilities,
+          metadataChanged: existing.version !== manifest.version ||
+            existing.name !== manifest.name ||
+            existing.description !== (manifest.description ?? null) ||
+            existing.vibressApiVersion !== manifest.vibressApiVersion ||
+            existing.entrypoint !== manifest.entrypoint ||
+            !isDeepStrictEqual(existing.capabilities, manifest.capabilities) ||
+            !isDeepStrictEqual(existing.hooks, manifest.hooks ?? []) ||
+            !isDeepStrictEqual(existing.settingsSchema, manifest.settingsSchema ?? {}),
+        } } : {}),
+      };
+      });
     } catch {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
   }
 
-  async registerOperatorPlugin(manifestId: string, actorId: string | null): Promise<Plugin> {
+  async registerOperatorPlugin(
+    manifestId: string, actorId: string | null, expectedReleaseId?: string,
+    acknowledgeUpgrade = false,
+  ): Promise<Plugin> {
     let approved: PluginManifest | undefined;
     try {
-      approved = (await this.host.getOperatorManifests?.() ?? [])
-        .find((manifest) => manifest.id === manifestId);
-    } catch {
+      if (expectedReleaseId !== undefined) {
+        // The client may reference an identity, never nominate executable data.
+        const entry = (await this.host.getOperatorManifestCatalog?.() ?? [])
+          .find((candidate) => candidate.manifest.id === manifestId);
+        if (!entry?.approvalId || entry.approvalId !== expectedReleaseId) {
+          throw new PluginDomainError(
+            "PLUGIN_RELEASE_CHANGED", "Approved plugin release changed; reload and review it",
+          );
+        }
+        approved = entry.manifest;
+      } else {
+        // Backwards-compatible v1 registration body, still operator-only.
+        approved = (await this.host.getOperatorManifests?.() ?? [])
+          .find((manifest) => manifest.id === manifestId);
+      }
+      if (!approved) {
+        throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
+      }
+      if (expectedReleaseId !== undefined) {
+        const installed = await this.pluginRepo.findByManifestId(manifestId);
+        if (installed && !acknowledgeUpgrade) {
+          // Persisted v1 plugin rows have no artifact digest. A same-version
+          // replacement could therefore change executable bytes invisibly;
+          // treat EVERY pinned re-registration as an operator-reviewed update.
+          throw new PluginDomainError("PLUGIN_UPGRADE_REVIEW_REQUIRED",
+            "Review release and capability changes before updating");
+        }
+      }
+      await this.host.verifyOperatorRegistration?.();
+    } catch (error: unknown) {
+      if (error instanceof PluginDomainError) throw error;
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
-    if (!approved) {
-      throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
-    }
-    return this.registerPlugin(approved, actorId);
+    // Host rechecks the same digest identity before the persistence boundary.
+    return this.registerPlugin(approved, actorId, expectedReleaseId);
   }
 
   /**
@@ -766,16 +906,22 @@ export class PluginsService {
 
   /** Additive Admin projection; global v1 activation remains unchanged. */
   async listPluginsForPublication(publicationId?: string): Promise<
-    Array<Plugin & { publicationScoped: boolean; publicationEnabled: boolean }>
+    Array<Plugin & { publicationScoped: boolean; publicationEnabled: boolean;
+      publicationConfiguredEnabled: boolean; hostCompatible: boolean }>
   > {
     const plugins = await this.pluginRepo.list();
     return Promise.all(plugins.map(async (plugin) => {
       const publicationScoped = this.host.requiresPublicationEnablement?.(plugin) === true;
-      const publicationEnabled = publicationScoped
-        ? Boolean(publicationId && plugin.status === "active" &&
-            this.publicationStates && await this.publicationStates.isEnabled(plugin.id, publicationId))
+      // Persisted site preference is distinct from effective active execution.
+      // Disabling globally must never silently overwrite or conceal the setting.
+      const publicationConfiguredEnabled = publicationScoped
+        ? Boolean(publicationId && this.publicationStates &&
+            await this.publicationStates.isEnabled(plugin.id, publicationId))
         : plugin.status === "active";
-      return { ...plugin, publicationScoped, publicationEnabled };
+      const publicationEnabled = publicationConfiguredEnabled && plugin.status === "active";
+      return { ...plugin, publicationScoped, publicationEnabled,
+        publicationConfiguredEnabled,
+        hostCompatible: plugin.vibressApiVersion === SDK_VERSION };
     }));
   }
 
@@ -803,6 +949,10 @@ export class PluginsService {
     }
     if (!this.publicationStates) {
       throw new PluginDomainError("PLUGIN_STATE_UNAVAILABLE", "Publication plugin state is unavailable");
+    }
+    if (enabled && plugin.vibressApiVersion !== SDK_VERSION) {
+      throw new PluginDomainError("PLUGIN_INCOMPATIBLE_API_VERSION",
+        "Plugin Host API version is incompatible; operator-approved upgrade required");
     }
     if (enabled && plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");

@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+import {
+  OperatorTrustedPluginCatalogResponseSchema,
+  OperatorTrustedPluginRegisterSchema,
+} from "../plugins";
+
+const digest = "a".repeat(64);
+const entry = {
+  id: "hello-public",
+  name: "Hello Public",
+  version: "1.0.0",
+  description: null,
+  capabilities: ["extension.routes.public"],
+  signatureVerified: true,
+  approvalId: `hello-public@1.0.0:${digest}`,
+  readiness: "verification_required",
+  release: {
+    releaseId: `hello-public@1.0.0:${digest}`,
+    publisher: { id: "reviewed", name: "Reviewed publisher" },
+    artifactSha256: digest,
+    compatibility: {
+      minVibressApiVersion: "1.0.0",
+      maxVibressApiVersion: "1.0.0",
+      sdkAbiVersion: "1.0.0",
+    },
+    hasSbom: true,
+    hasProvenance: false,
+    migrationPlanIds: ["0001_initial"],
+  },
+};
+
+describe("P0-2 operator trusted release catalog API response", () => {
+  it("accepts legacy clients but validates exact release pins on modern registration", () => {
+    expect(OperatorTrustedPluginRegisterSchema.safeParse({
+      manifestId: "hello-public",
+    }).success).toBe(true);
+    expect(OperatorTrustedPluginRegisterSchema.safeParse({
+      manifestId: "hello-public", expectedReleaseId: entry.approvalId,
+      acknowledgeUpgrade: true,
+    }).success).toBe(true);
+    for (const bad of ["../../evil", "hello-public@2.0.0:invalid", "http://evil"]) {
+      expect(OperatorTrustedPluginRegisterSchema.safeParse({
+        manifestId: "hello-public", expectedReleaseId: bad,
+      }).success).toBe(false);
+    }
+  });
+  it("admits an additive, path-free release summary", () => {
+    const payload = { plugins: [entry] };
+    expect(OperatorTrustedPluginCatalogResponseSchema.parse(payload)).toEqual(payload);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, release: undefined }],
+    }).success).toBe(true);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, signatureVerified: null, release: undefined }],
+    }).success).toBe(true);
+  });
+
+  it("admits bounded operator-owned upgrade diffs without secrets", () => {
+    const withUpgrade = {
+      ...entry,
+      upgradeReview: {
+        installedVersion: "0.9.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true,
+      },
+    };
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [withUpgrade],
+    }).success).toBe(true);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...withUpgrade, upgradeReview: {
+        ...withUpgrade.upgradeReview, secret: "leaked",
+      } }],
+    }).success).toBe(false);
+  });
+
+  it("preserves the full supported 200-character manifest ID", () => {
+    const id = "a".repeat(200);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, id, approvalId: `${id}@1.0.0:${digest}` }],
+    }).success).toBe(true);
+  });
+
+  it("rejects invalid immutable identities and readiness statuses", () => {
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, approvalId: "../outside" }],
+    }).success).toBe(false);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, readiness: "verified" }],
+    }).success).toBe(false);
+  });
+
+  it("rejects operator file paths and unrecognized executable-install fields", () => {
+    const unsafe = [
+      { ...entry.release, path: "/etc/vibress/operator-private.pem" },
+      { ...entry.release, installUrl: "https://malicious.example/install" },
+      { ...entry.release, migrationPlanIds: ["../root"] },
+      { ...entry.release, artifactSha256: "invalid" },
+      { ...entry.release, publisher: { id: "reviewed", name: "X", keyPath: "/keys" } },
+    ];
+    for (const release of unsafe) {
+      expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+        plugins: [{ ...entry, release }],
+      }).success).toBe(false);
+    }
+  });
+});

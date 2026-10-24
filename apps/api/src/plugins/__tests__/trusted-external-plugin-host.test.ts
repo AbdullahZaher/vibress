@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ import { TrustedExternalPluginHost, parseTrustedPluginLockfile } from "../truste
 const dirs: string[] = [];
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+  vi.unstubAllEnvs();
 });
 const manifest = {
   id: "operator-approved",
@@ -72,9 +73,141 @@ async function approvedAdminUiFixture() {
   };
 }
 
+
+function releaseMetadata(hash: string) {
+  return {
+    schemaVersion: 1,
+    releaseId: `${manifest.id}@${manifest.version}:${hash}`,
+    publisher: { id: "reviewed-publisher", name: "Reviewed Publisher" },
+    compatibility: {
+      minVibressApiVersion: SDK_VERSION,
+      maxVibressApiVersion: SDK_VERSION,
+      sdkAbiVersion: SDK_VERSION,
+    },
+    capabilities: [...manifest.capabilities],
+    sbom: { path: "sbom.json", sha256: "a".repeat(64) },
+    provenance: { path: "provenance.json", sha256: "b".repeat(64) },
+    migrationPlans: [{ id: "0001_initial", path: "migrations/initial.json",
+      sha256: "c".repeat(64) }],
+  };
+}
+
 describe("TrustedExternalPluginHost", () => {
+  it("checks approved bytes without importing the module at registration time", async () => {
+    const f = await fixture();
+    const { BundledPluginHost } = await import("../plugin-host");
+    const host = new BundledPluginHost(new TrustedExternalPluginHost(f.lockfile));
+    await expect(host.verifyOperatorRegistration()).resolves.toBeUndefined();
+    await writeFile(f.moduleFile, "throw new Error('changed');");
+    await expect(host.verifyOperatorRegistration())
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+  });
+
   it("preserves bundled-only defaults when opt-in is absent", async () => {
     expect(await new TrustedExternalPluginHost("").loadModule(plugin())).toBeNull();
+  });
+
+  it("discovers exact manifest capabilities and truthfully reports signed and unsigned approvals", async () => {
+    const f = await fixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([
+      { manifest, signatureVerified: false,
+        approvalId: expect.stringMatching(/^operator-approved@1\.0\.0:[a-f0-9]{64}$/) },
+    ]);
+    const initialApprovalId = (await host.listTrustedCatalog())[0]?.approvalId;
+    const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+    const keyPath = path.join(f.dir, "operator.pub");
+    const signaturePath = path.join(f.dir, "operator.sig");
+    await writeFile(keyPath, publicKey.export({ format: "pem", type: "spki" }));
+    await writeFile(signaturePath,
+      sign(null, await readFile(f.lockfile), privateKey).toString("base64") + "\n");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", keyPath);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", signaturePath);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([
+      { manifest, signatureVerified: true, approvalId: initialApprovalId },
+    ]);
+    await writeFile(f.lockfile, (await readFile(f.lockfile, "utf8")) + " ");
+    await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
+  });
+
+  it("keeps legacy v1 manifests with nonstandard versions discoverable", async () => {
+    const f = await fixture();
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    lock.plugins[0].manifest.version = "operator reviewed build 1";
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    await expect(new TrustedExternalPluginHost(f.lockfile).listTrustedCatalog())
+      .resolves.toEqual([{
+        manifest: { ...manifest, version: "operator reviewed build 1" },
+        signatureVerified: false,
+      }]);
+  });
+
+  it("projects a versioned SHA-bound operator release without importing executable code", async () => {
+    const f = await fixture();
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    const hash: string = lock.plugins[0].sha256;
+    const release = releaseMetadata(hash);
+    lock.plugins[0].release = release;
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([{
+      manifest, signatureVerified: false,
+      approvalId: expect.stringMatching(/^operator-approved@1\.0\.0:[a-f0-9]{64}$/),
+      release: {
+        releaseId: release.releaseId,
+        publisher: release.publisher,
+        artifactSha256: hash,
+        compatibility: release.compatibility,
+        hasSbom: true, hasProvenance: true,
+        migrationPlanIds: ["0001_initial"],
+      },
+    }]);
+    expect(parseTrustedPluginLockfile(lock).get(manifest.id)?.release?.releaseId)
+      .toBe(release.releaseId);
+    expect((await host.listTrustedCatalog())[0]?.approvalId).not.toBe(release.releaseId);
+  });
+
+  it("invalidates approval identity when reviewed metadata changes but ESM bytes do not", async () => {
+    const f = await fixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    const first = (await host.listTrustedCatalog())[0]?.approvalId;
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    const esmHash = lock.plugins[0].sha256;
+    lock.plugins[0].manifest.description = "Operator revised approved metadata";
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    const second = (await host.listTrustedCatalog())[0]?.approvalId;
+    expect(first).toMatch(/^[a-z0-9-]+@1\.0\.0:[a-f0-9]{64}$/);
+    expect(second).not.toBe(first);
+    expect(lock.plugins[0].sha256).toBe(esmHash);
+    expect((await host.listTrustedCatalog())[0]?.manifest.description)
+      .toBe("Operator revised approved metadata");
+  });
+
+  it("rejects substituted release identities, ABI, capabilities and unsafe evidence paths", () => {
+    const sha256 = "a".repeat(64);
+    const entry = { manifest, sha256, release: releaseMetadata(sha256) };
+    const valid = { schemaVersion: 1, plugins: [entry] };
+    expect(() => parseTrustedPluginLockfile(valid)).not.toThrow();
+    const invalid = [
+      { ...entry.release, releaseId: "other@1.0.0:" + sha256 },
+      { ...entry.release, compatibility: { ...entry.release.compatibility,
+        sdkAbiVersion: "2.0.0" } },
+      { ...entry.release, compatibility: { ...entry.release.compatibility,
+        maxVibressApiVersion: "2.0.0" } },
+      { ...entry.release, capabilities: ["content.write"] },
+      { ...entry.release, sbom: { path: "../leak.json", sha256 } },
+      { ...entry.release, provenance: { path: "https://site/sbom.json", sha256 } },
+      { ...entry.release, migrationPlans: [
+        { id: "0001_initial", path: "a.json", sha256 },
+        { id: "0001_initial", path: "b.json", sha256 },
+      ] },
+      { ...entry.release, provenance: { path: "sbom.json", sha256 } },
+    ];
+    for (const release of invalid) {
+      expect(() => parseTrustedPluginLockfile({
+        schemaVersion: 1, plugins: [{ ...entry, release }],
+      })).toThrow();
+    }
   });
 
   it("loads a pinned operator-controlled ESM module", async () => {
@@ -182,12 +315,15 @@ describe("TrustedExternalPluginHost", () => {
     const installed = plugin({ capabilities: privilegedManifest.capabilities });
     expect(await host.getApprovedStorageModels(installed)).toEqual([model]);
     expect(await host.getApprovedAudienceReadModels(installed, "public")).toBeNull();
+    const originalApproval = (await host.listTrustedCatalog())[0]?.approvalId;
     await writeFile(f.lockfile, JSON.stringify({
       ...approved, plugins: [{ ...approved.plugins[0],
         publicReadModels: ["courses"], memberReadModels: [] }],
     }));
     expect(await host.getApprovedAudienceReadModels(installed, "public")).toEqual(["courses"]);
     expect(await host.getApprovedAudienceReadModels(installed, "member")).toEqual([]);
+    // Access rules change without changing ESM: the approval identity must.
+    expect((await host.listTrustedCatalog())[0]?.approvalId).not.toBe(originalApproval);
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0], publicReadModels: ["other"] }],
     })).toThrow(/allowlist/);

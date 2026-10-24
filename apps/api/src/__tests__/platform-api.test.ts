@@ -3,11 +3,11 @@ import crypto from "node:crypto";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import { getDb, publications, publicationMemberships, workspaces, users } from "@vibress/database";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
-import { PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
+import { DrizzlePluginRepository, PluginDomainError, pluginPhysicalModelDigest } from "@vibress/plugins";
 import { pluginsService, workspaceService, publicationLocaleService } from "../services";
 
 async function loginStaff(app: FastifyInstance): Promise<string> {
@@ -342,6 +342,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       status: "active" as const, settingsSchema: {}, hooks: [],
       createdAt: new Date(), updatedAt: new Date(),
       publicationScoped: true, publicationEnabled: true,
+      publicationConfiguredEnabled: true, hostCompatible: true,
     });
     const label = { en: "Courses", ar: "الدورات" };
     const handle = vi.fn(async () => ({ total: 2 }));
@@ -702,6 +703,108 @@ describe("Batch 12 — Platform Integration & Security", () => {
   });
 
   // ---------------- Plugins ----------------
+  it("validates immutable operator release admission input before repository access", async () => {
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/plugins/register-trusted",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        manifestId: "vibress-content-metrics",
+        expectedReleaseId: "../../untrusted",
+      },
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().errors[0].code).toBe("VALIDATION_ERROR");
+    const noSession = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/plugins/register-trusted",
+      headers: { origin: "http://localhost:7777" },
+      payload: { manifestId: "vibress-content-metrics" },
+    });
+    expect(noSession.statusCode).toBe(401);
+  });
+
+  it("maps reviewed release conflicts to HTTP 409 without disclosing internals", async () => {
+    const spy = vi.spyOn(pluginsService, "registerOperatorPlugin").mockRejectedValueOnce(
+      new PluginDomainError("PLUGIN_RELEASE_CHANGED", "Approved plugin release changed; reload and review it"),
+    );
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/plugins/register-trusted",
+        headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+        payload: {
+          manifestId: "example-plugin",
+          expectedReleaseId: `example-plugin@1.0.0:${"a".repeat(64)}`,
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().errors[0].code).toBe("PLUGIN_RELEASE_CHANGED");
+      expect(spy).toHaveBeenCalledOnce();
+      expect(JSON.stringify(res.json())).not.toContain("/operator/private");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("atomically refuses plugin metadata replacement during activation", async () => {
+    const repo = new DrizzlePluginRepository();
+    const id = crypto.randomUUID();
+    const manifestId = `cas-plugin-${id}`;
+    await repo.create({
+      id,
+      manifestId,
+      name: "CAS Fixture",
+      version: "1.0.0",
+      vibressApiVersion: SDK_VERSION,
+      entrypoint: "index.ts",
+      capabilities: [],
+      hooks: [],
+      settingsSchema: {},
+    });
+    try {
+      await repo.tryTransitionStatus(id, ["registered"], "active");
+      const initial = await repo.findById(id);
+      if (!initial) throw new Error("Expected registered plugin");
+      const denied = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" }, initial);
+      expect(denied).toBeNull();
+      expect((await repo.findById(id))?.version).toBe("1.0.0");
+
+      await repo.tryTransitionStatus(id, ["active"], "inactive");
+      // Legacy rows with PG microsecond timestamps must still be upgradable.
+      await getDb().execute(sql`UPDATE plugins SET updated_at = clock_timestamp() WHERE id = ${id}`);
+      const snapshot = await repo.findById(id);
+      if (!snapshot) throw new Error("Expected current plugin");
+      const allowed = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" }, snapshot);
+      expect(allowed?.version).toBe("2.0.0");
+      expect(allowed?.status).toBe("inactive");
+      // An operator whose approval was based on the old metadata may not
+      // overwrite the first successful update.
+      const stale = await repo.tryUpdateMetadataIfInactive(id, {
+        version: "3.0.0",
+      }, snapshot);
+      expect(stale).toBeNull();
+      expect((await repo.findById(id))?.version).toBe("2.0.0");
+      // Same-version metadata updates also advance the optimistic timestamp,
+      // so the earlier read can never win a later write.
+      const newest = await repo.findById(id);
+      if (!newest) throw new Error("Missing updated plugin");
+      const revision = await repo.tryUpdateMetadataIfInactive(id, {
+        name: "CAS Fixture Updated",
+      }, newest);
+      expect(revision?.updatedAt.getTime()).toBeGreaterThan(newest.updatedAt.getTime());
+      await expect(repo.findById(id)).resolves.toMatchObject({
+        name: "CAS Fixture Updated",
+      });
+      const staleSameVersion = await repo.tryUpdateMetadataIfInactive(id, {
+        name: "CAS Fixture Stale",
+      }, newest);
+      expect(staleSameVersion).toBeNull();
+    } finally {
+      await repo.delete(id);
+    }
+  });
+
   it("registers the official example plugin (valid manifest)", async () => {
     const res = await app.inject({
       method: "POST",
@@ -1247,6 +1350,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
         description: null, entrypoint: "index.mjs", capabilities: ["admin.navigation", "extension.routes.admin"],
         hooks: [], settingsSchema: {}, status: "active", createdAt: new Date(), updatedAt: new Date(),
         publicationScoped: true, publicationEnabled: true,
+        publicationConfiguredEnabled: true, hostCompatible: true,
       }]);
     const fingerprints = vi.spyOn(pluginsService, "listOperatorAdminFingerprints")
       .mockResolvedValue(new Map([["independent-courses", "f".repeat(64)]]));

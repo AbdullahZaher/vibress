@@ -1,4 +1,4 @@
-import { Plugin, PluginHost, type ApprovedPluginPhysicalModel } from "@vibress/plugins";
+import { Plugin, PluginHost, type ApprovedPluginPhysicalModel, type OperatorTrustedReleaseSummary } from "@vibress/plugins";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -6,6 +6,7 @@ import {
   plugin as contentMetricsPlugin,
 } from "./official/example-plugin";
 import { TrustedExternalPluginHost } from "./trusted-external-plugin-host";
+import { verifyTrustedPluginRelease } from "@vibress/plugins";
 
 /**
  * Trusted plugin host: loads only bundled, controlled-source plugins.
@@ -39,11 +40,26 @@ export class BundledPluginHost implements PluginHost {
     return this.external.listTrustedManifests();
   }
 
+  async getOperatorManifestCatalog(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+    approvalId?: string;
+    release?: OperatorTrustedReleaseSummary;
+  }>> {
+    return this.external.listTrustedCatalog();
+  }
+
+  async verifyOperatorRegistration(): Promise<void> {
+    const lockfile = this.external.getOperatorLockfilePath();
+    if (!lockfile) throw new Error("Trusted plugin lockfile is unavailable");
+    await verifyTrustedPluginRelease(lockfile);
+  }
+
   async getOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {
     return this.external.listTrustedFingerprints();
   }
 
-  async authorizeRegistration(manifest: PluginManifest): Promise<void> {
+  async authorizeRegistration(manifest: PluginManifest, expectedReleaseId?: string): Promise<void> {
     const builtin = this.registry.get(manifest.id);
     if (builtin) {
       const builtinManifest = validateManifest(builtin.manifest);
@@ -58,8 +74,10 @@ export class BundledPluginHost implements PluginHost {
       }
       return;
     }
-    const approved = (await this.external.listTrustedManifests()).find((p) => p.id === manifest.id);
-    if (!approved || !isDeepStrictEqual(approved, manifest)) {
+    const approved = (await this.external.listTrustedCatalog())
+      .find((entry) => entry.manifest.id === manifest.id);
+    if (!approved || !isDeepStrictEqual(approved.manifest, manifest) ||
+        (expectedReleaseId !== undefined && approved.approvalId !== expectedReleaseId)) {
       throw new Error("Plugin manifest is not operator approved");
     }
   }

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readTrustedPluginLockfile } from "../trusted-release-attestation";
+import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "../trusted-release-attestation";
 import { TrustedExternalPluginHost } from "../trusted-external-plugin-host";
 import { verifyTrustedPluginRelease } from "../operator-release-preflight";
 
@@ -23,6 +23,9 @@ async function fixture() {
   ]);
   return {
     lockfile, keyFile, signatureFile, payload, privateKey,
+    keyFingerprint: createHash("sha256").update(publicKey.export({
+      format: "der", type: "spki",
+    })).digest("hex"),
     options: { publicKeyPath: keyFile, signaturePath: signatureFile },
   };
 }
@@ -37,6 +40,50 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     await expect(readTrustedPluginLockfile(f.lockfile, {})).resolves.toEqual({
       schemaVersion: 1, plugins: [],
     });
+  });
+
+  it("reports verified signature metadata from the exact authenticated lockfile", async () => {
+    const f = await fixture();
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, {}))
+      .resolves.toEqual({ lockfile: { schemaVersion: 1, plugins: [] }, signatureVerified: false });
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+      .resolves.toEqual({ lockfile: { schemaVersion: 1, plugins: [] },
+        signatureVerified: true, publicKeySha256: f.keyFingerprint });
+    await writeFile(f.lockfile, f.payload + " ");
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+      .rejects.toThrow(/signature verification failed/);
+  });
+
+  it("pins the canonical SPKI fingerprint and rejects a different operator key", async () => {
+    const f = await fixture();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
+    try {
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .resolves.toMatchObject({ signatureVerified: true, publicKeySha256: f.keyFingerprint });
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", "a".repeat(64));
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .rejects.toThrow("OPERATOR_TRUST_ROOT_MISMATCH");
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, {}))
+        .rejects.toThrow(/signed lockfile/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("rejects replayed, even validly signed old lockfiles after operator pin update", async () => {
+    const f = await fixture();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256",
+      createHash("sha256").update(f.payload).digest("hex"));
+    try {
+      await expect(readTrustedPluginLockfile(f.lockfile, f.options)).resolves.toEqual({
+        schemaVersion: 1, plugins: [],
+      });
+      await writeFile(f.lockfile, f.payload + " ");
+      await expect(readTrustedPluginLockfile(f.lockfile, f.options))
+        .rejects.toThrow("OPERATOR_RELEASE_REPLICA_MISMATCH");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("requires valid signature files when strict production policy is enabled", async () => {

@@ -25,6 +25,7 @@ import {
   PluginPublicationSettingsUpdateSchema,
   PluginPublicationSettingsResponseSchema,
   OperatorTrustedPluginRegisterSchema,
+  OperatorTrustedPluginCatalogResponseSchema,
   PluginLifecycleRecoverySchema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
@@ -430,7 +431,12 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         const approved = await pluginsService.listOperatorManifests();
-        return reply.status(200).send({ plugins: approved });
+        const result = OperatorTrustedPluginCatalogResponseSchema.safeParse({ plugins: approved });
+        if (!result.success) {
+          return sendError(reply, "PLUGIN_REGISTRY_UNAVAILABLE",
+            "Trusted plugin registry is unavailable", req.id, 503);
+        }
+        return reply.status(200).send(result.data);
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id, 503);
@@ -454,13 +460,18 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       }
       try {
         const plugin = await pluginsService.registerOperatorPlugin(
-          parsed.data.manifestId, req.user!.id,
+          parsed.data.manifestId, req.user!.id, parsed.data.expectedReleaseId,
+          parsed.data.acknowledgeUpgrade === true,
         );
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id,
-            err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 : 403);
+            err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 :
+            err.code === "PLUGIN_RELEASE_CHANGED" ||
+            err.code === "PLUGIN_UPGRADE_REVIEW_REQUIRED" ||
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ||
+            err.code === "PLUGIN_TRANSITION_IN_PROGRESS" ? 409 : 403);
         }
         throw err;
       }

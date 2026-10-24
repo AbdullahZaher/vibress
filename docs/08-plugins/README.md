@@ -1,8 +1,28 @@
 # Plugin extensibility: current implementation and proposed platform
 
-**Documentation status: mixed implementation and release gates — 2026-10-22.**
-PR #77 was merged into `main`; the platform is **not declared generally
+**Documentation status: historical milestone narrative (2026-10-22), supplemented by the active 2026-10-24 plan.**
+PR #77, PR #78 and PR #86 are now merged into `main`; the platform is **not declared generally
 supported for untrusted plugins** or complete for external SDK release.
+
+## Active platform completion program (2026-10-24)
+
+The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
+
+## P0-2 operator-trusted release catalog
+
+The optional [v1 trusted release catalog metadata](operator-trusted-release-catalog.md) extends each entry in the existing operator lockfile without altering legacy entries. A release includes a digest-bound identity, publisher, exactly supported Host/SDK ABI, capability snapshot, and optional SHA-256-pinned local SBOM/provenance/migration-plan references. The preflight verifies their bytes before rollout; the metadata does **not** install code or approve migrations by itself.
+
+## P0-4 installation lifecycle — initial increment
+
+The Admin plugin listing now distinguishes registered/inactive/active, **stored site preferences versus effective activation**, transitions and failures. A Host ABI mismatch is shown explicitly; a failed activation offers a guarded retry after operator diagnosis, while a genuinely stuck transition requires isolated maintenance recovery. The operator catalog binds registration to a SHA-256 approval identity, preflights files at registration, and previews version/capability differences before an inactive-only update. **This is not an automatic hot update**: drain/deactivate the old version before replacing its signed lockfile and deploy the new immutable release through the operator runbook. Uninstall/purge, synchronized fleet update/rollback and real untrusted-plugin containment remain unimplemented.
+
+## P0-3 operator staging and admission
+
+The [secure operator release admission runbook](secure-operator-release-admission.md) describes the new signed, evidence-backed staging command, per-replica byte-identical receipts, isolated dependency scanning and migration-plan preflight. This path **does not** enable ZIP/GitHub installation from Studio, automatically install packages, run SQL, or make trusted Node modules safe for untrusted publishers.
+
+## Security remediation status (2026-10-24)
+
+See [the scoped security closure register](plugin-security-closure-20261024.md) for verified code changes and remaining required execution checks. No unit tests, typecheck, Docker drills or CI runs have been executed for this branch at the time of the register. The Host/DB now reject pinned updates while active, and the DB enforces a conditional write so activation cannot race a metadata update. See the [Tier 2 runtime isolation ADR](plugin-runtime-tier2-isolation-adr.md) for the untrusted plugin boundary. Do not infer production certification from code/test additions.
 
 ## Architecture decision
 
@@ -17,8 +37,9 @@ Host-owned, read-only Studio navigation/view implementation. The proposed
 Admin UI asset verification; [EXT-301B2A](extension-admin-views-ext301b2.md)
 adds Staff/publication-authorized inert JSON delivery; the EXT-301B2B increment
 introduces an opaque-origin, single-file iframe with single-use Redis tickets,
-strict CSP and a private **read-only** linked-GET MessagePort. There is no
-privileged write/API-proxy bridge. This is **not** a general executable Admin
+strict CSP and a private **read-only** linked-GET MessagePort. These early milestones
+had no write bridge; later merged PR #78 added a narrowly Host-confirmed linked
+write flow, **not** an arbitrary privileged API proxy. This is **not** a general executable Admin
 UI platform or a declaration of extension platform release readiness.
 The proposed [EXT-302A public SSR dispatcher](extension-public-views-ext302a.md)
 adds opt-in, Host-authorized and text-only public extension pages; member-private
@@ -61,12 +82,12 @@ cross-replica/incident acceptance and EXT-501–504 pilot gates remain blockers.
 The opt-in production Compose override requires operator release signatures.
 Do not infer production readiness from CI alone.
 
-**Current additional change under review:** PR #78 proposes a confirmed
-linked-route Admin write bridge (EXT-301C). The existing read-only bridge
-remains compatible. Direct Admin POST mutation permissions are tightened
-under review; see the PR compatibility notice. Member-owned transactional
-enrollment storage is not yet a public Host capability. The independent
-`vibress-lms` integration remains a pilot, not an installable release.
+**Later merged increments:** PR #78 added the confirmed linked-route Admin write
+bridge (EXT-301C) with direct Admin POST permission restrictions while
+preserving the read-only bridge. PR #86 added Host-mediated member/public
+read-only storage wiring; check the current Host contracts before concluding
+that a specific plugin can use those capabilities. The independent
+`vibress-lms` integration is still a pilot, and LMS feature work is paused.
 
 See [external SDK release gates](external-sdk-release-gates.md) for the
 operational test matrix and blockers that prevent announcing a stable SDK.

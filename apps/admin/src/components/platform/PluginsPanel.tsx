@@ -34,8 +34,9 @@ export function PluginsPanel({
     try {
       await action();
       await onChanged();
-    } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : tr("Plugin action failed"));
+    } catch {
+      // Backend failures can include sensitive operator paths or plugin content.
+      onError(tr("Plugin action failed"));
     } finally {
       setBusyPluginId(null);
     }
@@ -51,9 +52,21 @@ export function PluginsPanel({
       ) : (
         plugins.map((plugin) => {
           const globalActive = plugin.status === "active";
+          const registered = plugin.status === "registered" || plugin.status === "inactive" || plugin.status === "error";
+          const transitioning = plugin.status === "activating" || plugin.status === "deactivating";
+          const failed = plugin.status === "error";
+          const incompatible = plugin.hostCompatible === false;
           const scoped = plugin.publicationScoped === true;
           const siteEnabled = scoped && plugin.publicationEnabled === true;
+          const siteConfigured = scoped &&
+            (plugin.publicationConfiguredEnabled ?? plugin.publicationEnabled) === true;
           const busy = busyPluginId !== null;
+          const statusLabel = globalActive ? tr("Globally active")
+            : plugin.status === "registered" ? tr("Registered, awaiting activation")
+            : plugin.status === "inactive" ? tr("Globally inactive")
+            : plugin.status === "activating" ? tr("Activating")
+            : plugin.status === "deactivating" ? tr("Deactivating")
+            : failed ? tr("Plugin lifecycle failed") : tr("Unknown plugin state");
           return (
             <Card key={plugin.id} className="p-5 bg-card border-border shadow-2xs space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -65,42 +78,71 @@ export function PluginsPanel({
                   variant="outline"
                   className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border"
                 >
-                  {globalActive ? tr("Active") : tr("Inactive")}
+                  {statusLabel}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground font-mono break-all" dir="auto">
                 {tr("Manifest ID")}: {plugin.manifestId}
               </p>
-              {scoped && (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {tr("This publication")}: {siteEnabled ? tr("Enabled") : tr("Disabled")}
+              <p className="text-xs text-muted-foreground" dir="auto">
+                {tr("Installed version")}: {plugin.version}
+              </p>
+              {incompatible && (
+                <p role="alert" className="text-xs text-destructive">
+                  {tr("Incompatible Host API version. Operator review and an approved update are required.")}
                 </p>
+              )}
+              {transitioning && (
+                <p role="status" className="text-xs text-muted-foreground">
+                  {tr("Lifecycle transition in progress. Refresh before changing state.")}
+                  {" "}
+                  {tr("A stuck transition requires isolated operator maintenance recovery.")}
+                </p>
+              )}
+              {failed && (
+                <p role="alert" className="text-xs text-destructive">
+                  {tr("Activation failed. Review operator logs and the approved release before retrying.")}
+                </p>
+              )}
+              {scoped && (
+                <>
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {tr("This publication")}: {siteEnabled ? tr("Enabled") : tr("Disabled")}
+                  </p>
+                  {siteConfigured !== siteEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      {tr("Saved site setting")}: {siteConfigured ? tr("Enabled") : tr("Disabled")}
+                      {" — "}
+                      {tr("Currently inactive until global activation.")}
+                    </p>
+                  )}
+                </>
               )}
               <div className="pt-2 border-t border-border flex flex-wrap justify-end gap-2">
                 {scoped && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy || !globalActive}
+                    disabled={busy || (!globalActive && !siteConfigured) || (incompatible && !siteConfigured)}
                     onClick={() => apply(plugin.id, () =>
-                      setPluginPublicationStateApi(plugin.id, !siteEnabled))}
-                    aria-label={`${siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}: ${plugin.name}`}
+                      setPluginPublicationStateApi(plugin.id, !siteConfigured))}
+                    aria-label={`${siteConfigured ? tr("Disable for this publication") : tr("Enable for this publication")}: ${plugin.name}`}
                     className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
                   >
-                    {siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}
+                    {siteConfigured ? tr("Disable for this publication") : tr("Enable for this publication")}
                   </Button>
                 )}
                 {platformOperator && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy}
+                    disabled={busy || transitioning || (incompatible && !globalActive) || (!globalActive && !registered)}
                     onClick={() => apply(plugin.id, () =>
                       globalActive ? deactivatePluginApi(plugin.id) : activatePluginApi(plugin.id))}
-                    aria-label={`${globalActive ? tr("Deactivate") : tr("Activate")}: ${plugin.name}`}
+                    aria-label={`${globalActive ? tr("Deactivate") : failed ? tr("Retry activation") : tr("Activate")}: ${plugin.name}`}
                     className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground"
                   >
-                    {globalActive ? tr("Deactivate") : tr("Activate")}
+                    {globalActive ? tr("Deactivate") : failed ? tr("Retry activation") : tr("Activate")}
                   </Button>
                 )}
               </div>

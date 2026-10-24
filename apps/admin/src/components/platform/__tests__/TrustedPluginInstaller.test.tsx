@@ -21,6 +21,9 @@ const plugin = {
   version: "1.0.0",
   description: "Pilot LMS",
   capabilities: ["extension.routes.member", "extension.member_storage.write"],
+  signatureVerified: true,
+  approvalId: `vibress-lms-pilot@1.0.0:${"a".repeat(64)}`,
+  readiness: "verification_required" as const,
 };
 
 describe("Operator-approved Add Plugin", () => {
@@ -67,6 +70,9 @@ describe("Operator-approved Add Plugin", () => {
   it("requires selection and explicit acknowledgement before registering", async () => {
     await render();
     expect(container.textContent).toContain("extension.member_storage.write");
+    expect(container.textContent).toContain("integrity verification required before registration");
+    expect(container.textContent).toContain("Detached Ed25519 operator approval verified.");
+    expect(container.textContent).toContain("signature verification is not sandbox isolation.");
     expect(container.textContent).toContain("They cannot be installed directly in Studio.");
     const registerButton = [...container.querySelectorAll("button")]
       .find((b) => b.textContent?.includes("Register trusted plugin"));
@@ -79,9 +85,140 @@ describe("Operator-approved Add Plugin", () => {
     await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
     await click("Register trusted plugin");
     expect(registerOperatorTrustedPluginApi).toHaveBeenCalledOnce();
-    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id);
+    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id, plugin.approvalId, false);
     expect(onRegistered).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("shows only the safe operator release summary and keeps acknowledgement required", async () => {
+    const hash = "a".repeat(64);
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ ...plugin, release: {
+        releaseId: `${plugin.id}@1.0.0:${hash}`,
+        publisher: { id: "reviewed", name: "Trusted Publisher" },
+        artifactSha256: hash,
+        compatibility: {
+          minVibressApiVersion: "1.0.0",
+          maxVibressApiVersion: "1.0.0",
+          sdkAbiVersion: "1.0.0",
+        },
+        hasSbom: true, hasProvenance: true, migrationPlanIds: ["0001_initial"],
+      } }],
+    });
+    await render();
+    expect(container.textContent).toContain("Trusted Publisher");
+    expect(container.textContent).toContain("Host ABI");
+    expect(container.textContent).toContain("SBOM pinned");
+    expect(container.textContent).toContain("Migration plans");
+    expect(container.textContent).not.toContain("/etc/vibress");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    const confirm = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+  });
+
+  it("warns operators when approved releases are unsigned legacy lockfiles", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ ...plugin, signatureVerified: false }],
+    });
+    await render();
+    expect(container.textContent).toContain("Legacy unsigned operator approval");
+    expect(container.textContent).not.toContain("Detached Ed25519 operator approval verified.");
+  });
+
+  it("refuses a registry entry without an immutable approval ID", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ id: plugin.id, name: plugin.name, version: plugin.version,
+        description: plugin.description, capabilities: plugin.capabilities,
+        signatureVerified: plugin.signatureVerified, readiness: plugin.readiness }],
+    });
+    await render();
+    expect(container.textContent).toContain("Immutable release identity unavailable");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const register = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(register.disabled).toBe(true);
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
+  });
+
+  it("does not allow blind registration when an older server omits capabilities", async () => {
+    const legacy = {
+      id: plugin.id, name: plugin.name, version: plugin.version,
+      description: plugin.description, signatureVerified: true,
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [legacy] });
+    await render();
+    expect(container.textContent).toContain("Capabilities unavailable");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const register = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(register.disabled).toBe(true);
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
+  });
+
+  it("previews an inactive upgrade and requires explicit review of added capabilities", async () => {
+    const update = { ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+      upgradeReview: { installedVersion: "1.0.0", installedStatus: "inactive",
+        addedCapabilities: ["extension.routes.public"], removedCapabilities: [],
+        metadataChanged: true },
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [update] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "inactive" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("Added capabilities");
+    expect(container.textContent).toContain("extension.routes.public");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    await click("Register reviewed update");
+    expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(
+      plugin.id, update.approvalId, true,
+    );
+  });
+
+  it("does not allow re-registration of an active upgrade from the UI", async () => {
+    const update = { ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+      upgradeReview: { installedVersion: "1.0.0", installedStatus: "active",
+        addedCapabilities: [], removedCapabilities: [], metadataChanged: true },
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [update] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "active" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("Deactivate globally before registering");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const submit = [...container.querySelectorAll("button")]
+      .find((b) => b.textContent?.includes("Register reviewed update")) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it("does not offer a blind version update when an older server omits upgrade review", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [{
+      ...plugin, version: "2.0.0",
+      approvalId: `${plugin.id}@2.0.0:${"b".repeat(64)}`,
+    }] });
+    await act(async () => {
+      root.render(<TrustedPluginInstaller installedIds={[plugin.id]}
+        installedPlugins={[{ id: "db-1", manifestId: plugin.id, name: plugin.name,
+          version: "1.0.0", vibressApiVersion: "1.0.0",
+          description: null, capabilities: plugin.capabilities, status: "inactive" }]}
+        onRegistered={onRegistered} onClose={onClose}/>);
+    });
+    expect(container.textContent).toContain("No operator-approved plugins available.");
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
   });
 
   it("does not list already registered releases", async () => {

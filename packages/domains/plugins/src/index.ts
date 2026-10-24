@@ -11,9 +11,11 @@ export { createHostMemberAccessSession } from "./application/plugin-member-acces
 export { createHostPluginMemberStorageSession } from "./application/plugin-member-storage-session";
 
 export { TrustedExternalPluginHost, parseTrustedPluginLockfile } from "./application/trusted-external-plugin-host";
-export { readTrustedPluginLockfile } from "./application/trusted-release-attestation";
+export { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./application/trusted-release-attestation";
 export type { TrustedPluginAttestationOptions } from "./application/trusted-release-attestation";
 export { verifyTrustedPluginRelease } from "./application/operator-release-preflight";
+export { verifyOperatorReleaseAdmission } from "./application/operator-release-admission";
+export type { OperatorReleaseAdmissionReceipt } from "./application/operator-release-admission";
 export type { VerifiedExternalRelease } from "./application/operator-release-preflight";
 export {
   DrizzlePluginEventLedger, pluginEventLedger, pluginEventJobId,

@@ -57,7 +57,12 @@ export interface AdminPlugin {
   settingsSchema?: Record<string, unknown>;
   /** Added for vNext external plugins; undefined on older API servers. */
   publicationScoped?: boolean;
+  /** Host ABI comparison only, not proof of artifact approval or isolation. */
+  hostCompatible?: boolean;
+  /** Effective: true only when both globally active and site-configured. */
   publicationEnabled?: boolean;
+  /** Persisted preference; can remain true while the plugin is globally inactive. */
+  publicationConfiguredEnabled?: boolean;
 }
 
 export async function listIntegrationsApi(): Promise<{
@@ -307,6 +312,32 @@ export interface AdminOperatorPlugin {
   description: string | null;
   /** Server-owned approved manifest capabilities, not plugin-authored UI labels. */
   capabilities?: string[];
+  /** Optional for older API servers; true only after detached Ed25519 verification. */
+  signatureVerified?: boolean | null;
+  /** Immutable artifact-bound approval ID; no plugin-supplied executable data. */
+  approvalId?: string;
+  readiness?: "verification_required";
+  upgradeReview?: {
+    installedVersion: string;
+    installedStatus: string;
+    addedCapabilities: string[];
+    removedCapabilities: string[];
+    metadataChanged: boolean;
+  };
+  /** Optional read-only release v1 summary; older Host/API versions omit it. */
+  release?: {
+    releaseId: string;
+    publisher: { id: string; name: string };
+    artifactSha256: string;
+    compatibility: {
+      minVibressApiVersion: string;
+      maxVibressApiVersion: string;
+      sdkAbiVersion: string;
+    };
+    hasSbom: boolean;
+    hasProvenance: boolean;
+    migrationPlanIds: string[];
+  };
 }
 
 export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminOperatorPlugin[] }> {
@@ -315,10 +346,16 @@ export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminO
 
 export async function registerOperatorTrustedPluginApi(
   manifestId: string,
+  expectedReleaseId?: string,
+  acknowledgeUpgrade = false,
 ): Promise<{ plugin: AdminPlugin }> {
   return apiRequest("/plugins/register-trusted", {
     method: "POST",
-    body: JSON.stringify({ manifestId }),
+    body: JSON.stringify({
+      manifestId,
+      ...(expectedReleaseId ? { expectedReleaseId } : {}),
+      ...(acknowledgeUpgrade ? { acknowledgeUpgrade: true } : {}),
+    }),
   });
 }
 

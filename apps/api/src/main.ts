@@ -81,7 +81,7 @@ import { distributionRoutes } from "./routes/distribution";
 import { openApiDocsRoutes } from "./routes/docs";
 import { storageService, themeService, pluginsService } from "./services";
 import { getConfig } from "@vibress/config";
-import { verifyTrustedPluginRelease } from "./plugins/operator-release-preflight";
+import { verifyTrustedPluginRelease, verifyOperatorReleaseAdmission } from "./plugins/operator-release-preflight";
 import {
   SITE_AUTH_COOKIE_NAME,
   signSiteAuthToken,
@@ -438,8 +438,21 @@ const start = async () => {
         !process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
       throw new Error("Trusted plugin release mount required");
     }
+    const policy = process.env.VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY;
+    if (policy !== undefined && policy !== "strict") {
+      throw new Error("Unsupported trusted plugin admission policy");
+    }
+    if (policy === "strict" &&
+        (!process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE ||
+         !process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256)) {
+      throw new Error("Strict operator admission requires pinned release");
+    }
     if (process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE) {
-      const verified = await verifyTrustedPluginRelease(process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE);
+      const lockfilePath = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+      const verified = policy === "strict"
+        ? (await verifyOperatorReleaseAdmission(lockfilePath,
+            process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256)).releases
+        : await verifyTrustedPluginRelease(lockfilePath);
       appLogger.info("External plugin release preflight passed", { approvedReleases: verified.length });
     }
 

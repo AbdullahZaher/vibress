@@ -60,6 +60,16 @@ export interface PluginRepository {
     id: string,
     data: Partial<RegisterPluginData>,
   ): Promise<Plugin>;
+  /**
+   * Atomic optimistic concurrency guard for pinned updates. Never overwrite a
+   * release if its version, update timestamp or lifecycle state has changed.
+   * Optional only for legacy/test adapters; pinned callers fail closed without it.
+   */
+  tryUpdateMetadataIfInactive?(
+    id: string,
+    data: Partial<RegisterPluginData>,
+    expected: Pick<Plugin, "version" | "updatedAt">,
+  ): Promise<Plugin | null>;
   list(): Promise<Plugin[]>;
   delete(id: string): Promise<void>;
   /** Prevent accidental uninstall after a forward-only plugin data migration. */

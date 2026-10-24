@@ -9,7 +9,7 @@ import {
   pluginSchemaMigrations,
   auditEvents,
 } from "@vibress/database";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   PluginRepository,
@@ -121,6 +121,36 @@ export class DrizzlePluginRepository implements PluginRepository {
       .returning();
     if (!row) throw new Error(`Plugin not found: ${id}`);
     return this.mapToDomain(row);
+  }
+
+  async tryUpdateMetadataIfInactive(
+    id: string,
+    data: Partial<RegisterPluginData>,
+    expected: Pick<Plugin, "version" | "updatedAt">,
+  ): Promise<Plugin | null> {
+    // Force a monotonic optimistic-lock value even for two writes in the same
+    // JS millisecond. The prior row timestamp must also match in the UPDATE.
+    const nextUpdate = new Date(Math.max(Date.now(), expected.updatedAt.getTime() + 1));
+    const payload: Record<string, unknown> = { updatedAt: nextUpdate };
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.version !== undefined) payload.version = data.version;
+    if (data.vibressApiVersion !== undefined) payload.vibressApiVersion = data.vibressApiVersion;
+    if (data.description !== undefined) payload.description = data.description;
+    if (data.entrypoint !== undefined) payload.entrypoint = data.entrypoint;
+    if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
+    if (data.hooks !== undefined) payload.hooks = data.hooks;
+    if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
+    const [row] = await getDb().update(plugins)
+      .set(payload)
+      .where(and(eq(plugins.id, id),
+        eq(plugins.version, expected.version),
+        // Historic rows populated by PostgreSQL defaultNow() can retain
+        // microseconds which JS Date cannot represent. Normalize both sides
+        // to milliseconds without weakening the monotonic CAS token.
+        sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
+        inArray(plugins.status, ["registered", "inactive", "error"])))
+      .returning();
+    return row ? this.mapToDomain(row) : null;
   }
 
   async list(): Promise<Plugin[]> {
