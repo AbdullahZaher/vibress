@@ -14,7 +14,7 @@ export const MediaAssetSchema = z.object({
   width: z.number().nullable().optional(),
   height: z.number().nullable().optional(),
   durationMs: z.number().nullable().optional(),
-  metadata: z.record(z.unknown()).nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   uploadedBy: z.string().nullable().optional(),
   url: z.string(),
   createdAt: z.string(),
@@ -29,7 +29,7 @@ export const UpdateMediaInputSchema = z.object({
     .min(1, "Display name is required")
     .max(255)
     .optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export type UpdateMediaInputDto = z.infer<typeof UpdateMediaInputSchema>;
 
