@@ -317,6 +317,13 @@ export interface AdminOperatorPlugin {
   /** Immutable artifact-bound approval ID; no plugin-supplied executable data. */
   approvalId?: string;
   readiness?: "verification_required";
+  upgradeReview?: {
+    installedVersion: string;
+    installedStatus: string;
+    addedCapabilities: string[];
+    removedCapabilities: string[];
+    metadataChanged: boolean;
+  };
   /** Optional read-only release v1 summary; older Host/API versions omit it. */
   release?: {
     releaseId: string;
@@ -340,10 +347,15 @@ export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminO
 export async function registerOperatorTrustedPluginApi(
   manifestId: string,
   expectedReleaseId?: string,
+  acknowledgeUpgrade = false,
 ): Promise<{ plugin: AdminPlugin }> {
   return apiRequest("/plugins/register-trusted", {
     method: "POST",
-    body: JSON.stringify({ manifestId, ...(expectedReleaseId ? { expectedReleaseId } : {}) }),
+    body: JSON.stringify({
+      manifestId,
+      ...(expectedReleaseId ? { expectedReleaseId } : {}),
+      ...(acknowledgeUpgrade ? { acknowledgeUpgrade: true } : {}),
+    }),
   });
 }
 

@@ -64,6 +64,13 @@ export const OperatorTrustedPluginCatalogResponseSchema = z.object({
     signatureVerified: z.boolean().nullable(),
     approvalId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/).optional(),
     readiness: z.literal("verification_required").optional(),
+    upgradeReview: z.object({
+      installedVersion: z.string().min(1).max(128),
+      installedStatus: z.enum(["registered", "activating", "active", "deactivating", "inactive", "error"]),
+      addedCapabilities: z.array(z.string()).max(64),
+      removedCapabilities: z.array(z.string()).max(64),
+      metadataChanged: z.boolean(),
+    }).strict().optional(),
     release: OperatorTrustedReleaseSummarySchema.optional(),
   }).strict()).max(64),
 }).strict();
@@ -73,6 +80,7 @@ export const OperatorTrustedPluginRegisterSchema = z.object({
   expectedReleaseId: z.string()
     .regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/)
     .optional(),
+  acknowledgeUpgrade: z.boolean().optional(),
 }).strict();
 
 /**

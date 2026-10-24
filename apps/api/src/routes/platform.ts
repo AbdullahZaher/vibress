@@ -461,13 +461,16 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.registerOperatorPlugin(
           parsed.data.manifestId, req.user!.id, parsed.data.expectedReleaseId,
+          parsed.data.acknowledgeUpgrade === true,
         );
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id,
             err.code === "PLUGIN_REGISTRY_UNAVAILABLE" ? 503 :
-            err.code === "PLUGIN_RELEASE_CHANGED" ? 409 : 403);
+            err.code === "PLUGIN_RELEASE_CHANGED" ||
+            err.code === "PLUGIN_UPGRADE_REVIEW_REQUIRED" ||
+            err.code === "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" ? 409 : 403);
         }
         throw err;
       }

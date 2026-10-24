@@ -735,6 +735,13 @@ export class PluginsService {
     approvalId?: string;
     /** Not a runtime readiness guarantee; checked by the server at registration. */
     readiness: "verification_required";
+    upgradeReview?: {
+      installedVersion: string;
+      installedStatus: PluginStatus;
+      addedCapabilities: string[];
+      removedCapabilities: string[];
+      metadataChanged: boolean;
+    };
     release?: OperatorTrustedReleaseSummary;
   }>> {
     try {
@@ -750,7 +757,17 @@ export class PluginsService {
         : (await this.host.getOperatorManifests?.() ?? []).map((manifest) => ({
             manifest, signatureVerified: null,
           }));
-      return catalog.map(({ manifest, signatureVerified, release, approvalId }) => ({
+      const installedByManifestId = new Map(
+        (await this.pluginRepo.list()).map((plugin) => [plugin.manifestId, plugin]),
+      );
+      return catalog.map(({ manifest, signatureVerified, release, approvalId }) => {
+        const existing = installedByManifestId.get(manifest.id);
+        const nextCapabilities = new Set(manifest.capabilities);
+        const previousCapabilities = new Set(existing?.capabilities ?? []);
+        const addedCapabilities = manifest.capabilities.filter((cap) => !previousCapabilities.has(cap));
+        const removedCapabilities = (existing?.capabilities ?? [])
+          .filter((cap) => !nextCapabilities.has(cap));
+        return {
         id: manifest.id,
         name: manifest.name,
         version: manifest.version,
@@ -760,7 +777,22 @@ export class PluginsService {
         readiness: "verification_required" as const,
         ...(approvalId ? { approvalId } : {}),
         ...(release ? { release } : {}),
-      }));
+        ...(existing ? { upgradeReview: {
+          installedVersion: existing.version,
+          installedStatus: existing.status,
+          addedCapabilities,
+          removedCapabilities,
+          metadataChanged: existing.version !== manifest.version ||
+            existing.name !== manifest.name ||
+            existing.description !== (manifest.description ?? null) ||
+            existing.vibressApiVersion !== manifest.vibressApiVersion ||
+            existing.entrypoint !== manifest.entrypoint ||
+            !isDeepStrictEqual(existing.capabilities, manifest.capabilities) ||
+            !isDeepStrictEqual(existing.hooks, manifest.hooks ?? []) ||
+            !isDeepStrictEqual(existing.settingsSchema, manifest.settingsSchema ?? {}),
+        } } : {}),
+      };
+      });
     } catch {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
@@ -768,6 +800,7 @@ export class PluginsService {
 
   async registerOperatorPlugin(
     manifestId: string, actorId: string | null, expectedReleaseId?: string,
+    acknowledgeUpgrade = false,
   ): Promise<Plugin> {
     let approved: PluginManifest | undefined;
     try {
@@ -788,6 +821,20 @@ export class PluginsService {
       }
       if (!approved) {
         throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
+      }
+      if (expectedReleaseId !== undefined) {
+        const installed = await this.pluginRepo.findByManifestId(manifestId);
+        if (installed) {
+          const changes = installed.version !== approved.version ||
+            installed.vibressApiVersion !== approved.vibressApiVersion ||
+            !isDeepStrictEqual(installed.capabilities, approved.capabilities) ||
+            !isDeepStrictEqual(installed.hooks, approved.hooks ?? []) ||
+            !isDeepStrictEqual(installed.settingsSchema, approved.settingsSchema ?? {});
+          if (changes && !acknowledgeUpgrade) {
+            throw new PluginDomainError("PLUGIN_UPGRADE_REVIEW_REQUIRED",
+              "Review release and capability changes before updating");
+          }
+        }
       }
       await this.host.verifyOperatorRegistration?.();
     } catch (error: unknown) {
