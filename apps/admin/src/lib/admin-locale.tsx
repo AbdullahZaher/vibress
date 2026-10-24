@@ -434,6 +434,7 @@ const translations: Record<string, string> = {
   "Plugin lifecycle failed": "فشل تشغيل الإضافة",
   "Unknown plugin state": "حالة الإضافة غير معروفة",
   "Installed version": "الإصدار المسجّل",
+  "Available for registration": "متاحة للتسجيل",
   "Incompatible Host API version. Operator review and an approved update are required.": "إصدار واجهة المضيف غير متوافق. يلزم مراجعة المشغّل وتحديث معتمد.",
   "Lifecycle transition in progress. Refresh before changing state.": "تغيير حالة الإضافة قيد التنفيذ. حدّث الصفحة قبل اتخاذ إجراء آخر.",
   "Recovery requires maintenance: stop all runtime replicas, inspect the failure, and follow the operator recovery runbook.": "يتطلب التعافي وضع الصيانة: أوقف جميع نسخ التشغيل وافحص الفشل واتبع دليل تعافي المشغّل.",

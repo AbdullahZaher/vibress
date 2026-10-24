@@ -102,6 +102,9 @@ export function TrustedPluginInstaller({
                 className="mt-0.5 shrink-0 accent-primary" />
               <span className="min-w-0 space-y-1">
                 <span className="block text-xs font-semibold break-words" dir="auto">{item.name}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {tr("Available for registration")}
+                </span>
                 <span className="block text-xs text-muted-foreground break-all" dir="auto">{item.id} · {item.version}</span>
                 {item.description && <span className="block text-xs text-muted-foreground" dir="auto">{item.description}</span>}
                 <span className="block text-xs text-muted-foreground">{tr("Requested capabilities")}</span>

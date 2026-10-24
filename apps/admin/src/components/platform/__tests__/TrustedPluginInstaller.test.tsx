@@ -68,6 +68,7 @@ describe("Operator-approved Add Plugin", () => {
   it("requires selection and explicit acknowledgement before registering", async () => {
     await render();
     expect(container.textContent).toContain("extension.member_storage.write");
+    expect(container.textContent).toContain("Available for registration");
     expect(container.textContent).toContain("Detached Ed25519 operator approval verified.");
     expect(container.textContent).toContain("signature verification is not sandbox isolation.");
     expect(container.textContent).toContain("They cannot be installed directly in Studio.");
