@@ -299,6 +299,30 @@ describe("PluginsService", () => {
     expect(repo.tryUpdateMetadataIfInactive).toHaveBeenCalledOnce();
   });
 
+  it("refuses pinned re-registration while a plugin is active even if semver is unchanged", async () => {
+    const approvalId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const installed = makePlugin({ status: "active" });
+    const repo: PluginRepository = { ...pluginRepo,
+      findByManifestId: vi.fn(async () => installed),
+      tryUpdateMetadataIfInactive: vi.fn(async () => null),
+      updateMetadata: vi.fn(async () => installed),
+    };
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      requiresPublicationEnablement: () => true,
+      getOperatorManifestCatalog: vi.fn(async () => [{
+        manifest: validManifest, signatureVerified: true, approvalId,
+      }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    await expect(makeService({ pluginRepo: repo, host: hostWith })
+      .registerOperatorPlugin("test-plugin", "operator", approvalId, true))
+      .rejects.toMatchObject({ code: "PLUGIN_UPDATE_REQUIRES_DEACTIVATION" });
+    expect(repo.tryUpdateMetadataIfInactive).not.toHaveBeenCalled();
+    expect(repo.updateMetadata).not.toHaveBeenCalled();
+  });
+
   it("blocks pinned updates when activation wins the database race", async () => {
     const approvalId = `test-plugin@2.0.0:${"a".repeat(64)}`;
     const manifest = { ...validManifest, version: "2.0.0" };
