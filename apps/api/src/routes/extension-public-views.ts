@@ -65,7 +65,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         );
         if (!allowed) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
         const binding = await pluginsService.resolveExtensionStorageBinding(
-          pluginId, publicationId, "extension.storage.read",
+          pluginId, publicationId, "extension.storage.read", "public",
         ).catch(() => null);
         let storageSession: ReturnType<typeof createHostPluginStorageSession> | null = null;
         if (binding) {
