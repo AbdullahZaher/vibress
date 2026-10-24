@@ -40,6 +40,10 @@ const pinnedPluginSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
   // Optional operator-reviewed descriptors; legacy lockfiles stay valid.
   storageModels: z.array(approvedModelSchema).max(16).optional(),
+  // Explicit signed allowlists for non-Staff handlers; omitted in legacy
+  // operator lockfiles to preserve existing releases until they are reviewed.
+  publicReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
+  memberReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
   adminUiAssets: z.array(approvedAdminUiAssetSchema).max(8).optional(),
 }).strict();
 const lockfileSchema = z.object({
@@ -54,6 +58,8 @@ type PinnedPlugin = {
   manifest: PluginManifest;
   sha256: string;
   storageModels: readonly ApprovedPluginPhysicalModel[];
+  publicReadModels?: readonly string[];
+  memberReadModels?: readonly string[];
   adminUiAssets: readonly {
     viewId: string;
     path: string;
@@ -76,6 +82,13 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
       validateStorageModel(model);
       if (modelKeys.has(model.key)) throw new Error("Duplicate approved storage model key");
       modelKeys.add(model.key);
+    }
+    for (const allowlist of [entry.publicReadModels, entry.memberReadModels]) {
+      if (!allowlist) continue;
+      if (new Set(allowlist).size !== allowlist.length ||
+          allowlist.some((key) => !modelKeys.has(key))) {
+        throw new Error("Operator read allowlist must reference unique approved storage models");
+      }
     }
     if (storageModels.length > 0 &&
         !manifest.capabilities.some((capability) =>
@@ -101,6 +114,8 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     }
     result.set(manifest.id, {
       manifest, sha256: entry.sha256.toLowerCase(), storageModels,
+      ...(entry.publicReadModels ? { publicReadModels: entry.publicReadModels } : {}),
+      ...(entry.memberReadModels ? { memberReadModels: entry.memberReadModels } : {}),
       adminUiAssets: adminUiAssets.map((asset) => ({ ...asset, sha256: asset.sha256.toLowerCase() })),
     });
   }
@@ -186,6 +201,25 @@ export class TrustedExternalPluginHost {
       key: model.key, schemaSha256: model.schemaSha256,
       columns: model.columns.map((column) => ({ ...column })),
     }));
+  }
+
+  /** Operator-admitted audience-specific read scope, never plugin supplied. */
+  async getApprovedAudienceReadModels(
+    plugin: Plugin,
+    audience: "public" | "member",
+  ): Promise<readonly string[] | null> {
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return null;
+    const approved = parseTrustedPluginLockfile(await readTrustedPluginLockfile(lockfile))
+      .get(plugin.manifestId);
+    if (!approved || !manifestMatchesInstalled(plugin, approved.manifest)) {
+      throw new PluginDomainError("PLUGIN_STORAGE_MODELS_NOT_APPROVED",
+        "Installed plugin differs from operator-approved storage manifest");
+    }
+    // null means a legacy lockfile: the caller retains its old model contract.
+    const keys = audience === "public"
+      ? approved.publicReadModels : approved.memberReadModels;
+    return keys === undefined ? null : [...keys];
   }
 
   /**
