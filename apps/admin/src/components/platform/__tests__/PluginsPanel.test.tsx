@@ -91,6 +91,12 @@ describe("P0-4 plugin lifecycle status and recovery UX", () => {
     expect(button(container, "Activate")?.disabled).toBe(true);
   });
 
+  it("still permits safe disable/deactivate when an active plugin becomes incompatible", async () => {
+    await render("active", { publicationEnabled: true, hostCompatible: false });
+    expect(button(container, "Disable for this publication")?.disabled).toBe(false);
+    expect(button(container, "Deactivate")?.disabled).toBe(false);
+  });
+
   it("does not display global lifecycle actions to non-operators", async () => {
     await render("active", { publicationEnabled: false }, false);
     expect(button(container, "Deactivate")).toBeUndefined();
