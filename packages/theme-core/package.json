@@ -14,7 +14,7 @@
     "@vibress/i18n": "workspace:*",
     "jszip": "^3.10.1",
     "liquidjs": "^10.29.0",
-    "zod": "^3.23.8"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/jszip": "^3.4.1",
