@@ -21,7 +21,8 @@
 
 - `pnpm install --frozen-lockfile`
 - `pnpm exec vitest run apps/admin/src/components/platform/__tests__/PluginsPanel.test.tsx apps/admin/src/components/platform/__tests__/PluginsPage.test.tsx`
-- `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__`
+- `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__ scripts/plugins/__tests__`
+- `pnpm exec tsx scripts/plugins/check-replica-receipts.ts api:api-a=... api:api-b=... worker:worker-a=... worker:worker-b=...` (see the [runbook](secure-operator-release-admission.md); **not** a substitute for live signed admission and independent physical replicas)
 - `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build`, `pnpm audit --prod --audit-level high`
 - Docker image build, security scan, relevant signed admission/restore scripts and full Admin E2E **against real services**.
 

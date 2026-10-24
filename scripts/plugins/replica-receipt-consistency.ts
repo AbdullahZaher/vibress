@@ -67,7 +67,7 @@ function readReceipt(value: unknown) {
       !Array.isArray(value.releases) || value.releases.length < 1 ||
       value.releases.length > 64) invalid();
 
-  const releases = (value.releases as unknown[]).map(readRelease);
+  const releases: NormalizedRelease[] = value.releases.map((item: unknown) => readRelease(item));
   releases.sort((a, b) => a.pluginId.localeCompare(b.pluginId, "en"));
   if (new Set(releases.map((r) => r.pluginId)).size !== releases.length) invalid();
   return {
