@@ -275,6 +275,28 @@ describe("PluginsService", () => {
     expect(repo.updateMetadata).toHaveBeenCalledOnce();
   });
 
+  it("requires review for same-version pinned re-registration without stored digest history", async () => {
+    const approvedId = `test-plugin@1.0.0:${"a".repeat(64)}`;
+    const hostWith = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [{
+        manifest: validManifest, signatureVerified: true, approvalId: approvedId,
+      }]),
+      verifyOperatorRegistration: vi.fn(async () => undefined),
+      authorizeRegistration: vi.fn(async () => undefined),
+    };
+    const installed = makePlugin({ status: "inactive" });
+    const repo: PluginRepository = { ...pluginRepo,
+      findByManifestId: vi.fn(async () => installed),
+      updateMetadata: vi.fn(async () => installed) };
+    const service = makeService({ pluginRepo: repo, host: hostWith });
+    await expect(service.registerOperatorPlugin("test-plugin", "operator", approvedId))
+      .rejects.toMatchObject({ code: "PLUGIN_UPGRADE_REVIEW_REQUIRED" });
+    expect(repo.updateMetadata).not.toHaveBeenCalled();
+    await service.registerOperatorPlugin("test-plugin", "operator", approvedId, true);
+    expect(repo.updateMetadata).toHaveBeenCalledOnce();
+  });
+
   it("registers a valid plugin manifest", async () => {
     const service = makeService();
     const plugin = await service.registerPlugin(validManifest, "u1");
