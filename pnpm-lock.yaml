@@ -364,7 +364,7 @@ importers:
         version: 5.12.7
       nodemailer:
         specifier: ^10.1.4
-        version: 10.2.1
+        version: 10.2.0
       stripe:
         specifier: ^17.7.0
         version: 17.7.0
@@ -839,7 +839,7 @@ importers:
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.4)(pg@8.22.0)
       nodemailer:
         specifier: ^10.1.4
-        version: 10.2.1
+        version: 10.2.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -6584,8 +6584,8 @@ packages:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
 
-  nodemailer@10.2.1:
-    resolution: {integrity: sha512-ZrDNsPFoDMwefNs7sJwrYiEJ/CG4ClJWDZv05iNJsEBWa8GRDry1QJHTJxsuTAY9eDDKjX4k+q3SxslXJOao7w==}
+  nodemailer@10.2.0:
+    resolution: {integrity: sha512-/XyGw6kX2stMdKGUJdAQmYAeY1FscWfdRydfd2NtK3A3KDfUUXCqZzExSNAt2xhh90X2qLCR+o2Gd48YPJcJwA==}
     engines: {node: '>=20.0.0'}
 
   npm-run-path@4.0.1:
@@ -12660,7 +12660,7 @@ snapshots:
 
   node-releases@2.0.53: {}
 
-  nodemailer@10.2.1: {}
+  nodemailer@10.2.0: {}
 
   npm-run-path@4.0.1:
     dependencies:
