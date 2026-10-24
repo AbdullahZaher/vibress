@@ -21,7 +21,7 @@ export const PluginPublicationStateSchema = z.object({
 
 /** Only declared string keys may be updated; domain validates declarations. */
 export const PluginPublicationSettingsUpdateSchema = z.object({
-  settings: z.record(z.string().max(4096).nullable()).refine(
+  settings: z.record(z.string(), z.string().max(4096).nullable()).refine(
     (value) => Object.keys(value).length <= 64,
     "Too many plugin settings",
   ),
