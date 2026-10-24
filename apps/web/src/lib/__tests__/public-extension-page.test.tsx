@@ -103,7 +103,7 @@ describe("EXT-302A verified public page policy", () => {
     expect(meta.robots).toBeUndefined();
     expect(meta.alternates?.languages).toEqual({
       en: "https://publication-a.example/extensions/vibress-lms/courses",
-      "ar-SA": "https://publication-a.example/ar-SA/extensions/vibress-lms/courses",
+      "ar-SA": "https://publication-a.example/ar/extensions/vibress-lms/courses",
       "x-default": "https://publication-a.example/extensions/vibress-lms/courses",
     });
     const notPublished = { ...page, publishedLocales: ["en"] };
