@@ -167,6 +167,22 @@ describe("PluginsService", () => {
     expect(plugin.status).toBe("registered");
   });
 
+  it("blocks activation of persisted Host-incompatible plugins before any transition", async () => {
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({
+        status: "registered", vibressApiVersion: "0.9.0",
+      })),
+      tryTransitionStatus: vi.fn(async () => null),
+    };
+    const service = makeService({ pluginRepo: repoWith });
+    await expect(service.activatePlugin("p1", "u1")).rejects.toMatchObject({
+      code: "PLUGIN_INCOMPATIBLE_API_VERSION",
+    });
+    expect(repoWith.tryTransitionStatus).not.toHaveBeenCalled();
+    expect(host.loadModule).not.toHaveBeenCalled();
+  });
+
   it("rejects an incompatible Vibress API version", async () => {
     const service = makeService();
     await expect(
