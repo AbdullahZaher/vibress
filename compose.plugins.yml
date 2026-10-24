@@ -10,9 +10,6 @@ services:
       VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: /run/vibress-plugins/operator-public.pem
       VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: /run/vibress-plugins/operator.sig
       VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1"
-      VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY: "strict"
-      VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256:?set operator public key fingerprint}
-      VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256:?set approved release fingerprint}
     volumes:
       - type: bind
         source: ${VIBRESS_PLUGIN_RELEASE_DIR:?set an absolute operator-controlled release directory}
@@ -25,9 +22,6 @@ services:
       VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: /run/vibress-plugins/operator-public.pem
       VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: /run/vibress-plugins/operator.sig
       VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1"
-      VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY: "strict"
-      VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256:?set operator public key fingerprint}
-      VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256:?set approved release fingerprint}
     volumes:
       - type: bind
         source: ${VIBRESS_PLUGIN_RELEASE_DIR:?set an absolute operator-controlled release directory}

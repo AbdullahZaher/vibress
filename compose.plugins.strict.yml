@@ -1,0 +1,16 @@
+# P0-3 opt-in strict operator release admission for NEW deployments.
+# Add AFTER compose.plugins.yml. Do not silently change legacy signed installs:
+# docker compose -f compose.prod.yml -f compose.plugins.yml -f compose.plugins.strict.yml ...
+# Pin SHA-256 of the DER/SPKI Ed25519 public key outside plugin-controlled files
+# and the exact signed lockfile bytes. Both pins are deployment policy.
+services:
+  api:
+    environment:
+      VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY: "strict"
+      VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256:?set operator public key fingerprint}
+      VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256:?set approved release fingerprint}
+  worker:
+    environment:
+      VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY: "strict"
+      VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256:?set operator public key fingerprint}
+      VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256: ${VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256:?set approved release fingerprint}
