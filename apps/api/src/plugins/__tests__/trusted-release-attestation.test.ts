@@ -3,7 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readTrustedPluginLockfile } from "../trusted-release-attestation";
+import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "../trusted-release-attestation";
 import { TrustedExternalPluginHost } from "../trusted-external-plugin-host";
 import { verifyTrustedPluginRelease } from "../operator-release-preflight";
 
@@ -37,6 +37,17 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     await expect(readTrustedPluginLockfile(f.lockfile, {})).resolves.toEqual({
       schemaVersion: 1, plugins: [],
     });
+  });
+
+  it("reports verified signature metadata from the exact authenticated lockfile", async () => {
+    const f = await fixture();
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, {}))
+      .resolves.toEqual({ lockfile: { schemaVersion: 1, plugins: [] }, signatureVerified: false });
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+      .resolves.toEqual({ lockfile: { schemaVersion: 1, plugins: [] }, signatureVerified: true });
+    await writeFile(f.lockfile, f.payload + " ");
+    await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+      .rejects.toThrow(/signature verification failed/);
   });
 
   it("requires valid signature files when strict production policy is enabled", async () => {

@@ -44,7 +44,7 @@ export function TrustedPluginInstaller({
   const available = approved.filter((item) => !installedIds.includes(item.id));
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
-    if (!selected || !acknowledged || loading || submitting || registeringRef.current) return;
+    if (!selected || !selected.capabilities || !acknowledged || loading || submitting || registeringRef.current) return;
     registeringRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -70,7 +70,7 @@ export function TrustedPluginInstaller({
             {tr("Add Plugin")}
           </h2>
           <p className="text-xs text-muted-foreground">
-            {tr("Only operator-approved, signed releases can be registered. Registration does not activate plugins or enable publications.")}
+            {tr("Only operator-approved releases can be registered. Registration does not activate plugins or enable publications.")}
           </p>
         </div>
         <Button type="button" variant="outline" size="xs" onClick={onClose}
@@ -78,7 +78,11 @@ export function TrustedPluginInstaller({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {tr("ZIP uploads and GitHub URLs require offline operator review, signature verification, and migration approval. They cannot be installed directly in Studio.")}
+        {tr("ZIP uploads and GitHub URLs require offline operator review, artifact integrity checks, and migration approval. They cannot be installed directly in Studio.")}
+      </p>
+
+      <p className="text-xs text-muted-foreground">
+        {tr("Trusted plugins run with Node.js process privileges; signature verification is not sandbox isolation.")}
       </p>
 
       {loading && <p role="status" className="text-xs text-muted-foreground">{tr("Loading approved plugins...")}</p>}
@@ -102,7 +106,16 @@ export function TrustedPluginInstaller({
                 {item.description && <span className="block text-xs text-muted-foreground" dir="auto">{item.description}</span>}
                 <span className="block text-xs text-muted-foreground">{tr("Requested capabilities")}</span>
                 <span className="block text-xs break-words" dir="auto">
-                  {(item.capabilities ?? []).length > 0 ? item.capabilities?.join(", ") : tr("None")}
+                  {item.capabilities === undefined
+                    ? tr("Capabilities unavailable: registration requires a newer server.")
+                    : item.capabilities.length > 0 ? item.capabilities.join(", ") : tr("None")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {item.signatureVerified === true
+                    ? tr("Detached Ed25519 operator approval verified.")
+                    : item.signatureVerified === false
+                      ? tr("Legacy unsigned operator approval: no detached signature was verified.")
+                      : tr("Operator signature status unavailable.")}
                 </span>
               </span>
             </label>
@@ -123,7 +136,7 @@ export function TrustedPluginInstaller({
               {tr("Cancel")}
             </Button>
             <Button type="button" onClick={() => { void register(); }}
-              disabled={!acknowledged || submitting}>
+              disabled={!selected.capabilities || !acknowledged || submitting}>
               {submitting ? tr("Registering plugin...") : tr("Register trusted plugin")}
             </Button>
           </div>

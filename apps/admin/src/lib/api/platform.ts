@@ -307,6 +307,8 @@ export interface AdminOperatorPlugin {
   description: string | null;
   /** Server-owned approved manifest capabilities, not plugin-authored UI labels. */
   capabilities?: string[];
+  /** Optional for older API servers; true only after detached Ed25519 verification. */
+  signatureVerified?: boolean | null;
 }
 
 export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminOperatorPlugin[] }> {

@@ -33,6 +33,11 @@ export interface PluginHost {
   loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null>;
   requiresPublicationEnablement?(plugin: Plugin): boolean;
   getOperatorManifests?(): Promise<PluginManifest[]>;
+  /** Operator-owned approval metadata; never accepted from an HTTP caller. */
+  getOperatorManifestCatalog?(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+  }>>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
   getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
   /** Optional approved file reader; returns inert bytes, never executable plugin code. */
@@ -693,16 +698,30 @@ export class PluginsService {
   }
 
   /** Operator-approved external package discovery, no client-provided manifest trust. */
-  async listOperatorManifests(): Promise<
-    Array<{ id: string; name: string; version: string; description: string | null }>
-  > {
+  async listOperatorManifests(): Promise<Array<{
+    id: string;
+    name: string;
+    version: string;
+    description: string | null;
+    capabilities: string[];
+    /** True only when the detached operator Ed25519 lockfile signature was verified. */
+    signatureVerified: boolean | null;
+  }>> {
     try {
-      const manifests = await this.host.getOperatorManifests?.() ?? [];
-      return manifests.map((manifest) => ({
+      // Keep the catalog optional for older PluginHost implementations.
+      // A legacy host cannot prove a signature, so never claim it is signed.
+      const catalog = this.host.getOperatorManifestCatalog
+        ? await this.host.getOperatorManifestCatalog()
+        : (await this.host.getOperatorManifests?.() ?? []).map((manifest) => ({
+            manifest, signatureVerified: null,
+          }));
+      return catalog.map(({ manifest, signatureVerified }) => ({
         id: manifest.id,
         name: manifest.name,
         version: manifest.version,
         description: manifest.description ?? null,
+        capabilities: [...manifest.capabilities],
+        signatureVerified,
       }));
     } catch {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");

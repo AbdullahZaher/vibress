@@ -42,13 +42,13 @@ function decodeUtf8(bytes: Buffer): string {
  * deployments, but supplying only one fails closed. To require signatures,
  * operators must provision both files on every API replica.
  */
-export async function readTrustedPluginLockfile(
+export async function readTrustedPluginLockfileWithVerification(
   lockfilePath: string,
   options: TrustedPluginAttestationOptions = {
     publicKeyPath: process.env.VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE,
     signaturePath: process.env.VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE,
   },
-): Promise<unknown> {
+): Promise<{ readonly lockfile: unknown; readonly signatureVerified: boolean }> {
   if (!path.isAbsolute(lockfilePath)) throw new Error("Invalid trusted plugin lockfile path");
   const lockfileBytes = await readBoundedFile(lockfilePath, MAX_LOCKFILE_BYTES);
   const { publicKeyPath, signaturePath } = options;
@@ -85,5 +85,16 @@ export async function readTrustedPluginLockfile(
     }
   }
   const parsed: unknown = JSON.parse(decodeUtf8(lockfileBytes));
-  return parsed;
+  return { lockfile: parsed, signatureVerified: Boolean(publicKeyPath && signaturePath) };
+}
+
+/** Preserve the v1 reader contract and all existing verification policies. */
+export async function readTrustedPluginLockfile(
+  lockfilePath: string,
+  options: TrustedPluginAttestationOptions = {
+    publicKeyPath: process.env.VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE,
+    signaturePath: process.env.VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE,
+  },
+): Promise<unknown> {
+  return (await readTrustedPluginLockfileWithVerification(lockfilePath, options)).lockfile;
 }

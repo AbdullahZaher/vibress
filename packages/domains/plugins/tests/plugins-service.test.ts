@@ -81,6 +81,38 @@ describe("PluginsService", () => {
     );
   }
 
+  it("shows exact operator-reviewed capabilities and signature status without loading code", async () => {
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [
+        { manifest: validManifest, signatureVerified: true },
+      ]),
+    };
+    const service = makeService({ host: catalogHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id,
+      name: validManifest.name,
+      version: validManifest.version,
+      description: null,
+      capabilities: validManifest.capabilities,
+      signatureVerified: true,
+    }]);
+    expect(catalogHost.loadModule).not.toHaveBeenCalled();
+  });
+
+  it("never invents signature verification for legacy PluginHost consumers", async () => {
+    const legacyHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifests: vi.fn(async () => [validManifest]),
+    };
+    const service = makeService({ host: legacyHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id, name: validManifest.name,
+      version: validManifest.version, description: null,
+      capabilities: validManifest.capabilities, signatureVerified: null,
+    }]);
+  });
+
   it("registers a valid plugin manifest", async () => {
     const service = makeService();
     const plugin = await service.registerPlugin(validManifest, "u1");

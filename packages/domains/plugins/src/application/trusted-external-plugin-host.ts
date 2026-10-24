@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
-import { readTrustedPluginLockfile } from "./trusted-release-attestation";
+import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./trusted-release-attestation";
 import { z } from "zod";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { validateStorageModel } from "./plugin-scoped-storage";
@@ -170,6 +170,23 @@ export class TrustedExternalPluginHost {
     if (!lockfile) return [];
     const json = await readTrustedPluginLockfile(lockfile);
     return [...parseTrustedPluginLockfile(json).values()].map((p) => p.manifest);
+  }
+
+  /**
+   * One verified lockfile snapshot supplies both displayed capabilities and
+   * detached-signature status. No module bytes are evaluated by discovery.
+   */
+  async listTrustedCatalog(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+  }>> {
+    const lockfile = this.lockfilePath;
+    if (!lockfile) return [];
+    const { lockfile: data, signatureVerified } =
+      await readTrustedPluginLockfileWithVerification(lockfile);
+    return [...parseTrustedPluginLockfile(data).values()].map(({ manifest }) => ({
+      manifest, signatureVerified,
+    }));
   }
 
   /**

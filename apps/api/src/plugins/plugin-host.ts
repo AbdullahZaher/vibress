@@ -39,6 +39,13 @@ export class BundledPluginHost implements PluginHost {
     return this.external.listTrustedManifests();
   }
 
+  async getOperatorManifestCatalog(): Promise<Array<{
+    manifest: PluginManifest;
+    signatureVerified: boolean;
+  }>> {
+    return this.external.listTrustedCatalog();
+  }
+
   async getOperatorAdminFingerprints(): Promise<ReadonlyMap<string, string>> {
     return this.external.listTrustedFingerprints();
   }

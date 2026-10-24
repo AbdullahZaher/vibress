@@ -21,6 +21,7 @@ const plugin = {
   version: "1.0.0",
   description: "Pilot LMS",
   capabilities: ["extension.routes.member", "extension.member_storage.write"],
+  signatureVerified: true,
 };
 
 describe("Operator-approved Add Plugin", () => {
@@ -67,6 +68,8 @@ describe("Operator-approved Add Plugin", () => {
   it("requires selection and explicit acknowledgement before registering", async () => {
     await render();
     expect(container.textContent).toContain("extension.member_storage.write");
+    expect(container.textContent).toContain("Detached Ed25519 operator approval verified.");
+    expect(container.textContent).toContain("signature verification is not sandbox isolation.");
     expect(container.textContent).toContain("They cannot be installed directly in Studio.");
     const registerButton = [...container.querySelectorAll("button")]
       .find((b) => b.textContent?.includes("Register trusted plugin"));
@@ -82,6 +85,28 @@ describe("Operator-approved Add Plugin", () => {
     expect(registerOperatorTrustedPluginApi).toHaveBeenCalledWith(plugin.id);
     expect(onRegistered).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("warns operators when approved releases are unsigned legacy lockfiles", async () => {
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ ...plugin, signatureVerified: false }],
+    });
+    await render();
+    expect(container.textContent).toContain("Legacy unsigned operator approval");
+    expect(container.textContent).not.toContain("Detached Ed25519 operator approval verified.");
+  });
+
+  it("does not allow blind registration when an older server omits capabilities", async () => {
+    const { capabilities: _capabilities, ...legacy } = plugin;
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({ plugins: [legacy] });
+    await render();
+    expect(container.textContent).toContain("Capabilities unavailable");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    await change(container.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    const register = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(register.disabled).toBe(true);
+    expect(registerOperatorTrustedPluginApi).not.toHaveBeenCalled();
   });
 
   it("does not list already registered releases", async () => {
