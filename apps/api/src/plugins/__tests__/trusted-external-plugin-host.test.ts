@@ -93,6 +93,16 @@ function releaseMetadata(hash: string) {
 }
 
 describe("TrustedExternalPluginHost", () => {
+  it("checks approved bytes without importing the module at registration time", async () => {
+    const f = await fixture();
+    const { BundledPluginHost } = await import("../plugin-host");
+    const host = new BundledPluginHost(new TrustedExternalPluginHost(f.lockfile));
+    await expect(host.verifyOperatorRegistration()).resolves.toBeUndefined();
+    await writeFile(f.moduleFile, "throw new Error('changed');");
+    await expect(host.verifyOperatorRegistration())
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+  });
+
   it("preserves bundled-only defaults when opt-in is absent", async () => {
     expect(await new TrustedExternalPluginHost("").loadModule(plugin())).toBeNull();
   });

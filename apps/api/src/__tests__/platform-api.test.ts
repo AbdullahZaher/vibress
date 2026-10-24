@@ -702,6 +702,27 @@ describe("Batch 12 — Platform Integration & Security", () => {
   });
 
   // ---------------- Plugins ----------------
+  it("validates immutable operator release admission input before repository access", async () => {
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/plugins/register-trusted",
+      headers: { cookie: staffCookie, origin: "http://localhost:7777" },
+      payload: {
+        manifestId: "vibress-content-metrics",
+        expectedReleaseId: "../../untrusted",
+      },
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().errors[0].code).toBe("VALIDATION_ERROR");
+    const noSession = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/plugins/register-trusted",
+      headers: { origin: "http://localhost:7777" },
+      payload: { manifestId: "vibress-content-metrics" },
+    });
+    expect(noSession.statusCode).toBe(401);
+  });
+
   it("registers the official example plugin (valid manifest)", async () => {
     const res = await app.inject({
       method: "POST",
