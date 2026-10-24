@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { readFile, realpath, stat, lstat } from "node:fs/promises";
+import { readFile, realpath, stat, lstat, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import path from "node:path";
 import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./trusted-release-attestation";
 
@@ -222,6 +223,11 @@ export class TrustedExternalPluginHost {
     return this.explicitLockfilePath ?? process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
   }
 
+  /** The effective operator mount, used only by Host-side admission checks. */
+  getOperatorLockfilePath(): string | undefined {
+    return this.lockfilePath;
+  }
+
   /** Read the operator's approved manifests. Not an Admin-uploaded registry. */
   async listTrustedManifests(): Promise<PluginManifest[]> {
     const lockfile = this.lockfilePath;
@@ -363,7 +369,23 @@ export class TrustedExternalPluginHost {
         "Approved Admin UI asset is not a bounded regular file",
       );
     }
-    const bytes = await readFile(canonical);
+    // Re-check the inode on the descriptor actually read, not on a mutable
+    // pathname that could change after realpath/lstat.
+    const handle = await open(assetPath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    let bytes: Buffer;
+    try {
+      const opened = await handle.stat();
+      if (!opened.isFile() || opened.size > MAX_ADMIN_UI_ASSET_BYTES ||
+          opened.dev !== canonicalInfo.dev || opened.ino !== canonicalInfo.ino) {
+        throw new PluginDomainError(
+          "PLUGIN_FILE_INVALID", "Approved Admin UI asset changed during verification",
+        );
+      }
+      bytes = await handle.readFile();
+    } finally {
+      await handle.close();
+    }
     if (bytes.length > MAX_ADMIN_UI_ASSET_BYTES) {
       throw new PluginDomainError(
         "PLUGIN_SIZE_LIMIT_EXCEEDED",

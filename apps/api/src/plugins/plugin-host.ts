@@ -50,7 +50,7 @@ export class BundledPluginHost implements PluginHost {
   }
 
   async verifyOperatorRegistration(): Promise<void> {
-    const lockfile = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
+    const lockfile = this.external.getOperatorLockfilePath();
     if (!lockfile) throw new Error("Trusted plugin lockfile is unavailable");
     await verifyTrustedPluginRelease(lockfile);
   }
