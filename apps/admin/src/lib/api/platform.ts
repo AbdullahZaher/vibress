@@ -180,9 +180,14 @@ export async function readExtensionAdminFrameStatusApi(
 
 export async function readExtensionAdminViewApi(
   link: AdminExtensionViewLink,
+  query?: Readonly<Record<string, string | number | boolean>>,
 ): Promise<Record<string, string | number | boolean>> {
-  // Neither path component nor API permission is supplied by plugin UI code.
-  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/v1/${encodeURIComponent(link.routeId)}`, {
+  // Host chooses the only authorized route; the server validates any scalar
+  // query against the plugin's declared runtime contract.
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) params.set(key, String(value));
+  const qs = params.size ? `?${params.toString()}` : "";
+  return apiRequest(`/extensions/${encodeURIComponent(link.pluginId)}/v1/${encodeURIComponent(link.routeId)}${qs}`, {
     cache: "no-store",
   });
 }
