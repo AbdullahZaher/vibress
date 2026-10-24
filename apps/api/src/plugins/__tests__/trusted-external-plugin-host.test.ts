@@ -194,6 +194,18 @@ describe("TrustedExternalPluginHost", () => {
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0], publicReadModels: ["courses", "courses"] }],
     })).toThrow(/allowlist/);
+    const indexed = { ...model, indexedTextFields: ["title"] };
+    expect(parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0], storageModels: [indexed] }],
+    }).get(privilegedManifest.id)?.storageModels).toEqual([indexed]);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0],
+        storageModels: [{ ...model, indexedTextFields: ["missing"] }] }],
+    })).toThrow(/index/);
+    expect(() => parseTrustedPluginLockfile({
+      ...approved, plugins: [{ ...approved.plugins[0],
+        storageModels: [{ ...model, indexedTextFields: ["title", "title"] }] }],
+    })).toThrow(/index/);
     await expect(host.getApprovedStorageModels(plugin())).rejects.toThrow(/operator-approved storage manifest/);
     expect(() => parseTrustedPluginLockfile({
       ...approved, plugins: [{ ...approved.plugins[0],
