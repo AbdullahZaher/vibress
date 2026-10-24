@@ -824,19 +824,12 @@ export class PluginsService {
       }
       if (expectedReleaseId !== undefined) {
         const installed = await this.pluginRepo.findByManifestId(manifestId);
-        if (installed) {
-          const changes = installed.version !== approved.version ||
-            installed.name !== approved.name ||
-            installed.description !== (approved.description ?? null) ||
-            installed.entrypoint !== approved.entrypoint ||
-            installed.vibressApiVersion !== approved.vibressApiVersion ||
-            !isDeepStrictEqual(installed.capabilities, approved.capabilities) ||
-            !isDeepStrictEqual(installed.hooks, approved.hooks ?? []) ||
-            !isDeepStrictEqual(installed.settingsSchema, approved.settingsSchema ?? {});
-          if (changes && !acknowledgeUpgrade) {
-            throw new PluginDomainError("PLUGIN_UPGRADE_REVIEW_REQUIRED",
-              "Review release and capability changes before updating");
-          }
+        if (installed && !acknowledgeUpgrade) {
+          // Persisted v1 plugin rows have no artifact digest. A same-version
+          // replacement could therefore change executable bytes invisibly;
+          // treat EVERY pinned re-registration as an operator-reviewed update.
+          throw new PluginDomainError("PLUGIN_UPGRADE_REVIEW_REQUIRED",
+            "Review release and capability changes before updating");
         }
       }
       await this.host.verifyOperatorRegistration?.();
