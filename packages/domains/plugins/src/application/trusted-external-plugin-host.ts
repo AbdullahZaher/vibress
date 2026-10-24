@@ -253,7 +253,15 @@ export class TrustedExternalPluginHost {
       await readTrustedPluginLockfileWithVerification(lockfile);
     return [...parseTrustedPluginLockfile(data).values()].map((approved) => {
       const release = approved.release;
-      const approvalId = `${approved.manifest.id}@${approved.manifest.version}:${approved.sha256}`;
+      // Bind the operator's *entire permission-bearing approval*, not only
+      // executable ESM. Same bytes may have different storage read allowlists,
+      // approved Admin assets, migration plans or capabilities.
+      const approvalDigest = createHash("sha256").update(JSON.stringify([
+        approved.manifest, approved.sha256, approved.storageModels,
+        approved.publicReadModels ?? [], approved.memberReadModels ?? [],
+        approved.adminUiAssets, approved.release ?? null,
+      ])).digest("hex");
+      const approvalId = `${approved.manifest.id}@${approved.manifest.version}:${approvalDigest}`;
       return {
         manifest: approved.manifest, signatureVerified,
         ...(APPROVAL_ID.test(approvalId) ? { approvalId } : {}),

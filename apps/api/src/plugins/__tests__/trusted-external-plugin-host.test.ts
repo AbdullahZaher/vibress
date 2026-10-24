@@ -112,9 +112,9 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([
       { manifest, signatureVerified: false,
-        approvalId: `${manifest.id}@${manifest.version}:${createHash("sha256")
-          .update(await readFile(f.moduleFile)).digest("hex")}` },
+        approvalId: expect.stringMatching(/^test-plugin@1\.0\.0:[a-f0-9]{64}$/) },
     ]);
+    const initialApprovalId = (await host.listTrustedCatalog())[0]?.approvalId;
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
     const keyPath = path.join(f.dir, "operator.pub");
     const signaturePath = path.join(f.dir, "operator.sig");
@@ -124,9 +124,7 @@ describe("TrustedExternalPluginHost", () => {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", keyPath);
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", signaturePath);
     await expect(host.listTrustedCatalog()).resolves.toEqual([
-      { manifest, signatureVerified: true,
-        approvalId: `${manifest.id}@${manifest.version}:${createHash("sha256")
-          .update(await readFile(f.moduleFile)).digest("hex")}` },
+      { manifest, signatureVerified: true, approvalId: initialApprovalId },
     ]);
     await writeFile(f.lockfile, (await readFile(f.lockfile, "utf8")) + " ");
     await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
@@ -154,7 +152,7 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([{
       manifest, signatureVerified: false,
-      approvalId: release.releaseId,
+      approvalId: expect.stringMatching(/^test-plugin@1\.0\.0:[a-f0-9]{64}$/),
       release: {
         releaseId: release.releaseId,
         publisher: release.publisher,
@@ -166,6 +164,23 @@ describe("TrustedExternalPluginHost", () => {
     }]);
     expect(parseTrustedPluginLockfile(lock).get(manifest.id)?.release?.releaseId)
       .toBe(release.releaseId);
+    expect((await host.listTrustedCatalog())[0]?.approvalId).not.toBe(release.releaseId);
+  });
+
+  it("invalidates approval identity when reviewed metadata changes but ESM bytes do not", async () => {
+    const f = await fixture();
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    const first = (await host.listTrustedCatalog())[0]?.approvalId;
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    const esmHash = lock.plugins[0].sha256;
+    lock.plugins[0].manifest.description = "Operator revised approved metadata";
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    const second = (await host.listTrustedCatalog())[0]?.approvalId;
+    expect(first).toMatch(/^[a-z0-9-]+@1\.0\.0:[a-f0-9]{64}$/);
+    expect(second).not.toBe(first);
+    expect(lock.plugins[0].sha256).toBe(esmHash);
+    expect((await host.listTrustedCatalog())[0]?.manifest.description)
+      .toBe("Operator revised approved metadata");
   });
 
   it("rejects substituted release identities, ABI, capabilities and unsafe evidence paths", () => {
