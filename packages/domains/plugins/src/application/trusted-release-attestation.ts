@@ -28,7 +28,7 @@ async function readBoundedFile(filePath: string, maxBytes: number): Promise<Buff
     // Expected OS-level rejection of a symlink. Do not leak operator trust
     // paths through raw ELOOP diagnostics; fail closed without following it.
     if (error instanceof Error && "code" in error && error.code === "ELOOP") {
-      throw new Error("Invalid trusted plugin lockfile or attestation file");
+      throw new Error("Invalid trusted plugin lockfile or attestation file", { cause: error });
     }
     throw error;
   }
