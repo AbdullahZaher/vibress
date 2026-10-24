@@ -187,6 +187,14 @@ export const ExtensionPublicProjectionSchema = z.record(
 
 /** The SSR response binds descriptor and scalar projection to one Host
  * publication and one authorized execution. Additive: old v1 APIs remain. */
+/** An authenticated-by-Host publication/locale admission proof which does
+ * not execute the plugin's catalog handler or read plugin storage. Additive
+ * endpoint for detailed extension pages; never a bearer authorization token. */
+export const ExtensionPublicViewIdentitySchema = ExtensionPublicViewDtoSchema.extend({
+  publicationId: z.string().min(1).max(200),
+  locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/),
+}).strict();
+
 export const ExtensionPublicPageResponseSchema = ExtensionPublicViewDtoSchema.extend({
   publicationId: z.string().min(1).max(200),
   /** Selected from the publication's enabled locale policy at request time. */
