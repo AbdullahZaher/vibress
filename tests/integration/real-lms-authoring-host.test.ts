@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -607,6 +608,44 @@ describe("LMS-104: Production-Quality Public Course Catalog, Protected Lessons &
     expect(siteBCat.data.outcome).toBe("empty");
     expect(siteBCat.data.total).toBe(0);
   });
+
+  it("upgrades a populated LMS model with verified concurrent status index maintenance", async () => {
+    const db = getDb();
+    const [model] = await db.select().from(pluginPhysicalModels)
+      .where(eq(pluginPhysicalModels.pluginId, registeredPluginId));
+    const course = model?.modelKey === "courses"
+      ? model
+      : (await db.select().from(pluginPhysicalModels)
+          .where(eq(pluginPhysicalModels.pluginId, registeredPluginId)))
+        .find((item) => item.modelKey === "courses");
+    expect(course).toBeDefined();
+    if (!course) throw new Error("Missing operator-owned course model");
+    const index = course.tableName + "_i_" +
+      createHash("sha256").update("status").digest("hex").slice(0, 12);
+    // Disposable DB only. Simulates an existing populated install which was
+    // created before indexedTextFields became an operator-approved extension.
+    await getDbPool().query(`DROP INDEX IF EXISTS "${index}"`);
+    const countBefore = await getDbPool().query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM "${course.tableName}"`,
+    );
+    expect(Number(countBefore.rows[0]?.count)).toBeGreaterThan(0);
+    execFileSync("pnpm", ["exec", "tsx",
+      "scripts/plugins/ensure-approved-text-indexes.ts", planPath, "--apply"], {
+      cwd: process.cwd(), env: process.env, timeout: 60000,
+      stdio: "pipe",
+    });
+    const checked = await getDbPool().query<{ indisvalid: boolean }>(
+      `SELECT idx.indisvalid FROM pg_index idx
+       JOIN pg_class relation ON relation.oid = idx.indexrelid
+       WHERE relation.relname = $1`,
+      [index],
+    );
+    expect(checked.rows).toEqual([{ indisvalid: true }]);
+    const countAfter = await getDbPool().query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM "${course.tableName}"`,
+    );
+    expect(countAfter.rows).toEqual(countBefore.rows);
+  }, 90000);
 
   it("Step 6: verifies Member enrollment, protected lesson access, completion, and progress", async () => {
     const siteA = `http://${domainA}:${serverPort}`;
