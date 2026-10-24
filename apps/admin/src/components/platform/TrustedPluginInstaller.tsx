@@ -44,7 +44,7 @@ export function TrustedPluginInstaller({
   const available = approved.filter((item) => !installedIds.includes(item.id));
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
-    if (!selected || !selected.capabilities || !acknowledged || loading || submitting || registeringRef.current) return;
+    if (!selected || !Array.isArray(selected.capabilities) || !acknowledged || loading || submitting || registeringRef.current) return;
     registeringRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -106,7 +106,7 @@ export function TrustedPluginInstaller({
                 {item.description && <span className="block text-xs text-muted-foreground" dir="auto">{item.description}</span>}
                 <span className="block text-xs text-muted-foreground">{tr("Requested capabilities")}</span>
                 <span className="block text-xs break-words" dir="auto">
-                  {item.capabilities === undefined
+                  {!Array.isArray(item.capabilities)
                     ? tr("Capabilities unavailable: registration requires a newer server.")
                     : item.capabilities.length > 0 ? item.capabilities.join(", ") : tr("None")}
                 </span>
@@ -136,7 +136,7 @@ export function TrustedPluginInstaller({
               {tr("Cancel")}
             </Button>
             <Button type="button" onClick={() => { void register(); }}
-              disabled={!selected.capabilities || !acknowledged || submitting}>
+              disabled={!Array.isArray(selected.capabilities) || !acknowledged || submitting}>
               {submitting ? tr("Registering plugin...") : tr("Register trusted plugin")}
             </Button>
           </div>
