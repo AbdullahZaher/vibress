@@ -91,6 +91,7 @@ export function PluginsPage() {
         <div id="trusted-installer">
           <TrustedPluginInstaller
             installedIds={plugins.map((plugin) => plugin.manifestId)}
+            installedPlugins={plugins}
             onRegistered={refresh}
             onClose={closeInstaller}
           />

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   type AdminOperatorPlugin,
+  type AdminPlugin,
   listOperatorTrustedPluginsApi,
   registerOperatorTrustedPluginApi,
 } from "../../lib/api";
@@ -14,10 +15,12 @@ import { Button } from "../ui/button";
  */
 export function TrustedPluginInstaller({
   installedIds,
+  installedPlugins = [],
   onRegistered,
   onClose,
 }: {
   installedIds: readonly string[];
+  installedPlugins?: readonly AdminPlugin[];
   onRegistered: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -41,16 +44,25 @@ export function TrustedPluginInstaller({
     return () => { canceled = true; };
   }, [tr]);
 
-  const available = approved.filter((item) => !installedIds.includes(item.id));
+  const available = approved.filter((item) => {
+    if (!installedIds.includes(item.id)) return true;
+    // Existing installations are offered only when the release version advances.
+    // Same-version artifact replacement requires separate operator handling.
+    const installed = installedPlugins.find((plugin) => plugin.manifestId === item.id);
+    return Boolean(installed && installed.version !== item.version);
+  });
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
     if (!selected || !selected.approvalId || !Array.isArray(selected.capabilities) ||
-        !acknowledged || loading || submitting || registeringRef.current) return;
+        !acknowledged || loading || submitting || registeringRef.current ||
+        (selected.upgradeReview?.installedStatus === "active")) return;
     registeringRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
-      await registerOperatorTrustedPluginApi(selected.id, selected.approvalId);
+      await registerOperatorTrustedPluginApi(
+        selected.id, selected.approvalId, selected.upgradeReview?.metadataChanged === true,
+      );
       await onRegistered();
       onClose();
     } catch {
@@ -107,6 +119,26 @@ export function TrustedPluginInstaller({
                   {tr("Operator approved — integrity verification required before registration")}
                 </span>
                 <span className="block text-xs text-muted-foreground break-all" dir="auto">{item.id} · {item.version}</span>
+                {item.upgradeReview && (
+                  <span className="block text-xs text-muted-foreground space-y-1">
+                    <span className="block" dir="auto">
+                      {tr("Installed version")}: {item.upgradeReview.installedVersion}
+                      {" → "}
+                      {item.version}
+                    </span>
+                    <span className="block" dir="auto">
+                      {tr("Added capabilities")}: {item.upgradeReview.addedCapabilities.join(", ") || tr("None")}
+                    </span>
+                    <span className="block" dir="auto">
+                      {tr("Removed capabilities")}: {item.upgradeReview.removedCapabilities.join(", ") || tr("None")}
+                    </span>
+                    {item.upgradeReview.installedStatus === "active" && (
+                      <span className="block text-destructive">
+                        {tr("Deactivate globally before registering an updated release.")}
+                      </span>
+                    )}
+                  </span>
+                )}
                 {!item.approvalId && (
                   <span className="block text-xs text-destructive">
                     {tr("Immutable release identity unavailable: registration requires an updated server.")}
@@ -159,15 +191,19 @@ export function TrustedPluginInstaller({
             <input type="checkbox" checked={acknowledged}
               onChange={(event) => setAcknowledged(event.target.checked)}
               disabled={submitting} className="mt-0.5 shrink-0 accent-primary" />
-            <span>{tr("I have reviewed the approved plugin and its requested capabilities. Installation and schema migrations remain operator-controlled.")}</span>
+            <span>{selected.upgradeReview?.metadataChanged
+              ? tr("I have reviewed the version, capability differences and migration implications. Installation and schema migrations remain operator-controlled.")
+              : tr("I have reviewed the approved plugin and its requested capabilities. Installation and schema migrations remain operator-controlled.")}</span>
           </label>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               {tr("Cancel")}
             </Button>
             <Button type="button" onClick={() => { void register(); }}
-              disabled={!selected.approvalId || !Array.isArray(selected.capabilities) || !acknowledged || submitting}>
-              {submitting ? tr("Registering plugin...") : tr("Register trusted plugin")}
+              disabled={!selected.approvalId || !Array.isArray(selected.capabilities) || !acknowledged ||
+                selected.upgradeReview?.installedStatus === "active" || submitting}>
+              {submitting ? tr("Registering plugin...") :
+                selected.upgradeReview ? tr("Register reviewed update") : tr("Register trusted plugin")}
             </Button>
           </div>
         </div>
