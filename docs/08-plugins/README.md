@@ -12,6 +12,10 @@ The [Plugin Platform Production Completion Plan](plugin-platform-production-plan
 
 The optional [v1 trusted release catalog metadata](operator-trusted-release-catalog.md) extends each entry in the existing operator lockfile without altering legacy entries. A release includes a digest-bound identity, publisher, exactly supported Host/SDK ABI, capability snapshot, and optional SHA-256-pinned local SBOM/provenance/migration-plan references. The preflight verifies their bytes before rollout; the metadata does **not** install code or approve migrations by itself.
 
+## P0-4 installation lifecycle — initial increment
+
+The Admin plugin listing now distinguishes registered/inactive/active, publication enablement, transitions and failures. A Host ABI mismatch is shown explicitly; failed plugins display operator-only maintenance recovery guidance instead of an unsafe one-click reset. This does **not** implement automated upgrade, uninstall/purge or fleet recovery, and still requires compatibility and accessibility testing.
+
 ## P0-3 operator staging and admission
 
 The [secure operator release admission runbook](secure-operator-release-admission.md) describes the new signed, evidence-backed staging command, per-replica byte-identical receipts, isolated dependency scanning and migration-plan preflight. This path **does not** enable ZIP/GitHub installation from Studio, automatically install packages, run SQL, or make trusted Node modules safe for untrusted publishers.

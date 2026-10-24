@@ -51,6 +51,8 @@ The existing `schemaVersion: 1` lockfile accepts optional `release` metadata on 
 
 Follow [Secure Operator Release Admission](secure-operator-release-admission.md) after staging and source/dependency scanning and **before** global registration or activation. Admission requires a verified detached Ed25519 signature, a versioned release metadata record for every entry, pinned SBOM/provenance files and exact release-bound migration plans for declared physical storage models. It emits a path-free `lockfileSha256` receipt to compare independently on every API and Worker replica. A mismatched or unverified replica must not serve plugin traffic.
 
+For **new** trusted-plugin releases, opt into `compose.plugins.strict.yml` after `compose.plugins.yml` and supply the operator-approved SHA-256 of both the signed lockfile and public-key SPKI DER (see [P0-3 workflow](secure-operator-release-admission.md)). The existing Compose override stays backward-compatible for previous operator-trusted releases. Both runtime startup paths reject mismatches before plugin admission; old signed deployments are not silently upgraded to the strict contract.
+
 The production API and Worker bundles each contain `dist/plugins-admit.js`. The existing `dist/plugins-preflight.js` remains valid for old operator-trusted installations. Neither executable downloads/installs plugins, executes module code or runs database migrations.
 
 ### Optional signed release approval (EXT-404, additive)

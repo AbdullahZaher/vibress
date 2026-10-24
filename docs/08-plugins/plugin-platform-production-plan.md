@@ -71,6 +71,6 @@ Use [external SDK release gates](external-sdk-release-gates.md) as the authorita
 | Baseline and risk review | Completed for planning | 2026-10-24 source review on `main` |
 | P0-1 accurate approved-release catalog | Implemented on branch; not release-certified | `feat/plugin-platform-trust-catalog-20261024` (signed/legacy metadata, capability display, regression tests; validation pending) |
 | P0-2 versioned release metadata | Implemented on branch; validation pending | Operator-pinned metadata + preflight evidence checks; no direct installation or execution |
-| P0-3 secure operator staging/admission | Implemented on branch; validation pending | Signed admission receipt and strict evidence/migration check, local replica equivalence gate; no distribution orchestration |
-| P0-4 installation lifecycle UX | Planned | No implementation claim |
+| P0-3 secure operator staging/admission | Security hardening implemented on branch; validation pending | Strict opt-in API/Worker startup gate, pinned key and release digest, signed reviewed evidence, migration binding, safe file reads; no fleet automation |
+| P0-4 installation lifecycle UX | First increment implemented on branch; validation pending | Accurate registered/active/publication states, incompatibility, transitions, failed recovery guidance and disabled unsafe actions; catalog integration unfinished |
 | Phase 2 through Phase 5 | Planned | Requires separate reviewed increments |
