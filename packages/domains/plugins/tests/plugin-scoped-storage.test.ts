@@ -167,6 +167,23 @@ describe("EXT-203B2 host-bound typed publication storage", () => {
       await expect(a.list("courses", 51)).rejects.toMatchObject({
         code: "PLUGIN_STORAGE_INVALID",
       });
+      // Query only approved text fields in this publication. The repository
+      // must enforce tenant boundaries and parameterize value/field separately.
+      expect((await a.listByText("courses", "title", "Updated", 20)).items
+        .map((entry) => entry.id)).toEqual(["same-id"]);
+      expect((await b.listByText("courses", "title", "Updated", 20)).items).toEqual([]);
+      expect((await other.listByText("courses", "title", "Updated", 20)).items).toEqual([]);
+      await expect(a.listByText("courses", "seats", "10")).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      await expect(a.listByText("courses", "publication_id", "pub-b")).rejects.toMatchObject({
+        code: "PLUGIN_STORAGE_INVALID",
+      });
+      await expect(a.listByText("courses", "title\" OR 1=1 --", "Updated")).rejects
+        .toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+      await expect(a.listByText("courses", "title", "Updated", 51)).rejects
+        .toMatchObject({ code: "PLUGIN_STORAGE_INVALID" });
+
 
       // A hostile search_path can expose an unowned same-named relation.
       // The adapter must read the physical table in the owner's schema.
