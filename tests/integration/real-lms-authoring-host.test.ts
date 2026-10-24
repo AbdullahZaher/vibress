@@ -258,6 +258,21 @@ describe("LMS-104: Production-Quality Public Course Catalog, Protected Lessons &
     expect(keys).toContain("enrollments");
     expect(keys).toContain("completions");
 
+    // Newly installed signed course models have a publication-scoped status
+    // index. On existing populated upgrades the operator installs it with the
+    // separate concurrent-index maintenance command.
+    const courseModel = models.find((item) => item.modelKey === "courses");
+    expect(courseModel).toBeDefined();
+    const indexDigest = createHash("sha256").update("status").digest("hex").slice(0, 12);
+    const indexName = `${courseModel?.tableName}_i_${indexDigest}`;
+    const indexes = await getDbPool().query<{ indisvalid: boolean }>(
+      `SELECT pg_index.indisvalid
+       FROM pg_index JOIN pg_class cls ON cls.oid = pg_index.indexrelid
+       WHERE cls.relname = $1`,
+      [indexName],
+    );
+    expect(indexes.rows).toEqual([{ indisvalid: true }]);
+
     // Activate plugin
     const activated = await pluginsService.activatePlugin(registeredPluginId, "operator-test");
     expect(activated.status).toBe("active");
