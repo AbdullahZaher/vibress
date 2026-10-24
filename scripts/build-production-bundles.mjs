@@ -44,6 +44,18 @@ async function buildAll() {
       entryPoints: ['scripts/plugins/preflight.ts'],
       outfile: 'apps/api/dist/plugins-preflight.js',
     }),
+    // Offline signed operator release admission on API and Worker replicas.
+    // No pnpm, tsx, DB connection or plugin import required at deployment time.
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['scripts/plugins/admit.ts'],
+      outfile: 'apps/api/dist/plugins-admit.js',
+    }),
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['scripts/plugins/admit.ts'],
+      outfile: 'apps/worker/dist/plugins-admit.js',
+    }),
     // 2. Worker entrypoint
     esbuild.build({
       ...COMMON_CONFIG,
