@@ -100,6 +100,39 @@ describe("PluginsService", () => {
     expect(catalogHost.loadModule).not.toHaveBeenCalled();
   });
 
+  it("passes only operator-owned release summary to catalog clients", async () => {
+    const hash = "a".repeat(64);
+    const release = {
+      releaseId: `test-plugin@1.0.0:${hash}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      artifactSha256: hash,
+      compatibility: {
+        minVibressApiVersion: SDK_VERSION,
+        maxVibressApiVersion: SDK_VERSION,
+        sdkAbiVersion: SDK_VERSION,
+      },
+      hasSbom: false, hasProvenance: true,
+      migrationPlanIds: ["0001_initial"],
+    };
+    const catalogHost = {
+      loadModule: vi.fn(async () => null),
+      getOperatorManifestCatalog: vi.fn(async () => [
+        { manifest: validManifest, signatureVerified: true, release },
+      ]),
+    };
+    const service = makeService({ host: catalogHost });
+    await expect(service.listOperatorManifests()).resolves.toEqual([{
+      id: validManifest.id,
+      name: validManifest.name,
+      version: validManifest.version,
+      description: null,
+      capabilities: validManifest.capabilities,
+      signatureVerified: true,
+      release,
+    }]);
+    expect(catalogHost.loadModule).not.toHaveBeenCalled();
+  });
+
   it("never invents signature verification for legacy PluginHost consumers", async () => {
     const legacyHost = {
       loadModule: vi.fn(async () => null),

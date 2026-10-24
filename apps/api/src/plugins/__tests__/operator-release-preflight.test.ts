@@ -51,6 +51,54 @@ describe("EXT-404 operator package integrity preflight", () => {
     }]);
   });
 
+  it("verifies optional release evidence without evaluating it or changing v1 result", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const entry = lock.plugins[0];
+    const evidence = {
+      sbom: '{"packages":[]}',
+      provenance: '{"builder":"local"}',
+      plan: '{"migration":"reviewed"}',
+    };
+    fs.mkdirSync(path.join(f.dir, "migrations"));
+    fs.writeFileSync(path.join(f.dir, "sbom.json"), evidence.sbom);
+    fs.writeFileSync(path.join(f.dir, "provenance.json"), evidence.provenance);
+    fs.writeFileSync(path.join(f.dir, "migrations", "plan.json"), evidence.plan);
+    entry.release = {
+      schemaVersion: 1,
+      releaseId: `hello-public@1.0.0:${entry.sha256}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0",
+        maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: entry.manifest.capabilities,
+      sbom: { path: "sbom.json", sha256: digest(evidence.sbom) },
+      provenance: { path: "provenance.json", sha256: digest(evidence.provenance) },
+      migrationPlans: [{
+        id: "0001_initial", path: "migrations/plan.json", sha256: digest(evidence.plan),
+      }],
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    const expected = [{ pluginId: "hello-public", version: "1.0.0",
+      sha256: entry.sha256, adminViewCount: 1 }];
+    await expect(verifyTrustedPluginRelease(f.lock)).resolves.toEqual(expected);
+    fs.appendFileSync(path.join(f.dir, "sbom.json"), " ");
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+    fs.writeFileSync(path.join(f.dir, "sbom.json"), evidence.sbom);
+    fs.unlinkSync(path.join(f.dir, "provenance.json"));
+    fs.symlinkSync(path.join(f.dir, "sbom.json"), path.join(f.dir, "provenance.json"));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("INVALID_APPROVED_ARTIFACT");
+    fs.unlinkSync(path.join(f.dir, "provenance.json"));
+    fs.writeFileSync(path.join(f.dir, "provenance.json"), evidence.provenance);
+    fs.appendFileSync(path.join(f.dir, "migrations", "plan.json"), " ");
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+  });
+
   it("rejects tampered bundle and Admin asset bytes", async () => {
     const f = fixture();
     fs.appendFileSync(f.entry, "\n// modified");

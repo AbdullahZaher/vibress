@@ -87,6 +87,33 @@ describe("Operator-approved Add Plugin", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("shows only the safe operator release summary and keeps acknowledgement required", async () => {
+    const hash = "a".repeat(64);
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [{ ...plugin, release: {
+        releaseId: `${plugin.id}@1.0.0:${hash}`,
+        publisher: { id: "reviewed", name: "Trusted Publisher" },
+        artifactSha256: hash,
+        compatibility: {
+          minVibressApiVersion: "1.0.0",
+          maxVibressApiVersion: "1.0.0",
+          sdkAbiVersion: "1.0.0",
+        },
+        hasSbom: true, hasProvenance: true, migrationPlanIds: ["0001_initial"],
+      } }],
+    });
+    await render();
+    expect(container.textContent).toContain("Trusted Publisher");
+    expect(container.textContent).toContain("Host ABI");
+    expect(container.textContent).toContain("SBOM pinned");
+    expect(container.textContent).toContain("Migration plans");
+    expect(container.textContent).not.toContain("/etc/vibress");
+    await change(container.querySelector('input[type="radio"]') as HTMLInputElement);
+    const confirm = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("Register trusted plugin")) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+  });
+
   it("warns operators when approved releases are unsigned legacy lockfiles", async () => {
     vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
       plugins: [{ ...plugin, signatureVerified: false }],

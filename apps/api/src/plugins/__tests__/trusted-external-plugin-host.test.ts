@@ -73,6 +73,25 @@ async function approvedAdminUiFixture() {
   };
 }
 
+
+function releaseMetadata(hash: string) {
+  return {
+    schemaVersion: 1,
+    releaseId: `${manifest.id}@${manifest.version}:${hash}`,
+    publisher: { id: "reviewed-publisher", name: "Reviewed Publisher" },
+    compatibility: {
+      minVibressApiVersion: SDK_VERSION,
+      maxVibressApiVersion: SDK_VERSION,
+      sdkAbiVersion: SDK_VERSION,
+    },
+    capabilities: [...manifest.capabilities],
+    sbom: { path: "sbom.json", sha256: "a".repeat(64) },
+    provenance: { path: "provenance.json", sha256: "b".repeat(64) },
+    migrationPlans: [{ id: "0001_initial", path: "migrations/initial.json",
+      sha256: "c".repeat(64) }],
+  };
+}
+
 describe("TrustedExternalPluginHost", () => {
   it("preserves bundled-only defaults when opt-in is absent", async () => {
     expect(await new TrustedExternalPluginHost("").loadModule(plugin())).toBeNull();
@@ -97,6 +116,56 @@ describe("TrustedExternalPluginHost", () => {
     ]);
     await writeFile(f.lockfile, (await readFile(f.lockfile, "utf8")) + " ");
     await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
+  });
+
+  it("projects a versioned SHA-bound operator release without importing executable code", async () => {
+    const f = await fixture();
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    const hash: string = lock.plugins[0].sha256;
+    const release = releaseMetadata(hash);
+    lock.plugins[0].release = release;
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    const host = new TrustedExternalPluginHost(f.lockfile);
+    await expect(host.listTrustedCatalog()).resolves.toEqual([{
+      manifest, signatureVerified: false,
+      release: {
+        releaseId: release.releaseId,
+        publisher: release.publisher,
+        artifactSha256: hash,
+        compatibility: release.compatibility,
+        hasSbom: true, hasProvenance: true,
+        migrationPlanIds: ["0001_initial"],
+      },
+    }]);
+    expect(parseTrustedPluginLockfile(lock).get(manifest.id)?.release?.releaseId)
+      .toBe(release.releaseId);
+  });
+
+  it("rejects substituted release identities, ABI, capabilities and unsafe evidence paths", () => {
+    const sha256 = "a".repeat(64);
+    const entry = { manifest, sha256, release: releaseMetadata(sha256) };
+    const valid = { schemaVersion: 1, plugins: [entry] };
+    expect(() => parseTrustedPluginLockfile(valid)).not.toThrow();
+    const invalid = [
+      { ...entry.release, releaseId: "other@1.0.0:" + sha256 },
+      { ...entry.release, compatibility: { ...entry.release.compatibility,
+        sdkAbiVersion: "2.0.0" } },
+      { ...entry.release, compatibility: { ...entry.release.compatibility,
+        maxVibressApiVersion: "2.0.0" } },
+      { ...entry.release, capabilities: ["content.write"] },
+      { ...entry.release, sbom: { path: "../leak.json", sha256 } },
+      { ...entry.release, provenance: { path: "https://site/sbom.json", sha256 } },
+      { ...entry.release, migrationPlans: [
+        { id: "0001_initial", path: "a.json", sha256 },
+        { id: "0001_initial", path: "b.json", sha256 },
+      ] },
+      { ...entry.release, provenance: { path: "sbom.json", sha256 } },
+    ];
+    for (const release of invalid) {
+      expect(() => parseTrustedPluginLockfile({
+        schemaVersion: 1, plugins: [{ ...entry, release }],
+      })).toThrow();
+    }
   });
 
   it("loads a pinned operator-controlled ESM module", async () => {
