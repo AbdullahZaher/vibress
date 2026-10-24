@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getLocalePrefix } from "@vibress/i18n";
+import { getLocalePrefix, supportsPublishedExtensionLocale } from "@vibress/i18n";
 import type { ThemeSiteSettings } from "./site-settings";
 import type { PublicExtensionPage } from "./public-extension-client";
 import { isValidPublicHost } from "./public-extension-client";
@@ -54,7 +54,7 @@ export function publicExtensionMetadata(
 ): Metadata {
   if (!matchesPublicExtensionPublication(page, site) ||
       (page.locale && page.locale !== site.locale) ||
-      (page.publishedLocales && !page.publishedLocales.includes(site.locale))) {
+      !supportsPublishedExtensionLocale(page.publishedLocales, site.locale)) {
     return { robots: { index: false, follow: false } };
   }
   const origin = trustedExtensionOrigin(host, site.url, production);
@@ -64,8 +64,8 @@ export function publicExtensionMetadata(
   );
   const title = localizedExtensionTitle(page.title, site.locale);
   const canonical = `${origin}${localePrefix}/extensions/${page.pluginId}/${page.viewId}`;
-  const published = page.publishedLocales?.filter((locale) =>
-    site.enabledLocales?.includes(locale)) ?? [];
+  const published = site.enabledLocales?.filter((locale) =>
+    supportsPublishedExtensionLocale(page.publishedLocales, locale)) ?? [];
   const alternates: Record<string, string> = {};
   if (published.length > 1 && published.includes(site.primaryLocale || site.locale)) {
     for (const locale of published) {
