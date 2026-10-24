@@ -14,11 +14,15 @@ The optional [v1 trusted release catalog metadata](operator-trusted-release-cata
 
 ## P0-4 installation lifecycle — initial increment
 
-The Admin plugin listing now distinguishes registered/inactive/active, publication enablement, transitions and failures. A Host ABI mismatch is shown explicitly; failed plugins display operator-only maintenance recovery guidance instead of an unsafe one-click reset. This does **not** implement automated upgrade, uninstall/purge or fleet recovery, and still requires compatibility and accessibility testing.
+The Admin plugin listing now distinguishes registered/inactive/active, **stored site preferences versus effective activation**, transitions and failures. A Host ABI mismatch is shown explicitly; a failed activation offers a guarded retry after operator diagnosis, while a genuinely stuck transition requires isolated maintenance recovery. The operator catalog binds registration to a SHA-256 approval identity, preflights files at registration, and previews version/capability differences before an inactive-only update. **This is not an automatic hot update**: drain/deactivate the old version before replacing its signed lockfile and deploy the new immutable release through the operator runbook. Uninstall/purge, synchronized fleet update/rollback and real untrusted-plugin containment remain unimplemented.
 
 ## P0-3 operator staging and admission
 
 The [secure operator release admission runbook](secure-operator-release-admission.md) describes the new signed, evidence-backed staging command, per-replica byte-identical receipts, isolated dependency scanning and migration-plan preflight. This path **does not** enable ZIP/GitHub installation from Studio, automatically install packages, run SQL, or make trusted Node modules safe for untrusted publishers.
+
+## Security remediation status (2026-10-24)
+
+See [the scoped security closure register](plugin-security-closure-20261024.md) for verified code changes and remaining required execution checks. No unit tests, typecheck, Docker drills or CI runs have been executed for this branch at the time of the register. Do not infer production certification from code/test additions.
 
 ## Architecture decision
 
