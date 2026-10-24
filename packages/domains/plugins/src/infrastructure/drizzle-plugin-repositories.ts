@@ -123,6 +123,29 @@ export class DrizzlePluginRepository implements PluginRepository {
     return this.mapToDomain(row);
   }
 
+  async tryUpdateMetadataIfInactive(
+    id: string,
+    data: Partial<RegisterPluginData>,
+  ): Promise<Plugin | null> {
+    // Restrict metadata mutation to safe lifecycle statuses at the database
+    // write boundary. An activation claimed on another replica wins the race.
+    const payload: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.version !== undefined) payload.version = data.version;
+    if (data.vibressApiVersion !== undefined) payload.vibressApiVersion = data.vibressApiVersion;
+    if (data.description !== undefined) payload.description = data.description;
+    if (data.entrypoint !== undefined) payload.entrypoint = data.entrypoint;
+    if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
+    if (data.hooks !== undefined) payload.hooks = data.hooks;
+    if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
+    const [row] = await getDb().update(plugins)
+      .set(payload)
+      .where(and(eq(plugins.id, id),
+        inArray(plugins.status, ["registered", "inactive", "error"])))
+      .returning();
+    return row ? this.mapToDomain(row) : null;
+  }
+
   async list(): Promise<Plugin[]> {
     const db = getDb();
     const rows = await db.select().from(plugins).orderBy(plugins.createdAt);

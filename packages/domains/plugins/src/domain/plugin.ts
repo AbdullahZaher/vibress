@@ -60,6 +60,11 @@ export interface PluginRepository {
     id: string,
     data: Partial<RegisterPluginData>,
   ): Promise<Plugin>;
+  /** New pinned updates must be atomic against concurrent activation. */
+  tryUpdateMetadataIfInactive?(
+    id: string,
+    data: Partial<RegisterPluginData>,
+  ): Promise<Plugin | null>;
   list(): Promise<Plugin[]>;
   delete(id: string): Promise<void>;
   /** Prevent accidental uninstall after a forward-only plugin data migration. */

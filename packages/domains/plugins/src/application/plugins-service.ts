@@ -239,6 +239,14 @@ export class PluginsService {
           "PLUGIN_TRANSITION_IN_PROGRESS", "A plugin lifecycle operation is in progress",
         );
       }
+      // Even a same-version digest swap must not be registered while an old
+      // module is active. Persisted v1 rows do not store the artifact digest.
+      if (expectedReleaseId !== undefined && existing.status === "active") {
+        throw new PluginDomainError(
+          "PLUGIN_UPDATE_REQUIRES_DEACTIVATION",
+          "Deactivate the external plugin before registering an updated release",
+        );
+      }
       // An external code/version change must never bypass deactivate/activate.
       if (this.host.requiresPublicationEnablement?.(existing) === true) {
         const newSchema = manifest.settingsSchema ?? {};
@@ -270,8 +278,9 @@ export class PluginsService {
           );
         }
       }
-      // Update metadata (re-registration)
-      const updated = await this.pluginRepo.updateMetadata(existing.id, {
+      // Update metadata (re-registration). Pinned external upgrades need a
+      // DB-atomic status guard so simultaneous activation cannot race the write.
+      const metadata = {
         name: manifest.name,
         version: manifest.version,
         vibressApiVersion: manifest.vibressApiVersion,
@@ -280,7 +289,18 @@ export class PluginsService {
         capabilities: manifest.capabilities,
         hooks: manifest.hooks || [],
         settingsSchema: manifest.settingsSchema,
-      });
+      };
+      let updated: Plugin | null;
+      if (expectedReleaseId !== undefined &&
+          this.host.requiresPublicationEnablement?.(existing) === true) {
+        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata) ?? null;
+        if (!updated) {
+          throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
+            "Plugin activated or changed during release admission");
+        }
+      } else {
+        updated = await this.pluginRepo.updateMetadata(existing.id, metadata);
+      }
       domainEvents.emit("plugin.updated", { pluginId: updated.id, actorId });
       return updated;
     }
