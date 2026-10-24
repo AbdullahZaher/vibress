@@ -263,7 +263,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
         } else if ((audience === "member" && req.member && req.member.publicationId === publicationId) ||
                    audience === "public") {
           const binding = await pluginsService.resolveExtensionStorageBinding(
-            params.data.pluginId, publicationId, "extension.storage.read",
+            params.data.pluginId, publicationId, "extension.storage.read", audience,
           ).catch(() => null);
           if (binding) {
             const actorUserId = audience === "member" && req.member ? req.member.id : "anonymous";
