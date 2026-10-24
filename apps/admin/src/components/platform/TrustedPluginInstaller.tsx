@@ -110,6 +110,27 @@ export function TrustedPluginInstaller({
                     ? tr("Capabilities unavailable: registration requires a newer server.")
                     : item.capabilities.length > 0 ? item.capabilities.join(", ") : tr("None")}
                 </span>
+                {item.release && (
+                  <span className="block text-xs text-muted-foreground space-y-1">
+                    <span className="block" dir="auto">
+                      {tr("Publisher")}: {item.release.publisher.name}
+                    </span>
+                    <span className="block break-all" dir="ltr">
+                      {tr("Release ID")}: {item.release.releaseId}
+                    </span>
+                    <span className="block" dir="auto">
+                      {tr("Host ABI")}: {item.release.compatibility.sdkAbiVersion}
+                    </span>
+                    <span className="block">
+                      {tr("SBOM pinned")}: {item.release.hasSbom ? tr("Yes") : tr("No")}
+                      {" · "}
+                      {tr("Provenance pinned")}: {item.release.hasProvenance ? tr("Yes") : tr("No")}
+                    </span>
+                    <span className="block">
+                      {tr("Migration plans")}: {item.release.migrationPlanIds.length}
+                    </span>
+                  </span>
+                )}
                 <span className="block text-xs text-muted-foreground">
                   {item.signatureVerified === true
                     ? tr("Detached Ed25519 operator approval verified.")

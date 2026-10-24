@@ -309,6 +309,20 @@ export interface AdminOperatorPlugin {
   capabilities?: string[];
   /** Optional for older API servers; true only after detached Ed25519 verification. */
   signatureVerified?: boolean | null;
+  /** Optional read-only release v1 summary; older Host/API versions omit it. */
+  release?: {
+    releaseId: string;
+    publisher: { id: string; name: string };
+    artifactSha256: string;
+    compatibility: {
+      minVibressApiVersion: string;
+      maxVibressApiVersion: string;
+      sdkAbiVersion: string;
+    };
+    hasSbom: boolean;
+    hasProvenance: boolean;
+    migrationPlanIds: string[];
+  };
 }
 
 export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminOperatorPlugin[] }> {

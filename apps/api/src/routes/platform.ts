@@ -25,6 +25,7 @@ import {
   PluginPublicationSettingsUpdateSchema,
   PluginPublicationSettingsResponseSchema,
   OperatorTrustedPluginRegisterSchema,
+  OperatorTrustedPluginCatalogResponseSchema,
   PluginLifecycleRecoverySchema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
@@ -430,7 +431,12 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       try {
         const approved = await pluginsService.listOperatorManifests();
-        return reply.status(200).send({ plugins: approved });
+        const result = OperatorTrustedPluginCatalogResponseSchema.safeParse({ plugins: approved });
+        if (!result.success) {
+          return sendError(reply, "PLUGIN_REGISTRY_UNAVAILABLE",
+            "Trusted plugin registry is unavailable", req.id, 503);
+        }
+        return reply.status(200).send(result.data);
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
           return sendError(reply, err.code, err.message, req.id, 503);
