@@ -74,9 +74,11 @@ describe("EXT-401 publication-scoped durable event worker", () => {
     const expectedReleaseKey = JSON.stringify([
       "plugin-row-a", "1.0.0", "dist/index.mjs", DIGEST,
     ]);
-    await host.loadModule(plugin(), expectedReleaseKey);
-    expect(loadModule).toHaveBeenCalledExactlyOnceWith(plugin(), expectedReleaseKey);
-    expect(host.requiresPublicationEnablement?.(plugin())).toBe(true);
+    const installed = plugin();
+    await host.loadModule(installed, expectedReleaseKey);
+    expect(loadModule).toHaveBeenCalledOnce();
+    expect(loadModule).toHaveBeenCalledWith(installed, expectedReleaseKey);
+    expect(host.requiresPublicationEnablement?.(installed)).toBe(true);
     await expect(host.getOperatorAdminFingerprints?.()).resolves.toEqual(
       new Map([["hello-public", DIGEST]]),
     );
