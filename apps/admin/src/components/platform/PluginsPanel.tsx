@@ -110,7 +110,7 @@ export function PluginsPanel({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy || !globalActive || incompatible}
+                    disabled={busy || (!globalActive && !siteEnabled) || (incompatible && !siteEnabled)}
                     onClick={() => apply(plugin.id, () =>
                       setPluginPublicationStateApi(plugin.id, !siteEnabled))}
                     aria-label={`${siteEnabled ? tr("Disable for this publication") : tr("Enable for this publication")}: ${plugin.name}`}
@@ -123,7 +123,7 @@ export function PluginsPanel({
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy || transitioning || failed || incompatible || (!globalActive && !registered)}
+                    disabled={busy || transitioning || failed || (incompatible && !globalActive) || (!globalActive && !registered)}
                     onClick={() => apply(plugin.id, () =>
                       globalActive ? deactivatePluginApi(plugin.id) : activatePluginApi(plugin.id))}
                     aria-label={`${globalActive ? tr("Deactivate") : tr("Activate")}: ${plugin.name}`}
