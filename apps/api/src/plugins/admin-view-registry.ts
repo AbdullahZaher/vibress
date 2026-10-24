@@ -1,4 +1,4 @@
-import type { PluginModule } from "@vibress/plugin-sdk";
+import type { PluginApiShape, PluginModule } from "@vibress/plugin-sdk";
 import {
   ExtensionAdminNavigationItemSchema,
   ExtensionAdminViewSchema,
@@ -21,7 +21,7 @@ const FORBIDDEN_READ_SELECTORS = new Set([
 ]);
 
 function admittedReadQuery(
-  query: import("@vibress/plugin-sdk").PluginApiShape | undefined,
+  query: PluginApiShape | undefined,
 ): boolean {
   if (!query) return true;
   if (query.required?.length) return false;
