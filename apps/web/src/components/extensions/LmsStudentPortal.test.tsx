@@ -73,7 +73,7 @@ describe("LMS first-party student interaction", () => {
     expect(container.innerHTML).toContain("&lt;script&gt;unsafe&lt;/script&gt;");
 
     await act(async () => {
-      const button = [...container.querySelectorAll("button")]
+      const button = Array.from(container.querySelectorAll("button"))
         .find((item) => item.textContent === "Enroll in course");
       expect(button).toBeDefined();
       button?.click();
@@ -84,7 +84,7 @@ describe("LMS first-party student interaction", () => {
     expect(container.textContent).toContain("0%");
 
     await act(async () => {
-      const button = [...container.querySelectorAll("button")]
+      const button = Array.from(container.querySelectorAll("button"))
         .find((item) => item.textContent === "Mark lesson complete");
       expect(button).toBeDefined();
       button?.click();
