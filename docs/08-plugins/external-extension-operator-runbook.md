@@ -43,6 +43,10 @@ snapshot of the approved bytes, public key and signature separately from the
 database and content backups. Verify the matching snapshot before rolling back.
 The private signing key requires separate secure offline custody.
 
+### Optional versioned trusted release metadata (P0-2)
+
+The existing `schemaVersion: 1` lockfile accepts optional `release` metadata on each entry, documented in [operator-trusted-release-catalog.md](operator-trusted-release-catalog.md). All referenced files remain on operator-owned, read-only mounts. The API's authorized approved-plugin list may show publisher, release identity and available evidence, **not operator filesystem paths**. Preflight checks referenced evidence by SHA-256 and rejects missing, mismatched, symbolic-link or out-of-root files. Migration plan references alone grant no authority to run SQL; the existing explicit migration-plan preflight and operator consent still apply.
+
 ### Optional signed release approval (EXT-404, additive)
 
 For deployments requiring an independently authenticated operator approval,

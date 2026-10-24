@@ -8,6 +8,10 @@ supported for untrusted plugins** or complete for external SDK release.
 
 The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
 
+## P0-2 operator-trusted release catalog
+
+The optional [v1 trusted release catalog metadata](operator-trusted-release-catalog.md) extends each entry in the existing operator lockfile without altering legacy entries. A release includes a digest-bound identity, publisher, exactly supported Host/SDK ABI, capability snapshot, and optional SHA-256-pinned local SBOM/provenance/migration-plan references. The preflight verifies their bytes before rollout; the metadata does **not** install code or approve migrations by itself.
+
 ## Architecture decision
 
 **Approved for implementation direction, not shipped:** [RFC review/approval record](EXTENSION_RFC_APPROVAL.md) and [accepted architecture ADR](../adr/2026-10-19-external-extension-host-vnext.md). Conceptual API examples remain unimplemented; production release and SDK contract freeze require the gates below.
