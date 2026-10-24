@@ -307,6 +307,10 @@ export class PluginsService {
     if (!plugin)
       throw new PluginDomainError("PLUGIN_NOT_FOUND", "Plugin not found");
 
+    if (plugin.vibressApiVersion !== SDK_VERSION) {
+      throw new PluginDomainError("PLUGIN_INCOMPATIBLE_API_VERSION",
+        "Plugin Host API version is incompatible; operator-approved upgrade required");
+    }
     if (plugin.status === "active") return plugin;
     if (plugin.status === "activating" || plugin.status === "deactivating") {
       throw new PluginDomainError(
@@ -846,6 +850,10 @@ export class PluginsService {
     }
     if (!this.publicationStates) {
       throw new PluginDomainError("PLUGIN_STATE_UNAVAILABLE", "Publication plugin state is unavailable");
+    }
+    if (enabled && plugin.vibressApiVersion !== SDK_VERSION) {
+      throw new PluginDomainError("PLUGIN_INCOMPATIBLE_API_VERSION",
+        "Plugin Host API version is incompatible; operator-approved upgrade required");
     }
     if (enabled && plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");
