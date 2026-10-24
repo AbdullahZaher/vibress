@@ -47,6 +47,12 @@ The private signing key requires separate secure offline custody.
 
 The existing `schemaVersion: 1` lockfile accepts optional `release` metadata on each entry, documented in [operator-trusted-release-catalog.md](operator-trusted-release-catalog.md). All referenced files remain on operator-owned, read-only mounts. The API's authorized approved-plugin list may show publisher, release identity and available evidence, **not operator filesystem paths**. Preflight checks referenced evidence by SHA-256 and rejects missing, mismatched, symbolic-link or out-of-root files. Migration plan references alone grant no authority to run SQL; the existing explicit migration-plan preflight and operator consent still apply.
 
+### P0-3 secure operator admission (new releases)
+
+Follow [Secure Operator Release Admission](secure-operator-release-admission.md) after staging and source/dependency scanning and **before** global registration or activation. Admission requires a verified detached Ed25519 signature, a versioned release metadata record for every entry, pinned SBOM/provenance files and exact release-bound migration plans for declared physical storage models. It emits a path-free `lockfileSha256` receipt to compare independently on every API and Worker replica. A mismatched or unverified replica must not serve plugin traffic.
+
+The production API and Worker bundles each contain `dist/plugins-admit.js`. The existing `dist/plugins-preflight.js` remains valid for old operator-trusted installations. Neither executable downloads/installs plugins, executes module code or runs database migrations.
+
 ### Optional signed release approval (EXT-404, additive)
 
 For deployments requiring an independently authenticated operator approval,
