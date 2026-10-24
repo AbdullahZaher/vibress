@@ -92,7 +92,12 @@ async function main(): Promise<void> {
               !row.indisvalid || !row.indisready || row.indisunique ||
               JSON.stringify(row.indexed_columns) !==
                 JSON.stringify(["publication_id", field, "id"])) {
-            throw new Error("Index missing, invalid or incompatible; operator repair required");
+            throw new Error(
+              "Index missing, invalid or incompatible; operator repair required " +
+              `(found=${checked.rowCount}, valid=${String(row?.indisvalid)}, ` +
+              `ready=${String(row?.indisready)}, unique=${String(row?.indisunique)}, ` +
+              `columns=${JSON.stringify(row?.indexed_columns)})`,
+            );
           }
         }
         process.stdout.write(`${apply ? "VERIFIED" : "DRY-RUN"} ${sql}\n`);
