@@ -20,6 +20,19 @@ async function fixture() {
   const provenancePath = path.join(dir, "provenance.json");
   await writeFile(sbomPath, '{"packages":[]}');
   await writeFile(provenancePath, '{"buildType":"operator-reviewed"}');
+  const reviewPath = path.join(dir, "security-review.json");
+  const reviewedArtifact = sha256(source);
+  const review = JSON.stringify({
+    schemaVersion: 1,
+    artifactSha256: reviewedArtifact,
+    reviewer: "Platform Security",
+    scanner: "Operator offline scan",
+    scannedAt: "2026-10-24T12:00:00Z",
+    criticalFindings: 0,
+    highFindings: 0,
+    decision: "approved",
+  });
+  await writeFile(reviewPath, review);
   const manifest = {
     id: "hello-public", name: "Hello Public", version: "1.0.0",
     vibressApiVersion: "1.0.0", entrypoint: "dist/plugin.mjs",
@@ -38,6 +51,7 @@ async function fixture() {
       capabilities: manifest.capabilities,
       sbom: { path: "sbom.json", sha256: sha256('{"packages":[]}') },
       provenance: { path: "provenance.json", sha256: sha256('{"buildType":"operator-reviewed"}') },
+      securityReview: { path: "security-review.json", sha256: sha256(review) },
     },
   };
   const lockfile = path.join(dir, "trusted-plugins.json");
@@ -51,14 +65,16 @@ async function fixture() {
     await writeFile(signatureFile, sign(null, bytes, keys.privateKey).toString("base64") + "\n");
     return sha256(bytes);
   }
+  const keyFingerprint = sha256(keys.publicKey.export({ format: "der", type: "spki" }));
   function configureSignature() {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE", publicKeyFile);
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE", signatureFile);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", keyFingerprint);
   }
   const payload = { schemaVersion: 1, plugins: [entry] };
   const lockfileSha256 = await approve(payload);
-  return { dir, moduleFile, sbomPath, entry, payload, lockfile, signatureFile,
-    lockfileSha256, approve, configureSignature };
+  return { dir, moduleFile, sbomPath, reviewPath, entry, payload, lockfile, signatureFile,
+    lockfileSha256, keyFingerprint, approve, configureSignature };
 }
 
 afterEach(async () => {
@@ -73,6 +89,7 @@ describe("P0-3 offline operator release admission", () => {
     const receipt = await verifyOperatorReleaseAdmission(f.lockfile);
     expect(receipt).toEqual({
       schemaVersion: 1, lockfileSha256: f.lockfileSha256, signatureVerified: true,
+      publicKeySha256: f.keyFingerprint,
       releases: [{ pluginId: "hello-public", version: "1.0.0",
         sha256: f.entry.sha256, adminViewCount: 0 }],
     });
@@ -98,6 +115,25 @@ describe("P0-3 offline operator release admission", () => {
     await f.approve(f.payload);
     await writeFile(f.signatureFile, "not-a-signature");
     await expect(verifyOperatorReleaseAdmission(f.lockfile)).rejects.toThrow();
+  });
+
+  it("refuses unreviewed security evidence, high findings and invalid operator roots", async () => {
+    const f = await fixture();
+    f.configureSignature();
+    const report = JSON.parse(await readFile(f.reviewPath, "utf8"));
+    report.highFindings = 1;
+    const forged = JSON.stringify(report);
+    await writeFile(f.reviewPath, forged);
+    await f.approve({ ...f.payload, plugins: [{
+      ...f.entry, release: { ...f.entry.release, securityReview: {
+        path: "security-review.json", sha256: sha256(forged),
+      } },
+    }] });
+    await expect(verifyOperatorReleaseAdmission(f.lockfile))
+      .rejects.toThrow("OPERATOR_SECURITY_REVIEW_REJECTED");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", "a".repeat(64));
+    await expect(verifyOperatorReleaseAdmission(f.lockfile))
+      .rejects.toThrow("OPERATOR_TRUST_ROOT_MISMATCH");
   });
 
   it("refuses mismatched replicas and modified artifacts", async () => {

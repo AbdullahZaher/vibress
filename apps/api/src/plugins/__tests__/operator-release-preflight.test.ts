@@ -152,6 +152,32 @@ describe("EXT-404 operator package integrity preflight", () => {
     await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow("INVALID_APPROVED_JSON");
   });
 
+  it("refuses signed metadata with a fabricated security scan result", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const entry = lock.plugins[0];
+    const report = JSON.stringify({
+      schemaVersion: 1, artifactSha256: entry.sha256,
+      reviewer: "Security", scanner: "Offline scan",
+      scannedAt: "2026-10-24T12:00:00Z",
+      criticalFindings: 0, highFindings: 1, decision: "approved",
+    });
+    fs.writeFileSync(path.join(f.dir, "security-review.json"), report);
+    entry.release = {
+      schemaVersion: 1, releaseId: `hello-public@1.0.0:${entry.sha256}`,
+      publisher: { id: "operator", name: "Operator" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0", maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: entry.manifest.capabilities,
+      securityReview: { path: "security-review.json", sha256: digest(report) },
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock))
+      .rejects.toThrow("OPERATOR_SECURITY_REVIEW_REJECTED");
+  });
+
   it("rejects tampered bundle and Admin asset bytes", async () => {
     const f = fixture();
     fs.appendFileSync(f.entry, "\n// modified");
