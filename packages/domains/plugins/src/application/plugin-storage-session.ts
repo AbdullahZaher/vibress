@@ -79,6 +79,8 @@ export function createHostPluginStorageSession(
       invoke(false, () => service.get(modelKey, id)),
     list: (modelKey: string, limit?: number, cursor?: string) =>
       invoke(false, () => service.list(modelKey, limit, cursor)),
+    listByText: (modelKey: string, field: string, value: string, limit?: number, cursor?: string) =>
+      invoke(false, () => service.listByText(modelKey, field, value, limit, cursor)),
     create: (
       modelKey: string, id: string,
       fields: Readonly<Record<string, string | number | boolean | null>>,
