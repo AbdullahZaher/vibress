@@ -9,7 +9,7 @@ import {
   pluginSchemaMigrations,
   auditEvents,
 } from "@vibress/database";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   PluginRepository,
@@ -144,7 +144,10 @@ export class DrizzlePluginRepository implements PluginRepository {
       .set(payload)
       .where(and(eq(plugins.id, id),
         eq(plugins.version, expected.version),
-        eq(plugins.updatedAt, expected.updatedAt),
+        // Historic rows populated by PostgreSQL defaultNow() can retain
+        // microseconds which JS Date cannot represent. Normalize both sides
+        // to milliseconds without weakening the monotonic CAS token.
+        sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
         inArray(plugins.status, ["registered", "inactive", "error"])))
       .returning();
     return row ? this.mapToDomain(row) : null;

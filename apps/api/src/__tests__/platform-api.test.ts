@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
 import { getDb, publications, publicationMemberships, workspaces, users } from "@vibress/database";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword } from "@vibress/security";
 import { SDK_VERSION } from "@vibress/plugin-sdk";
 import type { PluginApiRoute, PluginApiScope, PluginStorageApi, PluginModule } from "@vibress/plugin-sdk";
@@ -770,6 +770,8 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect((await repo.findById(id))?.version).toBe("1.0.0");
 
       await repo.tryTransitionStatus(id, ["active"], "inactive");
+      // Legacy rows with PG microsecond timestamps must still be upgradable.
+      await getDb().execute(sql`UPDATE plugins SET updated_at = clock_timestamp() WHERE id = ${id}`);
       const snapshot = await repo.findById(id);
       if (!snapshot) throw new Error("Expected current plugin");
       const allowed = await repo.tryUpdateMetadataIfInactive(id, { version: "2.0.0" }, snapshot);
