@@ -6,7 +6,7 @@ import {
 } from "../../lib/theme-host";
 import { renderThemeTemplate } from "../../lib/theme-renderer";
 import { mapSiteToViewModel } from "@vibress/theme-core";
-import { getDirection } from "@vibress/i18n";
+import { getDirection, supportsPublishedExtensionLocale } from "@vibress/i18n";
 import { getPublicExtensionPage } from "../../lib/public-extension-client";
 import {
   localizedExtensionTitle,
@@ -33,7 +33,7 @@ export default async function CoursesCatalogPage() {
   const site = await getThemeSiteSettings();
   if (!matchesPublicExtensionPublication(page, site) ||
       (page.locale && page.locale !== site.locale) ||
-      (page.publishedLocales && !page.publishedLocales.includes(site.locale))) notFound();
+      !supportsPublishedExtensionLocale(page.publishedLocales, site.locale)) notFound();
   const title = localizedExtensionTitle(page.title, site.locale);
   const previewThemeId = await getPreviewThemeIdFromHeaders();
   const theme = await resolveThemeHostState(!!previewThemeId, previewThemeId);
