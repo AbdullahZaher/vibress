@@ -168,12 +168,29 @@ describe("EXT-401 publication-scoped durable event worker", () => {
     ["renamed manifest", { installed: plugin({ manifestId: "other" }) }],
     ["revoked capability", { installed: plugin({ capabilities: [] }) }],
     ["undeclared hook", { installed: plugin({ hooks: [] }) }],
-    ["revoked digest", { fingerprints: new Map<string, string>() }],
-    ["replaced digest", { fingerprints: new Map([["hello-public", "b".repeat(64)]]) }],
     ["publication disabled", { enabled: false }],
   ] as const)("retires %s without executing old events", async (_caseName, options) => {
     const h = execution(options);
     await expect(processTrustedPluginEvent(event(), h)).resolves.toBe("retired");
+    expect(h.dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing on this replica", new Map<string, string>()],
+    ["different on this replica", new Map([["hello-public", "b".repeat(64)]])],
+  ])("keeps admitted events retryable when the worker release is %s", async (
+    _caseName, fingerprints,
+  ) => {
+    const { pluginEventJobId } = await import("@vibress/plugins");
+    const id = pluginEventJobId(event());
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const h = execution({ fingerprints });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, h))
+      .rejects.toThrow("PLUGIN_WORKER_RELEASE_MISMATCH");
+    expect(receipts.finalize).not.toHaveBeenCalled();
     expect(h.dispatchEvent).not.toHaveBeenCalled();
   });
 

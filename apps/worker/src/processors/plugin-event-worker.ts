@@ -47,7 +47,13 @@ export async function processTrustedPluginEvent(
   // Fingerprints come only from the currently authenticated operator release
   // lockfile, never the queued message. Mismatched/revoked versions retire.
   const digests = await execution.approvedDigests();
-  if (digests.get(plugin.manifestId) !== job.artifactSha256) return "retired";
+  if (digests.get(plugin.manifestId) !== job.artifactSha256) {
+    // This worker may be running an older approved snapshot while the DB
+    // already describes the new active release. Do not permanently retire
+    // the durable admission: another replica may legitimately deliver it.
+    // Retrying is fail-closed; exhausted attempts remain visible for replay.
+    throw new Error("PLUGIN_WORKER_RELEASE_MISMATCH");
+  }
   if (!(await execution.isPublicationEnabled(plugin.id, job.publicationId))) {
     return "retired";
   }
