@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: AbdullahZaher/vibress-lms
-          ref: 1127a10503e33c2be309dac9c5355999a3fb76c9
+          ref: 9ac5df7f8c4035ee49b9f9ae8ff2ca47f38408d5
           path: .lms-source
 
       - name: Validate pinned LMS and build both release fixtures
@@ -141,7 +141,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: build
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    # An audit finding still fails build and blocks merging. Run the browser
+    # smoke gate to collect independent functional evidence in that case.
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request') && (needs.build.result == 'success' || needs.build.result == 'failure')
 
     steps:
       - uses: actions/checkout@v7
