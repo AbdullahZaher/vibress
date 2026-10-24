@@ -109,7 +109,7 @@ export function PluginAdminView({ link }: Props) {
       closeBridgeRef.current = connectAdminExtensionReadBridge(
         element, locale,
         () => validFrame() && provedRef.current,
-        () => readExtensionAdminViewApi(link).catch((error: unknown) => {
+        (query) => readExtensionAdminViewApi(link, query).catch((error: unknown) => {
           if (error instanceof ApiError && [401, 403, 404].includes(error.statusCode)) revoke();
           throw error;
         }),
