@@ -4,6 +4,7 @@ import { supportsPublishedExtensionLocale } from "@vibress/i18n";
 import {
   ExtensionAdminNavigationParamsSchema,
   ExtensionPublicViewDtoSchema,
+  ExtensionPublicViewIdentitySchema,
   ExtensionPublicPageResponseSchema,
   ExtensionPublicPageQuerySchema,
   validateExtensionApiObject,
@@ -24,6 +25,57 @@ function reject(req: FastifyRequest, reply: FastifyReply, code: string, status: 
  * The descriptor never renders plugin HTML or calls the plugin GET handler.
  */
 export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
+  /** Lightweight public view admission: never invokes the linked plugin GET
+   * handler or opens a storage session. The publication is resolved by the
+   * public Host middleware, not caller-supplied IDs.
+   * Old /page and /views/:id routes remain unchanged. */
+  fastify.get("/extensions/:pluginId/views/:viewId/identity", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("X-Content-Type-Options", "nosniff");
+      const params = ExtensionAdminNavigationParamsSchema.safeParse(req.params);
+      const localeQuery = ExtensionPublicPageQuerySchema.safeParse(req.query);
+      if (!params.success || !localeQuery.success) return reject(req, reply, "VALIDATION_ERROR", 400);
+      const publicationId = req.publicationContext?.publicationId;
+      if (!publicationId) return reject(req, reply, "PUBLICATION_NOT_FOUND", 404);
+      const { pluginId, viewId } = params.data;
+      try {
+        const module = await pluginsService.resolveExtensionApiModule(
+          pluginId, publicationId, "extension.routes.public",
+        );
+        if (!module) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const views = admitPublicViews(module);
+        if (!views) return reject(req, reply, "EXTENSION_INVALID_PUBLIC_VIEWS", 503);
+        const view = views.find((entry) => entry.viewId === viewId);
+        if (!view) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const policy = await publicationLocaleService.getConfiguration(publicationId);
+        const locale = localeQuery.data.locale ?? policy.primaryLocale;
+        if (!policy.enabledLocales.includes(locale) ||
+            !supportsPublishedExtensionLocale(view.publishedLocales, locale)) {
+          return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        }
+        const approved = await pluginsService.prepareExtensionApiExecution(
+          pluginId, publicationId, "extension.routes.public", module,
+        );
+        if (!approved) return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        const result = ExtensionPublicViewIdentitySchema.safeParse({
+          pluginId, viewId, routeId: view.routeId, publicationId, locale,
+          title: view.title,
+          ...(view.publishedLocales ? { publishedLocales: view.publishedLocales } : {}),
+        });
+        if (!result.success) return reject(req, reply, "EXTENSION_INVALID_PUBLIC_VIEWS", 503);
+        return reply.status(200).send(result.data);
+      } catch (error) {
+        if (error instanceof PluginDomainError &&
+            (error.code === "PLUGIN_PUBLICATION_INACTIVE" ||
+             error.code === "PLUGIN_INACTIVE")) {
+          return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
+        }
+        return reject(req, reply, "EXTENSION_UNAVAILABLE", 503);
+      }
+    },
+  });
   /**
    * One Host-publication snapshot for descriptor, route admission, initialization,
    * and scalar data. The previous descriptor/v1 route endpoints are retained for
