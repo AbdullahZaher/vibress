@@ -134,7 +134,7 @@ export function connectAdminExtensionReadBridge(
       return;
     }
     active++;
-    void readLinkedView(read.data.query).then((data) => {
+    void readLinkedView(read.success ? read.data.query : undefined).then((data) => {
       respond(requestId, { ok: true, data });
     }).catch(() => {
       respond(requestId, { ok: false, error: "UNAVAILABLE" });
