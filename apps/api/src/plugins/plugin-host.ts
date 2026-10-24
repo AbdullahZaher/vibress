@@ -1,4 +1,4 @@
-import { Plugin, PluginHost, type ApprovedPluginPhysicalModel } from "@vibress/plugins";
+import { Plugin, PluginHost, type ApprovedPluginPhysicalModel, type OperatorTrustedReleaseSummary } from "@vibress/plugins";
 import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -42,6 +42,7 @@ export class BundledPluginHost implements PluginHost {
   async getOperatorManifestCatalog(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
+    release?: OperatorTrustedReleaseSummary;
   }>> {
     return this.external.listTrustedCatalog();
   }

@@ -7,6 +7,8 @@ import { readTrustedPluginLockfile } from "./trusted-release-attestation";
 const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_MODULE_BYTES = 8 * 1024 * 1024;
 const MAX_ADMIN_HTML_BYTES = 256 * 1024;
+const MAX_RELEASE_EVIDENCE_BYTES = 2 * 1024 * 1024;
+const MAX_MIGRATION_PLAN_BYTES = 256 * 1024;
 
 export interface VerifiedExternalRelease {
   readonly pluginId: string;
@@ -60,6 +62,13 @@ export async function verifyTrustedPluginRelease(
     await verifyFile(approved.manifest.entrypoint, approved.sha256, MAX_MODULE_BYTES);
     for (const asset of approved.adminUiAssets) {
       await verifyFile(asset.path, asset.sha256, MAX_ADMIN_HTML_BYTES, true);
+    }
+    // Release evidence is pinned inert JSON, never imported or executed.
+    for (const file of [approved.release?.sbom, approved.release?.provenance]) {
+      if (file) await verifyFile(file.path, file.sha256, MAX_RELEASE_EVIDENCE_BYTES);
+    }
+    for (const migration of approved.release?.migrationPlans ?? []) {
+      await verifyFile(migration.path, migration.sha256, MAX_MIGRATION_PLAN_BYTES);
     }
     result.push({
       pluginId: approved.manifest.id,

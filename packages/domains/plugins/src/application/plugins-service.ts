@@ -28,6 +28,21 @@ export class PluginDomainError extends Error {
   }
 }
 
+/** Host-owned, read-only release projection: no operator file paths or URLs. */
+export interface OperatorTrustedReleaseSummary {
+  readonly releaseId: string;
+  readonly publisher: { readonly id: string; readonly name: string };
+  readonly artifactSha256: string;
+  readonly compatibility: {
+    readonly minVibressApiVersion: string;
+    readonly maxVibressApiVersion: string;
+    readonly sdkAbiVersion: string;
+  };
+  readonly hasSbom: boolean;
+  readonly hasProvenance: boolean;
+  readonly migrationPlanIds: readonly string[];
+}
+
 export interface PluginHost {
   /** Optional release identity checked again immediately before ESM evaluation. */
   loadModule(plugin: Plugin, expectedReleaseKey?: string): Promise<PluginModule | null>;
@@ -37,6 +52,7 @@ export interface PluginHost {
   getOperatorManifestCatalog?(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
+    release?: OperatorTrustedReleaseSummary;
   }>>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
   getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
@@ -706,22 +722,28 @@ export class PluginsService {
     capabilities: string[];
     /** True only when the detached operator Ed25519 lockfile signature was verified. */
     signatureVerified: boolean | null;
+    release?: OperatorTrustedReleaseSummary;
   }>> {
     try {
       // Keep the catalog optional for older PluginHost implementations.
       // A legacy host cannot prove a signature, so never claim it is signed.
-      const catalog = this.host.getOperatorManifestCatalog
+      const catalog: Array<{
+        manifest: PluginManifest;
+        signatureVerified: boolean | null;
+        release?: OperatorTrustedReleaseSummary;
+      }> = this.host.getOperatorManifestCatalog
         ? await this.host.getOperatorManifestCatalog()
         : (await this.host.getOperatorManifests?.() ?? []).map((manifest) => ({
             manifest, signatureVerified: null,
           }));
-      return catalog.map(({ manifest, signatureVerified }) => ({
+      return catalog.map(({ manifest, signatureVerified, release }) => ({
         id: manifest.id,
         name: manifest.name,
         version: manifest.version,
         description: manifest.description ?? null,
         capabilities: [...manifest.capabilities],
         signatureVerified,
+        ...(release ? { release } : {}),
       }));
     } catch {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");

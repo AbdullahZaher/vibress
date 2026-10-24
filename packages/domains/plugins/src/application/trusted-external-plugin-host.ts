@@ -4,11 +4,11 @@ import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
 import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./trusted-release-attestation";
 import { z } from "zod";
-import { validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
+import { SDK_VERSION, validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { validateStorageModel } from "./plugin-scoped-storage";
 import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
 import type { Plugin } from "../domain/plugin";
-import { PluginDomainError } from "./plugins-service";
+import { PluginDomainError, type OperatorTrustedReleaseSummary } from "./plugins-service";
 
 /**
  * Operator-installed trusted, single-file ESM entrypoints.
@@ -36,6 +36,34 @@ const approvedAdminUiAssetSchema = z.object({
   path: z.string().max(240).regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.html$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
 }).strict();
+/**
+ * Versioned optional operator release metadata. The v1 lockfile and existing
+ * release admissions remain compatible; no URL, npm or executable input here.
+ */
+const releaseEvidenceSchema = z.object({
+  path: z.string().max(240).regex(/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.json$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+const releaseMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  releaseId: z.string().min(1).max(240),
+  publisher: z.object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+    name: z.string().trim().min(1).max(120),
+  }).strict(),
+  compatibility: z.object({
+    minVibressApiVersion: z.string().min(1).max(32),
+    maxVibressApiVersion: z.string().min(1).max(32),
+    sdkAbiVersion: z.string().min(1).max(32),
+  }).strict(),
+  capabilities: z.array(z.string()).max(64),
+  sbom: releaseEvidenceSchema.optional(),
+  provenance: releaseEvidenceSchema.optional(),
+  migrationPlans: z.array(releaseEvidenceSchema.extend({
+    id: z.string().regex(/^[0-9]{4}_[a-z][a-z0-9_]{0,63}$/),
+  })).max(16).optional(),
+}).strict();
+
 const pinnedPluginSchema = z.object({
   manifest: z.unknown(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
@@ -46,6 +74,7 @@ const pinnedPluginSchema = z.object({
   publicReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
   memberReadModels: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)).max(16).optional(),
   adminUiAssets: z.array(approvedAdminUiAssetSchema).max(8).optional(),
+  release: releaseMetadataSchema.optional(),
 }).strict();
 const lockfileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -59,6 +88,7 @@ type PinnedPlugin = {
   manifest: PluginManifest;
   sha256: string;
   storageModels: readonly ApprovedPluginPhysicalModel[];
+  release?: z.infer<typeof releaseMetadataSchema>;
   publicReadModels?: readonly string[];
   memberReadModels?: readonly string[];
   adminUiAssets: readonly {
@@ -104,6 +134,29 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
           capability === "extension.member_storage.write")) {
       throw new Error("Approved storage models require declared storage capability");
     }
+    const release = entry.release;
+    if (release) {
+      // Exact Host/SDK ABI support only; do not imply unimplemented ranges.
+      const expectedId = `${manifest.id}@${manifest.version}:${entry.sha256.toLowerCase()}`;
+      if (!/^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/.test(manifest.version) ||
+          release.releaseId !== expectedId ||
+          release.compatibility.minVibressApiVersion !== SDK_VERSION ||
+          release.compatibility.maxVibressApiVersion !== SDK_VERSION ||
+          release.compatibility.sdkAbiVersion !== SDK_VERSION ||
+          !isDeepStrictEqual(release.capabilities, manifest.capabilities)) {
+        throw new Error("Operator release metadata does not match approved plugin or Host ABI");
+      }
+      const evidence = [release.sbom, release.provenance, ...(release.migrationPlans ?? [])]
+        .filter((value) => value !== undefined);
+      const paths = evidence.map((item) => item.path);
+      const migrationIds = (release.migrationPlans ?? []).map((item) => item.id);
+      if (new Set(paths).size !== paths.length ||
+          new Set(migrationIds).size !== migrationIds.length ||
+          paths.includes(manifest.entrypoint) ||
+          (entry.adminUiAssets ?? []).some((item) => paths.includes(item.path))) {
+        throw new Error("Duplicate or conflicting operator release evidence");
+      }
+    }
     const adminUiAssets = entry.adminUiAssets ?? [];
     if (adminUiAssets.length > 0 &&
         (!manifest.capabilities.includes("admin.navigation") ||
@@ -121,6 +174,7 @@ export function parseTrustedPluginLockfile(input: unknown): ReadonlyMap<string, 
     }
     result.set(manifest.id, {
       manifest, sha256: entry.sha256.toLowerCase(), storageModels,
+      ...(release ? { release } : {}),
       ...(entry.publicReadModels ? { publicReadModels: entry.publicReadModels } : {}),
       ...(entry.memberReadModels ? { memberReadModels: entry.memberReadModels } : {}),
       adminUiAssets: adminUiAssets.map((asset) => ({ ...asset, sha256: asset.sha256.toLowerCase() })),
@@ -179,14 +233,27 @@ export class TrustedExternalPluginHost {
   async listTrustedCatalog(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
+    release?: OperatorTrustedReleaseSummary;
   }>> {
     const lockfile = this.lockfilePath;
     if (!lockfile) return [];
     const { lockfile: data, signatureVerified } =
       await readTrustedPluginLockfileWithVerification(lockfile);
-    return [...parseTrustedPluginLockfile(data).values()].map(({ manifest }) => ({
-      manifest, signatureVerified,
-    }));
+    return [...parseTrustedPluginLockfile(data).values()].map((approved) => {
+      const release = approved.release;
+      return {
+        manifest: approved.manifest, signatureVerified,
+        ...(release ? { release: {
+          releaseId: release.releaseId,
+          publisher: { ...release.publisher },
+          artifactSha256: approved.sha256,
+          compatibility: { ...release.compatibility },
+          hasSbom: release.sbom !== undefined,
+          hasProvenance: release.provenance !== undefined,
+          migrationPlanIds: (release.migrationPlans ?? []).map((item) => item.id),
+        } } : {}),
+      };
+    });
   }
 
   /**
