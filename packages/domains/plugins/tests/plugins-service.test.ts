@@ -146,6 +146,20 @@ describe("PluginsService", () => {
     }]);
   });
 
+  it("reports Host ABI compatibility without changing the persisted plugin", async () => {
+    const stored = makePlugin({ vibressApiVersion: "0.9.0" });
+    const repoWith: PluginRepository = {
+      ...pluginRepo,
+      list: vi.fn(async () => [stored]),
+    };
+    const service = makeService({ pluginRepo: repoWith });
+    await expect(service.listPluginsForPublication()).resolves.toEqual([{
+      ...stored, publicationScoped: false, publicationEnabled: false,
+      hostCompatible: false,
+    }]);
+    expect(stored).not.toHaveProperty("hostCompatible");
+  });
+
   it("registers a valid plugin manifest", async () => {
     const service = makeService();
     const plugin = await service.registerPlugin(validManifest, "u1");
