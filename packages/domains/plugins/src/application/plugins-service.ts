@@ -53,13 +53,16 @@ export interface PluginHost {
   getOperatorManifestCatalog?(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
+    approvalId?: string;
     release?: OperatorTrustedReleaseSummary;
   }>>;
+  /** Admission is rechecked immediately before changing registered metadata. */
+  verifyOperatorRegistration?(): Promise<void>;
   /** Operator-pinned digest identities for caching static Admin descriptors only. */
   getOperatorAdminFingerprints?(): Promise<ReadonlyMap<string, string>>;
   /** Optional approved file reader; returns inert bytes, never executable plugin code. */
   readApprovedAdminUiAsset?(plugin: Plugin, viewId: string): Promise<string | null>;
-  authorizeRegistration?(manifest: PluginManifest): Promise<void>;
+  authorizeRegistration?(manifest: PluginManifest, expectedReleaseId?: string): Promise<void>;
   /** Operator-owned lockfile only; descriptors are NOT accepted from plugins. */
   getApprovedStorageModels?(plugin: Plugin): Promise<readonly ApprovedPluginPhysicalModel[]>;
   getApprovedAudienceReadModels?(plugin: Plugin, audience: "public" | "member"): Promise<readonly string[] | null>;
@@ -209,6 +212,7 @@ export class PluginsService {
   async registerPlugin(
     manifestInput: unknown,
     actorId: string | null,
+    expectedReleaseId?: string,
   ): Promise<Plugin> {
     let manifest: PluginManifest;
     try {
@@ -221,7 +225,7 @@ export class PluginsService {
     }
 
     try {
-      await this.host.authorizeRegistration?.(manifest);
+      await this.host.authorizeRegistration?.(manifest, expectedReleaseId);
     } catch {
       throw new PluginDomainError(
         "PLUGIN_NOT_TRUSTED", "Plugin manifest is not approved by the operator",
@@ -727,6 +731,10 @@ export class PluginsService {
     capabilities: string[];
     /** True only when the detached operator Ed25519 lockfile signature was verified. */
     signatureVerified: boolean | null;
+    /** SHA-256-bound immutable approval identity, including legacy lockfile v1. */
+    approvalId?: string;
+    /** Not a runtime readiness guarantee; checked by the server at registration. */
+    readiness: "verification_required";
     release?: OperatorTrustedReleaseSummary;
   }>> {
     try {
@@ -735,19 +743,22 @@ export class PluginsService {
       const catalog: Array<{
         manifest: PluginManifest;
         signatureVerified: boolean | null;
+        approvalId?: string;
         release?: OperatorTrustedReleaseSummary;
       }> = this.host.getOperatorManifestCatalog
         ? await this.host.getOperatorManifestCatalog()
         : (await this.host.getOperatorManifests?.() ?? []).map((manifest) => ({
             manifest, signatureVerified: null,
           }));
-      return catalog.map(({ manifest, signatureVerified, release }) => ({
+      return catalog.map(({ manifest, signatureVerified, release, approvalId }) => ({
         id: manifest.id,
         name: manifest.name,
         version: manifest.version,
         description: manifest.description ?? null,
         capabilities: [...manifest.capabilities],
         signatureVerified,
+        readiness: "verification_required" as const,
+        ...(approvalId ? { approvalId } : {}),
         ...(release ? { release } : {}),
       }));
     } catch {
@@ -755,18 +766,36 @@ export class PluginsService {
     }
   }
 
-  async registerOperatorPlugin(manifestId: string, actorId: string | null): Promise<Plugin> {
+  async registerOperatorPlugin(
+    manifestId: string, actorId: string | null, expectedReleaseId?: string,
+  ): Promise<Plugin> {
     let approved: PluginManifest | undefined;
     try {
-      approved = (await this.host.getOperatorManifests?.() ?? [])
-        .find((manifest) => manifest.id === manifestId);
-    } catch {
+      if (expectedReleaseId !== undefined) {
+        // The client may reference an identity, never nominate executable data.
+        const entry = (await this.host.getOperatorManifestCatalog?.() ?? [])
+          .find((candidate) => candidate.manifest.id === manifestId);
+        if (!entry?.approvalId || entry.approvalId !== expectedReleaseId) {
+          throw new PluginDomainError(
+            "PLUGIN_RELEASE_CHANGED", "Approved plugin release changed; reload and review it",
+          );
+        }
+        approved = entry.manifest;
+      } else {
+        // Backwards-compatible v1 registration body, still operator-only.
+        approved = (await this.host.getOperatorManifests?.() ?? [])
+          .find((manifest) => manifest.id === manifestId);
+      }
+      if (!approved) {
+        throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
+      }
+      await this.host.verifyOperatorRegistration?.();
+    } catch (error: unknown) {
+      if (error instanceof PluginDomainError) throw error;
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
-    if (!approved) {
-      throw new PluginDomainError("PLUGIN_NOT_TRUSTED", "Plugin is not approved by the operator");
-    }
-    return this.registerPlugin(approved, actorId);
+    // Host rechecks the same digest identity before the persistence boundary.
+    return this.registerPlugin(approved, actorId, expectedReleaseId);
   }
 
   /**

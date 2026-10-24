@@ -62,12 +62,17 @@ export const OperatorTrustedPluginCatalogResponseSchema = z.object({
     description: z.string().nullable(),
     capabilities: z.array(z.string()),
     signatureVerified: z.boolean().nullable(),
+    approvalId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/).optional(),
+    readiness: z.literal("verification_required").optional(),
     release: OperatorTrustedReleaseSummarySchema.optional(),
   }).strict()).max(64),
 }).strict();
 
 export const OperatorTrustedPluginRegisterSchema = z.object({
   manifestId: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(200),
+  expectedReleaseId: z.string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z.+-]{1,64}:[a-f0-9]{64}$/)
+    .optional(),
 }).strict();
 
 /**

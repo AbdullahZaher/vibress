@@ -44,12 +44,13 @@ export function TrustedPluginInstaller({
   const available = approved.filter((item) => !installedIds.includes(item.id));
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {
-    if (!selected || !Array.isArray(selected.capabilities) || !acknowledged || loading || submitting || registeringRef.current) return;
+    if (!selected || !selected.approvalId || !Array.isArray(selected.capabilities) ||
+        !acknowledged || loading || submitting || registeringRef.current) return;
     registeringRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
-      await registerOperatorTrustedPluginApi(selected.id);
+      await registerOperatorTrustedPluginApi(selected.id, selected.approvalId);
       await onRegistered();
       onClose();
     } catch {
@@ -103,9 +104,14 @@ export function TrustedPluginInstaller({
               <span className="min-w-0 space-y-1">
                 <span className="block text-xs font-semibold break-words" dir="auto">{item.name}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {tr("Available for registration")}
+                  {tr("Operator approved — integrity verification required before registration")}
                 </span>
                 <span className="block text-xs text-muted-foreground break-all" dir="auto">{item.id} · {item.version}</span>
+                {!item.approvalId && (
+                  <span className="block text-xs text-destructive">
+                    {tr("Immutable release identity unavailable: registration requires an updated server.")}
+                  </span>
+                )}
                 {item.description && <span className="block text-xs text-muted-foreground" dir="auto">{item.description}</span>}
                 <span className="block text-xs text-muted-foreground">{tr("Requested capabilities")}</span>
                 <span className="block text-xs break-words" dir="auto">
@@ -160,7 +166,7 @@ export function TrustedPluginInstaller({
               {tr("Cancel")}
             </Button>
             <Button type="button" onClick={() => { void register(); }}
-              disabled={!Array.isArray(selected.capabilities) || !acknowledged || submitting}>
+              disabled={!selected.approvalId || !Array.isArray(selected.capabilities) || !acknowledged || submitting}>
               {submitting ? tr("Registering plugin...") : tr("Register trusted plugin")}
             </Button>
           </div>

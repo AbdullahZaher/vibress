@@ -311,6 +311,9 @@ export interface AdminOperatorPlugin {
   capabilities?: string[];
   /** Optional for older API servers; true only after detached Ed25519 verification. */
   signatureVerified?: boolean | null;
+  /** Immutable artifact-bound approval ID; no plugin-supplied executable data. */
+  approvalId?: string;
+  readiness?: "verification_required";
   /** Optional read-only release v1 summary; older Host/API versions omit it. */
   release?: {
     releaseId: string;
@@ -333,10 +336,11 @@ export async function listOperatorTrustedPluginsApi(): Promise<{ plugins: AdminO
 
 export async function registerOperatorTrustedPluginApi(
   manifestId: string,
+  expectedReleaseId?: string,
 ): Promise<{ plugin: AdminPlugin }> {
   return apiRequest("/plugins/register-trusted", {
     method: "POST",
-    body: JSON.stringify({ manifestId }),
+    body: JSON.stringify({ manifestId, ...(expectedReleaseId ? { expectedReleaseId } : {}) }),
   });
 }
 

@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import path from "node:path";
 import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "./trusted-release-attestation";
+import { verifyTrustedPluginRelease } from "./operator-release-preflight";
 import { z } from "zod";
 import { SDK_VERSION, validateManifest, type PluginManifest, type PluginModule } from "@vibress/plugin-sdk";
 import { validateStorageModel } from "./plugin-scoped-storage";
@@ -236,6 +237,7 @@ export class TrustedExternalPluginHost {
   async listTrustedCatalog(): Promise<Array<{
     manifest: PluginManifest;
     signatureVerified: boolean;
+    approvalId: string;
     release?: OperatorTrustedReleaseSummary;
   }>> {
     const lockfile = this.lockfilePath;
@@ -246,6 +248,7 @@ export class TrustedExternalPluginHost {
       const release = approved.release;
       return {
         manifest: approved.manifest, signatureVerified,
+        approvalId: `${approved.manifest.id}@${approved.manifest.version}:${approved.sha256}`,
         ...(release ? { release: {
           releaseId: release.releaseId,
           publisher: { ...release.publisher },
@@ -257,6 +260,13 @@ export class TrustedExternalPluginHost {
         } } : {}),
       };
     });
+  }
+
+  /** Perform a fresh complete bytes/evidence preflight before registration. */
+  async verifyRegistrationReadiness(): Promise<void> {
+    const lockfile = this.lockfilePath;
+    if (!lockfile) throw new Error("Trusted plugin lockfile is unavailable");
+    await verifyTrustedPluginRelease(lockfile);
   }
 
   /**
