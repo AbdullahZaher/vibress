@@ -56,7 +56,7 @@ export interface VibressPlugin {
 export function validatePluginManifest(manifest: unknown): PluginManifest {
   const result = PluginManifestSchema.safeParse(manifest);
   if (!result.success) {
-    const issues = result.error.errors.map(
+    const issues = result.error.issues.map(
       (e) => `${e.path.join(".")}: ${e.message}`,
     );
     throw new Error(`Invalid plugin manifest: ${issues.join("; ")}`);
