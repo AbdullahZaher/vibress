@@ -86,7 +86,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     needs: build
-    if: github.event_name != 'pull_request'
+    # Image vulnerability gates must run BEFORE merging, on the exact PR head.
+    # Continue to run on main pushes to validate the released runtime images.
 
     steps:
       - uses: actions/checkout@v7
