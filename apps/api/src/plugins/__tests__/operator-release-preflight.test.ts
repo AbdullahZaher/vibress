@@ -99,6 +99,31 @@ describe("EXT-404 operator package integrity preflight", () => {
       .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
   });
 
+  it("rejects invalid pinned evidence JSON even when the digest matches", async () => {
+    const f = fixture();
+    const lock = JSON.parse(fs.readFileSync(f.lock, "utf8"));
+    const bad = "not-a-json-object";
+    fs.writeFileSync(path.join(f.dir, "evidence.json"), bad);
+    lock.plugins[0].release = {
+      schemaVersion: 1,
+      releaseId: `hello-public@1.0.0:${lock.plugins[0].sha256}`,
+      publisher: { id: "reviewed", name: "Publisher" },
+      compatibility: {
+        minVibressApiVersion: "1.0.0",
+        maxVibressApiVersion: "1.0.0",
+        sdkAbiVersion: "1.0.0",
+      },
+      capabilities: lock.plugins[0].manifest.capabilities,
+      sbom: { path: "evidence.json", sha256: digest(bad) },
+    };
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow();
+    fs.writeFileSync(path.join(f.dir, "evidence.json"), "[]");
+    lock.plugins[0].release.sbom.sha256 = digest("[]");
+    fs.writeFileSync(f.lock, JSON.stringify(lock));
+    await expect(verifyTrustedPluginRelease(f.lock)).rejects.toThrow("INVALID_APPROVED_JSON");
+  });
+
   it("rejects tampered bundle and Admin asset bytes", async () => {
     const f = fixture();
     fs.appendFileSync(f.entry, "\n// modified");

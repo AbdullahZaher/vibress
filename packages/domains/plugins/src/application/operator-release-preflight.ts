@@ -33,7 +33,10 @@ export async function verifyTrustedPluginRelease(
   const admitted = parseTrustedPluginLockfile(input);
   const root = await realpath(path.dirname(lockfilePath));
 
-  async function verifyFile(relative: string, digest: string, maxSize: number, html = false) {
+  async function verifyFile(
+    relative: string, digest: string, maxSize: number,
+    format: "binary" | "html" | "json" = "binary",
+  ) {
     const resolved = path.resolve(root, relative);
     const canonical = await realpath(resolved);
     const withinRoot = path.relative(root, canonical);
@@ -49,11 +52,16 @@ export async function verifyTrustedPluginRelease(
         createHash("sha256").update(bytes).digest("hex") !== digest) {
       throw new Error("APPROVED_ARTIFACT_MISMATCH");
     }
-    if (html) {
-      // Match the runtime Admin UI byte contract before rollout, so the
-      // preflight cannot approve HTML the Host will refuse to load.
+    if (format !== "binary") {
       const document = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      if (document.includes("\u0000")) throw new Error("INVALID_ADMIN_UI_DOCUMENT");
+      if (document.includes("\u0000")) throw new Error("INVALID_APPROVED_DOCUMENT");
+      if (format === "json") {
+        // This checks syntax, not SBOM/provenance truth or migration consent.
+        const parsed: unknown = JSON.parse(document);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("INVALID_APPROVED_JSON");
+        }
+      }
     }
   }
 
@@ -61,14 +69,14 @@ export async function verifyTrustedPluginRelease(
   for (const approved of admitted.values()) {
     await verifyFile(approved.manifest.entrypoint, approved.sha256, MAX_MODULE_BYTES);
     for (const asset of approved.adminUiAssets) {
-      await verifyFile(asset.path, asset.sha256, MAX_ADMIN_HTML_BYTES, true);
+      await verifyFile(asset.path, asset.sha256, MAX_ADMIN_HTML_BYTES, "html");
     }
     // Release evidence is pinned inert JSON, never imported or executed.
     for (const file of [approved.release?.sbom, approved.release?.provenance]) {
-      if (file) await verifyFile(file.path, file.sha256, MAX_RELEASE_EVIDENCE_BYTES);
+      if (file) await verifyFile(file.path, file.sha256, MAX_RELEASE_EVIDENCE_BYTES, "json");
     }
     for (const migration of approved.release?.migrationPlans ?? []) {
-      await verifyFile(migration.path, migration.sha256, MAX_MIGRATION_PLAN_BYTES);
+      await verifyFile(migration.path, migration.sha256, MAX_MIGRATION_PLAN_BYTES, "json");
     }
     result.push({
       pluginId: approved.manifest.id,

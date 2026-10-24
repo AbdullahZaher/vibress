@@ -46,7 +46,7 @@ This is an illustrative **fragment**, not a complete valid lockfile: replace eve
 - `publisher` is an operator-reviewed identity string, **not** independently cryptographically authenticated publisher identity. Signing the lockfile attests the operator's approval, not a third-party publisher's claim.
 - `compatibility` currently requires `minVibressApiVersion`, `maxVibressApiVersion` and `sdkAbiVersion` to equal the currently supported `SDK_VERSION` (`1.0.0`). This is an **exact range** only; broader ranges are not implemented or inferred.
 - `capabilities` must match the validated installed manifest exactly, including ordering; the metadata cannot add runtime permissions or authorize a publication.
-- Evidence paths must be safe, operator-root-relative `.json` paths with bounded depth/length and lowercase SHA-256 values. URLs, drive paths, `..` segments, repeated paths and duplicate migration IDs are rejected. The lockfile only pins opaque bytes, not a particular SBOM/provenance serialization standard.
+- Evidence paths must be safe, operator-root-relative `.json` paths with bounded depth/length and lowercase SHA-256 values. URLs, drive paths, `..` segments, repeated paths and duplicate migration IDs are rejected. The preflight also requires well-formed UTF-8 JSON objects, but does not certify any particular SBOM/provenance serialization standard or claim contents are truthful.
 - Migration plan IDs are metadata only. Actual migrations still require existing operator-controlled reviewed model descriptors, exact release binding and separate explicit admission/consent. Merely listing a plan never executes or approves SQL.
 
 ## Operational verification
