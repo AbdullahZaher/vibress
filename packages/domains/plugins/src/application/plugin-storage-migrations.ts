@@ -97,7 +97,7 @@ export interface ApprovedPluginPhysicalColumn {
 export interface ApprovedPluginPhysicalModel extends PluginStorageModelDeclaration {
   readonly columns: readonly ApprovedPluginPhysicalColumn[];
   /** Optional operator-reviewed text equality indexes; metadata only, not a stored field. */
-  readonly indexedTextFields?: readonly string[];
+  readonly indexedTextFields?: readonly string[] | undefined;
 }
 
 export interface ApprovedPluginPhysicalMigration
