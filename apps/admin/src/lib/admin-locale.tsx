@@ -410,6 +410,8 @@ const translations: Record<string, string> = {
   "SBOM pinned": "بصمة قائمة المكونات معتمدة",
   "Provenance pinned": "بصمة مصدر الإصدار معتمدة",
   "Migration plans": "خطط الترحيل",
+  "Yes": "نعم",
+  "No": "لا",
   "Capabilities unavailable: registration requires a newer server.": "الصلاحيات غير متاحة: يتطلب التسجيل إصداراً أحدث من الخادم.",
   "Detached Ed25519 operator approval verified.": "تم التحقق من توقيع موافقة المشغّل المنفصل باستخدام Ed25519.",
   "Legacy unsigned operator approval: no detached signature was verified.": "موافقة مشغّل قديمة دون توقيع: لم يتم التحقق من أي توقيع منفصل.",
