@@ -112,7 +112,7 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([
       { manifest, signatureVerified: false,
-        approvalId: expect.stringMatching(/^test-plugin@1\.0\.0:[a-f0-9]{64}$/) },
+        approvalId: expect.stringMatching(/^operator-approved@1\.0\.0:[a-f0-9]{64}$/) },
     ]);
     const initialApprovalId = (await host.listTrustedCatalog())[0]?.approvalId;
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -152,7 +152,7 @@ describe("TrustedExternalPluginHost", () => {
     const host = new TrustedExternalPluginHost(f.lockfile);
     await expect(host.listTrustedCatalog()).resolves.toEqual([{
       manifest, signatureVerified: false,
-      approvalId: expect.stringMatching(/^test-plugin@1\.0\.0:[a-f0-9]{64}$/),
+      approvalId: expect.stringMatching(/^operator-approved@1\.0\.0:[a-f0-9]{64}$/),
       release: {
         releaseId: release.releaseId,
         publisher: release.publisher,
