@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PluginApiScope } from "@vibress/plugin-sdk";
+import { supportsPublishedExtensionLocale } from "@vibress/i18n";
 import {
   ExtensionAdminNavigationParamsSchema,
   ExtensionPublicViewDtoSchema,
@@ -51,7 +52,7 @@ export async function publicExtensionViewRoutes(fastify: FastifyInstance) {
         const localePolicy = await publicationLocaleService.getConfiguration(publicationId);
         const locale = localeQuery.data.locale ?? localePolicy.primaryLocale;
         if (!localePolicy.enabledLocales.includes(locale) ||
-            (view.publishedLocales && !view.publishedLocales.includes(locale))) {
+            !supportsPublishedExtensionLocale(view.publishedLocales, locale)) {
           return reject(req, reply, "EXTENSION_VIEW_NOT_FOUND", 404);
         }
         const route = module.routes?.find((item) =>
