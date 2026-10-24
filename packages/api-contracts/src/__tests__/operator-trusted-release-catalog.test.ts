@@ -74,6 +74,13 @@ describe("P0-2 operator trusted release catalog API response", () => {
     }).success).toBe(false);
   });
 
+  it("preserves the full supported 200-character manifest ID", () => {
+    const id = "a".repeat(200);
+    expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
+      plugins: [{ ...entry, id, approvalId: `${id}@1.0.0:${digest}` }],
+    }).success).toBe(true);
+  });
+
   it("rejects invalid immutable identities and readiness statuses", () => {
     expect(OperatorTrustedPluginCatalogResponseSchema.safeParse({
       plugins: [{ ...entry, approvalId: "../outside" }],

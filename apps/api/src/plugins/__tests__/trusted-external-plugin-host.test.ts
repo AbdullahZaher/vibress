@@ -132,6 +132,18 @@ describe("TrustedExternalPluginHost", () => {
     await expect(host.listTrustedCatalog()).rejects.toThrow(/signature verification failed/);
   });
 
+  it("keeps legacy v1 manifests with nonstandard versions discoverable", async () => {
+    const f = await fixture();
+    const lock = JSON.parse(await readFile(f.lockfile, "utf8"));
+    lock.plugins[0].manifest.version = "operator reviewed build 1";
+    await writeFile(f.lockfile, JSON.stringify(lock));
+    await expect(new TrustedExternalPluginHost(f.lockfile).listTrustedCatalog())
+      .resolves.toEqual([{
+        manifest: { ...manifest, version: "operator reviewed build 1" },
+        signatureVerified: false,
+      }]);
+  });
+
   it("projects a versioned SHA-bound operator release without importing executable code", async () => {
     const f = await fixture();
     const lock = JSON.parse(await readFile(f.lockfile, "utf8"));

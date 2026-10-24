@@ -128,9 +128,10 @@ export class DrizzlePluginRepository implements PluginRepository {
     data: Partial<RegisterPluginData>,
     expected: Pick<Plugin, "version" | "updatedAt">,
   ): Promise<Plugin | null> {
-    // Compare read snapshot and lifecycle state in the same UPDATE. A
-    // competing activation or upgrade must not overwrite reviewed metadata.
-    const payload: Record<string, unknown> = { updatedAt: new Date() };
+    // Force a monotonic optimistic-lock value even for two writes in the same
+    // JS millisecond. The prior row timestamp must also match in the UPDATE.
+    const nextUpdate = new Date(Math.max(Date.now(), expected.updatedAt.getTime() + 1));
+    const payload: Record<string, unknown> = { updatedAt: nextUpdate };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
     if (data.vibressApiVersion !== undefined) payload.vibressApiVersion = data.vibressApiVersion;
