@@ -45,7 +45,8 @@ export async function processTrustedPluginEvent(
     return "retired";
   }
   // Fingerprints come only from the currently authenticated operator release
-  // lockfile, never the queued message. Mismatched/revoked versions retire.
+  // lockfile, never the queued message. A mismatch is retryable rather than
+  // irreversible: a stale replica must not finalize a new release's event.
   const digests = await execution.approvedDigests();
   if (digests.get(plugin.manifestId) !== job.artifactSha256) {
     // This worker may be running an older approved snapshot while the DB
@@ -68,12 +69,13 @@ export async function processTrustedPluginEvent(
       "PLUGIN_INACTIVE",
       "PLUGIN_PUBLICATION_INACTIVE",
       "PLUGIN_RELEASE_CHANGED",
-      "PLUGIN_RESTART_REQUIRED",
       "PLUGIN_RELEASE_NOT_APPROVED",
       "PLUGIN_CAPABILITY_DENIED",
     ].includes(error.code)) return "retired";
-    // Provider outages, transient database failures, and handler errors are
-    // retried by BullMQ. Handlers must tolerate at-least-once delivery.
+    // Mixed-release local module state must be retried on a compatible
+    // replica, not acknowledged as retired. Provider outages, transient DB
+    // failures and handler errors also use bounded BullMQ retries.
+    // Handlers must tolerate at-least-once delivery.
     throw error;
   }
   return "executed";

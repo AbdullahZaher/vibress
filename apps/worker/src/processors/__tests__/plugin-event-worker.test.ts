@@ -194,6 +194,24 @@ describe("EXT-401 publication-scoped durable event worker", () => {
     expect(h.dispatchEvent).not.toHaveBeenCalled();
   });
 
+  it("does not finalize an admitted event when the Host requires a new replica", async () => {
+    const { pluginEventJobId } = await import("@vibress/plugins");
+    const id = pluginEventJobId(event());
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const host = execution({
+      failure: new (await import("@vibress/plugins")).PluginDomainError(
+        "PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime",
+      ),
+    });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, host))
+      .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
+    expect(receipts.finalize).not.toHaveBeenCalled();
+    expect(host.dispatchEvent).toHaveBeenCalledOnce();
+  });
+
   it("retries genuine handler failures through BullMQ rather than swallowing them", async () => {
     const h = execution({ failure: new Error("temporary failure") });
     await expect(processTrustedPluginEvent(event(), h))
