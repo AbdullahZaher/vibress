@@ -10,8 +10,11 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: "list",
+  // Real operator cookies may be present: never persist browser traces,
+  // screenshots or recordings with authenticated session material.
   use: {
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    trace: "off",
+    screenshot: "off",
+    video: "off",
   },
 });
