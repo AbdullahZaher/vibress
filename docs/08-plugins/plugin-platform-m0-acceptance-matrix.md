@@ -19,10 +19,10 @@
 
 ## Progressive test commands (capture SHA, exit code, environment)
 
-- \`pnpm install --frozen-lockfile\`
-- \`pnpm exec vitest run apps/admin/src/components/platform/__tests__/PluginsPanel.test.tsx apps/admin/src/components/platform/__tests__/PluginsPage.test.tsx\`
-- \`pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__\`
-- \`pnpm typecheck\`, \`pnpm lint\`, \`pnpm verify:explicit-any\`, \`pnpm vitest run\`, \`pnpm build\`, \`pnpm audit --prod --audit-level high\`
+- `pnpm install --frozen-lockfile`
+- `pnpm exec vitest run apps/admin/src/components/platform/__tests__/PluginsPanel.test.tsx apps/admin/src/components/platform/__tests__/PluginsPage.test.tsx`
+- `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__`
+- `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build`, `pnpm audit --prod --audit-level high`
 - Docker image build, security scan, relevant signed admission/restore scripts and full Admin E2E **against real services**.
 
 Run only commands supported by actual package tooling; resolve targeted failures instead of bypassing tests. Record exact command, configuration profile, URL to retained logs, commit SHA, pass/fail, DB/Redis image version, binary/release digests and operator acceptance sign-off. Never promote based on a checklist without results.

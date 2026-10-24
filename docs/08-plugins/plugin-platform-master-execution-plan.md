@@ -166,9 +166,13 @@ Fill one row per ticket as work proceeds; treat these rows as state, not promise
 | --- | --- | --- | --- | --- |
 | PR #87 Tier 1 trusted distribution + lifecycle foundation | CI Verified (merged) | #87 | Prior CI success | In-process privilege limitation |
 | PR #88 production-acceptance code verification | CI Verified (merged) | #88 | 2,171 Vitest passed, build/container-scan/E2E | Operational multi-replica + DR drills still pending |
-| PLUG-BASE-01..04 | Planned | — | — | — |
-| PLUG-OPS-01..06 / PLUG-SEC-01..02 | Planned | — | — | — |
-| PLUG-ADMIN-01..06 | Planned | — | — | — |
+| PLUG-BASE-01 | In progress — source-linked inventory authored | [1f98998](https://github.com/AbdullahZaher/vibress/commit/1f98998aebc5cc73ae498c59167015a0bc877bd4) | [M0 compatibility matrix](plugin-platform-m0-compatibility-matrix.md); GitHub code search returned no matches; local `rg` **not run** | Complete direct+independent consumer scan and obtain owner sign-off |
+| PLUG-BASE-02 | In progress — status sources reconciled in inventory | [1f98998](https://github.com/AbdullahZaher/vibress/commit/1f98998aebc5cc73ae498c59167015a0bc877bd4) | Historical vs authoritative master sources linked; **not CI verified** | Full status matrix approval pending |
+| PLUG-BASE-03 | In progress — ABI, tier and revocation policy recorded | [1f98998](https://github.com/AbdullahZaher/vibress/commit/1f98998aebc5cc73ae498c59167015a0bc877bd4) | [M0 decisions](plugin-platform-m0-compatibility-matrix.md); no external conformance run | Security/architecture signature, deprecation tests pending |
+| PLUG-BASE-04 | In progress — pass/fail matrix and commands authored | [fd1c2c4](https://github.com/AbdullahZaher/vibress/commit/fd1c2c487fee8e5e57de21a263c433f0befbb727) | [M0 acceptance matrix](plugin-platform-m0-acceptance-matrix.md); scripts/fixtures not executed | Fresh/upgrade and two-replica operational drills pending |
+| PLUG-OPS-01..06 / PLUG-SEC-01..02 | Planned; existing receipt/outbox implementation inventoried | — | [M0 inventory](plugin-platform-m0-compatibility-matrix.md) | Fleet, recovery, scanner and rotation acceptance not proven |
+| PLUG-ADMIN-01 | **Implemented, partial** — Installed list search and status filtering | [8afcdff](https://github.com/AbdullahZaher/vibress/commit/8afcdff19d44ec742c3386f409baf663eb117f13) | Two new Admin regression tests authored; **not executed / CI not verified** | Available/Updates/Activity layout and wider browser E2E remain |
+| PLUG-ADMIN-02..06 | Planned | — | — | — |
 | PLUG-UPD-01..06 | Planned | — | — | — |
 | PLUG-SDK-01..05 | Planned | — | — | — |
 | PLUG-RT-01..06 | Planned | — | — | — |
@@ -176,6 +180,8 @@ Fill one row per ticket as work proceeds; treat these rows as state, not promise
 | PLUG-MKT-01..04 | Planned | — | — | — |
 
 Update this table as each ticket is implemented/verified; do not prematurely label M0–M6 completed or production-ready.
+
+**Execution checkpoint, 2026-10-24:** Source docs and selected runtime files were read from the named GitHub branch. Local checkout, pnpm, Docker daemon, PostgreSQL and Redis test services were **not** available in this session. The new UI tests, typecheck, lint, full Vitest, build and operational drills have **not** run. PR #88 results apply only to the merged baseline SHA `782d7499ad695bafe90411b1512596380e667ca8`, not these commits. M0 gate remains unapproved; M1A, M1B and later milestones remain unaccepted.
 
 ## 6. Release levels and decision authority
 

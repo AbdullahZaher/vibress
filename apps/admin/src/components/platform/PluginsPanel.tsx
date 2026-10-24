@@ -75,7 +75,13 @@ export function PluginsPanel({
           </div>
           <label htmlFor={statusId} className="sr-only">{tr("Filter plugin status")}</label>
           <select id={statusId} value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === "all" || next === "active" ||
+                  next === "inactive" || next === "attention") {
+                setStatusFilter(next);
+              }
+            }}
             className="h-9 w-full sm:w-52 rounded-md border border-border/70 bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <option value="all">{tr("All plugin statuses")}</option>
             <option value="active">{tr("Globally active")}</option>
