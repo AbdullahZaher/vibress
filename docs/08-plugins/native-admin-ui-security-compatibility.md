@@ -84,11 +84,11 @@ The checks to run vary with the affected scope. Appropriate gates include target
 
 ## Open blockers / sign-off
 
-See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the inert NUI-01 prototype, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
+See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
 
 - NUI-00 RFC, compatibility negotiation and threat model require explicit architecture/security/API approval.
 - Structured resource transport, action admission and server-side mutation authorization are **not implemented**.
-- Native component renderer and generic plugin navigation are **not implemented**.
+- A limited stat/field-list Native renderer is implemented behind operator opt-in but has **not passed browser/API E2E or production acceptance**; generic plugin navigation and interactive forms/actions remain **not implemented**.
 - The LMS migration remains conditional on permission to resume LMS work.
 - Cross-publication E2E, populated upgrade/rollback, multi-replica and operator security acceptance have **not been run** for Native UI.
 

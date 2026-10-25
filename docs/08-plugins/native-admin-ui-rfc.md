@@ -28,7 +28,7 @@ The present Host supports read-only scalar Admin views and isolated, pinned HTML
 `adminPages` is now an **experimental optional SDK contribution**. Its presence does not change `adminViews`/`adminNavigation` ABI or v1 behavior; a new release-allowlisted Host read-only endpoint now parses it under independent authorization. The first implemented syntax schema covers **read-only scalar stat/field-list descriptors only**, linked in future to an existing admitted `adminViews` GET route. The example below matches that limited draft shape; it does not demonstrate a working runtime API.
 
 ```ts
-// NUI-01 experimental metadata only; the Host does not render it yet.
+// NUI-01 read-only metadata. Only the explicit operator-pinned Host path renders it.
 const proposedPage = {
   schemaVersion: 1,
   viewId: "courses", // Must match an existing admitted adminViews GET view.
@@ -49,7 +49,7 @@ const proposedPage = {
 };
 ```
 
-This example intentionally uses English placeholders for both locale keys; production Arabic translations are required before UI acceptance. The `field` and `key` values must be admitted against the already-linked GET response schema by a **future Host admission service**. The syntax schema alone does not check that linkage. There are **no data tables, actions, mutation grants, iframe assets or plugin-owned routes** in descriptor v1.
+This example intentionally uses English placeholders for both locale keys; production Arabic translations are required before UI acceptance. The `field` and `key` values are admitted against the already-linked GET response schema by the new Host registry. Runtime syntax validation alone is never authorization; the protected route also verifies active release, Staff permission and publication membership. There are **no data tables, actions, mutation grants, iframe assets or plugin-owned routes** in descriptor v1.
 
 ### NUI-01 experimental admission status and review record
 

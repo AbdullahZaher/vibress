@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Architect | Canonical SDK only, additive inert descriptors; no separate UI SDK or embedded browser extension code | Recommended, operator approval required |
 | Security | Existing Staff publication enforcement must remain authoritative; page metadata grants no permission; iframe safety unchanged | Recommended, independent approval required |
-| API Designer | NUI-01 is a schema/type-only read-only slice; structured tables/actions require a later independently authorized protocol | Recommended, API approval required |
+| API Designer | NUI-01/NUI-02 implement only read-only scalar projection with release-pinned Host checks; structured tables/actions require separately authorized protocol | Recommended, API approval required |
 | Plugin/Theme | Stable legacy `adminViews`, `adminNavigation`, routes, themes, settings and persisted content | Compatibility tests required |
 | i18n/RTL | Preserve en/ar v1 labels, Host-owned text rendering; v2 localization extensibility needs a deliberate policy | Acceptance required |
 | QA | Old/new ABI, hostile descriptors, wrong-publication, revoked state, performance and real upgrade/rollback tests | Execution pending |
@@ -50,7 +50,7 @@ Numeric limits above are **chosen safety ceilings**, not performance measurement
 
 ### D-04 — Version and compatibility behavior
 
-Keep `SDK_VERSION` unchanged because the new optional descriptor metadata is neither consumed by the existing Host nor a new runtime ABI. `schemaVersion: 1` covers only the small stat/field-list projection. Never assume that adding data tables or actions to the same v1 schema will work in older Hosts; a new version/feature negotiation must be designed.
+Keep `SDK_VERSION` unchanged for this additive read-only contribution: the upgraded Host now consumes optional metadata only after explicit approved-release opt-in, while previous modules and runtime route ABI stay intact. `schemaVersion: 1` covers only the small stat/field-list projection. Never assume that adding data tables or actions to the same v1 schema will work in older Hosts; a new version/feature negotiation must be designed.
 
 Old Host + old plugin remains unchanged. New Host + old plugin uses existing rendering. Old Host + plugin with optional native metadata must preserve legacy functionality **only if** that plugin still offers a valid legacy view. A plugin requiring native functionality must declare a supported minimum Host release via the operator approval/compatibility mechanism and must fail admission on an old Host. This is a **future gating requirement**, not an implemented new manifest flag. `plugin-core` has no implied native compatibility.
 
@@ -63,7 +63,7 @@ Operator default remains **legacy mode**. Future Native enablement must be expli
 - Operator opted in + descriptor invalid, unsupported, stale, revoked, or access denied: Host-owned failure; **no silent iframe downgrade**.
 - Intentional operator rollback: disable Native for the release only after verifying the legacy mode remains authorized; preserve data and existing iframe defenses.
 
-**OPEN OPERATIONS DECISION:** the precise on-disk/config/operator-management representation and migration/default of that allowlist must be reviewed. Do not invent an environment variable, auto-enable a capability, or change lockfile semantics in NUI-01.
+**Implemented proposal, pending operator sign-off:** `VIBRESS_NATIVE_ADMIN_UI_RELEASES` is a centrally validated, default-unset environment allowlist of exact `pluginId@entrypointSha256` values. It does not add a plugin capability or change the operator lockfile schema. See the [rollout runbook](native-admin-ui-rollout-runbook.md); production enablement is prohibited before acceptance.
 
 ### D-06 — Resource and action authorization (future NUI-03)
 

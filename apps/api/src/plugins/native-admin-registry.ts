@@ -31,7 +31,7 @@ export function admitNativeAdminPage(
     const linked = views.find((view) => view.viewId === page.viewId);
     if (!linked) return { kind: "invalid" };
     const routes = module.routes?.filter((route) =>
-      route.audience === "admin" && route.method === "GET" &&
+      route?.audience === "admin" && route.method === "GET" &&
       route.id === linked.routeId);
     if (!routes || routes.length !== 1 || !routes[0]) return { kind: "invalid" };
     const fields = routes[0].response.fields;
