@@ -16,7 +16,7 @@ type NativeState =
   | { kind: "legacy" }
   | { kind: "error" }
   | { kind: "native"; page: ExtensionNativeAdminPageV1;
-      data: Record<string, Scalar> };
+      publicationId: string | null; data: Record<string, Scalar> };
 
 const RECHECK_MS = 30_000;
 
@@ -55,7 +55,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         }
         const data = await readExtensionAdminViewApi(link);
         if (cancelled || getActivePublicationId() !== publicationId) return;
-        setState({ kind: "native", page: response.page, data });
+        setState({ kind: "native", page: response.page, publicationId, data });
       } catch {
         if (!cancelled) setState({ kind: "error" });
       } finally {
@@ -76,6 +76,12 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   }
   if (state.kind === "error") {
     return <p role="alert">{tr("Unable to load plugin view.")}</p>;
+  }
+
+  // Publication-change events can precede the effect that resets the view.
+  // Fail closed during that render, never show the previous site's rows.
+  if (getActivePublicationId() !== state.publicationId) {
+    return <p role="status">{tr("Loading plugin view...")}</p>;
   }
 
   const { page, data } = state;

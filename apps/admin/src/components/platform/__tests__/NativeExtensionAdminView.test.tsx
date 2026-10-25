@@ -89,6 +89,18 @@ describe("Host-rendered native extension page", () => {
     expect(element.querySelector("h1")?.textContent).toBe(hostile);
   });
 
+  it("does not render cached native data if publication changes before React effects flush", async () => {
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue(native);
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: hostile });
+    await render();
+    expect(element.textContent).toContain(hostile);
+    vi.mocked(getActivePublicationId).mockReturnValue("publication-b");
+    await act(async () => {
+      root.render(<NativeExtensionAdminView link={link} />);
+    });
+    expect(element.textContent).not.toContain(hostile);
+  });
+
   it("fails closed on a native endpoint denial rather than showing a frame", async () => {
     vi.mocked(readNativeExtensionAdminPageApi).mockRejectedValue(new Error("Permission denied"));
     await render();
