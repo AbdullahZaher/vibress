@@ -1,0 +1,51 @@
+# NUI-07: Native Extension SDK Conformance (Experimental)
+
+The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. New optional `adminPages`, `adminResources` and `adminActions` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
+
+## Bounded read-only example
+
+```ts
+import type { PluginModule } from "@vibress/plugin-sdk";
+
+const label = { en: "Records", ar: "Records" }; // Replace with reviewed Arabic.
+export const example: PluginModule = {
+  activate() {},
+  routes: [{
+    id: "overview", audience: "admin", method: "GET",
+    permission: "plugins.manage",
+    response: { fields: { total: "number" }, required: ["total"] },
+    handle: () => ({ total: 0 }),
+  }],
+  adminViews: [{ id: "overview", routeId: "overview", title: label }],
+  adminNavigation: [{ viewId: "overview", permission: "plugins.manage", label }],
+  adminPages: [{
+    schemaVersion: 1, viewId: "overview", title: label,
+    components: [{ type: "stat", id: "totals", label, field: "total" }],
+  }],
+  adminResources: [{
+    id: "record-list", viewId: "overview",
+    modelKey: "approved_records", fields: ["name"],
+  }],
+  // No adminActions: read-only pilot.
+};
+```
+
+`approved_records` is illustrative and requires a verified operator-approved physical model, enabled publication, and independently authorized `extension.storage.read` capability. Metadata alone never creates tables, makes requests or grants permissions.
+
+## Rules for extension developers
+
+- A Native page augments an existing admitted GET Admin view; route permission still applies to every scalar read.
+- All labels are plain text; no plugin React/JSX, CSS, HTML, direct Admin-origin JavaScript, arbitary URLs or SQL may execute.
+- A resource must be linked through its optional `viewId` to be displayed in the Native page. A projected field must match the operator-approved model. Text filters require operator-indexed fields.
+- Data pages contain up to 20 typed records and bounded signed HMAC pagination tokens bound to Staff, publication, plugin, resource, digest and filter.
+- A write descriptor is an inert `create` or CAS-protected `update` of approved Host storage, never a general-purpose business-action registry. It needs publication-local owner/admin, global `plugins.manage`, storage write capability and the independent default-off release opt-in.
+- Domain workflows, including LMS publishing, payment access, enrollment, erasure and content immutability, require independent domain-specific actions and testing; do not bypass policy using generic storage writes.
+- Localized field display labels, more locale variants and richer widgets require future contract approval. Current `en`/`ar` labels are a backward-compatible v1 constraint, not a worldwide permanent language policy.
+
+## Publication and compatibility tests
+
+Test old plugin/new Host, old Host/new plugin, Host without allowlist, revoked digest, bad model, two publications, stale/duplicate writes, large and hostile content, RTL/keyboard, real database upgrades and rollback. A plugin release requiring unsupported Native behavior must be rejected on an older Host, not silently downgraded.
+
+The Host operator must approve and pin the final signed artifact digest and separately configure `VIBRESS_NATIVE_ADMIN_UI_RELEASES` for Native read and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` for Native writes. No plugin can self-enable these values.
+
+See the [NUI-06 acceptance matrix](native-admin-ui-production-acceptance.md), [Native UI design RFC](native-admin-ui-rfc.md) and [rollout runbook](native-admin-ui-rollout-runbook.md). **Publishing a stable SDK and production enablement are on HOLD pending acceptance.**
