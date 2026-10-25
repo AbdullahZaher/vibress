@@ -219,11 +219,17 @@ async function main() {
   if (!dbRejected) throw new Error("PLUGIN_M1A_EVENT_DRILL_EXPECTED_DB_OUTAGE");
   stage("restore-postgres");
   compose("up", "-d", "--wait", "postgres");
-  stage("verify-durable-redis-and-postgres-lease");
-  if (await receiptStatus(second) !== "dispatching" ||
-      !(await (await realQueue()).getJob(secondId))) {
-    throw new Error("PLUGIN_M1A_EVENT_DRILL_LOST_POST_REDIS_LEASE");
-  }
+  stage("verify-pg-lease-after-restart");
+  // The first query on the pre-outage pg Pool can fail while PostgreSQL
+  // evicts old TCP sessions. Retry reads within a bounded window, but never
+  // accept a wrong state or synthesize a receipt; a missing row still fails.
+  await assertEventually("PostgreSQL receipt survives restart", async () => {
+    try { return await receiptStatus(second) === "dispatching"; }
+    catch { return false; }
+  }, 30000);
+  stage("verify-redis-job-after-pg-restart");
+  await assertEventually("Redis retains exact stable job ID", async () =>
+    Boolean(await (await realQueue()).getJob(secondId)), 15000);
   stage("reclaim-dispatching-postgres-lease");
   await ageReceipt(secondId, "3 minutes");
   const secondReclaimed = await claim(secondId);
@@ -271,7 +277,8 @@ try {
     console.error("PLUGIN_M1A_EVENT_DELIVERY_CLEANUP_TIMEOUT");
     process.exit(1); // Only the disposable CI runner; shell trap drops volumes.
   }, 12000);
-  cleanupDeadline.unref();
+  // Keep this deadline referenced: DB pool shutdown must not stall the
+  // disposable CI runner when a connection was severed during fault injection.
   try {
   if (consumer) {
     try { await consumer.close(true); } catch { process.exitCode = 1; }
