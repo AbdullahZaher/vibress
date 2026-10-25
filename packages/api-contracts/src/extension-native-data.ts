@@ -47,7 +47,7 @@ export const ExtensionNativeDataDiscoveryV1Schema = z.object({
     fields: Keys,
     textFilters: OptionalKeys.optional(),
     fieldTypes: z.record(Field, z.enum(["text", "integer", "boolean", "timestamptz"])).optional(),
-    requiredFields: OptionalKeys.optional(),
+    requiredFields: z.array(Field).max(12).refine((items) => new Set(items).size === items.length).optional(),
   }).strict()).max(8),
   actions: z.array(ExtensionNativeDataActionV1Schema).max(16),
 }).strict();
