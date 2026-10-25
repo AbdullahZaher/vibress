@@ -1,6 +1,6 @@
 # Native Admin UI Extensions — Production Implementation Plan (v2.0)
 
-**Status:** Design track with an experimental, non-activated NUI-01 contract prototype. Not approved for production or a stable SDK contract.
+**Status:** NUI-01/NUI-02 read-only candidate behind a default-off operator allowlist; not production certified. NUI-03 to NUI-07 remain incomplete.
 **Date:** 2026-10-25.
 **Owner:** Vibress core platform.
 **Baseline:** `main` at `782d7499ad695bafe90411b1512596380e667ca8` (merged PR #88).
@@ -158,7 +158,7 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 ## Documentation state and next step
 
 **Completed by documentation:** initial plan, draft RFC, source/consumer inventory, NUI-00 design/security findings, threat model, compatibility matrix and cross-document navigation.
-**In progress:** an optional read-only `adminPages` SDK type and shared Zod schema, authored with focused tests but without execution or Host consumption. This is an inert NUI-01 prototype, not a shipped capability.
+**Implemented on development branch, unverified:** optional NUI-01 SDK/Zod descriptor, server-side binding of native pages to already admitted Admin GET fields, release-digest allowlisted Staff/publication-scoped Native discovery endpoint, and NUI-02 Host-owned stat/field-list renderer. Regression/security tests are written, not run. The environment allowlist is unset by default. See [rollout runbook](native-admin-ui-rollout-runbook.md).
 **Not yet done:** formal Architecture/Security/API/Operations sign-off, final permission and resource protocol freeze, measured performance budgets, active API admission, UI renderer, LMS remediation/migration, production tests, CI, or operator acceptance.
 
-**Next step:** review the concrete [NUI-00 decisions](native-admin-ui-decisions.md), obtain independent owner approvals and run focused NUI-01 contract tests/typechecks. Do not connect the prototype to Admin routing or enable Native rendering before the NUI-00 release gates close. Existing LMS HTML interpolation risk requires a separate code fix before an LMS production pilot.
+**Next step:** run scoped/full checks in a complete checkout; obtain Architecture, Security, API, QA and Operator approvals before enabling the allowlist. Complete NUI-03 typed resources/actions, NUI-04 forms/navigation, NUI-05 independent LMS parity, NUI-06 live acceptance, and NUI-07 SDK release in separately validated increments. Do not label this read-only slice production-ready.

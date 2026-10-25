@@ -1,6 +1,6 @@
 # NUI-00 — Native Admin UI Decision Record and NUI-01 Entry Gate
 
-**Status:** Engineering recommendations and contract prototype recorded; **formal Architecture, Security, API, and Operator approval remains pending**.
+**Status:** Engineering decisions recorded; NUI-01/NUI-02 read-only Host implementation candidate exists behind a default-off, release-pinned operator allowlist. Formal Architecture, Security, API and Operator approval is pending.
 **Date:** 2026-10-25.
 **Branch:** `docs/native-admin-ui-plan-20261025`.
 **Context:** [NUI-00 review](native-admin-ui-nui00-review.md), [threat model](native-admin-ui-threat-model.md), [RFC](native-admin-ui-rfc.md), [release gates](external-sdk-release-gates.md).
@@ -22,7 +22,7 @@
 
 Use `@vibress/plugin-sdk` as the public module contract, not `plugin-core.VibressPlugin`. Extend `PluginModule` with optional `adminPages` metadata. Never import components from `apps/admin` into plugins. SDK types are not a security boundary: parse at runtime on the Host. Preserve v1 `adminViews`, `adminNavigation` and all existing fields, `SDK_VERSION = "1.0.0"`, and public/private app contracts.
 
-**Implemented as a non-activated prototype:** optional SDK type and independent `@vibress/api-contracts` Zod schema. No Host loader/renderer consumes it yet. The new public type is not frozen and cannot be marketed as generally supported.
+**Implemented as an unverified default-off candidate:** optional SDK type/Zod schema, Host-side view/field binding, Staff/publication-authorized GET endpoint and native read-only renderer. No actions, data tables or supported external SDK release. The new public type is not frozen and cannot be marketed as generally supported.
 
 ### D-02 — Read-only native descriptor v1
 
@@ -83,9 +83,9 @@ No plugin JS/HTML/React/CSS is imported into the privileged Admin document. Exis
 
 ## NUI-01 prototype boundary and tests
 
-**Included now:** optional inert public SDK types, standalone `ExtensionNativeAdminPageV1Schema` and plural collection validator, export from the shared contracts package, and Vitest negative descriptor fixtures.
+**Included now:** SDK types, Zod schema/response validation, API static admitted-view binding, release fingerprint allowlist, Host-only stat/field-list rendering and authored tests.
 
-**Explicitly not included:** API admission, route binding, publication or Staff security changes, UI rendering, data resources, action registry, plugin UI execution, activation controls, LMS code, migrations, or any production behavior change.
+**Explicitly not included:** structured resources/pagination, mutations/actions, forms, generic plugin navigation groups, LMS changes, database migrations, production verification or a stable external SDK. The Host/API/UI behavior changes only if an operator explicitly allowlists a pinned release.
 
 The tests are authored but not executed in this environment. They prove only syntax rejection **if they pass**; no schema unit test can prove server admission/authorization or DOM text escaping.
 
@@ -107,4 +107,4 @@ Required NUI-01 follow-up: run `pnpm --filter @vibress/api-contracts typecheck`,
 | Formal Architecture/Security/API/Operations sign-off | **NOT OBTAINED** | Named reviewers explicitly approve the RFC |
 | CI/typecheck/lint/integration/E2E | **NOT RUN for NUI-01** | Green relevant gates and reviewer evidence |
 
-**Release decision: HOLD.** A published SDK release, activated native renderer or production migration is not approved by this record. The code slice is experimental and passive until the gate is closed.
+**Release decision: HOLD.** Do not enable the new release-pinned environment allowlist in production before tests, API-first deployment verification, and Security/Architecture/API/Operator sign-off. See [rollout runbook](native-admin-ui-rollout-runbook.md).

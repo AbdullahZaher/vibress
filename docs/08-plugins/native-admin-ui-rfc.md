@@ -1,6 +1,6 @@
 # RFC — Host-rendered Native Plugin Admin UI
 
-**Status:** Draft for architecture/security review. A passive, read-only NUI-01 SDK/Zod contract prototype exists; API admission/rendering and versioned write/resource contracts are NOT implemented or frozen.
+**Status:** Draft, unapproved. NUI-01 read-only Host admission and NUI-02 stat/field-list renderer are implemented on a default-off development branch but untested here; resource/action contracts and stable SDK are not implemented.
 **Date:** 2026-10-25.
 **Track:** [Native Admin UI implementation plan](native-admin-ui-plan.md).
 **Existing authoritative contracts:** [EXT-301A](extension-admin-views-ext301a.md), [EXT-301B2](extension-admin-views-ext301b2.md), [Plugin SDK](plugin-sdk.md), and [External SDK release gates](external-sdk-release-gates.md). See also the [NUI-00 review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md).
@@ -25,7 +25,7 @@ The present Host supports read-only scalar Admin views and isolated, pinned HTML
 
 ## Draft contract: additive, declarative, versioned
 
-`adminPages` is now an **experimental optional type-only SDK contribution**. Its presence does not change `adminViews`/`adminNavigation` ABI or the behavior of v1 plugins; no Host runtime reads this property. The first implemented syntax schema covers **read-only scalar stat/field-list descriptors only**, linked in future to an existing admitted `adminViews` GET route. The example below matches that limited draft shape; it does not demonstrate a working runtime API.
+`adminPages` is now an **experimental optional SDK contribution**. Its presence does not change `adminViews`/`adminNavigation` ABI or v1 behavior; a new release-allowlisted Host read-only endpoint now parses it under independent authorization. The first implemented syntax schema covers **read-only scalar stat/field-list descriptors only**, linked in future to an existing admitted `adminViews` GET route. The example below matches that limited draft shape; it does not demonstrate a working runtime API.
 
 ```ts
 // NUI-01 experimental metadata only; the Host does not render it yet.
@@ -53,7 +53,7 @@ This example intentionally uses English placeholders for both locale keys; produ
 
 ### NUI-01 experimental admission status and review record
 
-The initial read-only syntax schema and SDK types are present, but **they are not wired into Host admission or Admin rendering**. Their guards cannot authorize the linked GET or enforce publication context without a future admitted-view binding. The [NUI-00 decision record](native-admin-ui-decisions.md) captures concrete first-slice ceilings, future operator opt-in, compatibility negotiation and open formal approvals. Later data-table/form/action components require new versions and security-reviewed resources/actions; do not silently expand descriptor v1.
+The initial syntax schema and SDK types now have a Host admission registry and a separately authorized, default-off discovery endpoint with an Admin read-only renderer. Every declared field must match an existing admitted GET response schema, and every request still checks Staff and publication-local rights. The added implementation has not been verified by CI. The [NUI-00 decision record](native-admin-ui-decisions.md) captures concrete first-slice ceilings, future operator opt-in, compatibility negotiation and open formal approvals. Later data-table/form/action components require new versions and security-reviewed resources/actions; do not silently expand descriptor v1.
 
 ### Schema and admission rules
 
@@ -163,4 +163,4 @@ Ownership is a proposed responsibility map, not an instruction to modify every d
 7. Approve exact action-level authorization and record-ownership policy, including how plugin capabilities interact with current Staff roles and whether new permissions are needed.
 8. Approve mandatory remediation of legacy LMS dynamic HTML interpolation before production acceptance; see [NUI-00 findings](native-admin-ui-nui00-review.md#findings-and-disposition).
 
-**No release approval or Host runtime implementation is claimed by this RFC.** Only passive SDK/schema test scaffolding exists; formal sign-off, CI validation, Host admission and rendering remain open.
+**No production approval is claimed.** A default-off Host admission/read-only renderer candidate is present, but CI, API/browser acceptance, NUI-03 resources/actions, LMS migration and operator sign-off remain open.
