@@ -54,3 +54,9 @@ For clarity this English-only guide uses untranslated English placeholders in `a
 **Compatibility:** existing plugin URLs and iframe/data renderers remain the default when Native is disabled. Do not require Native-only features on older Hosts without explicit compatibility checks. New tables, actions, forms and generic navigation must use future versioned contracts, not unsupported descriptor v1 fields.
 
 **Release status:** tests have been authored but not run in this execution environment; do not use the new metadata for production before security/operations acceptance.
+
+## Optional declarative navigation groups (incremental NUI-04)
+
+Existing `adminNavigation` items can add a `group` object containing a stable `id`, localized `label` (`en` and `ar`) and optional `icon`. Accepted icon values are `puzzle`, `graduation-cap`, and `book-open`. Group names must be consistent for all items within a plugin and are scoped by the plugin ID, so two independent plugins cannot merge groups by choosing the same identifier. The UI renders grouped items using Host-owned React and existing Admin navigation styles. Ungrouped legacy LMS and other plugin pages keep their established sections.
+
+This is inert presentation metadata only: it cannot grant permissions, add routes, or change the publication context. Translation values must be reviewed before release. NUI-03 typed resources/actions and NUI-04 interactive forms remain unimplemented.
