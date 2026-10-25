@@ -131,6 +131,11 @@ for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
 for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
 pids=()
 
+# Integration with REAL PostgreSQL/BullMQ admission+consumer semantics.
+# The bundled-only API/Worker processes are stopped to avoid touching
+# unrelated queues or handing execution to an unsigned external extension.
+pnpm exec tsx scripts/plugins/drill-event-delivery.ts
+
 "${compose[@]}" exec -T postgres sh -eu -c '
   pg_dump -U vibress -d vibress --format=custom --file=/tmp/m1a-drill.dump
   createdb -U vibress vibress_m1a_restored
