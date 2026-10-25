@@ -47,6 +47,11 @@ let queue: Queue<PluginWorkerEventJob> | null = null;
 let consumer: Worker<PluginWorkerEventJob> | null = null;
 let handlerCalls = 0;
 let successfulEffects = 0;
+let diagnosticStage = "initialize";
+function stage(name: string): void {
+  diagnosticStage = name; // Only code-owned static stage identifiers.
+  console.info("PLUGIN_M1A_EVENT_STAGE: " + name);
+}
 
 async function assertEventually(
   description: string, condition: () => Promise<boolean>, timeoutMs = 35000,
@@ -197,25 +202,32 @@ async function main() {
   // PostgreSQL fails AFTER Redis accepted a second job. The dispatcher
   // must not return its claimed receipt to pending on acknowledgement
   // failure. Reclaim the lease after restore; BullMQ keeps one stable job ID.
-  await consumer?.close();
+  stage("stop-first-consumer");
+  await consumer?.close(true);
   consumer = null;
+  stage("prepare-postgres-outage-event");
   const second = job();
   const secondId = await pluginEventLedger.admit(second);
   await ageReceipt(secondId);
   const secondClaim = await claim(secondId);
   await publish(secondId, secondClaim.envelope);
+  stage("stop-postgres-after-bullmq-publish");
   compose("stop", "postgres");
   let dbRejected = false;
   try { await pluginEventLedger.markQueued(secondId); }
   catch { dbRejected = true; }
   if (!dbRejected) throw new Error("PLUGIN_M1A_EVENT_DRILL_EXPECTED_DB_OUTAGE");
+  stage("restore-postgres");
   compose("up", "-d", "--wait", "postgres");
+  stage("verify-durable-redis-and-postgres-lease");
   if (await receiptStatus(second) !== "dispatching" ||
       !(await (await realQueue()).getJob(secondId))) {
     throw new Error("PLUGIN_M1A_EVENT_DRILL_LOST_POST_REDIS_LEASE");
   }
+  stage("reclaim-dispatching-postgres-lease");
   await ageReceipt(secondId, "3 minutes");
   const secondReclaimed = await claim(secondId);
+  stage("idempotently-republish-bullmq-job");
   await relayClaimedPluginEvent(secondReclaimed, pluginEventLedger,
     (row) => publish(row.id, row.envelope));
   if ((await (await realQueue()).getJobs(["waiting", "active", "delayed"]))
@@ -228,7 +240,7 @@ async function main() {
     await receiptStatus(second) === "executed" && successfulEffects === 2);
   if (successfulEffects !== 2) throw new Error("PLUGIN_M1A_EVENT_DRILL_DUPLICATE_EFFECT");
 
-  console.info("PLUGIN_M1A_EVENT_STAGE: post-outage BullMQ de-dup and finalization");
+  stage("post-outage-bullmq-finalized");
   // Mismatched approved artifact fingerprint must fail closed; a complete
   // BullMQ job with a valid PG receipt is insufficient for execution.
   const mismatched = job(randomUUID(), { artifactSha256: "b".repeat(64) });
@@ -246,14 +258,23 @@ async function main() {
   console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial and release mismatch");
 }
 async function executeAndClose(): Promise<void> {
+  // The CI runner may have broken connection handles after a fault. Bound
+  // shutdown even after failure, so a green stage never masks a hanging job.
+  const cleanupDeadline = setTimeout(() => {
+    console.error("PLUGIN_M1A_EVENT_DELIVERY_CLEANUP_TIMEOUT");
+    process.exit(1); // Restricted disposable CI runner; outer trap drops volumes.
+  }, 12000);
+  cleanupDeadline.unref();
 try {
   await main();
 } catch {
-  console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: no payloads or credentials logged");
+  // Only a predetermined stage label is printed. No DB error, event ID,
+  // envelope, password or plugin-provided string is emitted.
+  console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED_AT: " + diagnosticStage);
   process.exitCode = 1;
 } finally {
   if (consumer) {
-    try { await consumer.close(); } catch { process.exitCode = 1; }
+    try { await consumer.close(true); } catch { process.exitCode = 1; }
   }
   if (queue) {
     try { await queue.close(); } catch { process.exitCode = 1; }
@@ -268,6 +289,7 @@ try {
   }
   await closeDbPool();
 }
+  clearTimeout(cleanupDeadline);
 }
 void executeAndClose().catch(() => {
   console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: cleanup incomplete");
