@@ -114,6 +114,56 @@ because its `manifest.version` happens to match.
    objectives. Archive sanitized logs, checksums, CI commit SHA, replay
    decisions, operator identities and explicit go/no-go sign-off.
 
+## Coordinated read-only recovery acceptance gate
+
+For a **verified, isolated, restored and quiesced staging clone only**, the
+additional `scripts/plugins/run-m1a-recovery-acceptance.sh` runs existing
+preflight commands in a strict fixed order with no SQL writes, release
+activation, queue repair or secret re-encryption. This guards against
+accidentally omitting one of the individually documented checks.
+
+The operator must **independently** prove the restored PostgreSQL, Redis,
+signed operator artifacts and encryption keys all belong to the same approved
+snapshot. Gather four independent signed release receipts from **two API
+replicas and two Worker replicas**, using the independently pinned signer
+and lockfile. A receipt JSON file is not proof of the source replica by itself.
+File paths must be absolute and remain on protected operator storage.
+
+In a protected shell (no values logged to shell history), set the strict-mode
+release pins and real protected keyring as already documented above, and:
+
+```bash
+export VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1
+export VIBRESS_PLUGIN_SECRET_ROTATION_MAINTENANCE=1
+export VIBRESS_PLUGIN_DRILL_ISOLATED_CLONE_ACK=1
+export VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY=strict
+export VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1
+# Release paths, two trusted SHA-256 pins, legacy VIBRESS_ENCRYPTION_KEY,
+# VIBRESS_PLUGIN_SECRET_ACTIVE_KEY_ID and VIBRESS_PLUGIN_SECRET_KEYS_JSON
+# must be supplied privately and identically to the isolated fleet.
+bash scripts/plugins/run-m1a-recovery-acceptance.sh \
+  api:api-a=/protected/api-a.json api:api-b=/protected/api-b.json \
+  worker:worker-a=/protected/worker-a.json worker:worker-b=/protected/worker-b.json
+```
+
+The script executes, in order, `check-restore.ts`,
+`check-queue-recovery.ts`, `rotate-secrets.ts` **without `--apply`**,
+`check-replica-receipts.ts`, and `check-receipt-health.ts`. Every check
+must exit zero; missing strict pins, encryption keyring, maintenance flags,
+evidence arguments or any failed check stops the sequence. There is no
+skip/force mode. Zero exit only means the **read-only checks** passed;
+actual service recovery, multi-replica process identity, completed RPO/RTO,
+signer revocation propagation, live fault injection, monitoring deployment
+and operator sign-off are **not** automatically verified.
+
+The opt-in acknowledgment variable is a guard **not proof of isolation**;
+do not point this command at production. Its CI unit tests use a mock
+`pnpm` executable and never connect to actual PostgreSQL/Redis. For
+real acceptance, also run the individual negative drills below, record
+observed API×2/Worker×2 behavior and retained event receipts, measure
+actual recovery time and recovered writes, and secure the operator-signed
+go/no-go report outside the source tree.
+
 ## Mandatory negative drills
 
 | Injected condition | Required result |
