@@ -15,3 +15,4 @@ export * from "./content-models";
 export * from "./publication-locales";
 export * from "./translations";
 export * from "./plugins";
+export * from "./extension-native-admin";

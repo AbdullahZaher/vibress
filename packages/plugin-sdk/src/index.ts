@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import type { PluginNativeAdminPageV1 } from "./native-admin-ui";
+export type { PluginNativeAdminPageV1, PluginNativeAdminComponentV1 } from "./native-admin-ui";
 
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
@@ -181,6 +183,8 @@ export interface PluginModule {
   /** Optional metadata only; never executable UI contributions. */
   readonly adminViews?: readonly PluginAdminView[] | undefined;
   readonly adminNavigation?: readonly PluginAdminNavigationItem[] | undefined;
+  /** NUI-01 experimental inert metadata only; no runtime renderer/admission yet. */
+  readonly adminPages?: readonly PluginNativeAdminPageV1[] | undefined;
   /** Explicitly declared public SSR views; legacy modules remain unchanged. */
   readonly publicViews?: readonly PluginPublicView[] | undefined;
   deactivate?(): void | Promise<void>;
