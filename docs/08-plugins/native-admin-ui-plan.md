@@ -1,6 +1,6 @@
 # Native Admin UI Extensions — Production Implementation Plan (v2.0)
 
-**Status:** NUI-01/NUI-02 read-only candidate behind a default-off operator allowlist; not production certified. NUI-03 to NUI-07 remain incomplete.
+**Status:** NUI-01/NUI-02 read-only candidate behind a default-off operator allowlist; not production certified. NUI-03 actions/resources and NUI-04 forms remain incomplete; optional NUI-04 group navigation is an unverified incremental implementation. NUI-05 to NUI-07 remain incomplete.
 **Date:** 2026-10-25.
 **Owner:** Vibress core platform.
 **Baseline:** `main` at `782d7499ad695bafe90411b1512596380e667ca8` (merged PR #88).
@@ -158,7 +158,7 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 ## Documentation state and next step
 
 **Completed by documentation:** initial plan, draft RFC, source/consumer inventory, NUI-00 design/security findings, threat model, compatibility matrix and cross-document navigation.
-**Implemented on development branch, unverified:** optional NUI-01 SDK/Zod descriptor, server-side binding of native pages to already admitted Admin GET fields, release-digest allowlisted Staff/publication-scoped Native discovery endpoint, and NUI-02 Host-owned stat/field-list renderer. Regression/security tests are written, not run. The environment allowlist is unset by default. See [rollout runbook](native-admin-ui-rollout-runbook.md).
-**Not yet done:** formal Architecture/Security/API/Operations sign-off, final permission and resource protocol freeze, measured performance budgets, active API admission, UI renderer, LMS remediation/migration, production tests, CI, or operator acceptance.
+**Implemented on development branch, pending full CI acceptance:** optional NUI-01 SDK/Zod descriptor, server-side binding of native pages to already admitted Admin GET fields, release-digest allowlisted Staff/publication-scoped Native discovery endpoint, NUI-02 Host-owned stat/field-list renderer, and additive NUI-04 optional navigation-group metadata with server admission and an Admin sidebar renderer. Regression/security tests are written, not run. The environment allowlist is unset by default. See [rollout runbook](native-admin-ui-rollout-runbook.md).
+**Not yet done:** formal Architecture/Security/API/Operations sign-off, NUI-03 typed resources/actions and owner-scoped mutation policy, NUI-04 native forms/settings, measured performance budgets, LMS remediation/migration, browser/API integration acceptance, complete successful CI and operator acceptance. Native admission and read-only rendering exist on the development branch but are not production-certified.
 
-**Next step:** run scoped/full checks in a complete checkout; obtain Architecture, Security, API, QA and Operator approvals before enabling the allowlist. Complete NUI-03 typed resources/actions, NUI-04 forms/navigation, NUI-05 independent LMS parity, NUI-06 live acceptance, and NUI-07 SDK release in separately validated increments. Do not label this read-only slice production-ready.
+**Next step:** run scoped/full checks in a complete checkout; obtain Architecture, Security, API, QA and Operator approvals before enabling the allowlist. Complete NUI-03 typed resources/actions, remaining NUI-04 native forms/settings, NUI-05 independent LMS parity, NUI-06 live acceptance, and NUI-07 SDK release in separately validated increments. Do not label this read-only slice production-ready.

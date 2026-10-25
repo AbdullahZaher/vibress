@@ -28,9 +28,9 @@ Use `@vibress/plugin-sdk` as the public module contract, not `plugin-core.Vibres
 
 To avoid premature permissions and API contract changes, Native descriptor `schemaVersion: 1` is an **inert read-only projection** tied by `viewId` to an existing, admitted `adminViews` GET route. Initial component kinds are `stat` (one declared scalar field) and `field-list` (bounded declared scalar fields). Fields and labels are plain data, never expressions.
 
-A future admission service **MUST** ensure each native `viewId` maps to exactly one admitted legacy Admin view, that every referenced field exists in that linked GET route's declared response shape, and that the route matches the user's publication/permission. Syntax validation alone cannot establish any of this. Until the admission service exists, no descriptor is returned to browsers or rendered.
+The development branch implements linked-view and response-field admission for the read-only Native v1 slice, plus a Staff/publication-scoped endpoint behind a default-off operator release allowlist. This must remain independently reauthorized on every data request and requires integration/security acceptance. Syntax validation alone does not authorize any data.
 
-**Explicitly deferred:** native tables/arrays/pagination, forms, mutations, permissions other than those supported by the linked existing GET, actions and plugin-defined navigation groups. They require NUI-03/NUI-04 and must not be simulated with unvalidated JSON strings.
+**Explicitly deferred:** native tables/arrays/pagination, forms, mutations, permissions other than those supported by the linked existing GET, and action execution. Optional inert navigation-group labels/icons have been added independently and do not authorize any resource or action. They require NUI-03/NUI-04 and must not be simulated with unvalidated JSON strings.
 
 ### D-03 — Conservative syntax limits (prototype defaults)
 

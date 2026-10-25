@@ -57,6 +57,6 @@ Required beyond these commands: real Fastify/PostgreSQL/Redis integration; API a
 
 ## Unfinished release blockers
 
-NUI-03 typed paginated resources and authorized action gateway, NUI-04 forms and generic sidebar, NUI-05 independent LMS migration/parity, NUI-06 operational/security/E2E acceptance and NUI-07 stable external SDK release are **not implemented or certified**. The known LMS `courses.html` `innerHTML` sink requires a separate code fix before an LMS production pilot. The user-visible Native contract is limited to read-only scalar data.
+NUI-03 typed paginated resources and authorized action gateway, remaining NUI-04 native forms/settings (optional validated generic navigation grouping is now implemented on the branch), NUI-05 independent LMS migration/parity, NUI-06 operational/security/E2E acceptance and NUI-07 stable external SDK release are **not implemented or certified**. The known LMS `courses.html` `innerHTML` sink requires a separate code fix before an LMS production pilot. The user-visible Native contract is limited to read-only scalar data.
 
 **Decision:** keep the operator variable unset in production until all these gates close.
