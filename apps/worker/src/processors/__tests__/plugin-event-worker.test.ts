@@ -6,7 +6,7 @@ import {
 } from "@vibress/api-contracts";
 import {
   PluginEventWorker, processTrustedPluginEvent, processAdmittedPluginEvent,
-  createTrustedWorkerPluginHost, type PluginEventExecution,
+  createTrustedWorkerPluginHost, relayClaimedPluginEvent, type PluginEventExecution,
 } from "../plugin-event-worker";
 
 const DIGEST = "a".repeat(64);
@@ -83,6 +83,59 @@ describe("EXT-401 publication-scoped durable event worker", () => {
       new Map([["hello-public", DIGEST]]),
     );
     expect(listTrustedFingerprints).toHaveBeenCalledOnce();
+  });
+
+  it("records a successful Redis publish before marking the durable receipt queued", async () => {
+    const calls: string[] = [];
+    const ledger = {
+      markQueued: vi.fn(async () => { calls.push("queued"); }),
+      returnPending: vi.fn(async () => { calls.push("pending"); }),
+    };
+    const publish = vi.fn(async () => { calls.push("redis"); });
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .resolves.toBe("enqueued");
+    expect(calls).toEqual(["redis", "queued"]);
+    expect(ledger.returnPending).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledWith(job);
+  });
+
+  it("returns an unsent durable receipt for retry if Redis publishing fails", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => undefined),
+      returnPending: vi.fn(async () => undefined),
+    };
+    const publish = vi.fn(async () => { throw new Error("private Redis connection"); });
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .resolves.toBe("retry");
+    expect(ledger.returnPending).toHaveBeenCalledWith(job.id);
+    expect(ledger.markQueued).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dispatch lease if PostgreSQL fails after Redis accepted the job", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => { throw new Error("private DB connection"); }),
+      returnPending: vi.fn(async () => undefined),
+    };
+    const publish = vi.fn(async () => undefined);
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .rejects.toThrow("private DB connection");
+    expect(publish).toHaveBeenCalledOnce();
+    expect(ledger.returnPending).not.toHaveBeenCalled();
+  });
+
+  it("does not hide a failed PostgreSQL return-to-pending update", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => undefined),
+      returnPending: vi.fn(async () => { throw new Error("DB unavailable"); }),
+    };
+    const publish = vi.fn(async () => { throw new Error("Redis unavailable"); });
+    await expect(relayClaimedPluginEvent({
+      id: "plugin-" + DIGEST, envelope: event(),
+    }, ledger, publish)).rejects.toThrow("DB unavailable");
+    expect(ledger.markQueued).not.toHaveBeenCalled();
   });
 
   it("fails readiness until the trusted event consumer is started", () => {
@@ -229,6 +282,21 @@ describe("EXT-401 publication-scoped durable event worker", () => {
       .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
     expect(receipts.finalize).not.toHaveBeenCalled();
     expect(host.dispatchEvent).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a valid admission pending if approval disappears during dispatch", async () => {
+    const { PluginDomainError, pluginEventJobId } = await import("@vibress/plugins");
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const h = execution({ failure: new PluginDomainError(
+      "PLUGIN_RELEASE_NOT_APPROVED", "Release approval disappeared",
+    ) });
+    await expect(processAdmittedPluginEvent(
+      event(), pluginEventJobId(event()), receipts, h,
+    )).rejects.toMatchObject({ code: "PLUGIN_RELEASE_NOT_APPROVED" });
+    expect(receipts.finalize).not.toHaveBeenCalled();
   });
 
   it("retries genuine handler failures through BullMQ rather than swallowing them", async () => {

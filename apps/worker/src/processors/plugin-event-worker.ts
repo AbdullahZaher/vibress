@@ -13,7 +13,7 @@ import {
   DrizzlePluginPublicationSettingRepository,
   TrustedExternalPluginHost, verifyTrustedPluginRelease, verifyOperatorReleaseAdmission,
   pluginEventLedger, pluginEventJobId,
-  type Plugin, type PluginHost,
+  type Plugin, type PluginHost, type ClaimedPluginEvent,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
 import { metrics } from "@vibress/observability";
@@ -69,12 +69,11 @@ export async function processTrustedPluginEvent(
       "PLUGIN_INACTIVE",
       "PLUGIN_PUBLICATION_INACTIVE",
       "PLUGIN_RELEASE_CHANGED",
-      "PLUGIN_RELEASE_NOT_APPROVED",
       "PLUGIN_CAPABILITY_DENIED",
     ].includes(error.code)) return "retired";
-    // Mixed-release local module state must be retried on a compatible
-    // replica, not acknowledged as retired. Provider outages, transient DB
-    // failures and handler errors also use bounded BullMQ retries.
+    // A missing local approval or mixed-release module state must retry on a
+    // compatible replica rather than permanently retire a durable receipt.
+    // Provider outages, transient DB failures and handler errors also retry.
     // Handlers must tolerate at-least-once delivery.
     throw error;
   }
@@ -119,6 +118,32 @@ export function createTrustedWorkerPluginHost(
     requiresPublicationEnablement: () => true,
     getOperatorAdminFingerprints: () => operatorHost.listTrustedFingerprints(),
   };
+}
+
+/**
+ * PostgreSQL is the durable outbox. A Redis admission can succeed while
+ * the subsequent DB markQueued fails. That failure must NOT reset the
+ * dispatch claim to pending; wait for the existing bounded lease reclaim,
+ * when BullMQ's stable job ID can de-duplicate the retry.
+ *
+ * Only an actual Redis publication error warrants returning the claim to
+ * pending immediately. The caller owns safe metrics/logging.
+ */
+export async function relayClaimedPluginEvent(
+  receipt: Pick<ClaimedPluginEvent, "id" | "envelope">,
+  ledger: Pick<typeof pluginEventLedger, "markQueued" | "returnPending">,
+  publish: (job: Pick<ClaimedPluginEvent, "id" | "envelope">) => Promise<unknown>,
+): Promise<"enqueued" | "retry"> {
+  try {
+    await publish(receipt);
+  } catch {
+    await ledger.returnPending(receipt.id);
+    return "retry";
+  }
+  // Do not treat a failure here as Redis failure: the job may be running
+  // already. Retain the dispatching lease; retrying it is crash-safe.
+  await ledger.markQueued(receipt.id);
+  return "enqueued";
 }
 
 export class PluginEventWorker {
@@ -246,20 +271,27 @@ export class PluginEventWorker {
     metrics.gauge("plugin_events_claimed_per_sweep", claims.length);
     for (const receipt of claims) {
       try {
-        await enqueueTraced(this.producer, "event", receipt.envelope, {
-          jobId: receipt.id, attempts: 5,
-          backoff: { type: "exponential", delay: 5000 },
-          removeOnComplete: { age: 7 * 24 * 3600, count: 100000 },
-          removeOnFail: { age: 30 * 24 * 3600, count: 100000 },
-        });
-        // A consumer may already have finalized this receipt. Conditional
-        // updates must never change an executed/retired receipt back to queued.
-        await pluginEventLedger.markQueued(receipt.id);
-        metrics.counter("plugin_events_relay_enqueued");
+        const outcome = await relayClaimedPluginEvent(
+          receipt, pluginEventLedger,
+          (claimed) => enqueueTraced(this.producer!, "event", claimed.envelope, {
+            jobId: claimed.id, attempts: 5,
+            backoff: { type: "exponential", delay: 5000 },
+            removeOnComplete: { age: 7 * 24 * 3600, count: 100000 },
+            removeOnFail: { age: 30 * 24 * 3600, count: 100000 },
+          }),
+        );
+        metrics.counter(outcome === "enqueued"
+          ? "plugin_events_relay_enqueued" : "plugin_events_relay_failed");
+        if (outcome === "retry") {
+          console.error("[PluginEventWorker] Event admission relay unavailable", {
+            jobId: receipt.id,
+          });
+        }
       } catch {
-        await pluginEventLedger.returnPending(receipt.id);
+        // Redis may already have accepted the job. Do not return a claimed
+        // receipt to pending when only the DB acknowledgement failed.
+        // The existing lease reclaims it safely; job IDs de-duplicate Redis.
         metrics.counter("plugin_events_relay_failed");
-        // No plugin payloads/errors are logged; retry through the next sweep.
         console.error("[PluginEventWorker] Event admission relay unavailable", {
           jobId: receipt.id,
         });

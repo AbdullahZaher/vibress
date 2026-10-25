@@ -39,6 +39,59 @@ describe("EXT-401 scoped failed-event recovery ledger (PostgreSQL)", () => {
     await closeDbPool();
   });
 
+  it("recovers a crashed DB-to-Redis relay claim without losing admission", async () => {
+    const job = PluginWorkerEventJobSchema.parse({
+      schemaVersion: 1, scope: "publication",
+      publicationId, pluginId, manifestId,
+      pluginVersion: "1.0.0", artifactSha256: "a".repeat(64),
+      eventId: randomUUID(), eventName: "post.published",
+      payload: { postId: "private-recovery-fixture" },
+    });
+    const id = pluginEventJobId(job);
+    const pool = getDbPool();
+
+    // A committed PG admission remains durable even when no Redis enqueue
+    // happened; duplicate retries preserve the same immutable receipt.
+    expect(await ledger.admit(job)).toBe(id);
+    expect(await ledger.admit({ ...job })).toBe(id);
+    await expect(ledger.admit({
+      ...job, payload: { postId: "modified-duplicate" },
+    })).rejects.toThrow("Event ID is already bound to a different envelope");
+
+    // Simulate the publisher crashing before Redis accepted a job.
+    await pool.query(
+      "UPDATE plugin_event_receipts SET updated_at = now() - interval '10 seconds' WHERE id = $1",
+      [id],
+    );
+    const first = await ledger.claimReady(50);
+    expect(first.some((entry) => entry.id === id)).toBe(true);
+    expect((await ledger.getReceipt(publicationId, pluginId, job.eventId))?.status)
+      .toBe("dispatching");
+
+    // Simulate the other crash boundary: Redis may have accepted the job,
+    // but markQueued() never returned. Reclaim only AFTER the lease expires.
+    const immediate = await ledger.claimReady(50);
+    expect(immediate.some((entry) => entry.id === id)).toBe(false);
+    await pool.query(
+      "UPDATE plugin_event_receipts SET updated_at = now() - interval '3 minutes' WHERE id = $1",
+      [id],
+    );
+    const reclaimed = await ledger.claimReady(50);
+    expect(reclaimed.some((entry) => entry.id === id)).toBe(true);
+    await ledger.markQueued(id);
+    expect((await ledger.getReceipt(publicationId, pluginId, job.eventId))?.status)
+      .toBe("queued");
+
+    // Mark/failure callbacks racing after a consumer already completed must
+    // never resurrect a terminal delivery.
+    await ledger.finalize(id, "executed");
+    await ledger.markQueued(id);
+    await ledger.returnPending(id);
+    expect((await ledger.getReceipt(publicationId, pluginId, job.eventId))?.status)
+      .toBe("executed");
+    expect(await ledger.isAdmitted(job)).toBe(false);
+  });
+
   it("audit is atomic, scoped, and refuses executed or cross-publication replays", async () => {
     const job = PluginWorkerEventJobSchema.parse({
       schemaVersion: 1, scope: "publication",
