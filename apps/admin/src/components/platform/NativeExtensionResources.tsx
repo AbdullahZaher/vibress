@@ -61,8 +61,8 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
     return () => { cancelled = true; };
   }, [pluginId, viewId, publicationId]);
 
-  const resource = state.kind === "ready"
-    ? state.resources.find((item) => item.id === resourceId) : undefined;
+  const resources: readonly Resource[] = state.kind === "ready" ? state.resources : [];
+  const resource = resources.find((item) => item.id === resourceId);
   const cursor = history[history.length - 1];
   useEffect(() => {
     if (!resource) return;
@@ -102,16 +102,16 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
       <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 dir="auto" className="text-base font-semibold">{resource.id}</h2>
         <div className="flex flex-wrap gap-2">
-          {state.resources.length > 1 && (
+          {resources.length > 1 && (
             <select value={resource.id} aria-label={tr("Choose plugin resource")}
               className="h-8 rounded-md border border-border bg-background px-2 text-sm"
               onChange={(event) => {
-                const next = state.resources.find((item) => item.id === event.target.value);
+                const next = resources.find((item) => item.id === event.target.value);
                 setResourceId(event.target.value);
                 setHistory([undefined]); setFilter(null); setTerm(""); setSelected(null);
                 setField(next?.textFilters?.[0] ?? "");
               }}>
-              {state.resources.map((item) => <option value={item.id} key={item.id}>{item.id}</option>)}
+              {resources.map((item) => <option value={item.id} key={item.id}>{item.id}</option>)}
             </select>
           )}
           <Button size="sm" variant="outline" onClick={() => setRevision((value) => value + 1)}>
