@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021]
+    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, docs/native-admin-ui-plan-20261025]
   pull_request:
     branches: [main]
   workflow_dispatch:
