@@ -39,6 +39,7 @@ describe("NUI-04 native action form", () => {
     root = createRoot(element);
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     act(() => { root.unmount(); });
     element.remove();
   });
@@ -75,6 +76,40 @@ describe("NUI-04 native action form", () => {
     expect(element.querySelector("script")).toBeNull();
     expect(element.querySelector<HTMLInputElement>("input[id$='-title_en']")?.value).toBe(hostile);
     expect(element.querySelector<HTMLSelectElement>("select[id$='-published']")?.value).toBe("false");
+    expect(executeNativeExtensionActionApi).not.toHaveBeenCalled();
+  });
+
+  it("submits typed CAS values only after explicit confirmation", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(executeNativeExtensionActionApi).mockResolvedValue({
+      schemaVersion: 1, record: {
+        id: "course-1", version: 8, fields: { title_en: hostile, published: false },
+      },
+    });
+    await render({ id: "course-1", version: 7, fields: {
+      title_en: hostile, published: false,
+    } });
+    const form = element.querySelector("form");
+    expect(form).not.toBeNull();
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(confirm).toHaveBeenCalledWith("Confirm plugin record change?");
+    expect(executeNativeExtensionActionApi).toHaveBeenCalledWith(
+      "sample-plugin", "update-course",
+      { id: "course-1", expectedVersion: 7,
+        fields: { title_en: hostile, published: false } },
+    );
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it("does not send a mutation when the confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    await render({ id: "course-1", version: 7, fields: { title_en: "Safe" } });
+    const form = element.querySelector("form");
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
     expect(executeNativeExtensionActionApi).not.toHaveBeenCalled();
   });
 

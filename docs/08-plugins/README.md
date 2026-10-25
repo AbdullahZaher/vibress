@@ -131,3 +131,5 @@ The private `AbdullahZaher/vibress-lms` repository is the proposed integration/a
 - Change a contract with an ADR, compatibility review, migration plan, changelog and consumer tests.
 - Keep `Current` versus `Proposed` labels honest; replace them only after code and tests land on `main`.
 - Do not treat planning estimates as committed dates or claim release readiness based on documentation alone.
+
+**Native UI release gates:** [NUI-06 production acceptance](native-admin-ui-production-acceptance.md) and [NUI-07 experimental SDK conformance](native-admin-ui-sdk-conformance.md). These documents do not constitute production approval or a published stable SDK.

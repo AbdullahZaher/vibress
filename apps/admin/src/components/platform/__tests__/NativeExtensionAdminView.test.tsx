@@ -14,6 +14,7 @@ vi.mock("../../../lib/api", () => ({
   readExtensionAdminViewApi: vi.fn(),
   readNativeExtensionAdminPageApi: vi.fn(),
   readNativeExtensionDataRegistryApi: vi.fn(),
+  executeNativeExtensionActionApi: vi.fn(),
   readNativeExtensionResourceApi: vi.fn(),
 }));
 vi.mock("../../../lib/api/client", () => ({
