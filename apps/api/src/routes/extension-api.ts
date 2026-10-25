@@ -15,6 +15,7 @@ import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { requireMemberSession, validateMemberOrigin } from "../middleware/member-auth";
 import { pluginsService, workspaceService, settingsService, publicationLocaleService } from "../services";
 import { adminExtensionNavigationRoutes } from "./extension-admin-views";
+import { adminNativeDataRoutes } from "./extension-native-data";
 import { adminExtensionFrameRoutes } from "./extension-admin-iframe";
 import { publicExtensionViewRoutes } from "./extension-public-views";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
@@ -343,6 +344,7 @@ function extensionRoutes(fastify: FastifyInstance, audience: PluginApiAudience) 
 export async function adminExtensionApiRoutes(fastify: FastifyInstance) {
   extensionRoutes(fastify, "admin");
   await fastify.register(adminExtensionNavigationRoutes);
+  await fastify.register(adminNativeDataRoutes);
   await fastify.register(adminExtensionFrameRoutes);
 }
 
