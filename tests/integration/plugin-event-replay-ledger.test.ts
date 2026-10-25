@@ -76,8 +76,15 @@ describe("EXT-401 scoped failed-event recovery ledger (PostgreSQL)", () => {
 
     // Simulate the other crash boundary: Redis may have accepted the job,
     // but markQueued() never returned. Reclaim only AFTER the lease expires.
-    const immediate = await ledger.claimReady(1);
-    expect(immediate.some((entry) => entry.id === id)).toBe(false);
+    // Inspect our receipt only: calling claimReady here could mutate another
+    // fixture while our fresh dispatching lease is still held.
+    const immediate = await pool.query<{ id: string }>(
+      `SELECT id FROM plugin_event_receipts WHERE id = $1
+       AND ((status = 'pending' AND updated_at <= now() - interval '5 seconds')
+         OR (status = 'dispatching' AND updated_at <= now() - interval '2 minutes'))`,
+      [id],
+    );
+    expect(immediate.rows).toHaveLength(0);
     await pool.query(
       "UPDATE plugin_event_receipts SET updated_at = now() - interval '3 minutes' WHERE id = $1",
       [id],
