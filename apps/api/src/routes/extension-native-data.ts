@@ -223,7 +223,7 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
 
   fastify.post("/extensions/:pluginId/actions/:actionId", {
     preHandler: [requireStaffSession, validateOrigin],
-    bodyLimit: 16 * 1024,
+    bodyLimit: 16384,
     config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
     handler: async (req, reply) => {
       reply.header("Cache-Control", "private, no-store");

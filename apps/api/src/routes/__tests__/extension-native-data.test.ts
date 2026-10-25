@@ -61,7 +61,7 @@ vi.mock("@vibress/config", () => ({
   }),
 }));
 vi.mock("../../middleware/auth", () => ({
-  requireStaffSession: (req: FastifyRequest, reply: FastifyReply) => {
+  requireStaffSession: async (req: FastifyRequest, reply: FastifyReply) => {
     if (!state.authenticated) return reply.code(401).send({ errors: [{ code: "UNAUTHENTICATED" }] });
     Object.assign(req, {
       user: { id: state.actorId },
@@ -74,7 +74,7 @@ vi.mock("../../middleware/auth", () => ({
       },
     });
   },
-  validateOrigin: (req: FastifyRequest, reply: FastifyReply) => {
+  validateOrigin: async (req: FastifyRequest, reply: FastifyReply) => {
     if (req.method === "POST" && req.headers.origin !== "http://localhost:7777") {
       return reply.code(403).send({ errors: [{ code: "ORIGIN_DENIED" }] });
     }
