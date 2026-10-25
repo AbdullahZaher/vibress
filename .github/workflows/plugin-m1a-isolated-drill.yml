@@ -1,0 +1,36 @@
+name: Plugins M1A isolated replica fault drill
+
+on:
+  push:
+    branches: [feat/plugin-platform-roadmap-execution-20261024]
+  workflow_dispatch:
+
+concurrency:
+  group: plugin-m1a-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-replica-fault-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check drill shell syntax
+        run: bash -n scripts/plugins/drill-isolated-replica-faults.sh
+      - name: Exercise four live processes and disposable PostgreSQL/Redis outage
+        env:
+          VIBRESS_M1A_DISPOSABLE_DRILL: "1"
+        run: bash scripts/plugins/drill-isolated-replica-faults.sh
