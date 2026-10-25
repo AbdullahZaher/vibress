@@ -14,7 +14,7 @@ import {
   PluginContext,
   PluginModule,
 } from "@vibress/plugin-sdk";
-import { encryptSecret, decryptSecret } from "@vibress/security";
+import { encryptPluginSecret, decryptPluginSecret } from "@vibress/security";
 import { domainEvents } from "@vibress/events";
 import { isDeepStrictEqual } from "node:util";
 import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
@@ -1202,7 +1202,7 @@ export class PluginsService {
         key,
         isSecret,
         value: isSecret ? null : value,
-        encryptedValue: isSecret && value !== null ? encryptSecret(value) : null,
+        encryptedValue: isSecret && value !== null ? encryptPluginSecret(value, { pluginId, publicationId, key }) : null,
       });
     }
     if (entries.length > 0) {
@@ -1319,7 +1319,7 @@ export class PluginsService {
     if (!encrypted) return null;
     let plaintext: string;
     try {
-      plaintext = decryptSecret(encrypted);
+      plaintext = decryptPluginSecret(encrypted, { pluginId, publicationId, key });
     } catch {
       // Corruption is an operational problem, not a missing setting: fail closed.
       throw new PluginDomainError("PLUGIN_SECRET_CORRUPT", "Plugin secret cannot be decrypted");
@@ -1386,7 +1386,7 @@ export class PluginsService {
           pluginId,
           key,
           null,
-          encryptSecret(String(value)),
+          encryptPluginSecret(String(value), { pluginId, key }),
           true,
         );
       } else {
@@ -1447,7 +1447,7 @@ export class PluginsService {
     const encrypted = await this.settingRepo.getSecret(pluginId, key);
     if (!encrypted) return null;
     try {
-      return decryptSecret(encrypted);
+      return decryptPluginSecret(encrypted, { pluginId, key });
     } catch {
       return null;
     }
