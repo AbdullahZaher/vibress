@@ -1,10 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { PluginStorageApi, PluginStorageItem } from "@vibress/plugin-sdk";
+import type { PluginStorageItem } from "@vibress/plugin-sdk";
 import {
   ExtensionNativeDataParamsV1Schema, ExtensionNativeActionParamsV1Schema,
   ExtensionNativeDataQueryV1Schema, ExtensionNativeActionBodyV1Schema,
   ExtensionNativeDataPageV1Schema, ExtensionNativeActionResultV1Schema,
-  type ExtensionNativeDataResourceV1,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 import {
@@ -132,35 +131,44 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
       const cursor = query.data.cursor
         ? readNativeCursor(query.data.cursor, context, key) : undefined;
       if (query.data.cursor && !cursor) return reject(reply, req, "INVALID_CURSOR", 400);
-      const session = createHostPluginStorageSession({
-        pluginId: admitted.binding.pluginId, publicationId: admitted.publicationId,
-        actorUserId: admitted.actorId, requestId: req.id,
-      }, admitted.binding.models);
-      let failed = false;
+      let response: ReturnType<typeof ExtensionNativeDataPageV1Schema.safeParse> | null = null;
+      let failedCode: string | null = null;
+      let session: ReturnType<typeof createHostPluginStorageSession> | null = null;
       try {
-        const page = filterField && filterValue
-          ? await session.storage.listByText!(
+        session = createHostPluginStorageSession({
+          pluginId: admitted.binding.pluginId, publicationId: admitted.publicationId,
+          actorUserId: admitted.actorId, requestId: req.id,
+        }, admitted.binding.models);
+        const page = filterField && filterValue && session.storage.listByText
+          ? await session.storage.listByText(
             resource.modelKey, filterField, filterValue, limit, cursor)
-          : await session.storage.list(resource.modelKey, limit, cursor);
-        const nextCursor = page.nextCursor
-          ? issueNativeCursor(context, page.nextCursor, key) : undefined;
-        if (page.nextCursor && !nextCursor) {
-          return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+          : filterField ? null : await session.storage.list(resource.modelKey, limit, cursor);
+        if (!page) {
+          failedCode = "EXTENSION_UNAVAILABLE";
+        } else {
+          const nextCursor = page.nextCursor
+            ? issueNativeCursor(context, page.nextCursor, key) : undefined;
+          if (page.nextCursor && !nextCursor) {
+            failedCode = "EXTENSION_UNAVAILABLE";
+          } else {
+            response = ExtensionNativeDataPageV1Schema.safeParse({
+              items: page.items.map((item) => project(item, resource.fields)),
+              ...(nextCursor ? { nextCursor } : {}),
+            });
+            if (!response.success) failedCode = "EXTENSION_INVALID_RESPONSE";
+          }
         }
-        const response = ExtensionNativeDataPageV1Schema.safeParse({
-          items: page.items.map((item) => project(item, resource.fields)),
-          ...(nextCursor ? { nextCursor } : {}),
-        });
-        if (!response.success) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
-        return reply.status(200).send(response.data);
       } catch {
-        failed = true;
-        return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+        failedCode = "EXTENSION_UNAVAILABLE";
       } finally {
-        // Finish all storage operations before returning the HTTP response.
-        await session.close().catch(() => { failed = true; });
-        if (failed) reply.header("X-Extension-Storage-Error", "1");
+        // A storage failure during final drain MUST prevent any success reply.
+        if (session) {
+          try { await session.close(); } catch { failedCode = "EXTENSION_UNAVAILABLE"; }
+        }
       }
+      if (failedCode) return reject(reply, req, failedCode, 503);
+      if (!response?.success) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      return reply.status(200).send(response.data);
     },
   });
 
@@ -188,10 +196,15 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
           (action.operation === "update" && body.data.expectedVersion === undefined)) {
         return reject(reply, req, "VALIDATION_ERROR", 400);
       }
-      const session = createHostPluginStorageSession({
-        pluginId: admitted.binding.pluginId, publicationId: admitted.publicationId,
-        actorUserId: admitted.actorId, requestId: req.id, allowWrites: true,
-      }, admitted.binding.models);
+      let session: ReturnType<typeof createHostPluginStorageSession>;
+      try {
+        session = createHostPluginStorageSession({
+          pluginId: admitted.binding.pluginId, publicationId: admitted.publicationId,
+          actorUserId: admitted.actorId, requestId: req.id, allowWrites: true,
+        }, admitted.binding.models);
+      } catch {
+        return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+      }
       let result: PluginStorageItem | null = null;
       let errorCode: string | null = null;
       try {
