@@ -9,6 +9,7 @@ import { getActivePublicationId } from "../../lib/api/client";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import { PluginAdminView } from "./PluginAdminView";
+import { NativeExtensionResources } from "./NativeExtensionResources";
 
 type Scalar = string | number | boolean;
 type NativeState =
@@ -128,6 +129,8 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
           </div>
         ))}
       </div>
+      <NativeExtensionResources pluginId={link.pluginId} viewId={link.viewId}
+        publicationId={state.publicationId} />
     </section>
   );
 }
