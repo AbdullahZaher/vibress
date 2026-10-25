@@ -69,6 +69,8 @@ export interface AppConfig {
   secrets: { encryptionKey: string | null };
   /** Exact operator-approved release IDs enabled for read-only Native Admin UI. */
   nativeAdminUiReleases: readonly string[];
+  /** Independent opt-in for Host-approved Native storage writes. */
+  nativeAdminActionReleases: readonly string[];
   setup: { token: string | null };
   unsplash: { accessKey: string | null };
   outbox: {
@@ -209,6 +211,9 @@ const envSchema = z.object({
   VIBRESS_NATIVE_ADMIN_UI_RELEASES: z.string().max(8192).regex(
     /^[a-z0-9][a-z0-9-]{0,99}@[a-f0-9]{64}(?:,[a-z0-9][a-z0-9-]{0,99}@[a-f0-9]{64})*$/,
   ).optional(),
+  VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: z.string().max(8192).regex(
+    /^[a-z0-9][a-z0-9-]{0,99}@[a-f0-9]{64}(?:,[a-z0-9][a-z0-9-]{0,99}@[a-f0-9]{64})*$/,
+  ).optional(),
   STORAGE_PROVIDER: nonEmptyString.default("local"),
   STORAGE_LOCAL_ROOT: optionalNonEmptyString,
   UNSPLASH_ACCESS_KEY: optionalNonEmptyString,
@@ -343,6 +348,7 @@ export function loadConfig(env: EnvSource): AppConfig {
     },
     secrets: { encryptionKey: raw.VIBRESS_ENCRYPTION_KEY || null },
     nativeAdminUiReleases: raw.VIBRESS_NATIVE_ADMIN_UI_RELEASES?.split(",") ?? [],
+    nativeAdminActionReleases: raw.VIBRESS_NATIVE_ADMIN_ACTION_RELEASES?.split(",") ?? [],
     setup: { token: raw.VIBRESS_SETUP_TOKEN || null },
     outbox: {
       deliveryMode: raw.EVENT_DELIVERY_MODE,

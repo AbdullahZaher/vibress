@@ -16,10 +16,15 @@ describe("Typed configuration", () => {
 
   it("defaults Native Admin UI off and validates operator-pinned release allowlist", () => {
     expect(loadConfig({ NODE_ENV: "test" }).nativeAdminUiReleases).toEqual([]);
+    expect(loadConfig({ NODE_ENV: "test" }).nativeAdminActionReleases).toEqual([]);
     const digest = "a".repeat(64);
     expect(loadConfig({
       NODE_ENV: "test", VIBRESS_NATIVE_ADMIN_UI_RELEASES: `sample-plugin@${digest}`,
     }).nativeAdminUiReleases).toEqual([`sample-plugin@${digest}`]);
+    expect(loadConfig({ NODE_ENV: "test", VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: `sample-plugin@${digest}`,
+    }).nativeAdminActionReleases).toEqual([`sample-plugin@${digest}`]);
+    expect(() => loadConfig({ NODE_ENV: "test", VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: "invalid" }))
+      .toThrow(ConfigError);
     for (const invalid of [
       "sample-plugin", "sample-plugin@wrong",
       `sample-plugin@${"G".repeat(64)}`,
