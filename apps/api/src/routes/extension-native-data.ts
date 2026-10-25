@@ -4,6 +4,7 @@ import {
   ExtensionNativeDataParamsV1Schema, ExtensionNativeActionParamsV1Schema,
   ExtensionNativeDataQueryV1Schema, ExtensionNativeActionBodyV1Schema,
   ExtensionNativeDataPageV1Schema, ExtensionNativeActionResultV1Schema,
+  ExtensionNativeDataDiscoveryV1Schema,
 } from "@vibress/api-contracts";
 import { getConfig } from "@vibress/config";
 import {
@@ -101,6 +102,49 @@ function project(
 
 /** Never expose raw storage cursor or any undeclared model fields to browsers. */
 export async function adminNativeDataRoutes(fastify: FastifyInstance) {
+  fastify.get("/extensions/:pluginId/data", {
+    preHandler: [requireStaffSession, validateOrigin],
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("X-Content-Type-Options", "nosniff");
+      const params = ExtensionNativeDataParamsV1Schema.pick({ pluginId: true })
+        .safeParse(req.params);
+      if (!params.success) return reject(reply, req, "VALIDATION_ERROR", 400);
+      const admitted = await authorize(req, params.data.pluginId, false);
+      if (!admitted.ok) return reject(reply, req, admitted.code, admitted.status);
+      if (!admitted.registry.resources.every((resource) =>
+        admitNativeDataModel(resource, admitted.binding.models))) {
+        return reject(reply, req, "EXTENSION_INVALID_DATA", 503);
+      }
+      const allowWrites = getConfig().nativeAdminActionReleases.includes(
+        params.data.pluginId + "@" + admitted.digest);
+      let actions: typeof admitted.registry.actions = [];
+      if (allowWrites) {
+        try {
+          const binding = await pluginsService.resolveExtensionStorageBinding(
+            params.data.pluginId, admitted.publicationId, "extension.storage.write",
+          );
+          if (binding?.publicationId === admitted.publicationId) {
+            actions = admitted.registry.actions;
+          }
+        } catch {
+          return reject(reply, req, "EXTENSION_UNAVAILABLE", 503);
+        }
+      }
+      const response = ExtensionNativeDataDiscoveryV1Schema.safeParse({
+        schemaVersion: 1,
+        resources: admitted.registry.resources.map((r) => ({
+          id: r.id, fields: r.fields,
+          ...(r.textFilters ? { textFilters: r.textFilters } : {}),
+        })),
+        actions,
+      });
+      if (!response.success) return reject(reply, req, "EXTENSION_INVALID_DATA", 503);
+      return reply.status(200).send(response.data);
+    },
+  });
+
   fastify.get("/extensions/:pluginId/resources/:resourceId", {
     preHandler: [requireStaffSession, validateOrigin],
     config: { rateLimit: { max: 60, timeWindow: "1 minute" } },

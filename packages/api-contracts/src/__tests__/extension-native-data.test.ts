@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ExtensionNativeDataRegistryV1Schema, ExtensionNativeActionBodyV1Schema,
   ExtensionNativeDataQueryV1Schema, ExtensionNativeDataPageV1Schema,
+  ExtensionNativeDataDiscoveryV1Schema,
 } from "../extension-native-data";
 
 const resource = {
@@ -17,6 +18,17 @@ describe("NUI-03 storage-backed resource/action contracts", () => {
     expect(ExtensionNativeActionBodyV1Schema.safeParse({
       id: "course-1", expectedVersion: 3, fields: { title_en: "Valid" },
     }).success).toBe(true);
+  });
+  it("exposes only inert discovery metadata, never storage model IDs", () => {
+    expect(ExtensionNativeDataDiscoveryV1Schema.safeParse({
+      schemaVersion: 1,
+      resources: [{ id: resource.id, fields: resource.fields, textFilters: resource.textFilters }],
+      actions: [action],
+    }).success).toBe(true);
+    expect(ExtensionNativeDataDiscoveryV1Schema.safeParse({
+      schemaVersion: 1,
+      resources: [resource], actions: [],
+    }).success).toBe(false);
   });
   it("rejects arbitrary routes, permissions and unbound actions", () => {
     for (const value of [

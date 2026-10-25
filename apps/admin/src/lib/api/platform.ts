@@ -1,5 +1,9 @@
 import { apiRequest } from "./client";
-import { ExtensionNativeAdminResponseV1Schema, type ExtensionNativeAdminPageV1 } from "@vibress/api-contracts";
+import {
+  ExtensionNativeAdminResponseV1Schema, type ExtensionNativeAdminPageV1,
+  ExtensionNativeDataDiscoveryV1Schema, ExtensionNativeDataPageV1Schema,
+  ExtensionNativeActionResultV1Schema,
+} from "@vibress/api-contracts";
 
 export interface AdminIntegration {
   id: string;
@@ -178,6 +182,45 @@ export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLi
     throw new Error("Invalid native plugin view response");
   }
   return parsed.data;
+}
+
+/**
+ * NUI-03 Host API helpers. Plugin metadata never supplies arbitrary URLs.
+ * Discovery grants no permission; every resource/action is reauthorized.
+ */
+export async function readNativeExtensionDataRegistryApi(pluginId: string) {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/data`, { cache: "no-store" });
+  return ExtensionNativeDataDiscoveryV1Schema.parse(response);
+}
+
+export async function readNativeExtensionResourceApi(
+  pluginId: string, resourceId: string,
+  query: { limit?: number; cursor?: string; filterField?: string; filterValue?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (query.limit !== undefined) qs.set("limit", String(query.limit));
+  if (query.cursor !== undefined) qs.set("cursor", query.cursor);
+  if (query.filterField !== undefined) qs.set("filterField", query.filterField);
+  if (query.filterValue !== undefined) qs.set("filterValue", query.filterValue);
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceId)}` +
+      (qs.size ? `?${qs.toString()}` : ""),
+    { cache: "no-store" },
+  );
+  return ExtensionNativeDataPageV1Schema.parse(response);
+}
+
+export async function executeNativeExtensionActionApi(
+  pluginId: string, actionId: string,
+  payload: { id: string; expectedVersion?: number;
+    fields: Readonly<Record<string, string | number | boolean | null>> },
+) {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(actionId)}`,
+    { method: "POST", body: JSON.stringify(payload), cache: "no-store" },
+  );
+  return ExtensionNativeActionResultV1Schema.parse(response);
 }
 
 export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtensionViewLink[] }> {

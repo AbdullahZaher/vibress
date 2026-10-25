@@ -38,6 +38,17 @@ export const ExtensionNativeDataRegistryV1Schema = z.object({
     ctx.addIssue({ code: "custom", message: "Duplicate or unbound Native data ID" });
   }
 });
+export const ExtensionNativeDataDiscoveryV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  resources: z.array(z.object({
+    id: Segment,
+    fields: Keys,
+    textFilters: OptionalKeys.optional(),
+  }).strict()).max(8),
+  actions: z.array(ExtensionNativeDataActionV1Schema).max(16),
+}).strict();
+export type ExtensionNativeDataDiscoveryV1 = z.infer<typeof ExtensionNativeDataDiscoveryV1Schema>;
+
 export const ExtensionNativeDataParamsV1Schema = z.object({
   pluginId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
   resourceId: Segment,
