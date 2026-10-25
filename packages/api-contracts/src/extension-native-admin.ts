@@ -57,6 +57,20 @@ export const ExtensionNativeAdminPageV1Schema = z.object({
   }
 });
 
+export const ExtensionNativeAdminPageResponseV1Schema = z.object({
+  mode: z.literal("native"),
+  page: ExtensionNativeAdminPageV1Schema,
+}).strict();
+
+export const ExtensionNativeAdminLegacyResponseV1Schema = z.object({
+  mode: z.literal("legacy"),
+}).strict();
+
+export const ExtensionNativeAdminResponseV1Schema = z.discriminatedUnion("mode", [
+  ExtensionNativeAdminPageResponseV1Schema,
+  ExtensionNativeAdminLegacyResponseV1Schema,
+]);
+
 export const ExtensionNativeAdminPagesV1Schema = z.array(
   ExtensionNativeAdminPageV1Schema,
 ).max(8).superRefine((pages, ctx) => {
