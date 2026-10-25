@@ -10,6 +10,8 @@ supported for untrusted plugins** or complete for external SDK release.
 
 **M0 baseline artifacts:** [Source-linked consumer and contract inventory](plugin-platform-m0-compatibility-matrix.md) and [release acceptance/support matrix](plugin-platform-m0-acceptance-matrix.md). They record required checks and outstanding evidence, **not** a completed operational drill.
 
+**M1A recovery guidance:** [Isolated signed-release / PostgreSQL / Redis restore acceptance drill](plugin-platform-restore-drill.md). It describes strict admission, recovery maintenance, key custody, queue reconciliation and required RPO/RTO evidence. It is **not** a completed live restore.
+
 The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
 
 ## P0-2 operator-trusted release catalog

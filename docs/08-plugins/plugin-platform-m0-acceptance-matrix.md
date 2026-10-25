@@ -24,6 +24,7 @@
 - `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__ scripts/plugins/__tests__`
 - `pnpm exec tsx scripts/plugins/check-replica-receipts.ts api:api-a=... api:api-b=... worker:worker-a=... worker:worker-b=...` (see the [runbook](secure-operator-release-admission.md); **not** a substitute for live signed admission and independent physical replicas)
 - `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build`, `pnpm audit --prod --audit-level high`
+- For strict isolated restore: `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1 VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY=strict ... pnpm exec tsx scripts/plugins/check-restore.ts`, followed by `pnpm exec tsx scripts/plugins/check-queue-recovery.ts` (exact environment and run order in [PLUG-OPS-02 drill](plugin-platform-restore-drill.md)).
 - Docker image build, security scan, relevant signed admission/restore scripts and full Admin E2E **against real services**.
 
 Run only commands supported by actual package tooling; resolve targeted failures instead of bypassing tests. Record exact command, configuration profile, URL to retained logs, commit SHA, pass/fail, DB/Redis image version, binary/release digests and operator acceptance sign-off. Never promote based on a checklist without results.
