@@ -75,6 +75,69 @@ The read-only comparator rejects unsigned/malformed receipt data, duplicate repl
 3. For updates **first** disable affected publication delivery, drain/deactivate the **old active plugin while its old signed lockfile is still mounted**, and safely quiesce Worker/API replicas. Only then replace the operator-owned approved snapshot in all replicas, deploy/restart API and Worker against the new identical snapshot, review/install approved schema migrations through the existing controlled DB process, and register/activate the new plugin globally. Never hot-swap a signed lockfile under an active module: the Host intentionally refuses mismatched release deactivation, and you may need isolated operator recovery. Enable it individually for authorized publications. Do not advance while workers still run the previous ABI/release.
 4. Verify API and Worker startup, queue retry/idempotency and publication isolation; monitor failed events and metrics. A mismatched replica, failed signature, invalid scanner finding or migration conflict blocks deployment.
 
+## PLUG-OPS-05 — signer rotation and revocation (bounded operator policy)
+
+`VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256` is an **optional**
+operator-controlled comma-separated list of at most 32 lowercase SHA-256
+fingerprints of **SPKI DER Ed25519 signing public keys**. Each entry must be
+exactly 64 hexadecimal characters. Missing policy retains legacy compatibility;
+an explicitly malformed/empty list, duplicate, unknown format, or a revoked
+current signer fails the attestation check closed. When a denylist is configured,
+an unsigned lockfile is also rejected. The verifier reads this policy from
+**operator environment only**, not from the plugin bundle or catalog.
+
+Rotation and revocation have different operational semantics:
+
+1. Obtain a separately reviewed replacement Ed25519 public/private key pair
+   in offline operator custody. Never distribute the private key to API,
+   Worker, plugins, CMS storage or container images.
+2. Stage the **same independently reviewed immutable release bytes** with a
+   newly signed lockfile, preserving the operator's recorded SBOM, provenance,
+   security review and compatible migrations. Compute the new SPKI fingerprint
+   and complete the strict admission check before changing the live fleet.
+3. Quiesce **all** API and Worker replicas, disable plugin traffic and drain
+   durable event queues. In the coordinated release snapshot update, change
+   `VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE`,
+   `VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE`,
+   `VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256` and
+   `VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256` together. Include the
+   compromised/retired signer in
+   `VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256`. All four runtime
+   admission receipts must agree on the new signer/digest.
+4. Independently test the **old valid signature + old signer + old lockfile**
+   against the new denylist: it MUST fail. Test missing/malformed policy,
+   a wrong new signer and mixed-key replicas as separate go/no-go cases.
+   Never waive signature or clear revocation policy as a repair.
+5. Restore only the new fully approved snapshot. **Rollback must be signed
+   again by an allowed signer**, and must respect already-applied DB migrations
+   and immutable plugin event receipts. A valid but revoked old signature is
+   not a safe rollback artifact. Record operator sign-off and exact CI/deploy
+   evidence before restoring traffic.
+
+The denylist is **configuration-based fencing**, not a centralized durable
+revocation service. A restored or compromised deployment that omits the
+denylist can reauthorize old trust; preserve this policy in protected,
+independently backed-up operator configuration, and verify it on every
+replica after restoration. Rotation is not cluster-atomic by itself.
+
+### Encryption keys are a separate, still-open acceptance gate
+
+`VIBRESS_ENCRYPTION_KEY` encrypts existing secrets using an AES-256-GCM
+`v: 1` envelope with **no key identifier**. Changing it in place before all
+stored ciphertexts have been inventoried, backed up, decrypted and
+re-encrypted with verified compatibility can permanently destroy access to
+settings and integration credentials. Signing-key rotation **never** rotates
+or re-encrypts these secrets.
+
+For a future operator-approved secret-key migration, freeze writes under
+controlled maintenance, inventory every ciphertext consumer, preserve both
+old and new keys outside database backups, run a transactionally safe and
+resumable key-versioned migration on a populated PostgreSQL clone, verify all
+old and new records through the authorized API, then roll out compatible
+dual-read/single-write behavior. Test interrupted batches, rollback, operator
+key loss, multiple replicas and backup restore before changing the production
+encryption key. No automatic encryption key rotation is implemented here.
+
 ## Failure and rollback
 
 - Missing signing key/signature, unknown operator key fingerprint, unsigned lockfile, malformed JSON evidence, missing/failed security review, changed artifact, missing/mismatched plan or wrong expected SHA causes the checker to exit nonzero without executing plugin code or DB mutations.

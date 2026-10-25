@@ -54,6 +54,64 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
       .rejects.toThrow(/signature verification failed/);
   });
 
+  it("rejects revoked signer even with a correct signature and old operator pin", async () => {
+    const f = await fixture();
+    const digest = createHash("sha256").update(f.payload).digest("hex");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", digest);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256", f.keyFingerprint);
+    try {
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .rejects.toThrow("OPERATOR_SIGNER_REVOKED");
+
+      // A newly signed deployment needs a separately authorized new signer pin.
+      const next = generateKeyPairSync("ed25519");
+      const nextPem = next.publicKey.export({ format: "pem", type: "spki" });
+      const nextFingerprint = createHash("sha256").update(next.publicKey.export({
+        format: "der", type: "spki",
+      })).digest("hex");
+      await writeFile(f.keyFile, nextPem);
+      await writeFile(f.signatureFile, sign(null, Buffer.from(f.payload), next.privateKey)
+        .toString("base64") + "\n");
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", nextFingerprint);
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .resolves.toMatchObject({
+          signatureVerified: true, publicKeySha256: nextFingerprint,
+        });
+
+      // Restoring the old key and its valid signature does not undo revocation,
+      // even when the old lockfile bytes are still independently pinned.
+      await writeFile(f.keyFile, nextPem);
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .rejects.toThrow("OPERATOR_TRUST_ROOT_MISMATCH");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("fails closed for malformed revocation policies and unsigned fallback", async () => {
+    const f = await fixture();
+    try {
+      for (const invalid of [
+        "", ",", f.keyFingerprint + ",", f.keyFingerprint.toUpperCase(),
+        f.keyFingerprint + "," + f.keyFingerprint,
+        Array.from({ length: 33 }, (_, i) => i.toString(16).padStart(64, "0")).join(","),
+      ]) {
+        vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256", invalid);
+        await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+          .rejects.toThrow("INVALID_OPERATOR_SIGNER_REVOCATION_POLICY");
+      }
+      vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256", "b".repeat(64));
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, {}))
+        .rejects.toThrow("OPERATOR_SIGNATURE_REQUIRED");
+      await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
+        .resolves.toMatchObject({ publicKeySha256: f.keyFingerprint });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("pins the canonical SPKI fingerprint and rejects a different operator key", async () => {
     const f = await fixture();
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
