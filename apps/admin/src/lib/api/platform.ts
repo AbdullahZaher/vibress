@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import { ExtensionNativeAdminResponseV1Schema, type ExtensionNativeAdminPageV1 } from "@vibress/api-contracts";
 
 export interface AdminIntegration {
   id: string;
@@ -155,6 +156,23 @@ export interface AdminExtensionViewLink {
   label: { en: string; ar: string };
   title: { en: string; ar: string };
   permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+}
+
+/** Strictly Host-owned native metadata. A declaration alone is not authorization. */
+export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLink): Promise<
+  | { mode: "legacy" }
+  | { mode: "native"; page: ExtensionNativeAdminPageV1; routeId: string }
+> {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/native`,
+    { cache: "no-store" },
+  );
+  const parsed = ExtensionNativeAdminResponseV1Schema.safeParse(response);
+  if (!parsed.success || (parsed.data.mode === "native" &&
+      (parsed.data.page.viewId !== link.viewId || parsed.data.routeId !== link.routeId))) {
+    throw new Error("Invalid native plugin view response");
+  }
+  return parsed.data;
 }
 
 export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtensionViewLink[] }> {

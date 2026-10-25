@@ -60,6 +60,7 @@ export const ExtensionNativeAdminPageV1Schema = z.object({
 export const ExtensionNativeAdminPageResponseV1Schema = z.object({
   mode: z.literal("native"),
   page: ExtensionNativeAdminPageV1Schema,
+  routeId: NativeSegment,
 }).strict();
 
 export const ExtensionNativeAdminLegacyResponseV1Schema = z.object({

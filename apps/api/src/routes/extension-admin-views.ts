@@ -111,7 +111,7 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
           admission.permission,
         )) return reject(reply, req, "PERMISSION_DENIED", 403);
         return reply.status(200).send(ExtensionNativeAdminResponseV1Schema.parse({
-          mode: "native", page: admission.page,
+          mode: "native", page: admission.page, routeId: admission.routeId,
         }));
       } catch (error) {
         if (error instanceof PluginDomainError &&
