@@ -8,6 +8,10 @@ supported for untrusted plugins** or complete for external SDK release.
 
 The [Plugin Platform Production Completion Plan](plugin-platform-production-plan.md) is the active, phased work plan for trusted distribution, explicit trust tiers, operator installation, upgrades, Studio UX and eventual SDK release. **LMS development is paused**; only plugin-platform compatibility work is in scope. PR #86 is merged in the current baseline, but its implementation is not a declaration that the external SDK or marketplace is production-ready.
 
+## Native Admin UI Extensions — P1 design track (proposed 2026-10-25)
+
+The [Native Admin UI implementation plan](native-admin-ui-plan.md), [draft Host-rendered UI RFC](native-admin-ui-rfc.md), and [security/compatibility acceptance matrix](native-admin-ui-security-compatibility.md) propose a versioned, declarative, Host-rendered plugin Admin experience using the existing Studio design system. These documents are **design drafts only**. They add no SDK or API implementation, do not replace the current iframe/legacy view, and do not mark the SDK or plugin platform production-ready. LMS is a future validation pilot only if feature development is explicitly resumed; the active P0 plugin-platform and operator acceptance gates remain in force.
+
 ## P0-2 operator-trusted release catalog
 
 The optional [v1 trusted release catalog metadata](operator-trusted-release-catalog.md) extends each entry in the existing operator lockfile without altering legacy entries. A release includes a digest-bound identity, publisher, exactly supported Host/SDK ABI, capability snapshot, and optional SHA-256-pinned local SBOM/provenance/migration-plan references. The preflight verifies their bytes before rollout; the metadata does **not** install code or approve migrations by itself.
