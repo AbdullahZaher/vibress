@@ -38,12 +38,10 @@ describe("PLUG-OPS-06 aggregate-only worker backlog telemetry", () => {
     await expect(observePluginReceiptBacklog(async () => { throw err; }, {
       gauge, counter,
     })).resolves.toBe(false);
-    expect(gauge).toHaveBeenCalledExactlyOnceWith(
-      "plugin_events_receipt_probe_ok", 0,
-    );
-    expect(counter).toHaveBeenCalledExactlyOnceWith(
-      "plugin_events_receipt_probe_failures",
-    );
+    expect(gauge).toHaveBeenCalledTimes(1);
+    expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_probe_ok", 0);
+    expect(counter).toHaveBeenCalledTimes(1);
+    expect(counter).toHaveBeenCalledWith("plugin_events_receipt_probe_failures");
     expect(JSON.stringify([...gauge.mock.calls, ...counter.mock.calls]))
       .not.toContain("internal-db-private");
   });
