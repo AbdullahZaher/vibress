@@ -12,11 +12,15 @@ import { getDb, auditEvents, pluginEventReceipts } from "@vibress/database";
 export type PluginActivityAction =
   | "plugin.publication_settings_updated"
   | "plugin.publication_secret_revoked"
+  | "plugin.publication_enabled"
+  | "plugin.publication_disabled"
   | "plugin.event_replay_requested";
 
 const settingActions = [
   "plugin.publication_settings_updated",
   "plugin.publication_secret_revoked",
+  "plugin.publication_enabled",
+  "plugin.publication_disabled",
 ] as const;
 
 export interface PluginActivityRow {
@@ -31,6 +35,8 @@ export interface PluginActivityResult {
 function parseAction(action: string): PluginActivityAction {
   if (action === "plugin.publication_settings_updated" ||
       action === "plugin.publication_secret_revoked" ||
+      action === "plugin.publication_enabled" ||
+      action === "plugin.publication_disabled" ||
       action === "plugin.event_replay_requested") return action;
   throw new Error("PLUGIN_ACTIVITY_INVALID_ACTION");
 }

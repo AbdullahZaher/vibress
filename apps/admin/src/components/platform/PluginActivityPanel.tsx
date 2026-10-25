@@ -13,6 +13,8 @@ interface Props {
 const ACTION_LABEL: Record<AdminPluginActivity["action"], string> = {
   "plugin.publication_settings_updated": "Plugin settings updated",
   "plugin.publication_secret_revoked": "Plugin secret revoked",
+  "plugin.publication_enabled": "Plugin enabled in publication",
+  "plugin.publication_disabled": "Plugin disabled in publication",
   "plugin.event_replay_requested": "Plugin event replay requested",
 };
 

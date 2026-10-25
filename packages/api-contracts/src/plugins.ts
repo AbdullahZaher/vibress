@@ -362,6 +362,8 @@ export const PluginActivityListQuerySchema = z.object({
 export const PluginActivityActionSchema = z.enum([
   "plugin.publication_settings_updated",
   "plugin.publication_secret_revoked",
+  "plugin.publication_enabled",
+  "plugin.publication_disabled",
   "plugin.event_replay_requested",
 ]);
 export const PluginActivityListResponseSchema = z.object({

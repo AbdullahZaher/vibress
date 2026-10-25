@@ -362,7 +362,7 @@ export async function registerOperatorTrustedPluginApi(
 /** PLUG-OPS-06: whitelisted audit actions, publication resolved by Staff API. */
 export interface AdminPluginActivity {
   action: "plugin.publication_settings_updated" | "plugin.publication_secret_revoked" |
-    "plugin.event_replay_requested";
+    "plugin.publication_enabled" | "plugin.publication_disabled" | "plugin.event_replay_requested";
   createdAt: string;
 }
 export async function listPluginActivityApi(
