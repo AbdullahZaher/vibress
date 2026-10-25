@@ -2,7 +2,7 @@ import type { PluginModule, PluginAdminDataResourceV1 } from "@vibress/plugin-sd
 import type { ApprovedPluginPhysicalModel } from "@vibress/plugins";
 import {
   ExtensionNativeDataRegistryV1Schema,
-  type ExtensionNativeDataActionV1,
+  type ExtensionNativeDataResourceV1, type ExtensionNativeDataActionV1,
 } from "@vibress/api-contracts";
 import { admitNativeAdminPage } from "./native-admin-registry";
 
