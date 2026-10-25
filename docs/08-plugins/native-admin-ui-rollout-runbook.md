@@ -57,6 +57,16 @@ Required beyond these commands: real Fastify/PostgreSQL/Redis integration; API a
 
 ## Unfinished release blockers
 
-NUI-03 typed paginated resources and authorized action gateway, remaining NUI-04 native forms/settings (optional validated generic navigation grouping is now implemented on the branch), NUI-05 independent LMS migration/parity, NUI-06 operational/security/E2E acceptance and NUI-07 stable external SDK release are **not implemented or certified**. The known LMS `courses.html` `innerHTML` sink requires a separate code fix before an LMS production pilot. The user-visible Native contract is limited to read-only scalar data.
+NUI-03 structured Host storage resources and create/update action routes are now implemented experimentally, but have not passed full resource/action production acceptance or domain-specific ownership policy review. Remaining NUI-04 native forms/settings (optional validated generic navigation grouping is implemented on the branch), NUI-05 independent LMS migration/parity, NUI-06 operational/security/E2E acceptance and NUI-07 stable external SDK release are **not implemented or certified**. The known LMS `courses.html` `innerHTML` sink requires a separate code fix before an LMS production pilot. The user-visible Native contract is limited to read-only scalar data.
 
 **Decision:** keep the operator variable unset in production until all these gates close.
+
+## NUI-03 storage resource and action pilot (disabled by default)
+
+The experimental Host endpoints are `GET /api/admin/v1/extensions/:pluginId/data`, `GET /api/admin/v1/extensions/:pluginId/resources/:resourceId`, and `POST /api/admin/v1/extensions/:pluginId/actions/:actionId`.
+
+A resource lists **only explicitly projected fields** from an existing, operator-approved plugin storage model. Default and maximum pagination limit is 20; list ordering is the underlying stable record ID. Optional indexed text equality filters are Host-validated against operator model metadata. Pagination cursors are 15-minute HMAC-SHA256 tokens tied to the Staff ID, publication, plugin, immutable approved digest, resource and filter query. Signing requires a valid production-format `VIBRESS_ENCRYPTION_KEY` shared across API replicas. Raw storage cursors never reach the browser.
+
+**Write approval is a separate operator security contract**: `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` (same exact `pluginId@entrypointSha256` syntax) defaults to unset and has no effect unless the corresponding read-only release is also allowlisted in `VIBRESS_NATIVE_ADMIN_UI_RELEASES`. Both must remain unset in production pending NUI-03 acceptance. Only Staff with global `plugins.manage` and publication-local owner/admin role may use these endpoints; write also requires `extension.storage.write` and operator-approved storage model registration. Mutations are limited to bounded storage create and version-checked update (database CAS); retries with duplicate IDs or stale versions produce conflicts instead of repeated effects.
+
+This **does not** authorize arbitrary plugin handlers, SQL, public/member mutations, LMS publishing, deletion, billing, or writing domain records that require additional business-invariant checks. A signed release permit alone is not a security sign-off. Validate genuine multi-publication API integration, two-replica cursors, stale/replayed writes, malicious projection/filter inputs, operator rollback, and fresh/upgrade installations before enabling the pilot. Native forms and public SDK support remain separate follow-up gates.

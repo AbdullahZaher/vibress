@@ -71,6 +71,36 @@ describe("Batch 12 — Platform Integration & Security", () => {
     await app.close();
   });
 
+  it("rejects unauthenticated Native resources/actions and keeps both disabled by default", async () => {
+    const resourcePath = "/api/admin/v1/extensions/example/resources/courses";
+    const discoveryPath = "/api/admin/v1/extensions/example/data";
+    const actionPath = "/api/admin/v1/extensions/example/actions/course-create";
+    const unauthenticated = await app.inject({ method: "GET", url: resourcePath });
+    expect(unauthenticated.statusCode).toBe(401);
+    const unauthenticatedDiscovery = await app.inject({ method: "GET", url: discoveryPath });
+    expect(unauthenticatedDiscovery.statusCode).toBe(401);
+    const unauthenticatedMutation = await app.inject({
+      method: "POST", url: actionPath,
+      headers: { origin: "http://localhost:7777" },
+      payload: { id: "course-1", fields: { title_en: "Example" } },
+    });
+    expect(unauthenticatedMutation.statusCode).toBe(401);
+    const headers = { cookie: staffCookie, origin: "http://localhost:7777" };
+    const disabledResource = await app.inject({ method: "GET", url: resourcePath, headers });
+    expect(disabledResource.statusCode).toBe(404);
+    const disabledDiscovery = await app.inject({ method: "GET", url: discoveryPath, headers });
+    expect(disabledDiscovery.statusCode).toBe(404);
+    const disabledMutation = await app.inject({
+      method: "POST", url: actionPath, headers,
+      payload: { id: "course-1", fields: { title_en: "Example" } },
+    });
+    expect(disabledMutation.statusCode).toBe(404);
+    const forged = await app.inject({
+      method: "GET", url: resourcePath + "?publicationId=foreign", headers,
+    });
+    expect(forged.statusCode).toBe(400);
+  });
+
   // ---------------- Integrations ----------------
   it("admin creates an integration (secrets encrypted at rest)", async () => {
     const key = `ci-${Date.now()}`;

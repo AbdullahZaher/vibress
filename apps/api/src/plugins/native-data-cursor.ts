@@ -49,8 +49,12 @@ export function readNativeCursor(
     const decoded: unknown = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
     const parsed = Payload.safeParse(decoded);
     if (!parsed.success || parsed.data.expiresAt <= now) return null;
-    const { lastId, expiresAt: _expiresAt, v: _v, ...actual } = parsed.data;
-    return Object.entries(context).every(([field, value]) =>
-      actual[field as keyof NativeCursorContext] === value) ? lastId : null;
+    return parsed.data.pluginId === context.pluginId &&
+      parsed.data.publicationId === context.publicationId &&
+      parsed.data.actorId === context.actorId &&
+      parsed.data.resourceId === context.resourceId &&
+      parsed.data.digest === context.digest &&
+      parsed.data.filterHash === context.filterHash
+      ? parsed.data.lastId : null;
   } catch { return null; }
 }
