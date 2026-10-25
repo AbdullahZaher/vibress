@@ -72,6 +72,31 @@ describe("Operator failed plugin event UI", () => {
     expect(container.textContent).not.toContain(item.eventId);
   });
 
+  it("redacts secret-bearing API errors from both failed-event reads and replays", async () => {
+    vi.mocked(listFailedPluginEventsApi).mockRejectedValueOnce(
+      new Error("/operator/secret-key.pem private payload"),
+    );
+    await act(async () => root.render(
+      <FailedPluginEventsPanel pluginId="plugin-a" onError={onError} />,
+    ));
+    await click("Failed plugin events");
+    expect(onError).toHaveBeenCalledWith("Failed to load plugin events");
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("secret-key.pem");
+
+    vi.mocked(listFailedPluginEventsApi).mockResolvedValueOnce({
+      items: [item], nextOffset: 1,
+    });
+    await click("Failed plugin events");
+    await click("Failed plugin events");
+    await click("Review replay");
+    vi.mocked(replayFailedPluginEventApi).mockRejectedValueOnce(
+      new Error("private Redis credential"),
+    );
+    await click("Confirm replay");
+    expect(onError).toHaveBeenCalledWith("Plugin event replay failed");
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("private Redis credential");
+  });
+
   it("drops loaded event IDs and closes the view on publication change", async () => {
     await act(async () => root.render(
       <FailedPluginEventsPanel pluginId="plugin-a" onError={onError} />,

@@ -108,13 +108,13 @@ export function PluginsPage() {
           <nav aria-label={tr("Plugin sections")}
             className="flex flex-wrap gap-1 border-b border-border" >
             {([
-              { id: "installed", label: tr("Installed plugins") },
-              ...(platformOperator ? [
-                { id: "available", label: tr("Available approved plugins") },
-                { id: "updates", label: tr("Approved updates") },
-                { id: "activity", label: tr("Plugin activity") },
-              ] : []),
-            ] satisfies { id: PluginSection; label: string }[]).map((item) => (
+              { id: "installed" as const, label: tr("Installed plugins") },
+              ...(platformOperator ? ([
+                { id: "available" as const, label: tr("Available approved plugins") },
+                { id: "updates" as const, label: tr("Approved updates") },
+                { id: "activity" as const, label: tr("Plugin activity") },
+              ]) : []),
+            ]).map((item) => (
               <button key={item.id} type="button"
                 ref={item.id === "installed" ? installedSectionRef : undefined}
                 aria-pressed={section === item.id}

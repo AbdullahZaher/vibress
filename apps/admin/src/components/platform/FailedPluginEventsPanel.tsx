@@ -51,9 +51,11 @@ export function FailedPluginEventsPanel({ pluginId, onError }: Props) {
         ? result.items : [...previous, ...result.items]);
       setNextOffset(result.nextOffset > offset &&
         result.nextOffset - offset === 25 ? result.nextOffset : null);
-    } catch (error: unknown) {
+    } catch {
       if (current === generation.current) {
-        onError(error instanceof Error ? error.message : tr("Failed to load plugin events"));
+        // Provider errors may include operator paths, queue diagnostics or
+        // private event data. Never display untrusted error strings.
+        onError(tr("Failed to load plugin events"));
       }
     } finally {
       if (current === generation.current) setLoading(false);
@@ -70,9 +72,9 @@ export function FailedPluginEventsPanel({ pluginId, onError }: Props) {
       setItems((previous) => previous.filter((item) => item.eventId !== eventId));
       setArmed(null);
       setNextOffset(null);
-    } catch (error: unknown) {
+    } catch {
       if (current === generation.current) {
-        onError(error instanceof Error ? error.message : tr("Plugin event replay failed"));
+        onError(tr("Plugin event replay failed"));
       }
     } finally {
       if (current === generation.current) setRetrying(null);
