@@ -269,7 +269,11 @@ export function CommentSection({
 
   const tree = buildCommentTree(comments);
 
-  const renderCommentNode = (comment: ThreadedComment, depth = 0) => {
+  const renderCommentNode = (rawComment: ThreadedComment, depth = 0) => {
+    const comment = {
+      ...rawComment,
+      author: rawComment.author ?? { name: "Anonymous", avatarUrl: null },
+    } as ThreadedComment;
     const isReplying = replyingToId === comment.id;
     const isDeleted = comment.isDeleted;
 
