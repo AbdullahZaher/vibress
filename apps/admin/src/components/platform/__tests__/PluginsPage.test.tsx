@@ -17,6 +17,10 @@ vi.mock("../TrustedPluginInstaller", () => ({
   TrustedPluginInstaller: ({ show }: { show?: string }) =>
     <div data-testid="trusted-plugin-installer" data-show={show ?? "all"} />,
 }));
+vi.mock("../PluginActivityPanel", () => ({
+  PluginActivityPanel: ({ pluginId }: { pluginId: string }) =>
+    <div data-testid="audit-plugin-activity" data-plugin-id={pluginId} />,
+}));
 vi.mock("../FailedPluginEventsPanel", () => ({
   FailedPluginEventsPanel: ({ pluginId }: { pluginId: string }) =>
     <div data-testid="failed-plugin-events" data-plugin-id={pluginId} />,
@@ -66,7 +70,9 @@ describe("Admin Add Plugin access", () => {
     expect(container.querySelector('[data-testid="trusted-plugin-installer"]')
       ?.getAttribute("data-show")).toBe("updates");
     await click("Plugin activity");
-    expect(container.textContent).toContain("it is not a complete audit history");
+    expect(container.textContent).toContain("not every plugin lifecycle event");
+    expect(container.querySelector('[data-testid="audit-plugin-activity"]')
+      ?.getAttribute("data-plugin-id")).toBe("row-a");
     expect(container.querySelector('[data-testid="failed-plugin-events"]')
       ?.getAttribute("data-plugin-id")).toBe("row-a");
     expect(container.querySelector('[data-testid="trusted-plugin-installer"]')).toBeNull();

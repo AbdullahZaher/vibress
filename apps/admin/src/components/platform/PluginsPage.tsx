@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { FailedPluginEventsPanel } from "./FailedPluginEventsPanel";
+import { PluginActivityPanel } from "./PluginActivityPanel";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { type AdminPlugin, listPluginsApi } from "../../lib/api";
 import { IconButton } from "../ui/icon-button";
@@ -160,21 +161,23 @@ export function PluginsPage() {
             {platformOperator && section === "activity" && (
               <section aria-label={tr("Plugin activity")} className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  {tr("This view shows failed deliveries for active plugins enabled in the selected publication; it is not a complete audit history.")}
+                  {tr("This history includes selected audited actions for the current publication, not every plugin lifecycle event.")}
                 </p>
-                {plugins.filter((plugin) => plugin.status === "active" &&
-                    plugin.publicationScoped === true && plugin.publicationEnabled === true
-                  ).map((plugin) => (
+                {plugins.filter((plugin) => plugin.publicationScoped === true)
+                  .map((plugin) => (
                     <div key={plugin.id} className="rounded-lg border border-border p-3 space-y-2">
                       <h2 className="text-sm font-medium break-words" dir="auto">{plugin.name}</h2>
-                      <FailedPluginEventsPanel pluginId={plugin.id}
-                        onError={() => setError(tr("Failed to load plugin events"))} />
+                      <PluginActivityPanel pluginId={plugin.id}
+                        onError={() => setError(tr("Failed to load plugin activity"))} />
+                      {plugin.status === "active" && plugin.publicationEnabled === true && (
+                        <FailedPluginEventsPanel pluginId={plugin.id}
+                          onError={() => setError(tr("Failed to load plugin events"))} />
+                      )}
                     </div>
                   ))}
-                {!plugins.some((plugin) => plugin.status === "active" &&
-                    plugin.publicationScoped === true && plugin.publicationEnabled === true) && (
+                {!plugins.some((plugin) => plugin.publicationScoped === true) && (
                   <p role="status" className="text-sm text-muted-foreground">
-                    {tr("No active plugins enabled in this publication.")}
+                    {tr("No publication-scoped plugins installed.")}
                   </p>
                 )}
               </section>
