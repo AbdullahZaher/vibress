@@ -70,10 +70,11 @@ function assertScope(scope: PluginSecretScope): void {
     throw new SecretEncryptionError("Invalid plugin secret scope", "PLUGIN_SECRET_SCOPE_INVALID");
   }
 }
-function aad(scope: PluginSecretScope): Buffer {
+function aad(scope: PluginSecretScope, keyId: string): Buffer {
   assertScope(scope);
   return Buffer.from(JSON.stringify([
-    "vibress", "plugin-secret", 2, scope.pluginId, scope.publicationId ?? null, scope.key,
+    "vibress", "plugin-secret", 2, keyId,
+    scope.pluginId, scope.publicationId ?? null, scope.key,
   ]));
 }
 
@@ -104,7 +105,7 @@ function encryptV2(plaintext: string, scope: PluginSecretScope, ring: Keyring): 
   const current = activeKey(ring);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", current.key, iv);
-  cipher.setAAD(aad(scope));
+  cipher.setAAD(aad(scope, current.id));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return JSON.stringify({
     v: 2, kid: current.id, iv: iv.toString("hex"),
@@ -124,7 +125,7 @@ export function encryptPluginSecret(plaintext: string, scope: PluginSecretScope)
 
 /** A missing/removed v2 key fails closed; never try random fallback keys. */
 export function decryptPluginSecret(ciphertext: string, scope: PluginSecretScope): string {
-  const associatedData = aad(scope);
+  assertScope(scope);
   const ring = keyring();
   const payload = parseCiphertext(ciphertext);
   if (payload.v === 1) return decryptSecret(ciphertext);
@@ -143,7 +144,9 @@ export function decryptPluginSecret(ciphertext: string, scope: PluginSecretScope
     const decipher = crypto.createDecipheriv(
       "aes-256-gcm", key, Buffer.from(payload.iv, "hex"),
     );
-    decipher.setAAD(associatedData);
+    // Authenticate the key selector as well as the plugin/publication/key scope.
+    // Using the same raw key under another ID cannot alter key provenance.
+    decipher.setAAD(aad(scope, payload.kid));
     decipher.setAuthTag(Buffer.from(payload.tag, "hex"));
     return Buffer.concat([
       decipher.update(Buffer.from(payload.data, "hex")), decipher.final(),

@@ -45,6 +45,11 @@ describe("PLUG-OPS-05 key-versioned plugin secrets", () => {
       .toThrow("Plugin secret decryption failed");
     expect(() => decryptPluginSecret(ciphertext, { ...scope, key: "otherToken" }))
       .toThrow("Plugin secret decryption failed");
+    // Even if an operator mistakenly configured two IDs with identical key
+    // bytes, an attacker cannot relabel the original signing/encryption era.
+    configure("first", { first, alias: first });
+    expect(() => decryptPluginSecret(JSON.stringify({ ...payload, kid: "alias" }), scope))
+      .toThrow("Plugin secret decryption failed");
     expect(() => decryptPluginSecret(ciphertext, legacy))
       .toThrow(SecretEncryptionError);
   });
