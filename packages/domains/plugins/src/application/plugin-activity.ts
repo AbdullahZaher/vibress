@@ -56,7 +56,7 @@ export async function listPluginActivity(
     eq(auditEvents.publicationId, publicationId),
     or(
       and(
-        inArray(auditEvents.action, settingActions),
+        inArray(auditEvents.action, [...settingActions]),
         eq(auditEvents.targetType, "plugin"),
         eq(auditEvents.targetId, pluginId),
       ),

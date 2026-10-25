@@ -1,8 +1,10 @@
 # PLUG-OPS-06 — Trusted plugin delivery diagnostics
 
-**Status:** Read-only bounded PostgreSQL sampling and Worker gauges implemented
-on PR #89. Production alert-manager configuration, real outage drills,
-multi-replica acceptance, and full durable audit history are **not** completed.
+**Status:** Read-only bounded PostgreSQL sampling, Worker gauges and curated
+publication-scoped audit activity are implemented on PR #89. Production
+alert-manager configuration, real outage drills and multi-replica acceptance
+are **not** completed. The activity feed is intentionally **not** a complete
+plugin lifecycle audit or a long-term retention guarantee.
 
 ## Existing architecture, no parallel event ledger
 
@@ -87,3 +89,46 @@ pending/dispatching receipt is sampled and its envelope/tenant identity is
 absent. Completing acceptance still requires measured high-volume load,
 rollback/drain drills, actual monitoring deployment, and audited per-publication
 activity history with retention/privacy policy.
+
+## Staff activity: curated publication-scoped historical audit
+
+The Admin **Activity** section now shows the existing Failed deliveries UI for
+active/enabled extension plugins, plus a separate **Plugin audit history**
+panel for installed publication-scoped plugins (including ones now inactive).
+It reads only explicitly whitelisted actions from the **existing**
+`audit_events` ledger, without creating a second audit table:
+
+- `plugin.publication_settings_updated`
+- `plugin.publication_secret_revoked`
+- `plugin.event_replay_requested`
+
+The API is additive:
+`GET /plugins/:id/activity?offset=0&limit=25` — never accepts a tenant ID.
+All requests require `requireStaffSession`, `plugins.manage`,
+`requirePlatformPluginOperator`, and an **authoritative** selected
+publication context with owner/admin role. Data selection binds both the
+publication and plugin identity. The replay action requires an `EXISTS` join
+to the **original durable event receipt** for the same publication and
+plugin, rather than trusting audit metadata.
+
+Server responses return **only** the whitelisted action code and creation
+timestamp, with a bounded next offset (or null). No row metadata, plugin
+secrets, actor IDs, IP addresses, event IDs, request IDs, Redis error text
+or opaque host paths appear in results. API errors are sanitized and
+`Cache-Control: private, no-store` is set. Page size is capped at 25,
+offset at 10,000. UI discards stale responses after publication switches
+and provides localized Arabic strings, semantic time labels and
+keyboard-operable buttons.
+
+**Limitations:** Existing `audit_events` retention policy and legacy
+pre-feature gaps determine how much history is available. Registration,
+enablement, activation, version changes and failed worker delivery outcomes
+are **not** included unless they have a separate explicitly admitted
+publication-owned audit event. Do not claim the feed is a complete lifecycle
+history. Appending those events safely requires transactionally consistent
+ownership and upgrade-safe migrations only when justified.
+
+Tests must demonstrate that a forged replay audit metadata object cannot
+cause an event from a different plugin to appear, and that a foreign
+publication is never enumerated. A live browser/accessibility exercise,
+retention decisions, production alerts and fleet DR still remain.
