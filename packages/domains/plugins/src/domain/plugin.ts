@@ -42,13 +42,14 @@ export interface PluginSetting {
 }
 
 export interface PluginRepository {
-  create(data: RegisterPluginData): Promise<Plugin>;
+  create(data: RegisterPluginData, audit?: PluginSettingAuditContext): Promise<Plugin>;
   findById(id: string): Promise<Plugin | null>;
   findByManifestId(manifestId: string): Promise<Plugin | null>;
   updateStatus(
     id: string,
     status: PluginStatus,
     error?: string,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin>;
   /** Single conditional DB UPDATE prevents concurrent activation/deactivation claims. */
   tryTransitionStatus(
@@ -59,6 +60,7 @@ export interface PluginRepository {
   updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin>;
   /**
    * Atomic optimistic concurrency guard for pinned updates. Never overwrite a
@@ -69,6 +71,7 @@ export interface PluginRepository {
     id: string,
     data: Partial<RegisterPluginData>,
     expected: Pick<Plugin, "version" | "updatedAt">,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin | null>;
   list(): Promise<Plugin[]>;
   delete(id: string): Promise<void>;
@@ -92,7 +95,10 @@ export interface PluginSettingRepository {
 export interface PluginPublicationStateRepository {
   hasAnyState(pluginId: string): Promise<boolean>;
   isEnabled(pluginId: string, publicationId: string): Promise<boolean>;
-  setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void>;
+  setEnabled(
+    pluginId: string, publicationId: string, enabled: boolean,
+    audit?: PluginSettingAuditContext,
+  ): Promise<void>;
 }
 
 /** Publication-scoped settings: legacy plugin_settings is not a fallback. */

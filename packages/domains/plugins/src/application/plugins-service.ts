@@ -213,6 +213,7 @@ export class PluginsService {
     manifestInput: unknown,
     actorId: string | null,
     expectedReleaseId?: string,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
     let manifest: PluginManifest;
     try {
@@ -294,14 +295,14 @@ export class PluginsService {
       if (expectedReleaseId !== undefined &&
           this.host.requiresPublicationEnablement?.(existing) === true) {
         updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(
-          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt },
+          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt }, audit,
         ) ?? null;
         if (!updated) {
           throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
             "Plugin activated or changed during release admission");
         }
       } else {
-        updated = await this.pluginRepo.updateMetadata(existing.id, metadata);
+        updated = await this.pluginRepo.updateMetadata(existing.id, metadata, audit);
       }
       domainEvents.emit("plugin.updated", { pluginId: updated.id, actorId });
       return updated;
@@ -317,7 +318,7 @@ export class PluginsService {
       capabilities: manifest.capabilities,
       hooks: manifest.hooks || [],
       settingsSchema: manifest.settingsSchema,
-    });
+    }, audit);
     domainEvents.emit("plugin.registered", { pluginId: plugin.id, actorId });
     return plugin;
   }
@@ -327,7 +328,9 @@ export class PluginsService {
    * activate(). On failure the plugin is marked 'error' — visible but
    * reported as a domain error. In-process crashes are NOT isolated.
    */
-  async activatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+  async activatePlugin(
+    id: string, actorId: string | null, audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
     this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
@@ -405,7 +408,7 @@ export class PluginsService {
       throw safeError;
     }
 
-    const activated = await this.pluginRepo.updateStatus(id, "active");
+    const activated = await this.pluginRepo.updateStatus(id, "active", undefined, audit);
     domainEvents.emit("plugin.activated", { pluginId: id, actorId });
     return activated;
   }
@@ -560,7 +563,9 @@ export class PluginsService {
     await module.onEvent(eventName, payload, context);
   }
 
-  async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+  async deactivatePlugin(
+    id: string, actorId: string | null, audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
     this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
@@ -614,7 +619,7 @@ export class PluginsService {
         );
       }
     }
-    const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
+    const deactivated = await this.pluginRepo.updateStatus(id, "inactive", undefined, audit);
     const localKey = this.localReleaseKeys.get(id);
     if (localKey) this.initializedHere.delete(localKey);
     for (const [key, instance] of this.activeInstances) {
@@ -831,6 +836,7 @@ export class PluginsService {
   async registerOperatorPlugin(
     manifestId: string, actorId: string | null, expectedReleaseId?: string,
     acknowledgeUpgrade = false,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
     let approved: PluginManifest | undefined;
     try {
@@ -868,7 +874,7 @@ export class PluginsService {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
     // Host rechecks the same digest identity before the persistence boundary.
-    return this.registerPlugin(approved, actorId, expectedReleaseId);
+    return this.registerPlugin(approved, actorId, expectedReleaseId, audit);
   }
 
   /**
@@ -946,6 +952,7 @@ export class PluginsService {
     pluginId: string,
     publicationId: string,
     enabled: boolean,
+    audit?: PluginSettingAuditContext,
   ): Promise<boolean> {
     if (!publicationId) {
       throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
@@ -965,7 +972,7 @@ export class PluginsService {
     if (enabled && plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");
     }
-    await this.publicationStates.setEnabled(pluginId, publicationId, enabled);
+    await this.publicationStates.setEnabled(pluginId, publicationId, enabled, audit);
     domainEvents.emit("plugin.publication_changed", { pluginId, publicationId, enabled });
     return enabled;
   }

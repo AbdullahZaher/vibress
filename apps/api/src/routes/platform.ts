@@ -462,6 +462,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
         const plugin = await pluginsService.registerOperatorPlugin(
           parsed.data.manifestId, req.user!.id, parsed.data.expectedReleaseId,
           parsed.data.acknowledgeUpgrade === true,
+          { actorUserId: req.user!.id, requestId: req.id },
         );
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
@@ -497,7 +498,8 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const plugin = await pluginsService.registerPlugin(
           body.manifest,
-          req.user!.id,
+          req.user!.id, undefined,
+          { actorUserId: req.user!.id, requestId: req.id },
         );
         return reply.status(201).send({ plugin });
       } catch (err: unknown) {
@@ -522,7 +524,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const plugin = await pluginsService.activatePlugin(id, req.user!.id);
+        const plugin = await pluginsService.activatePlugin(
+          id, req.user!.id, { actorUserId: req.user!.id, requestId: req.id },
+        );
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
@@ -554,7 +558,9 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const plugin = await pluginsService.deactivatePlugin(id, req.user!.id);
+        const plugin = await pluginsService.deactivatePlugin(
+          id, req.user!.id, { actorUserId: req.user!.id, requestId: req.id },
+        );
         return reply.status(200).send({ plugin });
       } catch (err: unknown) {
         if (err instanceof PluginDomainError) {
@@ -654,6 +660,7 @@ export async function adminIntegrationRoutes(fastify: FastifyInstance) {
       try {
         const enabled = await pluginsService.setPublicationEnabled(
           params.data.id, publicationId, body.data.enabled,
+          { actorUserId: req.user!.id, requestId: req.id },
         );
         return reply.status(200).send(PluginPublicationStateSchema.parse({
           pluginId: params.data.id, publicationId, enabled,

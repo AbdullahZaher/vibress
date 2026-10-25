@@ -24,10 +24,11 @@ import {
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
-  async create(data: RegisterPluginData): Promise<Plugin> {
+  async create(data: RegisterPluginData, audit?: PluginSettingAuditContext): Promise<Plugin> {
     const db = getDb();
     const now = new Date();
-    const [row] = await db
+    const [row] = await db.transaction(async (tx) => {
+    const [created] = await tx
       .insert(plugins)
       .values({
         id: data.id || crypto.randomUUID(),
@@ -45,6 +46,14 @@ export class DrizzlePluginRepository implements PluginRepository {
         updatedAt: now,
       })
       .returning();
+      if (!created) throw new Error("Failed to insert plugin");
+      if (audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.registered", targetType: "plugin", targetId: created.id,
+      });
+      return [created];
+    });
     if (!row) throw new Error("Failed to insert plugin");
     return this.mapToDomain(row);
   }
@@ -73,14 +82,25 @@ export class DrizzlePluginRepository implements PluginRepository {
     return this.mapToDomain(row);
   }
 
-  async updateStatus(id: string, status: PluginStatus): Promise<Plugin> {
-    const db = getDb();
-    const [row] = await db
-      .update(plugins)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(plugins.id, id))
-      .returning();
-    if (!row) throw new Error(`Plugin not found: ${id}`);
+  async updateStatus(
+    id: string, status: PluginStatus, _error?: string,
+    audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
+    const row = await getDb().transaction(async (tx) => {
+      const [updated] = await tx.update(plugins)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(plugins.id, id)).returning();
+      if (!updated) throw new Error(`Plugin not found: ${id}`);
+      if (audit && (status === "active" || status === "inactive")) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(), publicationId: null,
+          actorUserId: audit.actorUserId, requestId: audit.requestId,
+          action: status === "active" ? "plugin.activated" : "plugin.deactivated",
+          targetType: "plugin", targetId: updated.id,
+        });
+      }
+      return updated;
+    });
     return this.mapToDomain(row);
   }
 
@@ -90,16 +110,25 @@ export class DrizzlePluginRepository implements PluginRepository {
     status: PluginStatus,
   ): Promise<Plugin | null> {
     if (expected.length === 0) return null;
-    const [row] = await getDb().update(plugins)
+    const row = await getDb().transaction(async (tx) => {
+    const [updated] = await tx.update(plugins)
       .set({ status, updatedAt: new Date() })
       .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
       .returning();
+      if (updated && audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
+      });
+      return updated;
+    });
     return row ? this.mapToDomain(row) : null;
   }
 
   async updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
     const db = getDb();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
@@ -114,11 +143,20 @@ export class DrizzlePluginRepository implements PluginRepository {
     if (data.hooks !== undefined) payload.hooks = data.hooks;
     if (data.settingsSchema !== undefined)
       payload.settingsSchema = data.settingsSchema;
-    const [row] = await db
+    const [row] = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(plugins)
       .set(payload)
       .where(eq(plugins.id, id))
       .returning();
+      if (!updated) throw new Error(`Plugin not found: ${id}`);
+      if (audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
+      });
+      return [updated];
+    });
     if (!row) throw new Error(`Plugin not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -127,6 +165,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     id: string,
     data: Partial<RegisterPluginData>,
     expected: Pick<Plugin, "version" | "updatedAt">,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin | null> {
     // Force a monotonic optimistic-lock value even for two writes in the same
     // JS millisecond. The prior row timestamp must also match in the UPDATE.
@@ -286,13 +325,29 @@ export class DrizzlePluginPublicationStateRepository implements PluginPublicatio
     return rows[0]?.enabled === true;
   }
 
-  async setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void> {
-    await getDb().insert(pluginPublicationStates)
-      .values({ pluginId, publicationId, enabled })
-      .onConflictDoUpdate({
-        target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
-        set: { enabled, updatedAt: new Date() },
-      });
+  async setEnabled(
+    pluginId: string, publicationId: string, enabled: boolean,
+    audit?: PluginSettingAuditContext,
+  ): Promise<void> {
+    await getDb().transaction(async (tx) => {
+      const updated = await tx.insert(pluginPublicationStates)
+        .values({ pluginId, publicationId, enabled })
+        .onConflictDoUpdate({
+          target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
+          set: { enabled, updatedAt: new Date() },
+          setWhere: sql`${pluginPublicationStates.enabled} IS DISTINCT FROM ${enabled}`,
+        }).returning({ pluginId: pluginPublicationStates.pluginId });
+      // An idempotent repeat has no state change and must not fabricate an
+      // audit transition. First explicit false set is still a real decision.
+      if (audit && updated.length === 1) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(), publicationId,
+          actorUserId: audit.actorUserId, requestId: audit.requestId,
+          action: enabled ? "plugin.publication_enabled" : "plugin.publication_disabled",
+          targetType: "plugin", targetId: pluginId,
+        });
+      }
+    });
   }
 }
 
