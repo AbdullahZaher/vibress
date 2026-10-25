@@ -1,18 +1,16 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
  * Automated repo contract guard for the optional Prometheus rule pack.
  * For actual PromQL and fixture evaluation use promtool, per OPS-06 runbook.
  */
-const rules = readFileSync(
-  new URL("../../../ops/monitoring/prometheus/plugin-alerts.yml", import.meta.url),
-  "utf8",
-);
-const fixture = readFileSync(
-  new URL("../../../ops/monitoring/prometheus/plugin-alerts.test.yml", import.meta.url),
-  "utf8",
-);
+// Vitest can transform import.meta.url into a Vite virtual URL in CI.
+// Root scripts/tests run with cwd set to the monorepo root.
+const alertsDir = resolve(process.cwd(), "ops/monitoring/prometheus");
+const rules = readFileSync(resolve(alertsDir, "plugin-alerts.yml"), "utf8");
+const fixture = readFileSync(resolve(alertsDir, "plugin-alerts.test.yml"), "utf8");
 
 const alerts = [
   "VibressPluginWorkerScrapeDown",
