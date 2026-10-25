@@ -77,21 +77,31 @@ because its `manifest.version` happens to match.
    unsigned releases, missing external pins, unreviewed release evidence and
    mutated artifacts. Legacy deployments retain their historical read-only
    preflight unless opted into strict policy. Both commands must exit 0.
-5. Investigate every failed, missing, terminal or invalid PostgreSQL↔Redis
+5. The PostgreSQL→Redis relay distinguishes an **actual Redis publish error**
+   from a **PostgreSQL acknowledgement error after Redis accepted the job**.
+   In the first case the claim returns to `pending` for bounded retry; in the
+   second it stays `dispatching` until the existing two-minute claim lease
+   expires. Redis job IDs remain stable across retries. Confirm both crash
+   boundaries with the dedicated Worker relay unit tests and PostgreSQL
+   integration test, then repeat with **real Redis/PG process failures**
+   before certifying the outbox. Do not infer exactly-once external plugin
+   side effects from BullMQ de-duplication; plugin handlers still require
+   idempotency.
+6. Investigate every failed, missing, terminal or invalid PostgreSQL↔Redis
    queued-event correspondence. Do **not** auto-replay from Redis or invent a
    new event receipt; use existing permission-scoped and audited replay
    mechanisms after resolving the root cause. Receipts marked `pending` or
    `dispatching` require the existing bounded relay/claim recovery path,
    not unrestricted Redis enqueue. Do not acknowledge or delete a job solely
    to make the offline check green.
-6. Restore service on a **single controlled replica** with the same pinned
+7. Restore service on a **single controlled replica** with the same pinned
    release/secret snapshot, verify decryption of a known non-production
    sentinel secret via the normal authorized workflow, and confirm that no
    secret appears in logs/API output. Confirm disabled publications remain
    disabled. Test a second API/Worker replica and the four-replica admission
    comparison before resuming traffic, then perform wrong-publication,
    duplicate, stale digest, retry/dead-letter and crash-injection checks.
-7. Measure **actual** recovery time (failure to serving verified traffic) and
+8. Measure **actual** recovery time (failure to serving verified traffic) and
    recovery point (difference between last confirmed durable write and latest
    recovered write). Record real timestamps/observed losses, not assumed
    RTO/RPO values; decide whether these meet the operator's contractual

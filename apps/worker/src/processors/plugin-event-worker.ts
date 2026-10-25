@@ -254,11 +254,12 @@ export class PluginEventWorker {
   }
 
   private async dispatchPending(): Promise<void> {
-    if (!this.producer || !this.ready) return;
+    const producer = this.producer;
+    if (!producer || !this.ready) return;
     // A bounded Redis status snapshot is useful for operator alerting but
     // must never block durable PG admission/dispatch if metrics fail.
     try {
-      const counts = await this.producer.getJobCounts(
+      const counts = await producer.getJobCounts(
         "waiting", "active", "delayed", "failed",
       );
       for (const state of ["waiting", "active", "delayed", "failed"] as const) {
@@ -273,7 +274,7 @@ export class PluginEventWorker {
       try {
         const outcome = await relayClaimedPluginEvent(
           receipt, pluginEventLedger,
-          (claimed) => enqueueTraced(this.producer!, "event", claimed.envelope, {
+          (claimed) => enqueueTraced(producer, "event", claimed.envelope, {
             jobId: claimed.id, attempts: 5,
             backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: { age: 7 * 24 * 3600, count: 100000 },

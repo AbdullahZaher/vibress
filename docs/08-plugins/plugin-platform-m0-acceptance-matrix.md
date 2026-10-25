@@ -21,7 +21,7 @@
 
 - `pnpm install --frozen-lockfile`
 - `pnpm exec vitest run apps/admin/src/components/platform/__tests__/PluginsPanel.test.tsx apps/admin/src/components/platform/__tests__/PluginsPage.test.tsx`
-- `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__ scripts/plugins/__tests__`
+- `pnpm exec vitest run packages/domains/plugins/tests apps/api/src/plugins/__tests__ apps/worker/src/processors/__tests__ scripts/plugins/__tests__ tests/integration/plugin-event-replay-ledger.test.ts` (with the test PostgreSQL service available)
 - `pnpm exec tsx scripts/plugins/check-replica-receipts.ts api:api-a=... api:api-b=... worker:worker-a=... worker:worker-b=...` (see the [runbook](secure-operator-release-admission.md); **not** a substitute for live signed admission and independent physical replicas)
 - `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build`, `pnpm audit --prod --audit-level high`
 - For strict isolated restore: `VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1 VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY=strict ... pnpm exec tsx scripts/plugins/check-restore.ts`, followed by `pnpm exec tsx scripts/plugins/check-queue-recovery.ts` (exact environment and run order in [PLUG-OPS-02 drill](plugin-platform-restore-drill.md)).
