@@ -59,7 +59,7 @@ vi.mock("@vibress/config", () => ({
     secrets: { encryptionKey: "d".repeat(64) },
   }),
 }));
-vi.mock("../middleware/auth", () => ({
+vi.mock("../../middleware/auth", () => ({
   requireStaffSession: (req: FastifyRequest, reply: FastifyReply) => {
     if (!state.authenticated) return reply.code(401).send({ errors: [{ code: "UNAUTHENTICATED" }] });
     Object.assign(req, {
@@ -79,7 +79,7 @@ vi.mock("../middleware/auth", () => ({
     }
   },
 }));
-vi.mock("../services", () => ({
+vi.mock("../../services", () => ({
   pluginsService: {
     listOperatorAdminFingerprints: async () => new Map([["sample-plugin", digest]]),
     resolveExtensionApiModule: async () => state.activeModule,
