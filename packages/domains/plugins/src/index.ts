@@ -36,3 +36,5 @@ export {
 export type {
   PluginReceiptDiagnostics, PluginReceiptStateDiagnostic, ActivePluginReceiptStatus,
 } from "./application/plugin-receipt-diagnostics";
+export { listPluginActivity } from "./application/plugin-activity";
+export type { PluginActivityAction, PluginActivityRow, PluginActivityResult } from "./application/plugin-activity";

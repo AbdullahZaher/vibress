@@ -4,8 +4,9 @@ import {
   PluginEventRecoveryParamsSchema, PluginEventFailureListQuerySchema,
   PluginEventReplayRequestSchema, PluginEventFailedDtoSchema,
   PluginEventFailedListResponseSchema,
+  PluginActivityListQuerySchema, PluginActivityListResponseSchema,
 } from "@vibress/api-contracts";
-import { PluginDomainError } from "@vibress/plugins";
+import { PluginDomainError, listPluginActivity } from "@vibress/plugins";
 import {
   requireStaffSession, requirePermission,
   requirePlatformPluginOperator, validateOrigin,
@@ -121,6 +122,46 @@ export async function adminPluginEventRoutes(fastify: FastifyInstance) {
       }],
     });
   }
+
+  // Curated immutable audit actions for the currently authorized publication.
+  // No raw audit metadata, job envelopes, actor identities or secrets.
+  fastify.get("/plugins/:id/activity", {
+    preHandler: operatorAccess,
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    handler: async (req, reply) => {
+      reply.header("Cache-Control", "private, no-store");
+      const params = PluginPublicationParamsSchema.safeParse(req.params);
+      const query = PluginActivityListQuerySchema.safeParse(req.query);
+      if (!params.success || !query.success) {
+        return reply.code(400).send({
+          errors: [{ code: "VALIDATION_ERROR",
+            message: "Invalid plugin activity query", requestId: req.id }],
+        });
+      }
+      const publicationId = scopedPublication(req);
+      if (!publicationId) return reply.code(403).send({
+        errors: [{ code: "PUBLICATION_ACCESS_DENIED",
+          message: "Publication operator access required", requestId: req.id }],
+      });
+      try {
+        // Validate plugin identity, but never use the ID alone as authority.
+        const plugin = await pluginsService.getPlugin(params.data.id);
+        if (!plugin) return reply.code(404).send({
+          errors: [{ code: "PLUGIN_NOT_FOUND",
+            message: "Plugin not found", requestId: req.id }],
+        });
+        const result = await listPluginActivity(
+          publicationId, params.data.id, query.data.offset, query.data.limit,
+        );
+        return reply.code(200).send(PluginActivityListResponseSchema.parse(result));
+      } catch {
+        return reply.code(503).send({
+          errors: [{ code: "PLUGIN_ACTIVITY_UNAVAILABLE",
+            message: "Plugin activity unavailable", requestId: req.id }],
+        });
+      }
+    },
+  });
 
   // No errors, stacktraces or original event payloads are returned to Staff.
   // Pagination begins with the authorized publication's PostgreSQL receipts.
