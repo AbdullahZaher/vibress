@@ -6,6 +6,8 @@
 export interface PluginAdminDataResourceV1 {
   readonly id: string;
   readonly modelKey: string;
+  /** Optional view binding: only this admitted native page renders its resource. */
+  readonly viewId?: string | undefined;
   /** Explicit projection: no wildcard, and no undeclared storage fields. */
   readonly fields: readonly string[];
   /** Optional operator-indexed text equality filters only. */

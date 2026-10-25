@@ -134,10 +134,19 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
       }
       const response = ExtensionNativeDataDiscoveryV1Schema.safeParse({
         schemaVersion: 1,
-        resources: admitted.registry.resources.map((r) => ({
-          id: r.id, fields: r.fields,
-          ...(r.textFilters ? { textFilters: r.textFilters } : {}),
-        })),
+        resources: admitted.registry.resources.map((r) => {
+          const model = admitted.binding.models.find((item) => item.key === r.modelKey);
+          const projected = model?.columns.filter((column) => r.fields.includes(column.name)) ?? [];
+          const fieldTypes: Record<string, "text" | "integer" | "boolean" | "timestamptz"> = {};
+          for (const field of projected) fieldTypes[field.name] = field.type;
+          return {
+            id: r.id, fields: r.fields,
+            ...(r.viewId ? { viewId: r.viewId } : {}),
+            ...(r.textFilters ? { textFilters: r.textFilters } : {}),
+            fieldTypes,
+            requiredFields: projected.filter((field) => field.required).map((field) => field.name),
+          };
+        }),
         actions,
       });
       if (!response.success) return reject(reply, req, "EXTENSION_INVALID_DATA", 503);

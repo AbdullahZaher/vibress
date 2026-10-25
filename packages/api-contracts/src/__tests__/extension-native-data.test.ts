@@ -22,7 +22,9 @@ describe("NUI-03 storage-backed resource/action contracts", () => {
   it("exposes only inert discovery metadata, never storage model IDs", () => {
     expect(ExtensionNativeDataDiscoveryV1Schema.safeParse({
       schemaVersion: 1,
-      resources: [{ id: resource.id, fields: resource.fields, textFilters: resource.textFilters }],
+      resources: [{ id: resource.id, viewId: "overview", fields: resource.fields,
+        textFilters: resource.textFilters, fieldTypes: { title_en: "text", status: "text" },
+        requiredFields: ["title_en"] }],
       actions: [action],
     }).success).toBe(true);
     expect(ExtensionNativeDataDiscoveryV1Schema.safeParse({

@@ -32,6 +32,14 @@ describe("NUI-03 static registry", () => {
     expect(admitNativeDataRegistry(base).kind).toBe("admitted");
     expect(admitNativeDataModel(base.adminResources![0]!, models, true)).toBe(true);
   });
+  it("rejects resources associated with a nonexistent Native page", () => {
+    expect(admitNativeDataRegistry({ ...base, adminResources: [{
+      id: "course-list", modelKey: "courses", viewId: "unknown", fields: ["title_en"],
+    }] }).kind).toBe("invalid");
+    expect(admitNativeDataRegistry({ ...base, adminResources: [{
+      id: "course-list", modelKey: "courses", viewId: "courses", fields: ["title_en"],
+    }] }).kind).toBe("admitted");
+  });
   it("rejects a missing Native view, unknown field and unindexed filter", () => {
     expect(admitNativeDataRegistry({ ...base, adminPages: undefined }).kind).toBe("invalid");
     expect(admitNativeDataModel({ id: "list", modelKey: "courses", fields: ["secret"] }, models)).toBe(false);

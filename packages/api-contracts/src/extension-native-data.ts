@@ -14,6 +14,7 @@ const OptionalKeys = z.array(Field).max(4).refine(
 export const ExtensionNativeDataResourceV1Schema = z.object({
   id: Segment,
   modelKey: Model,
+  viewId: Segment.optional(),
   fields: Keys,
   textFilters: OptionalKeys.optional(),
 }).strict().superRefine((resource, ctx) => {
@@ -42,8 +43,11 @@ export const ExtensionNativeDataDiscoveryV1Schema = z.object({
   schemaVersion: z.literal(1),
   resources: z.array(z.object({
     id: Segment,
+    viewId: Segment.optional(),
     fields: Keys,
     textFilters: OptionalKeys.optional(),
+    fieldTypes: z.record(Field, z.enum(["text", "integer", "boolean", "timestamptz"])).optional(),
+    requiredFields: OptionalKeys.optional(),
   }).strict()).max(8),
   actions: z.array(ExtensionNativeDataActionV1Schema).max(16),
 }).strict();

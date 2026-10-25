@@ -20,6 +20,11 @@ export function admitNativeDataRegistry(module: PluginModule): NativeDataAdmissi
     resources: module.adminResources, actions: module.adminActions ?? [],
   });
   if (!parsed.success || !module.adminPages?.length) return { kind: "invalid" };
+  for (const resource of parsed.data.resources) {
+    if (resource.viewId && !module.adminPages.some((page) => page.viewId === resource.viewId)) {
+      return { kind: "invalid" };
+    }
+  }
   for (const page of module.adminPages) {
     if (admitNativeAdminPage(module, page.viewId).kind !== "admitted") {
       return { kind: "invalid" };
