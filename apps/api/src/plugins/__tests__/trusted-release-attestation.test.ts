@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readTrustedPluginLockfile, readTrustedPluginLockfileWithVerification } from "../trusted-release-attestation";
@@ -60,6 +60,8 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", digest);
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256", f.keyFingerprint);
+    const originalPublicKey = await readFile(f.keyFile);
+    const originalSignature = await readFile(f.signatureFile);
     try {
       await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
         .rejects.toThrow("OPERATOR_SIGNER_REVOKED");
@@ -81,10 +83,11 @@ describe("EXT-404 detached operator Ed25519 lockfile attestation", () => {
 
       // Restoring the old key and its valid signature does not undo revocation,
       // even when the old lockfile bytes are still independently pinned.
-      await writeFile(f.keyFile, nextPem);
+      await writeFile(f.keyFile, originalPublicKey);
+      await writeFile(f.signatureFile, originalSignature);
       vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256", f.keyFingerprint);
       await expect(readTrustedPluginLockfileWithVerification(f.lockfile, f.options))
-        .rejects.toThrow("OPERATOR_TRUST_ROOT_MISMATCH");
+        .rejects.toThrow("OPERATOR_SIGNER_REVOKED");
     } finally {
       vi.unstubAllEnvs();
     }
