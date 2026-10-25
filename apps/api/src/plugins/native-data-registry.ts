@@ -1,8 +1,8 @@
-import type { PluginModule } from "@vibress/plugin-sdk";
+import type { PluginModule, PluginAdminDataResourceV1 } from "@vibress/plugin-sdk";
 import type { ApprovedPluginPhysicalModel } from "@vibress/plugins";
 import {
   ExtensionNativeDataRegistryV1Schema,
-  type ExtensionNativeDataResourceV1, type ExtensionNativeDataActionV1,
+  type ExtensionNativeDataActionV1,
 } from "@vibress/api-contracts";
 import { admitNativeAdminPage } from "./native-admin-registry";
 
@@ -33,7 +33,7 @@ export function admitNativeDataRegistry(module: PluginModule): NativeDataAdmissi
 
 /** Bind metadata to operator-approved database columns (not plugin-provided schema). */
 export function admitNativeDataModel(
-  resource: ExtensionNativeDataResourceV1,
+  resource: PluginAdminDataResourceV1,
   models: readonly ApprovedPluginPhysicalModel[],
   requireCreate = false,
 ): boolean {

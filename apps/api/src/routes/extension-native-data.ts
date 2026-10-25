@@ -172,9 +172,10 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
         resourceId, digest: admitted.digest, filterHash: nativeFilterHash(filterField, filterValue),
       };
       const key = getConfig().secrets.encryptionKey;
-      const cursor = query.data.cursor
+      const decodedCursor = query.data.cursor
         ? readNativeCursor(query.data.cursor, context, key) : undefined;
-      if (query.data.cursor && !cursor) return reject(reply, req, "INVALID_CURSOR", 400);
+      if (query.data.cursor && !decodedCursor) return reject(reply, req, "INVALID_CURSOR", 400);
+      const cursor = decodedCursor ?? undefined;
       let response: ReturnType<typeof ExtensionNativeDataPageV1Schema.safeParse> | null = null;
       let failedCode: string | null = null;
       let session: ReturnType<typeof createHostPluginStorageSession> | null = null;
