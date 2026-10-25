@@ -59,24 +59,30 @@ describe("EXT-401 scoped failed-event recovery ledger (PostgreSQL)", () => {
     })).rejects.toThrow("Event ID is already bound to a different envelope");
 
     // Simulate the publisher crashing before Redis accepted a job.
+    // The integration database is shared by the test suite. Give our own
+    // receipt the earliest claim order, and claim exactly one row so the test
+    // cannot transition unrelated fixtures' durable admissions.
     await pool.query(
-      "UPDATE plugin_event_receipts SET updated_at = now() - interval '10 seconds' WHERE id = $1",
+      `UPDATE plugin_event_receipts
+       SET created_at = now() - interval '100 years',
+           updated_at = now() - interval '10 seconds'
+       WHERE id = $1`,
       [id],
     );
-    const first = await ledger.claimReady(50);
+    const first = await ledger.claimReady(1);
     expect(first.some((entry) => entry.id === id)).toBe(true);
     expect((await ledger.getReceipt(publicationId, pluginId, job.eventId))?.status)
       .toBe("dispatching");
 
     // Simulate the other crash boundary: Redis may have accepted the job,
     // but markQueued() never returned. Reclaim only AFTER the lease expires.
-    const immediate = await ledger.claimReady(50);
+    const immediate = await ledger.claimReady(1);
     expect(immediate.some((entry) => entry.id === id)).toBe(false);
     await pool.query(
       "UPDATE plugin_event_receipts SET updated_at = now() - interval '3 minutes' WHERE id = $1",
       [id],
     );
-    const reclaimed = await ledger.claimReady(50);
+    const reclaimed = await ledger.claimReady(1);
     expect(reclaimed.some((entry) => entry.id === id)).toBe(true);
     await ledger.markQueued(id);
     expect((await ledger.getReceipt(publicationId, pluginId, job.eventId))?.status)
