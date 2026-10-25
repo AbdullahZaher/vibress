@@ -258,13 +258,6 @@ async function main() {
   console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial and release mismatch");
 }
 async function executeAndClose(): Promise<void> {
-  // The CI runner may have broken connection handles after a fault. Bound
-  // shutdown even after failure, so a green stage never masks a hanging job.
-  const cleanupDeadline = setTimeout(() => {
-    console.error("PLUGIN_M1A_EVENT_DELIVERY_CLEANUP_TIMEOUT");
-    process.exit(1); // Restricted disposable CI runner; outer trap drops volumes.
-  }, 12000);
-  cleanupDeadline.unref();
 try {
   await main();
 } catch {
@@ -273,6 +266,13 @@ try {
   console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED_AT: " + diagnosticStage);
   process.exitCode = 1;
 } finally {
+  // Only bound RESOURCE CLEANUP, not the actual 180-second fault drill.
+  const cleanupDeadline = setTimeout(() => {
+    console.error("PLUGIN_M1A_EVENT_DELIVERY_CLEANUP_TIMEOUT");
+    process.exit(1); // Only the disposable CI runner; shell trap drops volumes.
+  }, 12000);
+  cleanupDeadline.unref();
+  try {
   if (consumer) {
     try { await consumer.close(true); } catch { process.exitCode = 1; }
   }
@@ -288,8 +288,10 @@ try {
     } catch { process.exitCode = 1; }
   }
   await closeDbPool();
+  } finally {
+    clearTimeout(cleanupDeadline);
+  }
 }
-  clearTimeout(cleanupDeadline);
 }
 void executeAndClose().catch(() => {
   console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: cleanup incomplete");
