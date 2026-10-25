@@ -40,6 +40,12 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
     let cancelled = false;
     let pending = false;
     const publicationId = getActivePublicationId();
+    if (link.nativeProbeSupported !== true) {
+      // Old API servers did not advertise the Native admission endpoint.
+      // Preserve their separately authorized iframe/scalar behavior.
+      setState({ kind: "legacy" });
+      return;
+    }
     setState({ kind: "loading" });
     const refresh = async () => {
       if (pending || cancelled) return;
@@ -68,7 +74,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [link.pluginId, link.viewId, link.routeId, publicationRevision]);
+  }, [link.pluginId, link.viewId, link.routeId, link.nativeProbeSupported, publicationRevision]);
 
   if (state.kind === "legacy") return <PluginAdminView link={link} />;
   if (state.kind === "loading") {

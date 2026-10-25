@@ -204,6 +204,7 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
           title: { en: string; ar: string };
           label: { en: string; ar: string };
           permission: PluginAdminPermission;
+          nativeProbeSupported: true;
         }> = [];
         // All successful contributions are included up to the operator
         // lockfile maximum (64 trusted modules × 8 views).
@@ -242,7 +243,7 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
           for (const view of views) {
             if (canAccessExtensionAdminRoute(
               req.permissions, req.roles, req.publicationContext?.role, view.permission,
-            )) items.push({ pluginId: plugin.manifestId, ...view });
+            )) items.push({ pluginId: plugin.manifestId, ...view, nativeProbeSupported: true });
           }
         }
         const response = ExtensionAdminNavigationResponseSchema.safeParse({ items });

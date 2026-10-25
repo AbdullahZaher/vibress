@@ -200,6 +200,8 @@ export const ExtensionAdminNavDtoSchema = z.object({
   label: ExtensionAdminLabelSchema,
   title: ExtensionAdminLabelSchema,
   permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
+  /** Additive host feature signal; absent on older API deployments. */
+  nativeProbeSupported: z.literal(true).optional(),
 }).strict();
 export const ExtensionAdminNavigationResponseSchema = z.object({
   items: z.array(ExtensionAdminNavDtoSchema).max(512),

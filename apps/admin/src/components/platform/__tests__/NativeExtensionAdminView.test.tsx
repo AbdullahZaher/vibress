@@ -31,6 +31,7 @@ const link: AdminExtensionViewLink = {
   label: { en: "Courses", ar: "Courses" },
   title: { en: "Courses", ar: "Courses" },
   permission: "plugins.read",
+  nativeProbeSupported: true,
 };
 const hostile = "<img src=x onerror=alert(1)>";
 const native = {
@@ -71,6 +72,14 @@ describe("Host-rendered native extension page", () => {
       root.render(<NativeExtensionAdminView link={link} />);
     });
   }
+
+  it("preserves old API/Host compatibility without probing an unknown route", async () => {
+    await act(async () => {
+      root.render(<NativeExtensionAdminView link={{ ...link, nativeProbeSupported: undefined }} />);
+    });
+    expect(element.querySelector('[data-testid="legacy-frame"]')).not.toBeNull();
+    expect(readNativeExtensionAdminPageApi).not.toHaveBeenCalled();
+  });
 
   it("preserves explicit Host-selected legacy rendering", async () => {
     vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue({ mode: "legacy" });

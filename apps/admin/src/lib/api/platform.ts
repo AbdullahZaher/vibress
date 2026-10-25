@@ -156,6 +156,8 @@ export interface AdminExtensionViewLink {
   label: { en: string; ar: string };
   title: { en: string; ar: string };
   permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+  /** Capability negotiated from Host; absent on old API means legacy. */
+  nativeProbeSupported?: true;
 }
 
 /** Strictly Host-owned native metadata. A declaration alone is not authorization. */
