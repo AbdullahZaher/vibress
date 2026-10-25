@@ -17,6 +17,15 @@ export async function rotatePluginSecretRows(options: {
   readonly pluginId?: string;
 }): Promise<{ scanned: number; needed: number; changed: number }> {
   const { apply: write, maxRows, pluginId } = options;
+  // Enforce the same gates in the kernel as in its CLI: no caller importing
+  // this helper may bypass maintenance and explicit write approval.
+  if (process.env.VIBRESS_PLUGIN_RECOVERY_MAINTENANCE !== "1" ||
+      process.env.VIBRESS_PLUGIN_SECRET_ROTATION_MAINTENANCE !== "1") {
+    throw new Error("PLUGIN_SECRET_ROTATION_MAINTENANCE_REQUIRED");
+  }
+  if (write && process.env.VIBRESS_PLUGIN_SECRET_ROTATION_APPLY !== "1") {
+    throw new Error("PLUGIN_SECRET_ROTATION_APPROVAL_REQUIRED");
+  }
   if (!Number.isSafeInteger(maxRows) || maxRows < 1 || maxRows > 100000) {
     throw new Error("PLUGIN_SECRET_ROTATION_SCAN_LIMIT_INVALID");
   }

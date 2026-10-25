@@ -147,8 +147,8 @@ installed secrets use the original `VIBRESS_ENCRYPTION_KEY` AES-256-GCM
 `v: 1` payload. That format has no key identifier. To migrate existing
 plugin settings safely, the Host now supports **additive** `v: 2` envelopes
 with a `kid` (key ID) and AES-GCM additional authenticated data binding the
-ciphertext to the exact plugin ID, publication ID (when scoped), and setting
-key. These are private encrypted settings, not SDK-visible values.
+key ID and ciphertext to the exact plugin ID, publication ID (when scoped),
+and setting key. These are private encrypted settings, not SDK-visible values.
 
 By default both plugin settings tables still write and read v1 exactly as
 before. To **opt in**, set these variables for **every** API and Worker
@@ -206,7 +206,12 @@ migration approval.
    pnpm exec tsx scripts/plugins/rotate-secrets.ts
    ```
 
-   The final dry-run must report `needed: 0`. The script traverses both
+   The final dry-run must report `needed: 0`. The migration kernel enforces
+   maintenance and write-approval guards independently of the CLI. It is
+   regression-tested against **actual seeded PostgreSQL fixtures**, including
+   interrupted partial application/resumption, stale ciphertext CAS, invalid
+   data, key rollover and wrong publication identity; this is not a completed
+   live production DR drill. The script traverses both
    `plugin_settings` and `plugin_publication_settings` in bounded ID order
    (default maximum 100,000 secret rows; `VIBRESS_PLUGIN_SECRET_ROTATION_SCAN_LIMIT`
    can lower this ceiling). It updates each ciphertext using an exact-row

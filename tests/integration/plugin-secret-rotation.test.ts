@@ -47,6 +47,9 @@ describe("PLUG-OPS-05 PostgreSQL secret rotation, restart and CAS", () => {
     await runMigrations();
     await seedDatabase();
     vi.stubEnv("VIBRESS_ENCRYPTION_KEY", oldKey);
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ROTATION_MAINTENANCE", "1");
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ROTATION_APPLY", "1");
     const pool = getDbPool();
     const selected = await pool.query<{ id: string }>("SELECT id FROM publications LIMIT 1");
     const pub = selected.rows[0];
@@ -83,6 +86,18 @@ describe("PLUG-OPS-05 PostgreSQL secret rotation, restart and CAS", () => {
     await pool.query("DELETE FROM plugins WHERE id = $1", [pluginId]);
     vi.unstubAllEnvs();
     await closeDbPool();
+  });
+
+  it("rejects imported apply calls without explicit operator maintenance and approval", async () => {
+    ring("one", { one: keyOne, two: keyTwo });
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ROTATION_APPLY", "0");
+    await expect(rotatePluginSecretRows({ apply: true, maxRows: 10, pluginId }))
+      .rejects.toThrow("PLUGIN_SECRET_ROTATION_APPROVAL_REQUIRED");
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ROTATION_APPLY", "1");
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "0");
+    await expect(rotatePluginSecretRows({ apply: false, maxRows: 10, pluginId }))
+      .rejects.toThrow("PLUGIN_SECRET_ROTATION_MAINTENANCE_REQUIRED");
+    vi.stubEnv("VIBRESS_PLUGIN_RECOVERY_MAINTENANCE", "1");
   });
 
   it("dry-runs both persisted v1 tables without changing any stored bytes", async () => {
