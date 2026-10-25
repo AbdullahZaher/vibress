@@ -5,6 +5,7 @@ import { getActivePublicationId } from "../../lib/api/client";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { NativeExtensionActionForm } from "./NativeExtensionActionForm";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 type Resource = ExtensionNativeDataDiscoveryV1["resources"][number];
@@ -32,6 +33,8 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
   const [revision, setRevision] = useState(0);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState<ExtensionNativeDataPageV1["items"][number] | null>(null);
+  const [actions, setActions] = useState<ExtensionNativeDataDiscoveryV1["actions"]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +43,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
     setHistory([undefined]);
     setFilter(null);
     setError("");
+    setSelected(null); setActions([]);
     void readNativeExtensionDataRegistryApi(pluginId).then((result) => {
       if (cancelled || getActivePublicationId() !== publicationId) return;
       const resources = result.resources.filter((resource) => resource.viewId === viewId);
@@ -47,6 +51,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
       setResourceId(resources[0]!.id);
       setField(resources[0]!.textFilters?.[0] ?? "");
       setTerm("");
+      setActions(result.actions.filter((action) => resources.some((item) => item.id === action.resourceId)));
       setState({ kind: "ready", resources });
     }).catch((cause: unknown) => {
       if (cancelled || getActivePublicationId() !== publicationId) return;
@@ -103,7 +108,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
               onChange={(event) => {
                 const next = state.resources.find((item) => item.id === event.target.value);
                 setResourceId(event.target.value);
-                setHistory([undefined]); setFilter(null); setTerm("");
+                setHistory([undefined]); setFilter(null); setTerm(""); setSelected(null);
                 setField(next?.textFilters?.[0] ?? "");
               }}>
               {state.resources.map((item) => <option value={item.id} key={item.id}>{item.id}</option>)}
@@ -138,17 +143,27 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
       )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {fetching && <p role="status" className="text-sm">{tr("Loading plugin records...")}</p>}
+      <NativeExtensionActionForm pluginId={pluginId} publicationId={publicationId}
+        resource={resource} actions={actions} selected={selected}
+        onClear={() => setSelected(null)}
+        onSaved={() => { setHistory([undefined]); setRevision((value) => value + 1); }} />
       {current && <>
         <Table>
           <TableHeader><TableRow>
             <TableHead scope="col">{tr("Record ID")}</TableHead>
             {resource.fields.map((key) => <TableHead key={key} scope="col" dir="auto">{key}</TableHead>)}
+            {actions.some((action) => action.resourceId === resource.id && action.operation === "update") &&
+              <TableHead scope="col">{tr("Actions")}</TableHead>}
           </TableRow></TableHeader>
           <TableBody>{current.items.map((item) => <TableRow key={item.id}>
             <TableCell dir="auto">{item.id}</TableCell>
             {resource.fields.map((key) => <TableCell key={key} dir="auto"
               className="max-w-xs break-words">{item.fields[key] == null
                 ? "—" : String(item.fields[key])}</TableCell>)}
+            {actions.some((action) => action.resourceId === resource.id && action.operation === "update") &&
+              <TableCell><Button type="button" size="xs" variant="outline"
+                aria-label={tr("Edit record") + ": " + item.id}
+                onClick={() => setSelected(item)}>{tr("Edit record")}</Button></TableCell>}
           </TableRow>)}</TableBody>
         </Table>
         {current.items.length === 0 && <p className="text-sm text-muted-foreground">{tr("No plugin records.")}</p>}
