@@ -75,7 +75,10 @@ describe("Host-rendered native extension page", () => {
 
   it("preserves old API/Host compatibility without probing an unknown route", async () => {
     await act(async () => {
-      root.render(<NativeExtensionAdminView link={{ ...link, nativeProbeSupported: undefined }} />);
+      root.render(<NativeExtensionAdminView link={{
+        pluginId: link.pluginId, viewId: link.viewId, routeId: link.routeId,
+        label: link.label, title: link.title, permission: link.permission,
+      }} />);
     });
     expect(element.querySelector('[data-testid="legacy-frame"]')).not.toBeNull();
     expect(readNativeExtensionAdminPageApi).not.toHaveBeenCalled();
