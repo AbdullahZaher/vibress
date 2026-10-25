@@ -55,6 +55,17 @@ describe("NUI-01 Host static native page admission", () => {
       ...first, schemaVersion: 1, components: [],
     }] }, "courses").kind).toBe("invalid");
   });
+  it("rejects a dangling reference in another native page before serving a valid page", () => {
+    const module = fixture();
+    const native = module.adminPages ?? [];
+    const first = native[0];
+    if (!first) throw Error("Invalid fixture");
+    const unsafe = { ...first, viewId: "reports" };
+    expect(admitNativeAdminPage({
+      ...module, adminPages: [first, unsafe],
+    }, "courses").kind).toBe("invalid");
+  });
+
   it("rejects permission mismatch and wrong-audience routes", () => {
     const module = fixture();
     const routes = module.routes ?? [];

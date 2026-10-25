@@ -107,7 +107,7 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
         }
         if (admission.kind === "absent") return legacy();
         if (!canAccessExtensionAdminRoute(
-          req.permissions, req.roles, req.publicationContext.role,
+          req.permissions, req.roles, req.publicationContext?.role,
           admission.permission,
         )) return reject(reply, req, "PERMISSION_DENIED", 403);
         return reply.status(200).send(ExtensionNativeAdminResponseV1Schema.parse({
