@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { getDbPool, closeDbPool } from "@vibress/database";
+import { closeRedisClient } from "@vibress/cache";
 import { PluginWorkerEventJobSchema, type PluginWorkerEventJob } from "@vibress/api-contracts";
 import {
   DrizzlePluginRepository, DrizzlePluginPublicationStateRepository,
@@ -286,6 +287,10 @@ try {
   if (queue) {
     try { await queue.close(); } catch { process.exitCode = 1; }
   }
+  // BullMQ closes its Queue/Worker owners but not the shared Redis
+  // connection supplied by @vibress/cache. Keeping it open leaves the
+  // otherwise-successful CI drill alive until the external timeout.
+  try { await closeRedisClient(); } catch { process.exitCode = 1; }
   // Only fixture owned by this disposable run, never a real tenant row.
   if (publicationId) {
     try {
