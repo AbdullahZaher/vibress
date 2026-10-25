@@ -388,6 +388,7 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(initial.json().items).toEqual([{
         pluginId: goodId, viewId: "courses", routeId: "course-list",
         title: label, label, permission: "plugins.read",
+        nativeProbeSupported: true,
       }]);
       expect(repeated.statusCode).toBe(200);
       expect(repeated.json()).toEqual(initial.json());
