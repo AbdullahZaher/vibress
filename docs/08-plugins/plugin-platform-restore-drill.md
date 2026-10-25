@@ -94,7 +94,13 @@ because its `manifest.version` happens to match.
    `dispatching` require the existing bounded relay/claim recovery path,
    not unrestricted Redis enqueue. Do not acknowledge or delete a job solely
    to make the offline check green.
-7. Restore service on a **single controlled replica** with the same pinned
+7. Before restoring plugin secret service, run the separate
+   `scripts/plugins/rotate-secrets.ts` read-only check on a backed-up,
+   quiesced clone with the matching original v1 key and all v2 key IDs.
+   If a secret migration was approved, require a second post-migration
+   dry-run with `needed: 0`. Do not remove a key until the clone and both
+   API/Worker versions can still read every persisted secret.
+   Restore service on a **single controlled replica** with the same pinned
    release/secret snapshot, verify decryption of a known non-production
    sentinel secret via the normal authorized workflow, and confirm that no
    secret appears in logs/API output. Confirm disabled publications remain

@@ -140,23 +140,101 @@ denylist can reauthorize old trust; preserve this policy in protected,
 independently backed-up operator configuration, and verify it on every
 replica after restoration. Rotation is not cluster-atomic by itself.
 
-### Encryption keys are a separate, still-open acceptance gate
+## PLUG-OPS-05 — key-versioned AES-GCM plugin secrets (opt-in)
 
-`VIBRESS_ENCRYPTION_KEY` encrypts existing secrets using an AES-256-GCM
-`v: 1` envelope with **no key identifier**. Changing it in place before all
-stored ciphertexts have been inventoried, backed up, decrypted and
-re-encrypted with verified compatibility can permanently destroy access to
-settings and integration credentials. Signing-key rotation **never** rotates
-or re-encrypts these secrets.
+The signing keyring above is **not** the secrets encryption keyring. Current
+installed secrets use the original `VIBRESS_ENCRYPTION_KEY` AES-256-GCM
+`v: 1` payload. That format has no key identifier. To migrate existing
+plugin settings safely, the Host now supports **additive** `v: 2` envelopes
+with a `kid` (key ID) and AES-GCM additional authenticated data binding the
+ciphertext to the exact plugin ID, publication ID (when scoped), and setting
+key. These are private encrypted settings, not SDK-visible values.
 
-For a future operator-approved secret-key migration, freeze writes under
-controlled maintenance, inventory every ciphertext consumer, preserve both
-old and new keys outside database backups, run a transactionally safe and
-resumable key-versioned migration on a populated PostgreSQL clone, verify all
-old and new records through the authorized API, then roll out compatible
-dual-read/single-write behavior. Test interrupted batches, rollback, operator
-key loss, multiple replicas and backup restore before changing the production
-encryption key. No automatic encryption key rotation is implemented here.
+By default both plugin settings tables still write and read v1 exactly as
+before. To **opt in**, set these variables for **every** API and Worker
+instance after deploying the v2-capable binaries:
+
+- `VIBRESS_PLUGIN_SECRET_ACTIVE_KEY_ID`: 1–32 ASCII letters/digits/`_`/`-`.
+- `VIBRESS_PLUGIN_SECRET_KEYS_JSON`: JSON object of 1–16 named **independent,
+  randomly generated 32-byte keys** as 64 hexadecimal characters each.
+  Keep the active key and every older still-in-use v2 key in this ring.
+  A missing/invalid/partially deployed keyring fails closed.
+- Keep the **original** `VIBRESS_ENCRYPTION_KEY` unchanged for all legacy v1
+  ciphertext and unrelated CMS integrations throughout migration.
+
+Do **not** reuse the Ed25519 signing key or derive the new AES keys from the
+old installation key. Never commit the JSON keyring, put it in URLs, give it
+to plugins, or print resolved Docker Compose configuration (use
+`docker compose ... config --quiet`). Operator-managed environment or
+secret-management facilities must provide the same protected keyring to all
+replicas. Compose environments can be inspected by authorized Docker
+administrators; harden operator access accordingly.
+
+Add the **optional** `compose.plugins.secret-rotation.yml` override only
+after all Host images support v2. A database holding v2 ciphertext **cannot**
+be used with older Host binaries that only understand v1, even when you still
+possess the keys. The rollout order and tested rollback image are part of the
+migration approval.
+
+### Resumable offline migration procedure
+
+1. Take and authenticate **PostgreSQL + Redis + storage + release** backups,
+   with a separately protected copy of the old encryption key **and** the
+   complete new keyring. Verify restoration on a populated disposable clone.
+2. Upgrade API and Worker binaries to v2 readers on **every** replica
+   without initially enabling new keyring writes. Verify legacy v1 reads.
+   Quiesce API/Worker replicas and all writers for migration; the maintenance
+   env flags below do **not** prove the fleet is actually stopped.
+3. On the isolated clone, configure both legacy and new keys and the active
+   key ID. Run the **read-only** preflight, which decrypts and authenticates
+   every existing plugin secret before reporting aggregate counts:
+
+   ```bash
+   export VIBRESS_PLUGIN_RECOVERY_MAINTENANCE=1
+   export VIBRESS_PLUGIN_SECRET_ROTATION_MAINTENANCE=1
+   # VIBRESS_ENCRYPTION_KEY, VIBRESS_PLUGIN_SECRET_ACTIVE_KEY_ID and
+   # VIBRESS_PLUGIN_SECRET_KEYS_JSON are supplied privately by the operator
+   pnpm exec tsx scripts/plugins/rotate-secrets.ts
+   ```
+
+4. When preflight passes, explicitly approve the same protected snapshot and
+   run the idempotent migration on the **isolated clone first**:
+
+   ```bash
+   export VIBRESS_PLUGIN_SECRET_ROTATION_APPLY=1
+   pnpm exec tsx scripts/plugins/rotate-secrets.ts --apply
+   pnpm exec tsx scripts/plugins/rotate-secrets.ts
+   ```
+
+   The final dry-run must report `needed: 0`. The script traverses both
+   `plugin_settings` and `plugin_publication_settings` in bounded ID order
+   (default maximum 100,000 secret rows; `VIBRESS_PLUGIN_SECRET_ROTATION_SCAN_LIMIT`
+   can lower this ceiling). It updates each ciphertext using an exact-row
+   owner/scope **compare-and-swap**, so concurrent replacements/revocations
+   fail rather than being overwritten. Batch failure is safely resumable with
+   the same ring; it never changes permissions, creates secret rows or
+   exposes member IDs, raw values, ciphertext or key names in output.
+5. Repeat the approved procedure on the quiesced production snapshot,
+   re-run dry-run and validate normal authorized plugin `getSecret` reads,
+   publication boundaries and old global bundled plugins. Capture **counts
+   only** in operator audit records, plus masked test outcomes and run/commit
+   provenance. New writes use the active v2 key only after all replicas have
+   the new keyring; no key is automatically deleted.
+6. For another key rotation, add the next key to the ring on **all** replicas
+   first, advance active ID, quiesce writers and re-run migration, check
+   `needed: 0`, test a backup restore, then explicitly approve removal of
+   old v2 keys. Removing a key early is irrecoverable without restoring it.
+   Keep the original v1 key until **all other CMS ciphertext consumers**
+   have their own independently verified migration plan. The v1 key is not
+   rotated by this plugin-only procedure.
+
+Rollback after v2 writes requires a **v2-compatible Host** and every key
+used in the snapshot. Never use an old image that only understands v1, or
+restore a previous keyring without checking the ciphertext corpus. There is
+no automated reverse migration to v1. Failed decryptions, malformed keyring,
+wrong tenant AAD, missing key, CAS conflict, or scan limit breach abort with
+a nonzero exit; retain all old keys and maintenance mode, then investigate
+before retrying. Passing CI tests alone is not production DR acceptance.
 
 ## Failure and rollback
 

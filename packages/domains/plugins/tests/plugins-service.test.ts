@@ -1246,6 +1246,10 @@ describe("PluginsService", () => {
   });
 
   it("stores scoped settings atomically, encrypts secrets and passes only owning publication context", async () => {
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ACTIVE_KEY_ID", "rotation_a");
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_KEYS_JSON", JSON.stringify({
+      rotation_a: "b".repeat(64),
+    }));
     const encryptedByScope = new Map<string, {
       key: string;
       value: string | null;
@@ -1304,8 +1308,9 @@ describe("PluginsService", () => {
     );
     const recorded = encryptedByScope.get("p1:pub-a");
     expect(recorded?.find((entry) => entry.key === "apiToken")?.value).toBeNull();
-    expect(recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue)
-      .not.toContain("secret-in-publication-a");
+    const storedCiphertext = recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue;
+    expect(storedCiphertext).not.toContain("secret-in-publication-a");
+    expect(JSON.parse(storedCiphertext ?? "{}")).toMatchObject({ v: 2, kid: "rotation_a" });
     const masked = await service.listPublicationSettings("p1", "pub-a");
     expect(JSON.stringify(masked)).not.toContain("secret-in-publication-a");
     expect(masked.find((entry) => entry.key === "apiToken")?.masked).toBe(true);
