@@ -16,3 +16,4 @@ export * from "./publication-locales";
 export * from "./translations";
 export * from "./plugins";
 export * from "./extension-native-admin";
+export * from "./extension-native-data";
