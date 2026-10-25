@@ -395,6 +395,21 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
       expect(fingerprints).toHaveBeenCalledTimes(2);
 
+      // Native is operator-disabled by default; discovery must not expose
+      // descriptors or bypass Staff authentication on the new endpoint.
+      const nativeProbe = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/" + goodId + "/views/courses/native",
+        headers: { cookie: staffCookie },
+      });
+      expect(nativeProbe.statusCode).toBe(200);
+      expect(nativeProbe.json()).toEqual({ mode: "legacy" });
+      const unauthenticatedProbe = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/" + goodId + "/views/courses/native",
+      });
+      expect(unauthenticatedProbe.statusCode).toBe(401);
+
       const view = await app.inject({
         method: "GET",
         url: `/api/admin/v1/extensions/${goodId}/v1/course-list`,
