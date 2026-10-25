@@ -1,0 +1,92 @@
+# Run after copying rule and test files into the same directory:
+#   promtool check rules plugin-alerts.yml
+#   promtool test rules plugin-alerts.test.yml
+rule_files:
+  - plugin-alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_consumer_ready{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_receipt_probe_ok{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker",instance="worker-1"}'
+        values: '0+60x12'
+      - series: 'plugin_events_receipt_stale_sampled{job="vibress-worker",instance="worker-1",state="pending"}'
+        values: '0+0x12'
+      - series: 'plugin_events_receipt_sample_saturated{job="vibress-worker",instance="worker-1",state="pending"}'
+        values: '0+0x12'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: VibressPluginReceiptBacklogStale
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: VibressPluginReceiptProbeStalled
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: VibressPluginReceiptSampleSaturated
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: VibressPluginReceiptProbeFailed
+        exp_alerts: []
+
+  # Stale historic successful data must not trigger a backlog alert. Instead
+  # emit a distinct telemetry-stalled signal.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_consumer_ready{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_receipt_probe_ok{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker",instance="worker-1"}'
+        values: '0+0x12'
+      - series: 'plugin_events_receipt_stale_sampled{job="vibress-worker",instance="worker-1",state="pending"}'
+        values: '5+0x12'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: VibressPluginReceiptBacklogStale
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: VibressPluginReceiptProbeStalled
+        exp_alerts:
+          - exp_labels:
+              job: vibress-worker
+              instance: worker-1
+              severity: warning
+              component: plugins
+            exp_annotations:
+              summary: "Vibress durable receipt probe has stopped updating"
+              description: "Last-known probe status may be outdated even if it reported success. Investigate the Worker loop."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_consumer_ready{job="vibress-worker",instance="worker-1"}'
+        values: '1+0x12'
+      - series: 'plugin_events_receipt_probe_ok{job="vibress-worker",instance="worker-1"}'
+        values: '0+0x12'
+      - series: 'plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker",instance="worker-1"}'
+        values: '0+60x12'
+      - series: 'plugin_events_receipt_stale_sampled{job="vibress-worker",instance="worker-1",state="pending"}'
+        values: '5+0x12'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: VibressPluginReceiptBacklogStale
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: VibressPluginReceiptProbeFailed
+        exp_alerts:
+          - exp_labels:
+              job: vibress-worker
+              instance: worker-1
+              severity: warning
+              component: plugins
+            exp_annotations:
+              summary: "Vibress durable receipt probe is failing"
+              description: "Check database connectivity. Existing backlog gauges are stale and must not be interpreted as zero."
