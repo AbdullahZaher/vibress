@@ -239,6 +239,7 @@ async function main() {
 
   console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial and release mismatch");
 }
+async function executeAndClose(): Promise<void> {
 try {
   await main();
 } catch {
@@ -261,3 +262,8 @@ try {
   }
   await closeDbPool();
 }
+}
+void executeAndClose().catch(() => {
+  console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: cleanup incomplete");
+  process.exitCode = 1;
+});
