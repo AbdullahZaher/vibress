@@ -275,6 +275,8 @@ const translations: Record<string, string> = {
   "Plugin audit history": "سجل تدقيق الإضافة",
   "Plugin settings updated": "تحديث إعدادات الإضافة",
   "Plugin secret revoked": "إلغاء سر الإضافة",
+  "Plugin enabled in publication": "تمكين الإضافة في الموقع",
+  "Plugin disabled in publication": "تعطيل الإضافة في الموقع",
   "Plugin event replay requested": "طلب إعادة تشغيل حدث الإضافة",
   "This history includes selected audited actions for the current publication, not every plugin lifecycle event.": "يعرض هذا السجل عمليات مدققة محددة للموقع الحالي، وليس جميع أحداث دورة حياة الإضافة.",
   "Loading plugin activity...": "جارٍ تحميل سجل نشاط الإضافة...",

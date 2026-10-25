@@ -100,6 +100,8 @@ It reads only explicitly whitelisted actions from the **existing**
 
 - `plugin.publication_settings_updated`
 - `plugin.publication_secret_revoked`
+- `plugin.publication_enabled` and `plugin.publication_disabled` (only when
+  a publication's stored decision actually changes)
 - `plugin.event_replay_requested`
 
 The API is additive:
@@ -121,10 +123,12 @@ and provides localized Arabic strings, semantic time labels and
 keyboard-operable buttons.
 
 **Limitations:** Existing `audit_events` retention policy and legacy
-pre-feature gaps determine how much history is available. Registration,
-enablement, activation, version changes and failed worker delivery outcomes
-are **not** included unless they have a separate explicitly admitted
-publication-owned audit event. Do not claim the feed is a complete lifecycle
+pre-feature gaps determine how much history is available. Global plugin registration, approved release metadata updates, activation
+and deactivation now create **separate global** `audit_events` entries with
+`publication_id = NULL`. Those must not appear in the selected publication's
+Activity panel, because a global operator decision is not publication-owned.
+Failed Worker delivery outcomes and other lifecycle events are not included
+in this curated view. Do not claim the feed is a complete lifecycle
 history. Appending those events safely requires transactionally consistent
 ownership and upgrade-safe migrations only when justified.
 
@@ -132,3 +136,27 @@ Tests must demonstrate that a forged replay audit metadata object cannot
 cause an event from a different plugin to appear, and that a foreign
 publication is never enumerated. A live browser/accessibility exercise,
 retention decisions, production alerts and fleet DR still remain.
+
+## Plugin lifecycle audit write guarantees
+
+Authenticated operator calls to register, update, activate or deactivate a
+plugin append `plugin.registered`, `plugin.updated`, `plugin.activated` or
+`plugin.deactivated` **within the same PostgreSQL transaction** as the final
+matching persistence change. Global rows retain a null publication ID and
+record only the authenticated actor ID and HTTP request ID; no plugin-provided
+manifest field, credentials, errors, stack trace or metadata is copied. They
+remain visible only through pre-existing operator/global audit permissions.
+
+Publication enablement changes append `plugin.publication_enabled` or
+`plugin.publication_disabled` in the **same database transaction** as the
+state upsert, with the server-resolved publication ID. A repeated set to the
+current value does not fabricate a new transition or modify the prior state
+timestamp. Failed DB/audit writes roll back both modifications.
+
+Activation/deactivation run Host callbacks outside the database; these
+transactional audit guarantees only cover **successful persisted final state
+transitions**, not exactly-once execution of plugin module side effects.
+Failures and stranded intermediate states continue to require the existing
+maintenance-only recovery process. Legacy service/test consumers can omit
+the optional audit context without changing their previous API semantics.
+No schema migration or UI exposure of global operator actions is introduced.
