@@ -29,3 +29,10 @@ export { assessQueueRecovery } from "./application/plugin-queue-recovery";
 export type {
   QueueRecoveryReceipt, QueueRecoveryJob, QueueRecoveryState,
 } from "./application/plugin-queue-recovery";
+
+export {
+  readPluginReceiptDiagnostics, summarizePluginReceiptAges,
+} from "./application/plugin-receipt-diagnostics";
+export type {
+  PluginReceiptDiagnostics, PluginReceiptStateDiagnostic, ActivePluginReceiptStatus,
+} from "./application/plugin-receipt-diagnostics";
