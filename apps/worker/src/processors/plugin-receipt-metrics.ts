@@ -14,11 +14,15 @@ interface PluginReceiptMeter {
 export async function observePluginReceiptBacklog(
   collect: () => Promise<PluginReceiptDiagnostics>,
   meter: PluginReceiptMeter,
+  nowMs: () => number = Date.now,
 ): Promise<boolean> {
   let result: PluginReceiptDiagnostics;
   try {
     result = await collect();
   } catch {
+    // A stale successful gauge is not a successful fresh probe. Record
+    // completion for both outcomes; no tenant or error labels are attached.
+    meter.gauge("plugin_events_receipt_probe_timestamp_seconds", nowMs() / 1000);
     meter.gauge("plugin_events_receipt_probe_ok", 0);
     meter.counter("plugin_events_receipt_probe_failures");
     return false;
@@ -30,6 +34,7 @@ export async function observePluginReceiptBacklog(
     meter.gauge("plugin_events_receipt_stale_sampled", sample.staleSampled, tags);
     meter.gauge("plugin_events_receipt_sample_saturated", sample.saturated ? 1 : 0, tags);
   }
+  meter.gauge("plugin_events_receipt_probe_timestamp_seconds", nowMs() / 1000);
   meter.gauge("plugin_events_receipt_probe_ok", 1);
   return true;
 }

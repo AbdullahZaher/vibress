@@ -12,8 +12,9 @@ describe("PLUG-OPS-06 aggregate-only worker backlog telemetry", () => {
   it("records only fixed status labels and honest bounded lower bounds", async () => {
     const gauge = vi.fn();
     const counter = vi.fn();
-    await expect(observePluginReceiptBacklog(async () => report, { gauge, counter }))
-      .resolves.toBe(true);
+    await expect(observePluginReceiptBacklog(
+      async () => report, { gauge, counter }, () => 1_760_000_000_000,
+    )).resolves.toBe(true);
     expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_sampled", 250,
       { state: "pending" });
     expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_stale_sampled", 5,
@@ -23,6 +24,8 @@ describe("PLUG-OPS-06 aggregate-only worker backlog telemetry", () => {
     expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_stale_sampled", 0,
       { state: "dispatching" });
     expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_probe_ok", 1);
+    expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_probe_timestamp_seconds",
+      1_760_000_000);
     expect(counter).not.toHaveBeenCalled();
     const output = JSON.stringify(gauge.mock.calls);
     expect(output).not.toContain("publicationId");
@@ -37,8 +40,10 @@ describe("PLUG-OPS-06 aggregate-only worker backlog telemetry", () => {
     const err = new Error("secret_token=internal-db-private");
     await expect(observePluginReceiptBacklog(async () => { throw err; }, {
       gauge, counter,
-    })).resolves.toBe(false);
-    expect(gauge).toHaveBeenCalledTimes(1);
+    }, () => 1_760_000_001_000)).resolves.toBe(false);
+    expect(gauge).toHaveBeenCalledTimes(2);
+    expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_probe_timestamp_seconds",
+      1_760_000_001);
     expect(gauge).toHaveBeenCalledWith("plugin_events_receipt_probe_ok", 0);
     expect(counter).toHaveBeenCalledTimes(1);
     expect(counter).toHaveBeenCalledWith("plugin_events_receipt_probe_failures");
