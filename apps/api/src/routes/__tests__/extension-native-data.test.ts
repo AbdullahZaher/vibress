@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PluginModule, PluginStorageItem } from "@vibress/plugin-sdk";
+import type { PluginModule } from "@vibress/plugin-sdk";
+import { ExtensionNativeDataPageV1Schema } from "@vibress/api-contracts";
 import { adminNativeDataRoutes } from "../extension-native-data";
 
 const state = vi.hoisted(() => ({
@@ -17,7 +18,7 @@ const state = vi.hoisted(() => ({
     id: string; version: number;
     fields: Record<string, string | number | boolean | null>;
   }>,
-  activeModule: null as unknown,
+  activeModule: null as PluginModule | null,
 }));
 const digest = "a".repeat(64);
 const label = { en: "Courses", ar: "Courses" };
@@ -184,11 +185,8 @@ describe("NUI-03 Fastify resource/action boundary", () => {
       method: "GET", url: base + "/resources/courses?limit=1",
     });
     expect(first.statusCode).toBe(200);
-    const payload = first.json() as {
-      schemaVersion: number;
-      items: PluginStorageItem[];
-      nextCursor: string;
-    };
+    const payload = ExtensionNativeDataPageV1Schema.parse(first.json());
+    if (!payload.nextCursor) throw Error("Expected signed nextCursor");
     expect(payload.schemaVersion).toBe(1);
     expect(payload.items[0]?.fields).toEqual({ title_en: "<unsafe>" });
     expect(JSON.stringify(payload)).not.toContain("secret");
