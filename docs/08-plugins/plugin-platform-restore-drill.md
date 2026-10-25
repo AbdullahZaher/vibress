@@ -164,6 +164,57 @@ observed API×2/Worker×2 behavior and retained event receipts, measure
 actual recovery time and recovered writes, and secure the operator-signed
 go/no-go report outside the source tree.
 
+## CI disposable four-process fault and PostgreSQL restore drill
+
+**Evidence:** [GitHub Actions run #40219707208](https://github.com/AbdullahZaher/vibress/actions/runs/40219707208) succeeded
+on exact SHA `79ec639bbb804e3649486458129c24b1eec925c8`.
+The separate
+[Plugins M1A isolated replica fault drill workflow](../../.github/workflows/plugin-m1a-isolated-drill.yml)
+runs from this execution branch (or explicit operator-triggered workflow
+dispatch) on a **fresh GitHub-hosted Ubuntu runner**. It is not enabled
+automatically in operator installations and does not share production volumes.
+
+`scripts/plugins/drill-isolated-replica-faults.sh` requires three
+independent CI-only guard inputs: `GITHUB_ACTIONS=true`, `CI=true`,
+and `VIBRESS_M1A_DISPOSABLE_DRILL=1`, plus a numeric GitHub Actions run
+ID. It then creates a uniquely namespaced disposable Docker Compose project
+for PostgreSQL and Redis (from `compose.dev.yml`), applies existing core
+migrations/seeds, and launches **two real API processes** on different
+ports and **two real Worker processes** on different health ports. No
+release mount, operator signer, production keyring or external provider is
+injected. Temporary data, logs and Compose volumes are removed on exit.
+
+The run checked that all four processes became ready; stopping Redis made
+all four report non-ready, restarting Redis restored readiness; stopping
+PostgreSQL made all four report non-ready, and restarting PostgreSQL
+restored readiness. It then stopped the application processes, used
+`pg_dump --format=custom` to snapshot the populated disposable database,
+restored that dump with `pg_restore --exit-on-error` into a **different**
+empty disposable database, and verified the original and restored
+test-only sentinel survived. The workflow reported success for all stages.
+
+**This is limited but genuine executable evidence**, not production DR
+certification:
+
+- Processes are run from checked-out source, **not** four signed
+  production images; it does **not** exercise admission of approved
+  ESM across four independently mounted production releases.
+- The PostgreSQL dump includes migrated/seeding state plus a controlled
+  marker; it is **not** an operator-signed whole-deployment backup,
+  and does not include Redis RDB/AOF, media, release artifacts or an
+  independent key vault snapshot.
+- No queued plugin event was intentionally delivered across a crash
+  boundary, and exact-once handler effects are not inferred from health
+  endpoints. Separate replay/dead-letter and signed release tests remain.
+- The workflow measures bounded readiness recovery, not contractual
+  end-to-end RPO/RTO for a customer's deployed service. Real backup
+  verification, replica admission receipt provenance, alert delivery
+  and operator authorization remain mandatory before M1A sign-off.
+
+Do not execute this drill script on production or repurpose its test
+key/credential fixtures. The workflow's isolate and short-lived cleanup
+are part of its safety boundary.
+
 ## Mandatory negative drills
 
 | Injected condition | Required result |
