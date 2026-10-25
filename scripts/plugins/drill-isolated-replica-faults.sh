@@ -134,7 +134,9 @@ pids=()
 # Integration with REAL PostgreSQL/BullMQ admission+consumer semantics.
 # The bundled-only API/Worker processes are stopped to avoid touching
 # unrelated queues or handing execution to an unsigned external extension.
-pnpm exec tsx scripts/plugins/drill-event-delivery.ts
+# Never permit an idle BullMQ/Redis connection to consume the CI runner
+# indefinitely; fail closed and preserve the preceding checkpoint evidence.
+timeout --signal=TERM --kill-after=10s 180s pnpm exec tsx scripts/plugins/drill-event-delivery.ts
 
 "${compose[@]}" exec -T postgres sh -eu -c '
   pg_dump -U vibress -d vibress --format=custom --file=/tmp/m1a-drill.dump

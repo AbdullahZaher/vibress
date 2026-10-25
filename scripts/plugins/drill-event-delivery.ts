@@ -140,6 +140,7 @@ async function main() {
   }
   await ageReceipt(firstId);
   await claim(firstId);
+  console.info("PLUGIN_M1A_EVENT_STAGE: durable PostgreSQL admission and claim");
 
   // Redis unavailable after DB admission and claim. The receipt MUST remain
   // durable and not be misrepresented as queued or executed.
@@ -152,6 +153,7 @@ async function main() {
   // reclaim path without sleeping for two minutes.
   await ageReceipt(firstId, "3 minutes");
   const reclaimed = await claim(firstId);
+  console.info("PLUGIN_M1A_EVENT_STAGE: Redis outage and claim recovery");
   queue = new Queue<PluginWorkerEventJob>(QUEUE_NAMES.PLUGIN_EVENTS, {
     connection: getBullMqRedisConnection(),
   });
@@ -172,6 +174,7 @@ async function main() {
   if (handlerCalls !== 2 || successfulEffects !== 1) {
     throw new Error("PLUGIN_M1A_EVENT_DRILL_UNSAFE_RETRY");
   }
+  console.info("PLUGIN_M1A_EVENT_STAGE: BullMQ handler retry and finalization");
   await publish(firstId, first); // stable ID, still present in Redis
   await delay(500);
   if (successfulEffects !== 1) throw new Error("PLUGIN_M1A_EVENT_DRILL_DUPLICATE_EFFECT");
@@ -190,6 +193,7 @@ async function main() {
     throw new Error("PLUGIN_M1A_EVENT_DRILL_CROSS_PUBLICATION_EXECUTION");
   }
 
+  console.info("PLUGIN_M1A_EVENT_STAGE: unadmitted cross-publication job denied");
   // PostgreSQL fails AFTER Redis accepted a second job. The dispatcher
   // must not return its claimed receipt to pending on acknowledgement
   // failure. Reclaim the lease after restore; BullMQ keeps one stable job ID.
@@ -218,11 +222,13 @@ async function main() {
       .filter((item) => item.id === secondId).length !== 1) {
     throw new Error("PLUGIN_M1A_EVENT_DRILL_DUPLICATE_REDIS_JOB");
   }
+  console.info("PLUGIN_M1A_EVENT_STAGE: PostgreSQL ack outage and lease reclaim");
   await startConsumer();
   await assertEventually("post DB outage finalization", async () =>
     await receiptStatus(second) === "executed" && successfulEffects === 2);
   if (successfulEffects !== 2) throw new Error("PLUGIN_M1A_EVENT_DRILL_DUPLICATE_EFFECT");
 
+  console.info("PLUGIN_M1A_EVENT_STAGE: post-outage BullMQ de-dup and finalization");
   // Mismatched approved artifact fingerprint must fail closed; a complete
   // BullMQ job with a valid PG receipt is insufficient for execution.
   const mismatched = job(randomUUID(), { artifactSha256: "b".repeat(64) });
