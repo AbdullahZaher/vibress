@@ -16,11 +16,13 @@ import { Button } from "../ui/button";
 export function TrustedPluginInstaller({
   installedIds,
   installedPlugins = [],
+  show = "all",
   onRegistered,
   onClose,
 }: {
   installedIds: readonly string[];
   installedPlugins?: readonly AdminPlugin[];
+  show?: "all" | "new" | "updates";
   onRegistered: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -45,13 +47,16 @@ export function TrustedPluginInstaller({
   }, [tr]);
 
   const available = approved.filter((item) => {
-    if (!installedIds.includes(item.id)) return true;
-    // Existing installations are offered only when the release version advances.
-    // Same-version artifact replacement requires separate operator handling.
+    const alreadyInstalled = installedIds.includes(item.id);
+    // Existing installations are offered only with a server-reviewed update.
+    // Never offer same-version replacement or an update without a review.
     const installed = installedPlugins.find((plugin) => plugin.manifestId === item.id);
-    return Boolean(installed && item.upgradeReview &&
+    const reviewedUpdate = Boolean(alreadyInstalled && installed && item.upgradeReview &&
       item.upgradeReview.installedVersion === installed.version &&
       installed.version !== item.version);
+    if (show === "new") return !alreadyInstalled;
+    if (show === "updates") return reviewedUpdate;
+    return !alreadyInstalled || reviewedUpdate;
   });
   const selected = available.find((item) => item.id === selectedId);
   const register = async () => {

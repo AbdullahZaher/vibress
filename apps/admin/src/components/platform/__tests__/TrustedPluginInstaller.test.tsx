@@ -67,6 +67,44 @@ describe("Operator-approved Add Plugin", () => {
     });
   }
 
+  it("separates new releases and server-reviewed updates without trusting version alone", async () => {
+    const approvedUpdate = { ...plugin, id: "old", name: "Old installed", version: "2.0.0",
+      approvalId: `old@2.0.0:${"b".repeat(64)}`,
+      upgradeReview: { installedVersion: "1.0.0", installedStatus: "inactive",
+        addedCapabilities: [], removedCapabilities: [], metadataChanged: true },
+    };
+    vi.mocked(listOperatorTrustedPluginsApi).mockResolvedValue({
+      plugins: [plugin, approvedUpdate, {
+        ...plugin, id: "unsafe", name: "Unreviewed installed",
+        version: "3.0.0", approvalId: `unsafe@3.0.0:${"c".repeat(64)}`,
+      }],
+    });
+    const installedIds = ["old", "unsafe"];
+    const installedPlugins = [
+      { id: "db-old", manifestId: "old", name: "Old installed", version: "1.0.0",
+        vibressApiVersion: "1.0.0", description: null, capabilities: [], status: "inactive" },
+      { id: "db-unsafe", manifestId: "unsafe", name: "Unreviewed installed",
+        version: "1.0.0", vibressApiVersion: "1.0.0", description: null,
+        capabilities: [], status: "inactive" },
+    ];
+    await act(async () => { root.render(
+      <TrustedPluginInstaller show="new" installedIds={installedIds}
+        installedPlugins={installedPlugins}
+        onRegistered={onRegistered} onClose={onClose}/>,
+    ); });
+    expect(container.textContent).toContain("Vibress LMS");
+    expect(container.textContent).not.toContain("Old installed");
+    expect(container.textContent).not.toContain("Unreviewed installed");
+    await act(async () => { root.render(
+      <TrustedPluginInstaller show="updates" installedIds={installedIds}
+        installedPlugins={installedPlugins}
+        onRegistered={onRegistered} onClose={onClose}/>,
+    ); });
+    expect(container.textContent).toContain("Old installed");
+    expect(container.textContent).not.toContain("Vibress LMS");
+    expect(container.textContent).not.toContain("Unreviewed installed");
+  });
+
   it("requires selection and explicit acknowledgement before registering", async () => {
     await render();
     expect(container.textContent).toContain("extension.member_storage.write");
