@@ -3,7 +3,7 @@
 **Status:** Draft for architecture/security review, not an implemented or frozen API.
 **Date:** 2026-10-25.
 **Track:** [Native Admin UI implementation plan](native-admin-ui-plan.md).
-**Existing authoritative contracts:** [EXT-301A](extension-admin-views-ext301a.md), [EXT-301B2](extension-admin-views-ext301b2.md), [Plugin SDK](plugin-sdk.md), and [External SDK release gates](external-sdk-release-gates.md).
+**Existing authoritative contracts:** [EXT-301A](extension-admin-views-ext301a.md), [EXT-301B2](extension-admin-views-ext301b2.md), [Plugin SDK](plugin-sdk.md), and [External SDK release gates](external-sdk-release-gates.md). See also the [NUI-00 review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md).
 
 ## Context
 
@@ -67,9 +67,22 @@ The example uses English placeholder strings for both locale keys and illustrate
 1. Resolve the active publication from authenticated Host state, and re-check plugin admission/version/site enablement.
 2. If the plugin has a native descriptor and the Host supports the declared version **and** the operator enabled that release for native rendering, validate it and render via Host components.
 3. If the plugin **does not declare** native UI (or native is not enabled), use its existing admitted iframe or read-only data view.
-4. If an explicit native descriptor is malformed, unauthorized, revoked, or unsupported while selected for native operation, show a Host-owned error/denial and emit sanitized diagnostics. Never execute HTML as a silent fallback or bypass permission checks.
+4. If Native is explicitly selected for a release but its descriptor is malformed, unauthorized, revoked, unbound or unsupported, show a Host-owned error/denial and emit sanitized diagnostics. Never execute HTML as a silent fallback or bypass permission checks.
 5. A user changing publication, role, session, plugin status, or release must invalidate view/resource/action state and re-resolve admission. Out-of-order responses from the former context are ignored.
 6. Keep `/admin/extensions/:pluginId/:viewId` links stable where possible, including bookmarks.
+
+### Mode/compatibility decision table (proposed)
+
+| Host assessment for this plugin/release | Result |
+| --- | --- |
+| No native declaration in a compatible legacy release | Existing admitted iframe, otherwise Host scalar view |
+| Native declaration present; operator has **not** enabled Native for this pinned release | Existing admitted legacy renderer; the native descriptor is not used for privilege decisions |
+| Native selected, descriptor version supported, admissible and bound to release/view/resources | Host native renderer; APIs still authorize each call |
+| Native selected but descriptor invalid, unsupported, unapproved, revoked, or resource/action binding absent | Host-owned error/denial; no silent fallback to executable HTML |
+| Operator rolls back Native after verification | A deliberately selected, still-authorized legacy mode; never a response to a security denial |
+| Old Host receives a plugin that **requires** native-only functionality | Reject incompatible release or withhold unavailable feature; never assume legacy UI parity or silently skip critical business behavior |
+
+Compatibility must be negotiated across Host, canonical SDK/extension ABI, UI schema version, and pinned release digest. Optional native metadata must not change old v1 module loading; an extension must declare its minimum supported Host capability before depending on native-only features. The alternate `plugin-core.VibressPlugin` ABI is **not** automatically equivalent to canonical `PluginModule`.
 
 ## Proposed data/resource contract (independent from scalar v1)
 
@@ -79,7 +92,7 @@ A future, separately versioned resource contract should define:
 - Immutable `resourceId`, pre-registered to exactly one approved Host Admin read handler.
 - A typed response envelope for rows/records, stable `nextCursor` (opaque, bounded), optional total count, data version, and declared field projection.
 - Bounded result sizes, filter/sort keys and selectors; no arbitrary SQL, URLs, or query language.
-- Server-issued cursor scope binding to publication, identity, filters and release as applicable; reject tampering and scope switching.
+- Server-issued opaque/authenticated cursor scoped to publication, Staff principal, plugin/release, resource, filters and sort. Verify expiry/replay semantics where relevant; reject tampering, scope switching and incompatible versions.
 - Runtime input/output validation, pagination defaults, deterministic order and explicit empty/error states.
 - Host-owned API transport, cache invalidation and error representation.
 
@@ -87,7 +100,7 @@ Prefer extending an already established typed data contract if an equivalently s
 
 ## Proposed action contract (distinct from rendering)
 
-A page can **reference** a named action, but cannot define an executable callback or grant it a permission. The API binds a declared action ID to a reviewed Admin endpoint/handler, operation class, input/output schemas, and permission.
+A page can **reference** a namespaced action ID, but cannot define an executable callback or grant it a permission. The Host binds that ID to the same immutable approved plugin/release, a reviewed Admin endpoint/handler, operation class, input/output schemas, global/local permission and resource ownership policy. UI visibility is not an authorization decision. Current Admin POST admission is limited to `plugins.manage` or `posts.edit`, which must not be widened implicitly.
 
 - No caller-selected URL, HTTP method, arbitrary tenant/user ID, SQL statement, or Host token.
 - Enforce `requireStaffSession`, `validateOrigin` where relevant, both global and publication-local authorization, live plugin enablement/capability admission, resource ownership, and request validation.
@@ -143,5 +156,7 @@ Ownership is a proposed responsibility map, not an instruction to modify every d
 4. Versioned resource/action transport shape, including cursor binding and conflict/idempotency semantics.
 5. Locale fallback and future multi-locale descriptor evolution beyond present en/ar behavior.
 6. Rollout controls, migration path, rollback timing, and independent external SDK conformance fixture.
+7. Approve exact action-level authorization and record-ownership policy, including how plugin capabilities interact with current Staff roles and whether new permissions are needed.
+8. Approve mandatory remediation of legacy LMS dynamic HTML interpolation before production acceptance; see [NUI-00 findings](native-admin-ui-nui00-review.md#findings-and-disposition).
 
 **No release approval or implementation claim is made by this RFC.**

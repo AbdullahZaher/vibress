@@ -43,7 +43,7 @@ No native interactive extension-page contract, resource envelope, or action regi
 - **Compatibility before aesthetics:** avoid changes to persisted LMS formats, public/member routes, themes, or existing installation tables merely to implement a native editor.
 - **Trust boundary is not a sandbox:** native UI reduces browser exposure; it does not isolate Tier 1 ESM executed inside API/Worker. Tier 2 remains separately gated.
 
-See the [Native UI RFC](native-admin-ui-rfc.md) for an illustrative contract and the [Security and Compatibility Matrix](native-admin-ui-security-compatibility.md) for specific invariants.
+See the [Native UI RFC](native-admin-ui-rfc.md), [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [threat model](native-admin-ui-threat-model.md), and [Security and Compatibility Matrix](native-admin-ui-security-compatibility.md). The NUI-00 source inventory is recorded in the review; documentation work is not release approval.
 
 ## Deliverables and exit gates
 
@@ -56,7 +56,7 @@ See the [Native UI RFC](native-admin-ui-rfc.md) for an illustrative contract and
 - Identify exact contracts and error codes that cannot change. Define measured budgets for payload size, nesting, pages, rows, action count, and discovery latency; avoid fabricated performance promises.
 - Record RFC decisions and alternatives. No code or database changes in this ticket.
 
-**Gate:** signed-off RFC, concrete compatibility matrix, security review, and baseline tests identified. This document is the initial draft, **not** that sign-off.
+**Gate:** a reviewed and signed-off RFC, complete source/consumer inventory, threat model, exact native/legacy fallback state machine, Host-owned action policy, release/ABI negotiation, operator rollout policy, bounded budgets and baseline tests. The inventory, threat model and findings are now documented, but owner sign-offs and several protocol decisions remain **OPEN**. No runtime code work is authorized by this document alone.
 
 ### NUI-01 — Additive native descriptor and API contract
 
@@ -84,7 +84,7 @@ See the [Native UI RFC](native-admin-ui-rfc.md) for an illustrative contract and
 
 **Scope**
 - Introduce a **separate versioned resource envelope** for arrays/objects, bounded typed records, stable cursor pagination, and allowlisted server-side filters and sorts. Do **not** silently broaden the v1 scalar route response contract.
-- Register action IDs against fixed Host-approved Admin routes and explicit read/write permissions. All inputs and outputs have runtime schemas and bounded sizes.
+- Register namespaced action IDs against fixed Host-approved Admin routes and explicit read/write permissions **plus resource/record ownership**. Treat page-level permission as a visibility hint only; never infer an action grant from a button, route presence or plugin manifest. All inputs and outputs have runtime schemas and bounded sizes.
 - Apply Staff/publication-local role checks on every call, independent of navigation visibility. Bind publication exclusively from the Host-authenticated session/context.
 - Define optimistic concurrency/version conflict behavior; handle duplicate, stale, and retried mutations deliberately. Operations that create or publish records must not succeed twice by accident.
 - Preserve existing status/error envelopes, request IDs, rate limits, CSRF/origin validation, no-store behavior, and audit requirements.
@@ -117,7 +117,7 @@ See the [Native UI RFC](native-admin-ui-rfc.md) for an illustrative contract and
 **Scope**
 - Independently review XSS, schema recursion, policy confusion, IDOR/BFLA, origin/CSRF, publication switching, cache invalidation, plugin revocation, secret fields, denial of service, and rollback paths.
 - Test mixed-version Host/API replicas, signed operator artifacts, disabled/updated plugins, retries, concurrent writes, and populated upgrades.
-- Stage native mode behind an **operator-controlled opt-in rollout** for allowlisted extensions; compare behavior with existing iframe and scalar modes.
+- Stage native mode behind an **operator-controlled, default-off opt-in rollout** bound to the reviewed plugin/release; compare behavior with existing iframe and scalar modes. The rollout mechanism is undecided and must not be implemented by inventing an undocumented environment variable.
 - Measure first-render, discovery, resource pagination, and action latencies in representative self-hosted environments; document real budgets and thresholds before GA.
 - Complete relevant Vitest, typecheck, lint, build, Admin E2E, Docker, and operator acceptance gates. Do not call CI success production certification.
 
@@ -157,7 +157,7 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 
 ## Documentation state and next step
 
-**Completed by documentation:** initial plan, draft RFC, security/compatibility checklist and navigation links.
-**Not yet done:** architecture approval, API/SDK implementation, UI renderer, LMS migration, production tests, CI, or operator acceptance.
+**Completed by documentation:** initial plan, draft RFC, source/consumer inventory, NUI-00 design/security findings, threat model, compatibility matrix and cross-document navigation.
+**Not yet done:** architecture/security/API/operations sign-off, permission and versioning policy freeze, measured numeric budgets, API/SDK implementation, UI renderer, LMS remediation/migration, production tests, CI, or operator acceptance.
 
-**Next authorized technical step (after review):** NUI-00 sign-off and a scoped proof of concept for NUI-01; implementation should occur in separately reviewed code PRs.
+**Next step:** close the [NUI-00 acceptance register](native-admin-ui-nui00-review.md#nui-00-acceptance-register), including action authorization and native/legacy downgrade decisions, and obtain owner sign-offs before opening NUI-01 implementation. Existing LMS HTML interpolation risk requires an independently scoped code fix before an LMS production pilot.

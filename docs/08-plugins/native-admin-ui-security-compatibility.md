@@ -1,6 +1,6 @@
 # Native Admin UI — Security, Compatibility, and Acceptance Matrix
 
-**Status:** Initial design checklist; not a completed security assessment or test report.
+**Status:** Updated design checklist following source review; NOT a completed security assessment, implementation, or test report.
 **Date:** 2026-10-25.
 **Related:** [Implementation plan](native-admin-ui-plan.md), [RFC](native-admin-ui-rfc.md), [Tier 2 ADR](plugin-runtime-tier2-isolation-adr.md), [SDK release gates](external-sdk-release-gates.md).
 
@@ -24,6 +24,11 @@ A native Admin plugin page is Host-rendered **untrusted data**, never Host-execu
 | Unsafe fallback | Missing native contract uses legacy mode; invalid/revoked native contract fails closed | Corrupt native declaration then attempt iframe/HTML privilege bypass |
 | Browser API or network access | Plugin descriptors never run code or choose fetch targets; Admin transport fixed in Host | Supply external script/import URL, data exfiltration URL or forged action endpoint |
 | Supply-chain/artifact confusion | Bind descriptor/version to the operator-approved immutable release; no unverified assets | Change release digest, stale descriptor, mismatched Host/API replicas |
+| Per-action/resource permission confusion | Page visibility cannot authorize mutation; Host validates fixed action ID, capability, global/local permission, and record ownership | Forge page permission, cross-plugin action ID, resource ID and publication-owned record ID |
+| Legacy LMS stored markup injection | Treat persisted values as hostile; remove dynamic `innerHTML` interpolation from legacy LMS HTML | Store hostile course title/ID; verify no executable markup or unexpected bridge use |
+| Truncated serialized course lists | Do not rely on `JSON.stringify(...).slice(0, 4000)`; use typed paginated resources | 50+ courses and large/multilingual labels must paginate without malformed JSON |
+| ABI/version mismatch | Negotiate Host/SDK/UI schema/release digest; do not assume `plugin-core` is canonical SDK | Old Host/new required-native plugin, unsupported schema, mixed-replica release |
+| Operator rollout setting ambiguity | Default off, pinned release allowlist and documented operator setting/upgrade contract | Missing/invalid setting, revoked allowlist, rollback with stored production data |
 
 For read-only views, never infer that hidden controls are enforcement. For writes, UI confirmation does not make a request authorized. Return sanitized errors and preserve request IDs.
 
@@ -35,7 +40,7 @@ For read-only views, never infer that hidden controls are enforcement. For write
 | Existing `adminViews`/`adminNavigation` | Preserve IDs, link generation, declared route permissions and locale labels | Old view list/navigation still matches |
 | Approved iframe assets | Preserve opaque-origin sandbox, Redis ticket, CSP, MessagePort security and revocation | Existing frame loads; permission revocation fails closed |
 | Host-rendered scalar data view | Preserve current read-only output and legacy fallback rules | Plugin with no HTML/native descriptor renders as before |
-| Old Host receiving new plugin | Explicit compatibility requirements; new optional fields cannot cause arbitrary execution or silent permission elevation | Test with a representative older Host and a plugin declaring native support |
+| Old Host receiving new plugin | Optional metadata is ignored only for legacy-compatible behavior; plugins requiring native must declare a compatible minimum Host/ABI and must not silently lose critical functions | Test old Host with native-optional and native-required plugins and mixed-release workers |
 | Existing `PluginApiRoute` scalar contract | No silent object/array widening or changed error shapes | Existing route/response-schema tests remain green |
 | Stored plugin settings/secrets | No copy between publications, no plaintext leak, no reset on render-mode switch | Populated upgrade; secret masking; site switch |
 | LMS course/enrollment/lesson data | Keep current durable formats and publication/member isolation | Reopen existing draft and published courses after UI switch |
@@ -78,6 +83,8 @@ The checks to run vary with the affected scope. Appropriate gates include target
 5. Confirm replica-consistent release activation before opening the feature to additional publications. Rollback of code does not imply DB rollback.
 
 ## Open blockers / sign-off
+
+See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
 
 - NUI-00 RFC, compatibility negotiation and threat model require explicit architecture/security/API approval.
 - Structured resource transport, action admission and server-side mutation authorization are **not implemented**.
