@@ -1,6 +1,6 @@
 # RFC — Host-rendered Native Plugin Admin UI
 
-**Status:** Draft, unapproved. NUI-01 read-only Host admission and NUI-02 stat/field-list renderer are implemented on a default-off development branch but untested here; resource/action contracts and stable SDK are not implemented.
+**Status:** Draft, unapproved. NUI-01/NUI-02 read-only Host admission/renderer and experimental NUI-03 storage resources/create/update API exist behind separate operator opt-ins. Production resource/action acceptance and stable SDK remain outstanding.
 **Date:** 2026-10-25.
 **Track:** [Native Admin UI implementation plan](native-admin-ui-plan.md).
 **Existing authoritative contracts:** [EXT-301A](extension-admin-views-ext301a.md), [EXT-301B2](extension-admin-views-ext301b2.md), [Plugin SDK](plugin-sdk.md), and [External SDK release gates](external-sdk-release-gates.md). See also the [NUI-00 review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md).
@@ -92,7 +92,7 @@ Compatibility must be negotiated across Host, canonical SDK/extension ABI, UI sc
 
 Current `PluginApiRoute` response declarations accept bounded scalar records. They are not a safe general table envelope. Do **not** encode arbitrary JSON in strings or silently widen `validateExtensionApiObject`.
 
-A future, separately versioned resource contract should define:
+The experimental NUI-03 storage-backed resource contract now implements several of the following properties; others remain required for any future general-purpose resource/action ABI:
 - Immutable `resourceId`, pre-registered to exactly one approved Host Admin read handler.
 - A typed response envelope for rows/records, stable `nextCursor` (opaque, bounded), optional total count, data version, and declared field projection.
 - Bounded result sizes, filter/sort keys and selectors; no arbitrary SQL, URLs, or query language.
@@ -163,4 +163,4 @@ Ownership is a proposed responsibility map, not an instruction to modify every d
 7. Approve exact action-level authorization and record-ownership policy, including how plugin capabilities interact with current Staff roles and whether new permissions are needed.
 8. Approve mandatory remediation of legacy LMS dynamic HTML interpolation before production acceptance; see [NUI-00 findings](native-admin-ui-nui00-review.md#findings-and-disposition).
 
-**No production approval is claimed.** A default-off Host admission/read-only renderer candidate is present, but CI, API/browser acceptance, NUI-03 resources/actions, LMS migration and operator sign-off remain open.
+**No production approval is claimed.** Read-only Native rendering and experimental NUI-03 storage-backed structured resource/create/update routes are present, default-off. Full cross-publication/DB/browser acceptance, domain-specific actions, LMS migration, compatibility tests and operator sign-off remain open. Native data is not a general plugin handler execution API.

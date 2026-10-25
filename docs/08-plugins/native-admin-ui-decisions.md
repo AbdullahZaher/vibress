@@ -1,6 +1,6 @@
 # NUI-00 — Native Admin UI Decision Record and NUI-01 Entry Gate
 
-**Status:** Engineering decisions recorded; NUI-01/NUI-02 read-only Host implementation candidate exists behind a default-off, release-pinned operator allowlist. Formal Architecture, Security, API and Operator approval is pending.
+**Status:** Engineering decisions recorded; NUI-01/NUI-02 read-only Host and experimental NUI-03 approved-storage resources/actions are implemented behind separate default-off operator release allowlists. Formal Architecture, Security, API and Operator approval remains pending.
 **Date:** 2026-10-25.
 **Branch:** `docs/native-admin-ui-plan-20261025`.
 **Context:** [NUI-00 review](native-admin-ui-nui00-review.md), [threat model](native-admin-ui-threat-model.md), [RFC](native-admin-ui-rfc.md), [release gates](external-sdk-release-gates.md).
@@ -30,7 +30,7 @@ To avoid premature permissions and API contract changes, Native descriptor `sche
 
 The development branch implements linked-view and response-field admission for the read-only Native v1 slice, plus a Staff/publication-scoped endpoint behind a default-off operator release allowlist. This must remain independently reauthorized on every data request and requires integration/security acceptance. Syntax validation alone does not authorize any data.
 
-**Explicitly deferred:** native tables/arrays/pagination, forms, mutations, permissions other than those supported by the linked existing GET, and action execution. Optional inert navigation-group labels/icons have been added independently and do not authorize any resource or action. They require NUI-03/NUI-04 and must not be simulated with unvalidated JSON strings.
+**Explicitly deferred from page descriptor v1:** native interactive table/form rendering and domain-specific actions such as LMS publish. NUI-03 separately implements storage-backed bounded records, signed pagination and create/update with CAS; NUI-04 separately adds validated inert navigation groups. No executable handler or browser-defined URL is admitted from page metadata.
 
 ### D-03 — Conservative syntax limits (prototype defaults)
 
@@ -65,13 +65,13 @@ Operator default remains **legacy mode**. Future Native enablement must be expli
 
 **Implemented proposal, pending operator sign-off:** `VIBRESS_NATIVE_ADMIN_UI_RELEASES` is a centrally validated, default-unset environment allowlist of exact `pluginId@entrypointSha256` values. It does not add a plugin capability or change the operator lockfile schema. See the [rollout runbook](native-admin-ui-rollout-runbook.md); production enablement is prohibited before acceptance.
 
-### D-06 — Resource and action authorization (future NUI-03)
+### D-06 — Experimental NUI-03 Host storage resources and actions
 
 Page-level permission controls only visibility. Every read/write resolves a Host-owned namespaced identifier bound to the same approved plugin/release and independent Staff permission and publication-local role. Mutations require resource/record ownership plus dedicated write permission; generic `plugins.read` or `posts.read` is never a grant. Existing v1 Admin POST restrictions remain intact. New resource/operation policy cannot silently expand them.
 
-Proposed transport for NUI-03, **not implemented or frozen**: versioned Host-owned `GET /api/admin/v1/extensions/:pluginId/resources/:resourceId` and `POST /api/admin/v1/extensions/:pluginId/actions/:actionId`. No arbitrary browser-provided URLs/methods/permissions; share existing error envelopes, Origin, Staff, capability, publication, rate limiting, ownership and audit policy.
+**Experimental implementation:** Host-owned `GET /api/admin/v1/extensions/:pluginId/data`, `GET /api/admin/v1/extensions/:pluginId/resources/:resourceId`, and `POST /api/admin/v1/extensions/:pluginId/actions/:actionId`. Resources project up to 12 fields from operator-approved plugin storage models, return up to 20 records/page in an explicitly versioned envelope and support approved indexed text equality filters. Pagination cursors carry an HMAC signature, 15-minute expiry and context binding to Staff, publication, resource, plugin/release digest and filters. All requests enforce Staff global `plugins.manage`, local publication owner/admin, live plugin capability and storage binding. Writes additionally require `extension.storage.write` and a separate operator-controlled `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` opt-in, which is disabled by default even when Native reads are enabled. Create has unique-record conflict protection; update requires an expected version and database CAS. No arbitrary browser-provided URLs, plugin handlers, SQL, permission names, publication selectors, public/member mutations or publish semantics are admitted. This implementation is **not yet a frozen external SDK or production-accepted protocol**.
 
-Cursor semantics require authenticated, opaque scope-bound tokens (Staff/publication/plugin/release/resource/query), TTL/rotation rules, bounded rows and stable ordering. **OPEN API DECISION:** pick a specific implementation compatible with current storage and self-hosting, then test mixed-replica failure/replay cases before creating endpoints. Do not introduce raw SQL, ad hoc user-supplied cursors or unsigned tenant selectors.
+Cursor design uses HMAC-SHA256 over a bounded, scope-bound token, ordered Host storage IDs and a production-format encryption key shared across API replicas. **OPEN ACCEPTANCE GATES:** verify mixed-replica key continuity and rotation, concurrency/retry scenarios with real PostgreSQL, duplicate prevention, cross-publication denial, and rollback. A generic create/update storage operation does not satisfy domain-specific invariant checks for LMS, billing or other workflows.
 
 ### D-07 — Locale and design system
 
