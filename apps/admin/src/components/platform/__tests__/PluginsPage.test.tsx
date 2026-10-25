@@ -50,7 +50,7 @@ describe("Admin Add Plugin access", () => {
       status: "active", publicationScoped: true, publicationEnabled: true,
     }], platformOperator: true });
     await render();
-    const sections = [...container.querySelectorAll('nav[aria-label="Plugin sections"] button')];
+    const sections = [...container.querySelectorAll<HTMLButtonElement>('nav[aria-label="Plugin sections"] button')];
     expect(sections.map((item) => item.textContent)).toEqual([
       "Installed plugins", "Available approved plugins", "Approved updates", "Plugin activity",
     ]);
@@ -81,7 +81,7 @@ describe("Admin Add Plugin access", () => {
       plugins: [], platformOperator: false,
     });
     await render();
-    const activity = [...container.querySelectorAll("nav button")].find(
+    const activity = [...container.querySelectorAll<HTMLButtonElement>("nav button")].find(
       (item) => item.textContent === "Plugin activity",
     );
     await act(async () => { activity?.click(); });
