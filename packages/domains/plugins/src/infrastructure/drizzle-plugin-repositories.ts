@@ -110,18 +110,10 @@ export class DrizzlePluginRepository implements PluginRepository {
     status: PluginStatus,
   ): Promise<Plugin | null> {
     if (expected.length === 0) return null;
-    const row = await getDb().transaction(async (tx) => {
-    const [updated] = await tx.update(plugins)
+    const [row] = await getDb().update(plugins)
       .set({ status, updatedAt: new Date() })
       .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
       .returning();
-      if (updated && audit) await tx.insert(auditEvents).values({
-        id: crypto.randomUUID(), publicationId: null,
-        actorUserId: audit.actorUserId, requestId: audit.requestId,
-        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
-      });
-      return updated;
-    });
     return row ? this.mapToDomain(row) : null;
   }
 
@@ -179,16 +171,22 @@ export class DrizzlePluginRepository implements PluginRepository {
     if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
     if (data.hooks !== undefined) payload.hooks = data.hooks;
     if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
-    const [row] = await getDb().update(plugins)
-      .set(payload)
-      .where(and(eq(plugins.id, id),
-        eq(plugins.version, expected.version),
-        // Historic rows populated by PostgreSQL defaultNow() can retain
-        // microseconds which JS Date cannot represent. Normalize both sides
-        // to milliseconds without weakening the monotonic CAS token.
-        sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
-        inArray(plugins.status, ["registered", "inactive", "error"])))
-      .returning();
+    const row = await getDb().transaction(async (tx) => {
+      const [updated] = await tx.update(plugins)
+        .set(payload)
+        .where(and(eq(plugins.id, id),
+          eq(plugins.version, expected.version),
+          // Preserve the existing optimistic guard for persisted timestamps.
+          sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
+          inArray(plugins.status, ["registered", "inactive", "error"])))
+        .returning();
+      if (updated && audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
+      });
+      return updated;
+    });
     return row ? this.mapToDomain(row) : null;
   }
 
