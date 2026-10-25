@@ -294,21 +294,25 @@ export class PluginsService {
       let updated: Plugin | null;
       if (expectedReleaseId !== undefined &&
           this.host.requiresPublicationEnablement?.(existing) === true) {
-        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(
-          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt }, audit,
+        const expected = { version: existing.version, updatedAt: existing.updatedAt };
+        updated = await (audit
+          ? this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata, expected, audit)
+          : this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata, expected)
         ) ?? null;
         if (!updated) {
           throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
             "Plugin activated or changed during release admission");
         }
       } else {
-        updated = await this.pluginRepo.updateMetadata(existing.id, metadata, audit);
+        updated = await (audit
+          ? this.pluginRepo.updateMetadata(existing.id, metadata, audit)
+          : this.pluginRepo.updateMetadata(existing.id, metadata));
       }
       domainEvents.emit("plugin.updated", { pluginId: updated.id, actorId });
       return updated;
     }
 
-    const plugin = await this.pluginRepo.create({
+    const data = {
       manifestId: manifest.id,
       name: manifest.name,
       version: manifest.version,
@@ -318,7 +322,10 @@ export class PluginsService {
       capabilities: manifest.capabilities,
       hooks: manifest.hooks || [],
       settingsSchema: manifest.settingsSchema,
-    }, audit);
+    };
+    const plugin = await (audit
+      ? this.pluginRepo.create(data, audit)
+      : this.pluginRepo.create(data));
     domainEvents.emit("plugin.registered", { pluginId: plugin.id, actorId });
     return plugin;
   }
@@ -408,7 +415,9 @@ export class PluginsService {
       throw safeError;
     }
 
-    const activated = await this.pluginRepo.updateStatus(id, "active", undefined, audit);
+    const activated = await (audit
+      ? this.pluginRepo.updateStatus(id, "active", undefined, audit)
+      : this.pluginRepo.updateStatus(id, "active"));
     domainEvents.emit("plugin.activated", { pluginId: id, actorId });
     return activated;
   }
@@ -619,7 +628,9 @@ export class PluginsService {
         );
       }
     }
-    const deactivated = await this.pluginRepo.updateStatus(id, "inactive", undefined, audit);
+    const deactivated = await (audit
+      ? this.pluginRepo.updateStatus(id, "inactive", undefined, audit)
+      : this.pluginRepo.updateStatus(id, "inactive"));
     const localKey = this.localReleaseKeys.get(id);
     if (localKey) this.initializedHere.delete(localKey);
     for (const [key, instance] of this.activeInstances) {
@@ -972,7 +983,11 @@ export class PluginsService {
     if (enabled && plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");
     }
-    await this.publicationStates.setEnabled(pluginId, publicationId, enabled, audit);
+    if (audit) {
+      await this.publicationStates.setEnabled(pluginId, publicationId, enabled, audit);
+    } else {
+      await this.publicationStates.setEnabled(pluginId, publicationId, enabled);
+    }
     domainEvents.emit("plugin.publication_changed", { pluginId, publicationId, enabled });
     return enabled;
   }
