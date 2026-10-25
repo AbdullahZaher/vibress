@@ -68,9 +68,11 @@ describe("NUI-03 storage-backed resource/action contracts", () => {
   });
   it("caps resource responses and does not admit malformed typed records", () => {
     expect(ExtensionNativeDataPageV1Schema.safeParse({
+      schemaVersion: 1,
       items: [{ id: "course-1", version: 1, fields: { title_en: "OK" } }],
     }).success).toBe(true);
     expect(ExtensionNativeDataPageV1Schema.safeParse({
+      schemaVersion: 1,
       items: [{ id: "course-1", version: 1, fields: { title_en: { x: "unsafe" } } }],
     }).success).toBe(false);
   });

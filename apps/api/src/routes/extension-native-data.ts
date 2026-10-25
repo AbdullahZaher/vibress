@@ -196,6 +196,7 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
             failedCode = "EXTENSION_UNAVAILABLE";
           } else {
             response = ExtensionNativeDataPageV1Schema.safeParse({
+              schemaVersion: 1,
               items: page.items.map((item) => project(item, resource.fields)),
               ...(nextCursor ? { nextCursor } : {}),
             });
@@ -212,6 +213,9 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
       }
       if (failedCode) return reject(reply, req, failedCode, 503);
       if (!response?.success) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      if (Buffer.byteLength(JSON.stringify(response.data), "utf8") > 256 * 1024) {
+        return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      }
       return reply.status(200).send(response.data);
     },
   });
@@ -274,9 +278,12 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
         return reject(reply, req, errorCode, status);
       }
       const response = ExtensionNativeActionResultV1Schema.safeParse({
+        schemaVersion: 1,
         record: result ? project(result, resource.fields) : null,
       });
-      if (!response.success) return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      if (!response.success || Buffer.byteLength(JSON.stringify(response.data), "utf8") > 128 * 1024) {
+        return reject(reply, req, "EXTENSION_INVALID_RESPONSE", 503);
+      }
       return reply.status(action.operation === "create" ? 201 : 200).send(response.data);
     },
   });

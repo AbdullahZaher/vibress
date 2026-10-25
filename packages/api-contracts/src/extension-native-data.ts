@@ -87,10 +87,12 @@ export const ExtensionNativeDataRecordV1Schema = z.object({
   fields: z.record(Field, DataValue),
 }).strict();
 export const ExtensionNativeDataPageV1Schema = z.object({
+  schemaVersion: z.literal(1),
   items: z.array(ExtensionNativeDataRecordV1Schema).max(20),
   nextCursor: z.string().min(50).max(1024).optional(),
 }).strict();
 export const ExtensionNativeActionResultV1Schema = z.object({
+  schemaVersion: z.literal(1),
   record: ExtensionNativeDataRecordV1Schema,
 }).strict();
 
