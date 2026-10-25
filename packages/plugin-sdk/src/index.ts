@@ -154,11 +154,18 @@ export interface PluginAdminView {
   readonly routeId: string;
   readonly title: PluginAdminLocalizedLabel;
 }
+/** Optional inert group metadata; Host owns its route and permission. */
+export interface PluginAdminNavigationGroup {
+  readonly id: string;
+  readonly label: PluginAdminLocalizedLabel;
+  readonly icon?: "puzzle" | "graduation-cap" | "book-open" | undefined;
+}
 export interface PluginAdminNavigationItem {
   readonly viewId: string;
   readonly label: PluginAdminLocalizedLabel;
   /** Must match the linked route permission; the Host checks both. */
   readonly permission: PluginAdminPermission;
+  readonly group?: PluginAdminNavigationGroup | undefined;
 }
 
 /**

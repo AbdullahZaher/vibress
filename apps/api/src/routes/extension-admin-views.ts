@@ -205,6 +205,7 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
           label: { en: string; ar: string };
           permission: PluginAdminPermission;
           nativeProbeSupported: true;
+          group?: AdmittedAdminView["group"];
         }> = [];
         // All successful contributions are included up to the operator
         // lockfile maximum (64 trusted modules × 8 views).

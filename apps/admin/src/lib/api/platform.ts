@@ -156,6 +156,9 @@ export interface AdminExtensionViewLink {
   label: { en: string; ar: string };
   title: { en: string; ar: string };
   permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+  /** Inert group metadata; absent for legacy plugins and API versions. */
+  group?: { id: string; label: { en: string; ar: string };
+    icon?: "puzzle" | "graduation-cap" | "book-open" };
   /** Capability negotiated from Host; absent on old API means legacy. */
   nativeProbeSupported?: true;
 }

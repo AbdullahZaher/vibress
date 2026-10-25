@@ -187,10 +187,16 @@ export const ExtensionAdminViewSchema = z.object({
   routeId: ExtensionAdminSegmentSchema,
   title: ExtensionAdminLabelSchema,
 }).strict();
+export const ExtensionAdminNavigationGroupSchema = z.object({
+  id: ExtensionAdminSegmentSchema,
+  label: ExtensionAdminLabelSchema,
+  icon: z.enum(["puzzle", "graduation-cap", "book-open"]).optional(),
+}).strict();
 export const ExtensionAdminNavigationItemSchema = z.object({
   viewId: ExtensionAdminSegmentSchema,
   label: ExtensionAdminLabelSchema,
   permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
+  group: ExtensionAdminNavigationGroupSchema.optional(),
 }).strict();
 /** Validated Host projection; plugin-supplied URLs never enter the DTO. */
 export const ExtensionAdminNavDtoSchema = z.object({
@@ -200,6 +206,7 @@ export const ExtensionAdminNavDtoSchema = z.object({
   label: ExtensionAdminLabelSchema,
   title: ExtensionAdminLabelSchema,
   permission: z.enum(["plugins.read", "plugins.manage", "posts.read", "posts.edit"]),
+  group: ExtensionAdminNavigationGroupSchema.optional(),
   /** Additive host feature signal; absent on older API deployments. */
   nativeProbeSupported: z.literal(true).optional(),
 }).strict();

@@ -1,4 +1,4 @@
-import type { PluginApiShape, PluginModule } from "@vibress/plugin-sdk";
+import type { PluginAdminNavigationGroup, PluginApiShape, PluginModule } from "@vibress/plugin-sdk";
 import {
   ExtensionAdminNavigationItemSchema,
   ExtensionAdminViewSchema,
@@ -11,6 +11,7 @@ export interface AdmittedAdminView {
   readonly title: { readonly en: string; readonly ar: string };
   readonly label: { readonly en: string; readonly ar: string };
   readonly permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+  readonly group?: PluginAdminNavigationGroup | undefined;
 }
 
 const MAX_VIEWS_PER_PLUGIN = 8;
@@ -55,11 +56,20 @@ export function admitAdminViews(module: PluginModule): readonly AdmittedAdminVie
 
   const result: AdmittedAdminView[] = [];
   const seen = new Set<string>();
+  const groups = new Map<string, string>();
   for (const raw of navigation) {
     const parsed = ExtensionAdminNavigationItemSchema.safeParse(raw);
     if (!parsed.success || seen.has(parsed.data.viewId) ||
         !parsed.data.label.en.trim() || !parsed.data.label.ar.trim()) return null;
     seen.add(parsed.data.viewId);
+    const group = parsed.data.group;
+    if (group) {
+      if (!group.label.en.trim() || !group.label.ar.trim()) return null;
+      const signature = JSON.stringify([group.label.en, group.label.ar, group.icon ?? "puzzle"]);
+      const previous = groups.get(group.id);
+      if (previous !== undefined && previous !== signature) return null;
+      groups.set(group.id, signature);
+    }
     const view = viewMap.get(parsed.data.viewId);
     if (!view) return null;
     // A Host-rendered view can only call its single permission-checked GET
@@ -79,6 +89,7 @@ export function admitAdminViews(module: PluginModule): readonly AdmittedAdminVie
     result.push({
       viewId: view.id, routeId: view.routeId, title: view.title,
       label: parsed.data.label, permission: parsed.data.permission,
+      ...(group ? { group } : {}),
     });
   }
   // Unlinked views are a configuration mistake, not a hidden attack surface.
