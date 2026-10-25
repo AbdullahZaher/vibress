@@ -12,11 +12,12 @@ import {
   DrizzlePluginPublicationStateRepository,
   DrizzlePluginPublicationSettingRepository,
   TrustedExternalPluginHost, verifyTrustedPluginRelease, verifyOperatorReleaseAdmission,
-  pluginEventLedger, pluginEventJobId,
+  pluginEventLedger, pluginEventJobId, readPluginReceiptDiagnostics,
   type Plugin, type PluginHost, type ClaimedPluginEvent,
 } from "@vibress/plugins";
 import { tracedProcessor } from "./trace-helper";
 import { metrics } from "@vibress/observability";
+import { observePluginReceiptBacklog } from "./plugin-receipt-metrics";
 
 export interface PluginEventExecution {
   getPlugin(id: string): Promise<Plugin | null>;
@@ -152,6 +153,7 @@ export class PluginEventWorker {
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private sweep: Promise<void> | null = null;
   private ready = false;
+  private nextReceiptProbeAt = 0;
 
   /** The base DB/Redis health probe alone does not prove event consumption. */
   isReady(): boolean {
@@ -256,6 +258,18 @@ export class PluginEventWorker {
   private async dispatchPending(): Promise<void> {
     const producer = this.producer;
     if (!producer || !this.ready) return;
+    // Sample durable PostgreSQL receipt ages no more than once per minute,
+    // independent of the five-second dispatch loop. Probe failures never
+    // block admissions, delivery, or the core CMS readiness checks.
+    if (Date.now() >= this.nextReceiptProbeAt) {
+      this.nextReceiptProbeAt = Date.now() + 60_000;
+      const observed = await observePluginReceiptBacklog(
+        readPluginReceiptDiagnostics, metrics,
+      );
+      if (!observed) {
+        console.error("[PluginEventWorker] Receipt diagnostic probe unavailable");
+      }
+    }
     // A bounded Redis status snapshot is useful for operator alerting but
     // must never block durable PG admission/dispatch if metrics fail.
     try {
