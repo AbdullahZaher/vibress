@@ -114,8 +114,12 @@ describe("PLUG-OPS-06 historical audit, publication and plugin isolation", () =>
     expect(second.nextOffset).toBeNull();
     expect(await listPluginActivity("unknown-publication", pluginId, 0, 25))
       .toEqual({ items: [], nextOffset: null });
-    expect((await listPluginActivity(publicationId, foreignPluginId, 0, 25)).items)
-      .toHaveLength(1);
+    // The replay linked to the other plugin's receipt belongs to that
+    // plugin, even though the audit metadata falsely claims our plugin ID.
+    const foreign = await listPluginActivity(publicationId, foreignPluginId, 0, 25);
+    expect(foreign.items.map(row => row.action).sort()).toEqual([
+      "plugin.event_replay_requested", "plugin.publication_secret_revoked",
+    ]);
   });
 
   it("rejects invalid pagination and tenant override in shared request contract", () => {
