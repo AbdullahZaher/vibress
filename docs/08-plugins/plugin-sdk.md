@@ -55,3 +55,11 @@ It proves the real boundaries:
 - does not bypass the SDK
 
 Registered and activated through the standard admin plugin lifecycle.
+
+## Experimental Native Admin UI (NUI-01; not active)
+
+The [Native Admin UI RFC](native-admin-ui-rfc.md) and [NUI-00 decision record](native-admin-ui-decisions.md) describe an **experimental** `PluginModule.adminPages?` read-only descriptor type and `@vibress/api-contracts` syntax validator. The first descriptor schema version only describes `stat` and `field-list` scalar projections linked, in a future Host admission step, to existing `adminViews` GET route declarations.
+
+**There is no registered Host admission endpoint, API route, renderer, action execution or plugin UI capability for this new metadata.** Existing plugins must continue using their supported `adminViews` and optional isolated iframe paths. Type declarations and syntactic validation are not authorization. Do not advertise `adminPages` as a supported integration contract, or depend on its fields for production behavior, until NUI-00 approval, Host bindings, tests and external SDK release gates are complete.
+
+The public SDK protocol constant remains `SDK_VERSION = "1.0.0"`; the package's version is not an independent guarantee that an experimental Native UI protocol is supported by deployed Hosts.

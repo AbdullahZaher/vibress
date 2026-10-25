@@ -58,7 +58,7 @@ The initial read-only syntax schema and SDK types are present, but **they are no
 ### Schema and admission rules
 
 - Define concrete runtime Zod schemas under `@vibress/api-contracts`; TypeScript interfaces alone are insufficient.
-- Bound schema versions, descriptor bytes, section/component depth, component count, label lengths, column count, and action count; choose numeric ceilings in NUI-00 after representative LMS profiling, then test boundary values.
+- NUI-01 prototype syntax ceilings are eight pages, twelve flat components/page, twelve fields/field-list, 100 UTF-16 code units per locale label and 64 KiB UTF-8/page. These are defensive draft limits, **not measured performance targets**; additional column/action limits and runtime budgets require review and profiling in later phases.
 - Admit only a fixed set of Host-implemented component types and icon identifiers. Unknown component kinds, properties, schema versions, or bindings fail closed.
 - Descriptors are inert serializable data: no functions, JSX, HTML, unsafe URLs, freeform CSS/classes, Markdown interpretation, expressions, query fragments, or browser-side plugin module imports.
 - The Host owns URLs, parameter encoding, routing, display order enforcement, request transport, focus policy, and accessible markup.
