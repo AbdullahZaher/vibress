@@ -1,10 +1,11 @@
 # PLUG-OPS-06 — Trusted plugin delivery diagnostics
 
-**Status:** Read-only bounded PostgreSQL sampling, Worker gauges and curated
-publication-scoped audit activity are implemented on PR #89. Production
-alert-manager configuration, real outage drills and multi-replica acceptance
-are **not** completed. The activity feed is intentionally **not** a complete
-plugin lifecycle audit or a long-term retention guarantee.
+**Status:** Read-only bounded PostgreSQL sampling, Worker gauges, curated
+publication-scoped audit activity and **optional** Prometheus alert rules
+are committed on PR #89. Production alert routing/installation, live outage
+drills and multi-replica acceptance are **not** completed. The activity feed
+is intentionally **not** a complete plugin lifecycle audit or a retention
+guarantee.
 
 ## Existing architecture, no parallel event ledger
 
@@ -45,6 +46,7 @@ It publishes:
 | `plugin_events_receipt_stale_sampled{state}` | Stale rows among those sampled |
 | `plugin_events_receipt_sample_saturated{state}` | 1 if more than 250 rows exist in this state |
 | `plugin_events_receipt_probe_ok` | 1 if the last PostgreSQL probe succeeded; 0 if unavailable |
+| `plugin_events_receipt_probe_timestamp_seconds` | Unix seconds when the latest probe **completed**, on both success and failure; detects stale-but-successful gauge values |
 | `plugin_events_receipt_probe_failures_total` | Aggregate probe failures, no identities |
 
 Only the fixed status labels `pending` and `dispatching` are used. There
@@ -76,8 +78,9 @@ Recommend a non-page alert after two consecutive successful samples of
 `plugin_events_receipt_stale_sampled > 0` or
 `plugin_events_receipt_sample_saturated == 1`, with escalation for sustained
 `plugin_events_receipt_probe_ok == 0` and a separately monitored consumer
-readiness gap. These are **recommended thresholds**, not automatically
-deployed alert rules. Distinguish primary DB/Redis outages from just a plugin
+readiness gap. These thresholds are represented in **optional, operator-installed**
+[Prometheus rules](../../ops/monitoring/prometheus/plugin-alerts.yml);
+Vibress deliberately does not install or reload a Prometheus server. Distinguish primary DB/Redis outages from just a plugin
 handler failure. Investigate queue failed jobs and permission-scoped failed
 deliveries via the existing Activity panel and replay service; **never**
 automatically replay a terminal/unknown receipt. Avoid placing raw job IDs,
@@ -160,3 +163,87 @@ Failures and stranded intermediate states continue to require the existing
 maintenance-only recovery process. Legacy service/test consumers can omit
 the optional audit context without changing their previous API semantics.
 No schema migration or UI exposure of global operator actions is introduced.
+
+## Opt-in Prometheus rule deployment (no mandatory infrastructure dependency)
+
+A tested production setup requires a **separately operated Prometheus**
+(or a compatible evaluator) to scrape `GET /metrics` from **each**
+Vibress Worker replica on its internal health port (default `7782`).
+Set `METRICS_ENABLED=true` for those Worker processes. Keep the metrics
+endpoint on a trusted network, not the public reverse proxy. Configure a
+distinct `instance` label per replica and `job="vibress-worker"`, with
+scrapes every 15–60 seconds and rules evaluated every 60 seconds. This
+job label is the explicit contract of the example file; if changed,
+operator-review every rule and fixture before deploying.
+
+1. Review the rules file
+   `ops/monitoring/prometheus/plugin-alerts.yml` and the
+   [fixture](../../ops/monitoring/prometheus/plugin-alerts.test.yml).
+   Stage both files under the **same directory** in a test Prometheus
+   installation. With a version-compatible `promtool`, run
+   `promtool check rules plugin-alerts.yml` and
+   `promtool test rules plugin-alerts.test.yml` there.
+2. Reference `plugin-alerts.yml` in the existing operator-controlled
+   Prometheus `rule_files` (and reload Prometheus). No Docker/host
+   privilege or new CMS API is needed. Configure routing/contact points
+   in the **operator-owned** Alertmanager, not in source control.
+3. Check each Worker `/metrics` contains
+   `plugin_events_receipt_probe_timestamp_seconds` after the first
+   successful **or failed** probe. On a fresh ready Worker this should
+   appear after its first dispatch sweep. Validate ordinary metrics,
+   healthy samples and the full stale/failure cases on a staging stack.
+4. Run an approved fault drill with non-production events and verify
+   the distinct alerts: Worker scrape down, ready consumer without a
+   probe, DB probe failed, probe stalled despite a previous green
+   reading, stale pending/dispatching receipts, and a saturated
+   250-row sample. Confirm release identity remains pinned, core health
+   semantics are unchanged and no event is automatically replayed.
+5. Roll back by removing the Prometheus `rule_files` entry and
+   reloading the evaluator; leave CMS releases and durable receipts
+   intact. Record alert destinations, drill times, noise thresholds,
+   replica labels and operator sign-off.
+
+The rules require a healthy, **fresh** `probe_ok=1` and a successful
+Worker scrape before interpreting a stale/saturated sample. Each replica
+emits an independent view of the *same* PostgreSQL ledger: never `sum()`
+these counts into a made-up fleet-wide event total. Separate alerts
+detect `probe_ok=0`, missing, outdated or unreachable metrics.
+`VibressPluginWorkerTargetMissing` assumes this dedicated scrape job
+always exists once monitoring is opted in; disable this optional rule
+for an intentionally unmonitored environment. Do not mistake unobserved
+metrics for a zero backlog.
+
+**Limitations:** These files ship as operator-approved, opt-in
+configuration. They have not been loaded into a real external Prometheus
+server/Alertmanager in this PR. PromQL evaluation fixture verification and
+multi-replica operational testing are still required before production
+alert acceptance. Never expose secrets or tenant metadata in alert labels.
+
+## Audit retention and legal holds (policy, no destructive automation)
+
+`audit_events` is currently append-only and **not** subject to
+plugin-specific automatic deletion. The new global plugin audit rows
+(`publication_id=NULL`) and publication-owned actions share existing
+CMS audit storage, legal hold, backup/restore and access policies. This
+PR adds **no TTL, purge job, retention SQL, data backfill or automatic
+removal**. A user installing/upgrading Vibress must retain historical
+events unless their operator explicitly approves a lawful retention
+change.
+
+For each self-hosted deployment the operator must document:
+
+- The applicable legal/contractual minimum, privacy purpose and maximum
+  retention for global and publication-scoped audit events, including
+  staff/actor IDs, request IDs, event metadata and third-party plugin
+  activity; do not invent one universal number of days.
+- The published backup/PITR window, encrypted archives, access log and
+  restoration proof. Archiving must preserve chronological integrity and
+  relationship to durable event receipts, even if a plugin is uninstalled.
+- Any legal hold, litigation, fraud/security investigation or tenant
+  portability requirement that bars deletion.
+- A separate, reviewed **export + retention + purge** change with
+  permission checks, publication scope, preview/dry-run, bounded batches,
+  idempotency and rollback/restore tests **before** removing anything.
+
+No existing operator can delete audit history through these changes.
+Retention sign-off and failure simulations remain separate M1A gates.
