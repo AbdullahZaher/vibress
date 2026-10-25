@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readExtensionAdminViewApi, readNativeExtensionAdminPageApi,
+  readNativeExtensionDataRegistryApi, readNativeExtensionResourceApi,
   type AdminExtensionViewLink,
 } from "../../../lib/api";
 import { getActivePublicationId } from "../../../lib/api/client";
@@ -12,6 +13,8 @@ import { NativeExtensionAdminView } from "../NativeExtensionAdminView";
 vi.mock("../../../lib/api", () => ({
   readExtensionAdminViewApi: vi.fn(),
   readNativeExtensionAdminPageApi: vi.fn(),
+  readNativeExtensionDataRegistryApi: vi.fn(),
+  readNativeExtensionResourceApi: vi.fn(),
 }));
 vi.mock("../../../lib/api/client", () => ({
   getActivePublicationId: vi.fn(),
@@ -58,6 +61,9 @@ describe("Host-rendered native extension page", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getActivePublicationId).mockReturnValue("publication-a");
+    vi.mocked(readNativeExtensionDataRegistryApi).mockResolvedValue({
+      schemaVersion: 1, resources: [], actions: [],
+    });
     element = document.createElement("div");
     document.body.append(element);
     root = createRoot(element);
@@ -99,6 +105,31 @@ describe("Host-rendered native extension page", () => {
     expect(element.querySelector("img")).toBeNull();
     expect(element.querySelector("iframe")).toBeNull();
     expect(element.querySelector("h1")?.textContent).toBe(hostile);
+  });
+
+  it("renders paginated Host data as text, without executing persisted HTML", async () => {
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue(native);
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "overview" });
+    vi.mocked(readNativeExtensionDataRegistryApi).mockResolvedValue({
+      schemaVersion: 1,
+      resources: [{
+        id: "course-list", viewId: "courses", fields: ["title_en"],
+        textFilters: ["title_en"], fieldTypes: { title_en: "text" },
+      }],
+      actions: [],
+    });
+    vi.mocked(readNativeExtensionResourceApi).mockResolvedValue({
+      schemaVersion: 1,
+      items: [{ id: "course-1", version: 1, fields: { title_en: hostile } }],
+    });
+    await render();
+    expect(element.textContent).toContain(hostile);
+    expect(element.querySelector("img")).toBeNull();
+    expect(element.querySelector("table")).not.toBeNull();
+    expect(element.querySelector("button[aria-label='Edit record']")).toBeNull();
+    expect(readNativeExtensionResourceApi).toHaveBeenCalledWith(
+      "operator-plugin", "course-list", { limit: 20 },
+    );
   });
 
   it("does not render cached native data if publication changes before React effects flush", async () => {
