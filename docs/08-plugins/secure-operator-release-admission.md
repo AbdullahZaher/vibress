@@ -96,7 +96,8 @@ Compose-render time:
 ```bash
 export VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256='<revoked-SPKI-DER-sha256>'
 docker compose -f compose.prod.yml -f compose.plugins.yml \
-  -f compose.plugins.strict.yml -f compose.plugins.signer-revocation.yml config
+  -f compose.plugins.strict.yml -f compose.plugins.signer-revocation.yml config --quiet
+# Use --quiet: printing resolved Compose config can expose deployment secrets.
 # After quiescence, repeat the same full -f sequence on every deploy and
 # verify the denylist is present inside every actual API/Worker process.
 ```
