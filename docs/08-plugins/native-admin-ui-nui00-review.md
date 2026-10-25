@@ -1,6 +1,6 @@
 # NUI-00 — Architecture, Documentation, and Security Review
 
-**Status:** Technical documentation review completed; NUI-00 approval gate OPEN. This is not an independent security certification.
+**Status:** Technical documentation review completed; NUI-00 approval gate OPEN. NUI-01 has an inert descriptor schema/type prototype but no runtime integration or test run. This is not independent security certification.
 **Review date:** 2026-10-25.
 **Reviewed baseline:** Vibress `main` at `782d7499ad695bafe90411b1512596380e667ca8`; independent `vibress-lms` `main` inspected on this date.
 **Branch:** `docs/native-admin-ui-plan-20261025`.
@@ -74,6 +74,10 @@ Relevant existing tests (not run in this review): `apps/api/src/plugins/__tests_
 | UI components | Fixed Host allowlist with measured limits | Recommended; numeric budgets pending |
 | Locale policy | Preserve en/ar labels; separately version multi-locale descriptors | Migration policy pending |
 | LMS rollout | No LMS work until explicitly resumed; then parity and independent security closure | Pending |
+
+## Decision and NUI-01 status
+
+See the [NUI-00 decision record](native-admin-ui-decisions.md). The v1 read-only type and syntax validator are now authored as an **experimental, non-executed** contract slice; it grants no permission and is not accepted by existing Host routes or the Admin browser. Formal sign-offs, Host view/field admission, compatibility test runs and operator opt-in policy remain blocking.
 
 ## NUI-00 acceptance register
 

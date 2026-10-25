@@ -1,6 +1,6 @@
 # Native Admin UI Extensions — Production Implementation Plan (v2.0)
 
-**Status:** Proposed design track; documentation only. Not implemented, approved for release, or a stable SDK contract.
+**Status:** Design track with an experimental, non-activated NUI-01 contract prototype. Not approved for production or a stable SDK contract.
 **Date:** 2026-10-25.
 **Owner:** Vibress core platform.
 **Baseline:** `main` at `782d7499ad695bafe90411b1512596380e667ca8` (merged PR #88).
@@ -43,7 +43,7 @@ No native interactive extension-page contract, resource envelope, or action regi
 - **Compatibility before aesthetics:** avoid changes to persisted LMS formats, public/member routes, themes, or existing installation tables merely to implement a native editor.
 - **Trust boundary is not a sandbox:** native UI reduces browser exposure; it does not isolate Tier 1 ESM executed inside API/Worker. Tier 2 remains separately gated.
 
-See the [Native UI RFC](native-admin-ui-rfc.md), [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [threat model](native-admin-ui-threat-model.md), and [Security and Compatibility Matrix](native-admin-ui-security-compatibility.md). The NUI-00 source inventory is recorded in the review; documentation work is not release approval.
+See the [Native UI RFC](native-admin-ui-rfc.md), [NUI-00 decision record](native-admin-ui-decisions.md), [architecture/security review](native-admin-ui-nui00-review.md), [threat model](native-admin-ui-threat-model.md), and [Security and Compatibility Matrix](native-admin-ui-security-compatibility.md). The NUI-00 source inventory is recorded in the review; documentation work is not release approval.
 
 ## Deliverables and exit gates
 
@@ -158,6 +158,7 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 ## Documentation state and next step
 
 **Completed by documentation:** initial plan, draft RFC, source/consumer inventory, NUI-00 design/security findings, threat model, compatibility matrix and cross-document navigation.
-**Not yet done:** architecture/security/API/operations sign-off, permission and versioning policy freeze, measured numeric budgets, API/SDK implementation, UI renderer, LMS remediation/migration, production tests, CI, or operator acceptance.
+**In progress:** an optional read-only `adminPages` SDK type and shared Zod schema, authored with focused tests but without execution or Host consumption. This is an inert NUI-01 prototype, not a shipped capability.
+**Not yet done:** formal Architecture/Security/API/Operations sign-off, final permission and resource protocol freeze, measured performance budgets, active API admission, UI renderer, LMS remediation/migration, production tests, CI, or operator acceptance.
 
-**Next step:** close the [NUI-00 acceptance register](native-admin-ui-nui00-review.md#nui-00-acceptance-register), including action authorization and native/legacy downgrade decisions, and obtain owner sign-offs before opening NUI-01 implementation. Existing LMS HTML interpolation risk requires an independently scoped code fix before an LMS production pilot.
+**Next step:** review the concrete [NUI-00 decisions](native-admin-ui-decisions.md), obtain independent owner approvals and run focused NUI-01 contract tests/typechecks. Do not connect the prototype to Admin routing or enable Native rendering before the NUI-00 release gates close. Existing LMS HTML interpolation risk requires a separate code fix before an LMS production pilot.

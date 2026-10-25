@@ -84,7 +84,7 @@ The checks to run vary with the affected scope. Appropriate gates include target
 
 ## Open blockers / sign-off
 
-See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
+See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the inert NUI-01 prototype, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
 
 - NUI-00 RFC, compatibility negotiation and threat model require explicit architecture/security/API approval.
 - Structured resource transport, action admission and server-side mutation authorization are **not implemented**.

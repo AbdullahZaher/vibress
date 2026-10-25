@@ -1,6 +1,6 @@
 # RFC — Host-rendered Native Plugin Admin UI
 
-**Status:** Draft for architecture/security review, not an implemented or frozen API.
+**Status:** Draft for architecture/security review. A passive, read-only NUI-01 SDK/Zod contract prototype exists; API admission/rendering and versioned write/resource contracts are NOT implemented or frozen.
 **Date:** 2026-10-25.
 **Track:** [Native Admin UI implementation plan](native-admin-ui-plan.md).
 **Existing authoritative contracts:** [EXT-301A](extension-admin-views-ext301a.md), [EXT-301B2](extension-admin-views-ext301b2.md), [Plugin SDK](plugin-sdk.md), and [External SDK release gates](external-sdk-release-gates.md). See also the [NUI-00 review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md).
@@ -25,31 +25,35 @@ The present Host supports read-only scalar Admin views and isolated, pinned HTML
 
 ## Draft contract: additive, declarative, versioned
 
-`adminPages` is a **working name**, proposed as an optional SDK contribution. Its presence must not change `adminViews`/`adminNavigation` ABI or the behavior of v1 plugins. Example schema below is **illustrative pseudocode, not executable code against the current SDK**.
+`adminPages` is now an **experimental optional type-only SDK contribution**. Its presence does not change `adminViews`/`adminNavigation` ABI or the behavior of v1 plugins; no Host runtime reads this property. The first implemented syntax schema covers **read-only scalar stat/field-list descriptors only**, linked in future to an existing admitted `adminViews` GET route. The example below matches that limited draft shape; it does not demonstrate a working runtime API.
 
 ```ts
-// Proposal only; not a shipped PluginModule type.
+// NUI-01 experimental metadata only; the Host does not render it yet.
 const proposedPage = {
   schemaVersion: 1,
-  id: "courses",
-  renderMode: "native",
+  viewId: "courses", // Must match an existing admitted adminViews GET view.
   title: { en: "Courses", ar: "Courses" },
-  description: { en: "Manage courses", ar: "Manage courses" },
-  permission: "plugins.manage",
-  layout: [{
-    type: "data-table",
-    id: "course-list",
-    resourceId: "courses.list",
-    columns: [
-      { key: "title", label: { en: "Title", ar: "Title" } },
-      { key: "status", label: { en: "Status", ar: "Status" } },
-    ],
-    actionIds: ["courses.open"],
-  }],
+  components: [
+    {
+      type: "stat",
+      id: "course-total",
+      label: { en: "Total", ar: "Total" },
+      field: "total",
+    },
+    {
+      type: "field-list",
+      id: "overview",
+      fields: [{ key: "status", label: { en: "Status", ar: "Status" } }],
+    },
+  ],
 };
 ```
 
-The example uses English placeholder strings for both locale keys and illustrates only the contract shape. Real localized entries must be translated and reviewed. No `actionIds` may execute until separately approved route binding and permission admission exist.
+This example intentionally uses English placeholders for both locale keys; production Arabic translations are required before UI acceptance. The `field` and `key` values must be admitted against the already-linked GET response schema by a **future Host admission service**. The syntax schema alone does not check that linkage. There are **no data tables, actions, mutation grants, iframe assets or plugin-owned routes** in descriptor v1.
+
+### NUI-01 experimental admission status and review record
+
+The initial read-only syntax schema and SDK types are present, but **they are not wired into Host admission or Admin rendering**. Their guards cannot authorize the linked GET or enforce publication context without a future admitted-view binding. The [NUI-00 decision record](native-admin-ui-decisions.md) captures concrete first-slice ceilings, future operator opt-in, compatibility negotiation and open formal approvals. Later data-table/form/action components require new versions and security-reviewed resources/actions; do not silently expand descriptor v1.
 
 ### Schema and admission rules
 
@@ -152,11 +156,11 @@ Ownership is a proposed responsibility map, not an instruction to modify every d
 
 1. Precise schema-version negotiation and which incompatible declarations fail the whole extension vs one page.
 2. Static descriptor delivery/attestation placement in the existing operator lockfile and capability declarations.
-3. Numeric ceilings and performance budgets, backed by production-like profiling.
+3. Adopt conservative prototype ceilings (eight pages, twelve components, twelve fields per list, 100-character v1 labels, 64 KiB descriptor), then approve measured runtime budgets before enabling native rendering.
 4. Versioned resource/action transport shape, including cursor binding and conflict/idempotency semantics.
 5. Locale fallback and future multi-locale descriptor evolution beyond present en/ar behavior.
 6. Rollout controls, migration path, rollback timing, and independent external SDK conformance fixture.
 7. Approve exact action-level authorization and record-ownership policy, including how plugin capabilities interact with current Staff roles and whether new permissions are needed.
 8. Approve mandatory remediation of legacy LMS dynamic HTML interpolation before production acceptance; see [NUI-00 findings](native-admin-ui-nui00-review.md#findings-and-disposition).
 
-**No release approval or implementation claim is made by this RFC.**
+**No release approval or Host runtime implementation is claimed by this RFC.** Only passive SDK/schema test scaffolding exists; formal sign-off, CI validation, Host admission and rendering remain open.
