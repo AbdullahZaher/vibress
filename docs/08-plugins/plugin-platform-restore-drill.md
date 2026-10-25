@@ -203,9 +203,17 @@ certification:
   marker; it is **not** an operator-signed whole-deployment backup,
   and does not include Redis RDB/AOF, media, release artifacts or an
   independent key vault snapshot.
-- No queued plugin event was intentionally delivered across a crash
-  boundary, and exact-once handler effects are not inferred from health
-  endpoints. Separate replay/dead-letter and signed release tests remain.
+- A later [successful live event drill #40228493169](https://github.com/AbdullahZaher/vibress/actions/runs/40228493169)
+  now **does** exercise real durable PG admission, BullMQ transport and
+  bounded retry after a transient controlled-handler failure, plus Redis
+  interruption after a PG dispatch claim, and a PostgreSQL outage **after**
+  Redis accepted the job but before PG queue acknowledgement. The restored
+  lease is reclaimed and the same stable BullMQ job ID is reused.
+  The drill also denies an unadmitted foreign-publication job and rejects
+  a mismatched approved digest. The synthetic handler increments a counter;
+  it deliberately never loads third-party ESM or invokes external providers.
+  Thus it does **not** certify exactly-once external side effects,
+  complete poison/dead-letter endurance or signed fleet rollout.
 - The workflow measures bounded readiness recovery, not contractual
   end-to-end RPO/RTO for a customer's deployed service. Real backup
   verification, replica admission receipt provenance, alert delivery
@@ -214,6 +222,34 @@ certification:
 Do not execute this drill script on production or repurpose its test
 key/credential fixtures. The workflow's isolate and short-lived cleanup
 are part of its safety boundary.
+
+
+### Live event-delivery fault evidence and exit discipline
+
+The [event integration drill](../../scripts/plugins/drill-event-delivery.ts)
+is called from the same guarded, disposable Docker workflow **after**
+stopping the original API and Worker processes, so no unsigned extension
+module can be loaded and no unrelated event consumer runs. It reuses the
+production Drizzle receipt ledger, the production relay helper and the
+production admitted-job gate with a synthetic, predictable counting handler.
+
+Evidence on [commit `e76e764`](https://github.com/AbdullahZaher/vibress/commit/e76e76446d1461201f0216c24160b211038ff8ed)
+is [drill run #40228493169](https://github.com/AbdullahZaher/vibress/actions/runs/40228493169)
+**SUCCESS**. Its final log contains both
+`PLUGIN_M1A_EVENT_DELIVERY_PASSED` and
+`PLUGIN_M1A_LIVE_DRILL_PASSED`; the process exited normally, allowing
+`pg_dump`/`pg_restore` to run as part of the same workflow. The
+previously failing runs #40224594551 and #40227960040 exposed,
+respectively, the need for bounded stale `pg Pool` read retries after
+a forced PostgreSQL restart and the need to close the shared
+`@vibress/cache` BullMQ Redis connection on CI-script teardown.
+Both were fixed without disabling any event safety assertion.
+
+A success result here establishes only **bounded fixture behavior on an
+isolated, temporary GitHub runner**. It is not a signed operator plugin
+release, a complete Redis/asset/key backup and restore, evidence of
+exactly-once effects in external services, or measured production RPO/RTO.
+A missing or stale independent fleet receipt still blocks M1A approval.
 
 ## Mandatory negative drills
 
