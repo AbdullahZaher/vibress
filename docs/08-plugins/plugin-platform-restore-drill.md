@@ -114,7 +114,7 @@ because its `manifest.version` happens to match.
 | --- | --- |
 | Strict policy without maintenance mode / lockfile pin / signer pin | Preflight rejects **before** DB inspection |
 | Tampered lockfile, wrong signature, reviewed ESM hash, or missing review evidence | No success receipt and no plugin import |
-| Valid old lockfile signed by a revoked operator key, including after restore | Revocation policy rejects signer on each replica; no legacy unsigned downgrade when denylist configured |
+| Valid old lockfile signed by a revoked operator key, including after restore | Revocation policy rejects signer on each replica; use the dedicated signer-revocation Compose override to inject it into both API/Worker; no legacy unsigned downgrade |
 | Missing approved release for active publication / pending event | Restore gate fails; no implicit disable or module substitution |
 | Restored queued PG receipt without matching Redis job, or forged Redis tenant/event | Queue reconciliation blocks activation |
 | Redis has job without PG admission | Worker never runs it; no receipt is synthesized |

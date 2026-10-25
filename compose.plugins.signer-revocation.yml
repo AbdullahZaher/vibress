@@ -1,0 +1,18 @@
+# Optional strict-mode signer revocation policy for self-hosted deployments.
+#
+# Add ONLY if operator policy includes revoked Ed25519 SPKI DER key digests:
+# docker compose -f compose.prod.yml -f compose.plugins.yml \
+#   -f compose.plugins.strict.yml -f compose.plugins.signer-revocation.yml up -d
+#
+# The base + strict Compose files intentionally do not set an empty default:
+# absent revocation config preserves existing signed/legacy deployments.
+# This override fails at Compose configuration time unless the operator supplies
+# at least one revoked 64-char lowercase SHA-256 key fingerprint.
+# NEVER put signing private keys, member secrets or artifacts in this setting.
+services:
+  api:
+    environment:
+      VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256: ${VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256:?set revoked operator signer fingerprints}
+  worker:
+    environment:
+      VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256: ${VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256:?set revoked operator signer fingerprints}

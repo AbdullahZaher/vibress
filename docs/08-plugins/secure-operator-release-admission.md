@@ -86,6 +86,25 @@ current signer fails the attestation check closed. When a denylist is configured
 an unsigned lockfile is also rejected. The verifier reads this policy from
 **operator environment only**, not from the plugin bundle or catalog.
 
+This environment variable is **not automatically propagated** by Compose.
+For a strict self-hosted deployment with at least one revoked signer, add the
+opt-in `compose.plugins.signer-revocation.yml` override **after**
+`compose.plugins.strict.yml`. It injects the independently managed denylist
+into **both** API and Worker and rejects a missing/empty operator setting at
+Compose-render time:
+
+```bash
+export VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256='<revoked-SPKI-DER-sha256>'
+docker compose -f compose.prod.yml -f compose.plugins.yml \
+  -f compose.plugins.strict.yml -f compose.plugins.signer-revocation.yml config
+# After quiescence, repeat the same full -f sequence on every deploy and
+# verify the denylist is present inside every actual API/Worker process.
+```
+
+**Do not** put private signing keys in Compose or release directories. A
+revoked signer policy configured only in an operator shell, or omitted from
+an API/Worker replica, does not enforce revocation in that replica.
+
 Rotation and revocation have different operational semantics:
 
 1. Obtain a separately reviewed replacement Ed25519 public/private key pair
