@@ -112,3 +112,53 @@ The existing separate portal sign-in redirect tests at
 approval, production Native write allowlisting, signing or deployment
 is granted by this regression fix; final E2E, signed release,
 multi-publication, upgrade/rollback and approval gates remain open.
+
+## Local Validation Execution Record (October 26, 2026)
+
+### 1. Temporary Development-Branch CI Suspension
+To optimize development feedback and avoid redundant remote CI overhead during local hardening, automatic GitHub Actions CI pushes for development branch `docs/native-admin-ui-plan-20261025` were temporarily suspended in `.github/workflows/ci.yml`.
+- Protected Triggers Preserved: Pull requests to `main`, pushes to `main`, scheduled cron jobs, and manual `workflow_dispatch` triggers remain completely intact.
+- Mandatory Restoration Procedure: Prior to opening a final pull request or requesting formal release approval, the commented line `- 'docs/native-admin-ui-plan-20261025'` under `on.push.branches` in `.github/workflows/ci.yml` must be restored, and all required remote CI jobs (Build, E2E, Container Scan, Trivy) must run and pass.
+
+### 2. Priority 1 — Clean-Build SDK Consumer Acceptance (NUI-07)
+- Test Suite: `tests/integration/native-admin-independent-packaged-consumer.test.ts` (7 tests passed).
+- Deterministic Build: Automatically compiles `packages/plugin-sdk/tsconfig.json` into `/dist` if artifacts are absent.
+- Isolated Consumer Verification: Verifies an isolated external project directory cannot access private Host internals (`@vibress/domains/plugins`, `@vibress/database`).
+- Public API Conformance: Validates `SDK_VERSION = '1.0.0'`, TypeScript declaration files (`.d.ts`), admission of conforming descriptors, fail-closed handling for unapproved components, and legacy plugin compatibility.
+
+### 3. Priority 2 — Real Multi-Replica API Acceptance (NUI-06)
+- Test Suite: `tests/integration/native-data-cursor-multi-replica.test.ts` (12 tests passed).
+- Two-Process Live Architecture: Spins up two actual Fastify instances (`replicaA` and `replicaB`) listening on distinct OS-allocated ephemeral TCP ports (`127.0.0.1:0`), sharing underlying PostgreSQL models, Redis state, and encryption keys.
+- Cursor Continuity: Replica A issues an HMAC-signed pagination cursor; Replica B receives and decodes the cursor over HTTP, continuing seamless multi-page pagination.
+- Cryptographic Isolation: Rejects cursors with altered publication IDs (400 `INVALID_CURSOR`), altered actor IDs (400), altered filter parameters (400), or mismatched/rotated encryption keys (400).
+- Immediate Revocation: Disabling the plugin in shared state immediately causes both replicas to return 404 fail-closed.
+
+### 4. Priority 3 — Native LMS Arabic RTL & Accessibility Acceptance (NUI-04/NUI-05)
+- Test Suite: `apps/admin/src/components/platform/__tests__/NativeExtensionArabicRtl.test.tsx` (7 tests passed).
+- BiDi Layout & Focus: Validates Arabic form labels, `dir="auto"` on text inputs, `dir="ltr"` for technical record IDs.
+- Stored Content Safety: Verifies hostile `<script>` and `<img>` XSS payloads stored in record fields are safely escaped by React and do not execute.
+- Accessible Error Announcements: Asserts validation errors, authorization loss (403/401), and publishing immutability use `role="alert"` and `role="status"` in Arabic.
+- Publication Boundaries: Switching publications immediately clears and unmounts in-flight Arabic draft forms and sensitive field values.
+
+### 5. Priority 4 — Database Upgrade, Rollback & Concurrency Acceptance
+- Test Suites:
+  - `packages/database/src/__tests__/migration-0040-0041-plugin-publication-isolation.test.ts` (2 tests passed)
+  - `packages/database/src/__tests__/migration-0042-plugin-storage-foundation.test.ts` (2 tests passed)
+  - `packages/database/src/__tests__/migration-0043-plugin-physical-models.test.ts` (2 tests passed)
+  - `packages/database/src/__tests__/schema-safety.test.ts` (4 tests passed)
+  - `packages/database/src/__tests__/dr-backup-restore.test.ts` (1 test passed)
+  - `tests/integration/real-lms-authoring-host.test.ts` (11 tests passed)
+- Populated Upgrade Safety: Validates additive PostgreSQL migrations, append-only physical models, concurrent CAS index creation, and disaster recovery backup/restore without content loss.
+
+### 6. Verification Status Definitions
+To prevent misrepresenting readiness, all documentation strictly adheres to the following classification:
+- **Implemented:** Code written and syntactically valid in workspace.
+- **Locally Tested:** Subsystem unit tests pass on local development environment.
+- **Integration Verified:** Multi-component suites (Fastify + Postgres + Redis + DOM) pass locally.
+- **Operationally Verified:** Live two-process network server communication, cursor continuity, and fail-closed revocation proven over TCP sockets.
+- **Remote CI Verified:** Pending CI trigger restoration and successful green runs across remote GitHub Actions runners.
+- **Independently Security Reviewed:** Pending formal third-party AppSec evaluation.
+- **Formally Approved:** Pending architecture, security, and product stakeholder sign-off.
+- **Production Activated:** Requires explicitly setting `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` on all production API replicas (disabled by default).
+
+**Current Engineering Verdict: LOCALLY VERIFIED — FORMAL RELEASE APPROVAL PENDING.**

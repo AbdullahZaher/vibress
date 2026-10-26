@@ -23,6 +23,9 @@ vi.mock("../../../lib/admin-locale", () => ({
         "Domain workflow": "سير العمل للمجال",
         "Record ID": "معرف السجل",
         "Create draft": "إنشاء مسودة",
+        "Save draft": "حفظ المسودة",
+        "Publish": "نشر",
+        "Cancel": "إلغاء",
         "Confirm saving this draft?": "تأكيد حفظ المسودة؟",
         "Confirm publish this record?": "تأكيد نشر هذا السجل؟",
         "Draft saved successfully.": "تم حفظ المسودة بنجاح.",
@@ -32,6 +35,7 @@ vi.mock("../../../lib/admin-locale", () => ({
         "Save your changes before publishing.": "احفظ تغييراتك قبل النشر.",
         "Invalid plugin record data.": "بيانات سجل الإضافة غير صالحة.",
         "Workflow action rejected.": "تم رفض إجراء سير العمل.",
+        "Workflow action failed.": "فشل إجراء سير العمل.",
         "Loading plugin view...": "جارٍ تحميل عرض الإضافة...",
         "Unable to load plugin view.": "تعذر تحميل عرض الإضافة.",
       };
@@ -255,5 +259,124 @@ describe("NUI-04/NUI-05 Native Admin UI Arabic RTL and Accessibility Acceptance"
     // Old site's private Arabic form must be unmounted and wiped out immediately
     expect(element.querySelector("form")).toBeNull();
     expect(element.querySelector("input[id$='-title_ar']")).toBeNull();
+  });
+
+  it("safely escapes hostile stored XSS payloads without executing scripts", async () => {
+    (window as unknown as { __xss_injected?: boolean }).__xss_injected = false;
+
+    const xssPayload = "<script>window.__xss_injected=true;</script><img src=x onerror=\"window.__xss_injected=true;\" />";
+
+    await act(async () => {
+      root.render(
+        <NativeExtensionDomainEditor
+          workflow={workflow}
+          link={link}
+          publicationId="site-arabic"
+          selected={{
+            id: "course-xss-test",
+            version: 1,
+            fields: {
+              title_ar: xssPayload,
+              description_ar: "Safe description",
+              status: "draft",
+            },
+          }}
+          onSaved={onSaved}
+          onClear={onClear}
+        />
+      );
+    });
+
+    // Verification: Script did not execute
+    expect((window as unknown as { __xss_injected?: boolean }).__xss_injected).toBe(false);
+
+    // Form inputs receive the string value literally, not parsed as HTML nodes
+    const titleInput = element.querySelector<HTMLInputElement>("input[id$='-title_ar']");
+    expect(titleInput?.value).toBe(xssPayload);
+    // Ensure no <script> or <img> tags were inserted into DOM
+    expect(element.querySelector("script")).toBeNull();
+    expect(element.querySelector("img")).toBeNull();
+  });
+
+  it("displays accessible role='alert' error when authorization is lost or workflow action fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    // Simulate network error / 403 Forbidden rejection
+    vi.mocked(writeExtensionAdminViewApi).mockRejectedValue(new Error("403 Forbidden"));
+
+    await act(async () => {
+      root.render(
+        <NativeExtensionDomainEditor
+          workflow={workflow}
+          link={link}
+          publicationId="site-arabic"
+          selected={null}
+          onSaved={onSaved}
+          onClear={onClear}
+        />
+      );
+    });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>("button")?.click();
+    });
+
+    const idInput = element.querySelector<HTMLInputElement>("input[id$='-id']");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      if (idInput && setter) setter.call(idInput, "test-course");
+      idInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await act(async () => {
+      element.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const alertEl = element.querySelector('[role="alert"]');
+    expect(alertEl).not.toBeNull();
+    expect(alertEl?.textContent).toBe("فشل إجراء سير العمل.");
+  });
+
+  it("supports keyboard-only cancel and prompts before discarding unsaved dirty changes", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false); // User cancels discard prompt
+
+    await act(async () => {
+      root.render(
+        <NativeExtensionDomainEditor
+          workflow={workflow}
+          link={link}
+          publicationId="site-arabic"
+          selected={null}
+          onSaved={onSaved}
+          onClear={onClear}
+        />
+      );
+    });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>("button")?.click();
+    });
+
+    // Make form dirty
+    const idInput = element.querySelector<HTMLInputElement>("input[id$='-id']");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      if (idInput && setter) setter.call(idInput, "test-dirty");
+      idInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    // Click Cancel button
+    const cancelBtn = Array.from(element.querySelectorAll("button")).find(
+      (b) => b.textContent === "إلغاء"
+    );
+    expect(cancelBtn).toBeDefined();
+
+    await act(async () => {
+      cancelBtn?.click();
+    });
+
+    expect(window.confirm).toHaveBeenCalledWith("تجاهل التغييرات غير المحفوظة؟");
+    // Since user canceled discard, form should still be open
+    expect(element.querySelector("form")).not.toBeNull();
+    expect(onClear).not.toHaveBeenCalled();
   });
 });

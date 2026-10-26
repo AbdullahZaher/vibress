@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { SDK_VERSION, type PluginModule } from "../../packages/plugin-sdk/dist/index.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { pathToFileURL } from "node:url";
+import type { PluginModule } from "@vibress/plugin-sdk";
 import {
   ExtensionNativeAdminPageV1Schema,
   ExtensionNativeDomainWorkflowV1Schema,
@@ -15,7 +20,18 @@ const label = { en: "Independent Records", ar: "السجلات المستقلة"
  * Validates that an external plugin author importing ONLY the built /dist artifact
  * of @vibress/plugin-sdk can successfully construct conforming native descriptors,
  * without accessing any internal Host packages or private APIs.
+ *
+ * This test is designed to run reliably on clean checkouts where /dist is not yet built,
+ * as well as in post-build environments.
  */
+const repoRoot = path.resolve(__dirname, "../..");
+const sdkDir = path.resolve(repoRoot, "packages/plugin-sdk");
+const distIndexPath = path.resolve(sdkDir, "dist/index.js");
+const distDtsPath = path.resolve(sdkDir, "dist/index.d.ts");
+
+let tmpConsumerDir: string | null = null;
+let sdkRuntime: { SDK_VERSION: string; validateManifest?: unknown } | null = null;
+
 const packagedExternalPlugin: PluginModule = {
   activate() {},
   routes: [
@@ -95,8 +111,48 @@ const packagedExternalPlugin: PluginModule = {
 };
 
 describe("NUI-07 Packaged SDK Consumer and Contract Conformance", () => {
+  beforeAll(async () => {
+    // 1. Build SDK deterministically if dist artifacts are absent
+    if (!fs.existsSync(distIndexPath) || !fs.existsSync(distDtsPath)) {
+      execFileSync("npx", ["tsc", "-p", path.resolve(sdkDir, "tsconfig.json")], {
+        cwd: repoRoot,
+        stdio: "pipe",
+      });
+    }
+
+    // 2. Prepare an isolated consumer directory to verify packaging and separation
+    tmpConsumerDir = fs.mkdtempSync(path.join(os.tmpdir(), "vibress-sdk-consumer-"));
+
+    // 3. Dynamically import runtime SDK artifacts via file URL
+    const imported = await import(pathToFileURL(distIndexPath).href);
+    sdkRuntime = imported;
+  });
+
+  afterAll(() => {
+    // 10. Clean temporary artifacts after execution
+    if (tmpConsumerDir && fs.existsSync(tmpConsumerDir)) {
+      fs.rmSync(tmpConsumerDir, { recursive: true, force: true });
+    }
+  });
+
   it("exports stable SDK_VERSION = '1.0.0' from the compiled package entrypoint", () => {
-    expect(SDK_VERSION).toBe("1.0.0");
+    expect(sdkRuntime?.SDK_VERSION).toBe("1.0.0");
+  });
+
+  it("generates complete TypeScript declaration files without private Host internals", () => {
+    expect(fs.existsSync(distDtsPath)).toBe(true);
+    const dts = fs.readFileSync(distDtsPath, "utf-8");
+
+    // Public API symbols must be declared
+    expect(dts).toContain("SDK_VERSION");
+    expect(dts).toContain("PluginModule");
+    expect(dts).toContain("PluginAdminDataResourceV1");
+
+    // Host private internals must NOT leak into the public SDK declaration
+    expect(dts).not.toContain("@vibress/database");
+    expect(dts).not.toContain("@vibress/domains");
+    expect(dts).not.toContain("fastify");
+    expect(dts).not.toContain("drizzle-orm");
   });
 
   it("admits a packaged external plugin conforming to public SDK contracts", () => {
@@ -168,5 +224,36 @@ describe("NUI-07 Packaged SDK Consumer and Contract Conformance", () => {
 
     const outcome = admitNativeAdminPage(corruptedPlugin, "catalog-view");
     expect(outcome.kind).toBe("invalid");
+  });
+
+  it("verifies isolated consumer cannot access Host private internals", () => {
+    expect(tmpConsumerDir).toBeTruthy();
+    if (!tmpConsumerDir) return;
+
+    // Verify consumer script attempting to require private internal fails
+    const consumerScript = path.join(tmpConsumerDir, "consumer-test.cjs");
+    fs.writeFileSync(
+      consumerScript,
+      `
+      try {
+        require("@vibress/domains/plugins");
+        process.exit(1); // should not reach here in isolated external consumer
+      } catch (e) {
+        process.exit(0); // expected failure to resolve internal host package
+      }
+      `
+    );
+
+    // Run the isolated consumer check outside monorepo resolution
+    expect(() => {
+      execFileSync(process.execPath, [consumerScript], {
+        cwd: tmpConsumerDir,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          NODE_PATH: tmpConsumerDir,
+        },
+      });
+    }).not.toThrow();
   });
 });
