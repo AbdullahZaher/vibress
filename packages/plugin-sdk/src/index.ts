@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import type { PluginNativeAdminPageV1 } from "./native-admin-ui";
+import type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
+export type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
 import type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginNativeAdminPageV1, PluginNativeAdminComponentV1 } from "./native-admin-ui";
@@ -197,6 +199,8 @@ export interface PluginModule {
   /** NUI-03 experimental Host-owned storage only; disabled without operator approval. */
   readonly adminResources?: readonly PluginAdminDataResourceV1[] | undefined;
   readonly adminActions?: readonly PluginAdminDataActionV1[] | undefined;
+  /** NUI-05 inert form metadata for an already authorized Admin POST route. */
+  readonly adminDomainWorkflows?: readonly PluginAdminDomainWorkflowV1[] | undefined;
   /** Explicitly declared public SSR views; legacy modules remain unchanged. */
   readonly publicViews?: readonly PluginPublicView[] | undefined;
   deactivate?(): void | Promise<void>;

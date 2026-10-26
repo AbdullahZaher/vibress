@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ExtensionNativeDomainWorkflowV1Schema } from "./extension-native-workflow";
 
 /**
  * NUI-01 experimental inert descriptor contract.
@@ -61,6 +62,8 @@ export const ExtensionNativeAdminPageResponseV1Schema = z.object({
   mode: z.literal("native"),
   page: ExtensionNativeAdminPageV1Schema,
   routeId: NativeSegment,
+  /** Present only when a separate operator-approved write release is enabled. */
+  workflow: ExtensionNativeDomainWorkflowV1Schema.optional(),
 }).strict();
 
 export const ExtensionNativeAdminLegacyResponseV1Schema = z.object({
