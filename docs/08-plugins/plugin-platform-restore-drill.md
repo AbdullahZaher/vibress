@@ -245,6 +245,27 @@ a forced PostgreSQL restart and the need to close the shared
 `@vibress/cache` BullMQ Redis connection on CI-script teardown.
 Both were fixed without disabling any event safety assertion.
 
+A later **real OS-process crash** extension was verified on
+[exact-head run #40277366107](https://github.com/AbdullahZaher/vibress/actions/runs/40277366107)
+(commit `8b6daf4aba22bb7dc33a223295f5407b8b112e81`). A separate Node
+process (not a `pnpm` wrapper) passes the real admitted-event gate, writes a
+fixed no-PII marker and is terminated with **SIGKILL** inside its handler
+before a PostgreSQL completion update or external side effect. The surviving
+durable receipt remains `queued`. A newly started Worker recovers the
+**same** BullMQ job via its normal stalled-job reclamation, executes the
+controlled handler and commits `executed` to the original receipt. The
+test also checks a single successful controlled effect and the stable Redis
+job identity. The normal BullMQ lock/stalled interval is used; this is
+**at-least-once** delivery evidence, not exactly-once behavior for a plugin
+which performs an external side effect before crashing. The SIGKILL is
+confined to a child process on a disposable GitHub-hosted runner; the core
+production Worker is unchanged.
+
+The preceding attempt [#40277123426](https://github.com/AbdullahZaher/vibress/actions/runs/40277123426)
+failed at **test signal observation**, because a `pnpm` wrapper hid the
+real child exit signal. The test harness was corrected to spawn Node
+directly; no authorization, claim or retry assertions were disabled.
+
 A success result here establishes only **bounded fixture behavior on an
 isolated, temporary GitHub runner**. It is not a signed operator plugin
 release, a complete Redis/asset/key backup and restore, evidence of
