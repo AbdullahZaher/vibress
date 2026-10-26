@@ -277,6 +277,14 @@ Real plugin handlers must use durable idempotency keys or an equivalent
 provider-supported deduplication mechanism. The controlled fixture neither
 imports external plugins nor proves that any external API is idempotent.
 
+A further disposable poison-event fixture is authored for the existing live
+drill (fresh exact-HEAD CI pending). After three controlled provider failures
+the BullMQ job must reach `failed`, `attemptsMade` must be exactly three,
+and the PostgreSQL receipt must remain `queued`. The fixture checks that no
+fourth attempt occurs spontaneously. A failed queue job is **not** proof
+of dead-letter dispatch to an independent DLQ, operator replay approval or
+retention behavior at production scale.
+
 A success result here establishes only **bounded fixture behavior on an
 isolated, temporary GitHub runner**. It is not a signed operator plugin
 release, a complete Redis/asset/key backup and restore, evidence of

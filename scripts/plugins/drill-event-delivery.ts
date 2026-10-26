@@ -48,6 +48,7 @@ let queue: Queue<PluginWorkerEventJob> | null = null;
 let consumer: Worker<PluginWorkerEventJob> | null = null;
 let handlerCalls = 0;
 let successfulEffects = 0;
+let poisonAttempts = 0;
 let diagnosticStage = "initialize";
 function stage(name: string): void {
   diagnosticStage = name; // Only code-owned static stage identifiers.
@@ -109,7 +110,7 @@ async function simulatedSideEffectCount(id: string): Promise<number> {
   );
   return result.rows[0]?.total ?? 0;
 }
-async function startConsumer(effectJobId?: string) {
+async function startConsumer(effectJobId?: string, poisonJobId?: string) {
   if (consumer) throw new Error("PLUGIN_M1A_EVENT_DRILL_CONSUMER_ALREADY_RUNNING");
   consumer = new Worker<PluginWorkerEventJob>(
     QUEUE_NAMES.PLUGIN_EVENTS,
@@ -120,6 +121,16 @@ async function startConsumer(effectJobId?: string) {
         isPublicationEnabled: (id, pub) => publicationStates.isEnabled(id, pub),
         dispatchEvent: async (_pluginId, _eventName, payload) => {
           handlerCalls++;
+          if (poisonJobId) {
+            if (typeof payload !== "object" || payload === null ||
+                !("m1aPoisonKey" in payload) || payload.m1aPoisonKey !== poisonJobId) {
+              throw new Error("PLUGIN_M1A_UNEXPECTED_POISON_FIXTURE");
+            }
+            poisonAttempts++;
+            // A permanently failing provider MUST exhaust its bounded
+            // BullMQ attempts without finalizing the durable PG receipt.
+            throw new Error("PLUGIN_M1A_SIMULATED_PERMANENT_FAILURE");
+          }
           // Simulated transient failure BEFORE an external side effect.
           if (handlerCalls === 1) throw new Error("DRILL_TRANSIENT_PROVIDER_FAILURE");
           if (effectJobId) {
@@ -454,7 +465,46 @@ async function main() {
   }
   console.info("PLUGIN_M1A_EVENT_STAGE: SIGKILL after committed synthetic effect; same job redelivered, two side-effect attempts, one finalized receipt");
 
-  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: PG/Redis faults, tenant/release fencing, pre-effect and post-effect SIGKILL, stalled-job recovery and proven at-least-once side effects");
+  // Poison/dead-letter fixture: all three provider attempts fail, without
+  // a successful side effect or premature receipt finalization. The failed
+  // Redis job remains visible for explicit audited operator recovery.
+  stage("prepare-bounded-poison-event");
+  await consumer?.close(true);
+  consumer = null;
+  const poisonEventId = randomUUID();
+  const poisonId = pluginEventJobId(job(poisonEventId));
+  const poisoned = job(poisonEventId, {
+    payload: { marker: "disposable-drill", m1aPoisonKey: poisonId },
+  });
+  await pluginEventLedger.admit(poisoned);
+  await ageReceipt(poisonId);
+  const poisonClaim = await claim(poisonId);
+  await relayClaimedPluginEvent(poisonClaim, pluginEventLedger,
+    (receipt) => publish(receipt.id, receipt.envelope));
+  if (await receiptStatus(poisoned) !== "queued") {
+    throw new Error("PLUGIN_M1A_POISON_FIXTURE_NOT_QUEUED");
+  }
+  await startConsumer(undefined, poisonId);
+  await assertEventually("poison event reaches terminal BullMQ failed state", async () => {
+    const queued = await (await realQueue()).getJob(poisonId);
+    return Boolean(queued && (await queued.getState()) === "failed" &&
+      queued.attemptsMade === 3 && poisonAttempts === 3);
+  }, 35000);
+  const poisonSaved = await (await realQueue()).getJob(poisonId);
+  if (!poisonSaved || poisonSaved.id !== poisonId ||
+      await receiptStatus(poisoned) !== "queued" ||
+      successfulEffects !== 4 || poisonAttempts !== 3) {
+    throw new Error("PLUGIN_M1A_POISON_EVENT_NOT_DURABLE");
+  }
+  // Ensure there is no unchecked fourth attempt or unbounded replay.
+  await delay(1500);
+  if (poisonAttempts !== 3 || (await poisonSaved.getState()) !== "failed" ||
+      await receiptStatus(poisoned) !== "queued") {
+    throw new Error("PLUGIN_M1A_POISON_UNBOUNDED_REPLAY");
+  }
+  console.info("PLUGIN_M1A_EVENT_STAGE: permanent provider failure exhausted three BullMQ attempts, retained failed job and queued durable receipt");
+
+  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: PG/Redis faults, tenant/release fencing, two real SIGKILL boundaries and bounded poison delivery");
 }
 async function executeAndClose(): Promise<void> {
 try {
