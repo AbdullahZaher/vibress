@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Skyway Avatar</title>
+  <mask id="mask__beam__skyway" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__skyway)">
+    <rect width="36" height="36" fill="#0369A1" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(1 -2) rotate(32 18 18) scale(1.2)" fill="#E0F2FE" rx="36" />
+    <g transform="translate(-3.3 -2.1) rotate(11 18 18)">
+      <path d="M15 20.4c2 -1 4 -1 6 0" stroke="#082F49" fill="none" stroke-linecap="round" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#082F49" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#082F49" />
+    </g>
+  </g>
+</svg>

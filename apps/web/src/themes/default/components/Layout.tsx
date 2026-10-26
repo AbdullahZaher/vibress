@@ -75,7 +75,7 @@ export async function ThemeLayout({
             ) : null}
             <SocialLinks links={site.socialLinks} locale={site.locale} />
             <div>
-              <a href="#/portal/signup">Sign up</a>
+              <a href="/portal/#/sign-in">Sign up</a>
             </div>
             <div>
               <a

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useId } from "react";
 import type { PublicCommentDTO } from "@vibress/api-contracts";
 import { t } from "../../lib/i18n";
+import { useMember } from "../../lib/useMember";
 
 export interface CommentSectionProps {
   postId: string;
@@ -69,6 +70,7 @@ export function CommentSection({
 
   const isRtl = locale.startsWith("ar");
   const inputId = useId();
+  const currentMember = useMember();
 
   const fetchComments = useCallback(async () => {
     try {
@@ -419,6 +421,43 @@ export function CommentSection({
 
       {/* Main Comment Input Form */}
       <div className="vb-comment-composer">
+        {currentMember && (
+          <div
+            className="vb-composer-author"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+            {currentMember.avatarUrl && (
+              <img
+                src={currentMember.avatarUrl}
+                alt=""
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+                }}
+              />
+            )}
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: "var(--color-text-secondary, #666)",
+              }}
+            >
+              Commenting as{" "}
+              <strong style={{ color: "var(--color-text, #111)" }}>
+                {currentMember.name || currentMember.email}
+              </strong>
+            </span>
+          </div>
+        )}
         <label htmlFor={inputId} className="vb-sr-only">
           {t("comments.leaveComment", undefined, locale)}
         </label>

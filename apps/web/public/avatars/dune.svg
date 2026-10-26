@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Dune Avatar</title>
+  <mask id="mask__beam__dune" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__dune)">
+    <rect width="36" height="36" fill="#92400E" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(3 -6) rotate(321 18 18) scale(1.1)" fill="#FDE68A" rx="5" />
+    <g transform="translate(2.1 2.6) rotate(12 18 18)">
+      <path d="M13,20.2 a1,0.62 0 0,0 10,0" fill="#1F2937" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#1F2937" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#1F2937" />
+    </g>
+  </g>
+</svg>

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MemberAvatarKeySchema } from "./avatars";
+
 export const MemberAuthRequestSchema = z.object({
   email: z.string().trim().min(3).max(254),
 });
@@ -13,6 +15,8 @@ export const MemberSelfSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  avatar: z.string().nullable().optional(),
+  avatarUrl: z.string().optional(),
   emailVerified: z.boolean(),
   createdAt: z.string(),
 });
@@ -20,15 +24,18 @@ export type MemberSelfDto = z.infer<typeof MemberSelfSchema>;
 
 export const MemberProfileUpdateSchema = z.object({
   name: z.string().trim().max(200).nullable().optional(),
+  avatar: MemberAvatarKeySchema.nullable().optional(),
 });
 export type MemberProfileUpdateInput = z.infer<
   typeof MemberProfileUpdateSchema
-> & { name?: string | null };
+> & { name?: string | null; avatar?: string | null };
 
 export const AdminMemberSummarySchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  avatar: z.string().nullable().optional(),
+  avatarUrl: z.string().optional(),
   status: z.enum(["active", "disabled"]),
   emailVerified: z.boolean(),
   createdAt: z.string(),

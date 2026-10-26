@@ -24,6 +24,7 @@ export class DrizzleMemberRepository implements MemberRepository {
         email: data.email,
         emailNormalized: data.emailNormalized,
         name: data.name || null,
+        avatar: data.avatar || "default",
         status: data.status || "active",
         emailVerifiedAt: data.emailVerifiedAt || null,
         createdAt: now,
@@ -68,6 +69,7 @@ export class DrizzleMemberRepository implements MemberRepository {
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
 
     if (data.name !== undefined) updatePayload.name = data.name;
+    if (data.avatar !== undefined) updatePayload.avatar = data.avatar;
     if (data.status !== undefined) updatePayload.status = data.status;
     if (data.emailVerifiedAt !== undefined)
       updatePayload.emailVerifiedAt = data.emailVerifiedAt;
@@ -156,6 +158,7 @@ export class DrizzleMemberRepository implements MemberRepository {
       email: row.email,
       emailNormalized: row.emailNormalized,
       name: row.name || null,
+      avatar: (row as { avatar?: string | null }).avatar || null,
       status: row.status as MemberStatus,
       emailVerifiedAt: row.emailVerifiedAt,
       lastSeenAt: row.lastSeenAt,

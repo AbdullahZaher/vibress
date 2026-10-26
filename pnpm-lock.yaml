@@ -929,6 +929,9 @@ importers:
 
   packages/domains/members:
     dependencies:
+      '@vibress/api-contracts':
+        specifier: workspace:*
+        version: link:../../api-contracts
       '@vibress/config':
         specifier: workspace:*
         version: link:../../config

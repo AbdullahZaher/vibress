@@ -65,6 +65,10 @@ export default defineConfig({
         __dirname,
         "./packages/domains/auth/src/index.ts",
       ),
+      "@vibress/members": path.resolve(
+        __dirname,
+        "./packages/domains/members/src/index.ts",
+      ),
       "@vibress/tags": path.resolve(
         __dirname,
         "./packages/domains/tags/src/index.ts",
