@@ -43,3 +43,7 @@ export type { OperatorUpgradeStageInput, PluginUpgradeStageDetails } from "./app
 export { DrizzlePluginUpgradePlanRepository } from "./infrastructure/drizzle-plugin-upgrade-plans";
 export { validateOperatorUpgradeAbort } from "./application/plugin-upgrade-plan";
 export type { OperatorUpgradeAbortInput, OperatorUpgradeAuditContext } from "./application/plugin-upgrade-plan";
+export { validateOperatorUpgradePreflight, validateOperatorUpgradeApproval } from "./application/plugin-upgrade-plan";
+export type {
+  OperatorUpgradePreflightInput, OperatorUpgradeApprovalInput,
+} from "./application/plugin-upgrade-plan";

@@ -20,6 +20,10 @@ export const pluginUpgradePlans = pgTable("plugin_upgrade_plans", {
   capabilitiesAdded: jsonb("capabilities_added").$type<string[]>().notNull().default([]),
   capabilitiesRemoved: jsonb("capabilities_removed").$type<string[]>().notNull().default([]),
   planSha256: text("plan_sha256").notNull(),
+  preflightSha256: text("preflight_sha256"),
+  preflightedAt: timestamp("preflighted_at", { withTimezone: true }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedBy: text("approved_by"),
   status: text("status").notNull().default("staged"),
   revision: integer("revision").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -32,6 +36,25 @@ export const pluginUpgradePlans = pgTable("plugin_upgrade_plans", {
   validStatus: check("plugin_upgrade_plans_status_check",
     sql`${table.status} IN ('staged', 'preflighted', 'approved', 'quiesced', 'migrated', 'activated', 'observed', 'completed', 'aborted')`),
   validRevision: check("plugin_upgrade_plans_revision_check", sql`${table.revision} > 0`),
+  validPreflight: check("plugin_upgrade_plans_preflight_sha_check",
+    sql`${table.preflightSha256} IS NULL OR ${table.preflightSha256} ~ '^[a-f0-9]{64}
+  validDigests: check("plugin_upgrade_plans_digests_check", sql`
+    ${table.fromArtifactSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.toArtifactSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.fromLockfileSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.toLockfileSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.fromSignerSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.toSignerSha256} ~ '^[a-f0-9]{64}$' AND
+    ${table.planSha256} ~ '^[a-f0-9]{64}$'`),
+}));
+export type PluginUpgradePlanRow = typeof pluginUpgradePlans.$inferSelect;
+`),
+  preflightRequired: check("plugin_upgrade_plans_preflight_required_check",
+    sql`${table.status} NOT IN ('preflighted', 'approved', 'quiesced', 'migrated', 'activated', 'observed', 'completed')
+      OR (${table.preflightSha256} IS NOT NULL AND ${table.preflightedAt} IS NOT NULL)`),
+  approvalRequired: check("plugin_upgrade_plans_approval_required_check",
+    sql`${table.status} NOT IN ('approved', 'quiesced', 'migrated', 'activated', 'observed', 'completed')
+      OR (${table.approvedAt} IS NOT NULL AND ${table.approvedBy} IS NOT NULL)`),
   validDigests: check("plugin_upgrade_plans_digests_check", sql`
     ${table.fromArtifactSha256} ~ '^[a-f0-9]{64}$' AND
     ${table.toArtifactSha256} ~ '^[a-f0-9]{64}$' AND

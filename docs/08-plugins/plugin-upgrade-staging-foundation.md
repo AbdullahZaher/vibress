@@ -22,18 +22,32 @@ Admin users, drain Workers, import ESM, or enable untrusted execution.
    the actual plugin row, fails on stale version/identity and limits each
    plugin to one nonterminal plan.
 
-The only permitted write transitions are **creating `staged`** and
-**`staged → aborted`** with exact plan hash + expected revision CAS. Aborting
+The only permitted write transitions are **creating `staged`**,
+**`staged → aborted`**, **`staged → preflighted`** and
+**`preflighted → approved`** with exact plan hash + expected revision CAS. Aborting
 requires operator-supplied authenticated audit identity and writes a global
 `audit_events` row atomically with status/revision changes. Aborting an already
 approved, executing or changed plan is rejected; the method never deletes
-historical plans. Neither operation authorizes execution or release activation.
+historical plans. Preflight requires an inactive/registered installed plugin, no enabled
+publication and no pending/dispatching/queued receipts at the time of the
+locked database observation. The resulting SHA-256 fingerprint binds that
+observation to the persisted plan, revision and old/new signed-release pins.
+Approval additionally requires the exact preflight fingerprint and explicit
+review of the ordered capability diff; it rechecks readiness before recording
+the authenticated operator's approval and audit in one transaction. The
+preflight and approval are **operator-only intents**, not proof that replicas
+are drained or signed images match; no transition to `quiesced` or later is
+implemented. None of these operations authorizes execution or release
+activation without separate verified fleet fencing and migration acceptance.
 The schema reserves later phase names for forward-compatible orchestration;
 their presence does not confer runtime authority or implement phase transitions.
 
 ## Upgrade and rollback
 
-Migration `0047_plugin_upgrade_plans.sql` is additive, empty on upgrade
+Migrations `0047_plugin_upgrade_plans.sql` and
+`0048_plugin_upgrade_preflight_approval.sql` are additive and safe for
+existing staged or aborted upgrade plans; the second adds nullable
+preflight and operator approval metadata. The original staging table is empty on upgrade
 and does not change existing publication/content/plugin state. It adds a
 foreign-key-protected plan history, a unique index limiting concurrent active
 plans per plugin and SHA-256/check constraints. The prior migrations must
@@ -50,8 +64,8 @@ operator-approved compatibility and restore procedure.
 
 ## Explicitly open
 
-- Authenticated and audited operator approval, all execution-phase transitions,
-  preflight/permission consent, fleet draining, signed image fencing,
+- Independent signed multi-replica evidence, migration/schema diff consent,
+  all execution-phase transitions, fleet draining and signed image fencing,
   migration application with interrupted-upgrade tests, observe/rollback.
 - Proven signed old-release identity on each running replica, not merely
   identical version strings in the database.

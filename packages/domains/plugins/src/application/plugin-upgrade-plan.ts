@@ -72,6 +72,31 @@ export interface OperatorUpgradeAuditContext {
   readonly actorUserId: string;
   readonly requestId: string;
 }
+export interface OperatorUpgradePreflightInput {
+  readonly pluginId: string;
+  readonly planId: string;
+  readonly expectedPlanSha256: string;
+  readonly expectedRevision: number;
+}
+export interface OperatorUpgradeApprovalInput extends OperatorUpgradePreflightInput {
+  readonly expectedPreflightSha256: string;
+  readonly decision: "approve";
+  readonly reviewedCapabilitiesAdded: readonly string[];
+  readonly reviewedCapabilitiesRemoved: readonly string[];
+}
+const preflightInputSchema = z.object({
+  pluginId: z.string().uuid(),
+  planId: z.string().uuid(),
+  expectedPlanSha256: sha,
+  expectedRevision: z.number().int().positive().max(2147483646),
+}).strict();
+const approvalInputSchema = preflightInputSchema.extend({
+  expectedPreflightSha256: sha,
+  decision: z.literal("approve"),
+  reviewedCapabilitiesAdded: z.array(capability).max(64),
+  reviewedCapabilitiesRemoved: z.array(capability).max(64),
+}).strict();
+
 const abortInputSchema = z.object({
   pluginId: z.string().uuid(),
   planId: z.string().uuid(),
@@ -90,6 +115,27 @@ export function validateOperatorUpgradeAbort(
   const parsedAudit = auditSchema.safeParse(audit);
   if (!parsedInput.success || !parsedAudit.success) {
     throw new PluginUpgradePlanError("PLUGIN_UPGRADE_ABORT_INVALID_INPUT");
+  }
+  return { input: parsedInput.data, audit: parsedAudit.data };
+}
+
+export function validateOperatorUpgradePreflight(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradePreflightInput; readonly audit: OperatorUpgradeAuditContext } {
+  const parsedInput = preflightInputSchema.safeParse(input);
+  const parsedAudit = auditSchema.safeParse(audit);
+  if (!parsedInput.success || !parsedAudit.success) {
+    throw new PluginUpgradePlanError("PLUGIN_UPGRADE_PREFLIGHT_INVALID_INPUT");
+  }
+  return { input: parsedInput.data, audit: parsedAudit.data };
+}
+export function validateOperatorUpgradeApproval(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeApprovalInput; readonly audit: OperatorUpgradeAuditContext } {
+  const parsedInput = approvalInputSchema.safeParse(input);
+  const parsedAudit = auditSchema.safeParse(audit);
+  if (!parsedInput.success || !parsedAudit.success) {
+    throw new PluginUpgradePlanError("PLUGIN_UPGRADE_APPROVAL_INVALID_INPUT");
   }
   return { input: parsedInput.data, audit: parsedAudit.data };
 }
