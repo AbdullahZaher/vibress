@@ -80,6 +80,69 @@ describe("NUI-05 Host domain editor", () => {
     });
     expect(onSaved).toHaveBeenCalledOnce();
   });
+  it("creates a draft only after user confirmation using version zero", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(writeExtensionAdminViewApi).mockResolvedValue({
+      outcome: "created", courseId: "draft-one", version: 1, status: "draft",
+    });
+    await render();
+    await act(async () => { element.querySelector<HTMLButtonElement>("button")?.click(); });
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    const id = element.querySelector<HTMLInputElement>("input[id$='-id']");
+    const title = element.querySelector<HTMLInputElement>("input[id$='-title_en']");
+    await act(async () => {
+      if (id && setter) setter.call(id, "draft-one");
+      id?.dispatchEvent(new Event("input", { bubbles: true }));
+      if (title && setter) setter.call(title, "First draft");
+      title?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      element.querySelector("form")?.dispatchEvent(new Event("submit", {
+        bubbles: true, cancelable: true,
+      }));
+    });
+    expect(writeExtensionAdminViewApi).toHaveBeenCalledWith(link, {
+      courseId: "draft-one", expectedVersion: 0,
+      operation: "create", title_en: "First draft",
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it("uses the persisted version for save without publishing the draft", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(writeExtensionAdminViewApi).mockResolvedValue({
+      outcome: "saved", courseId: "course-one", version: 8, status: "draft",
+    });
+    await render({ id: "course-one", version: 7, fields: {
+      title_en: "Existing draft", status: "draft",
+    } });
+    await act(async () => {
+      element.querySelector("form")?.dispatchEvent(new Event("submit", {
+        bubbles: true, cancelable: true,
+      }));
+    });
+    expect(writeExtensionAdminViewApi).toHaveBeenCalledWith(link, {
+      courseId: "course-one", expectedVersion: 7,
+      operation: "save", title_en: "Existing draft",
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it("refuses to submit when the active publication has changed", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await render({ id: "course-one", version: 7, fields: {
+      title_en: "Private", status: "draft",
+    } });
+    vi.mocked(getActivePublicationId).mockReturnValue("site-b");
+    await act(async () => {
+      element.querySelector("form")?.dispatchEvent(new Event("submit", {
+        bubbles: true, cancelable: true,
+      }));
+    });
+    expect(writeExtensionAdminViewApi).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it("treats conflict outcomes as denials even if the HTTP status is 200", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(writeExtensionAdminViewApi).mockResolvedValue({
