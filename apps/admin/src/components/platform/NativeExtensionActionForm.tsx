@@ -20,6 +20,7 @@ export function NativeExtensionActionForm({ pluginId, publicationId, resource, a
 }) {
   const { tr } = useAdminLocale();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [initialDraft, setInitialDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -33,16 +34,37 @@ export function NativeExtensionActionForm({ pluginId, publicationId, resource, a
         const value = selected.fields[key];
         if (value !== null && value !== undefined) fields[key] = String(value);
       }
-      setDraft({ kind: "update", id: selected.id, version: selected.version, fields });
+      const nextDraft = { kind: "update" as const, id: selected.id, version: selected.version, fields };
+      setDraft(nextDraft);
+      setInitialDraft(nextDraft);
     } else {
       setDraft(null);
+      setInitialDraft(null);
     }
   }, [pluginId, publicationId, resource.id, selected?.id, selected?.version]);
+
+  const dirty = draft !== null && initialDraft !== null &&
+    (draft.id !== initialDraft.id ||
+      JSON.stringify(draft.fields) !== JSON.stringify(initialDraft.fields));
+
+  useEffect(() => {
+    if (!dirty) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [dirty]);
 
   function setField(key: string, value: string) {
     setDraft((prev) => prev ? { ...prev, fields: { ...prev.fields, [key]: value } } : prev);
   }
-  function close() { setDraft(null); onClear(); }
+  function close() { setDraft(null); setInitialDraft(null); onClear(); }
+  function cancel() {
+    if (dirty && !window.confirm(tr("Discard unsaved plugin changes?"))) return;
+    close();
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft || saving || getActivePublicationId() !== publicationId) return;
@@ -95,7 +117,9 @@ export function NativeExtensionActionForm({ pluginId, publicationId, resource, a
   const prefix = "plugin-record-" + pluginId + "-" + resource.id;
   return <section aria-label={tr("Plugin record editor")} className="space-y-3">
     {hasCreate && !draft && <Button type="button" size="sm" onClick={() => {
-      setDraft({ kind: "create", id: "", fields: {} }); setError(""); setNotice("");
+      const nextDraft = { kind: "create" as const, id: "", fields: {} };
+      setDraft(nextDraft); setInitialDraft(nextDraft);
+      setError(""); setNotice("");
     }}>{tr("Create record")}</Button>}
     {notice && <p role="status">{notice}</p>}
     {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
@@ -132,7 +156,7 @@ export function NativeExtensionActionForm({ pluginId, publicationId, resource, a
       })}
       <div className="flex gap-2">
         <Button type="submit" disabled={saving}>{tr("Save plugin record")}</Button>
-        <Button type="button" variant="outline" disabled={saving} onClick={close}>{tr("Cancel")}</Button>
+        <Button type="button" variant="outline" disabled={saving} onClick={cancel}>{tr("Cancel")}</Button>
       </div>
     </form>}
   </section>;

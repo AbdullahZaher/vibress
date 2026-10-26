@@ -39,16 +39,26 @@ export const ExtensionNativeDataRegistryV1Schema = z.object({
     ctx.addIssue({ code: "custom", message: "Duplicate or unbound Native data ID" });
   }
 });
+const NativeDiscoverableResourceV1Schema = z.object({
+  id: Segment,
+  viewId: Segment.optional(),
+  fields: Keys,
+  textFilters: OptionalKeys.optional(),
+  fieldTypes: z.record(Field, z.enum(["text", "integer", "boolean", "timestamptz"])).optional(),
+  requiredFields: z.array(Field).max(12).refine(
+    (items) => new Set(items).size === items.length,
+  ).optional(),
+}).strict().superRefine((resource, ctx) => {
+  const projected = new Set(resource.fields);
+  if (resource.textFilters?.some((field) => !projected.has(field)) ||
+      resource.requiredFields?.some((field) => !projected.has(field)) ||
+      Object.keys(resource.fieldTypes ?? {}).some((field) => !projected.has(field))) {
+    ctx.addIssue({ code: "custom", message: "Discovery metadata must reference projected fields" });
+  }
+});
 export const ExtensionNativeDataDiscoveryV1Schema = z.object({
   schemaVersion: z.literal(1),
-  resources: z.array(z.object({
-    id: Segment,
-    viewId: Segment.optional(),
-    fields: Keys,
-    textFilters: OptionalKeys.optional(),
-    fieldTypes: z.record(Field, z.enum(["text", "integer", "boolean", "timestamptz"])).optional(),
-    requiredFields: z.array(Field).max(12).refine((items) => new Set(items).size === items.length).optional(),
-  }).strict()).max(8),
+  resources: z.array(NativeDiscoverableResourceV1Schema).max(8),
   actions: z.array(ExtensionNativeDataActionV1Schema).max(16),
 }).strict();
 export type ExtensionNativeDataDiscoveryV1 = z.infer<typeof ExtensionNativeDataDiscoveryV1Schema>;

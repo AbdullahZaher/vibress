@@ -32,6 +32,19 @@ describe("NUI-03 storage-backed resource/action contracts", () => {
       resources: [resource], actions: [],
     }).success).toBe(false);
   });
+  it("rejects discovery field metadata outside the approved projection", () => {
+    const projected = {
+      id: "courses", fields: ["title_en"], fieldTypes: { title_en: "text" },
+      requiredFields: ["title_en"], textFilters: ["title_en"],
+    };
+    const check = (value: unknown) => ExtensionNativeDataDiscoveryV1Schema.safeParse({
+      schemaVersion: 1, resources: [value], actions: [],
+    }).success;
+    expect(check(projected)).toBe(true);
+    expect(check({ ...projected, textFilters: ["secret"] })).toBe(false);
+    expect(check({ ...projected, requiredFields: ["secret"] })).toBe(false);
+    expect(check({ ...projected, fieldTypes: { title_en: "text", secret: "text" } })).toBe(false);
+  });
   it("rejects arbitrary routes, permissions and unbound actions", () => {
     for (const value of [
       { resources: [{ ...resource, url: "https://evil.example" }], actions: [] },

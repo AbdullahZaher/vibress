@@ -103,6 +103,35 @@ describe("NUI-04 native action form", () => {
     expect(onSaved).toHaveBeenCalledOnce();
   });
 
+  it("warns before abandoning a changed create draft but not an untouched draft", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await render();
+    const create = element.querySelector<HTMLButtonElement>("button");
+    await act(async () => { create?.click(); });
+    const form = element.querySelector("form");
+    const cancel = Array.from(form?.querySelectorAll("button") ?? [])
+      .find((button) => button.textContent === "Cancel");
+    await act(async () => { cancel?.click(); });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(element.querySelector("form")).toBeNull();
+    await act(async () => { create?.click(); });
+    const id = element.querySelector<HTMLInputElement>("input[id$='-id']");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      if (id && setter) setter.call(id, "draft-course");
+      id?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const activeCancel = Array.from(element.querySelectorAll<HTMLButtonElement>("form button"))
+      .find((button) => button.textContent === "Cancel");
+    await act(async () => { activeCancel?.click(); });
+    expect(confirm).toHaveBeenCalledWith("Discard unsaved plugin changes?");
+    expect(element.querySelector("form")).not.toBeNull();
+    confirm.mockReturnValue(true);
+    await act(async () => { activeCancel?.click(); });
+    expect(element.querySelector("form")).toBeNull();
+    expect(executeNativeExtensionActionApi).not.toHaveBeenCalled();
+  });
+
   it("does not send a mutation when the confirmation is declined", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     await render({ id: "course-1", version: 7, fields: { title_en: "Safe" } });
