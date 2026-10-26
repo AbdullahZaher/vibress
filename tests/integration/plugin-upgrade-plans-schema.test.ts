@@ -56,7 +56,7 @@ describe("0046 staged plugin upgrade history migration", () => {
       const plans = await client.query(
         "SELECT status FROM plugin_upgrade_plans ORDER BY id",
       );
-      expect(plans.rows).toEqual([{ status: "aborted" }, { status: "staged" }]);
+      expect(plans.rows).toEqual([{ status: "staged" }, { status: "aborted" }]);
     } finally {
       if (created) {
         await client.query("RESET search_path");
