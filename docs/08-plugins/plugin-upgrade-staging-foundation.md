@@ -53,6 +53,11 @@ foreign-key-protected plan history, a unique index limiting concurrent active
 plans per plugin and SHA-256/check constraints. The prior migrations must
 remain immutable. Verify both fresh installation and an existing populated
 upgrade using normal migration procedures and a bounded database lock timeout.
+An isolated PostgreSQL regression also covers conservative readiness denials
+(inactive global lifecycle, disabled publications, no pending receipts),
+stale preflight/approval digests and capability review, transaction rollback
+when audit persistence fails, and unchanged installed plugin metadata.
+These remain fixture evidence only: approved plans do not activate modules.
 A focused isolated PostgreSQL test is authored for duplicate active plans,
 malformed digests, restricted plugin deletion and preservation of installed
 records; exact-HEAD CI evidence remains required.
