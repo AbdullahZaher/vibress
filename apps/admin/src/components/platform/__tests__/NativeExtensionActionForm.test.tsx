@@ -114,7 +114,8 @@ describe("NUI-04 native action form", () => {
     await act(async () => { cancel?.click(); });
     expect(confirm).not.toHaveBeenCalled();
     expect(element.querySelector("form")).toBeNull();
-    await act(async () => { create?.click(); });
+    const restoredCreate = element.querySelector<HTMLButtonElement>("button");
+    await act(async () => { restoredCreate?.click(); });
     const id = element.querySelector<HTMLInputElement>("input[id$='-id']");
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     await act(async () => {
