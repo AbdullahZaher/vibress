@@ -18,6 +18,12 @@ export function admitNativeDomainWorkflow(module: PluginModule, viewId: string):
     const view = admitNativeAdminPage(module, workflow.viewId);
     if (view.kind !== "admitted" || view.routeId !== workflow.routeId ||
         view.permission !== "plugins.manage") return { kind: "invalid" };
+    const source = module.adminResources?.find((resource) =>
+      resource.id === workflow.resourceId && resource.viewId === workflow.viewId);
+    if (!source || !source.fields.includes("status") ||
+        workflow.fields.some((field) => !source.fields.includes(field.key))) {
+      return { kind: "invalid" };
+    }
     const postRoutes = module.routes?.filter((route) =>
       route.id === workflow.routeId && route.audience === "admin" &&
       route.method === "POST" && route.permission === "plugins.manage") ?? [];

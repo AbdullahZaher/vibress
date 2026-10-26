@@ -14,7 +14,7 @@ vi.mock("../../../lib/admin-locale", () => ({
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const workflow = {
-  schemaVersion: 1 as const, viewId: "overview", routeId: "courses",
+  schemaVersion: 1 as const, viewId: "overview", routeId: "courses", resourceId: "course-records",
   idField: "courseId", versionField: "expectedVersion", operationField: "operation",
   fields: [{ key: "title_en", label: { en: "Title", ar: "العنوان" }, maxLength: 180 }],
   operations: ["create", "save", "publish"] as const,

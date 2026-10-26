@@ -7,6 +7,8 @@ export interface PluginAdminDomainWorkflowV1 {
   readonly viewId: string;
   /** Must equal the Host-admitted GET view's routeId and a paired Admin POST. */
   readonly routeId: string;
+  /** Bound, Host-authorized model resource supplying editor field values. */
+  readonly resourceId: string;
   readonly idField: string;
   readonly versionField: string;
   readonly operationField: string;

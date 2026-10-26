@@ -3,7 +3,7 @@ import { ExtensionNativeDomainWorkflowV1Schema } from "../extension-native-workf
 
 const label = { en: "Course", ar: "دورة" };
 const workflow = {
-  schemaVersion: 1, viewId: "course-overview", routeId: "courses",
+  schemaVersion: 1, viewId: "course-overview", routeId: "courses", resourceId: "course-records",
   idField: "courseId", versionField: "expectedVersion", operationField: "operation",
   operations: ["create", "save", "publish"],
   fields: [{ key: "title_en", label, maxLength: 180 },

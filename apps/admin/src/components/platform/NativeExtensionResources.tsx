@@ -74,7 +74,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
     setFetching(true);
     setError("");
     void readNativeExtensionResourceApi(pluginId, resource.id, {
-      limit: workflow ? 5 : 20,
+      limit: workflow?.resourceId === resource.id ? 5 : 20,
       ...(cursor ? { cursor } : {}),
       ...(filter ? { filterField: filter.field, filterValue: filter.term } : {}),
     }).then((data) => {
@@ -99,8 +99,9 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
   if (!resource) return null;
   const current = page?.resourceId === resource.id ? page.data : null;
   const prefix = "plugin-data-" + pluginId + "-" + resource.id;
-  const visibleFields = workflow ? resource.fields.slice(0, 3) : resource.fields;
-  const canEdit = Boolean(workflow) || actions.some((a) => a.resourceId === resource.id && a.operation === "update");
+  const boundWorkflow = workflow?.resourceId === resource.id ? workflow : undefined;
+  const visibleFields = boundWorkflow ? resource.fields.slice(0, 3) : resource.fields;
+  const canEdit = Boolean(boundWorkflow) || actions.some((a) => a.resourceId === resource.id && a.operation === "update");
 
   return (
     <section aria-label={tr("Plugin records")} className="space-y-3 rounded-xl border border-border p-4">
@@ -148,8 +149,8 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
       )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {fetching && <p role="status" className="text-sm">{tr("Loading plugin records...")}</p>}
-      {workflow ? (
-        <NativeExtensionDomainEditor link={link} workflow={workflow}
+      {boundWorkflow ? (
+        <NativeExtensionDomainEditor link={link} workflow={boundWorkflow}
           publicationId={publicationId} selected={selected}
           onClear={() => setSelected(null)}
           onSaved={() => { setSelected(null); setHistory([undefined]); setRevision((value) => value + 1); }} />

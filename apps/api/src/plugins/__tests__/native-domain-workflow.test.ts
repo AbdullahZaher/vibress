@@ -23,8 +23,10 @@ function plugin(): PluginModule {
     adminNavigation: [{ viewId: "course-overview", label, permission: "plugins.manage" }],
     adminPages: [{ schemaVersion: 1, viewId: "course-overview", title: label,
       components: [{ type: "stat", id: "total", field: "total", label }] }],
+    adminResources: [{ id: "course-records", viewId: "course-overview", modelKey: "courses",
+      fields: ["status", "title_en"] }],
     adminDomainWorkflows: [{
-      schemaVersion: 1, viewId: "course-overview", routeId: "courses",
+      schemaVersion: 1, viewId: "course-overview", routeId: "courses", resourceId: "course-records",
       idField: "courseId", versionField: "expectedVersion", operationField: "operation",
       fields: [{ key: "title_en", label, maxLength: 180 }],
       operations: ["create", "save", "publish"],

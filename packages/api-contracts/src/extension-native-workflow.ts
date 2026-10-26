@@ -12,6 +12,7 @@ export const ExtensionNativeDomainWorkflowV1Schema = z.object({
   schemaVersion: z.literal(1),
   viewId: Segment,
   routeId: Segment,
+  resourceId: Segment,
   idField: Field,
   versionField: Field,
   operationField: Field,

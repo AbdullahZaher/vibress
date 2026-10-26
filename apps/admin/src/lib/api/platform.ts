@@ -179,7 +179,9 @@ export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLi
   );
   const parsed = ExtensionNativeAdminResponseV1Schema.safeParse(response);
   if (!parsed.success || (parsed.data.mode === "native" &&
-      (parsed.data.page.viewId !== link.viewId || parsed.data.routeId !== link.routeId))) {
+      (parsed.data.page.viewId !== link.viewId || parsed.data.routeId !== link.routeId ||
+        (parsed.data.workflow !== undefined &&
+          (parsed.data.workflow.viewId !== link.viewId || parsed.data.workflow.routeId !== link.routeId))))) {
     throw new Error("Invalid native plugin view response");
   }
   return parsed.data;
