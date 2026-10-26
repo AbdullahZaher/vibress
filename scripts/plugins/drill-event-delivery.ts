@@ -143,8 +143,11 @@ async function runCrashConsumer(): Promise<void> {
         dispatchEvent: async () => {
           // Flush an untrusted-data-free marker before SIGKILL; the process
           // cannot run a finally block, ACK Redis, or finalize PostgreSQL.
-          await new Promise<void>((resolve) => {
-            process.stdout.write("PLUGIN_M1A_CHILD_HANDLER_ENTERED\\n", resolve);
+          await new Promise<void>((resolve, reject) => {
+            process.stdout.write("PLUGIN_M1A_CHILD_HANDLER_ENTERED\\n", (error) => {
+              if (error) reject(new Error("PLUGIN_M1A_CRASH_MARKER_WRITE_FAILED"));
+              else resolve();
+            });
           });
           process.kill(process.pid, "SIGKILL");
           await new Promise<void>(() => {});
