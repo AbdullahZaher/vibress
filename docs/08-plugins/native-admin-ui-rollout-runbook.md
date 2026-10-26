@@ -57,7 +57,7 @@ Required beyond these commands: real Fastify/PostgreSQL/Redis integration; API a
 
 ## Unfinished release blockers
 
-NUI-03 structured Host storage resources and create/update action routes are now implemented experimentally, but have not passed full resource/action production acceptance or domain-specific ownership policy review. Remaining NUI-04 native forms/settings (optional validated generic navigation grouping is implemented on the branch), NUI-05 independent LMS migration/parity, NUI-06 operational/security/E2E acceptance and NUI-07 stable external SDK release are **not implemented or certified**. The known LMS `courses.html` `innerHTML` sink requires a separate code fix before an LMS production pilot. The user-visible Native contract is limited to read-only scalar data.
+NUI-03 structured Host storage resources and create/update action routes are now implemented experimentally, but have not passed full resource/action production acceptance or domain-specific ownership policy review. Remaining NUI-04 native forms/settings (optional validated generic navigation grouping is implemented on the branch), NUI-05 has an experimental Native LMS domain-authoring form on independent core/LMS branches, but real database and browser parity remain unverified. NUI-06 operational/security acceptance and NUI-07 stable external SDK release are not certified. The LMS iframe HTML interpolation sink was repaired on its development branch, but no signed production artifact has been approved.
 
 **Decision:** keep the operator variable unset in production until all these gates close.
 

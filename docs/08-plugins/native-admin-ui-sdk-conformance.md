@@ -1,6 +1,6 @@
 # NUI-07: Native Extension SDK Conformance (Experimental)
 
-The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. New optional `adminPages`, `adminResources` and `adminActions` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
+The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. New optional `adminPages`, `adminResources`, `adminActions` and `adminDomainWorkflows` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
 
 ## Bounded read-only example
 
@@ -39,7 +39,7 @@ export const example: PluginModule = {
 - A resource must be linked through its optional `viewId` to be displayed in the Native page. A projected field must match the operator-approved model. Text filters require operator-indexed fields.
 - Data pages contain up to 20 typed records and bounded signed HMAC pagination tokens bound to Staff, publication, plugin, resource, digest and filter.
 - A write descriptor is an inert `create` or CAS-protected `update` of approved Host storage, never a general-purpose business-action registry. It needs publication-local owner/admin, global `plugins.manage`, storage write capability and the independent default-off release opt-in.
-- Domain workflows, including LMS publishing, payment access, enrollment, erasure and content immutability, require independent domain-specific actions and testing; do not bypass policy using generic storage writes.
+- Domain workflows such as LMS draft create/save/publish require bounded descriptions, a Host-admitted GET/POST route pair with plugins.manage and separately operator-approved storage write capability. The Host sends commands to the existing domain POST and never simulates publish with generic storage CRUD. Billing, membership and destructive domain actions require their own future contracts and independent security review.
 - Localized field display labels, more locale variants and richer widgets require future contract approval. Current `en`/`ar` labels are a backward-compatible v1 constraint, not a worldwide permanent language policy.
 
 ## Publication and compatibility tests

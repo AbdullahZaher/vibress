@@ -36,7 +36,7 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`
 
 ## LMS exception
 
-The [LMS NUI-05 pilot](https://github.com/AbdullahZaher/vibress-lms/blob/docs/native-admin-ui-plan-20261025/docs/NATIVE_ADMIN_UI_PILOT.md) is **read-only** and preserves the legacy authoring iframe. Its new Native overview intentionally declares no generic write actions. Course save/publish require LMS-specific bilingual, saved-version and immutable-published-state validation, which generic storage create/update does not provide. Full LMS Native authoring parity is a separate blocking phase.
+The [LMS NUI-05 pilot](https://github.com/AbdullahZaher/vibress-lms/blob/docs/native-admin-ui-plan-20261025/docs/NATIVE_ADMIN_UI_PILOT.md) now has a source-level Native domain editor, gated by independent operator read and write release allowlists. It delegates create/save/publish to the existing permission-checked and publication-bound LMS POST handler and deliberately declares no generic storage actions. Bilingual completeness, version checks and published immutability remain LMS domain rules. Real PostgreSQL/browser parity, upgrade/rollback and independent security and operator acceptance are still blocking.
 
 ## Operator release decision
 

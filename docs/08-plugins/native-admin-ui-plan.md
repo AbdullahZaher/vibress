@@ -1,6 +1,6 @@
 # Native Admin UI Extensions — Production Implementation Plan (v2.0)
 
-**Status:** NUI-01/NUI-02 read-only candidate plus experimental NUI-03 storage-backed resources/create/update routes and opt-in NUI-04 navigation groups. NUI-03 is not yet production-accepted or an arbitrary business-action framework; NUI-04 forms and NUI-05 to NUI-07 remain incomplete.
+**Status:** NUI-01 to NUI-04 have experimental Host implementations. NUI-05 now has an optional native domain-authoring source candidate on the core and independent LMS branches, using the existing guarded LMS Admin POST route. NUI-06 production acceptance and NUI-07 stable SDK release remain OPEN.
 **Date:** 2026-10-25.
 **Owner:** Vibress core platform.
 **Baseline:** `main` at `782d7499ad695bafe90411b1512596380e667ca8` (merged PR #88).
@@ -165,4 +165,4 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 
 ## Latest NUI-04 through NUI-07 development-branch state
 
-NUI-04 now includes an operator-field-typed, Host-rendered resource table with pagination, text filters and confirmation-gated storage create/update forms. These controls are inert without independent, default-off Host approval and do not execute plugin React/JavaScript. NUI-05 has an independently branched, read-only LMS Course Overview candidate that preserves the existing authoring/publishing iframe and does not register generic LMS storage actions. See the [NUI-06 security/production acceptance matrix](native-admin-ui-production-acceptance.md) and [NUI-07 SDK developer conformance guide](native-admin-ui-sdk-conformance.md). Full browser localization, signed release, compatibility, upgrade and multi-replica acceptance remain blocking; documentation completion alone is not certification.
+NUI-04 now includes an operator-field-typed, Host-rendered resource table with pagination, text filters and confirmation-gated storage create/update forms. These controls are inert without independent, default-off Host approval and do not execute plugin React/JavaScript. NUI-05 has an independently branched Native Course Overview and domain-authoring form for create, save and publish. Writes use the existing paired permission-checked LMS POST route, never generic storage CRUD. The original authoring iframe remains available for old Hosts and deliberate operator rollback. See the [NUI-06 security/production acceptance matrix](native-admin-ui-production-acceptance.md) and [NUI-07 SDK developer conformance guide](native-admin-ui-sdk-conformance.md). Full browser localization, signed release, compatibility, upgrade and multi-replica acceptance remain blocking; documentation completion alone is not certification.

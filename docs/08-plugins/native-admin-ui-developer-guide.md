@@ -4,7 +4,7 @@
 **Date:** 2026-10-25.
 **References:** [RFC](native-admin-ui-rfc.md), [rollout runbook](native-admin-ui-rollout-runbook.md), [NUI-00 review](native-admin-ui-nui00-review.md).
 
-The first Native renderer supports only `stat` and `field-list` components, projecting fields from an **existing Host-admitted Admin GET route**. It deliberately has no forms, tables, arrays, pagination or mutation actions.
+The page descriptor v1 supports stat and field-list projections from an existing Host-admitted Admin GET route. Independent, additive contracts now provide typed paginated resources, Host-rendered storage forms, and an experimental domain-authoring workflow linked to an existing authorized POST route. None permits arbitrary plugin JavaScript in Admin.
 
 ## Optional plugin declaration
 
@@ -59,7 +59,7 @@ For clarity this English-only guide uses untranslated English placeholders in `a
 
 Existing `adminNavigation` items can add a `group` object containing a stable `id`, localized `label` (`en` and `ar`) and optional `icon`. Accepted icon values are `puzzle`, `graduation-cap`, and `book-open`. Group names must be consistent for all items within a plugin and are scoped by the plugin ID, so two independent plugins cannot merge groups by choosing the same identifier. The UI renders grouped items using Host-owned React and existing Admin navigation styles. Ungrouped legacy LMS and other plugin pages keep their established sections.
 
-This is inert presentation metadata only: it cannot grant permissions, add routes, or change the publication context. Translation values must be reviewed before release. An older Host whose strict navigation validator does not recognize `group` will reject a release that declares it; require a compatible minimum Host version and provide a legacy-compatible artifact for older installations. NUI-03 typed resources/actions and NUI-04 interactive forms remain unimplemented.
+This is inert presentation metadata only: it cannot grant permissions, add routes, or change the publication context. Translation values must be reviewed before release. An older Host whose strict navigation validator does not recognize `group` will reject a release that declares it; require a compatible minimum Host version and provide a legacy-compatible artifact for older installations. NUI-03 resources/actions and NUI-04 forms are experimental code; full production acceptance remains pending.
 
 ## NUI-03 experimental storage-backed resources (not production-ready)
 
