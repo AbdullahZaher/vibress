@@ -21,9 +21,10 @@ const REFRESH_MS = 30_000;
  * NUI-04 Host-only inert resource table. Unbound resources remain invisible.
  * All reads are independently authorized on the Host with publication scope.
  */
-export function NativeExtensionResources({ pluginId, viewId, publicationId, workflow, link }: {
+export function NativeExtensionResources({ pluginId, viewId, publicationId, workflow, link, onAuthorizationLost }: {
   pluginId: string; viewId: string; publicationId: string | null;
   workflow?: ExtensionNativeDomainWorkflowV1; link: AdminExtensionViewLink;
+  onAuthorizationLost: () => void;
 }) {
   const { tr } = useAdminLocale();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -64,11 +65,19 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
       setState({ kind: "ready", resources });
     }).catch((cause: unknown) => {
       if (cancelled || getActivePublicationId() !== publicationId) return;
+      // Older read-only plugins may legitimately lack a data registry (404).
+      // A declared domain workflow cannot, and 401/403 always revoke the page.
+      if (cause instanceof ApiError &&
+          ([401, 403].includes(cause.statusCode) ||
+           (cause.statusCode === 404 && workflow !== undefined))) {
+        onAuthorizationLost();
+        return;
+      }
       setState(cause instanceof ApiError && cause.statusCode === 404
         ? { kind: "absent" } : { kind: "error" });
     });
     return () => { cancelled = true; };
-  }, [pluginId, viewId, publicationId]);
+  }, [pluginId, viewId, publicationId, workflow?.resourceId, onAuthorizationLost]);
 
   const resources: readonly Resource[] = state.kind === "ready" ? state.resources : [];
   const resource = resources.find((item) => item.id === resourceId);
@@ -87,11 +96,19 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
       if (!cancelled && getActivePublicationId() === publicationId) {
         setPage({ resourceId: resource.id, data });
       }
-    }).catch(() => {
-      if (!cancelled) { setPage(null); setError(tr("Unable to load plugin records.")); }
+    }).catch((cause: unknown) => {
+      if (cancelled || getActivePublicationId() !== publicationId) return;
+      // A failed revalidation cannot leave a previously selected record or
+      // cached scalar page visible after permissions/release were revoked.
+      if (cause instanceof ApiError && [401, 403, 404].includes(cause.statusCode)) {
+        onAuthorizationLost();
+        return;
+      }
+      setPage(null); setError(tr("Unable to load plugin records."));
     }).finally(() => { if (!cancelled) setFetching(false); });
     return () => { cancelled = true; };
-  }, [resourceId, cursor, filter, revision, state.kind, pluginId, publicationId]);
+  }, [resourceId, cursor, filter, revision, state.kind, pluginId, publicationId,
+    workflow?.resourceId, onAuthorizationLost]);
 
   useEffect(() => {
     if (state.kind !== "ready") return;

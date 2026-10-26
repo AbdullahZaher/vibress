@@ -82,6 +82,23 @@ The checks to run vary with the affected scope. Appropriate gates include target
 4. Roll back native rendering without removing plugin content, settings, migrations, enrollments, or artifact admission controls.
 5. Confirm replica-consistent release activation before opening the feature to additional publications. Rollback of code does not imply DB rollback.
 
+## NUI-05 scoped remediation acceptance (2026-10-26)
+
+- Independent LMS authoring fixtures must explicitly restrict public and Member generic
+  storage reads to the `courses` model. Enrollments/completions remain in Member-owned
+  storage; the public API continues to project **published** courses only. Previously
+  signed operator packages do not change until independently rebuilt and reapproved.
+- A Native data-resource 401/403, or a 404 for a formerly bound resource, must
+  immediately hide both the resource editor and the parent Native scalar data.
+  A read-only plugin without a declared resource may continue to treat initial
+  resource discovery 404 as absent, preserving its existing Host-only page.
+- The legacy LMS iframe's bounded `coursesJson` must always parse as complete JSON.
+  It must not silently truncate editable lesson bodies; the existing full first-record
+  scalar projection remains its compatibility fallback when list rows exceed the limit.
+- The scoped source changes and unit tests do **not** satisfy real PostgreSQL/Redis,
+  two-publication browser, signed-artifact, upgrade/rollback or full CI acceptance.
+  Native action-release allowlists must remain disabled in production until those gates pass.
+
 ## Open blockers / sign-off
 
 See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.

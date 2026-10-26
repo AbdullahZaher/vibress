@@ -5,12 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readExtensionAdminViewApi, readNativeExtensionAdminPageApi,
   readNativeExtensionDataRegistryApi, readNativeExtensionResourceApi,
-  type AdminExtensionViewLink,
+  ApiError, type AdminExtensionViewLink,
 } from "../../../lib/api";
 import { getActivePublicationId } from "../../../lib/api/client";
 import { NativeExtensionAdminView } from "../NativeExtensionAdminView";
 
 vi.mock("../../../lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    constructor(readonly code: string, message: string, readonly statusCode: number) {
+      super(message);
+    }
+  },
   readExtensionAdminViewApi: vi.fn(),
   readNativeExtensionAdminPageApi: vi.fn(),
   readNativeExtensionDataRegistryApi: vi.fn(),
@@ -131,6 +136,54 @@ describe("Host-rendered native extension page", () => {
     expect(readNativeExtensionResourceApi).toHaveBeenCalledWith(
       "operator-plugin", "course-list", { limit: 20 },
     );
+  });
+
+  it("redacts the complete native page when a resource refresh loses authorization", async () => {
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue(native);
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "private summary" });
+    vi.mocked(readNativeExtensionDataRegistryApi).mockResolvedValue({
+      schemaVersion: 1,
+      resources: [{ id: "course-list", viewId: "courses", fields: ["title_en"] }],
+      actions: [],
+    });
+    vi.mocked(readNativeExtensionResourceApi)
+      .mockResolvedValueOnce({ schemaVersion: 1, items: [
+        { id: "course-1", version: 1, fields: { title_en: "private course" } },
+      ] })
+      .mockRejectedValueOnce(new ApiError("PERMISSION_DENIED", "Denied", 403));
+    await render();
+    expect(element.textContent).toContain("private summary");
+    expect(element.textContent).toContain("private course");
+    const refresh = Array.from(element.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Refresh");
+    expect(refresh).toBeDefined();
+    await act(async () => { refresh?.click(); });
+    expect(element.textContent).not.toContain("private summary");
+    expect(element.textContent).not.toContain("private course");
+    expect(element.querySelector("table")).toBeNull();
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it("redacts scalar data when resource discovery loses Staff authorization", async () => {
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue(native);
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "private summary" });
+    vi.mocked(readNativeExtensionDataRegistryApi)
+      .mockRejectedValue(new ApiError("AUTHENTICATION_REQUIRED", "Expired", 401));
+    await render();
+    expect(element.textContent).not.toContain("private summary");
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+  });
+
+  it("preserves a read-only Native page when an older plugin has no data registry", async () => {
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue(native);
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "readonly value" });
+    vi.mocked(readNativeExtensionDataRegistryApi)
+      .mockRejectedValue(new ApiError("EXTENSION_DATA_NOT_FOUND", "Absent", 404));
+    await render();
+    expect(element.textContent).toContain("readonly value");
+    expect(element.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("does not render cached native data if publication changes before React effects flush", async () => {

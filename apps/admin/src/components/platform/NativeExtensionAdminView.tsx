@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ExtensionNativeAdminPageV1, ExtensionNativeDomainWorkflowV1 } from "@vibress/api-contracts";
 import {
   type AdminExtensionViewLink,
@@ -31,6 +31,9 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   const { locale, tr } = useAdminLocale();
   const [publicationRevision, setPublicationRevision] = useState(0);
   const [state, setState] = useState<NativeState>({ kind: "loading" });
+  // Any protected child resource denial must also remove previously loaded
+  // scalar page values, not just the resource table or editor.
+  const onAuthorizationLost = useCallback(() => setState({ kind: "error" }), []);
 
   useEffect(() => {
     const onPublicationChanged = () => setPublicationRevision((value) => value + 1);
@@ -132,6 +135,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
       </div>
       <NativeExtensionResources pluginId={link.pluginId} viewId={link.viewId}
         publicationId={state.publicationId} link={link}
+        onAuthorizationLost={onAuthorizationLost}
         {...(state.workflow ? { workflow: state.workflow } : {})} />
     </section>
   );
