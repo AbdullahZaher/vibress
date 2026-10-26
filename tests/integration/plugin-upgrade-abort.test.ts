@@ -44,10 +44,14 @@ describe("PLUG-UPD-02A PostgreSQL staged-plan CAS and atomic audit", () => {
                 ($2,'foreign-upgrade','1.0.0','[]'::jsonb)`,
         [pluginId, otherPluginId],
       );
-      await client.query(readFileSync(
-        resolve(process.cwd(), "packages/database/migrations/0047_plugin_upgrade_plans.sql"),
-        "utf8",
-      ));
+      for (const file of [
+        "0047_plugin_upgrade_plans.sql",
+        "0048_plugin_upgrade_preflight_approval.sql",
+      ]) {
+        await client.query(readFileSync(
+          resolve(process.cwd(), "packages/database/migrations", file), "utf8",
+        ));
+      }
       const repository = new DrizzlePluginUpgradePlanRepository(
         () => drizzle(client, { schema }),
       );
@@ -125,7 +129,9 @@ describe("PLUG-UPD-02A PostgreSQL staged-plan CAS and atomic audit", () => {
       });
       expect(next.id).not.toBe(plan.id);
       await client.query(
-        "UPDATE plugin_upgrade_plans SET status = 'approved' WHERE id = $1", [next.id],
+        `UPDATE plugin_upgrade_plans
+         SET status = 'preflighted', preflight_sha256 = $2, preflighted_at = now()
+         WHERE id = $1`, [next.id, "c".repeat(64)],
       );
       await refused({ ...abort, planId: next.id, expectedPlanSha256: next.planSha256 });
       expect((await client.query(
