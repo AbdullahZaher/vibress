@@ -13,6 +13,7 @@ import { admitAdminViews, type AdmittedAdminView } from "../plugins/admin-view-r
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
 import { appLogger } from "../observability";
 import { admitNativeAdminPage } from "../plugins/native-admin-registry";
+import { admitNativeDomainWorkflow } from "../plugins/native-domain-workflow";
 
 function reject(reply: FastifyReply, req: FastifyRequest, code: string, status: number) {
   return reply.status(status).send({
@@ -110,8 +111,25 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
           req.permissions, req.roles, req.publicationContext?.role,
           admission.permission,
         )) return reject(reply, req, "PERMISSION_DENIED", 403);
+        // A read allowlist must NEVER imply consent to a write workflow.
+        // The paired Admin POST independently authenticates and enforces the
+        // Host-scoped plugin handler's publication, CAS and business rules.
+        let workflow;
+        if (getConfig().nativeAdminActionReleases.includes(`${pluginId}@${digest}`)) {
+          const admitted = admitNativeDomainWorkflow(module, viewId);
+          if (admitted.kind === "invalid") {
+            return reject(reply, req, "EXTENSION_INVALID_WORKFLOW", 503);
+          }
+          if (admitted.kind === "admitted") {
+            const storage = await pluginsService.resolveExtensionStorageBinding(
+              pluginId, publicationId, "extension.storage.write",
+            );
+            if (storage?.publicationId === publicationId) workflow = admitted.workflow;
+          }
+        }
         return reply.status(200).send(ExtensionNativeAdminResponseV1Schema.parse({
           mode: "native", page: admission.page, routeId: admission.routeId,
+          ...(workflow ? { workflow } : {}),
         }));
       } catch (error) {
         if (error instanceof PluginDomainError &&
