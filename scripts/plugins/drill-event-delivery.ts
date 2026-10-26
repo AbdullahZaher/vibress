@@ -160,8 +160,10 @@ async function runCrashConsumer(): Promise<void> {
 
 async function crashDuringAdmittedDispatch(id: string): Promise<void> {
   let reachedHandler = false;
+  // Spawn the Node process itself, not a pnpm wrapper: its observed
+  // SIGKILL must be the signal of the process that held the BullMQ lease.
   const child = spawn(
-    "pnpm", ["exec", "tsx", "scripts/plugins/drill-event-delivery.ts", "--crash-consumer"],
+    process.execPath, ["--import=tsx", "scripts/plugins/drill-event-delivery.ts", "--crash-consumer"],
     {
       cwd: root,
       env: {
