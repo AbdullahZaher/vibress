@@ -28,6 +28,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify independent signed plugin admissions and reject stale/forged releases
+        env:
+          VIBRESS_M1A_DISPOSABLE_DRILL: "1"
+        run: pnpm exec tsx scripts/plugins/drill-signed-fleet.ts
       - name: Check drill shell syntax
         run: bash -n scripts/plugins/drill-isolated-replica-faults.sh
       - name: Exercise four live processes and disposable PostgreSQL/Redis outage
