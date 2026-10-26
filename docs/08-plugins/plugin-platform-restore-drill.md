@@ -272,6 +272,39 @@ release, a complete Redis/asset/key backup and restore, evidence of
 exactly-once effects in external services, or measured production RPO/RTO.
 A missing or stale independent fleet receipt still blocks M1A approval.
 
+## CI independently verified four-replica signed admission (PLUG-OPS-01 / SEC-02)
+
+**Evidence:** [exact-SHA GitHub workflow #40281269263](https://github.com/AbdullahZaher/vibress/actions/runs/40281269263)
+passed at commit `906628b73a432a4e85aa1c952082786b30a4cdbb`
+(in addition to the real PostgreSQL/Redis outage and event-crash drill).
+
+The [disposable fleet verification fixture](../../scripts/plugins/drill-signed-fleet.ts)
+runs the **production** `scripts/plugins/admit.ts` CLI in four separate Node
+processes, each reading a distinct temporary copy of the operator-approved
+lockfile, ESM, SBOM, provenance, security-review evidence, Ed25519 public
+key and detached signature. A CI-only Ed25519 private key is generated in
+memory and never provided to the child process. The ESM deliberately throws
+if imported: the admission check verifies hashes and policies **without
+executing** the untrusted module.
+
+The four independent signed receipts must pass
+`assertPluginReplicaConsensus` with an **externally supplied exact lockfile
+digest and SPKI trust-root fingerprint** and exactly two API-role and two
+Worker-role receipts. Negative cases individually reject a revoked signer,
+wrong SPKI fingerprint, re-signed but stale Worker lockfile, modified ESM
+after signing and missing detached signature (no strict-to-legacy downgrade).
+No private keys, tenant content, plugin payloads or external services are
+used in those tests.
+
+**Limit:** This is four *independent operator admission subprocesses*, not
+four independently deployed and mounted production container images.
+The accompanying live source-process health/outage drill runs in bundled-only
+mode. Operator sign-off still requires each real replica to capture its own
+signed admission receipt from the running image/mount, tests of read-only
+mount enforcement and stale release/worker draining, and a full
+PostgreSQL/Redis/artifact/key/media restore. A passing CI fixture does not
+prove scanner authenticity or production RPO/RTO.
+
 ## Mandatory negative drills
 
 | Injected condition | Required result |
