@@ -21,6 +21,32 @@
 
 Run `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build` and the repository's supported E2E and container-image checks. Never confuse an older successful SHA or a cancelled CI run with acceptance of this branch.
 
+## NUI-06 signed LMS/database pilot verification (added October 26, 2026)
+
+The CI source checkout for the independent LMS candidate now pins commit
+`bc6b74e774f77b525a715d2a2d32a92637795413` in both
+`.github/workflows/ci.yml` and `tests/helpers/lms-source-provider.ts`.
+This ensures the Host verification uses the candidate containing the scoped
+Public/Member model allowlists and legacy JSON fix; earlier green Core runs
+used a different, older LMS commit and cannot certify these exact artifacts.
+
+`tests/integration/real-lms-authoring-host.test.ts` now includes a
+**disposable PostgreSQL + signed ESM + real Fastify** NUI-06 case. The
+case exercises disabled-by-default Native discovery, read-only release
+admission, denial of direct action writes, explicit write-workflow
+admission, Staff cross-publication and unauthenticated denial, release
+revocation by disabling the plugin for one publication, and re-enabling
+without losing stored course records. Environment allowlists are restored
+in a `finally` block and no production environment is changed.
+
+The integration case is part of regular `pnpm vitest run` discovery and
+must pass **on the final joint Core/LMS commit pair** before it counts as
+evidence. It is not a substitute for two-replica Redis continuity,
+browser Arabic/RTL and keyboard verification, upgrade/rollback with
+production-like persisted content, operator backup/restore, or separately
+signed release/operator approvals. Both Native allowlists remain unset
+in production until those gates are complete.
+
 ## High-risk negative cases
 
 1. Unauthenticated or insufficiently authorized request returns 401/403 without plugin module code executing.
