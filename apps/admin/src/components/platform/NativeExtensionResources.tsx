@@ -38,6 +38,12 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<ExtensionNativeDataPageV1["items"][number] | null>(null);
   const [actions, setActions] = useState<ExtensionNativeDataDiscoveryV1["actions"]>([]);
+  const [domainDirty, setDomainDirty] = useState(false);
+  function confirmDiscard() {
+    if (domainDirty && !window.confirm(tr("Discard unsaved plugin changes?"))) return false;
+    setDomainDirty(false);
+    return true;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +52,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
     setHistory([undefined]);
     setFilter(null);
     setError("");
-    setSelected(null); setActions([]);
+    setSelected(null); setActions([]); setDomainDirty(false);
     void readNativeExtensionDataRegistryApi(pluginId).then((result) => {
       if (cancelled || getActivePublicationId() !== publicationId) return;
       const resources = result.resources.filter((resource) => resource.viewId === viewId);
@@ -112,6 +118,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
             <select value={resource.id} aria-label={tr("Choose plugin resource")}
               className="h-8 rounded-md border border-border bg-background px-2 text-sm"
               onChange={(event) => {
+                if (!confirmDiscard()) return;
                 const next = resources.find((item) => item.id === event.target.value);
                 setResourceId(event.target.value);
                 setHistory([undefined]); setFilter(null); setTerm(""); setSelected(null);
@@ -128,6 +135,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
       {(resource.textFilters?.length ?? 0) > 0 && (
         <form className="flex items-end flex-wrap gap-2" onSubmit={(event) => {
           event.preventDefault();
+          if (!confirmDiscard()) return;
           setHistory([undefined]);
           setFilter(term ? { field, term } : null);
         }}>
@@ -151,9 +159,10 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
       {fetching && <p role="status" className="text-sm">{tr("Loading plugin records...")}</p>}
       {boundWorkflow ? (
         <NativeExtensionDomainEditor link={link} workflow={boundWorkflow}
-          publicationId={publicationId} selected={selected}
+          publicationId={publicationId} selected={selected} onDirtyChange={setDomainDirty}
           onClear={() => setSelected(null)}
-          onSaved={() => { setSelected(null); setHistory([undefined]); setRevision((value) => value + 1); }} />
+          onSaved={() => { setSelected(null); setDomainDirty(false);
+            setHistory([undefined]); setRevision((value) => value + 1); }} />
       ) : (
         <NativeExtensionActionForm pluginId={pluginId} publicationId={publicationId}
           resource={resource} actions={actions} selected={selected}
@@ -177,8 +186,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
               <TableCell><Button type="button" size="xs" variant="outline"
                 aria-label={tr("Edit record") + ": " + item.id}
                 onClick={() => {
-                  if (selected && selected.id !== item.id &&
-                      !window.confirm(tr("Discard unsaved plugin changes?"))) return;
+                  if (selected?.id !== item.id && !confirmDiscard()) return;
                   setSelected(item);
                 }}>{tr("Edit record")}</Button></TableCell>}
           </TableRow>)}</TableBody>
@@ -189,11 +197,13 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId, work
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm"
               disabled={history.length < 2 || fetching}
-              onClick={() => setHistory((value) => value.slice(0, -1))}>{tr("Previous")}</Button>
+              onClick={() => { if (confirmDiscard()) setHistory((value) => value.slice(0, -1)); }}>{tr("Previous")}</Button>
             <Button type="button" variant="outline" size="sm"
               disabled={!current.nextCursor || fetching}
               onClick={() => {
-                if (current.nextCursor) setHistory((value) => [...value, current.nextCursor]);
+                if (current.nextCursor && confirmDiscard()) {
+                  setHistory((value) => [...value, current.nextCursor]);
+                }
               }}>{tr("Next")}</Button>
           </div>
         </div>
