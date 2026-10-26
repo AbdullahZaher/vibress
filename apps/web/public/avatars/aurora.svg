@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Aurora Avatar</title>
+  <mask id="mask__beam__aurora" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__aurora)">
+    <rect width="36" height="36" fill="#6D28D9" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(4 5) rotate(230 18 18) scale(1.0)" fill="#A7F3D0" rx="8" />
+    <g transform="translate(-2.6 -1.4) rotate(-3 18 18)">
+      <path d="M13,21.0 a1,0.67 0 0,0 11,0" fill="#111827" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#111827" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#111827" />
+    </g>
+  </g>
+</svg>

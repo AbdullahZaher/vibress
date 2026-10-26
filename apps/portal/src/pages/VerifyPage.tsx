@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { memberApi, MemberApiError } from "../lib/member-api";
 import { navigate } from "../router";
+import { Shell } from "../components/Shell";
+import { consumeReturnTo } from "../lib/return-to";
 
 type VerifyState = "verifying" | "success" | "error";
 
@@ -23,8 +25,7 @@ export function VerifyPage({ token }: { token: string }) {
           const res = await memberApi.me();
           if (res?.member) {
             setState("success");
-            navigate("/account");
-            window.history.replaceState(null, "", "/portal/#/account");
+            window.location.replace(consumeReturnTo());
             return;
           }
         } catch {
@@ -38,8 +39,7 @@ export function VerifyPage({ token }: { token: string }) {
 
     if (verifiedTokens.has(token)) {
       setState("success");
-      navigate("/account");
-      window.history.replaceState(null, "", "/portal/#/account");
+      window.location.replace(consumeReturnTo());
       return;
     }
 
@@ -58,8 +58,7 @@ export function VerifyPage({ token }: { token: string }) {
 
         if (!isMounted) return;
         setState("success");
-        navigate("/account");
-        window.history.replaceState(null, "", "/portal/#/account");
+        window.location.replace(consumeReturnTo());
       } catch (err) {
         inFlightVerifications.delete(token);
 
@@ -71,8 +70,7 @@ export function VerifyPage({ token }: { token: string }) {
               verifiedTokens.add(token);
               if (!isMounted) return;
               setState("success");
-              navigate("/account");
-              window.history.replaceState(null, "", "/portal/#/account");
+              window.location.replace(consumeReturnTo());
               return;
             }
           } catch {
@@ -95,73 +93,52 @@ export function VerifyPage({ token }: { token: string }) {
     };
   }, [token]);
 
-  if (state === "verifying") {
+  if (state === "verifying" || state === "success") {
     return (
-      <div style={styles.container}>
-        <p style={styles.status}>Verifying your sign-in link…</p>
-      </div>
-    );
-  }
-
-  if (state === "success") {
-    return (
-      <div style={styles.container}>
-        <p style={styles.status}>Signed in. Redirecting…</p>
-      </div>
+      <Shell center>
+        <div className="ap-card ap-card-narrow ap-card-center" role="status">
+          {state === "verifying" ? (
+            <div className="ap-spinner" aria-hidden="true" />
+          ) : (
+            <div className="ap-icon ap-icon-ok" aria-hidden="true">
+              ✓
+            </div>
+          )}
+          <h1 className="ap-title ap-title-sm">
+            {state === "verifying" ? "Verifying…" : "You're signed in"}
+          </h1>
+          <p className="ap-sub">
+            {state === "verifying"
+              ? "Checking your sign-in link."
+              : "Taking you back now."}
+          </p>
+        </div>
+      </Shell>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Link invalid or expired</h1>
-        <p style={styles.subtitle}>
+    <Shell center>
+      <div className="ap-card ap-card-narrow ap-card-center">
+        <div className="ap-icon ap-icon-bad" aria-hidden="true">
+          !
+        </div>
+        <h1 className="ap-title ap-title-sm">Link invalid or expired</h1>
+        <p className="ap-sub">
           {errorCode === "AUTH_TOKEN_USED"
             ? "This sign-in link has already been used."
             : errorCode === "AUTH_TOKEN_EXPIRED"
               ? "This sign-in link has expired."
               : "This sign-in link is no longer valid."}
         </p>
-        <button onClick={() => navigate("/sign-in")} style={styles.button}>
+        <button
+          onClick={() => navigate("/sign-in")}
+          className="ap-btn ap-btn-block"
+          style={{ marginTop: 28 }}
+        >
           Request a new link
         </button>
       </div>
-    </div>
+    </Shell>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f8fafc",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    padding: 32,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-    boxSizing: "border-box",
-    textAlign: "center",
-  },
-  title: { margin: 0, fontSize: 22, fontWeight: 700 },
-  subtitle: { margin: "8px 0 20px", fontSize: 14, color: "#64748b" },
-  status: { fontSize: 14, color: "#475569" },
-  button: {
-    width: "100%",
-    padding: "11px 16px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

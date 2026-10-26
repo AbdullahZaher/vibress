@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import {
   MemberAuthRequestSchema,
   MemberProfileUpdateSchema,
+  getAvatarUrl,
 } from "@vibress/api-contracts";
 import { memberAuthService, membersService } from "../services";
 import {
@@ -292,11 +293,14 @@ export async function memberRoutes(fastify: FastifyInstance) {
     preHandler: [requireMemberSession],
     handler: async (req, reply) => {
       const member = req.member!;
+      const avatar = member.avatar || null;
       return reply.status(200).send({
         member: {
           id: member.id,
           email: member.email,
           name: member.name || null,
+          avatar,
+          avatarUrl: getAvatarUrl(avatar, member.email || member.id),
           emailVerified: !!member.emailVerifiedAt,
           createdAt: member.createdAt.toISOString(),
         },
@@ -304,7 +308,7 @@ export async function memberRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // Update profile (name only)
+  // Update profile (name, avatar)
   fastify.patch("/me", {
     preHandler: [requireMemberSession, validateMemberOrigin],
     handler: async (req, reply) => {
@@ -325,12 +329,16 @@ export async function memberRoutes(fastify: FastifyInstance) {
         const updated = await membersService.updateProfile(
           req.member!.id,
           parseResult.data,
+          req.member!.publicationId,
         );
+        const avatar = updated.avatar || null;
         return reply.status(200).send({
           member: {
             id: updated.id,
             email: updated.email,
             name: updated.name || null,
+            avatar,
+            avatarUrl: getAvatarUrl(avatar, updated.email || updated.id),
             emailVerified: !!updated.emailVerifiedAt,
             createdAt: updated.createdAt.toISOString(),
           },

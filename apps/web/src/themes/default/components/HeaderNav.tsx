@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { SubscribeModal } from "./SubscribeModal";
 import { ThemeToggle } from "../../../components/reader/ThemeToggle";
 import { t } from "../../../lib/i18n";
+import { useMember } from "../../../lib/useMember";
 
 interface HeaderNavProps {
   siteTitle: string;
@@ -19,6 +20,7 @@ export function HeaderNav({
   primaryNav,
 }: HeaderNavProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const member = useMember();
 
   return (
     <>
@@ -89,17 +91,49 @@ export function HeaderNav({
               </svg>
             </button>
 
-            <a href="#/portal/signin" className="vb-head-signin">
-              {t("nav.signin")}
-            </a>
+            {member ? (
+              <a
+                href="/portal/#/account"
+                className="vb-head-signin"
+                title={member.email}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                {member.avatarUrl && (
+                  <img
+                    src={member.avatarUrl}
+                    alt=""
+                    width={26}
+                    height={26}
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+                    }}
+                  />
+                )}
+                <span>{member.name || "Account"}</span>
+              </a>
+            ) : (
+              <>
+                <a href="/portal/#/sign-in" className="vb-head-signin">
+                  {t("nav.signin")}
+                </a>
 
-            <button
-              type="button"
-              className="vb-head-subscribe-btn"
-              onClick={() => setIsModalOpen(true)}
-            >
-              {t("nav.subscribe")}
-            </button>
+                <button
+                  type="button"
+                  className="vb-head-subscribe-btn"
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  {t("nav.subscribe")}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>

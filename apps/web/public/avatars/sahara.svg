@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Sahara Avatar</title>
+  <mask id="mask__beam__sahara" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__sahara)">
+    <rect width="36" height="36" fill="#F59E0B" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(4 1) rotate(239 18 18) scale(1.2)" fill="#FEF3C7" rx="8" />
+    <g transform="translate(-1.4 -0.3) rotate(6 18 18)">
+      <path d="M14,20.1 a1,0.83 0 0,0 9,0" fill="#1F2937" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#1F2937" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#1F2937" />
+    </g>
+  </g>
+</svg>

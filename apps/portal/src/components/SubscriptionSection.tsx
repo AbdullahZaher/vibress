@@ -79,139 +79,145 @@ export function SubscriptionSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p>Loading subscription…</p>;
+  if (loading) {
+    return (
+      <section className="ap-section">
+        <div className="ap-skeleton" />
+      </section>
+    );
+  }
+
+  const statusTone = (status: string) =>
+    ["active", "trialing", "free"].includes(status)
+      ? "ok"
+      : ["past_due", "unpaid"].includes(status)
+        ? "bad"
+        : "warn";
 
   return (
-    <div
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
-    >
-      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 12px" }}>
-        Membership
-      </h2>
+    <section className="ap-section" aria-labelledby="member-h">
+      <div className="ap-section-head">
+        <h2 className="ap-section-title" id="member-h">
+          Membership
+        </h2>
+      </div>
       {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}
-        >
+        <p role="alert" className="ap-alert bad">
           {error}
         </p>
       )}
 
       {subscriptions.length === 0 ? (
-        <div>
-          <p style={{ fontSize: 14, color: "#475569" }}>
-            You don't have a membership yet.
-          </p>
-          <button onClick={() => navigate("/plans")} style={styles.button}>
-            View plans
-          </button>
+        <div className="ap-group">
+          <div className="ap-row">
+            <span className="ap-row-meta" style={{ fontSize: 15 }}>
+              You don't have a membership yet.
+            </span>
+            <button
+              onClick={() => navigate("/plans")}
+              className="ap-btn ap-btn-sm"
+            >
+              View plans
+            </button>
+          </div>
         </div>
       ) : (
         subscriptions.map((sub) => (
-          <div
-            key={sub.id}
-            style={{
-              border: "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: 16,
-              marginBottom: 12,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <strong>{sub.planName}</strong>
-                <div style={{ fontSize: 13, color: "#475569" }}>
-                  {sub.status === "cancelled" || sub.status === "expired"
-                    ? `Status: ${sub.status}`
-                    : `Status: ${sub.status}`}
-                  {sub.status !== "free" && (
-                    <>
-                      {" · "}
-                      {formatAmount(sub.currency, sub.amountMinor)}
-                      {sub.billingInterval === "year" ? "/year" : "/month"}
-                    </>
-                  )}
-                </div>
-                {sub.trialEnd && sub.status === "trialing" && (
-                  <div style={{ fontSize: 13, color: "#b45309" }}>
-                    Trial ends {new Date(sub.trialEnd).toLocaleDateString()}
-                  </div>
-                )}
-                {sub.currentPeriodEnd &&
-                  ["active", "past_due", "unpaid"].includes(sub.status) && (
-                    <div style={{ fontSize: 13, color: "#475569" }}>
-                      {sub.status === "past_due" || sub.status === "unpaid"
-                        ? "Payment failed — update your payment method to keep access."
-                        : `Renews ${new Date(sub.currentPeriodEnd).toLocaleDateString()}`}
-                    </div>
-                  )}
-                {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                  <div style={{ fontSize: 13, color: "#b45309" }}>
-                    Cancellation scheduled for period end
-                    {sub.currentPeriodEnd
-                      ? ` (${new Date(sub.currentPeriodEnd).toLocaleDateString()})`
-                      : ""}
-                  </div>
-                )}
+          <div key={sub.id} className="ap-group" style={{ marginBottom: 12 }}>
+            <div className="ap-row ap-row-stack">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <span className="ap-row-title">{sub.planName}</span>
+                <span className={`ap-pill ${statusTone(sub.status)}`}>
+                  {sub.status.replace("_", " ")}
+                </span>
               </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
-                <button
-                  onClick={() =>
-                    runAction("resume", () =>
-                      memberApi.resumeSubscription(sub.id),
-                    )
-                  }
-                  disabled={action !== null}
-                  style={styles.button}
-                >
-                  {action === "resume" ? "Resuming…" : "Resume membership"}
-                </button>
+              {sub.status !== "free" && (
+                <div className="ap-row-meta">
+                  {formatAmount(sub.currency, sub.amountMinor)}
+                  {sub.billingInterval === "year" ? "/year" : "/month"}
+                </div>
               )}
-              {!sub.cancelAtPeriodEnd &&
-                ["active", "trialing", "past_due"].includes(sub.status) && (
+              {sub.trialEnd && sub.status === "trialing" && (
+                <div className="ap-row-meta warn">
+                  Trial ends {new Date(sub.trialEnd).toLocaleDateString()}
+                </div>
+              )}
+              {sub.currentPeriodEnd &&
+                ["active", "past_due", "unpaid"].includes(sub.status) && (
+                  <div
+                    className={`ap-row-meta${
+                      sub.status === "past_due" || sub.status === "unpaid"
+                        ? " bad"
+                        : ""
+                    }`}
+                  >
+                    {sub.status === "past_due" || sub.status === "unpaid"
+                      ? "Payment failed — update your payment method to keep access."
+                      : `Renews ${new Date(sub.currentPeriodEnd).toLocaleDateString()}`}
+                  </div>
+                )}
+              {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
+                <div className="ap-row-meta warn">
+                  Cancellation scheduled for period end
+                  {sub.currentPeriodEnd
+                    ? ` (${new Date(sub.currentPeriodEnd).toLocaleDateString()})`
+                    : ""}
+                </div>
+              )}
+            </div>
+            <div className="ap-row">
+              <div className="ap-actions">
+                {sub.cancelAtPeriodEnd && sub.status !== "cancelled" && (
                   <button
                     onClick={() =>
-                      runAction("cancel", () =>
-                        memberApi.cancelSubscription(sub.id),
+                      runAction("resume", () =>
+                        memberApi.resumeSubscription(sub.id),
                       )
                     }
                     disabled={action !== null}
-                    style={styles.cancelButton}
+                    className="ap-btn ap-btn-sm"
                   >
-                    {action === "cancel"
-                      ? "Cancelling…"
-                      : "Cancel at period end"}
+                    {action === "resume" ? "Resuming…" : "Resume membership"}
                   </button>
                 )}
-              {["active", "past_due", "unpaid"].includes(sub.status) && (
-                <button
-                  onClick={openBillingPortal}
-                  disabled={action !== null}
-                  style={styles.button}
-                >
-                  {action === "portal" ? "Opening…" : "Billing portal"}
-                </button>
-              )}
+                {["active", "past_due", "unpaid"].includes(sub.status) && (
+                  <button
+                    onClick={openBillingPortal}
+                    disabled={action !== null}
+                    className="ap-btn ap-btn-sm ap-btn-secondary"
+                  >
+                    {action === "portal" ? "Opening…" : "Billing portal"}
+                  </button>
+                )}
+                {!sub.cancelAtPeriodEnd &&
+                  ["active", "trialing", "past_due"].includes(sub.status) && (
+                    <button
+                      onClick={() =>
+                        runAction("cancel", () =>
+                          memberApi.cancelSubscription(sub.id),
+                        )
+                      }
+                      disabled={action !== null}
+                      className="ap-btn ap-btn-sm ap-btn-danger"
+                    >
+                      {action === "cancel"
+                        ? "Cancelling…"
+                        : "Cancel at period end"}
+                    </button>
+                  )}
+              </div>
             </div>
           </div>
         ))
       )}
-    </div>
+    </section>
   );
 }
 
@@ -222,25 +228,3 @@ function formatAmount(currency: string, amountMinor: number): string {
   return `${symbol}${amount.toFixed(2)}`;
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  button: {
-    padding: "8px 14px",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  cancelButton: {
-    padding: "8px 14px",
-    backgroundColor: "#ffffff",
-    color: "#dc2626",
-    border: "1px solid #fecaca",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

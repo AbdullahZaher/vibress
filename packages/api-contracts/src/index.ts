@@ -18,3 +18,4 @@ export * from "./plugins";
 export * from "./extension-native-admin";
 export * from "./extension-native-data";
 export * from "./extension-native-workflow";
+export * from "./avatars";

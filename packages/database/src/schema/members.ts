@@ -11,6 +11,7 @@ export const members = pgTable(
     email: text("email").notNull(),
     emailNormalized: text("email_normalized").notNull(),
     name: text("name"),
+    avatar: text("avatar").default("default"),
     status: text("status").notNull().default("active"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),

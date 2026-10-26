@@ -1,5 +1,6 @@
 import React from "react";
 import { t } from "../../../lib/i18n";
+import { MemberActions } from "./MemberActions";
 
 interface HeaderNavProps {
   siteTitle: string;
@@ -62,17 +63,7 @@ export function HeaderNav({
         </nav>
 
         <div className="vb-head-actions">
-          <div className="vb-head-members">
-            <a className="vb-head-link" href="#/portal/signin">
-              {t("nav.signin")}
-            </a>
-            <a
-              className="vb-head-btn vb-btn vb-primary-btn"
-              href="#/portal/signup"
-            >
-              {t("nav.subscribe")}
-            </a>
-          </div>
+          <MemberActions />
         </div>
       </div>
     </header>

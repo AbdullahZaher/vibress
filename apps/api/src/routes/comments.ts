@@ -10,12 +10,11 @@ import {
   ReportCommentSchema,
   AdminCommentFilterSchema,
   ModerateCommentSchema,
+  getAvatarUrl,
 } from "@vibress/api-contracts";
 import {
   CommentDomainError,
   Comment,
-  ModerationEvent,
-  CommentReport,
 } from "@vibress/comments";
 import {
   requireMemberSession,
@@ -27,10 +26,19 @@ import {
 } from "../middleware/auth";
 import { getConfig } from "@vibress/config";
 import { getDb } from "@vibress/database";
-import { posts, publications } from "@vibress/database";
-import { and, eq } from "drizzle-orm";
+import { posts, members } from "@vibress/database";
+import { and, eq, inArray } from "drizzle-orm";
 
-function publicCommentDto(comment: Comment) {
+function publicCommentDto(
+  comment: Comment,
+  membersMap?: Map<string, { name: string | null; avatar: string | null }>,
+) {
+  const memberData = membersMap?.get(comment.memberId);
+  const memberName = memberData?.name || comment.member?.name || "Member";
+  const avatarUrl =
+    comment.member?.avatarUrl ||
+    getAvatarUrl(memberData?.avatar, comment.member?.id || comment.memberId);
+
   return {
     id: comment.id,
     publicationId: comment.publicationId,
@@ -45,13 +53,16 @@ function publicCommentDto(comment: Comment) {
     createdAt: comment.createdAt.toISOString(),
     updatedAt: comment.updatedAt.toISOString(),
     deletedAt: comment.deletedAt?.toISOString() ?? null,
-    member: comment.member
-      ? {
-          id: comment.member.id,
-          name: comment.member.name,
-          avatarUrl: comment.member.avatarUrl,
-        }
-      : undefined,
+    author: {
+      id: comment.member?.id || comment.memberId,
+      name: memberName,
+      avatarUrl,
+    },
+    member: {
+      id: comment.member?.id || comment.memberId,
+      name: memberName,
+      avatarUrl,
+    },
   };
 }
 
@@ -110,8 +121,34 @@ export async function publicCommentRoutes(fastify: FastifyInstance) {
       offset,
     );
 
+    const memberIds = Array.from(
+      new Set(result.comments.map((c) => c.memberId).filter(Boolean)),
+    );
+    const membersMap = new Map<
+      string,
+      { id: string; name: string | null; avatar: string | null }
+    >();
+    if (memberIds.length > 0) {
+      const memberRows = await db
+        .select({
+          id: members.id,
+          name: members.name,
+          avatar: members.avatar,
+        })
+        .from(members)
+        .where(
+          and(
+            eq(members.publicationId, publicationId),
+            inArray(members.id, memberIds),
+          ),
+        );
+      for (const m of memberRows) {
+        membersMap.set(m.id, m);
+      }
+    }
+
     return reply.status(200).send({
-      comments: result.comments.map(publicCommentDto),
+      comments: result.comments.map((c) => publicCommentDto(c, membersMap)),
       total: result.total,
       limit,
       offset,
@@ -265,7 +302,18 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
           clientCommentId,
           status: preModeration ? "pending_review" : "published",
         });
-        return reply.status(201).send({ comment: publicCommentDto(comment) });
+        const currentMemberMap = new Map([
+          [
+            member.id,
+            {
+              name: member.name,
+              avatar: member.avatar || null,
+            },
+          ],
+        ]);
+        return reply.status(201).send({
+          comment: publicCommentDto(comment, currentMemberMap),
+        });
       } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           const status = err.code === "COMMENT_NOT_FOUND" ? 404 : 400;
@@ -315,7 +363,18 @@ export async function memberCommentRoutes(fastify: FastifyInstance) {
           member.id,
           parsed.data.body,
         );
-        return reply.status(200).send({ comment: publicCommentDto(comment) });
+        const currentMemberMap = new Map([
+          [
+            member.id,
+            {
+              name: member.name,
+              avatar: member.avatar || null,
+            },
+          ],
+        ]);
+        return reply.status(200).send({
+          comment: publicCommentDto(comment, currentMemberMap),
+        });
       } catch (err: unknown) {
         if (err instanceof CommentDomainError) {
           const status =

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vibress/api-contracts": "workspace:*",
     "@vibress/config": "workspace:*",
     "@vibress/database": "workspace:*",
     "@vibress/events": "workspace:*",

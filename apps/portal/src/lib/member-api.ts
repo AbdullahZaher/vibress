@@ -2,6 +2,8 @@ export interface MemberSelf {
   id: string;
   email: string;
   name: string | null;
+  avatar?: string | null;
+  avatarUrl?: string;
   emailVerified: boolean;
   createdAt: string;
 }
@@ -86,10 +88,14 @@ export const memberApi = {
     return request("/me");
   },
 
-  updateProfile(name: string | null): Promise<{ member: MemberSelf }> {
+  updateProfile(
+    data: { name?: string | null; avatar?: string | null } | string | null,
+  ): Promise<{ member: MemberSelf }> {
+    const payload =
+      typeof data === "string" || data === null ? { name: data } : data;
     return request("/me", {
       method: "PATCH",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(payload),
     });
   },
 
