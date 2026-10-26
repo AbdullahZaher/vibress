@@ -88,8 +88,16 @@ describe("PLUG-UPD-02A PostgreSQL staged-plan CAS and atomic audit", () => {
       // Failure of an atomic audit write must roll back the status mutation.
       await client.query(`ALTER TABLE audit_events ADD CONSTRAINT reject_aborts
         CHECK (action <> 'plugin.upgrade_aborted')`);
-      await expect(repository.abortStaged(abort, audit))
-        .rejects.toMatchObject({ code: "23514" });
+      try {
+        await repository.abortStaged(abort, audit);
+        throw new Error("Audit constraint was unexpectedly bypassed");
+      } catch (error: unknown) {
+        // Drizzle wraps PostgreSQL errors in a query error with a cause.
+        // Accept neither a different SQLSTATE nor an unrelated test error.
+        const pgError = error instanceof Error && "cause" in error
+          ? error.cause : error;
+        expect(pgError).toMatchObject({ code: "23514" });
+      }
       expect((await client.query(
         "SELECT status, revision FROM plugin_upgrade_plans WHERE id = $1", [plan.id],
       )).rows).toEqual([{ status: "staged", revision: 1 }]);
