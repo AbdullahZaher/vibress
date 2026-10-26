@@ -24,11 +24,12 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`
 ## NUI-06 signed LMS/database pilot verification (added October 26, 2026)
 
 The CI source checkout for the independent LMS candidate now pins commit
-`bc6b74e774f77b525a715d2a2d32a92637795413` in both
+`4ae44d903b723e4411ab2a090e19e99ff87a0923` in both
 `.github/workflows/ci.yml` and `tests/helpers/lms-source-provider.ts`.
 This ensures the Host verification uses the candidate containing the scoped
-Public/Member model allowlists and legacy JSON fix; earlier green Core runs
-used a different, older LMS commit and cannot certify these exact artifacts.
+Public/Member model allowlists, indexedTextFields course status index, and
+legacy JSON fix; earlier green Core runs used a different, older LMS commit
+and cannot certify these exact artifacts.
 
 `tests/integration/real-lms-authoring-host.test.ts` now includes a
 **disposable PostgreSQL + signed ESM + real Fastify** NUI-06 case. The

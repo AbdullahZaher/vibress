@@ -238,8 +238,7 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
       reply.header("Cache-Control", "private, no-store");
       reply.header("X-Content-Type-Options", "nosniff");
       const params = ExtensionNativeActionParamsV1Schema.safeParse(req.params);
-      const body = ExtensionNativeActionBodyV1Schema.safeParse(req.body);
-      if (!params.success || !body.success) return reject(reply, req, "VALIDATION_ERROR", 400);
+      if (!params.success) return reject(reply, req, "VALIDATION_ERROR", 400);
       const admitted = await authorize(req, params.data.pluginId, true);
       if (!admitted.ok) return reject(reply, req, admitted.code, admitted.status);
       const action = admitted.registry.actions.find((a) => a.id === params.data.actionId);
@@ -249,6 +248,8 @@ export async function adminNativeDataRoutes(fastify: FastifyInstance) {
         action.operation === "create")) {
         return reject(reply, req, "EXTENSION_INVALID_DATA", 503);
       }
+      const body = ExtensionNativeActionBodyV1Schema.safeParse(req.body);
+      if (!body.success) return reject(reply, req, "VALIDATION_ERROR", 400);
       if (Object.keys(body.data.fields).some((key) => !resource.fields.includes(key)) ||
           (action.operation === "create" && body.data.expectedVersion !== undefined) ||
           (action.operation === "update" && body.data.expectedVersion === undefined)) {

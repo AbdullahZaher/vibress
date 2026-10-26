@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: AbdullahZaher/vibress-lms
-          ref: bc6b74e774f77b525a715d2a2d32a92637795413
+          ref: 4ae44d903b723e4411ab2a090e19e99ff87a0923
           path: .lms-source
 
       - name: Validate pinned LMS and build both release fixtures
