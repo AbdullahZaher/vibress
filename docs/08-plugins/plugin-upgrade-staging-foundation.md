@@ -22,9 +22,14 @@ Admin users, drain Workers, import ESM, or enable untrusted execution.
    the actual plugin row, fails on stale version/identity and limits each
    plugin to one nonterminal plan.
 
-Only the **staged** status is ever written by this implementation. The schema
-reserves the later phase names for forward-compatible orchestration; their
-presence does not confer runtime authority or implement phase transitions.
+The only permitted write transitions are **creating `staged`** and
+**`staged → aborted`** with exact plan hash + expected revision CAS. Aborting
+requires operator-supplied authenticated audit identity and writes a global
+`audit_events` row atomically with status/revision changes. Aborting an already
+approved, executing or changed plan is rejected; the method never deletes
+historical plans. Neither operation authorizes execution or release activation.
+The schema reserves later phase names for forward-compatible orchestration;
+their presence does not confer runtime authority or implement phase transitions.
 
 ## Upgrade and rollback
 
@@ -45,7 +50,7 @@ operator-approved compatibility and restore procedure.
 
 ## Explicitly open
 
-- Authenticated and audited operator approval, CAS phase transitions,
+- Authenticated and audited operator approval, all execution-phase transitions,
   preflight/permission consent, fleet draining, signed image fencing,
   migration application with interrupted-upgrade tests, observe/rollback.
 - Proven signed old-release identity on each running replica, not merely

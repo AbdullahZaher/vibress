@@ -61,6 +61,39 @@ export interface PluginUpgradeStageDetails {
   readonly capabilitiesRemoved: readonly string[];
   readonly planSha256: string;
 }
+/** Only the authenticated operator orchestration supplies audit identity. */
+export interface OperatorUpgradeAbortInput {
+  readonly pluginId: string;
+  readonly planId: string;
+  readonly expectedPlanSha256: string;
+  readonly expectedRevision: number;
+}
+export interface OperatorUpgradeAuditContext {
+  readonly actorUserId: string;
+  readonly requestId: string;
+}
+const abortInputSchema = z.object({
+  pluginId: z.string().uuid(),
+  planId: z.string().uuid(),
+  expectedPlanSha256: sha,
+  expectedRevision: z.number().int().positive().max(2147483646),
+}).strict();
+const auditSchema = z.object({
+  actorUserId: z.string().trim().min(1).max(128),
+  requestId: z.string().trim().min(1).max(128),
+}).strict();
+
+export function validateOperatorUpgradeAbort(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeAbortInput; readonly audit: OperatorUpgradeAuditContext } {
+  const parsedInput = abortInputSchema.safeParse(input);
+  const parsedAudit = auditSchema.safeParse(audit);
+  if (!parsedInput.success || !parsedAudit.success) {
+    throw new PluginUpgradePlanError("PLUGIN_UPGRADE_ABORT_INVALID_INPUT");
+  }
+  return { input: parsedInput.data, audit: parsedAudit.data };
+}
+
 export class PluginUpgradePlanError extends Error {
   constructor(readonly code: string) {
     super(code);

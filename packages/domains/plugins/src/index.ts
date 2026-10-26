@@ -41,3 +41,5 @@ export type { PluginActivityAction, PluginActivityRow, PluginActivityResult } fr
 export { preparePluginUpgradeStage, PluginUpgradePlanError } from "./application/plugin-upgrade-plan";
 export type { OperatorUpgradeStageInput, PluginUpgradeStageDetails } from "./application/plugin-upgrade-plan";
 export { DrizzlePluginUpgradePlanRepository } from "./infrastructure/drizzle-plugin-upgrade-plans";
+export { validateOperatorUpgradeAbort } from "./application/plugin-upgrade-plan";
+export type { OperatorUpgradeAbortInput, OperatorUpgradeAuditContext } from "./application/plugin-upgrade-plan";

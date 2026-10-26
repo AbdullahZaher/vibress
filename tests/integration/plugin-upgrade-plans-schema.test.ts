@@ -9,7 +9,7 @@ import { getDbPool } from "@vibress/database";
  * catalog. The ephemeral schema is owned only by this test and is dropped
  * even when assertions fail; never use production connections for tests.
  */
-describe("0046 staged plugin upgrade history migration", () => {
+describe("0047 staged plugin upgrade history migration", () => {
   it("preserves installed plugins, restricts duplicate staging and digest corruption", async () => {
     const pool = getDbPool();
     const client = await pool.connect();
