@@ -37,18 +37,7 @@ export const pluginUpgradePlans = pgTable("plugin_upgrade_plans", {
     sql`${table.status} IN ('staged', 'preflighted', 'approved', 'quiesced', 'migrated', 'activated', 'observed', 'completed', 'aborted')`),
   validRevision: check("plugin_upgrade_plans_revision_check", sql`${table.revision} > 0`),
   validPreflight: check("plugin_upgrade_plans_preflight_sha_check",
-    sql`${table.preflightSha256} IS NULL OR ${table.preflightSha256} ~ '^[a-f0-9]{64}
-  validDigests: check("plugin_upgrade_plans_digests_check", sql`
-    ${table.fromArtifactSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.toArtifactSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.fromLockfileSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.toLockfileSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.fromSignerSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.toSignerSha256} ~ '^[a-f0-9]{64}$' AND
-    ${table.planSha256} ~ '^[a-f0-9]{64}$'`),
-}));
-export type PluginUpgradePlanRow = typeof pluginUpgradePlans.$inferSelect;
-`),
+    sql`${table.preflightSha256} IS NULL OR ${table.preflightSha256} ~ '^[a-f0-9]{64}$'`),
   preflightRequired: check("plugin_upgrade_plans_preflight_required_check",
     sql`${table.status} NOT IN ('preflighted', 'approved', 'quiesced', 'migrated', 'activated', 'observed', 'completed')
       OR (${table.preflightSha256} IS NOT NULL AND ${table.preflightedAt} IS NOT NULL)`),
