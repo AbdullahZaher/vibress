@@ -61,4 +61,26 @@ Native read and write allowlists both default to unset. Production activation re
 
 **Limitations:** this is a source fixture inside the Host monorepo, not an independent installed release. Before a stable SDK is published, the final packaged SDK must compile in a separate repository against a pinned Host compatibility range, be admitted from an operator-approved immutable artifact, and pass fresh/upgrade/rollback tests. No consumer support guarantee or production sign-off follows from adding this test.
 
-The member portal sign-in redirect regression identified in the latest CI has a separate scoped fix and negative tests at `apps/portal/src/lib/return-to.test.ts`; full E2E on that final commit must pass before considering this branch mergeable.
+## NUI-06 scoped security regression evidence (October 26, 2026)
+
+Additional source-level tests exercise the Native resource cursor boundary:
+tampering with a signed cursor, reusing a cursor with another text filter,
+and revoking the operator-approved release between paginated reads must all
+fail closed. These tests live in
+`apps/api/src/routes/__tests__/extension-native-data.test.ts`.
+They supplement, but cannot replace, real multi-replica/Redis/PostgreSQL
+integration and rollback acceptance.
+
+The Member E2E suite at `tests/e2e/member-auth.test.ts` now compares
+the actual Portal heading (`Session expired`) after logout, account
+disablement and subsequent re-enablement. Importantly it **also verifies
+the Member API returns HTTP 401** from the same browser context in all
+three states, and checks the Staff re-enable request succeeded, rather
+than weakening a security assertion to make a UI text mismatch pass.
+These test-source changes are not proof of a passing new CI run.
+
+The existing separate portal sign-in redirect tests at
+`apps/portal/src/lib/return-to.test.ts` remain in place. No operator
+approval, production Native write allowlisting, signing or deployment
+is granted by this regression fix; final E2E, signed release,
+multi-publication, upgrade/rollback and approval gates remain open.

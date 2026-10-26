@@ -207,6 +207,37 @@ describe("NUI-03 Fastify resource/action boundary", () => {
     })).statusCode).toBe(400);
   });
 
+  it("rejects tampered or filter-replayed cursors and revocation after the first page", async () => {
+    state.rows = [
+      { id: "c1", version: 1, fields: { title_en: "First" } },
+      { id: "c2", version: 1, fields: { title_en: "Second" } },
+    ];
+    const first = await app.inject({
+      method: "GET", url: base + "/resources/courses?limit=1",
+    });
+    expect(first.statusCode).toBe(200);
+    const cursor = ExtensionNativeDataPageV1Schema.parse(first.json()).nextCursor;
+    if (!cursor) throw Error("Expected a signed pagination cursor");
+
+    // Replacing part of the signed body must never be accepted as a valid page.
+    const tampered = (cursor.startsWith("e") ? "f" : "e") + cursor.slice(1);
+    expect((await app.inject({ method: "GET",
+      url: base + "/resources/courses?limit=1&cursor=" + tampered,
+    })).statusCode).toBe(400);
+
+    // The same valid cursor cannot be reused under a different text filter.
+    expect((await app.inject({ method: "GET",
+      url: base + "/resources/courses?limit=1&cursor=" + cursor +
+        "&filterField=title_en&filterValue=First",
+    })).statusCode).toBe(400);
+
+    // Operators can revoke the release between pages; a prior cursor is not access.
+    state.readAllowed = false;
+    expect((await app.inject({ method: "GET",
+      url: base + "/resources/courses?limit=1&cursor=" + cursor,
+    })).statusCode).toBe(404);
+  });
+
   it("requires distinct write approval, Origin and versioned CAS", async () => {
     const payload = { id: "course-1", fields: { title_en: "First" } };
     const path = base + "/actions/create-course";
