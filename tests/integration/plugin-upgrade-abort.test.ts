@@ -4,10 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { getDbPool, schema } from "@vibress/database";
-import { DrizzlePluginUpgradePlanRepository } from
-  "../../packages/domains/plugins/src/infrastructure/drizzle-plugin-upgrade-plans";
-import { PluginUpgradePlanError } from
-  "../../packages/domains/plugins/src/application/plugin-upgrade-plan";
+import { DrizzlePluginUpgradePlanRepository, PluginUpgradePlanError } from "@vibress/plugins";
 
 const a = "a".repeat(64);
 const b = "b".repeat(64);
