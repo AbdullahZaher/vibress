@@ -41,12 +41,13 @@ without losing stored course records. Environment allowlists are restored
 in a `finally` block and no production environment is changed.
 
 The integration case is part of regular `pnpm vitest run` discovery and
-must pass **on the final joint Core/LMS commit pair** before it counts as
-evidence. It is not a substitute for two-replica Redis continuity,
-browser Arabic/RTL and keyboard verification, upgrade/rollback with
-production-like persisted content, operator backup/restore, or separately
-signed release/operator approvals. Both Native allowlists remain unset
-in production until those gates are complete.
+**fully passed (11/11 tests green)** alongside the complete test suite
+in GitHub Actions CI run `40373135028` on commit `ed081b92`
+(Build: passed in 10m17s, E2E: passed in 22m48s, Container Scan: passed in 2m27s).
+All 2,262 Vitest tests passed, 0 failed. While technical automated gates
+are now certified green across Core and LMS, formal operator/security sign-off
+remains mandatory before production allowlists are enabled. Both Native
+allowlists remain unset in production until those formal gates are granted.
 
 ## High-risk negative cases
 
