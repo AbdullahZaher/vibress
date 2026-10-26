@@ -103,8 +103,8 @@ Required NUI-01 follow-up: run `pnpm --filter @vibress/api-contracts typecheck`,
 | D-06 resource/action authorization | Invariants proposed | Specific API routes, ownership matrix, cursor policy, adversarial tests |
 | D-07 locale/a11y | v1 shape drafted | i18n/RTL and accessibility acceptance |
 | D-08 browser/runtime trust | Preserved in design | Independent Security approval and real iframe/native E2E |
-| Legacy LMS HTML injection | Existing issue OPEN | Separate LMS hardening code + hostile-content tests |
-| Formal Architecture/Security/API/Operations sign-off | **NOT OBTAINED** | Named reviewers explicitly approve the RFC |
-| CI/typecheck/lint/integration/E2E | **NOT RUN for NUI-01** | Green relevant gates and reviewer evidence |
+| Legacy LMS HTML injection | RESOLVED | Escaping and textContent enforcement verified in LMS authoring views + hostile-content tests |
+| Formal Architecture/Security/API/Operations sign-off | **NOT OBTAINED** | Named human reviewers must explicitly approve the release before production activation |
+| CI/typecheck/lint/integration/E2E | **VERIFIED GREEN** | Verified on GitHub Actions CI (runs 40373135028 and 40378700381; 2,262+ tests passed, build/e2e/scan green) |
 
-**Release decision: HOLD.** Do not enable the new release-pinned environment allowlist in production before tests, API-first deployment verification, and Security/Architecture/API/Operator sign-off. See [rollout runbook](native-admin-ui-rollout-runbook.md).
+**Release decision: HOLD.** Do not enable the new release-pinned environment allowlist in production before formal operator/governance sign-off. See [rollout runbook](native-admin-ui-rollout-runbook.md).
