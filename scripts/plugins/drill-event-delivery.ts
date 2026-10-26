@@ -1,8 +1,8 @@
 /**
  * M1A PG/Redis/BullMQ crash-boundary integration drill on an entirely
  * disposable GitHub-hosted CI runner. Uses the PRODUCTION ledger, relay and
- * admission/identity gate. Dispatch side effects are a counting stub;
- * no unreviewed external plugin module is ever imported.
+ * admission/identity gate. Side effects use a counting stub and disposable
+ * PostgreSQL attempt sink; no external plugin module is ever imported.
  *
  * Docker faults are confined to the namespaced compose.dev.yml project.
  * NOT a release-attestation or exactly-once external side-effect test.
@@ -95,7 +95,21 @@ async function realQueue() {
   if (!queue) throw new Error("PLUGIN_M1A_EVENT_DRILL_QUEUE_NOT_READY");
   return queue;
 }
-async function startConsumer() {
+// A separate committed fixture sink models an external effect that is NOT
+// atomic with the production PostgreSQL receipt finalization.
+async function recordSimulatedSideEffect(id: string): Promise<void> {
+  await getDbPool().query(
+    "INSERT INTO public.m1a_drill_effect_attempts (job_id) VALUES ($1)", [id],
+  );
+}
+async function simulatedSideEffectCount(id: string): Promise<number> {
+  const result = await getDbPool().query<{ total: number }>(
+    "SELECT count(*)::integer AS total FROM public.m1a_drill_effect_attempts WHERE job_id = $1",
+    [id],
+  );
+  return result.rows[0]?.total ?? 0;
+}
+async function startConsumer(effectJobId?: string) {
   if (consumer) throw new Error("PLUGIN_M1A_EVENT_DRILL_CONSUMER_ALREADY_RUNNING");
   consumer = new Worker<PluginWorkerEventJob>(
     QUEUE_NAMES.PLUGIN_EVENTS,
@@ -104,10 +118,17 @@ async function startConsumer() {
         getPlugin: (id) => pluginRepo.findById(id),
         approvedDigests: async () => new Map([[manifestId, digest]]),
         isPublicationEnabled: (id, pub) => publicationStates.isEnabled(id, pub),
-        dispatchEvent: async () => {
+        dispatchEvent: async (_pluginId, _eventName, payload) => {
           handlerCalls++;
           // Simulated transient failure BEFORE an external side effect.
           if (handlerCalls === 1) throw new Error("DRILL_TRANSIENT_PROVIDER_FAILURE");
+          if (effectJobId) {
+            if (typeof payload !== "object" || payload === null ||
+                !("m1aEffectKey" in payload) || payload.m1aEffectKey !== effectJobId) {
+              throw new Error("PLUGIN_M1A_UNEXPECTED_EFFECT_FIXTURE");
+            }
+            await recordSimulatedSideEffect(effectJobId);
+          }
           successfulEffects++;
         },
       },
@@ -123,6 +144,7 @@ async function startConsumer() {
  * BullMQ active job must be recovered by the normal stalled-job mechanism.
  */
 async function runCrashConsumer(): Promise<void> {
+  const afterEffect = process.argv.includes("--crash-after-effect-consumer");
   const expectedJobId = process.env.VIBRESS_M1A_CRASH_JOB_ID;
   const expectedManifestId = process.env.VIBRESS_M1A_CRASH_MANIFEST_ID;
   if (!expectedJobId?.startsWith("plugin-") ||
@@ -141,6 +163,9 @@ async function runCrashConsumer(): Promise<void> {
         approvedDigests: async () => new Map([[expectedManifestId, digest]]),
         isPublicationEnabled: (id, pub) => publicationStates.isEnabled(id, pub),
         dispatchEvent: async () => {
+          // The second crash mode commits a simulated downstream effect
+          // independently of the receipt, then SIGKILL prevents finalization.
+          if (afterEffect) await recordSimulatedSideEffect(expectedJobId);
           // Flush an untrusted-data-free marker before SIGKILL; the process
           // cannot run a finally block, ACK Redis, or finalize PostgreSQL.
           await new Promise<void>((resolve, reject) => {
@@ -161,12 +186,13 @@ async function runCrashConsumer(): Promise<void> {
   await new Promise<void>(() => {});
 }
 
-async function crashDuringAdmittedDispatch(id: string): Promise<void> {
+async function crashDuringAdmittedDispatch(id: string, afterEffect = false): Promise<void> {
   let reachedHandler = false;
   // Spawn the Node process itself, not a pnpm wrapper: its observed
   // SIGKILL must be the signal of the process that held the BullMQ lease.
   const child = spawn(
-    process.execPath, ["--import=tsx", "scripts/plugins/drill-event-delivery.ts", "--crash-consumer"],
+    process.execPath, ["--import=tsx", "scripts/plugins/drill-event-delivery.ts",
+      afterEffect ? "--crash-after-effect-consumer" : "--crash-consumer"],
     {
       cwd: root,
       env: {
@@ -214,6 +240,9 @@ async function main() {
   const pub = selected.rows[0];
   if (!pub) throw new Error("PLUGIN_M1A_EVENT_DRILL_NO_SEEDED_PUBLICATION");
   publicationId = pub.id;
+  // The whole Docker project is disposable, including this simulation table.
+  // This table is not a production schema or a plugin-facing API.
+  await pool.query("CREATE TABLE public.m1a_drill_effect_attempts (job_id text NOT NULL)");
   await pluginRepo.create({
     id: pluginId, manifestId, name: "Disposable Event Transport Drill",
     version: "1.0.0", vibressApiVersion: "1.0.0", entrypoint: "dist/index.mjs",
@@ -381,7 +410,51 @@ async function main() {
   }
   console.info("PLUGIN_M1A_EVENT_STAGE: real SIGKILL of admitted Worker; BullMQ stalled-job recovery and PG finalization");
 
-  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial, release mismatch and SIGKILL stalled-job recovery");
+  // A second real-process SIGKILL occurs AFTER a committed simulated external
+  // effect but BEFORE the original receipt can be finalized. BullMQ must
+  // deliver the SAME job again; a non-idempotent handler runs its effect twice.
+  stage("prepare-post-effect-crash-fixture");
+  await consumer?.close(true);
+  consumer = null;
+  const postEffectEventId = randomUUID();
+  const postEffectId = pluginEventJobId(job(postEffectEventId));
+  const postEffect = job(postEffectEventId, {
+    payload: { marker: "disposable-drill", m1aEffectKey: postEffectId },
+  });
+  if (await pluginEventLedger.admit(postEffect) !== postEffectId) {
+    throw new Error("PLUGIN_M1A_POST_EFFECT_ADMISSION_FAILED");
+  }
+  await ageReceipt(postEffectId);
+  const postEffectClaim = await claim(postEffectId);
+  await relayClaimedPluginEvent(postEffectClaim, pluginEventLedger,
+    (receipt) => publish(receipt.id, receipt.envelope));
+  if (await receiptStatus(postEffect) !== "queued") {
+    throw new Error("PLUGIN_M1A_POST_EFFECT_FIXTURE_NOT_QUEUED");
+  }
+  stage("kill-real-worker-after-committed-side-effect");
+  await crashDuringAdmittedDispatch(postEffectId, true);
+  if (await receiptStatus(postEffect) !== "queued" ||
+      await simulatedSideEffectCount(postEffectId) !== 1) {
+    throw new Error("PLUGIN_M1A_POST_EFFECT_CRASH_BOUNDARY_NOT_PROVEN");
+  }
+  stage("reclaim-post-effect-crash-and-observe-duplicate-effect");
+  await startConsumer(postEffectId);
+  await assertEventually("post-effect crash redelivered and finalized", async () =>
+    await receiptStatus(postEffect) === "executed" &&
+      await simulatedSideEffectCount(postEffectId) === 2, 105_000);
+  if (handlerCalls !== 5 || successfulEffects !== 4 ||
+      (await (await realQueue()).getJob(postEffectId))?.id !== postEffectId ||
+      await simulatedSideEffectCount(postEffectId) !== 2) {
+    throw new Error("PLUGIN_M1A_POST_EFFECT_REDELIVERY_NOT_PROVEN");
+  }
+  await publish(postEffectId, postEffect);
+  await delay(500);
+  if (await simulatedSideEffectCount(postEffectId) !== 2) {
+    throw new Error("PLUGIN_M1A_POST_EFFECT_FINALIZED_JOB_REEXECUTED");
+  }
+  console.info("PLUGIN_M1A_EVENT_STAGE: SIGKILL after committed synthetic effect; same job redelivered, two side-effect attempts, one finalized receipt");
+
+  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: PG/Redis faults, tenant/release fencing, pre-effect and post-effect SIGKILL, stalled-job recovery and proven at-least-once side effects");
 }
 async function executeAndClose(): Promise<void> {
 try {
@@ -418,13 +491,17 @@ try {
       await getDbPool().query("DELETE FROM plugins WHERE id = $1", [pluginId]);
     } catch { process.exitCode = 1; }
   }
+  try {
+    await getDbPool().query("DROP TABLE IF EXISTS public.m1a_drill_effect_attempts");
+  } catch { process.exitCode = 1; }
   await closeDbPool();
   } finally {
     clearTimeout(cleanupDeadline);
   }
 }
 }
-if (process.argv.includes("--crash-consumer")) {
+if (process.argv.includes("--crash-consumer") ||
+    process.argv.includes("--crash-after-effect-consumer")) {
   void runCrashConsumer().catch(() => {
     console.error("PLUGIN_M1A_CHILD_FAILED"); // Static redacted error.
     process.exitCode = 1;

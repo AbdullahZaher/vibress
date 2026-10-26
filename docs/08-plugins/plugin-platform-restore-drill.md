@@ -266,6 +266,17 @@ failed at **test signal observation**, because a `pnpm` wrapper hid the
 real child exit signal. The test harness was corrected to spawn Node
 directly; no authorization, claim or retry assertions were disabled.
 
+A further post-side-effect crash scenario has been authored for the same
+disposable drill (CI verification pending on the new commit). Its child
+commits an independently persisted synthetic effect to a CI-only PostgreSQL
+table **before** SIGKILL, while the original receipt is still `queued`.
+After BullMQ reclaims the same job, the test expects two committed effect
+attempts but just one terminal `executed` receipt. That is deliberate
+proof that at-least-once dispatch alone cannot prevent downstream duplicates.
+Real plugin handlers must use durable idempotency keys or an equivalent
+provider-supported deduplication mechanism. The controlled fixture neither
+imports external plugins nor proves that any external API is idempotent.
+
 A success result here establishes only **bounded fixture behavior on an
 isolated, temporary GitHub runner**. It is not a signed operator plugin
 release, a complete Redis/asset/key backup and restore, evidence of
