@@ -49,3 +49,25 @@ Test old plugin/new Host, old Host/new plugin, Host without allowlist, revoked d
 The Host operator must approve and pin the final signed artifact digest and separately configure `VIBRESS_NATIVE_ADMIN_UI_RELEASES` for Native read and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` for Native writes. No plugin can self-enable these values.
 
 See the [NUI-06 acceptance matrix](native-admin-ui-production-acceptance.md), [Native UI design RFC](native-admin-ui-rfc.md) and [rollout runbook](native-admin-ui-rollout-runbook.md). **Publishing a stable SDK and production enablement are on HOLD pending acceptance.**
+
+## Experimental NUI-05 paired domain workflow
+
+The independent LMS source demonstrates an optional `adminDomainWorkflows` descriptor. It is intentionally inert: it supplies a Host-owned existing Native view ID, exactly one `resourceId`, an existing Admin GET/POST `routeId`, bounded localized labels and input-field maximum lengths. The route ID cannot be a plugin-selected external URL. Only the `create`, `save` and `publish` operation names are supported in the initial constrained form contract.
+
+Host admission validates the Native read view, publication-local `plugins.manage` for both paired routes, the exact POST required field names and types, a typed response, and an approved storage resource containing the referenced fields and a status marker. Domain mutations use `POST /extensions/:pluginId/v1/:routeId`, where the existing plugin handler owns CAS, validation and immutable published-state rules. They **must not** use generic storage update to set a published status.
+
+The workflow is only returned after the operator independently allows the same pinned release in `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES`. Both remain unset by default. The independent LMS code intentionally leaves `adminActions` undefined to block generic LMS storage mutations. A new release digest requires new explicit operator review and approval.
+
+Minimal public contract fragment (illustrative, not a released SDK fixture):
+
+```ts
+adminDomainWorkflows: [{
+  schemaVersion: 1,
+  viewId: "overview", routeId: "courses", resourceId: "approved-course-records",
+  idField: "courseId", versionField: "expectedVersion", operationField: "operation",
+  operations: ["create", "save", "publish"],
+  fields: [{ key: "title_en", label: { en: "English title", ar: "English title" }, maxLength: 180 }],
+}]
+```
+
+A real consumer MUST also declare matching admitted `routes`, `adminViews`, `adminPages`, and `adminResources`, use reviewed translated labels, and pass all Host authorization and compatibility gates. This code fragment does not independently permit writes or constitute a stable SDK release.

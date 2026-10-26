@@ -43,3 +43,14 @@ The [LMS NUI-05 pilot](https://github.com/AbdullahZaher/vibress-lms/blob/docs/na
 Native read and write allowlists both default to unset. Production activation requires explicit Architecture, Security, API, QA and Operator approval, green CI on the final SHA, real PostgreSQL acceptance, two-replica tests, recovery rehearsal, compatible signed LMS artifact and safe rollback. Never rewrite a released migration or reuse an old signing digest.
 
 **Final release status: NOT APPROVED.**
+
+## Added NUI-05 domain authoring negative gates
+
+- No read-only Native allowlist may disclose an LMS publish form; the exact same approved artifact must be independently write-allowlisted.
+- Any unbound `resourceId`, wrong view/POST route, missing required POST fields, read-only or mismatched permission, or unsupported workflow operation must cause denial before form rendering.
+- The Host form must not send generic storage create/update to publish. All create/save/publish requests use the existing paired LMS Admin POST and its Staff/publication-scoped handler.
+- Concurrent, stale or repeated writes must preserve LMS draft version and immutable published course invariants. Explicitly check the LMS scalar `outcome` response, not only HTTP 200.
+- Full bilingual fields should remain escaped data in English/Arabic, with bounded five-row pagination for the pilot. Validate real memory/latency with large content and ensure no cross-publication async leakage or unsaved-draft loss.
+- A hostile persisted title or injected response cannot execute scripts in Admin. Verify old iframe's safe DOM row construction on the final signed LMS artifact.
+
+**Evidence status:** new source-level admission/unit/browser-form fixtures exist; independent real PostgreSQL, multi-replica, signed artifact installation, production-like E2E and operator sign-offs are not yet complete. Therefore this is not release certification.
