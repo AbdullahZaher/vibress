@@ -131,7 +131,8 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         ))}
       </div>
       <NativeExtensionResources pluginId={link.pluginId} viewId={link.viewId}
-        publicationId={state.publicationId} link={link} workflow={state.workflow} />
+        publicationId={state.publicationId} link={link}
+        {...(state.workflow ? { workflow: state.workflow } : {})} />
     </section>
   );
 }

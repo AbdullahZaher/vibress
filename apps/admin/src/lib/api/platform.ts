@@ -184,7 +184,11 @@ export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLi
           (parsed.data.workflow.viewId !== link.viewId || parsed.data.workflow.routeId !== link.routeId))))) {
     throw new Error("Invalid native plugin view response");
   }
-  return parsed.data;
+  if (parsed.data.mode === "legacy") return parsed.data;
+  return {
+    mode: "native", page: parsed.data.page, routeId: parsed.data.routeId,
+    ...(parsed.data.workflow ? { workflow: parsed.data.workflow } : {}),
+  };
 }
 
 /**

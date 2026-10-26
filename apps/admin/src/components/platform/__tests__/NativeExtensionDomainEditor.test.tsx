@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { writeExtensionAdminViewApi } from "../../../lib/api";
 import { getActivePublicationId } from "../../../lib/api/client";
 import { NativeExtensionDomainEditor } from "../NativeExtensionDomainEditor";
+import type { ExtensionNativeDomainWorkflowV1 } from "@vibress/api-contracts";
 
 vi.mock("../../../lib/api", () => ({ writeExtensionAdminViewApi: vi.fn() }));
 vi.mock("../../../lib/api/client", () => ({ getActivePublicationId: vi.fn() }));
@@ -13,11 +14,11 @@ vi.mock("../../../lib/admin-locale", () => ({
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const workflow = {
+const workflow: ExtensionNativeDomainWorkflowV1 = {
   schemaVersion: 1 as const, viewId: "overview", routeId: "courses", resourceId: "course-records",
   idField: "courseId", versionField: "expectedVersion", operationField: "operation",
   fields: [{ key: "title_en", label: { en: "Title", ar: "العنوان" }, maxLength: 180 }],
-  operations: ["create", "save", "publish"] as const,
+  operations: ["create", "save", "publish"],
 };
 const link = {
   pluginId: "lms-course", viewId: "overview", routeId: "courses",
