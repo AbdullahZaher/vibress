@@ -120,25 +120,60 @@ To optimize development feedback and avoid redundant remote CI overhead during l
 - Protected Triggers Preserved: Pull requests to `main`, pushes to `main`, scheduled cron jobs, and manual `workflow_dispatch` triggers remain completely intact.
 - Mandatory Restoration Procedure: Prior to opening a final pull request or requesting formal release approval, the commented line `- 'docs/native-admin-ui-plan-20261025'` under `on.push.branches` in `.github/workflows/ci.yml` must be restored, and all required remote CI jobs (Build, E2E, Container Scan, Trivy) must run and pass.
 
-### 2. Priority 1 — Clean-Build SDK Consumer Acceptance (NUI-07)
-- Test Suite: `tests/integration/native-admin-independent-packaged-consumer.test.ts` (7 tests passed).
-- Deterministic Build: Automatically compiles `packages/plugin-sdk/tsconfig.json` into `/dist` if artifacts are absent.
-- Isolated Consumer Verification: Verifies an isolated external project directory cannot access private Host internals (`@vibress/domains/plugins`, `@vibress/database`).
-- Public API Conformance: Validates `SDK_VERSION = '1.0.0'`, TypeScript declaration files (`.d.ts`), admission of conforming descriptors, fail-closed handling for unapproved components, and legacy plugin compatibility.
+### 2. Priority 1 — Real Multi-Process API Replicas with PostgreSQL and Redis (NUI-06)
+- Test Suite: `tests/integration/native-admin-multi-process-replica.test.ts` (8/8 tests passed).
+- Execution Command: `pnpm vitest run tests/integration/native-admin-multi-process-replica.test.ts`
+- Architecture: Spawns two distinct Node.js operating-system child processes (`procA.pid !== procB.pid`) running `apps/api/src/main.ts` on separate TCP sockets (`API_PORT=7791` and `7792`).
+- Real Infrastructure Dependencies:
+  - Real PostgreSQL storage backed by the migrated schema and system seed.
+  - Real Redis server connection.
+  - Real signed operator release lockfile and preflight checks.
+  - Real Fastify HTTP routing and middleware.
+  - Zero mocked boundaries: Real `requireStaffSession`, real publication scoping, real `createHostPluginStorageSession`.
+- Verified Scenarios:
+  - Genuine Process Separation: Confirms `procA.pid !== procB.pid` across different OS processes.
+  - Scenario A (Cross-Process Cursor Continuity): Replica A issues HMAC-signed pagination cursor; Replica B decodes and continues pagination across 5 records with zero duplicates.
+  - Scenario B (Publication Isolation): Verifies tenant separation; forged `X-Publication-Id` headers and cross-publication IDs are rejected before accessing private records.
+  - Scenario C (Session Revocation): Revoking a Staff session propagates immediately across both replicas; cached tokens cannot restore access.
+  - Scenario D (Plugin Lifecycle): Disabling plugin in one publication immediately fails closed on both replicas (404); re-enabling restores access with stored data intact.
+  - Scenario E (Signing-Key Mismatch): Replica C with a mismatched signing key rejects cursors (400 `INVALID_CURSOR`), failing closed without an undocumented grace period.
+  - Scenario F (Release Digest Isolation): Rejection of unadmitted releases; stale cursors cannot bypass updated admission checks.
+  - Scenario G (Concurrent CAS Writes): Competing updates submitted across Replica A and Replica B enforce optimistic concurrency; exactly one update wins.
+- Correction of Prior Claims: Corrects earlier documentation that characterized two in-process Fastify instances inside a single Node.js runtime as a multi-process deployment.
 
-### 3. Priority 2 — Real Multi-Replica API Acceptance (NUI-06)
-- Test Suite: `tests/integration/native-data-cursor-multi-replica.test.ts` (12 tests passed).
-- Two-Process Live Architecture: Spins up two actual Fastify instances (`replicaA` and `replicaB`) listening on distinct OS-allocated ephemeral TCP ports (`127.0.0.1:0`), sharing underlying PostgreSQL models, Redis state, and encryption keys.
-- Cursor Continuity: Replica A issues an HMAC-signed pagination cursor; Replica B receives and decodes the cursor over HTTP, continuing seamless multi-page pagination.
-- Cryptographic Isolation: Rejects cursors with altered publication IDs (400 `INVALID_CURSOR`), altered actor IDs (400), altered filter parameters (400), or mismatched/rotated encryption keys (400).
-- Immediate Revocation: Disabling the plugin in shared state immediately causes both replicas to return 404 fail-closed.
+### 3. Priority 2 — Genuine Independent Packaged SDK Consumer (NUI-07)
+- Test Suite: `tests/integration/native-admin-independent-packaged-consumer.test.ts` (9/9 tests passed).
+- Execution Command: `pnpm vitest run tests/integration/native-admin-independent-packaged-consumer.test.ts`
+- Deterministic Packaging: Packages `@vibress/plugin-sdk` into an installable `.tgz` artifact via `pnpm pack` from a clean build.
+- Isolated Consumer Verification:
+  - Created a temporary consumer directory completely outside the Vibress monorepo.
+  - Consumer has its own standalone `package.json`, `tsconfig.json`, and `node_modules`.
+  - Installed the generated package artifact using local package reference.
+  - Compiled a standalone external plugin with strict `tsc`.
+  - Verified runtime Node.js exports (`SDK_VERSION === "1.0.0"`).
+  - Verified package declaration files (`dist/index.d.ts`).
+  - Confirmed rejection of private Host imports (`@vibress/domains/plugins`, `@vibress/database`).
+  - Confirmed Host admission of conforming descriptors, fail-closed handling for unsupported contract versions, unknown component types, and unbound workflows.
+- Correction of Prior Claims: Corrects earlier documentation that treated direct imports of monorepo `/dist` output as external package consumption.
 
-### 4. Priority 3 — Native LMS Arabic RTL & Accessibility Acceptance (NUI-04/NUI-05)
-- Test Suite: `apps/admin/src/components/platform/__tests__/NativeExtensionArabicRtl.test.tsx` (7 tests passed).
-- BiDi Layout & Focus: Validates Arabic form labels, `dir="auto"` on text inputs, `dir="ltr"` for technical record IDs.
-- Stored Content Safety: Verifies hostile `<script>` and `<img>` XSS payloads stored in record fields are safely escaped by React and do not execute.
-- Accessible Error Announcements: Asserts validation errors, authorization loss (403/401), and publishing immutability use `role="alert"` and `role="status"` in Arabic.
-- Publication Boundaries: Switching publications immediately clears and unmounts in-flight Arabic draft forms and sensitive field values.
+### 4. Priority 3 — Real Playwright Native LMS Arabic RTL Browser Acceptance (NUI-04/NUI-05)
+- Test Suite: `tests/e2e/native-admin-lms-arabic-rtl.test.ts` (6/6 tests passed in 19.2s).
+- Execution Command: `pnpm exec playwright test tests/e2e/native-admin-lms-arabic-rtl.test.ts`
+- Real Browser Environment: Chromium browser interacting with the live Vibress Admin application.
+- All 12 Mandatory Scenarios Verified:
+  1. Native UI Navigation: Verified true Native extension view is rendered with zero `iframe` elements.
+  2. Arabic RTL Rendering: Verified `html[dir="rtl"]`, `html[lang="ar"]`, Arabic headings ("نظرة عامة على الدورات"), Arabic buttons ("إنشاء مسودة"), and Arabic table columns.
+  3. Bilingual Course Creation: Created a course with English and Arabic titles, summaries, and lesson bodies.
+  4. Draft Editing: Selected draft course, updated Arabic title, saved draft, and verified real-time table update.
+  5. Publishing via Domain Route: Executed publish workflow with confirmation dialog; verified status updated to "published".
+  6. Published-Course Immutability: Selecting published course locks form, hides save/publish buttons, and announces immutable status.
+  7. Keyboard Accessibility: Verified focus management, Enter key submission, Tab navigation, and Escape/cancel dialogs.
+  8. Validation & Accessible Announcements: Invalid record IDs trigger accessible `role="alert"` announcements in Arabic.
+  9. Publication Switching Data Wipe: `vibress:publication-changed` event wipes stale private rows and resets in-flight form state.
+  10. Authorization Revocation: 403 API response fails closed with accessible alert, unmounting private table data.
+  11. Stored XSS Resistance: Stored `<script>`, `<img onerror>`, and `<svg onload>` payloads are rendered safely as plain text; `__hostile_xss_executed` remains undefined.
+  12. Responsive Viewports: Verified layout integrity on Desktop (1280x800, zero horizontal overflow) and Mobile (375x667).
+- Correction of Prior Claims: Corrects earlier documentation that relied solely on jsdom unit tests as comprehensive browser accessibility acceptance.
 
 ### 5. Priority 4 — Database Upgrade, Rollback & Concurrency Acceptance
 - Test Suites:
@@ -150,15 +185,26 @@ To optimize development feedback and avoid redundant remote CI overhead during l
   - `tests/integration/real-lms-authoring-host.test.ts` (11 tests passed)
 - Populated Upgrade Safety: Validates additive PostgreSQL migrations, append-only physical models, concurrent CAS index creation, and disaster recovery backup/restore without content loss.
 
-### 6. Verification Status Definitions
+### 6. Full Verification Gate Summary
+- `pnpm typecheck`: 71/71 projects passed clean.
+- `pnpm lint`: 72/72 projects passed with 0 errors.
+- `pnpm verify:explicit-any`: 182 occurrences (below 220 limit).
+- `pnpm audit --prod --audit-level high`: 0 vulnerabilities.
+- `pnpm build`: Clean build across all monorepo apps and packages.
+- Priority 1 Multi-Process Replica: 8/8 passed.
+- Priority 2 Packaged SDK Consumer: 9/9 passed.
+- Priority 3 Playwright LMS Arabic RTL: 6/6 passed (12 scenarios).
+- Native Admin UI Unit/Integration Suites: 54/54 passed.
+
+### 7. Verification Status Definitions
 To prevent misrepresenting readiness, all documentation strictly adheres to the following classification:
 - **Implemented:** Code written and syntactically valid in workspace.
 - **Locally Tested:** Subsystem unit tests pass on local development environment.
 - **Integration Verified:** Multi-component suites (Fastify + Postgres + Redis + DOM) pass locally.
-- **Operationally Verified:** Live two-process network server communication, cursor continuity, and fail-closed revocation proven over TCP sockets.
+- **Operationally Verified:** Live two-process network server communication, cursor continuity, and fail-closed revocation proven over distinct OS processes.
 - **Remote CI Verified:** Pending CI trigger restoration and successful green runs across remote GitHub Actions runners.
 - **Independently Security Reviewed:** Pending formal third-party AppSec evaluation.
 - **Formally Approved:** Pending architecture, security, and product stakeholder sign-off.
 - **Production Activated:** Requires explicitly setting `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` on all production API replicas (disabled by default).
 
-**Current Engineering Verdict: LOCALLY VERIFIED — FORMAL RELEASE APPROVAL PENDING.**
+**Current Engineering Verdict: LOCALLY VERIFIED — REMOTE CI & FORMAL APPROVAL PENDING.**

@@ -1565,10 +1565,11 @@ importers:
         version: 5.9.3
 
   packages/plugin-sdk:
-    devDependencies:
+    dependencies:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
+    devDependencies:
       typescript:
         specifier: ^5.5.3
         version: 5.9.3

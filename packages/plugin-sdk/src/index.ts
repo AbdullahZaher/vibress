@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import type { PluginNativeAdminPageV1 } from "./native-admin-ui";
 import type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
 export type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
@@ -544,7 +544,7 @@ export function validateManifest(manifest: unknown): PluginManifest {
  * Verifies SHA-256 cryptographic checksum of plugin code or package artifact.
  */
 export function verifyPluginChecksum(
-  data: Buffer | string,
+  data: Uint8Array | string,
   expectedSha256: string,
 ): boolean {
   const actualHash = crypto
@@ -562,7 +562,7 @@ export async function executeWithTimeout<T>(
   fn: () => Promise<T> | T,
   timeoutMs = 5000,
 ): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       reject(new Error(`Plugin execution exceeded timeout of ${timeoutMs}ms`));
