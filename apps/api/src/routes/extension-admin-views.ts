@@ -14,6 +14,7 @@ import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions"
 import { appLogger } from "../observability";
 import { admitNativeAdminPage } from "../plugins/native-admin-registry";
 import { admitNativeDomainWorkflow } from "../plugins/native-domain-workflow";
+import { admitNativeDataModel } from "../plugins/native-data-registry";
 
 function reject(reply: FastifyReply, req: FastifyRequest, code: string, status: number) {
   return reply.status(status).send({
@@ -124,7 +125,16 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
             const storage = await pluginsService.resolveExtensionStorageBinding(
               pluginId, publicationId, "extension.storage.write",
             );
-            if (storage?.publicationId === publicationId) workflow = admitted.workflow;
+            if (storage?.publicationId === publicationId) {
+              const source = module.adminResources?.find(
+                (item) => item.id === admitted.workflow.resourceId &&
+                  item.viewId === admitted.workflow.viewId,
+              );
+              if (!source || !admitNativeDataModel(source, storage.models)) {
+                return reject(reply, req, "EXTENSION_INVALID_WORKFLOW", 503);
+              }
+              workflow = admitted.workflow;
+            }
           }
         }
         return reply.status(200).send(ExtensionNativeAdminResponseV1Schema.parse({
