@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import type { ExtensionNativeDataDiscoveryV1, ExtensionNativeDataPageV1 } from "@vibress/api-contracts";
+import type { ExtensionNativeDataDiscoveryV1, ExtensionNativeDataPageV1, ExtensionNativeDomainWorkflowV1 } from "@vibress/api-contracts";
+import type { AdminExtensionViewLink } from "../../lib/api";
 import { ApiError, readNativeExtensionDataRegistryApi, readNativeExtensionResourceApi } from "../../lib/api";
 import { getActivePublicationId } from "../../lib/api/client";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { NativeExtensionActionForm } from "./NativeExtensionActionForm";
+import { NativeExtensionDomainEditor } from "./NativeExtensionDomainEditor";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 type Resource = ExtensionNativeDataDiscoveryV1["resources"][number];
@@ -19,8 +21,9 @@ const REFRESH_MS = 30_000;
  * NUI-04 Host-only inert resource table. Unbound resources remain invisible.
  * All reads are independently authorized on the Host with publication scope.
  */
-export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
+export function NativeExtensionResources({ pluginId, viewId, publicationId, workflow, link }: {
   pluginId: string; viewId: string; publicationId: string | null;
+  workflow?: ExtensionNativeDomainWorkflowV1; link: AdminExtensionViewLink;
 }) {
   const { tr } = useAdminLocale();
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -71,7 +74,7 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
     setFetching(true);
     setError("");
     void readNativeExtensionResourceApi(pluginId, resource.id, {
-      limit: 20,
+      limit: workflow ? 5 : 20,
       ...(cursor ? { cursor } : {}),
       ...(filter ? { filterField: filter.field, filterValue: filter.term } : {}),
     }).then((data) => {
@@ -96,6 +99,8 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
   if (!resource) return null;
   const current = page?.resourceId === resource.id ? page.data : null;
   const prefix = "plugin-data-" + pluginId + "-" + resource.id;
+  const visibleFields = workflow ? resource.fields.slice(0, 3) : resource.fields;
+  const canEdit = Boolean(workflow) || actions.some((a) => a.resourceId === resource.id && a.operation === "update");
 
   return (
     <section aria-label={tr("Plugin records")} className="space-y-3 rounded-xl border border-border p-4">
@@ -143,27 +148,38 @@ export function NativeExtensionResources({ pluginId, viewId, publicationId }: {
       )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {fetching && <p role="status" className="text-sm">{tr("Loading plugin records...")}</p>}
-      <NativeExtensionActionForm pluginId={pluginId} publicationId={publicationId}
-        resource={resource} actions={actions} selected={selected}
-        onClear={() => setSelected(null)}
-        onSaved={() => { setHistory([undefined]); setRevision((value) => value + 1); }} />
+      {workflow ? (
+        <NativeExtensionDomainEditor link={link} workflow={workflow}
+          publicationId={publicationId} selected={selected}
+          onClear={() => setSelected(null)}
+          onSaved={() => { setSelected(null); setHistory([undefined]); setRevision((value) => value + 1); }} />
+      ) : (
+        <NativeExtensionActionForm pluginId={pluginId} publicationId={publicationId}
+          resource={resource} actions={actions} selected={selected}
+          onClear={() => setSelected(null)}
+          onSaved={() => { setHistory([undefined]); setRevision((value) => value + 1); }} />
+      )}
       {current && <>
         <Table>
           <TableHeader><TableRow>
             <TableHead scope="col">{tr("Record ID")}</TableHead>
-            {resource.fields.map((key) => <TableHead key={key} scope="col" dir="auto">{key}</TableHead>)}
-            {actions.some((action) => action.resourceId === resource.id && action.operation === "update") &&
+            {visibleFields.map((key) => <TableHead key={key} scope="col" dir="auto">{key}</TableHead>)}
+            {canEdit &&
               <TableHead scope="col">{tr("Actions")}</TableHead>}
           </TableRow></TableHeader>
           <TableBody>{current.items.map((item) => <TableRow key={item.id}>
             <TableCell dir="auto">{item.id}</TableCell>
-            {resource.fields.map((key) => <TableCell key={key} dir="auto"
+            {visibleFields.map((key) => <TableCell key={key} dir="auto"
               className="max-w-xs break-words">{item.fields[key] == null
                 ? "—" : String(item.fields[key])}</TableCell>)}
-            {actions.some((action) => action.resourceId === resource.id && action.operation === "update") &&
+            {canEdit &&
               <TableCell><Button type="button" size="xs" variant="outline"
                 aria-label={tr("Edit record") + ": " + item.id}
-                onClick={() => setSelected(item)}>{tr("Edit record")}</Button></TableCell>}
+                onClick={() => {
+                  if (selected && selected.id !== item.id &&
+                      !window.confirm(tr("Discard unsaved plugin changes?"))) return;
+                  setSelected(item);
+                }}>{tr("Edit record")}</Button></TableCell>}
           </TableRow>)}</TableBody>
         </Table>
         {current.items.length === 0 && <p className="text-sm text-muted-foreground">{tr("No plugin records.")}</p>}
