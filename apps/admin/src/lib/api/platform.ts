@@ -170,7 +170,8 @@ export interface AdminExtensionViewLink {
 /** Strictly Host-owned native metadata. A declaration alone is not authorization. */
 export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLink): Promise<
   | { mode: "legacy" }
-  | { mode: "native"; page: ExtensionNativeAdminPageV1; routeId: string }
+  | { mode: "native"; page: ExtensionNativeAdminPageV1; routeId: string;
+      workflow?: import("@vibress/api-contracts").ExtensionNativeDomainWorkflowV1 }
 > {
   const response: unknown = await apiRequest(
     `/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/native`,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ExtensionNativeAdminPageV1 } from "@vibress/api-contracts";
+import type { ExtensionNativeAdminPageV1, ExtensionNativeDomainWorkflowV1 } from "@vibress/api-contracts";
 import {
   type AdminExtensionViewLink,
   readExtensionAdminViewApi,
@@ -18,7 +18,7 @@ type NativeState =
   | { kind: "error" }
   | { kind: "native"; page: ExtensionNativeAdminPageV1;
       publicationId: string | null; pluginId: string; viewId: string; routeId: string;
-      data: Record<string, Scalar> };
+      data: Record<string, Scalar>; workflow?: ExtensionNativeDomainWorkflowV1 };
 
 const RECHECK_MS = 30_000;
 
@@ -66,6 +66,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         setState({
           kind: "native", page: response.page, publicationId, data,
           pluginId: link.pluginId, viewId: link.viewId, routeId: link.routeId,
+          ...(response.workflow ? { workflow: response.workflow } : {}),
         });
       } catch {
         if (!cancelled) setState({ kind: "error" });
@@ -130,7 +131,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         ))}
       </div>
       <NativeExtensionResources pluginId={link.pluginId} viewId={link.viewId}
-        publicationId={state.publicationId} />
+        publicationId={state.publicationId} link={link} workflow={state.workflow} />
     </section>
   );
 }
