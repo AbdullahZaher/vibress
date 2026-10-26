@@ -32,6 +32,7 @@ export function admitNativeDomainWorkflow(module: PluginModule, viewId: string):
           ...workflow.fields.map((field) => field.key)]
           .every((name) => body.required?.includes(name)) ||
         response.fields.outcome !== "string" ||
+        response.fields[workflow.idField] !== "string" ||
         response.fields.version !== "number" || response.fields.status !== "string") {
       return { kind: "invalid" };
     }
