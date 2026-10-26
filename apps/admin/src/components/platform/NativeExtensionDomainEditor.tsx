@@ -13,10 +13,11 @@ const COURSE_ID = /^[a-z][a-z0-9-]{1,63}$/;
 /** An inert form bound to an existing Host-authorized Admin POST.
  * Business invariants and publication isolation remain in the plugin handler.
  * Never substitute the generic storage mutation API for a domain workflow. */
-export function NativeExtensionDomainEditor({ link, workflow, publicationId, selected, onClear, onSaved }: {
+export function NativeExtensionDomainEditor({ link, workflow, publicationId, selected, onClear, onSaved, onDirtyChange }: {
   link: AdminExtensionViewLink; workflow: ExtensionNativeDomainWorkflowV1;
   publicationId: string | null; selected: Item | null;
   onClear: () => void; onSaved: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { tr, locale } = useAdminLocale();
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -24,6 +25,9 @@ export function NativeExtensionDomainEditor({ link, workflow, publicationId, sel
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Fingerprint stable descriptors: a 30-second Host revalidation must never
+  // silently replace Staff edits with a new but equivalent JSON object.
+  const descriptorIdentity = JSON.stringify(workflow);
 
   useEffect(() => {
     setSaving(false); setError(""); setNotice("");
@@ -35,9 +39,10 @@ export function NativeExtensionDomainEditor({ link, workflow, publicationId, sel
     }
     const next: Draft = { kind: "edit", id: selected.id, version: selected.version, fields };
     setDraft(next); setInitial(next);
-  }, [link.pluginId, link.viewId, publicationId, selected?.id, selected?.version, workflow]);
+  }, [link.pluginId, link.viewId, publicationId, selected?.id, selected?.version, descriptorIdentity]);
   const dirty = !!draft && !!initial && (draft.id !== initial.id ||
     JSON.stringify(draft.fields) !== JSON.stringify(initial.fields));
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
     if (!dirty) return;
     const handler = (event: BeforeUnloadEvent) => {

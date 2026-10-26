@@ -66,6 +66,7 @@ const translations: Record<string, string> = {
   "Publish": "نشر",
   "Published items cannot be edited.": "لا يمكن تعديل العناصر المنشورة.",
   "Save your changes before publishing.": "احفظ تعديلاتك قبل النشر.",
+  "Discard unsaved plugin changes?": "هل تريد تجاهل تغييرات الإضافة غير المحفوظة؟",
   "Confirm publish this record?": "هل تريد نشر هذا السجل؟",
   "Confirm saving this draft?": "هل تريد تأكيد حفظ هذه المسودة؟",
   "Workflow action rejected.": "تم رفض العملية.",
