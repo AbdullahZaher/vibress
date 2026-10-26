@@ -108,6 +108,30 @@ describe("NUI-05 Host domain editor", () => {
     expect(onSaved).toHaveBeenCalledOnce();
   });
 
+  it("does not impose LMS-specific slug rules on unrelated plugin records", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(writeExtensionAdminViewApi).mockResolvedValue({
+      outcome: "created", courseId: "9_sample", version: 1, status: "draft",
+    });
+    await render();
+    await act(async () => { element.querySelector<HTMLButtonElement>("button")?.click(); });
+    const id = element.querySelector<HTMLInputElement>("input[id$='-id']");
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      if (id && setter) setter.call(id, "9_sample");
+      id?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      element.querySelector("form")?.dispatchEvent(new Event("submit", {
+        bubbles: true, cancelable: true,
+      }));
+    });
+    expect(writeExtensionAdminViewApi).toHaveBeenCalledWith(link, {
+      courseId: "9_sample", expectedVersion: 0,
+      operation: "create", title_en: "",
+    });
+  });
+
   it("uses the persisted version for save without publishing the draft", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(writeExtensionAdminViewApi).mockResolvedValue({

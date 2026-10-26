@@ -8,7 +8,8 @@ import { Input } from "../ui/input";
 
 type Item = ExtensionNativeDataPageV1["items"][number];
 type Draft = { kind: "create" | "edit"; id: string; version: number; fields: Record<string, string> };
-const COURSE_ID = /^[a-z][a-z0-9-]{1,63}$/;
+// Match the bounded Host record ID contract; domain-specific rules remain server-side.
+const RECORD_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 /** An inert form bound to an existing Host-authorized Admin POST.
  * Business invariants and publication isolation remain in the plugin handler.
@@ -60,7 +61,7 @@ export function NativeExtensionDomainEditor({ link, workflow, publicationId, sel
   async function submit(operation: "create" | "save" | "publish") {
     if (!draft || saving || getActivePublicationId() !== publicationId ||
         !workflow.operations.includes(operation) || workflow.routeId !== link.routeId) return;
-    if (!COURSE_ID.test(draft.id) ||
+    if (!RECORD_ID.test(draft.id) ||
         (operation === "create" ? draft.kind !== "create" : draft.kind !== "edit")) {
       setError(tr("Invalid plugin record data.")); return;
     }
@@ -94,7 +95,7 @@ export function NativeExtensionDomainEditor({ link, workflow, publicationId, sel
       }
       close();
       setNotice(operation === "publish"
-        ? tr("Course published successfully.") : tr("Draft saved successfully."));
+        ? tr("Record published successfully.") : tr("Draft saved successfully."));
       onSaved();
     } catch {
       if (getActivePublicationId() === publicationId) setError(tr("Workflow action failed."));

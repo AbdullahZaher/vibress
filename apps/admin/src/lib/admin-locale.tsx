@@ -73,6 +73,7 @@ const translations: Record<string, string> = {
   "Workflow action failed.": "تعذّر تنفيذ العملية.",
   "Draft saved successfully.": "تم حفظ المسودة بنجاح.",
   "Course published successfully.": "تم نشر الدورة بنجاح.",
+  "Record published successfully.": "تم نشر السجل بنجاح.",
   "Create record": "إنشاء سجل",
   "Edit record": "تعديل السجل",
   "Save plugin record": "حفظ سجل الإضافة",
