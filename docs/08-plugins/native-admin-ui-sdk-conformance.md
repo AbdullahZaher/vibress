@@ -1,6 +1,6 @@
 # NUI-07: Native Extension SDK Conformance (Experimental)
 
-The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. New optional `adminPages`, `adminResources`, `adminActions` and `adminDomainWorkflows` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
+The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. The repository now includes a **source-level independent SDK consumer conformance fixture** at `tests/integration/native-admin-independent-consumer.test.ts`. It compiles an inert example against public SDK exports and checks Host admission from test code. This fixture is **not** a separately published or signed extension and cannot establish deployed multi-version compatibility on its own. New optional `adminPages`, `adminResources`, `adminActions` and `adminDomainWorkflows` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
 
 ## Bounded read-only example
 

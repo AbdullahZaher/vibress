@@ -54,3 +54,11 @@ Native read and write allowlists both default to unset. Production activation re
 - A hostile persisted title or injected response cannot execute scripts in Admin. Verify old iframe's safe DOM row construction on the final signed LMS artifact.
 
 **Evidence status:** new source-level admission/unit/browser-form fixtures exist; independent real PostgreSQL, multi-replica, signed artifact installation, production-like E2E and operator sign-offs are not yet complete. Therefore this is not release certification.
+
+## NUI-07 experimental consumer evidence
+
+`tests/integration/native-admin-independent-consumer.test.ts` covers a standalone TypeScript `PluginModule` fixture using public SDK types, affirmative Host admission, legacy-module compatibility, and rejection of unbound Native workflow metadata. It is included in ordinary Vitest discovery.
+
+**Limitations:** this is a source fixture inside the Host monorepo, not an independent installed release. Before a stable SDK is published, the final packaged SDK must compile in a separate repository against a pinned Host compatibility range, be admitted from an operator-approved immutable artifact, and pass fresh/upgrade/rollback tests. No consumer support guarantee or production sign-off follows from adding this test.
+
+The member portal sign-in redirect regression identified in the latest CI has a separate scoped fix and negative tests at `apps/portal/src/lib/return-to.test.ts`; full E2E on that final commit must pass before considering this branch mergeable.
