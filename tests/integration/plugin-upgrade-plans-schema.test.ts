@@ -24,7 +24,7 @@ describe("0046 staged plugin upgrade history migration", () => {
         "INSERT INTO plugins(id) VALUES ('plug-a'), ('plug-b');",
       );
       const sql = readFileSync(
-        resolve(process.cwd(), "packages/database/migrations/0046_plugin_upgrade_plans.sql"),
+        resolve(process.cwd(), "packages/database/migrations/0047_plugin_upgrade_plans.sql"),
         "utf8",
       );
       await client.query(sql);

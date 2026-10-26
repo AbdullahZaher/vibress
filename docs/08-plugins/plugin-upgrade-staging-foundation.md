@@ -28,7 +28,7 @@ presence does not confer runtime authority or implement phase transitions.
 
 ## Upgrade and rollback
 
-Migration `0046_plugin_upgrade_plans.sql` is additive, empty on upgrade
+Migration `0047_plugin_upgrade_plans.sql` is additive, empty on upgrade
 and does not change existing publication/content/plugin state. It adds a
 foreign-key-protected plan history, a unique index limiting concurrent active
 plans per plugin and SHA-256/check constraints. The prior migrations must
