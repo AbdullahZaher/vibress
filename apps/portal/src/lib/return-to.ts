@@ -87,7 +87,7 @@ export function captureReturnTo(): void {
   }
 }
 
-/** Where to go after successful sign-in: the original page, or the home page. */
+/** Where to go after sign-in: a verified public destination or the member account. */
 export function consumeReturnTo(): string {
   try {
     const value = localStorage.getItem(KEY);
@@ -97,5 +97,7 @@ export function consumeReturnTo(): string {
   } catch {
     // ignore
   }
-  return "/";
+  // The default post-verification destination is the member portal, not the
+  // public homepage. This constant is Host-owned, not untrusted return input.
+  return "/portal/#/account";
 }
