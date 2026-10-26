@@ -7,7 +7,7 @@
  * Docker faults are confined to the namespaced compose.dev.yml project.
  * NOT a release-attestation or exactly-once external side-effect test.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -116,6 +116,86 @@ async function startConsumer() {
   );
   await consumer.waitUntilReady();
 }
+/**
+ * Real OS-process termination at the admitted handler boundary. This child
+ * runs the production PostgreSQL admission/release/tenant gate, then dies
+ * before any external side effect or durable finalization. Its orphaned
+ * BullMQ active job must be recovered by the normal stalled-job mechanism.
+ */
+async function runCrashConsumer(): Promise<void> {
+  const expectedJobId = process.env.VIBRESS_M1A_CRASH_JOB_ID;
+  const expectedManifestId = process.env.VIBRESS_M1A_CRASH_MANIFEST_ID;
+  if (!expectedJobId?.startsWith("plugin-") ||
+      !/^[0-9a-f]{64}$/.test(expectedJobId.slice(7)) ||
+      !expectedManifestId?.startsWith("event-drill-")) {
+    throw new Error("PLUGIN_M1A_INVALID_CRASH_CONSUMER_CONFIG");
+  }
+  const worker = new Worker<PluginWorkerEventJob>(
+    QUEUE_NAMES.PLUGIN_EVENTS,
+    async (queued) => {
+      if (queued.id !== expectedJobId) {
+        throw new Error("PLUGIN_M1A_CRASH_CONSUMER_UNEXPECTED_JOB");
+      }
+      return processAdmittedPluginEvent(queued.data, queued.id, pluginEventLedger, {
+        getPlugin: (id) => pluginRepo.findById(id),
+        approvedDigests: async () => new Map([[expectedManifestId, digest]]),
+        isPublicationEnabled: (id, pub) => publicationStates.isEnabled(id, pub),
+        dispatchEvent: async () => {
+          // Flush an untrusted-data-free marker before SIGKILL; the process
+          // cannot run a finally block, ACK Redis, or finalize PostgreSQL.
+          await new Promise<void>((resolve) => {
+            process.stdout.write("PLUGIN_M1A_CHILD_HANDLER_ENTERED\\n", resolve);
+          });
+          process.kill(process.pid, "SIGKILL");
+          await new Promise<void>(() => {});
+        },
+      });
+    },
+    { connection: getBullMqRedisConnection(), concurrency: 1 },
+  );
+  await worker.waitUntilReady();
+  // A healthy worker must stay alive until its admitted handler is reached.
+  await new Promise<void>(() => {});
+}
+
+async function crashDuringAdmittedDispatch(id: string): Promise<void> {
+  let reachedHandler = false;
+  const child = spawn(
+    "pnpm", ["exec", "tsx", "scripts/plugins/drill-event-delivery.ts", "--crash-consumer"],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        VIBRESS_M1A_CRASH_JOB_ID: id,
+        VIBRESS_M1A_CRASH_MANIFEST_ID: manifestId,
+      },
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
+  child.stdout?.setEncoding("utf8");
+  child.stdout?.on("data", (text: string) => {
+    if (text.includes("PLUGIN_M1A_CHILD_HANDLER_ENTERED")) reachedHandler = true;
+  });
+  const signal = await new Promise<string | null>((resolveSignal, reject) => {
+    const deadline = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("PLUGIN_M1A_CRASH_CONSUMER_TIMEOUT"));
+    }, 30_000);
+    child.once("error", () => {
+      clearTimeout(deadline);
+      reject(new Error("PLUGIN_M1A_CRASH_CONSUMER_START_FAILED"));
+    });
+    // 'close' waits until stdout is drained, unlike 'exit'.
+    child.once("close", (_code, exitSignal) => {
+      clearTimeout(deadline);
+      resolveSignal(exitSignal);
+    });
+  });
+  if (signal !== "SIGKILL" || !reachedHandler) {
+    throw new Error("PLUGIN_M1A_CRASH_CONSUMER_DID_NOT_DIE_IN_HANDLER");
+  }
+}
+
 async function publish(id: string, item: PluginWorkerEventJob) {
   const q = await realQueue();
   await q.add("event", item, {
@@ -262,7 +342,41 @@ async function main() {
     throw new Error("PLUGIN_M1A_EVENT_DRILL_RELEASE_MISMATCH_EXECUTED");
   }
 
-  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial and release mismatch");
+  // Kill an ENTIRE processing OS process after authorization but before
+  // acknowledging/finalizing. On restart, BullMQ must reclaim the stalled
+  // active job (not invent another PostgreSQL admission) and retry it.
+  // The controlled handler has NO external side effect before SIGKILL.
+  stage("prepare-process-crash-fixture");
+  await consumer?.close(true);
+  consumer = null;
+  const interrupted = job();
+  const interruptedId = await pluginEventLedger.admit(interrupted);
+  await ageReceipt(interruptedId);
+  const admittedClaim = await claim(interruptedId);
+  await relayClaimedPluginEvent(admittedClaim, pluginEventLedger,
+    (receipt) => publish(receipt.id, receipt.envelope));
+  if (await receiptStatus(interrupted) !== "queued") {
+    throw new Error("PLUGIN_M1A_CRASH_FIXTURE_NOT_QUEUED");
+  }
+  stage("kill-real-worker-in-admitted-handler");
+  await crashDuringAdmittedDispatch(interruptedId);
+  if (await receiptStatus(interrupted) !== "queued") {
+    throw new Error("PLUGIN_M1A_WORKER_CRASH_LOST_DURABLE_RECEIPT");
+  }
+  stage("restart-worker-and-reclaim-stalled-bullmq-job");
+  await startConsumer();
+  await assertEventually("stalled job redelivered and receipt finalized", async () =>
+    await receiptStatus(interrupted) === "executed" && successfulEffects === 3,
+  105_000);
+  if (successfulEffects !== 3 || handlerCalls !== 4) {
+    throw new Error("PLUGIN_M1A_WORKER_CRASH_UNSAFE_REDELIVERY");
+  }
+  if ((await (await realQueue()).getJob(interruptedId))?.id !== interruptedId) {
+    throw new Error("PLUGIN_M1A_WORKER_CRASH_REDIS_JOB_LOST");
+  }
+  console.info("PLUGIN_M1A_EVENT_STAGE: real SIGKILL of admitted Worker; BullMQ stalled-job recovery and PG finalization");
+
+  console.info("PLUGIN_M1A_EVENT_DELIVERY_PASSED: real PG admission, Redis reclaim, BullMQ retry/de-dup, PG ack-outage replay, tenant denial, release mismatch and SIGKILL stalled-job recovery");
 }
 async function executeAndClose(): Promise<void> {
 try {
@@ -305,7 +419,14 @@ try {
   }
 }
 }
-void executeAndClose().catch(() => {
-  console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: cleanup incomplete");
-  process.exitCode = 1;
-});
+if (process.argv.includes("--crash-consumer")) {
+  void runCrashConsumer().catch(() => {
+    console.error("PLUGIN_M1A_CHILD_FAILED"); // Static redacted error.
+    process.exitCode = 1;
+  });
+} else {
+  void executeAndClose().catch(() => {
+    console.error("PLUGIN_M1A_EVENT_DELIVERY_FAILED: cleanup incomplete");
+    process.exitCode = 1;
+  });
+}
