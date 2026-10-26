@@ -34,6 +34,9 @@ foreign-key-protected plan history, a unique index limiting concurrent active
 plans per plugin and SHA-256/check constraints. The prior migrations must
 remain immutable. Verify both fresh installation and an existing populated
 upgrade using normal migration procedures and a bounded database lock timeout.
+A focused isolated PostgreSQL test is authored for duplicate active plans,
+malformed digests, restricted plugin deletion and preservation of installed
+records; exact-HEAD CI evidence remains required.
 
 An unfinished plan must not trigger deletion, activation or data migration.
 Schema expansions, backfills and successful external effects must not be
