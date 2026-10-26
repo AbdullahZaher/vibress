@@ -36,7 +36,9 @@ describe("PLUG-UPD-02A PostgreSQL staged-plan CAS and atomic audit", () => {
         CREATE TABLE audit_events (
           id text PRIMARY KEY, publication_id text,
           actor_user_id text, request_id text, action text NOT NULL,
-          target_type text, target_id text, metadata jsonb
+          target_type text, target_id text, metadata jsonb,
+          ip_address text, user_agent text,
+          created_at timestamptz NOT NULL DEFAULT now()
         );
       `);
       await client.query(
