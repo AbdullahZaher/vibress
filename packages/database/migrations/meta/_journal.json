@@ -323,6 +323,13 @@
       "when": 1792706400000,
       "tag": "0045_plugin_member_records",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793059200000,
+      "tag": "0046_plugin_upgrade_plans",
+      "breakpoints": true
     }
   ]
 }

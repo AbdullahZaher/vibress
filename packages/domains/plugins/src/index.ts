@@ -38,3 +38,6 @@ export type {
 } from "./application/plugin-receipt-diagnostics";
 export { listPluginActivity } from "./application/plugin-activity";
 export type { PluginActivityAction, PluginActivityRow, PluginActivityResult } from "./application/plugin-activity";
+export { preparePluginUpgradeStage, PluginUpgradePlanError } from "./application/plugin-upgrade-plan";
+export type { OperatorUpgradeStageInput, PluginUpgradeStageDetails } from "./application/plugin-upgrade-plan";
+export { DrizzlePluginUpgradePlanRepository } from "./infrastructure/drizzle-plugin-upgrade-plans";
