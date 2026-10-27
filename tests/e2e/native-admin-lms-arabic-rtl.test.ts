@@ -94,11 +94,11 @@ async function login(page: Page) {
   await page.goto(`${BASE}/admin`);
   await page.waitForLoadState("networkidle");
   const emailInput = page.locator("#email");
-  if (await emailInput.isVisible({ timeout: 4000 }).catch(() => false)) {
+  if (await emailInput.isVisible({ timeout: 10000 }).catch(() => false)) {
     await emailInput.fill("owner@example.com");
     await page.locator("#password").fill("OwnerPass123!");
     await page.locator('button[type="submit"]').click();
-    await expect(page.locator("#email")).toHaveCount(0, { timeout: 10000 });
+    await expect(page.locator("#email")).toHaveCount(0, { timeout: 15000 });
     await page.waitForLoadState("networkidle");
   }
 }

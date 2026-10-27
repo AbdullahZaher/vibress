@@ -904,8 +904,20 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       fetch(urlB, { method: "POST", headers: headersB, body: JSON.stringify(updatePayloadB) }),
     ]);
 
-    const statusCodes = [resWriteA.status, resWriteB.status];
-    expect(statusCodes).toContain(200);
+    expect(resWriteA.status).toBe(200);
+    expect(resWriteB.status).toBe(200);
+
+    const bodyA = (await resWriteA.json()) as { outcome: string; version: number };
+    const bodyB = (await resWriteB.json()) as { outcome: string; version: number };
+
+    const outcomes = [bodyA.outcome, bodyB.outcome];
+    expect(outcomes).toContain("saved");
+    expect(outcomes).toContain("conflict");
+
+    const winner = bodyA.outcome === "saved" ? bodyA : bodyB;
+    const loser = bodyA.outcome === "conflict" ? bodyA : bodyB;
+    expect(winner.version).toBe(expectedVersion + 1);
+    expect(loser.outcome).toBe("conflict");
 
     // Verify database state: course-a-01 version has incremented exactly once
     const finalRes = await fetch(`${resourceUrl}?limit=1`, {
@@ -918,6 +930,10 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     const finalList = (await finalRes.json()) as { items: Array<{ id: string; version: number; fields: { title_en: string } }> };
     const updatedCourse = finalList.items.find((c) => c.id === "course-a-01")!;
     expect(updatedCourse.version).toBe(expectedVersion + 1);
-    expect(["Updated by Replica A", "Updated by Replica B"]).toContain(updatedCourse.fields.title_en);
+
+    const expectedWinnerTitle = bodyA.outcome === "saved" ? "Updated by Replica A" : "Updated by Replica B";
+    const expectedLoserTitle = bodyA.outcome === "saved" ? "Updated by Replica B" : "Updated by Replica A";
+    expect(updatedCourse.fields.title_en).toBe(expectedWinnerTitle);
+    expect(updatedCourse.fields.title_en).not.toBe(expectedLoserTitle);
   });
 });

@@ -217,10 +217,70 @@ To prevent misrepresenting readiness, all documentation strictly adheres to the 
 - **Implemented:** Code written and syntactically valid in workspace.
 - **Locally Tested:** Subsystem unit tests pass on local development environment.
 - **Integration Verified:** Multi-component suites (Fastify + Postgres + Redis + DOM) pass locally.
-- **Operationally Verified:** Live two-process network server communication, cursor continuity, and fail-closed revocation proven over distinct OS processes.
-- **Remote CI Verified:** Pending CI trigger restoration and successful green runs across remote GitHub Actions runners.
-- **Independently Security Reviewed:** Pending formal third-party AppSec evaluation.
-- **Formally Approved:** Pending architecture, security, and product stakeholder sign-off.
-- **Production Activated:** Requires explicitly setting `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` on all production API replicas (disabled by default).
+### 8. Canonical NUI Phase Mapping
 
-**Current Engineering Verdict: LOCALLY VERIFIED — REMOTE CI & FORMAL APPROVAL PENDING.**
+The platform strictly aligns with the master roadmap definitions established in `native-admin-ui-plan.md`:
+
+| Phase | Canonical Scope | Delivery & Acceptance Status |
+|---|---|:---:|
+| **NUI-00** | Architecture, threat model, decisions, compatibility inventory | Completed & Documented |
+| **NUI-01** | Additive Native SDK and API contracts | Implemented & Type-Checked |
+| **NUI-02** | Host-native read-only renderer | Implemented & Tested |
+| **NUI-03** | Structured resources and authenticated actions | Implemented & Tested |
+| **NUI-04** | Native forms, settings, and navigation | Implemented & Tested |
+| **NUI-05** | Native LMS course-authoring pilot | Implemented & Tested (Core & LMS) |
+| **NUI-06** | Security, rollout, and production acceptance | Locally Verified (Pending Remote CI & Approval) |
+| **NUI-07** | Independent SDK consumer, developer documentation, release readiness | Locally Verified (Packaged Tarball Tested) |
+
+### 9. Canonical Production Environment Configuration Contracts
+
+Production deployment and operational runbooks must adhere strictly to supported configuration contracts:
+
+| Variable Name | Required Format / Value | Subsystem Responsibility |
+|---|---|---|
+| `VIBRESS_ENCRYPTION_KEY` | 64-character hex string (`openssl rand -hex 32`) | Secret encryption and HMAC-SHA256 cursor signing (`native-data-cursor.ts`) |
+| `VIBRESS_TRUSTED_PLUGIN_LOCKFILE` | Absolute filesystem path to `trusted-plugins.json` | Operator plugin lockfile containing manifest & artifact digests |
+| `VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE` | Absolute filesystem path to Ed25519 public key (`.pem`) | Public key used to verify the lockfile signature |
+| `VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE` | Absolute filesystem path to detached signature (`.sig`) | Detached base64 Ed25519 signature of the lockfile bytes |
+| `VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE` | `"1"` (mandatory in production) | Enforces fail-closed Ed25519 signature attestation before boot |
+| `VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256` | 64-character lowercase hex digest | Optional expected fingerprint of operator public key |
+| `VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256` | 64-character lowercase hex digest | Optional expected SHA-256 digest of `trusted-plugins.json` |
+| `VIBRESS_NATIVE_ADMIN_UI_RELEASES` | Comma-separated `pluginId@64-hex-sha256` | Read allowlist admitting plugin into Native Admin UI (default unset) |
+| `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` | Comma-separated `pluginId@64-hex-sha256` | Write allowlist admitting mutations via Native Admin UI (default unset) |
+
+> [!IMPORTANT]
+> **Allowlist Format Requirement:** Release allowlists require the 64-character lowercase SHA-256 entrypoint artifact digest, **NOT** a semantic version (e.g. `vibress-lms-authoring@1.2.0` is invalid and rejected by configuration parsing regex).
+> Example placeholder (never use placeholder digests in production):
+> ```dotenv
+> VIBRESS_NATIVE_ADMIN_UI_RELEASES=vibress-lms-authoring@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+> ```
+
+Offline operator admission verification must be executed using:
+```bash
+pnpm tsx scripts/plugins/admit.ts [--expected-lockfile-sha256 <sha256>]
+```
+
+### 10. Development Proxy Hardening & Compatibility (apps/admin/vite.config.ts)
+
+The development API proxy in `apps/admin/vite.config.ts` has been hardened to use official, supported Vite APIs:
+- **No Stack Manipulation:** Removed experimental `server.middlewares.stack.unshift` manipulation.
+- **Strict Typing:** Eliminated all explicit `any` types.
+- **SSRF / Scope Protection:** Restricts proxy targets to loopback interfaces (`127.0.0.1` and `localhost`) via `getValidatedProxyTarget()`.
+- **Sanitized Error Envelopes:** Returns RFC 7807/Vibress standard JSON `{ errors: [{ code: "BAD_GATEWAY", message: "api proxy destination is unavailable" }] }` on backend failure without disclosing internal socket addresses or error stacks.
+- **Supported API:** Employs standard Vite `server.proxy` with `configure: (proxy) => { ... }`.
+
+### 11. CAS Concurrency & Optimistic Locking Contract Acceptance
+
+CAS concurrency has been verified across both API contracts:
+1. **LMS Domain Route Contract (`POST /api/admin/v1/extensions/:id/v1/:routeId`):**
+   - Competing requests issued with identical `expectedVersion`:
+     - Winner receives HTTP 200 with `{ outcome: "saved", version: v + 1, ... }`.
+     - Loser receives HTTP 200 with `{ outcome: "conflict", version: v + 1, ... }`.
+   - Stale-version retry write receives `{ outcome: "conflict" }`.
+   - Valid update retry with the new version succeeds with `{ outcome: "saved", version: v + 2 }`.
+   - PostgreSQL confirms exactly one version increment per successful update; loser data never overwrites winner data.
+2. **Generic Action Gateway Contract (`POST /api/admin/v1/extensions/:id/actions/:actionId`):**
+   - Returns HTTP 409 Conflict with sanitized error envelope `{ errors: [{ code: "CONFLICT", message: "conflict" }] }` on version mismatch or duplicate create.
+
+**Current Engineering Verdict: LOCALLY VERIFIED — READY FOR AUTHORIZED PR REVIEW.**
+

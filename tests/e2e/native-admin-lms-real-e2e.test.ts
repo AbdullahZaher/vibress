@@ -735,10 +735,23 @@ test.describe.serial("Priority 1: Genuine Native LMS Browser-to-Database E2E (Ch
       }),
     ]);
 
-    const statuses = [res1.status(), res2.status()];
-    expect(statuses).toContain(200);
+    expect(res1.status()).toBe(200);
+    expect(res2.status()).toBe(200);
 
-    // Verify database state: version incremented exactly once
+    const body1 = (await res1.json()) as { outcome: string; version: number; courseId: string };
+    const body2 = (await res2.json()) as { outcome: string; version: number; courseId: string };
+
+    const outcomes = [body1.outcome, body2.outcome];
+    expect(outcomes).toContain("saved");
+    expect(outcomes).toContain("conflict");
+
+    const winner = body1.outcome === "saved" ? body1 : body2;
+    const loser = body1.outcome === "conflict" ? body1 : body2;
+
+    expect(winner.version).toBe(initialVersion + 1);
+    expect(loser.outcome).toBe("conflict");
+
+    // Verify database state: version incremented exactly once in PostgreSQL
     const sessionVerifyG = createHostPluginStorageSession(
       {
         pluginId: registeredPluginId,
@@ -749,9 +762,62 @@ test.describe.serial("Priority 1: Genuine Native LMS Browser-to-Database E2E (Ch
       approvedPlan.models,
     );
     try {
+      const intermediateCourse = await sessionVerifyG.storage.get("courses", "course-seed-01");
+      expect(intermediateCourse?.version).toBe(initialVersion + 1);
+
+      // Verify winner content was persisted and loser content did NOT overwrite
+      const expectedWinnerTitle = body1.outcome === "saved" ? "CAS Winner Alpha" : "CAS Contender Beta";
+      const expectedLoserTitle = body1.outcome === "saved" ? "CAS Contender Beta" : "CAS Winner Alpha";
+      expect(intermediateCourse?.fields.title_en).toBe(expectedWinnerTitle);
+      expect(intermediateCourse?.fields.title_en).not.toBe(expectedLoserTitle);
+
+      // 3. Stale-version retry: A third update using the old initialVersion must also be rejected
+      const staleRes = await page.request.post(url, {
+        headers,
+        data: {
+          operation: "save",
+          courseId: "course-seed-01",
+          expectedVersion: initialVersion, // Stale!
+          title_en: "Stale Overwrite Attempt",
+          title_ar: "محاولة كتابة قديمة",
+          summary_en: "Stale Summary",
+          summary_ar: "ملخص قديم",
+          lesson_title_en: "Lesson",
+          lesson_title_ar: "درس",
+          lesson_body_en: "Body",
+          lesson_body_ar: "محتوى",
+        },
+      });
+      expect(staleRes.status()).toBe(200);
+      const staleBody = (await staleRes.json()) as { outcome: string };
+      expect(staleBody.outcome).toBe("conflict");
+
+      // 4. Valid update retry using the winning version: Must succeed and increment version again
+      const resolvedRes = await page.request.post(url, {
+        headers,
+        data: {
+          operation: "save",
+          courseId: "course-seed-01",
+          expectedVersion: initialVersion + 1, // Valid latest version
+          title_en: "Resolved CAS Update",
+          title_ar: "تحديث محلول",
+          summary_en: "Resolved Summary",
+          summary_ar: "ملخص محلول",
+          lesson_title_en: "Lesson",
+          lesson_title_ar: "درس",
+          lesson_body_en: "Body",
+          lesson_body_ar: "محتوى",
+        },
+      });
+      expect(resolvedRes.status()).toBe(200);
+      const resolvedBody = (await resolvedRes.json()) as { outcome: string; version: number };
+      expect(resolvedBody.outcome).toBe("saved");
+      expect(resolvedBody.version).toBe(initialVersion + 2);
+
+      // Verify final database state: version incremented to initialVersion + 2
       const finalCourse = await sessionVerifyG.storage.get("courses", "course-seed-01");
-      expect(finalCourse?.version).toBe(initialVersion + 1);
-      expect(["CAS Winner Alpha", "CAS Contender Beta"]).toContain(finalCourse?.fields.title_en);
+      expect(finalCourse?.version).toBe(initialVersion + 2);
+      expect(finalCourse?.fields.title_en).toBe("Resolved CAS Update");
     } finally {
       await sessionVerifyG.close();
     }
