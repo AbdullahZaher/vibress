@@ -3,9 +3,49 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+import http from "node:http";
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: "api-proxy-middleware",
+      configureServer(server) {
+        if (!process.env.API_PROXY_TARGET) return;
+        const target = process.env.API_PROXY_TARGET;
+        server.middlewares.stack.unshift({
+          route: "/api",
+          handle: (req: any, res: any) => {
+            const fullPath = "/api" + (req.url || "");
+            const targetUrl = new URL(fullPath, target);
+            const proxyReq = http.request(
+              targetUrl,
+              {
+                method: req.method,
+                headers: {
+                  ...req.headers,
+                  host: targetUrl.host,
+                },
+              },
+              (proxyRes) => {
+                res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
+                proxyRes.pipe(res);
+              },
+            );
+            proxyReq.on("error", (err) => {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({ error: "Bad gateway", details: err.message }),
+              );
+            });
+            req.pipe(proxyReq);
+          },
+        });
+      },
+    },
+  ],
   base: "/admin/",
   resolve: {
     alias: {
@@ -59,5 +99,13 @@ export default defineConfig({
   server: {
     port: process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT) : 7779,
     host: "0.0.0.0",
+    proxy: process.env.API_PROXY_TARGET
+      ? {
+          "/api": {
+            target: process.env.API_PROXY_TARGET,
+            changeOrigin: false,
+          },
+        }
+      : undefined,
   },
 });

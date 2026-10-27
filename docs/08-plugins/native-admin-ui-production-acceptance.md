@@ -120,18 +120,20 @@ To optimize development feedback and avoid redundant remote CI overhead during l
 - Protected Triggers Preserved: Pull requests to `main`, pushes to `main`, scheduled cron jobs, and manual `workflow_dispatch` triggers remain completely intact.
 - Mandatory Restoration Procedure: Prior to opening a final pull request or requesting formal release approval, the commented line `- 'docs/native-admin-ui-plan-20261025'` under `on.push.branches` in `.github/workflows/ci.yml` must be restored, and all required remote CI jobs (Build, E2E, Container Scan, Trivy) must run and pass.
 
-### 2. Priority 1 — Real Multi-Process API Replicas with PostgreSQL and Redis (NUI-06)
-- Test Suite: `tests/integration/native-admin-multi-process-replica.test.ts` (8/8 tests passed).
+### 2. Priority 1 — Hardened Multi-Process API Replicas with PostgreSQL and Redis (NUI-06)
+- Test Suite: `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 tests passed).
 - Execution Command: `pnpm vitest run tests/integration/native-admin-multi-process-replica.test.ts`
-- Architecture: Spawns two distinct Node.js operating-system child processes (`procA.pid !== procB.pid`) running `apps/api/src/main.ts` on separate TCP sockets (`API_PORT=7791` and `7792`).
+- Architecture: Spawns distinct Node.js operating-system child processes (`procA.pid !== procB.pid`) running `apps/api/src/main.ts` on dynamically allocated ephemeral TCP ports via `net.createServer()` to prevent port collisions.
+- Graceful Lifecycle: Manages process lifecycle with graceful shutdown (`SIGTERM` with timeout fallback to `SIGKILL`) preventing zombie processes.
 - Real Infrastructure Dependencies:
   - Real PostgreSQL storage backed by the migrated schema and system seed.
   - Real Redis server connection.
   - Real signed operator release lockfile and preflight checks.
   - Real Fastify HTTP routing and middleware.
-  - Zero mocked boundaries: Real `requireStaffSession`, real publication scoping, real `createHostPluginStorageSession`.
+  - Zero mocked boundaries: Real Staff authentication over HTTP (`POST /api/admin/v1/auth/login`), real session cookies, real publication scoping, real `createHostPluginStorageSession`.
 - Verified Scenarios:
   - Genuine Process Separation: Confirms `procA.pid !== procB.pid` across different OS processes.
+  - Scenario Auth (Real Staff Login): Staff user logs in via HTTP on Replica A, receives genuine `vibress_session` cookie; cookie is validated on Replica B to access protected resources; invalid credentials return 401.
   - Scenario A (Cross-Process Cursor Continuity): Replica A issues HMAC-signed pagination cursor; Replica B decodes and continues pagination across 5 records with zero duplicates.
   - Scenario B (Publication Isolation): Verifies tenant separation; forged `X-Publication-Id` headers and cross-publication IDs are rejected before accessing private records.
   - Scenario C (Session Revocation): Revoking a Staff session propagates immediately across both replicas; cached tokens cannot restore access.
@@ -139,7 +141,7 @@ To optimize development feedback and avoid redundant remote CI overhead during l
   - Scenario E (Signing-Key Mismatch): Replica C with a mismatched signing key rejects cursors (400 `INVALID_CURSOR`), failing closed without an undocumented grace period.
   - Scenario F (Release Digest Isolation): Rejection of unadmitted releases; stale cursors cannot bypass updated admission checks.
   - Scenario G (Concurrent CAS Writes): Competing updates submitted across Replica A and Replica B enforce optimistic concurrency; exactly one update wins.
-- Correction of Prior Claims: Corrects earlier documentation that characterized two in-process Fastify instances inside a single Node.js runtime as a multi-process deployment.
+- Correction of Prior Claims: Eliminates fixed-port assumptions (previously hardcoded to 7791/7792), implements real HTTP login validation across replicas, and guarantees reproducible multi-run stability.
 
 ### 3. Priority 2 — Genuine Independent Packaged SDK Consumer (NUI-07)
 - Test Suite: `tests/integration/native-admin-independent-packaged-consumer.test.ts` (9/9 tests passed).
@@ -156,24 +158,37 @@ To optimize development feedback and avoid redundant remote CI overhead during l
   - Confirmed Host admission of conforming descriptors, fail-closed handling for unsupported contract versions, unknown component types, and unbound workflows.
 - Correction of Prior Claims: Corrects earlier documentation that treated direct imports of monorepo `/dist` output as external package consumption.
 
-### 4. Priority 3 — Real Playwright Native LMS Arabic RTL Browser Acceptance (NUI-04/NUI-05)
+### 4. Priority 3 — Distinct Playwright LMS Acceptance Suites (NUI-04/NUI-05)
+
+To ensure strict separation between fast frontend contract verification and full-stack production end-to-end acceptance, two separate Playwright test suites are maintained:
+
+#### A. Genuine Browser-to-Database E2E Acceptance Suite
+- Test Suite: `tests/e2e/native-admin-lms-real-e2e.test.ts` (7/7 tests passed in 24.4s).
+- Execution Command: `PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm exec playwright test tests/e2e/native-admin-lms-real-e2e.test.ts`
+- Real Infrastructure Topology:
+  - Genuine Chromium browser managed by Playwright.
+  - Dedicated live Vite dev server (`apps/admin`) proxying `/api` requests via middleware.
+  - Dedicated live Fastify API child process (`apps/api/src/main.ts`) running on dynamic port.
+  - Real disposable PostgreSQL database with migrated schema, system roles, and permissions.
+  - Real Redis cache instance.
+  - Real signed operator release lockfile (`vibress-lms-authoring` candidate built directly from source).
+  - Explicit read and write release allowlists (`VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES`) enabled strictly for the test release tag.
+- All Scenarios Verified with Real Persistence:
+  - Scenario A & B: Native view admission (no iframe fallback) & Arabic RTL rendering.
+  - Scenario C: Real Course Creation via browser form; persistence verified by direct PostgreSQL query and page reload.
+  - Scenario D: Real Course Editing; version increment and title update verified in PostgreSQL.
+  - Scenario E: Course Publishing via authorized LMS domain handler; status updated to "published".
+  - Scenario F: Published Course Immutability; UI locks form and API rejects mutations with immutable outcome.
+  - Scenario G: CAS Concurrency; competing simultaneous updates enforce optimistic locking with exactly one winner.
+  - Scenario H: Cross-Publication Isolation; switching active publication isolates data with zero leakage across tenants.
+  - Scenario I: Session Revocation; revoking session in PostgreSQL immediately terminates browser access (401).
+  - Scenario J: Stored XSS Resistance; hostile script/event tags stored in PostgreSQL render inert without script execution.
+  - Scenario K & L: Keyboard accessibility navigation and responsive viewport verification (Desktop 1280x800 & Mobile 375x667).
+
+#### B. Fast UI Regression Suite (Mocked)
 - Test Suite: `tests/e2e/native-admin-lms-arabic-rtl.test.ts` (6/6 tests passed in 19.2s).
 - Execution Command: `pnpm exec playwright test tests/e2e/native-admin-lms-arabic-rtl.test.ts`
-- Real Browser Environment: Chromium browser interacting with the live Vibress Admin application.
-- All 12 Mandatory Scenarios Verified:
-  1. Native UI Navigation: Verified true Native extension view is rendered with zero `iframe` elements.
-  2. Arabic RTL Rendering: Verified `html[dir="rtl"]`, `html[lang="ar"]`, Arabic headings ("نظرة عامة على الدورات"), Arabic buttons ("إنشاء مسودة"), and Arabic table columns.
-  3. Bilingual Course Creation: Created a course with English and Arabic titles, summaries, and lesson bodies.
-  4. Draft Editing: Selected draft course, updated Arabic title, saved draft, and verified real-time table update.
-  5. Publishing via Domain Route: Executed publish workflow with confirmation dialog; verified status updated to "published".
-  6. Published-Course Immutability: Selecting published course locks form, hides save/publish buttons, and announces immutable status.
-  7. Keyboard Accessibility: Verified focus management, Enter key submission, Tab navigation, and Escape/cancel dialogs.
-  8. Validation & Accessible Announcements: Invalid record IDs trigger accessible `role="alert"` announcements in Arabic.
-  9. Publication Switching Data Wipe: `vibress:publication-changed` event wipes stale private rows and resets in-flight form state.
-  10. Authorization Revocation: 403 API response fails closed with accessible alert, unmounting private table data.
-  11. Stored XSS Resistance: Stored `<script>`, `<img onerror>`, and `<svg onload>` payloads are rendered safely as plain text; `__hostile_xss_executed` remains undefined.
-  12. Responsive Viewports: Verified layout integrity on Desktop (1280x800, zero horizontal overflow) and Mobile (375x667).
-- Correction of Prior Claims: Corrects earlier documentation that relied solely on jsdom unit tests as comprehensive browser accessibility acceptance.
+- Purpose: Fast developer-feedback regression testing using Playwright `page.route` intercepts to validate UI layout, Arabic translations, keyboard traps, and accessibility announcements without requiring full backend infrastructure boot.
 
 ### 5. Priority 4 — Database Upgrade, Rollback & Concurrency Acceptance
 - Test Suites:
@@ -191,9 +206,10 @@ To optimize development feedback and avoid redundant remote CI overhead during l
 - `pnpm verify:explicit-any`: 182 occurrences (below 220 limit).
 - `pnpm audit --prod --audit-level high`: 0 vulnerabilities.
 - `pnpm build`: Clean build across all monorepo apps and packages.
-- Priority 1 Multi-Process Replica: 8/8 passed.
-- Priority 2 Packaged SDK Consumer: 9/9 passed.
-- Priority 3 Playwright LMS Arabic RTL: 6/6 passed (12 scenarios).
+- Priority 1 Multi-Process Replica: 9/9 passed (dynamic ports, graceful shutdown, real login).
+- Priority 2 Packaged SDK Consumer: 9/9 passed (isolated external consumer, strict tsc).
+- Priority 3 Genuine Browser-to-Database E2E: 7/7 passed (Chromium → Admin → API → PostgreSQL).
+- Priority 3 Fast UI Regression Suite: 6/6 passed (12 scenarios).
 - Native Admin UI Unit/Integration Suites: 54/54 passed.
 
 ### 7. Verification Status Definitions

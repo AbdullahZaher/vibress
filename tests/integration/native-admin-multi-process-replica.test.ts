@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -42,9 +43,81 @@ const repoRoot = path.resolve(__dirname, "../..");
 const sharedSecret = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
 const rotatedSecret = "f9e8d7c6b5a43210f9e8d7c6b5a43210f9e8d7c6b5a43210f9e8d7c6b5a43210";
 
-const PORT_A = 7791;
-const PORT_B = 7792;
-const PORT_C = 7793;
+/**
+ * Dynamically binds an ephemeral socket to find an open available TCP port.
+ */
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Unable to obtain port")));
+        return;
+      }
+      const port = address.port;
+      server.close((err) => {
+        if (err) reject(err);
+        else resolve(port);
+      });
+    });
+  });
+}
+
+/**
+ * Allocates multiple distinct ephemeral ports without collisions.
+ */
+async function allocateDistinctPorts(count: number): Promise<number[]> {
+  const ports = new Set<number>();
+  while (ports.size < count) {
+    const p = await getAvailablePort();
+    ports.add(p);
+  }
+  return Array.from(ports);
+}
+
+/**
+ * Gracefully terminates a child process using SIGTERM with bounded timeout fallback to SIGKILL.
+ */
+async function terminateProcessGracefully(proc: ChildProcess | null, timeoutMs = 4000): Promise<void> {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  return new Promise<void>((resolve) => {
+    let resolved = false;
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    };
+
+    proc.once("exit", cleanup);
+
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      cleanup();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // already killed
+        }
+        cleanup();
+      }
+    }, timeoutMs);
+
+    proc.once("exit", () => {
+      clearTimeout(timer);
+      cleanup();
+    });
+  });
+}
 
 /**
  * Polls an HTTP endpoint until it returns status 200 or timeout expires.
@@ -74,8 +147,13 @@ function spawnReplicaProcess(
   keyPath: string,
   sigPath: string,
   releaseTag: string,
+  allowedPorts: number[],
 ): ChildProcess {
   const tsxBin = path.resolve(repoRoot, "node_modules/.bin/tsx");
+  const corsOrigins = allowedPorts
+    .flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`])
+    .join(",");
+
   return spawn(
     tsxBin,
     ["apps/api/src/main.ts"],
@@ -96,7 +174,7 @@ function spawnReplicaProcess(
         VIBRESS_ENCRYPTION_KEY: encryptionKey,
         NODE_ENV: "test",
         LOG_LEVEL: "warn",
-        CORS_ORIGINS: `http://localhost:${PORT_A},http://localhost:${PORT_B},http://127.0.0.1:${PORT_A},http://127.0.0.1:${PORT_B}`,
+        CORS_ORIGINS: corsOrigins,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -114,6 +192,10 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
   let procA: ChildProcess | null = null;
   let procB: ChildProcess | null = null;
   let procC: ChildProcess | null = null;
+
+  let portA: number;
+  let portB: number;
+  let portC: number;
 
   const runId = randomUUID().replace(/-/g, "").slice(0, 8);
   const dbName = `vibress_replica_${runId}`;
@@ -270,6 +352,29 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       },
     ]);
 
+    // Also grant publication membership to seeded owner@example.com for real HTTP login testing
+    const [exampleOwner] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "owner@example.com"))
+      .limit(1);
+    if (exampleOwner) {
+      await db.insert(publicationMemberships).values([
+        {
+          id: randomUUID(),
+          publicationId: pubAId,
+          userId: exampleOwner.id,
+          role: "owner",
+        },
+        {
+          id: randomUUID(),
+          publicationId: pubBId,
+          userId: exampleOwner.id,
+          role: "owner",
+        },
+      ]);
+    }
+
     // Insert staff session directly into sessions table
     const expiresAt = new Date(Date.now() + 86400000);
     await db.insert(sessions).values({
@@ -347,53 +452,54 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       await sessionB.close();
     }
 
-    // 8. Launch two genuinely separate Node.js OS processes for Replica A and Replica B
+    // 8. Dynamically allocate 3 distinct ephemeral TCP ports
+    [portA, portB, portC] = await allocateDistinctPorts(3);
+
+    // Launch two genuinely separate Node.js OS processes for Replica A and Replica B
     procA = spawnReplicaProcess(
-      PORT_A,
+      portA,
       disposableDbUrl,
       sharedSecret,
       lockfilePath,
       keyPath,
       sigPath,
       approvedReleaseTag,
+      [portA, portB, portC],
     );
 
     procB = spawnReplicaProcess(
-      PORT_B,
+      portB,
       disposableDbUrl,
       sharedSecret,
       lockfilePath,
       keyPath,
       sigPath,
       approvedReleaseTag,
+      [portA, portB, portC],
     );
 
     // 9. Verify genuine separate OS processes and wait for health
     expect(procA.pid).toBeDefined();
     expect(procB.pid).toBeDefined();
     expect(procA.pid).not.toBe(procB.pid);
-    expect(PORT_A).not.toBe(PORT_B);
+    expect(portA).not.toBe(portB);
 
     await Promise.all([
-      waitForHealthy(`http://127.0.0.1:${PORT_A}/health/live`),
-      waitForHealthy(`http://127.0.0.1:${PORT_B}/health/live`),
+      waitForHealthy(`http://127.0.0.1:${portA}/health/live`),
+      waitForHealthy(`http://127.0.0.1:${portB}/health/live`),
     ]);
   }, 120000);
 
   afterAll(async () => {
-    // Terminate spawned child processes immediately
-    if (procA) {
-      procA.kill("SIGKILL");
-      procA = null;
-    }
-    if (procB) {
-      procB.kill("SIGKILL");
-      procB = null;
-    }
-    if (procC) {
-      procC.kill("SIGKILL");
-      procC = null;
-    }
+    // Terminate spawned child processes gracefully with SIGTERM and fallback to SIGKILL
+    await Promise.all([
+      terminateProcessGracefully(procA),
+      terminateProcessGracefully(procB),
+      terminateProcessGracefully(procC),
+    ]);
+    procA = null;
+    procB = null;
+    procC = null;
 
     await closeDbPool();
 
@@ -429,9 +535,59 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     expect(procA?.pid).not.toBe(procB?.pid);
   });
 
+  it("Scenario Auth: Real Staff authentication via HTTP login endpoint propagates across replicas", async () => {
+    // 1. Authenticate via real login route on Replica A
+    const loginRes = await fetch(`http://127.0.0.1:${portA}/api/admin/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: `http://localhost:${portA}`,
+      },
+      body: JSON.stringify({
+        email: "owner@example.com",
+        password: "OwnerPass123!",
+      }),
+    });
+    expect(loginRes.status).toBe(200);
+
+    const setCookieHeader = loginRes.headers.get("set-cookie");
+    expect(setCookieHeader).toBeDefined();
+    expect(setCookieHeader).toContain("vibress_session=");
+
+    const match = setCookieHeader!.match(/vibress_session=([^;]+)/);
+    expect(match).toBeDefined();
+    const liveSessionCookie = `vibress_session=${match![1]}`;
+
+    // 2. Access protected extension resource on Replica B using the session cookie issued by Replica A
+    const urlB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const resB = await fetch(`${urlB}?limit=2`, {
+      headers: {
+        Cookie: liveSessionCookie,
+        "x-publication-id": pubAId,
+      },
+    });
+    expect(resB.status).toBe(200);
+    const dataB = (await resB.json()) as { items: unknown[] };
+    expect(dataB.items.length).toBeGreaterThan(0);
+
+    // 3. Attempt invalid login credentials on Replica A: must return 401
+    const badLoginRes = await fetch(`http://127.0.0.1:${portA}/api/admin/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: `http://localhost:${portA}`,
+      },
+      body: JSON.stringify({
+        email: "owner@example.com",
+        password: "WrongPassword999!",
+      }),
+    });
+    expect(badLoginRes.status).toBe(401);
+  });
+
   it("Scenario A: Cross-process cursor pagination across Replica A and Replica B", async () => {
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
-    const urlB = `http://127.0.0.1:${PORT_B}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
 
     const headers = {
       Authorization: `Bearer ${staffSessionToken}`,
@@ -488,7 +644,7 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
   });
 
   it("Scenario B: Publication isolation and forged header rejection", async () => {
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
 
     // 1. Legitimate request to Publication Beta returns only Beta records
     const resBeta = await fetch(`${urlA}?limit=10`, {
@@ -554,8 +710,8 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       expiresAt: new Date(Date.now() + 86400000),
     });
 
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
-    const urlB = `http://127.0.0.1:${PORT_B}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
 
     const ephemHeaders = {
       Authorization: `Bearer ${ephemToken}`,
@@ -583,8 +739,8 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
 
   it("Scenario D: Plugin deactivation and re-enablement across both replicas", async () => {
     const db = getDb();
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
-    const urlB = `http://127.0.0.1:${PORT_B}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
 
     const headers = {
       Authorization: `Bearer ${staffSessionToken}`,
@@ -626,19 +782,20 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
   it("Scenario E: Signing-key mismatch rejects cross-replica cursors", async () => {
     // 1. Spawn Replica C with rotated/mismatched encryption key
     procC = spawnReplicaProcess(
-      PORT_C,
+      portC,
       disposableDbUrl,
       rotatedSecret, // Mismatched secret
       lockfilePath,
       keyPath,
       sigPath,
       approvedReleaseTag,
+      [portA, portB, portC],
     );
 
-    await waitForHealthy(`http://127.0.0.1:${PORT_C}/health/live`);
+    await waitForHealthy(`http://127.0.0.1:${portC}/health/live`);
 
     // 2. Fetch cursor from Replica A (signed with sharedSecret)
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
     const resA = await fetch(`${urlA}?limit=2`, {
       headers: {
         Authorization: `Bearer ${staffSessionToken}`,
@@ -651,7 +808,7 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     expect(dataA.nextCursor).toBeDefined();
 
     // 3. Send cursor to Replica C: HMAC verification must fail and return 400 INVALID_CURSOR
-    const urlC = `http://127.0.0.1:${PORT_C}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const urlC = `http://127.0.0.1:${portC}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
     const resC = await fetch(`${urlC}?limit=2&cursor=${encodeURIComponent(dataA.nextCursor!)}`, {
       headers: {
         Authorization: `Bearer ${staffSessionToken}`,
@@ -663,13 +820,13 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     const errorBody = (await resC.json()) as { errors: Array<{ code: string }> };
     expect(errorBody.errors[0]?.code).toBe("INVALID_CURSOR");
 
-    // Clean up Replica C
-    procC.kill("SIGTERM");
+    // Clean up Replica C gracefully
+    await terminateProcessGracefully(procC);
     procC = null;
   });
 
   it("Scenario F: Release digest isolation rejects unadmitted releases", async () => {
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/nonexistent-plugin/resources/course-records`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/nonexistent-plugin/resources/course-records`;
     const resNotFound = await fetch(`${urlA}?limit=2`, {
       headers: {
         Authorization: `Bearer ${staffSessionToken}`,
@@ -681,15 +838,15 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
   });
 
   it("Scenario G: Concurrent writes via Replica A and Replica B enforce CAS version consistency", async () => {
-    const urlA = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/v1/courses`;
-    const urlB = `http://127.0.0.1:${PORT_B}/api/admin/v1/extensions/${manifest.id}/v1/courses`;
+    const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/v1/courses`;
+    const urlB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/v1/courses`;
 
     const headersA = {
       Authorization: `Bearer ${staffSessionToken}`,
       Cookie: `vibress_session=${staffSessionToken}`,
       "x-publication-id": pubAId,
       "Content-Type": "application/json",
-      Origin: `http://localhost:${PORT_A}`,
+      Origin: `http://localhost:${portA}`,
     };
 
     const headersB = {
@@ -697,11 +854,11 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       Cookie: `vibress_session=${staffSessionToken}`,
       "x-publication-id": pubAId,
       "Content-Type": "application/json",
-      Origin: `http://localhost:${PORT_B}`,
+      Origin: `http://localhost:${portB}`,
     };
 
     // Read current version of course-a-01
-    const resourceUrl = `http://127.0.0.1:${PORT_A}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const resourceUrl = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
     const getRes = await fetch(`${resourceUrl}?limit=1`, {
       headers: {
         Authorization: `Bearer ${staffSessionToken}`,
