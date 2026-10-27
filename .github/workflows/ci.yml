@@ -165,6 +165,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The PR browser acceptance suite builds the exact signed LMS source candidate.
+      # This is separate from the build job because GitHub runners do not share checkouts.
+      - name: Checkout pinned LMS candidate for Native Admin UI PR acceptance
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          repository: AbdullahZaher/vibress-lms
+          ref: 4ae44d903b723e4411ab2a090e19e99ff87a0923
+          path: .lms-source
+
       - name: Run E2E suite (dev stack + fresh-install wizard)
         env:
           VIBRESS_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -242,6 +252,12 @@ jobs:
             # Keep the complete install/functional suite on main pushes.
             npx playwright test tests/e2e/smoke.test.ts tests/e2e/media-library-storage-integrity.test.ts --grep 'Vibress Foundation Smoke Tests|TEST (B|C|J):'
             npx playwright test tests/e2e/auth-flow.test.ts tests/e2e/collaboration-websocket-gateway.test.ts tests/e2e/settings-full-suite.test.ts tests/e2e/studio-card-selection.test.ts tests/e2e/studio-media-toolbar.test.ts tests/e2e/collaboration-truncation-regression.test.ts tests/e2e/collaboration-feature-image-isolation.test.ts
+
+            # Required Native Admin UI PR acceptance: real Fastify/PostgreSQL/Redis
+            # browser workflow (owns disposable services), plus fast RTL UI regressions.
+            # Do not start a second shared pnpm dev stack for either suite.
+            PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm exec playwright test tests/e2e/native-admin-lms-real-e2e.test.ts
+            PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm exec playwright test tests/e2e/native-admin-lms-arabic-rtl.test.ts
           else
             npx playwright test
           fi
