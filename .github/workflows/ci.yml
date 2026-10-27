@@ -165,6 +165,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build plugin SDK for clean-checkout E2E servers
+        run: pnpm --filter @vibress/plugin-sdk build
+
       # The PR browser acceptance suite builds the exact signed LMS source candidate.
       # This is separate from the build job because GitHub runners do not share checkouts.
       - name: Checkout pinned LMS candidate for Native Admin UI PR acceptance
@@ -246,6 +249,9 @@ jobs:
 
           # --- Browser + tests ---
           npx playwright install chromium --with-deps
+          # Apps are started above in this same CI step; Playwright must not
+          # run its fallback pnpm dev webServer and collide with ports.
+          export PLAYWRIGHT_SKIP_WEBSERVER=1
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             # PR gate: gateway health, upload/traversal regressions and a real
             # authenticated collaboration WebSocket handshake via Nginx.
