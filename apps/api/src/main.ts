@@ -48,6 +48,7 @@ import {
 } from "./routes/recommendations";
 import { adminIntegrationRoutes, machineApiRoutes } from "./routes/platform";
 import { adminPluginEventRoutes } from "./routes/plugin-events";
+import { adminNativeDataRoutes } from "./routes/extension-native-data";
 import { closePluginEventQueue } from "./plugins/plugin-event-queue";
 import {
   adminExtensionApiRoutes,
@@ -373,6 +374,7 @@ export const buildApp = () => {
   fastify.register(adminCommentModerationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminIntegrationRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminExtensionApiRoutes, { prefix: "/api/admin/v1" });
+  fastify.register(adminNativeDataRoutes, { prefix: "/api/admin/v1" });
   fastify.register(adminPluginEventRoutes, { prefix: "/api/admin/v1" });
   fastify.register(unsplashRoutes, {
     prefix: "/api/admin/v1/integrations/unsplash",

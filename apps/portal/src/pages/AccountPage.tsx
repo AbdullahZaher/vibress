@@ -133,8 +133,13 @@ export function AccountPage() {
           />
         </div>
         <div className="ap-hero-text">
-          <h1 className="ap-title">{member.name || "Your account"}</h1>
-          <p className="ap-sub" style={{ marginTop: 4 }}>
+          <h1 className="ap-title">Your account</h1>
+          {member.name && (
+            <p className="ap-sub" dir="auto" style={{ marginTop: 4, fontWeight: 600 }}>
+              {member.name}
+            </p>
+          )}
+          <p className="ap-sub" dir="auto" style={{ marginTop: 4 }}>
             {member.email}
           </p>
         </div>

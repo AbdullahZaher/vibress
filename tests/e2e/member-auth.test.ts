@@ -142,11 +142,10 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     await page.click('button:has-text("Sign out")');
     await expect(page.locator("h1")).toContainText("Vibress");
 
-    // Protected account redirects to sign-in
+    // Sign-out must revoke server access, not merely redirect the browser.
+    expect((await page.request.get("http://localhost:7777/api/members/v1/me")).status()).toBe(401);
     await page.goto("http://localhost:7777/portal/#/account");
-    await expect(page.locator("h1")).toContainText(
-      "Your session is no longer valid",
-    );
+    await expect(page.locator("h1")).toContainText("Session expired");
   });
 
   test("[Staff + Member Coexistence] Both identities independent", async ({
@@ -232,25 +231,23 @@ test.describe("Batch 8 Member Auth E2E Suite", () => {
     );
     expect(disableRes.status()).toBe(200);
 
-    // Member session invalid → account shows sign-in
+    // Disabling a member must invalidate the *server* session, not only the UI.
+    expect((await page.request.get("http://localhost:7777/api/members/v1/me")).status()).toBe(401);
     await page.reload();
-    await expect(page.locator("h1")).toContainText(
-      "Your session is no longer valid",
-    );
+    await expect(page.locator("h1")).toContainText("Session expired");
 
-    // Re-enable
-    await request.post(
+    // Re-enabling the account cannot revive its previously revoked session.
+    const enableRes = await request.post(
       `http://localhost:7777/api/admin/v1/members/${memberId}/enable`,
       {
         headers: { Origin: "http://localhost:7777" },
       },
     );
+    expect(enableRes.status()).toBe(200);
 
-    // Old session still invalid
+    expect((await page.request.get("http://localhost:7777/api/members/v1/me")).status()).toBe(401);
     await page.reload();
-    await expect(page.locator("h1")).toContainText(
-      "Your session is no longer valid",
-    );
+    await expect(page.locator("h1")).toContainText("Session expired");
 
     // New magic link works
     await fetch("http://127.0.0.1:8025/api/v1/messages", { method: "DELETE" }).catch(() => {});

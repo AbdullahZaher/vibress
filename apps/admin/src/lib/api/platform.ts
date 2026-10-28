@@ -1,4 +1,9 @@
 import { apiRequest } from "./client";
+import {
+  ExtensionNativeAdminResponseV1Schema, type ExtensionNativeAdminPageV1,
+  ExtensionNativeDataDiscoveryV1Schema, ExtensionNativeDataPageV1Schema,
+  ExtensionNativeActionResultV1Schema,
+} from "@vibress/api-contracts";
 
 export interface AdminIntegration {
   id: string;
@@ -155,6 +160,74 @@ export interface AdminExtensionViewLink {
   label: { en: string; ar: string };
   title: { en: string; ar: string };
   permission: "plugins.read" | "plugins.manage" | "posts.read" | "posts.edit";
+  /** Inert group metadata; absent for legacy plugins and API versions. */
+  group?: { id: string; label: { en: string; ar: string };
+    icon?: "puzzle" | "graduation-cap" | "book-open" };
+  /** Capability negotiated from Host; absent on old API means legacy. */
+  nativeProbeSupported?: true;
+}
+
+/** Strictly Host-owned native metadata. A declaration alone is not authorization. */
+export async function readNativeExtensionAdminPageApi(link: AdminExtensionViewLink): Promise<
+  | { mode: "legacy" }
+  | { mode: "native"; page: ExtensionNativeAdminPageV1; routeId: string;
+      workflow?: import("@vibress/api-contracts").ExtensionNativeDomainWorkflowV1 }
+> {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(link.pluginId)}/views/${encodeURIComponent(link.viewId)}/native`,
+    { cache: "no-store" },
+  );
+  const parsed = ExtensionNativeAdminResponseV1Schema.safeParse(response);
+  if (!parsed.success || (parsed.data.mode === "native" &&
+      (parsed.data.page.viewId !== link.viewId || parsed.data.routeId !== link.routeId ||
+        (parsed.data.workflow !== undefined &&
+          (parsed.data.workflow.viewId !== link.viewId || parsed.data.workflow.routeId !== link.routeId))))) {
+    throw new Error("Invalid native plugin view response");
+  }
+  if (parsed.data.mode === "legacy") return parsed.data;
+  return {
+    mode: "native", page: parsed.data.page, routeId: parsed.data.routeId,
+    ...(parsed.data.workflow ? { workflow: parsed.data.workflow } : {}),
+  };
+}
+
+/**
+ * NUI-03 Host API helpers. Plugin metadata never supplies arbitrary URLs.
+ * Discovery grants no permission; every resource/action is reauthorized.
+ */
+export async function readNativeExtensionDataRegistryApi(pluginId: string) {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/data`, { cache: "no-store" });
+  return ExtensionNativeDataDiscoveryV1Schema.parse(response);
+}
+
+export async function readNativeExtensionResourceApi(
+  pluginId: string, resourceId: string,
+  query: { limit?: number; cursor?: string; filterField?: string; filterValue?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (query.limit !== undefined) qs.set("limit", String(query.limit));
+  if (query.cursor !== undefined) qs.set("cursor", query.cursor);
+  if (query.filterField !== undefined) qs.set("filterField", query.filterField);
+  if (query.filterValue !== undefined) qs.set("filterValue", query.filterValue);
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/resources/${encodeURIComponent(resourceId)}` +
+      (qs.size ? `?${qs.toString()}` : ""),
+    { cache: "no-store" },
+  );
+  return ExtensionNativeDataPageV1Schema.parse(response);
+}
+
+export async function executeNativeExtensionActionApi(
+  pluginId: string, actionId: string,
+  payload: { id: string; expectedVersion?: number;
+    fields: Readonly<Record<string, string | number | boolean | null>> },
+) {
+  const response: unknown = await apiRequest(
+    `/extensions/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(actionId)}`,
+    { method: "POST", body: JSON.stringify(payload), cache: "no-store" },
+  );
+  return ExtensionNativeActionResultV1Schema.parse(response);
 }
 
 export async function listExtensionAdminViewsApi(): Promise<{ items: AdminExtensionViewLink[] }> {

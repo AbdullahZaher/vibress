@@ -15,11 +15,13 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  webServer: {
-    command: "pnpm dev",
-    url: "http://127.0.0.1:7780/health/ready",
-    reuseExistingServer: true,
-    timeout: 120 * 1000,
-  },
+  webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
+    ? undefined
+    : {
+        command: "pnpm dev",
+        url: "http://127.0.0.1:7780/health/ready",
+        reuseExistingServer: true,
+        timeout: 120 * 1000,
+      },
 });
 

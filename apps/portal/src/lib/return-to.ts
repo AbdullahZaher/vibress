@@ -42,7 +42,12 @@ export function sanitizeReturnTo(
     const parsed = new URL(trimmed, baseOrigin);
     if (parsed.origin !== baseOrigin) return null;
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-    const pathname = parsed.pathname.toLowerCase();
+    // A proxy or browser may decode percent-escapes before route handling.
+    // Apply the same restrictions to the decoded path, not just raw text.
+    const decodedPath = decodeURIComponent(parsed.pathname);
+    if (decodedPath.startsWith("//") ||
+        hasControlCharactersOrBackslash(decodedPath)) return null;
+    const pathname = decodedPath.toLowerCase();
     if (
       pathname === "/portal" ||
       pathname.startsWith("/portal/") ||
@@ -87,7 +92,7 @@ export function captureReturnTo(): void {
   }
 }
 
-/** Where to go after successful sign-in: the original page, or the home page. */
+/** Where to go after sign-in: a verified public destination or the member account. */
 export function consumeReturnTo(): string {
   try {
     const value = localStorage.getItem(KEY);
@@ -97,5 +102,7 @@ export function consumeReturnTo(): string {
   } catch {
     // ignore
   }
-  return "/";
+  // The default post-verification destination is the member portal, not the
+  // public homepage. This constant is Host-owned, not untrusted return input.
+  return "/portal/#/account";
 }

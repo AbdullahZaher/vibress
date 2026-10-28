@@ -13,7 +13,8 @@ ARG BUILD_DATE=""
 
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN node scripts/build-production-bundles.mjs && \
+RUN pnpm --filter @vibress/plugin-sdk build && \
+    node scripts/build-production-bundles.mjs && \
     find apps/worker/dist -name "*.map" -delete
 
 # Extract production runtime native dependencies into an isolated directory

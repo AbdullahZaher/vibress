@@ -71,6 +71,36 @@ describe("Batch 12 — Platform Integration & Security", () => {
     await app.close();
   });
 
+  it("rejects unauthenticated Native resources/actions and keeps both disabled by default", async () => {
+    const resourcePath = "/api/admin/v1/extensions/example/resources/courses";
+    const discoveryPath = "/api/admin/v1/extensions/example/data";
+    const actionPath = "/api/admin/v1/extensions/example/actions/course-create";
+    const unauthenticated = await app.inject({ method: "GET", url: resourcePath });
+    expect(unauthenticated.statusCode).toBe(401);
+    const unauthenticatedDiscovery = await app.inject({ method: "GET", url: discoveryPath });
+    expect(unauthenticatedDiscovery.statusCode).toBe(401);
+    const unauthenticatedMutation = await app.inject({
+      method: "POST", url: actionPath,
+      headers: { origin: "http://localhost:7777" },
+      payload: { id: "course-1", fields: { title_en: "Example" } },
+    });
+    expect(unauthenticatedMutation.statusCode).toBe(401);
+    const headers = { cookie: staffCookie, origin: "http://localhost:7777" };
+    const disabledResource = await app.inject({ method: "GET", url: resourcePath, headers });
+    expect(disabledResource.statusCode).toBe(404);
+    const disabledDiscovery = await app.inject({ method: "GET", url: discoveryPath, headers });
+    expect(disabledDiscovery.statusCode).toBe(404);
+    const disabledMutation = await app.inject({
+      method: "POST", url: actionPath, headers,
+      payload: { id: "course-1", fields: { title_en: "Example" } },
+    });
+    expect(disabledMutation.statusCode).toBe(404);
+    const forged = await app.inject({
+      method: "GET", url: resourcePath + "?publicationId=foreign", headers,
+    });
+    expect(forged.statusCode).toBe(400);
+  });
+
   // ---------------- Integrations ----------------
   it("admin creates an integration (secrets encrypted at rest)", async () => {
     const key = `ci-${Date.now()}`;
@@ -388,11 +418,27 @@ describe("Batch 12 — Platform Integration & Security", () => {
       expect(initial.json().items).toEqual([{
         pluginId: goodId, viewId: "courses", routeId: "course-list",
         title: label, label, permission: "plugins.read",
+        nativeProbeSupported: true,
       }]);
       expect(repeated.statusCode).toBe(200);
       expect(repeated.json()).toEqual(initial.json());
       expect(resolve).toHaveBeenCalledTimes(3); // coalesced pinned metadata
       expect(fingerprints).toHaveBeenCalledTimes(2);
+
+      // Native is operator-disabled by default; discovery must not expose
+      // descriptors or bypass Staff authentication on the new endpoint.
+      const nativeProbe = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/" + goodId + "/views/courses/native",
+        headers: { cookie: staffCookie },
+      });
+      expect(nativeProbe.statusCode).toBe(200);
+      expect(nativeProbe.json()).toEqual({ mode: "legacy" });
+      const unauthenticatedProbe = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/extensions/" + goodId + "/views/courses/native",
+      });
+      expect(unauthenticatedProbe.statusCode).toBe(401);
 
       const view = await app.inject({
         method: "GET",
