@@ -10,6 +10,7 @@ import {
 } from "../domain/member";
 import { domainEvents } from "@vibress/events";
 import { runInTransaction } from "@vibress/database";
+import { isMemberAvatarKey } from "@vibress/api-contracts";
 
 export class MemberNotFoundError extends Error {
   code = "MEMBER_NOT_FOUND";
@@ -53,7 +54,7 @@ export class MembersService {
 
   async updateProfile(
     memberId: string,
-    data: { name?: string | null | undefined },
+    data: { name?: string | null | undefined; avatar?: string | null | undefined },
     publicationId?: string,
   ): Promise<Member> {
     const member = await this.memberRepo.findById(memberId, publicationId);
@@ -77,6 +78,13 @@ export class MembersService {
         );
       }
       update.name = name;
+    }
+
+    if (data.avatar !== undefined) {
+      if (data.avatar !== null && !isMemberAvatarKey(data.avatar)) {
+        throw new MemberStateError("VALIDATION_ERROR", "Invalid avatar key");
+      }
+      update.avatar = data.avatar || "default";
     }
 
     const updated = await this.memberRepo.update(memberId, update, publicationId);

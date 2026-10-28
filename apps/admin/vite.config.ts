@@ -3,6 +3,21 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+function getValidatedProxyTarget(): string | undefined {
+  const raw = process.env.API_PROXY_TARGET;
+  if (!raw) return undefined;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+    if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") return undefined;
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+const proxyTarget = getValidatedProxyTarget();
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -59,5 +74,30 @@ export default defineConfig({
   server: {
     port: process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT) : 7779,
     host: "0.0.0.0",
+    proxy: proxyTarget
+      ? {
+          "/api": {
+            target: proxyTarget,
+            changeOrigin: false,
+            configure: (proxy) => {
+              proxy.on("error", (_err, _req, res) => {
+                if ("writeHead" in res && !res.headersSent) {
+                  res.writeHead(502, { "Content-Type": "application/json" });
+                  res.end(
+                    JSON.stringify({
+                      errors: [
+                        {
+                          code: "BAD_GATEWAY",
+                          message: "api proxy destination is unavailable",
+                        },
+                      ],
+                    }),
+                  );
+                }
+              });
+            },
+          },
+        }
+      : undefined,
   },
 });

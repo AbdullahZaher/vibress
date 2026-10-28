@@ -7,6 +7,7 @@ import {
 } from "../lib/catalog";
 import { memberApi } from "../lib/member-api";
 import { navigate } from "../router";
+import { Shell } from "../components/Shell";
 
 export function PlansPage() {
   const [products, setProducts] = useState<PublicProduct[]>([]);
@@ -33,68 +34,66 @@ export function PlansPage() {
     }
   };
 
-  if (loading) return <div className="page-card">Loading plans…</div>;
+  const nav = (
+    <button className="ap-nav-link" onClick={() => navigate("/account")}>
+      Account
+    </button>
+  );
+
+  if (loading) {
+    return (
+      <Shell nav={nav}>
+        <div className="ap-skeleton" style={{ height: 120 }} />
+      </Shell>
+    );
+  }
 
   return (
-    <div className="page-card">
-      <h1>Choose your plan</h1>
-      {error && <div className="form-error">{error}</div>}
-      {products.length === 0 && <p>No plans available yet.</p>}
+    <Shell nav={nav}>
+      <p className="ap-eyebrow">Membership</p>
+      <h1 className="ap-title">Choose your plan.</h1>
+      <p className="ap-sub">Pick the plan that fits you. Change or cancel anytime.</p>
+
+      {error && (
+        <p role="alert" className="ap-alert bad" style={{ marginTop: 24 }}>
+          {error}
+        </p>
+      )}
+      {products.length === 0 && !error && (
+        <div className="ap-group" style={{ marginTop: 32 }}>
+          <p className="ap-empty">No plans available yet.</p>
+        </div>
+      )}
+
       {products.map((product) => (
-        <section key={product.id} style={{ marginBottom: 32 }}>
-          <h2>{product.name}</h2>
-          {product.description && <p>{product.description}</p>}
-          <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+        <section key={product.id} className="ap-section">
+          <h2 className="ap-section-title">{product.name}</h2>
+          {product.description && <p className="ap-sub" style={{ fontSize: 15 }}>{product.description}</p>}
+          <div className="ap-plans">
             {product.plans.map((plan) => (
-              <div
-                key={plan.id}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 8,
-                  padding: 16,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
+              <article key={plan.id} className="ap-plan">
+                <h3 className="ap-plan-name">{plan.name}</h3>
+                <p className="ap-plan-desc">{plan.description}</p>
+                <p className="ap-plan-price">{formatPrice(plan)}</p>
+                <p className="ap-plan-trial">
+                  {plan.trialDays > 0 ? `${plan.trialDays}-day free trial` : "\u00A0"}
+                </p>
+                <button
+                  onClick={() => startCheckout(plan)}
+                  disabled={starting === plan.id}
+                  className="ap-btn ap-btn-block"
                 >
-                  <div>
-                    <strong>{plan.name}</strong>
-                    {plan.description && (
-                      <div style={{ fontSize: 14 }}>{plan.description}</div>
-                    )}
-                    <div style={{ fontSize: 14, color: "#555" }}>
-                      {formatPrice(plan)}
-                    </div>
-                    {plan.trialDays > 0 && (
-                      <div style={{ fontSize: 13, color: "#2a7" }}>
-                        {plan.trialDays}-day free trial
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => startCheckout(plan)}
-                    disabled={starting === plan.id}
-                    className="button button-primary"
-                  >
-                    {starting === plan.id
-                      ? "Starting…"
-                      : plan.billingType === "free"
-                        ? "Get started"
-                        : "Subscribe"}
-                  </button>
-                </div>
-              </div>
+                  {starting === plan.id
+                    ? "Starting…"
+                    : plan.billingType === "free"
+                      ? "Get started"
+                      : "Subscribe"}
+                </button>
+              </article>
             ))}
           </div>
         </section>
       ))}
-      <button className="link-button" onClick={() => navigate("/account")}>
-        Back to account
-      </button>
-    </div>
+    </Shell>
   );
 }

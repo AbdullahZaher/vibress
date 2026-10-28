@@ -46,6 +46,10 @@ Source discovery (registry/Git URL/ZIP) is **not** executable-code admission. Ev
 3. Avoid unsafe embedded HTML; preserve iframe Host authorization and theme/SDK ABI.
 4. **Exit gate:** Staff/operator capability matrix, cross-publication denial, accessible end-to-end flows, no storage/secret exposure.
 
+### Related P1 design proposal: Native Admin UI Extensions
+
+A separate [Native Admin UI plan](native-admin-ui-plan.md) and [draft RFC](native-admin-ui-rfc.md) propose optional Host-rendered declarative plugin pages with [security and compatibility gates](native-admin-ui-security-compatibility.md). This is a **design track with an experimental, default-off NUI-01/NUI-02 Host read-only implementation candidate**, not an accepted release or part of the implemented Phase 3 state and not a replacement for outstanding P0/operator sign-offs. Existing opaque-origin iframe and scalar-view behavior remain supported. The LMS pilot is conditional on an explicit decision to resume LMS feature work. The [NUI-00 review](native-admin-ui-nui00-review.md) and [threat model](native-admin-ui-threat-model.md) record high-priority design and legacy LMS risks; the approval gate remains open.
+
 ## Phase 4 — P1: Updates, migrations and recovery
 
 1. Compare old/new pinned immutable releases, compatibility/capability diffs and approved migration plan **before** any lifecycle transition.

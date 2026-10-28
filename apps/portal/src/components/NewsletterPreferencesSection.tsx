@@ -66,52 +66,55 @@ export function NewsletterPreferencesSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p>Loading preferences…</p>;
+  if (loading) {
+    return (
+      <section className="ap-section">
+        <div className="ap-skeleton" />
+      </section>
+    );
+  }
 
   return (
-    <div
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
-    >
-      <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 12px" }}>
-        Email preferences
-      </h2>
+    <section className="ap-section" aria-labelledby="prefs-h">
+      <div className="ap-section-head">
+        <h2 className="ap-section-title" id="prefs-h">
+          Email preferences
+        </h2>
+      </div>
       {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}
-        >
+        <p role="alert" className="ap-alert bad">
           {error}
         </p>
       )}
-      {Object.keys(preferences).length === 0 ? (
-        <p style={{ fontSize: 14, color: "#475569" }}>
-          You have no newsletter preferences yet.
-        </p>
-      ) : (
-        Object.entries(preferences).map(([newsletterId, subscribed]) => (
-          <label
-            key={newsletterId}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 10,
-              fontSize: 14,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={subscribed}
-              disabled={saving === newsletterId}
-              onChange={(e) => toggle(newsletterId, e.target.checked)}
-            />
-            {subscribed ? "Subscribed" : "Unsubscribed"}
-            <span style={{ color: "#6b7280", fontSize: 12 }}>
-              ({newsletterId.slice(0, 8)}…)
-            </span>
-          </label>
-        ))
-      )}
-    </div>
+      <div className="ap-group">
+        {Object.keys(preferences).length === 0 ? (
+          <p className="ap-empty">You have no newsletter preferences yet.</p>
+        ) : (
+          Object.entries(preferences).map(([newsletterId, subscribed]) => (
+            <div key={newsletterId} className="ap-row">
+              <div>
+                <div className="ap-row-label">
+                  Newsletter {newsletterId.slice(0, 8)}
+                </div>
+                <div className="ap-row-meta">
+                  {subscribed ? "Subscribed" : "Unsubscribed"}
+                </div>
+              </div>
+              <label className="ap-switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={`Newsletter ${newsletterId.slice(0, 8)}`}
+                  checked={subscribed}
+                  disabled={saving === newsletterId}
+                  onChange={(e) => toggle(newsletterId, e.target.checked)}
+                />
+                <span className="ap-slider" />
+              </label>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }

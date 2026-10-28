@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Pearl Avatar</title>
+  <mask id="mask__beam__pearl" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__pearl)">
+    <rect width="36" height="36" fill="#F3F4F6" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(5 -4) rotate(120 18 18) scale(1.1)" fill="#111827" rx="8" />
+    <g transform="translate(-2 2) rotate(6 18 18)">
+      <path d="M13,21 a1,0.75 0 0,0 10,0" fill="#FFFFFF" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#FFFFFF" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#FFFFFF" />
+    </g>
+  </g>
+</svg>

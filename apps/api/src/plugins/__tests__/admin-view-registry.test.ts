@@ -80,6 +80,44 @@ describe("EXT-301A Admin view admission", () => {
     })).toBeNull();
   });
 
+  it("allows an inert group, validates its bounds, and preserves permissions", () => {
+    const valid = moduleWithView();
+    const group = { id: "learning", label, icon: "book-open" as const };
+    const admitted = admitAdminViews({ ...valid, adminNavigation: [
+      { viewId: "courses", label, permission: "plugins.read", group },
+    ] });
+    expect(admitted?.[0]?.group).toEqual(group);
+    expect(ExtensionAdminNavigationResponseSchema.safeParse({
+      items: [{ pluginId: "courses", ...admitted?.[0] }],
+    }).success).toBe(true);
+    expect(ExtensionAdminNavigationResponseSchema.safeParse({
+      items: [{ pluginId: "courses", ...admitted?.[0], group: { ...group, icon: "evil" } }],
+    }).success).toBe(false);
+    expect(admitAdminViews({ ...valid, adminNavigation: [
+      { viewId: "courses", label, permission: "plugins.read", group: { ...group, id: "../evil" } },
+    ] })).toBeNull();
+    expect(admitAdminViews({ ...valid, adminNavigation: [
+      { viewId: "courses", label, permission: "plugins.manage", group },
+    ] })).toBeNull();
+  });
+
+  it("rejects conflicting names for one group in a plugin", () => {
+    const good = moduleWithView();
+    const firstRoute = good.routes?.[0];
+    const firstView = good.adminViews?.[0];
+    if (!firstRoute || !firstView) throw Error("Invalid fixture");
+    expect(admitAdminViews({ ...good,
+      routes: [firstRoute, { ...firstRoute, id: "other" }],
+      adminViews: [firstView, { id: "other", routeId: "other", title: label }],
+      adminNavigation: [
+        { viewId: "courses", label, permission: "plugins.read",
+          group: { id: "learning", label } },
+        { viewId: "other", label, permission: "plugins.read",
+          group: { id: "learning", label: { en: "Other", ar: "Other" } } },
+      ],
+    })).toBeNull();
+  });
+
   it("rejects undeclared required fields in GET response schemas", () => {
     const good = moduleWithView();
     expect(admitAdminViews({

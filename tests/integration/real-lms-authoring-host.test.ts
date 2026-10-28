@@ -524,6 +524,138 @@ describe("LMS-104: Production-Quality Public Course Catalog, Protected Lessons &
     expect((await reEditRes.json()).outcome).toBe("immutable");
   });
 
+  it("NUI-06: signed LMS Native Host admission enforces real publication and release boundaries", async () => {
+    // Real signed ESM, PostgreSQL-backed storage and an authenticated Staff
+    // session: avoid claiming production acceptance from an isolated fake.
+    const releaseDigest = createHash("sha256")
+      .update(await readFile(artifactPath)).digest("hex");
+    const approvedRelease = `vibress-lms-authoring@${releaseDigest}`;
+    const staffToken = process.env["STAFF_SESSION_COOKIE_" + runId];
+    expect(staffToken).toBeTruthy();
+    const headers = {
+      host: domainA,
+      authorization: `Bearer ${staffToken}`,
+      "x-publication-id": pubAId,
+    };
+    const nativeUrl = "/api/admin/v1/extensions/vibress-lms-authoring/views/course-overview/native";
+    const dataUrl = "/api/admin/v1/extensions/vibress-lms-authoring/data";
+    const resourceUrl = "/api/admin/v1/extensions/vibress-lms-authoring/resources/course-records";
+    const previousRead = process.env.VIBRESS_NATIVE_ADMIN_UI_RELEASES;
+    const previousWrite = process.env.VIBRESS_NATIVE_ADMIN_ACTION_RELEASES;
+    const previousCursorKey = process.env.VIBRESS_ENCRYPTION_KEY;
+    let siteDisabled = false;
+
+    try {
+      delete process.env.VIBRESS_NATIVE_ADMIN_UI_RELEASES;
+      delete process.env.VIBRESS_NATIVE_ADMIN_ACTION_RELEASES;
+      // Default-off on both fresh and upgraded installations.
+      const legacy = await app.inject({ method: "GET", url: nativeUrl, headers });
+      expect(legacy.statusCode).toBe(200);
+      expect(legacy.json()).toEqual({ mode: "legacy" });
+      expect((await app.inject({ method: "GET", url: dataUrl, headers })).statusCode).toBe(404);
+
+      process.env.VIBRESS_NATIVE_ADMIN_UI_RELEASES = approvedRelease;
+      process.env.VIBRESS_ENCRYPTION_KEY = "a".repeat(64);
+      const readOnly = await app.inject({ method: "GET", url: nativeUrl, headers });
+      expect(readOnly.statusCode).toBe(200);
+      expect(readOnly.json()).toMatchObject({ mode: "native", routeId: "courses" });
+      expect(readOnly.json().workflow).toBeUndefined();
+
+      const registry = await app.inject({ method: "GET", url: dataUrl, headers });
+      expect(registry.statusCode).toBe(200);
+      expect(registry.json().resources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "course-records", viewId: "course-overview" }),
+      ]));
+      expect(registry.json().actions).toEqual([]);
+
+      const page = await app.inject({
+        method: "GET", url: resourceUrl + "?limit=5", headers,
+      });
+      expect(page.statusCode).toBe(200);
+      const course = page.json().items.find(
+        (item: { id: string }) => item.id === sampleCourse.courseId,
+      );
+      expect(course).toMatchObject({
+        id: sampleCourse.courseId,
+        fields: {
+          title_en: sampleCourse.title_en,
+          title_ar: sampleCourse.title_ar,
+          status: "published",
+        },
+      });
+      expect(page.headers["cache-control"]).toContain("no-store");
+
+      // A valid global Staff session does not authorize a publication without
+      // a local membership, even if that publication has the plugin enabled.
+      const foreignHeaders = { ...headers, "x-publication-id": pubBId };
+      expect((await app.inject({
+        method: "GET", url: resourceUrl, headers: foreignHeaders,
+      })).statusCode).toBe(403);
+      expect((await app.inject({
+        method: "GET", url: nativeUrl, headers: foreignHeaders,
+      })).statusCode).toBe(403);
+      expect((await app.inject({
+        method: "GET", url: resourceUrl,
+      })).statusCode).toBe(401);
+
+      // Operator read admission cannot grant a Native publish form.
+      process.env.VIBRESS_NATIVE_ADMIN_ACTION_RELEASES = approvedRelease;
+      const withWriteApproval = await app.inject({
+        method: "GET", url: nativeUrl, headers,
+      });
+      expect(withWriteApproval.statusCode).toBe(200);
+      expect(withWriteApproval.json().workflow).toMatchObject({
+        routeId: "courses", resourceId: "course-records",
+        operations: ["create", "save", "publish"],
+      });
+      // LMS declares no generic storage actions: all authoring must use its
+      // existing validated, permission-checked domain POST route.
+      expect((await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/extensions/vibress-lms-authoring/actions/publish",
+        headers: { ...headers, origin: "http://localhost:7777" },
+        payload: { id: sampleCourse.courseId, fields: {} },
+      })).statusCode).toBe(404);
+
+      await pluginsService.setPublicationEnabled(
+        registeredPluginId, pubAId, false, "operator-test",
+      );
+      siteDisabled = true;
+      expect((await app.inject({
+        method: "GET", url: nativeUrl, headers,
+      })).statusCode).toBe(404);
+      expect((await app.inject({
+        method: "GET", url: resourceUrl, headers,
+      })).statusCode).toBe(404);
+
+      await pluginsService.setPublicationEnabled(
+        registeredPluginId, pubAId, true, "operator-test",
+      );
+      siteDisabled = false;
+      const restored = await app.inject({
+        method: "GET", url: resourceUrl, headers,
+      });
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json().items.some(
+        (item: { id: string }) => item.id === sampleCourse.courseId,
+      )).toBe(true);
+    } finally {
+      if (siteDisabled) {
+        await pluginsService.setPublicationEnabled(
+          registeredPluginId, pubAId, true, "operator-test",
+        );
+      }
+      for (const [key, value] of [
+        ["VIBRESS_NATIVE_ADMIN_UI_RELEASES", previousRead],
+        ["VIBRESS_NATIVE_ADMIN_ACTION_RELEASES", previousWrite],
+        ["VIBRESS_ENCRYPTION_KEY", previousCursorKey],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }, 90000);
+
   it("Step 5: verifies public catalog and course detail with bilingual projections and strict privacy", async () => {
     const siteA = `http://${domainA}:${serverPort}`;
     const siteB = `http://${domainB}:${serverPort}`;

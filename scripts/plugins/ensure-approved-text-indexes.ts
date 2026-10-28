@@ -108,7 +108,11 @@ async function main(): Promise<void> {
     await closeDbPool();
   }
 }
-main().catch((error: unknown) => {
-  process.stderr.write(`Operator index maintenance failed: ${error instanceof Error ? error.message : "unknown"}\n`);
-  process.exitCode = 1;
-});
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error: unknown) => {
+    process.stderr.write(`Operator index maintenance failed: ${error instanceof Error ? error.message : "unknown"}\n`);
+    process.exit(1);
+  });

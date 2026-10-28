@@ -1,0 +1,120 @@
+# Native Admin UI — Security, Compatibility, and Acceptance Matrix
+
+**Status:** NUI-00–NUI-07 implementation & automated CI gates complete; **HELD DEFAULT-OFF IN PRODUCTION PENDING FORMAL HUMAN APPROVAL**.
+**Verified Head SHA:** `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648))
+**Date:** 2026-10-28.
+**Related:** [Implementation plan](native-admin-ui-plan.md), [RFC](native-admin-ui-rfc.md), [Tier 2 ADR](plugin-runtime-tier2-isolation-adr.md), [SDK release gates](external-sdk-release-gates.md).
+
+## Security invariant
+
+A native Admin plugin page is Host-rendered **untrusted data**, never Host-executed browser code contributed by a plugin. This protects the browser trust boundary but **does not** constrain the privileges of an operator-trusted in-process Tier 1 ESM plugin in API/Worker. No untrusted ZIP/GitHub/marketplace execution is authorized. Tier 2 process/container isolation must be handled separately.
+
+## Threat/control matrix
+
+| Threat | Required control | Required negative test |
+| --- | --- | --- |
+| DOM XSS via a title, cell, error, or field | Text-only React rendering; no dangerous HTML/JS, arbitrary href, CSS, component type, or expression | Inject scripts, event attributes, dangerous URL schemes and hostile Unicode through every display field |
+| Privilege escalation through declarative controls | Descriptors may reference only fixed approved action/resource IDs; server separately authorizes every request | Forge an action ID, method, URL, permission, and request body |
+| Cross-publication access (IDOR) | Host derives publication from authenticated Staff context, checks global permission AND local role, verifies resource ownership | User from site A opens/edits same ID on site B; switch site during an in-flight request |
+| Inactive/revoked/changed plugin | Check live status and release identity on each resource/action request; invalidate view state on changes | Disable or upgrade plugin with a page open; attempt stale/replayed requests |
+| Secret disclosure | Secret values are not descriptors/discovery data; preserve settings masking/redaction/encryption | Inspect initial HTML, network JSON, errors, logs and drafts for leaked plaintext secrets |
+| CSRF/origin bypass | Retain `requireStaffSession`, `validateOrigin`, and same existing route protections | Cross-origin POST or cookie-only request without valid Host context |
+| Descriptor denial of service | Bound bytes, depth, items, columns, recursion, rows, pagination, latency, and active actions | Deeply nested, huge, circular-looking, repeated, or expensive descriptor/resource inputs |
+| Conflicting or duplicate mutation | Explicit version/ETag or optimistic checks, guarded idempotency where relevant, consistent audit | Concurrent save/publish, stale revision, duplicate submit, retry after network loss |
+| Caching private data across sites | No global cache of session/role/publication data; generation/scoped query keys on client | Render site A data after switching to B; late promise resolution |
+| Unsafe fallback | Missing native contract uses legacy mode; invalid/revoked native contract fails closed | Corrupt native declaration then attempt iframe/HTML privilege bypass |
+| Browser API or network access | Plugin descriptors never run code or choose fetch targets; Admin transport fixed in Host | Supply external script/import URL, data exfiltration URL or forged action endpoint |
+| Supply-chain/artifact confusion | Bind descriptor/version to the operator-approved immutable release; no unverified assets | Change release digest, stale descriptor, mismatched Host/API replicas |
+| Per-action/resource permission confusion | Page visibility cannot authorize mutation; Host validates fixed action ID, capability, global/local permission, and record ownership | Forge page permission, cross-plugin action ID, resource ID and publication-owned record ID |
+| Legacy LMS stored markup injection | Treat persisted values as hostile; remove dynamic `innerHTML` interpolation from legacy LMS HTML | Store hostile course title/ID; verify no executable markup or unexpected bridge use |
+| Truncated serialized course lists | Do not rely on `JSON.stringify(...).slice(0, 4000)`; use typed paginated resources | 50+ courses and large/multilingual labels must paginate without malformed JSON |
+| ABI/version mismatch | Negotiate Host/SDK/UI schema/release digest; do not assume `plugin-core` is canonical SDK | Old Host/new required-native plugin, unsupported schema, mixed-replica release |
+| Operator rollout setting ambiguity | Default off, pinned release allowlist and documented operator setting/upgrade contract | Missing/invalid setting, revoked allowlist, rollback with stored production data |
+
+For read-only views, never infer that hidden controls are enforcement. For writes, UI confirmation does not make a request authorized. Return sanitized errors and preserve request IDs.
+
+## Backward-compatibility matrix
+
+| Existing consumer or state | Required behavior | Upgrade test |
+| --- | --- | --- |
+| v1 `PluginModule` without `adminPages` | Continue to load unchanged | Build and invoke an old plugin in new Host |
+| Existing `adminViews`/`adminNavigation` | Preserve IDs, link generation, declared route permissions and locale labels | Old view list/navigation still matches |
+| Approved iframe assets | Preserve opaque-origin sandbox, Redis ticket, CSP, MessagePort security and revocation | Existing frame loads; permission revocation fails closed |
+| Host-rendered scalar data view | Preserve current read-only output and legacy fallback rules | Plugin with no HTML/native descriptor renders as before |
+| Old Host receiving new plugin | Optional metadata is ignored only for legacy-compatible behavior; plugins requiring native must declare a compatible minimum Host/ABI and must not silently lose critical functions | Test old Host with native-optional and native-required plugins and mixed-release workers |
+| Existing `PluginApiRoute` scalar contract | No silent object/array widening or changed error shapes | Existing route/response-schema tests remain green |
+| Stored plugin settings/secrets | No copy between publications, no plaintext leak, no reset on render-mode switch | Populated upgrade; secret masking; site switch |
+| LMS course/enrollment/lesson data | Keep current durable formats and publication/member isolation | Reopen existing draft and published courses after UI switch |
+| Admin routes and bookmarked URLs | Keep `/admin/extensions/:pluginId/:viewId` where possible | Deep link and browser back/forward behavior |
+| Public Web SSR, member APIs and themes | No change required to consume Native Admin UI | Two-theme rendering/SEO/member access regression |
+| Self-hosted/multiple replicas | Deterministic approved version, identical admission and graceful rollback | Mixed rollout then pinned rollback/restore |
+
+A backward-compatibility claim is incomplete without **both** a fresh install and a populated upgrade test. Released migrations must not be rewritten. No database migration should be added solely to switch display mode unless there is a reviewed, proven storage requirement.
+
+## Locale, accessibility, and design-system acceptance
+
+- Host locale resolution and well-defined fallback; v1 `en`/`ar` labels remain valid, but the future ABI cannot assume two permanent global languages.
+- Arabic RTL, mixed-direction titles, translated long labels, and content IDs displayed with correct direction.
+- Accessible page heading and hierarchy, keyboard navigation, visible focus, screen-reader labels, and validation error association.
+- Dialog focus trap/return, save success/error announcements, loading/empty/denied states, and unsaved-change protection.
+- Mobile, tablet, narrow sidebar, zoom, dark mode, and reduced motion where relevant.
+- Consistent Admin Posts-style header and shared components, not copied extension-specific styles.
+
+## Test matrix by increment
+
+| Increment | Primary tests | Evidence required |
+| --- | --- | --- |
+| NUI-00 | Documentation diff and architecture review | RFC decisions recorded; explicit sign-offs |
+| NUI-01 | SDK/contract unit tests, malicious descriptors, legacy ABI | Independent old/new consumer fixtures |
+| NUI-02 | Renderer component/E2E, CSP and DOM injection, locale/RTL | Native read-only page without executable plugin code |
+| NUI-03 | API/auth/integration, cross-publication, conflicts, duplicate actions | Negative authorization, structured data and concurrency tests |
+| NUI-04 | Admin E2E and a11y, settings secrets, navigation | Keyboard/dark/RTL/mobile and permission matrix |
+| NUI-05 | LMS API/database/browser parity across two publications | Existing content preserved; create/edit/save/publish parity |
+| NUI-06 | Security review, Docker, cross-replica, rollback, restore, performance | Operator evidence and release sign-off |
+| NUI-07 | Independent plugin conformance and compatibility suite | Published support policy and version matrix |
+
+The checks to run vary with the affected scope. Appropriate gates include targeted Vitest, API/DB integration, relevant E2E, `pnpm typecheck`, `pnpm lint`, `pnpm verify:explicit-any`, `pnpm vitest run`, `pnpm build`, dependency auditing, image scans and operator restore/rollout drills. Do not claim any gate passed when it has not been executed.
+
+## Rollout / rollback acceptance
+
+1. Operator-enabled Native is initially off and can be activated per reviewed release.
+2. Revoke plugin, change publication or role, log out, and remove/stale the release while a page is open: the UI must stop accepting data/mutations.
+3. If native metadata is absent, existing frame/data selection works. If it is explicitly invalid or access was revoked, show a denial; do not automatically downgrade to a more privileged implementation.
+4. Roll back native rendering without removing plugin content, settings, migrations, enrollments, or artifact admission controls.
+5. Confirm replica-consistent release activation before opening the feature to additional publications. Rollback of code does not imply DB rollback.
+
+## NUI-05 scoped remediation acceptance (2026-10-26)
+
+- Independent LMS authoring fixtures must explicitly restrict public and Member generic
+  storage reads to the `courses` model. Enrollments/completions remain in Member-owned
+  storage; the public API continues to project **published** courses only. Previously
+  signed operator packages do not change until independently rebuilt and reapproved.
+- A Native data-resource 401/403, or a 404 for a formerly bound resource, must
+  immediately hide both the resource editor and the parent Native scalar data.
+  A read-only plugin without a declared resource may continue to treat initial
+  resource discovery 404 as absent, preserving its existing Host-only page.
+- The legacy LMS iframe's bounded `coursesJson` must always parse as complete JSON.
+  It must not silently truncate editable lesson bodies; the existing full first-record
+  scalar projection remains its compatibility fallback when list rows exceed the limit.
+- The scoped source changes and unit tests do **not** satisfy real PostgreSQL/Redis,
+  two-publication browser, signed-artifact, upgrade/rollback or full CI acceptance.
+  Native action-release allowlists must remain disabled in production until those gates pass.
+
+## Open blockers / sign-off
+
+See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria.
+
+- **Automated Verification Status:** All technical automated engineering gates across NUI-00 through NUI-07 are completed and verified green in GitHub Actions CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (Build with 2,299 Vitest tests across 294 test files, Container Scan with 0 Trivy findings, and E2E Playwright).
+- **Security Scope & Boundary Clarifications:**
+  - *Pagination Cursors:* Authenticated via HMAC-SHA256 signatures with 15-minute TTL, not encrypted ciphertext; tokens protect integrity and bind context (actor, publication, resource, digest, filter) against forgery.
+  - *Trivy Container Scan:* Confirms zero findings against `--severity HIGH,CRITICAL --ignore-unfixed`; this verifies compliance with the automated release gate rather than the absolute absence of vulnerabilities.
+  - *Accessibility Smoke Checks:* Playwright automated assertions verify keyboard navigation (Tab, Enter, Escape) and RTL rendering; they provide smoke verification and do not independently certify full WCAG 2.2 AA compliance.
+  - *Artifact Attestation:* Operator Ed25519 signature verification and SHA-256 digest pinning guarantee artifact immutability and provenance; they do not establish an isolated sandboxed runtime for Tier 1 Node.js execution.
+  - *Operational Runbooks:* Automated tests for CAS concurrency, migration rollbacks, and DR scripts provide baseline confidence, but physical operator rehearsals for rollback and backup/restore remain mandatory prior to production deployment.
+- **Multi-Process Replica & DB Concurrency:** Verified in `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 passed) and `tests/integration/native-data-cursor-multi-replica.test.ts` (5/5 passed).
+- **Packaged External Consumer:** Verified in `tests/integration/native-admin-independent-packaged-consumer.test.ts` (9/9 passed).
+- **Genuine E2E Browser Acceptance:** Verified in `tests/e2e/native-admin-lms-real-e2e.test.ts` (Chromium -> Admin Vite -> Fastify API -> PostgreSQL).
+- **Production Activation Hold:** Both `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` remain default-unset in production. Enabling them requires formal human administrative and operator sign-off.
+- **LMS Feature Pause:** Feature-development on LMS remains paused; only Host-platform compatibility is admitted.
+
+**Decision record:** Automated technical gates are certified green; PR #96 is **READY FOR AUTHORIZED REVIEW** (not production approved).

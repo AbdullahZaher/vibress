@@ -68,6 +68,40 @@ describe("NavExtensionViews", () => {
     expect(onNavigate).toHaveBeenCalledWith("/admin/extensions/vibress-lms-authoring/courses");
   });
 
+  it("renders independently grouped plugins alongside legacy navigation", async () => {
+    const onNavigate = vi.fn();
+    const item: AdminExtensionViewLink = {
+      ...genericItem,
+      group: { id: "insights", label: { en: "Insights", ar: "Insights" }, icon: "book-open" },
+    };
+    await act(async () => {
+      root.render(
+        <NavExtensionViews items={[item, lmsItem]}
+          currentPath="/admin/extensions/analytics-tool/reports" onNavigate={onNavigate} />,
+      );
+    });
+    expect(Array.from(container.querySelectorAll("nav")).map((nav) =>
+      nav.getAttribute("aria-label"))).toEqual(["LMS", "Insights"]);
+    const button = container.querySelector<HTMLButtonElement>('[aria-current="page"]');
+    expect(button?.textContent).toContain("Reports");
+    await act(async () => { button?.click(); });
+    expect(onNavigate).toHaveBeenCalledWith("/admin/extensions/analytics-tool/reports");
+  });
+
+  it("does not merge identically named groups across different plugins", async () => {
+    const group = { id: "shared", label: { en: "Insights", ar: "Insights" } };
+    const other: AdminExtensionViewLink = {
+      ...genericItem, pluginId: "another-plugin", viewId: "events", routeId: "events",
+      group: { ...group, label: { en: "Security", ar: "Security" } },
+    };
+    await act(async () => {
+      root.render(<NavExtensionViews items={[{ ...genericItem, group }, other]}
+        currentPath="/admin" onNavigate={vi.fn()} />);
+    });
+    expect(Array.from(container.querySelectorAll("nav")).map((nav) =>
+      nav.getAttribute("aria-label"))).toEqual(["Insights", "Security"]);
+  });
+
   it("returns null when items is empty", async () => {
     await act(async () => {
       root.render(

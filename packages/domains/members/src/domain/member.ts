@@ -6,6 +6,7 @@ export interface Member {
   email: string;
   emailNormalized: string;
   name: string | null;
+  avatar?: string | null;
   status: MemberStatus;
   emailVerifiedAt: Date | null;
   lastSeenAt: Date | null;
@@ -20,12 +21,14 @@ export interface CreateMemberData {
   email: string;
   emailNormalized: string;
   name?: string | null | undefined;
+  avatar?: string | null | undefined;
   status?: MemberStatus | undefined;
   emailVerifiedAt?: Date | null | undefined;
 }
 
 export interface UpdateMemberData {
   name?: string | null | undefined;
+  avatar?: string | null | undefined;
   status?: MemberStatus | undefined;
   emailVerifiedAt?: Date | null | undefined;
   lastSeenAt?: Date | null | undefined;

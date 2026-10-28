@@ -67,95 +67,58 @@ export function NotificationsSection({ authLost }: Props) {
     }
   };
 
-  if (loading) return <p>Loading notifications…</p>;
+  if (loading) {
+    return (
+      <section className="ap-section">
+        <div className="ap-skeleton" />
+      </section>
+    );
+  }
 
   return (
-    <div
-      style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>
-          Notifications{" "}
-          {unreadCount > 0 && (
-            <span style={{ fontSize: 13, color: "#dc2626", marginLeft: 8 }}>
-              {unreadCount} unread
-            </span>
-          )}
+    <section className="ap-section" aria-labelledby="notif-h">
+      <div className="ap-section-head">
+        <h2 className="ap-section-title" id="notif-h">
+          Notifications
+          {unreadCount > 0 && <span className="ap-badge">{unreadCount}</span>}
         </h2>
         {unreadCount > 0 && (
-          <button
-            onClick={handleMarkAllRead}
-            style={{
-              fontSize: 13,
-              color: "#2563eb",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
+          <button className="ap-link" onClick={handleMarkAllRead}>
             Mark all read
           </button>
         )}
       </div>
       {error && (
-        <p
-          role="alert"
-          style={{ color: "#dc2626", fontSize: 13, margin: "0 0 12px" }}
-        >
+        <p role="alert" className="ap-alert bad">
           {error}
         </p>
       )}
-      {notifications.length === 0 ? (
-        <p style={{ fontSize: 14, color: "#475569" }}>No notifications.</p>
-      ) : (
-        notifications.map((n) => (
-          <div
-            key={n.id}
-            style={{
-              padding: "12px 16px",
-              marginBottom: 8,
-              borderRadius: 8,
-              border: "1px solid #e2e8f0",
-              backgroundColor: n.readAt ? "#ffffff" : "#f0f7ff",
-              fontSize: 14,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span>{TYPE_LABELS[n.type] || n.type}</span>
+      <div className="ap-group">
+        {notifications.length === 0 ? (
+          <p className="ap-empty">You're all caught up.</p>
+        ) : (
+          notifications.map((n) => (
+            <div key={n.id} className={`ap-row${n.readAt ? "" : " ap-unread"}`}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                {!n.readAt && <span className="ap-dot" aria-label="Unread" />}
+                <div>
+                  <div className="ap-row-label">
+                    {TYPE_LABELS[n.type] || n.type}
+                  </div>
+                  <div className="ap-row-meta">
+                    {new Date(n.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              </div>
               {!n.readAt && (
-                <button
-                  onClick={() => handleMarkRead(n.id)}
-                  style={{
-                    fontSize: 12,
-                    color: "#2563eb",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
+                <button className="ap-link" onClick={() => handleMarkRead(n.id)}>
                   Mark read
                 </button>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
-              {new Date(n.createdAt).toLocaleString()}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }

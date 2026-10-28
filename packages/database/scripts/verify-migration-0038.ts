@@ -286,10 +286,12 @@ async function verifyOnlineFirstUpgrade(migrationSql: string): Promise<void> {
 }
 
 verifyMigration0038()
-  .catch((err) => {
-    console.error("Verification failed:", err);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await closeDbPool();
+    process.exit(0);
+  })
+  .catch(async (err) => {
+    console.error("Verification failed:", err);
+    await closeDbPool();
+    process.exit(1);
   });

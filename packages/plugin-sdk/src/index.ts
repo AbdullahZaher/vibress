@@ -1,4 +1,10 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
+import type { PluginNativeAdminPageV1 } from "./native-admin-ui";
+import type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
+export type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
+import type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
+export type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
+export type { PluginNativeAdminPageV1, PluginNativeAdminComponentV1 } from "./native-admin-ui";
 
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
@@ -152,11 +158,18 @@ export interface PluginAdminView {
   readonly routeId: string;
   readonly title: PluginAdminLocalizedLabel;
 }
+/** Optional inert group metadata; Host owns its route and permission. */
+export interface PluginAdminNavigationGroup {
+  readonly id: string;
+  readonly label: PluginAdminLocalizedLabel;
+  readonly icon?: "puzzle" | "graduation-cap" | "book-open" | undefined;
+}
 export interface PluginAdminNavigationItem {
   readonly viewId: string;
   readonly label: PluginAdminLocalizedLabel;
   /** Must match the linked route permission; the Host checks both. */
   readonly permission: PluginAdminPermission;
+  readonly group?: PluginAdminNavigationGroup | undefined;
 }
 
 /**
@@ -181,6 +194,13 @@ export interface PluginModule {
   /** Optional metadata only; never executable UI contributions. */
   readonly adminViews?: readonly PluginAdminView[] | undefined;
   readonly adminNavigation?: readonly PluginAdminNavigationItem[] | undefined;
+  /** NUI-01 experimental inert metadata only; no runtime renderer/admission yet. */
+  readonly adminPages?: readonly PluginNativeAdminPageV1[] | undefined;
+  /** NUI-03 experimental Host-owned storage only; disabled without operator approval. */
+  readonly adminResources?: readonly PluginAdminDataResourceV1[] | undefined;
+  readonly adminActions?: readonly PluginAdminDataActionV1[] | undefined;
+  /** NUI-05 inert form metadata for an already authorized Admin POST route. */
+  readonly adminDomainWorkflows?: readonly PluginAdminDomainWorkflowV1[] | undefined;
   /** Explicitly declared public SSR views; legacy modules remain unchanged. */
   readonly publicViews?: readonly PluginPublicView[] | undefined;
   deactivate?(): void | Promise<void>;
@@ -524,7 +544,7 @@ export function validateManifest(manifest: unknown): PluginManifest {
  * Verifies SHA-256 cryptographic checksum of plugin code or package artifact.
  */
 export function verifyPluginChecksum(
-  data: Buffer | string,
+  data: Uint8Array | string,
   expectedSha256: string,
 ): boolean {
   const actualHash = crypto
@@ -542,7 +562,7 @@ export async function executeWithTimeout<T>(
   fn: () => Promise<T> | T,
   timeoutMs = 5000,
 ): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       reject(new Error(`Plugin execution exceeded timeout of ${timeoutMs}ms`));

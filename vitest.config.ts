@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 export default defineConfig({
   // The Next.js web app preserves JSX in its TypeScript config. Vitest runs
@@ -64,6 +67,10 @@ export default defineConfig({
       "@vibress/auth": path.resolve(
         __dirname,
         "./packages/domains/auth/src/index.ts",
+      ),
+      "@vibress/members": path.resolve(
+        __dirname,
+        "./packages/domains/members/src/index.ts",
       ),
       "@vibress/tags": path.resolve(
         __dirname,
@@ -228,6 +235,9 @@ export default defineConfig({
         "./packages/domains/search/src/index.ts",
       ),
       "@": path.resolve(__dirname, "./apps/admin/src"),
+      fastify: require.resolve("fastify", {
+        paths: [path.resolve(__dirname, "apps/api")],
+      }),
     },
   },
 });

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, beforeAll } from "vitest";
-import { getDb, publications } from "@vibress/database";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
+import { getDb, publications, members, inArray } from "@vibress/database";
 import { DrizzleMemberRepository } from "../infrastructure/drizzle-member-repository";
 import { MembersService, MemberNotFoundError } from "../application/members-service";
 
@@ -14,6 +14,13 @@ describe("Members Multi-Publication Isolation", () => {
     revokeAllForMember: async () => 1,
     deleteExpired: async () => 0,
   } as any;
+
+  const cleanup = async () => {
+    const db = getDb();
+    await db
+      .delete(members)
+      .where(inArray(members.publicationId, ["pub_alpha", "pub_beta"]));
+  };
 
   beforeAll(async () => {
     const db = getDb();
@@ -36,9 +43,15 @@ describe("Members Multi-Publication Isolation", () => {
         },
       ])
       .onConflictDoNothing();
+    await cleanup();
   });
 
-  beforeEach(() => {
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  beforeEach(async () => {
+    await cleanup();
     memberRepo = new DrizzleMemberRepository();
     membersService = new MembersService(memberRepo, mockSessionRepo);
   });

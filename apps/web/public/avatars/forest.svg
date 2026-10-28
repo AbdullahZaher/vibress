@@ -1,0 +1,15 @@
+<svg viewBox="0 0 36 36" fill="none" role="img" xmlns="http://www.w3.org/2000/svg" width="128" height="128">
+  <title>Forest Avatar</title>
+  <mask id="mask__beam__forest" maskUnits="userSpaceOnUse" x="0" y="0" width="36" height="36">
+    <rect width="36" height="36" fill="#FFFFFF" />
+  </mask>
+  <g mask="url(#mask__beam__forest)">
+    <rect width="36" height="36" fill="#064E3B" />
+    <rect x="0" y="0" width="36" height="36" transform="translate(-6 2) rotate(165 18 18) scale(1.2)" fill="#FDE047" rx="36" />
+    <g transform="translate(-3 -3) rotate(4 18 18)">
+      <path d="M15 19c2 1 4 1 6 0" stroke="#022C22" fill="none" stroke-linecap="round" />
+      <rect x="10" y="14" width="1.5" height="2" rx="1" fill="#022C22" />
+      <rect x="24" y="14" width="1.5" height="2" rx="1" fill="#022C22" />
+    </g>
+  </g>
+</svg>

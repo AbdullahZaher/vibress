@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, lazy, useEffect } from "react";
 import { ApiUser, type AdminExtensionViewLink } from "./api";
 import { useAdminLocale } from "./admin-locale";
-import { PluginAdminView } from "../components/platform/PluginAdminView";
+import { NativeExtensionAdminView } from "../components/platform/NativeExtensionAdminView";
 import { usePublicationLocales } from "./usePublicationLocales";
 import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { PermissionDenied } from "../components/common/PermissionDenied";
@@ -192,7 +192,7 @@ function PluginExtensionRoute({
     item.viewId === match.params.viewId &&
     can(item.permission));
   return link
-    ? <PluginAdminView link={link} />
+    ? <NativeExtensionAdminView link={link} />
     : <RouteNotFound path={match.pathname} onNavigate={onNavigate} />;
 }
 
