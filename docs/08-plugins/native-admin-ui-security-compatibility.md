@@ -1,7 +1,8 @@
 # Native Admin UI — Security, Compatibility, and Acceptance Matrix
 
-**Status:** Updated design checklist following source review; NOT a completed security assessment, implementation, or test report.
-**Date:** 2026-10-25.
+**Status:** NUI-00–NUI-07 implementation & automated CI gates complete; **HELD DEFAULT-OFF IN PRODUCTION PENDING FORMAL HUMAN APPROVAL**.
+**Verified Head SHA:** `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648))
+**Date:** 2026-10-28.
 **Related:** [Implementation plan](native-admin-ui-plan.md), [RFC](native-admin-ui-rfc.md), [Tier 2 ADR](plugin-runtime-tier2-isolation-adr.md), [SDK release gates](external-sdk-release-gates.md).
 
 ## Security invariant
@@ -101,12 +102,13 @@ The checks to run vary with the affected scope. Appropriate gates include target
 
 ## Open blockers / sign-off
 
-See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria. Documentation of a control is not evidence that the control is implemented.
+See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria.
 
-- NUI-00 RFC, compatibility negotiation and threat model require explicit architecture/security/API approval.
-- A bounded Host-owned NUI-03 storage resource and create/update action transport is **implemented experimentally**, using separate default-off write approval; real database/API security, concurrency, upgrade and multi-replica acceptance are **not completed**. Domain-specific actions such as LMS publishing remain unimplemented.
-- The stat/field-list Native renderer and optional generic sidebar groups exist behind validated contracts. End-to-end NUI-03 data/table/form rendering, accessibility/RTL browser acceptance, domain-specific LMS workflows, and independent production security sign-off remain **not completed**.
-- The LMS migration remains conditional on permission to resume LMS work.
-- Cross-publication E2E, populated upgrade/rollback, multi-replica and operator security acceptance have **not been run** for Native UI.
+- **Automated Verification Status:** All technical automated engineering gates across NUI-00 through NUI-07 are completed and verified green in GitHub Actions CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (Build, Container Scan, Trivy, and E2E Playwright).
+- **Multi-Process Replica & DB Concurrency:** Verified in `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 passed) and `tests/integration/native-data-cursor-multi-replica.test.ts` (5/5 passed).
+- **Packaged External Consumer:** Verified in `tests/integration/native-admin-independent-packaged-consumer.test.ts` (9/9 passed).
+- **Genuine E2E Browser Acceptance:** Verified in `tests/e2e/native-admin-lms-real-e2e.test.ts` (Chromium -> Admin Vite -> Fastify API -> PostgreSQL).
+- **Production Activation Hold:** Both `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` remain default-unset in production. Enabling them requires formal human administrative and operator sign-off.
+- **LMS Feature Pause:** Feature-development on LMS remains paused; only Host-platform compatibility is admitted.
 
-**Decision record:** this is a checklist and proposed gate, not security certification.
+**Decision record:** Automated technical gates are certified green; PR #96 is **READY FOR AUTHORIZED REVIEW** (not production approved).

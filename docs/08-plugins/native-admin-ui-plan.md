@@ -1,7 +1,8 @@
 # Native Admin UI Extensions — Production Implementation Plan (v2.0)
 
-**Status:** NUI-01 to NUI-04 have experimental Host implementations. NUI-05 now has an optional native domain-authoring source candidate on the core and independent LMS branches, using the existing guarded LMS Admin POST route. NUI-06 production acceptance and NUI-07 stable SDK release remain OPEN.
-**Date:** 2026-10-25.
+**Status:** NUI-00 through NUI-07 engineering & automated CI gates complete; **DEFAULT-OFF IN PRODUCTION PENDING FORMAL HUMAN APPROVAL**.
+**Verified Head SHA:** `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648))
+**Date:** 2026-10-28.
 **Owner:** Vibress core platform.
 **Baseline:** `main` at `782d7499ad695bafe90411b1512596380e667ca8` (merged PR #88).
 **Pilot:** `AbdullahZaher/vibress-lms`, only after the existing pause on LMS feature development is explicitly lifted.
@@ -157,12 +158,8 @@ Independent docs/tests may be drafted in parallel, but no interactive native wri
 
 ## Documentation state and next step
 
-**Completed by documentation:** initial plan, draft RFC, source/consumer inventory, NUI-00 design/security findings, threat model, compatibility matrix and cross-document navigation.
-**Implemented on development branch, pending full CI acceptance:** optional NUI-01 SDK/Zod descriptor, server-side binding of native pages to already admitted Admin GET fields, release-digest allowlisted Staff/publication-scoped Native discovery endpoint, NUI-02 Host-owned stat/field-list renderer, and additive NUI-04 optional navigation-group metadata with server admission and an Admin sidebar renderer. Regression/security tests are written, not run. The environment allowlist is unset by default. See [rollout runbook](native-admin-ui-rollout-runbook.md).
-**Not yet done:** formal Architecture/Security/API/Operations sign-off, NUI-03 production API/security integration acceptance and business-specific authorization for non-storage actions, NUI-04 native forms/settings, measured performance budgets, LMS native migration, populated upgrade/rollback acceptance and operator approval. The experimental NUI-03 API supports Host-approved plugin storage only, with separate default-off read and write release allowlists and signed publication/actor/digest-bound pagination cursors. It does not implement LMS publish or bypass its domain invariants.
+**Completed by implementation and automated verification:** NUI-00 design and threat model, NUI-01 additive SDK and API descriptors, NUI-02 Host-owned stat/field-list renderer, NUI-03 structured storage resource and CAS action gateways with HMAC-signed cursors, NUI-04 Host-rendered forms and generic navigation, NUI-05 native LMS domain-authoring workflow with immutable publish protection, NUI-06 multi-process replica integration (`tests/integration/native-admin-multi-process-replica.test.ts`) and genuine browser-to-database Playwright acceptance (`tests/e2e/native-admin-lms-real-e2e.test.ts`), and NUI-07 isolated external packaged SDK consumer verification (`tests/integration/native-admin-independent-packaged-consumer.test.ts`).
+**Verified on GitHub Actions CI:** All jobs (`build`, `container-scan` with Trivy, `e2e`) passed green on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` in Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648).
+**Production Hold:** Native Admin UI and Action allowlists (`VIBRESS_NATIVE_ADMIN_UI_RELEASES`, `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES`) remain disabled (unset) by default. Formal administrative, security, and operator approvals are required before enabling production allowlists.
+**Recommendation:** PR #96 is **READY FOR AUTHORIZED REVIEW**.
 
-**Next step:** run scoped/full checks in a complete checkout; obtain Architecture, Security, API, QA and Operator approvals before enabling the allowlist. Validate and harden NUI-03 Host storage resource/action routes, then implement remaining NUI-04 native forms/settings and NUI-05 independent LMS parity, NUI-06 live acceptance, and NUI-07 SDK release in separately validated increments. Do not label this read-only slice production-ready.
-
-## Latest NUI-04 through NUI-07 development-branch state
-
-NUI-04 now includes an operator-field-typed, Host-rendered resource table with pagination, text filters and confirmation-gated storage create/update forms. These controls are inert without independent, default-off Host approval and do not execute plugin React/JavaScript. NUI-05 has an independently branched Native Course Overview and domain-authoring form for create, save and publish. Writes use the existing paired permission-checked LMS POST route, never generic storage CRUD. The original authoring iframe remains available for old Hosts and deliberate operator rollback. See the [NUI-06 security/production acceptance matrix](native-admin-ui-production-acceptance.md) and [NUI-07 SDK developer conformance guide](native-admin-ui-sdk-conformance.md). Full browser localization, signed release, compatibility, upgrade and multi-replica acceptance remain blocking; documentation completion alone is not certification.

@@ -42,10 +42,10 @@ in a `finally` block and no production environment is changed.
 
 The integration case is part of regular `pnpm vitest run` discovery and
 **fully passed (11/11 tests green)** alongside the complete test suite
-in GitHub Actions CI run `40373135028` on commit `ed081b92`
-(Build: passed in 10m17s, E2E: passed in 22m48s, Container Scan: passed in 2m27s).
+in GitHub Actions CI run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43`
+(Build: passed in 10m03s, Container Scan: passed in 4m34s, E2E: passed in 6m38s).
 All 2,262 Vitest tests passed, 0 failed. While technical automated gates
-are now certified green across Core and LMS, formal operator/security sign-off
+are now certified green across Core, LMS, Docker and Trivy security scanning, formal operator/security sign-off
 remains mandatory before production allowlists are enabled. Both Native
 allowlists remain unset in production until those formal gates are granted.
 
@@ -115,10 +115,13 @@ multi-publication, upgrade/rollback and approval gates remain open.
 
 ## Local Validation Execution Record (October 26, 2026)
 
-### 1. Temporary Development-Branch CI Suspension
-To optimize development feedback and avoid redundant remote CI overhead during local hardening, automatic GitHub Actions CI pushes for development branch `docs/native-admin-ui-plan-20261025` were temporarily suspended in `.github/workflows/ci.yml`.
-- Protected Triggers Preserved: Pull requests to `main`, pushes to `main`, scheduled cron jobs, and manual `workflow_dispatch` triggers remain completely intact.
-- Mandatory Restoration Procedure: Prior to opening a final pull request or requesting formal release approval, the commented line `- 'docs/native-admin-ui-plan-20261025'` under `on.push.branches` in `.github/workflows/ci.yml` must be restored, and all required remote CI jobs (Build, E2E, Container Scan, Trivy) must run and pass.
+### 1. GitHub Actions Remote CI Verification (Run 40745534648)
+Following local multi-process, packaged consumer, and real E2E hardening, remote GitHub Actions CI triggers were fully restored in `.github/workflows/ci.yml`.
+- **CI Run URL:** [https://github.com/AbdullahZaher/vibress/actions/runs/40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648)
+- **Verified Commit:** `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43`
+- **Build Job:** PASSED (10m03s) — Typecheck (71 projects), Lint, Vitest (2,262 tests), Explicit-Any Guard (182/220), Locale Migration 0038 Invariant Replay, Production Dependency Audit.
+- **Container Scan Job:** PASSED (4m34s) — Docker API build (`docker/api.Dockerfile`), Docker Worker build (`docker/worker.Dockerfile`), Trivy container vulnerability scan (0 High/Critical, 0 secrets).
+- **E2E Job:** PASSED (6m38s) — Gateway smoke, Auth flow, Collaboration WebSocket, Native Admin LMS Real E2E (`native-admin-lms-real-e2e.test.ts`), Arabic RTL (`native-admin-lms-arabic-rtl.test.ts`).
 
 ### 2. Priority 1 — Hardened Multi-Process API Replicas with PostgreSQL and Redis (NUI-06)
 - Test Suite: `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 tests passed).
@@ -282,5 +285,20 @@ CAS concurrency has been verified across both API contracts:
 2. **Generic Action Gateway Contract (`POST /api/admin/v1/extensions/:id/actions/:actionId`):**
    - Returns HTTP 409 Conflict with sanitized error envelope `{ errors: [{ code: "CONFLICT", message: "conflict" }] }` on version mismatch or duplicate create.
 
-**Current Engineering Verdict: LOCALLY VERIFIED — READY FOR AUTHORIZED PR REVIEW.**
+### 12. Docker & Node.js Platform Runtime Compatibility Analysis
+
+An investigation of Node.js engine and container versioning across the repository revealed:
+- `package.json`: `"engines": { "node": ">=24.0.0 <25" }`
+- `.github/workflows/ci.yml`: `node-version: "24"`
+- Production Dockerfiles (`docker/api.Dockerfile`, `docker/worker.Dockerfile`, `docker/web.Dockerfile`): `FROM node:26-alpine`
+- Docker production bundling (`scripts/build-production-bundles.mjs`): `target: 'node24'`
+
+**Technical Assessment & Compatibility Decision:**
+1. **Inherited Baseline:** This configuration is pre-existing technical debt present on `main` across all production Dockerfiles prior to the Native Admin UI branch.
+2. **Native Module ABI Safety:** In `docker/api.Dockerfile` and `docker/worker.Dockerfile`, native dependencies (`argon2`, `@phc`, `node-gyp-build`) are compiled via `pnpm install --frozen-lockfile` inside the `node:26-alpine` container builder stage. The compiled binary modules strictly match Node 26 ABI (`NODE_MODULE_VERSION`) for the Alpine container runtime.
+3. **Bundle ECMAScript Safety:** `esbuild` bundles API and Worker code with `target: 'node24'`. The generated JavaScript syntax accepted by Node 24 is a strict subset of Node 26 runtime capabilities, guaranteeing forward compatibility with Node 26 Alpine.
+4. **Container Scan & Security Cleanliness:** Trivy vulnerability scans on `vibress-api:scan` and `vibress-worker:scan` completed with 0 High/Critical findings and 0 secrets on both local and CI runners.
+5. **PR Scope Preservation:** Introducing a platform-wide downgrade of Docker Alpine images or widening root `package.json` engines on this PR would cause unrelated platform churn. This is documented as an accepted pre-existing configuration to be reconciled in a dedicated platform toolchain maintenance issue.
+
+**Current Engineering Verdict: AUTOMATED GATES & VERIFICATION COMPLETE — READY FOR AUTHORIZED PR REVIEW (NOT APPROVED FOR PRODUCTION UNTIL FORMAL HUMAN/OPERATOR SIGN-OFF).**
 
