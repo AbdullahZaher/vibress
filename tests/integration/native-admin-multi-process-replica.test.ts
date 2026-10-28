@@ -823,7 +823,7 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     // Clean up Replica C gracefully
     await terminateProcessGracefully(procC);
     procC = null;
-  });
+  }, 45000); // Replica C cold startup may exceed Vitest's 5s default on CI.
 
   it("Scenario F: Release digest isolation rejects unadmitted releases", async () => {
     const urlA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/nonexistent-plugin/resources/course-records`;

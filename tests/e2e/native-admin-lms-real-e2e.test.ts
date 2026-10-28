@@ -383,7 +383,7 @@ test.describe.serial("Priority 1: Genuine Native LMS Browser-to-Database E2E (Ch
           API_PORT: String(apiPort),
           PORT: String(apiPort),
           DATABASE_URL: disposableDbUrl,
-          REDIS_URL: "redis://127.0.0.1:6379",
+          REDIS_URL: process.env.REDIS_URL || "redis://127.0.0.1:6380",
           VIBRESS_TRUSTED_PLUGIN_LOCKFILE: lockfilePath,
           VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: keyPath,
           VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: sigPath,
@@ -402,7 +402,8 @@ test.describe.serial("Priority 1: Genuine Native LMS Browser-to-Database E2E (Ch
     );
 
     // 9. Spawn dedicated Admin Vite dev server proxying /api to the Fastify API port
-    const viteBin = path.resolve(repoRoot, "node_modules/.bin/vite");
+    // Vite is a dependency of the Admin workspace, not the monorepo root.
+    const viteBin = path.resolve(repoRoot, "apps/admin/node_modules/.bin/vite");
     adminProc = spawn(
       viteBin,
       ["--port", String(adminPort), "--host", "127.0.0.1"],
