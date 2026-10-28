@@ -6,6 +6,8 @@
 **Owner:** Vibress core engineering.  
 **Excluded:** LMS feature development (paused); only external consumer/conformance checks permitted.
 
+> **2026-10-28 roadmap review:** [Unified Roadmap v3](plugin-platform-master-roadmap-v3.md) and the [Native Admin SDK proposal](plugin-native-admin-sdk-spec-v1.md) supersede this file's *future-feature design suggestions* after review/adoption, but **not** its ticket-level historical implementation statuses, exact-SHA CI links, release gates or operator evidence. The v3 ticket names are planning aliases until explicitly mapped to the `PLUG-*` IDs in this ledger; Native UI from merged PR #96 remains default-off pending formal operator approval. See [security and compatibility review](plugin-roadmap-v3-review-and-adoption.md). No milestone is certified merely by these documentation changes.
+
 ## 0. Purpose and source of truth
 
 Deliver a production-grade, self-hostable plugins ecosystem while preserving existing publications, installed plugins, stored content, queued jobs, themes, public/member APIs, Arabic/RTL, and operator-managed Docker deployments.
