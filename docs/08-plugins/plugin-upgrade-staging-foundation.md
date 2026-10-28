@@ -76,3 +76,57 @@ operator-approved compatibility and restore procedure.
   identical version strings in the database.
 - Deactivation/uninstall/purge, independent SDK acceptance, Tier 2 isolation,
   marketplace validation and all M0–M6 release sign-offs.
+
+## PLUG-UPD-03 — read-only source-fleet readiness snapshot (partial)
+
+The optional offline `scripts/plugins/check-upgrade-source-fleet.ts`
+correlates an **already approved** durable plan with the **installed**
+plugin's source identity and four separately collected release-admission
+receipts from at least **two API and two Worker replicas**. It reuses the
+existing offline fleet receipt consistency comparator and additionally
+requires the source plugin version and exact artifact SHA-256 to match
+the immutable plan. Any stale Worker, changed signer/lockfile, unsigned
+or missing replica fails closed.
+
+It checks PostgreSQL for enabled publications and unsettled
+`pending/dispatching/queued` receipts and requires the entire Redis
+plugin queue to have no waiting, active, delayed, paused, prioritized or
+waiting-children jobs. This is **more conservative** than checking only
+the upgraded plugin, to avoid masking work owned by other plugins.
+All checks use bounded queries. The output is aggregate only.
+
+From a **trusted operator terminal** with appropriate read-only access to
+the established production data sources and independently collected
+admission receipts, while the deployment is **already halted/drained**:
+
+```bash
+export VIBRESS_PLUGIN_UPGRADE_MAINTENANCE=1
+export VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY=strict
+export VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE=1
+# Set the expected source release lockfile and signer SHA-256 pins,
+# database and Redis connection configuration through protected operator
+# credentials; never paste credentials into CLI history or logs.
+pnpm exec tsx scripts/plugins/check-upgrade-source-fleet.ts \
+  <approved-plan-uuid> \
+  api:api-a=/protected/api-a.json api:api-b=/protected/api-b.json \
+  worker:worker-a=/protected/worker-a.json worker:worker-b=/protected/worker-b.json
+```
+
+**This is an observation, not an authorization or distributed lock.** The
+command **does not** verify cryptographic signatures of files passed to
+it; the receipt producer must first execute
+`verifyOperatorReleaseAdmission()` separately on each **real,
+independently identified and immutable** running replica and keep their
+evidence under operator custody. `signatureVerified: true` inside a
+JSON file is not proof by itself. The database/Redis observations are
+not atomic with other replicas. In particular, stopping producers and
+preventing new event admissions is a **separate mandatory operator
+prerequisite**, and race-free fleet draining, leases and fencing are not
+implemented by this command.
+
+No `approved → quiesced` plan transition is authorized or implemented
+by this new helper. No migration, ESM import, runtime activation or
+schema alteration occurs. Unit tests cover wrong source digest/version,
+stale signer, incomplete replicas, disabled-state gates and queue/ledger
+backlog. Production multi-replica fencing and admission revocation tests
+are still mandatory before moving PLUG-UPD-03 to accepted status.
