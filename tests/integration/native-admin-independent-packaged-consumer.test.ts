@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -148,7 +148,7 @@ describe("NUI-07 Genuine Packaged SDK Consumer and Contract Conformance", () => 
     );
 
     // 5. Install the locally prepared .tgz package artifact
-    execFileSync("npm", ["install", "--no-package-lock", tarballPath], {
+    execFileSync("npm", ["install", "--no-package-lock", "--save-dev", "--save-exact", "typescript@5.9.3", tarballPath], {
       cwd: tmpConsumerDir,
       stdio: "pipe",
     });
@@ -284,7 +284,7 @@ export const plugin: PluginModule = {
 
     // Compile with tsc --noEmit
     expect(() => {
-      execFileSync("npx", ["tsc", "-p", "tsconfig.json"], {
+      execFileSync(process.execPath, [path.join(consumerDir, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"], {
         cwd: consumerDir,
         stdio: "pipe",
       });
@@ -303,17 +303,21 @@ import { getDb } from "@vibress/database";
 `,
     );
 
-    // tsc must fail compilation due to unresolvable Host private module
-    expect(() => {
-      execFileSync(
-        "npx",
-        ["tsc", "--noEmit", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "invalid-consumer.ts"],
-        {
-          cwd: consumerDir,
-          stdio: "pipe",
-        },
-      );
-    }).toThrow();
+    // Use the independently installed compiler and prove failure is
+    // specifically an inaccessible Host dependency, not a missing compiler.
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(consumerDir, "node_modules/typescript/bin/tsc"),
+        "--noEmit", "--target", "ES2022", "--module", "NodeNext",
+        "--moduleResolution", "NodeNext", "invalid-consumer.ts",
+      ],
+      { cwd: consumerDir, encoding: "utf8" },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("TS2307");
+    expect(result.stdout + result.stderr).toContain("@vibress/database");
   });
 
   it("admits a packaged external plugin conforming to public SDK contracts", () => {

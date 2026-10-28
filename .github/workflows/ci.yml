@@ -69,6 +69,12 @@ jobs:
           npm run verify:local
 
       - name: Test
+        # compose.dev.yml exposes PostgreSQL and Redis on these host ports.
+        # Explicit values keep isolated multi-process tests on the CI services,
+        # not the local workstation defaults or the production environment.
+        env:
+          DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
+          REDIS_URL: "redis://127.0.0.1:6380"
         run: pnpm vitest run --no-file-parallelism
 
       - name: Verify locale migration 0038 replay invariants
@@ -180,6 +186,8 @@ jobs:
 
       - name: Run E2E suite (dev stack + fresh-install wizard)
         env:
+          DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
+          REDIS_URL: "redis://127.0.0.1:6380"
           VIBRESS_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
           NEWSLETTER_UNSUBSCRIBE_SECRET: "batch10_unsub_secret_32bytes_hex!"
           STRIPE_SECRET_KEY: "sk_test_ci_e2e"

@@ -164,7 +164,7 @@ function spawnReplicaProcess(
         API_PORT: String(port),
         PORT: String(port),
         DATABASE_URL: dbUrl,
-        REDIS_URL: "redis://127.0.0.1:6379",
+        REDIS_URL: process.env.REDIS_URL || "redis://127.0.0.1:6380",
         VIBRESS_TRUSTED_PLUGIN_LOCKFILE: lockfilePath,
         VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: keyPath,
         VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: sigPath,
