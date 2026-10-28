@@ -1,10 +1,9 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { resolve, isAbsolute } from "node:path";
-import { and, eq, inArray } from "drizzle-orm";
 import {
   getDb, closeDbPool, plugins, pluginUpgradePlans,
-  pluginPublicationStates, pluginEventReceipts,
+  pluginPublicationStates, pluginEventReceipts, and, eq, inArray,
 } from "@vibress/database";
 import { Queue, QUEUE_NAMES, getBullMqRedisConnection } from "@vibress/queue";
 import type { PluginWorkerEventJob } from "@vibress/api-contracts";
