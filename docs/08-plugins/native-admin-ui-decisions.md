@@ -105,6 +105,6 @@ Required NUI-01 follow-up: run `pnpm --filter @vibress/api-contracts typecheck`,
 | D-08 browser/runtime trust | Preserved in design | Independent Security approval and real iframe/native E2E |
 | Legacy LMS HTML injection | RESOLVED | Escaping and textContent enforcement verified in LMS authoring views + hostile-content tests |
 | Formal Architecture/Security/API/Operations sign-off | **NOT OBTAINED** | Named human reviewers must explicitly approve the release before production activation |
-| CI/typecheck/lint/integration/E2E | **VERIFIED GREEN** | Verified on GitHub Actions CI (runs 40373135028 and 40378700381; 2,262+ tests passed, build/e2e/scan green) |
+| CI/typecheck/lint/integration/E2E | **VERIFIED GREEN** | Verified on GitHub Actions CI (Run 40745534648 on commit `50ad19bd`; 2,299 Vitest tests across 294 test files passed, build/e2e/scan green) |
 
 **Release decision: HOLD.** Do not enable the new release-pinned environment allowlist in production before formal operator/governance sign-off. See [rollout runbook](native-admin-ui-rollout-runbook.md).

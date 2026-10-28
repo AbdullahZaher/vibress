@@ -53,7 +53,7 @@ For clarity this English-only guide uses untranslated English placeholders in `a
 
 **Compatibility:** existing plugin URLs and iframe/data renderers remain the default when Native is disabled. Do not require Native-only features on older Hosts without explicit compatibility checks. New tables, actions, forms and generic navigation must use future versioned contracts, not unsupported descriptor v1 fields.
 
-**Release status:** Automated unit, integration, packaged SDK consumer, and Playwright E2E suites have been verified in CI (run 40745534648, commit 50ad19bdef92560ede7704e6ec2a25e8fa3e7c43); do not use the new metadata for production before security and operations acceptance.
+**Release status:** Automated unit, integration, packaged SDK consumer, and Playwright E2E suites have been verified in CI (run 40745534648 on commit `50ad19bd` and run 40750645560 on commit `63b540f8`; 2,299 Vitest tests across 294 test files passed clean); do not use the new metadata for production before security and operations acceptance.
 
 ## Optional declarative navigation groups (incremental NUI-04)
 

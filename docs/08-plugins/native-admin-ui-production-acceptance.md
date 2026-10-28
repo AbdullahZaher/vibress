@@ -44,7 +44,7 @@ The integration case is part of regular `pnpm vitest run` discovery and
 **fully passed (11/11 tests green)** alongside the complete test suite
 in GitHub Actions CI run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43`
 (Build: passed in 10m03s, Container Scan: passed in 4m34s, E2E: passed in 6m38s).
-All 2,262 Vitest tests passed, 0 failed. While technical automated gates
+All 2,299 Vitest tests across 294 test files passed, 0 failed. While technical automated gates
 are now certified green across Core, LMS, Docker and Trivy security scanning, formal operator/security sign-off
 remains mandatory before production allowlists are enabled. Both Native
 allowlists remain unset in production until those formal gates are granted.
@@ -119,9 +119,9 @@ multi-publication, upgrade/rollback and approval gates remain open.
 Following local multi-process, packaged consumer, and real E2E hardening, remote GitHub Actions CI triggers were fully restored in `.github/workflows/ci.yml`.
 - **CI Run URL:** [https://github.com/AbdullahZaher/vibress/actions/runs/40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648)
 - **Verified Commit:** `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43`
-- **Build Job:** PASSED (10m03s) — Typecheck (71 projects), Lint, Vitest (2,262 tests), Explicit-Any Guard (182/220), Locale Migration 0038 Invariant Replay, Production Dependency Audit.
-- **Container Scan Job:** PASSED (4m34s) — Docker API build (`docker/api.Dockerfile`), Docker Worker build (`docker/worker.Dockerfile`), Trivy container vulnerability scan (0 High/Critical, 0 secrets).
-- **E2E Job:** PASSED (6m38s) — Gateway smoke, Auth flow, Collaboration WebSocket, Native Admin LMS Real E2E (`native-admin-lms-real-e2e.test.ts`), Arabic RTL (`native-admin-lms-arabic-rtl.test.ts`).
+- **Build Job:** PASSED (10m03s) — Typecheck (71 projects), Lint, Vitest (2,299 tests across 294 test files), Explicit-Any Guard (182/220), Locale Migration 0038 Invariant Replay, Production Dependency Audit.
+- **Container Scan Job:** PASSED (4m34s) — Docker API build (`docker/api.Dockerfile`), Docker Worker build (`docker/worker.Dockerfile`), Trivy container vulnerability scan (0 High/Critical matching gate `--ignore-unfixed`, 0 secrets).
+- **E2E Job:** PASSED (6m38s) — Gateway smoke, Auth flow, Collaboration WebSocket, Native Admin LMS Real E2E (`native-admin-lms-real-e2e.test.ts`), Arabic RTL (`native-admin-lms-arabic-rtl.test.ts`). Automated RTL and keyboard assertions provide regression smoke testing and do not independently constitute full WCAG 2.2 AA certification.
 
 ### 2. Priority 1 — Hardened Multi-Process API Replicas with PostgreSQL and Redis (NUI-06)
 - Test Suite: `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 tests passed).
@@ -241,11 +241,12 @@ Production deployment and operational runbooks must adhere strictly to supported
 
 | Variable Name | Required Format / Value | Subsystem Responsibility |
 |---|---|---|
-| `VIBRESS_ENCRYPTION_KEY` | 64-character hex string (`openssl rand -hex 32`) | Secret encryption and HMAC-SHA256 cursor signing (`native-data-cursor.ts`) |
+| `VIBRESS_ENCRYPTION_KEY` | 64-character hex string (`openssl rand -hex 32`) | Secret encryption and HMAC-SHA256 cursor token signing (`native-data-cursor.ts`) |
 | `VIBRESS_TRUSTED_PLUGIN_LOCKFILE` | Absolute filesystem path to `trusted-plugins.json` | Operator plugin lockfile containing manifest & artifact digests |
 | `VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE` | Absolute filesystem path to Ed25519 public key (`.pem`) | Public key used to verify the lockfile signature |
 | `VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE` | Absolute filesystem path to detached signature (`.sig`) | Detached base64 Ed25519 signature of the lockfile bytes |
 | `VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE` | `"1"` (mandatory in production) | Enforces fail-closed Ed25519 signature attestation before boot |
+| `VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY` | `"strict"` (optional in dev, required for offline admission) | Policy enforcing complete evidence checks during preflight |
 | `VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256` | 64-character lowercase hex digest | Optional expected fingerprint of operator public key |
 | `VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256` | 64-character lowercase hex digest | Optional expected SHA-256 digest of `trusted-plugins.json` |
 | `VIBRESS_NATIVE_ADMIN_UI_RELEASES` | Comma-separated `pluginId@64-hex-sha256` | Read allowlist admitting plugin into Native Admin UI (default unset) |

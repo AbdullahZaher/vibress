@@ -17,20 +17,28 @@ Native Admin UI and its action gateway are disabled by default. Activation is co
 | --- | --- | --- | --- |
 | `VIBRESS_NATIVE_ADMIN_UI_RELEASES` | Comma-separated `pluginId@64-hex-sha256` | *unset* | Read-only Native view admission for exact pinned entrypoint artifact digest. |
 | `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` | Comma-separated `pluginId@64-hex-sha256` | *unset* | Write action admission for exact pinned entrypoint artifact digest. Mandatory prerequisite: must also be in `VIBRESS_NATIVE_ADMIN_UI_RELEASES`. |
-| `VIBRESS_ENCRYPTION_KEY` | 64-hex string (`openssl rand -hex 32`) | *required* | Cryptographic key for HMAC-SHA256 cursor signing and secret decryption. Must be identical across all replicas. |
+| `VIBRESS_ENCRYPTION_KEY` | 64-hex string (`openssl rand -hex 32`) | *required* | Cryptographic key for HMAC-SHA256 cursor authentication and secret decryption. Must be identical across all API replicas. |
 
 ```dotenv
 # Production Default (both UNSET on all API replicas):
 # VIBRESS_NATIVE_ADMIN_UI_RELEASES=
 # VIBRESS_NATIVE_ADMIN_ACTION_RELEASES=
 
-# Example Stage Activation (exact 64-character lowercase hex digest, NEVER a semver):
-VIBRESS_NATIVE_ADMIN_UI_RELEASES=vibress-lms-authoring@4ae44d903b723e4411ab2a090e19e99ff87a0923e3e2e1a4b5c6d7e8f9a0b1c2
-VIBRESS_NATIVE_ADMIN_ACTION_RELEASES=vibress-lms-authoring@4ae44d903b723e4411ab2a090e19e99ff87a0923e3e2e1a4b5c6d7e8f9a0b1c2
+# Example Stage Activation (exact 64-character lowercase hex entrypoint artifact digest, NEVER a semver or Git commit):
+# Format: <plugin-id>@<entrypoint-sha256>
+VIBRESS_NATIVE_ADMIN_UI_RELEASES=vibress-lms-authoring@<approved-entrypoint-sha256>
+VIBRESS_NATIVE_ADMIN_ACTION_RELEASES=vibress-lms-authoring@<approved-entrypoint-sha256>
 ```
 
 > [!IMPORTANT]
-> **Digest Constraint:** Release allowlists require the 64-character lowercase hex SHA-256 entrypoint digest from `trusted-plugins.json`, **NOT** a semantic version or package name. Supplying a version string (e.g. `plugin@1.2.0`) fails configuration parsing and causes all native requests to fail closed.
+> **Cryptographic & Version Identifier Reference:**
+> 1. **Git Commit SHA:** 40-character hex commit of the plugin or host Git repository (e.g. `4ae44d903b723e4411ab2a090e19e99ff87a0923`). Not used in allowlists.
+> 2. **Plugin Version:** SemVer string declared in manifest (e.g. `1.0.0`). Not used in allowlists.
+> 3. **Release ID:** Strict compound identifier formatted as `${manifest.id}@${manifest.version}:${entry.sha256.toLowerCase()}`.
+> 4. **Entrypoint Artifact SHA-256 Digest:** 64-hex SHA-256 checksum of the bundled plugin `.mjs` entrypoint file (`sha256sum content/plugins/<plugin-id>/index.mjs`). This is the exact value required in `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` (`<plugin-id>@<entrypoint-sha256>`).
+> 5. **Lockfile SHA-256 Digest:** 64-hex SHA-256 checksum of the entire `trusted-plugins.json` file. Used in `VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256`.
+> 6. **Detached Ed25519 Signature:** Base64-encoded 64-byte Ed25519 signature of the raw lockfile bytes (`trusted-plugins.sig`).
+> 7. **Cursor Token Signing Key:** The `VIBRESS_ENCRYPTION_KEY` hex secret is used by `native-data-cursor.ts` to compute timing-safe HMAC-SHA256 signatures over base64url cursor payloads; cursors are authenticated tokens, not encrypted ciphertext.
 
 ---
 
@@ -39,11 +47,12 @@ VIBRESS_NATIVE_ADMIN_ACTION_RELEASES=vibress-lms-authoring@4ae44d903b723e4411ab2
 The following automated verification checks ran and passed on GitHub Actions runner infrastructure against commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43`:
 
 ```sh
-# 1. Monorepo Typecheck & Lint
+# 1. Monorepo Typecheck, Lint & Unit Tests
 pnpm typecheck                    # 71/71 projects passed clean
 pnpm lint                         # 72/72 projects passed clean (0 errors)
 pnpm verify:explicit-any          # 182 occurrences (budget: max 220)
 pnpm audit --prod --audit-level moderate # 0 vulnerabilities
+pnpm exec vitest run              # 2,299 Vitest tests across 294 test files passed clean (0 failures)
 
 # 2. Additive Contract & Unit Suites
 pnpm exec vitest run packages/api-contracts/src/__tests__/extension-native-admin.test.ts
@@ -70,9 +79,14 @@ PLAYWRIGHT_SKIP_WEBSERVER=1 pnpm exec playwright test tests/e2e/native-admin-lms
 # 5. Production Container Assembly & Security Scanning
 docker build -f docker/api.Dockerfile . -t vibress-api:scan
 docker build -f docker/worker.Dockerfile . -t vibress-worker:scan
-trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-api:scan    # 0 findings
-trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-worker:scan # 0 findings
+trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-api:scan    # 0 findings triggering gate
+trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-worker:scan # 0 findings triggering gate
 ```
+
+> [!NOTE]
+> - **Container Security Gate:** Trivy scanning passing with zero findings against `--severity HIGH,CRITICAL --ignore-unfixed` verifies that no known vulnerabilities matching that threshold exist in the scanned container layers. It does not certify the complete absence of uncataloged vulnerabilities.
+> - **Accessibility Verification:** Playwright Chromium tests verify bidirectional RTL rendering, keyboard operability (Tab, Enter, Escape), and form error/status ARIA roles; this provides automated smoke verification and does not independently constitute complete WCAG 2.2 AA certification.
+> - **Signed Release Scope:** An operator-signed and approved plugin artifact guarantees artifact integrity and provenance; it is not equivalent to an isolated sandboxed execution environment (Tier 1 plugins execute with Node process privileges). Native UI achieves presentation safety because the Host renders all UI components declaratively without executing plugin client code.
 
 ---
 
@@ -125,24 +139,49 @@ trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-work
    - New Admin SPA gracefully detects `nativeProbeSupported` and falls back to legacy views until allowlists are activated.
 
 ### Procedure 3: Signed Plugin Deployment & Admission
-1. Verify detached signature of operator lockfile before staging:
+
+The operator admission and preflight CLIs verify immutable plugin packages and their detached signatures offline before staging or deployment. Both tools read configuration from environment variables (avoiding sensitive path leakage in process tables) and take no arbitrary CLI flags.
+
+1. **Verify detached Ed25519 signature & operator admission**:
    ```bash
-   node apps/api/dist/plugins-admit.js \
-     --lockfile content/plugins/trusted-plugins.json \
-     --public-key content/plugins/operator-public.pem \
-     --signature content/plugins/trusted-plugins.sig
+   # Run offline admission verification using absolute paths to lockfile, public key, and detached signature:
+   VIBRESS_TRUSTED_PLUGIN_LOCKFILE="$(pwd)/content/plugins/trusted-plugins.json" \
+   VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE="$(pwd)/content/plugins/operator-public.pem" \
+   VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE="$(pwd)/content/plugins/trusted-plugins.sig" \
+   VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE="1" \
+   VIBRESS_TRUSTED_PLUGIN_EXPECTED_PUBLIC_KEY_SHA256="<operator-public-key-sha256>" \
+   node apps/api/dist/plugins-admit.js [--expected-lockfile-sha256 <expected-lockfile-sha256>]
    ```
-2. Run operator migration preflight (if plugin declares physical models):
+   *Output:* A path- and secret-free JSON receipt with schema version 1, verified lockfile SHA-256, public key fingerprint, and approved release list. Unsigned, tampered, or mismatched files fail closed (`process.exitCode = 1`).
+
+2. **Run operator preflight on each replica mount**:
    ```bash
-   node apps/api/dist/plugins-preflight.js --plugin <plugin-id>
+   # Verify all plugins declared in trusted-plugins.json against physical models and release evidence:
+   VIBRESS_TRUSTED_PLUGIN_LOCKFILE="$(pwd)/content/plugins/trusted-plugins.json" \
+   VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE="$(pwd)/content/plugins/operator-public.pem" \
+   VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE="$(pwd)/content/plugins/trusted-plugins.sig" \
+   VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY="strict" \
+   VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256="<expected-lockfile-sha256>" \
+   node apps/api/dist/plugins-preflight.js
    ```
-3. Extract entrypoint artifact SHA-256 digest from admitted `trusted-plugins.json`:
+   *Note:* The preflight CLI validates all plugins declared in `trusted-plugins.json` against physical storage models and release evidence. It does not accept a `--plugin` flag; it operates over the entire mounted lockfile.
+
+3. **Extract entrypoint artifact SHA-256 digest from `trusted-plugins.json`**:
+   The `trusted-plugins.json` file contains a top-level `plugins` **array** (not a dictionary). Extract the exact entrypoint SHA-256 checksum for an approved plugin using `jq`:
    ```bash
-   jq -r '.plugins["<plugin-id>"].releases["<release-id>"].entrypointSha256' content/plugins/trusted-plugins.json
+   # Extract entrypoint digest for a specific plugin ID:
+   jq -r '.plugins[] | select(.manifest.id == "<plugin-id>") | .sha256' content/plugins/trusted-plugins.json
+
+   # List all approved plugins, versions, and entrypoint digests:
+   jq -r '.plugins[] | "\(.manifest.id)@\(.manifest.version) sha256:\(.sha256)"' content/plugins/trusted-plugins.json
+
+   # Extract full releaseId if declared:
+   jq -r '.plugins[] | select(.manifest.id == "<plugin-id>") | .release.releaseId' content/plugins/trusted-plugins.json
    ```
-4. Verify entrypoint digest matches exact calculated checksum of plugin file:
+
+4. **Verify entrypoint digest matches exact calculated checksum of mounted plugin file**:
    ```bash
-   sha256sum content/plugins/<plugin-id>/index.js
+   sha256sum content/plugins/<plugin-id>/index.mjs
    ```
 
 ### Procedure 4: Read-Only Native Rollout
@@ -176,7 +215,7 @@ trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 vibress-work
 
 ### Procedure 6: Multi-Replica Configuration
 To ensure zero session disruptions or pagination errors across multiple API nodes:
-1. **Shared Encryption Key**: Distribute the identical `VIBRESS_ENCRYPTION_KEY` to all API replicas. Mismatched keys cause cross-replica HMAC cursor invalidation (`INVALID_CURSOR`).
+1. **Shared HMAC Signing Key**: Distribute the identical 64-hex `VIBRESS_ENCRYPTION_KEY` to all API replicas. Mismatched keys cause cross-replica HMAC cursor signature invalidation (`400 INVALID_CURSOR`).
 2. **Shared Operator Lockfile**: Ensure identical `trusted-plugins.json` and signatures exist across all replicas via shared read-only volume or container image baking.
 3. **Identical Allowlists**: Set identical `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` on every replica.
 
@@ -196,6 +235,10 @@ In the event of an unexpected defect, security incident, or unverified plugin be
    - Stored plugin data remains 100% intact in PostgreSQL.
 
 ### Procedure 8: Rollback and Recovery
+
+> [!NOTE]
+> **Operational Status:** The following rollback procedure is an operational specification. Reverting allowlists has been verified in automated multi-process tests (`native-admin-multi-process-replica.test.ts`), while live operator package rollbacks require dedicated staging rehearsal before production deployment.
+
 1. Reverting an approved Native release does **not** require rolling back database migrations.
 2. Remove the revoked `pluginId@sha256` from `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES`.
 3. If rolling back to an older plugin release:
@@ -208,6 +251,10 @@ In the event of an unexpected defect, security incident, or unverified plugin be
    ```
 
 ### Procedure 9: Backup & Restore Validation
+
+> [!NOTE]
+> **Operational Status:** The following backup and restore procedures are operational specifications. Disaster recovery scripts have automated verification in `dr-backup-restore.test.ts`, while physical operator backup and restoration drills must be rehearsed in a dedicated staging environment prior to production activation.
+
 1. Execute physical backup drill:
    ```bash
    bash scripts/backup.sh /var/backups/vibress-pre-release.sql.gz

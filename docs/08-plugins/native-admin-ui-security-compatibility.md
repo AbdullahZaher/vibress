@@ -104,7 +104,13 @@ The checks to run vary with the affected scope. Appropriate gates include target
 
 See the detailed [NUI-00 architecture/security review](native-admin-ui-nui00-review.md), [decision record](native-admin-ui-decisions.md) and [threat model](native-admin-ui-threat-model.md) for source inventory, severity-ranked findings, the default-off NUI-01/NUI-02 candidate, abuse cases, and owner-specific acceptance criteria.
 
-- **Automated Verification Status:** All technical automated engineering gates across NUI-00 through NUI-07 are completed and verified green in GitHub Actions CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (Build, Container Scan, Trivy, and E2E Playwright).
+- **Automated Verification Status:** All technical automated engineering gates across NUI-00 through NUI-07 are completed and verified green in GitHub Actions CI Run [40745534648](https://github.com/AbdullahZaher/vibress/actions/runs/40745534648) on commit `50ad19bdef92560ede7704e6ec2a25e8fa3e7c43` (Build with 2,299 Vitest tests across 294 test files, Container Scan with 0 Trivy findings, and E2E Playwright).
+- **Security Scope & Boundary Clarifications:**
+  - *Pagination Cursors:* Authenticated via HMAC-SHA256 signatures with 15-minute TTL, not encrypted ciphertext; tokens protect integrity and bind context (actor, publication, resource, digest, filter) against forgery.
+  - *Trivy Container Scan:* Confirms zero findings against `--severity HIGH,CRITICAL --ignore-unfixed`; this verifies compliance with the automated release gate rather than the absolute absence of vulnerabilities.
+  - *Accessibility Smoke Checks:* Playwright automated assertions verify keyboard navigation (Tab, Enter, Escape) and RTL rendering; they provide smoke verification and do not independently certify full WCAG 2.2 AA compliance.
+  - *Artifact Attestation:* Operator Ed25519 signature verification and SHA-256 digest pinning guarantee artifact immutability and provenance; they do not establish an isolated sandboxed runtime for Tier 1 Node.js execution.
+  - *Operational Runbooks:* Automated tests for CAS concurrency, migration rollbacks, and DR scripts provide baseline confidence, but physical operator rehearsals for rollback and backup/restore remain mandatory prior to production deployment.
 - **Multi-Process Replica & DB Concurrency:** Verified in `tests/integration/native-admin-multi-process-replica.test.ts` (9/9 passed) and `tests/integration/native-data-cursor-multi-replica.test.ts` (5/5 passed).
 - **Packaged External Consumer:** Verified in `tests/integration/native-admin-independent-packaged-consumer.test.ts` (9/9 passed).
 - **Genuine E2E Browser Acceptance:** Verified in `tests/e2e/native-admin-lms-real-e2e.test.ts` (Chromium -> Admin Vite -> Fastify API -> PostgreSQL).
