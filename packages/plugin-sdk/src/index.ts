@@ -10,6 +10,13 @@ export {
   defineNativeAdminResourceV1,
   defineNativeAdminActionV1,
   defineNativeDomainWorkflowV1,
+  resolveLocalizedLabel,
+  defineSettingsSchema,
+  maskSecretValue,
+  type PluginLocalizedLabel,
+  type PluginSettingType,
+  type PluginSettingFieldDescriptor,
+  type PluginSettingsSchemaDescriptor,
 } from "./native-admin-definitions.js";
 
 /**
@@ -565,6 +572,25 @@ export function validateManifest(manifest: unknown): PluginManifest {
     hooks: Array.isArray(m.hooks) ? (m.hooks as string[]) : undefined,
     checksum: typeof m.checksum === "string" ? m.checksum : undefined,
   };
+}
+
+/**
+ * SDK-02: Type-safe, declarative plugin definition helper.
+ * Validates manifest properties strictly according to Vibress Plugin SDK specification.
+ */
+export interface PluginDefinition {
+  readonly manifest: PluginManifest;
+  readonly adminPages?: readonly PluginNativeAdminPageV1[] | undefined;
+  readonly adminResources?: readonly PluginAdminDataResourceV1[] | undefined;
+  readonly adminActions?: readonly PluginAdminDataActionV1[] | undefined;
+  readonly domainWorkflows?: readonly PluginAdminDomainWorkflowV1[] | undefined;
+  readonly activate?: ((context: PluginContext) => Promise<void> | void) | undefined;
+  readonly deactivate?: ((context: PluginContext) => Promise<void> | void) | undefined;
+}
+
+export function definePlugin<const T extends PluginDefinition>(definition: T): T {
+  validateManifest(definition.manifest);
+  return definition;
 }
 
 /**

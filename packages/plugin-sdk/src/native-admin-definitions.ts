@@ -27,3 +27,61 @@ export function defineNativeAdminActionV1<const T extends PluginAdminDataActionV
 export function defineNativeDomainWorkflowV1<const T extends PluginAdminDomainWorkflowV1>(workflow: T): T {
   return workflow;
 }
+
+/**
+ * SDK-NUI-05: BCP-47 locale-neutral label resolution with graceful fallback.
+ * Supports { en, ar } v1 records as well as extended BCP-47 language tags.
+ */
+export type PluginLocalizedLabel =
+  | { readonly en: string; readonly ar: string; readonly [lang: string]: string }
+  | { readonly en: string; readonly [lang: string]: string };
+
+export function resolveLocalizedLabel(
+  label: PluginLocalizedLabel | string,
+  preferredLocale = "en",
+  fallbackLocale = "en",
+): string {
+  if (typeof label === "string") return label;
+  if (!label || typeof label !== "object") return "";
+  const direct = (label as Record<string, string>)[preferredLocale];
+  if (typeof direct === "string" && direct.trim()) return direct;
+  const langPrefix = preferredLocale.split("-")[0]?.toLowerCase();
+  if (langPrefix) {
+    const prefixed = (label as Record<string, string>)[langPrefix];
+    if (typeof prefixed === "string" && prefixed.trim()) return prefixed;
+  }
+  const fallback = (label as Record<string, string>)[fallbackLocale];
+  if (typeof fallback === "string" && fallback.trim()) return fallback;
+  return (label as Record<string, string>).en || "";
+}
+
+/**
+ * SDK-NUI-06: Declarative plugin settings, secrets, and media capability descriptors.
+ */
+export type PluginSettingType = "string" | "number" | "boolean" | "secret" | "media";
+
+export interface PluginSettingFieldDescriptor {
+  readonly key: string;
+  readonly type: PluginSettingType;
+  readonly label: PluginLocalizedLabel;
+  readonly description?: PluginLocalizedLabel | undefined;
+  readonly required?: boolean | undefined;
+  readonly isSecret?: boolean | undefined;
+  readonly defaultValue?: string | number | boolean | null | undefined;
+  readonly mediaAllowedTypes?: readonly ("image" | "video" | "document")[] | undefined;
+}
+
+export interface PluginSettingsSchemaDescriptor {
+  readonly version: 1;
+  readonly fields: readonly PluginSettingFieldDescriptor[];
+}
+
+export function defineSettingsSchema<const T extends PluginSettingsSchemaDescriptor>(schema: T): T {
+  return schema;
+}
+
+export function maskSecretValue(value: string | null | undefined): string {
+  if (!value) return "";
+  if (value.length <= 4) return "••••";
+  return value.slice(0, 2) + "••••••••" + value.slice(-2);
+}
