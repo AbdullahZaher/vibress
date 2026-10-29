@@ -6,7 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { assertPluginReplicaConsensus, type PluginReplicaReceipt } from "./replica-receipt-consistency";
@@ -153,6 +153,67 @@ async function run(): Promise<void> {
     denied(altered, "PLUGIN_M1A_TAMPERED_ARTIFACT_ACCEPTED");
     // No module import should ever run the deliberately throwing fixture.
     console.info("PLUGIN_M1A_SIGNED_FLEET_STAGE: stale Worker and changed ESM rejected");
+
+    // Restore an exact, immutable operator release directory from a separate
+    // offline filesystem copy into fresh, independently mounted API/Worker
+    // paths. No plugin ESM is imported or executed: the real production
+    // verifier checks copied lockfile/signature, signer root, reviewed files
+    // and artifact SHA-256 in four separate child processes.
+    const offlineBackup = join(dir, "offline-artifact-backup");
+    const backedUpRelease = join(offlineBackup, "approved-release");
+    await mkdir(offlineBackup, { recursive: true, mode: 0o700 });
+    await cp(fixtures[1]!.root, backedUpRelease, { recursive: true });
+    const restoredFixtures = await Promise.all(instances.map(async instance => {
+      const target = join(dir, `restored-${instance.replica}`);
+      await cp(backedUpRelease, target, { recursive: true });
+      return {
+        root: target,
+        lock: join(target, "trusted-plugins.json"),
+        module: join(target, "dist", "plugin.mjs"),
+        signature: join(target, "operator.sig"),
+      } satisfies Fixture;
+    }));
+    const restoredReceipts = restoredFixtures.map((fixture, index): PluginReplicaReceipt => ({
+      role: instances[index]!.role,
+      replica: instances[index]!.replica,
+      receipt: admit(fixture),
+    }));
+    const restoredConsensus = assertPluginReplicaConsensus(restoredReceipts, {
+      lockfileSha256: expectedLock, publicKeySha256: expectedKey,
+    });
+    requires(restoredConsensus.apiReplicas === 2 &&
+      restoredConsensus.workerReplicas === 2 &&
+      restoredConsensus.approvedReleases === 1,
+    "PLUGIN_M1A_RESTORED_ARTIFACT_CONSENSUS_FAILED");
+
+    // Failed partial restore and revoked signer must NEVER degrade to
+    // unsigned or previously admitted execution, even with matching data.
+    await rm(join(restoredFixtures[0]!.root, "operator-public.pem"));
+    denied(restoredFixtures[0]!, "PLUGIN_M1A_RESTORED_MISSING_TRUST_ROOT_ACCEPTED");
+    await rm(restoredFixtures[1]!.signature);
+    denied(restoredFixtures[1]!, "PLUGIN_M1A_RESTORED_MISSING_SIGNATURE_ACCEPTED");
+    await writeFile(restoredFixtures[2]!.module,
+      'throw new Error("tampered recovered module must not execute");\\n');
+    denied(restoredFixtures[2]!, "PLUGIN_M1A_RESTORED_TAMPERED_MODULE_ACCEPTED");
+    denied(restoredFixtures[3]!, "PLUGIN_M1A_RESTORED_REVOKED_SIGNER_ACCEPTED", {
+      VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256: expectedKey,
+    });
+
+    // The operator's offline, unmodified archive remains the authority.
+    // Recover a damaged replica to a fresh mount and demand signed admission
+    // again; do not allow in-place trust overrides to repair failed checks.
+    const replacementRoot = join(dir, "recovered-api-a");
+    await cp(backedUpRelease, replacementRoot, { recursive: true });
+    const replacement = {
+      root: replacementRoot,
+      lock: join(replacementRoot, "trusted-plugins.json"),
+      module: join(replacementRoot, "dist", "plugin.mjs"),
+      signature: join(replacementRoot, "operator.sig"),
+    } satisfies Fixture;
+    const recovered = admit(replacement);
+    requires(JSON.stringify(recovered) === JSON.stringify(restoredReceipts[0]!.receipt),
+      "PLUGIN_M1A_RECOVERED_RELEASE_IDENTITY_CHANGED");
+    console.info("PLUGIN_M1A_SIGNED_ARTIFACT_RESTORE_PASSED: copied release re-admitted on four replicas; incomplete, altered and revoked mounts rejected");
 
     // An unsigned sibling must not downgrade strict admission.
     await rm(fixtures[0]!.signature);

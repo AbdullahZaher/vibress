@@ -164,6 +164,32 @@ observed API×2/Worker×2 behavior and retained event receipts, measure
 actual recovery time and recovered writes, and secure the operator-signed
 go/no-go report outside the source tree.
 
+## Independent signed plugin-artifact restore rehearsal (CI)
+
+The existing ephemeral signed-fleet drill now takes a separate offline copy
+of an independently generated Ed25519-signed release directory, including the
+approved lockfile, ESM module, public trust root, detached signature, SBOM,
+provenance and review attestation. It copies this release into **four fresh
+API/Worker mounts** and invokes the production offline
+`verifyOperatorReleaseAdmission` path in four separate Node processes.
+All four receipts must match independently pinned lockfile and signer SHA-256
+digests.
+
+The restored mounts are then tested independently for missing trust root,
+missing detached signature, modified plugin ESM and a revoked signer fingerprint;
+every variant must fail closed. A replacement fresh copy of the unchanged
+offline release must pass admission again and return the same release identity.
+The fixture ESM intentionally throws if executed and **is never imported**.
+
+This test verifies artifact bytes and admission behavior only. The signing
+private key is ephemeral and remains outside the four runtime mounts.
+The drill does **not** restore production key-vault material or encrypted
+plugin secrets, launch historical API/Worker binaries, swap or fence serving
+production containers, execute third-party code, or establish a coordinated
+SQL/Redis/artifact recovery point. Those requirements, plus measured RPO/RTO
+and operator sign-off, remain pending. Exact-HEAD CI evidence is required
+before counting this rehearsal as passed.
+
 ## Separate Redis RDB snapshot/restore drill (pending exact-head CI)
 
 After stopping the disposable API and Worker producers, M1A now also exercises
