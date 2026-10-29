@@ -170,8 +170,11 @@ function spawnReplicaProcess(
         VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: keyPath,
         VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: sigPath,
         VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1",
-        VIBRESS_NATIVE_ADMIN_UI_RELEASES: releaseTag,
-        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: actionReleaseTag,
+        // These environment variables are optional *or* strict release IDs.
+        // An empty string fails Host config validation before HTTP startup.
+        // Setting undefined intentionally omits disabled flags from child env.
+        VIBRESS_NATIVE_ADMIN_UI_RELEASES: releaseTag || undefined,
+        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: actionReleaseTag || undefined,
         VIBRESS_ENCRYPTION_KEY: encryptionKey,
         NODE_ENV: "test",
         LOG_LEVEL: "warn",
@@ -1031,5 +1034,59 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       procC = null;
     }
   }, 90000);
+
+  it("Scenario I: Running migrations again on a populated installation preserves plugin data", async () => {
+    const baseA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records?limit=20`;
+    const baseB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records?limit=20`;
+    const baseHeaders = {
+      Authorization: `Bearer ${staffSessionToken}`,
+      Cookie: `vibress_session=${staffSessionToken}`,
+    };
+    const headersA = { ...baseHeaders, "x-publication-id": pubAId };
+    const headersB = { ...baseHeaders, "x-publication-id": pubBId };
+    const read = async (url: string, headers: typeof headersA) => {
+      const response = await fetch(url, { headers });
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        items: Array<{
+          id: string; version: number;
+          fields: Record<string, string | number | boolean | null>;
+        }>;
+      };
+    };
+    const [originalA, originalB] = await Promise.all([
+      read(baseA, headersA),
+      read(baseB, headersB),
+    ]);
+    expect(originalA.items).toHaveLength(5);
+    expect(originalB.items).toHaveLength(2);
+    expect(originalA.items[0]?.fields.title_ar).toBe("دورة ألفا 1");
+    expect(originalB.items[0]?.fields.title_ar).toBe("دورة بيتا 1");
+
+    const modelBefore = await getDb().select().from(pluginPhysicalModels)
+      .where(eq(pluginPhysicalModels.pluginId, registeredPluginId));
+    expect(modelBefore.length).toBeGreaterThan(0);
+
+    // Model an existing installation: run the same forward migrator with
+    // real bilingual content, physical plugin models, sessions and two API
+    // processes already present. Never rewind or edit released migrations.
+    await runMigrations();
+
+    const [afterA, afterB] = await Promise.all([
+      read(baseB, headersA),
+      read(baseA, headersB),
+    ]);
+    expect(afterA).toEqual(originalA);
+    expect(afterB).toEqual(originalB);
+    const modelAfter = await getDb().select().from(pluginPhysicalModels)
+      .where(eq(pluginPhysicalModels.pluginId, registeredPluginId));
+    expect(modelAfter).toEqual(modelBefore);
+
+    // Unknown tenant selector must remain denied after upgrade replay.
+    const forged = await fetch(baseA, {
+      headers: { ...headersA, "x-publication-id": "other-tenant" },
+    });
+    expect(forged.status).toBe(403);
+  }, 45000);
 
 });

@@ -4,6 +4,30 @@
 
 ## SDK-NUI-03 read-only multi-replica acceptance (PR #89)
 
+**Correction from final CI of `bbc54811069d90bd64bbe2e67c9a83a71d0b4124`:**
+[PR CI 40866001820](https://github.com/AbdullahZaher/vibress/actions/runs/40866001820)
+and [push CI 40865993974](https://github.com/AbdullahZaher/vibress/actions/runs/40865993974)
+failed in *Scenario H* because its disposable API process passed an **empty**
+`VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` string (and, on rollback, an empty
+`VIBRESS_NATIVE_ADMIN_UI_RELEASES` string). The Host correctly rejects
+these malformed operator settings on startup. The test fixture now
+**omits** disabled env keys instead of weakening production validation;
+[M1A 40865994023](https://github.com/AbdullahZaher/vibress/actions/runs/40865994023)
+passed on that earlier commit, but does not certify the amended scenario.
+
+**Populated-install replay added:** *Scenario I* runs the real forward
+migrator again against the already migrated and populated disposable
+PostgreSQL database while two independent API processes continue serving.
+It compares five publication-A and two publication-B bilingual course
+records and versions across replicas before/after the replay, checks the
+physical model catalog is unchanged and confirms forged tenant selectors
+remain denied. This tests migration **re-entrance on existing current-version
+content**; it does **not** simulate deploying historical API binaries or
+a down-migration. A full previous-version-image to current-version upgrade,
+actual operator-signed package rollback, production backup restoration,
+and staging approval remain separate release blockers.
+
+
 **Baseline verified 2026-10-29:** On `5e1980ccda3cd625e7c9115861c8a38eb8e366a1`,
 [PR CI 40857258268](https://github.com/AbdullahZaher/vibress/actions/runs/40857258268),
 [push CI 40857247895](https://github.com/AbdullahZaher/vibress/actions/runs/40857247895)
