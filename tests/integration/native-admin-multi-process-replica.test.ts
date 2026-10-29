@@ -1060,7 +1060,9 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     ]);
     expect(originalA.items).toHaveLength(5);
     expect(originalB.items).toHaveLength(2);
-    expect(originalA.items[0]?.fields.title_ar).toBe("دورة ألفا 1");
+    // Scenario G updates course-a-01; use the actual pre-migration snapshot
+    // for that record. Verify the untouched second Arabic row explicitly.
+    expect(originalA.items[1]?.fields.title_ar).toBe("دورة ألفا 2");
     expect(originalB.items[0]?.fields.title_ar).toBe("دورة بيتا 1");
 
     const modelBefore = await getDb().select().from(pluginPhysicalModels)
