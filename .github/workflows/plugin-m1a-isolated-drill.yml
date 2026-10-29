@@ -28,6 +28,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # Native Admin SDK consumers resolve @vibress/plugin-sdk from dist, not src.
+      # The signed-fleet child processes must exercise that packaged entrypoint.
+      - name: Build plugin SDK for signed-fleet and live replica drills
+        run: pnpm --filter @vibress/plugin-sdk build
       - name: Verify independent signed plugin admissions and reject stale/forged releases
         env:
           VIBRESS_M1A_DISPOSABLE_DRILL: "1"
