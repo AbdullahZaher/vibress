@@ -230,6 +230,27 @@ An operator must still coordinate and validate the same recovery point,
 queue/receipt correspondence, full encryption keyring and signed artifact
 mounts before releasing production traffic.
 
+### Quiesced PostgreSQL/Redis checkpoint-correlation extension
+
+The same M1A RDB drill additionally writes a shared **test-only** checkpoint
+marker into the existing isolated PostgreSQL sentinel table and Redis after
+the parent has stopped both API and Worker processes. It takes a separate
+PostgreSQL custom-format dump and Redis RDB snapshot, restores the SQL into
+another newly created database and boots the RDB in the existing no-network
+Redis recovery container. The restored databases—not the live sources—must
+contain the exact same checkpoint token, and the original PostgreSQL marker
+must survive. Both snapshot SHA-256 digests must remain unchanged. The drill
+also verifies the source PostgreSQL and Redis containers belong to the
+expected, uniquely named CI Compose project before writing the marker.
+
+The exact-head workflow must emit `PLUGIN_M1A_PAIRED_CHECKPOINT_PASSED`
+to count this *sampled checkpoint correlation* as passing. This is **not**
+atomic PostgreSQL/Redis snapshotting, general Redis lease recovery, restored
+BullMQ↔PostgreSQL receipt reconciliation, a recovery point objective,
+production artifact/key backup, or a full customer DR test. Missing or
+mismatched checkpoint metadata fails the isolated test; operator deployment
+must still use its own verified quiescence and complete restore evidence.
+
 ## Historical 0042 → 0048 populated core-upgrade drill (pending CI)
 
 An additional **disposable PostgreSQL database** in the M1A CI-only Compose
