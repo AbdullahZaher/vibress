@@ -15,6 +15,7 @@ type Scalar = string | number | boolean;
 type NativeState =
   | { kind: "loading" }
   | { kind: "legacy" }
+  | { kind: "rechecking"; wasNative: boolean }
   | { kind: "error" }
   | { kind: "native"; page: ExtensionNativeAdminPageV1;
       publicationId: string | null; pluginId: string; viewId: string; routeId: string;
@@ -30,6 +31,7 @@ const RECHECK_MS = 30_000;
 export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLink }) {
   const { locale, tr } = useAdminLocale();
   const [publicationRevision, setPublicationRevision] = useState(0);
+  const [resumeRevision, setResumeRevision] = useState(0);
   const [state, setState] = useState<NativeState>({ kind: "loading" });
   // Any protected child resource denial must also remove previously loaded
   // scalar page values, not just the resource table or editor.
@@ -39,6 +41,29 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
     const onPublicationChanged = () => setPublicationRevision((value) => value + 1);
     window.addEventListener("vibress:publication-changed", onPublicationChanged);
     return () => window.removeEventListener("vibress:publication-changed", onPublicationChanged);
+  }, []);
+
+  // Revalidate promptly when the operator returns to the Admin tab. Do not
+  // expose cached values during the recheck, or silently downgrade a formerly
+  // admitted Native page into a legacy frame after release revocation.
+  useEffect(() => {
+    const recheck = () => {
+      setState((previous) => ({
+        kind: "rechecking",
+        wasNative: previous.kind === "native" ||
+          (previous.kind === "rechecking" && previous.wasNative),
+      }));
+      setResumeRevision((revision) => revision + 1);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -51,7 +76,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
       setState({ kind: "legacy" });
       return;
     }
-    setState({ kind: "loading" });
+    setState((previous) => previous.kind === "rechecking" ? previous : { kind: "loading" });
     const refresh = async () => {
       if (pending || cancelled) return;
       pending = true;
@@ -61,7 +86,9 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         if (response.mode === "legacy") {
           // Only the Host explicitly decides a compatible legacy fallback.
           setState((previous) =>
-            previous.kind === "native" ? { kind: "error" } : { kind: "legacy" });
+            previous.kind === "native" ||
+            (previous.kind === "rechecking" && previous.wasNative)
+              ? { kind: "error" } : { kind: "legacy" });
           return;
         }
         const data = await readExtensionAdminViewApi(link);
@@ -83,10 +110,10 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [link.pluginId, link.viewId, link.routeId, link.nativeProbeSupported, publicationRevision]);
+  }, [link.pluginId, link.viewId, link.routeId, link.nativeProbeSupported, publicationRevision, resumeRevision]);
 
   if (state.kind === "legacy") return <PluginAdminView link={link} />;
-  if (state.kind === "loading") {
+  if (state.kind === "loading" || state.kind === "rechecking") {
     return <p role="status">{tr("Loading plugin view...")}</p>;
   }
   if (state.kind === "error") {

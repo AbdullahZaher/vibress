@@ -198,6 +198,27 @@ describe("Host-rendered native extension page", () => {
     expect(element.textContent).not.toContain(hostile);
   });
 
+  it("redacts cached Native data on window focus and rejects a revoked legacy downgrade", async () => {
+    let resolveRecheck: ((response: { mode: "legacy" }) => void) | undefined;
+    vi.mocked(readNativeExtensionAdminPageApi)
+      .mockResolvedValueOnce(native)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveRecheck = resolve; }));
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "private Native summary" });
+    await render();
+    expect(element.textContent).toContain("private Native summary");
+
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.textContent).not.toContain("private Native summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(element.querySelector('[role="status"]')).not.toBeNull();
+
+    await act(async () => { resolveRecheck?.({ mode: "legacy" }); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.textContent).not.toContain("private Native summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(readExtensionAdminViewApi).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed on a native endpoint denial rather than showing a frame", async () => {
     vi.mocked(readNativeExtensionAdminPageApi).mockRejectedValue(new Error("Permission denied"));
     await render();

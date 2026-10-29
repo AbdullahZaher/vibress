@@ -10,7 +10,7 @@ export {
   defineNativeAdminResourceV1,
   defineNativeAdminActionV1,
   defineNativeDomainWorkflowV1,
-} from "./native-admin-definitions";
+} from "./native-admin-definitions.js";
 
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
