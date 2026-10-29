@@ -150,4 +150,84 @@ timeout --signal=TERM --kill-after=10s 360s pnpm exec tsx scripts/plugins/drill-
   [ "$original" = 1 ] && [ "$restored" = 1 ]
 ' >/dev/null || die "populated PostgreSQL clone restoration failed"
 
-printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: real four-process readiness, Redis/PG outage/recovery and isolated PostgreSQL restore (not signed-release or full DR acceptance)'
+# All writers are stopped. Exercise the production restore.sh signature gate
+# against a SECOND disposable database in the uniquely named CI Compose project.
+signed_archive="$log_dir/vibress_backup_20000101_000000.sql.gz"
+signed_manifest="$log_dir/vibress_backup_manifest_20000101_000000.json"
+signed_key="isolated-test-signing-key-$GITHUB_RUN_ID"
+"${compose[@]}" exec -T postgres sh -eu -c \
+  'pg_dump -U vibress -d vibress --clean --if-exists --no-owner --no-acl' \
+  | gzip -c > "$signed_archive"
+gzip -t "$signed_archive" || die "signed drill archive is corrupt"
+archive_sha="$(sha256sum "$signed_archive" | cut -d ' ' -f 1)"
+archive_size="$(wc -c < "$signed_archive" | tr -d ' ')"
+cat > "$signed_manifest" <<EOF
+{
+  "backupSetId": "vibress_backup_20000101_000000",
+  "timestamp": "2000-01-01 00:00:00 UTC",
+  "project": "vibress-isolated-drill",
+  "storageProvider": "local",
+  "database": {
+    "file": "vibress_backup_20000101_000000.sql.gz",
+    "sha256": "$archive_sha",
+    "size": "$archive_size"
+  },
+  "content": { "backedUp": false, "volume": "none", "file": "none", "sha256": "none" },
+  "s3": { "backedUp": false, "bucket": "none", "prefix": "none", "file": "none", "sha256": "none" },
+  "signatureAlgorithm": "hmac-sha256"
+}
+EOF
+BACKUP_SIGNING_KEY="$signed_key" node -e '
+  const fs = require("node:fs");
+  const crypto = require("node:crypto");
+  const bytes = fs.readFileSync(process.argv[1]);
+  process.stdout.write(crypto.createHmac("sha256", process.env.BACKUP_SIGNING_KEY)
+    .update(bytes).digest("hex") + "\n");
+' "$signed_manifest" > "$signed_manifest.sig"
+"${compose[@]}" exec -T postgres createdb -U vibress vibress_m1a_signed
+
+# Deny the missing signature and a syntactically valid modified manifest
+# BEFORE any change to the target database.
+missing_sig_manifest="$log_dir/missing-signature.json"
+cp "$signed_manifest" "$missing_sig_manifest"
+if COMPOSE_PROJECT_NAME="$project" COMPOSE_FILE=compose.dev.yml ENV_FILE=/dev/null \
+    BACKUP_SIGNING_KEY="$signed_key" ./scripts/restore.sh \
+    --archive "$signed_archive" --manifest "$missing_sig_manifest" \
+    --db vibress_m1a_signed --confirm > "$log_dir/missing-signature.log" 2>&1; then
+  die "restore accepted signed manifest without detached signature"
+fi
+grep -q 'detached signature.*missing' "$log_dir/missing-signature.log" \
+  || die "missing signature refusal did not reach cryptographic gate"
+tampered_manifest="$log_dir/tampered-manifest.json"
+cp "$signed_manifest" "$tampered_manifest"
+cp "$signed_manifest.sig" "$tampered_manifest.sig"
+node -e '
+  const fs = require("node:fs");
+  const p = process.argv[1];
+  const m = JSON.parse(fs.readFileSync(p, "utf8"));
+  m.project = "modified-without-resigning";
+  fs.writeFileSync(p, JSON.stringify(m));
+' "$tampered_manifest"
+if COMPOSE_PROJECT_NAME="$project" COMPOSE_FILE=compose.dev.yml ENV_FILE=/dev/null \
+    BACKUP_SIGNING_KEY="$signed_key" ./scripts/restore.sh \
+    --archive "$signed_archive" --manifest "$tampered_manifest" \
+    --db vibress_m1a_signed --confirm > "$log_dir/tampered-manifest.log" 2>&1; then
+  die "restore accepted a tampered signed manifest"
+fi
+grep -q 'HMAC-SHA256 signature verification FAILED' "$log_dir/tampered-manifest.log" \
+  || die "tampered manifest refusal did not reach cryptographic gate"
+pre_restore="$("${compose[@]}" exec -T postgres psql -X -U vibress -d vibress_m1a_signed \
+  -Atqc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='m1a_drill_marker'")"
+[[ "$pre_restore" == "0" ]] || die "rejected restore mutated the target database"
+
+COMPOSE_PROJECT_NAME="$project" COMPOSE_FILE=compose.dev.yml ENV_FILE=/dev/null \
+  BACKUP_SIGNING_KEY="$signed_key" ./scripts/restore.sh \
+  --archive "$signed_archive" --manifest "$signed_manifest" \
+  --db vibress_m1a_signed --confirm > "$log_dir/signed-restore.log" 2>&1 \
+  || die "authenticated restore of populated disposable database failed"
+restored="$("${compose[@]}" exec -T postgres psql -X -U vibress -d vibress_m1a_signed \
+  -Atqc "SELECT count(*) FROM public.m1a_drill_marker WHERE marker='isolated-recovery-sentinel'")"
+[[ "$restored" == "1" ]] || die "authenticated restore lost the original sentinel"
+printf '%s\n' 'PLUGIN_M1A_SIGNED_RESTORE_PASSED: HMAC manifest, tamper/missing-signature rejection and populated SQL recovery'
+
+printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: four-process fault recovery, isolated PostgreSQL clone and authenticated SQL restore (not complete DR acceptance)'

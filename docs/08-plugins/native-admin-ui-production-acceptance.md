@@ -61,6 +61,36 @@ allowlists. The release remains default-off until security/operator
 sign-off, final exact-head CI and staged multi-replica rollback evidence;
 automated regressions are necessary but not sufficient for production.
 
+## SDK-NUI-04 — signed recovery and read-only rollback rehearsal (pending exact-head CI)
+
+The current disposable multi-process integration adds a **read-only release
+rollback and readmission** check on a database with prior, real bilingual
+course edits. It snapshots publication-A/B rows and versions, removes the
+Native release allowlist on an isolated API process, verifies Native resource
+routes fail closed, then re-admits the **same signed digest** on a restarted
+process without schema or data resets. It requires both publications to return
+the exact original snapshots, including Arabic text and versions, and
+continues to deny a foreign publication. This tests **operator flag rollback
+of Native rendering**, not reverting an installed plugin's database schema.
+
+The separate CI-only M1A recovery drill now exercises the real production
+`scripts/restore.sh` HMAC signature preflight against an additional empty
+database in a namespaced disposable PostgreSQL stack. A valid compressed
+dump of the populated test installation is accompanied by a signed manifest;
+missing signature and tampered manifest are rejected before database writes.
+The unchanged signed archive must restore the original sentinel. Application
+API/Worker writers have already been stopped; the private signing key used by
+this test is an ephemeral *nonproduction* fixture.
+
+**Evidence is pending:** these are authored acceptance checks and do not
+become proof until CI and M1A succeed on the new commit. In particular, they
+do not restore Redis/queues, media, encryption keys or actual operator-signed
+third-party release mounts. Nor do they test a pinned historical API/Worker
+binary against a real pre-upgrade database snapshot or reverse an irreversible
+plugin schema migration. Those tests, upgrade fencing, full staging DR,
+measured RPO/RTO and explicit Security/Operator approvals are still blockers
+to Native production enablement.
+
 ## Automated release matrix
 
 | Verification | Evidence required |

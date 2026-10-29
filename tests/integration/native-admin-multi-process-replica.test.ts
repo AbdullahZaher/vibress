@@ -1002,6 +1002,27 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       expect(records.items.map((r) => r.id))
         .toEqual(["course-a-01", "course-a-02"]);
 
+      // Capture complete persisted bilingual fields and row versions BEFORE
+      // rollback; this survives earlier concurrent edits from Scenario G.
+      const snapshot = async (publicationId: string) => {
+        const response = await fetch(baseC + resourcePath + "?limit=10", {
+          headers: { ...headers, "x-publication-id": publicationId },
+        });
+        expect(response.status).toBe(200);
+        return (await response.json()) as {
+          items: Array<{
+            id: string; version: number;
+            fields: Record<string, string | number | boolean | null>;
+          }>;
+        };
+      };
+      const beforeAlpha = await snapshot(pubAId);
+      const beforeBeta = await snapshot(pubBId);
+      expect(beforeAlpha.items).toHaveLength(5);
+      expect(beforeBeta.items).toHaveLength(2);
+      expect(beforeAlpha.items[1]?.fields.title_ar).toBe("دورة ألفا 2");
+      expect(beforeBeta.items[0]?.fields.title_ar).toBe("دورة بيتا 1");
+
       // The same read-only release cannot authorize a forged publication.
       const wrongPublication = await fetch(baseC + nativePath, {
         headers: { ...headers, "x-publication-id": "unknown-foreign-publication" },
@@ -1029,6 +1050,32 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
       expect(disabledData.status).toBe(404);
       const disabledRecords = await fetch(baseC + resourcePath + "?limit=2", { headers });
       expect(disabledRecords.status).toBe(404);
+
+      // Restore the SAME signed, reviewed read-only release without running
+      // migrations or resetting the existing PostgreSQL database. A release
+      // rollback changes admission, not durable plugin-owned content.
+      await terminateProcessGracefully(procC);
+      procC = null;
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, approvedReleaseTag,
+        [portA, portB, portC], "",
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const readmitted = await fetch(baseC + nativePath, { headers });
+      expect(readmitted.status).toBe(200);
+      const readmittedBody = (await readmitted.json()) as {
+        mode: string; workflow?: unknown;
+      };
+      expect(readmittedBody.mode).toBe("native");
+      expect(readmittedBody.workflow).toBeUndefined();
+      expect(await snapshot(pubAId)).toEqual(beforeAlpha);
+      expect(await snapshot(pubBId)).toEqual(beforeBeta);
+      const stillForbidden = await fetch(baseC + resourcePath + "?limit=2", {
+        headers: { ...headers, "x-publication-id": "unknown-foreign-publication" },
+      });
+      expect(stillForbidden.status).toBe(403);
     } finally {
       await terminateProcessGracefully(procC);
       procC = null;

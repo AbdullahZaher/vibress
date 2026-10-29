@@ -164,6 +164,29 @@ observed API×2/Worker×2 behavior and retained event receipts, measure
 actual recovery time and recovered writes, and secure the operator-signed
 go/no-go report outside the source tree.
 
+## Signed database restore extension to the disposable M1A drill
+
+The isolated four-process drill is extended to create a second, separately
+named PostgreSQL restore target. It produces a real compressed SQL dump of
+the migrated and populated disposable source, and a synthetic HMAC-SHA256
+manifest in a private temporary directory. After stopping API/Worker
+writers, it invokes the **existing production `scripts/restore.sh`** and
+requires: (1) refusal of an authenticated manifest whose detached signature
+was removed, (2) refusal of a valid JSON manifest that was modified without
+re-signing, with the target database still unchanged, and (3) successful
+restoration of the original sentinel with the correct HMAC key and archive.
+All databases and temporary files are cleaned up through the original
+M1A disposable Compose-project lifecycle. No production backups are read.
+
+The step retains the original strict CI-only runner guard and does not add
+any bypass/skip flag to `restore.sh`. This adds concrete **signed SQL restore**
+evidence, but not a coordinated PostgreSQL/Redis/media/secrets/approved
+plugin-artifact recovery, historical binary upgrade, actual deployment
+rollback or measured customer RPO/RTO. Formal operator sign-off remains
+blocked. Record the exact commit SHA and the
+`PLUGIN_M1A_SIGNED_RESTORE_PASSED` marker after a successful drill; an
+authored test is not a successful test.
+
 ## CI disposable four-process fault and PostgreSQL restore drill
 
 **Evidence:** [GitHub Actions run #40219707208](https://github.com/AbdullahZaher/vibress/actions/runs/40219707208) succeeded
