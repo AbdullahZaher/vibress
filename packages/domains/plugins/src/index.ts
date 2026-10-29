@@ -66,3 +66,8 @@ export { validateOperatorUpgradePreflight, validateOperatorUpgradeApproval } fro
 export type {
   OperatorUpgradePreflightInput, OperatorUpgradeApprovalInput,
 } from "./application/plugin-upgrade-plan";
+
+export * from "./runtime/tier2-ipc";
+export * from "./runtime/tier2-capability-gateway";
+export * from "./runtime/tier2-process-supervisor";
+
