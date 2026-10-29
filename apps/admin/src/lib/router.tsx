@@ -465,7 +465,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/plugins",
     exact: true,
     requiredPermission: "plugins.read",
-    render: () => <PluginsPage />,
+    render: ({ onNavigate, extensionViews }) => (
+      <PluginsPage onNavigate={onNavigate} extensionViews={extensionViews} />
+    ),
   },
   // 5. Settings Hub Routes & Backward-Compatible Aliases
   {

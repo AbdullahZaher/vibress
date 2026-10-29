@@ -3,7 +3,12 @@ import { Plus, RefreshCw } from "lucide-react";
 import { FailedPluginEventsPanel } from "./FailedPluginEventsPanel";
 import { PluginActivityPanel } from "./PluginActivityPanel";
 import { useAdminLocale } from "../../lib/admin-locale";
-import { type AdminPlugin, listPluginsApi } from "../../lib/api";
+import {
+  type AdminPlugin,
+  type AdminExtensionViewLink,
+  listPluginsApi,
+  listExtensionAdminViewsApi,
+} from "../../lib/api";
 import { IconButton } from "../ui/icon-button";
 import { Button } from "../ui/button";
 import { TrustedPluginInstaller } from "./TrustedPluginInstaller";
@@ -12,10 +17,16 @@ import { PluginsPanel } from "./PluginsPanel";
 
 type PluginSection = "installed" | "available" | "updates" | "activity";
 
+export interface PluginsPageProps {
+  onNavigate?: ((path: string) => void) | undefined;
+  extensionViews?: readonly AdminExtensionViewLink[] | undefined;
+}
+
 /** First-class admin route: /admin/plugins (requires plugins.read). */
-export function PluginsPage() {
+export function PluginsPage({ onNavigate, extensionViews }: PluginsPageProps = {}) {
   const { tr } = useAdminLocale();
   const [plugins, setPlugins] = useState<AdminPlugin[]>([]);
+  const [views, setViews] = useState<readonly AdminExtensionViewLink[]>(extensionViews ?? []);
   const [platformOperator, setPlatformOperator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -47,6 +58,14 @@ export function PluginsPage() {
       }
       setHasLoaded(true);
       setError(null);
+      if (!extensionViews) {
+        try {
+          const viewsRes = await listExtensionAdminViewsApi();
+          if (request === generation.current) setViews(viewsRes.items);
+        } catch {
+          // Graceful fallback: views list remains empty
+        }
+      }
     } catch {
       if (request !== generation.current) return;
       setError(tr("Failed to load plugins"));
@@ -146,6 +165,8 @@ export function PluginsPage() {
                   platformOperator={platformOperator}
                   onError={setError}
                   onChanged={refresh}
+                  extensionViews={views}
+                  onNavigate={onNavigate}
                 />
               </>
             )}

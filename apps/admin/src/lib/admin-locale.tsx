@@ -33,6 +33,8 @@ const translations: Record<string, string> = {
   "Copy URL": "نسخ الرابط",
   "Copied": "تم النسخ",
   "Plugin pages": "صفحات الإضافات",
+  "Open page": "فتح الصفحة",
+  "Native Admin Pages": "صفحات الإدارة الأصلية",
   "LMS": "نظام التعلّم (LMS)",
   "Failed plugin events": "أحداث الإضافات الفاشلة",
   "Failed to load plugin events": "تعذّر تحميل أحداث الإضافات",

@@ -10,8 +10,12 @@ vi.mock("../../../lib/admin-locale", () => {
   const tr = (value: string) => value;
   return { useAdminLocale: () => ({ tr }) };
 });
+let lastPluginsPanelProps: Record<string, unknown> | null = null;
 vi.mock("../PluginsPanel", () => ({
-  PluginsPanel: () => <div data-testid="installed-plugins" />,
+  PluginsPanel: (props: Record<string, unknown>) => {
+    lastPluginsPanelProps = props;
+    return <div data-testid="installed-plugins" />;
+  },
 }));
 vi.mock("../TrustedPluginInstaller", () => ({
   TrustedPluginInstaller: ({ show }: { show?: string }) =>
@@ -123,5 +127,24 @@ describe("Admin Add Plugin access", () => {
     expect(container.querySelector('[data-testid="trusted-plugin-installer"]')).toBeNull();
     expect([...container.querySelectorAll("button")]
       .some((button) => button.textContent?.includes("Add Plugin"))).toBe(false);
+  });
+
+  it("forwards onNavigate and extensionViews to PluginsPanel (ADMIN-07)", async () => {
+    vi.mocked(listPluginsApi).mockResolvedValue({ plugins: [], platformOperator: false });
+    const onNavigate = vi.fn();
+    const testViews = [{
+      pluginId: "db-1",
+      viewId: "v1",
+      routeId: "r1",
+      label: { en: "V1", ar: "V1" },
+      title: { en: "V1", ar: "V1" },
+      permission: "plugins.read" as const,
+    }];
+    await act(async () => {
+      root.render(<PluginsPage onNavigate={onNavigate} extensionViews={testViews} />);
+    });
+    expect(lastPluginsPanelProps).not.toBeNull();
+    expect(lastPluginsPanelProps?.onNavigate).toBe(onNavigate);
+    expect(lastPluginsPanelProps?.extensionViews).toEqual(testViews);
   });
 });

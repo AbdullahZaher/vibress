@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import {
   AdminPlugin,
+  type AdminExtensionViewLink,
   activatePluginApi,
   deactivatePluginApi,
   setPluginPublicationStateApi,
@@ -9,7 +10,7 @@ import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Puzzle, Search } from "lucide-react";
+import { ExternalLink, Puzzle, Search } from "lucide-react";
 import { Input } from "../ui/input";
 import { ScopedPluginSettingsEditor } from "./ScopedPluginSettingsEditor";
 import { FailedPluginEventsPanel } from "./FailedPluginEventsPanel";
@@ -19,6 +20,8 @@ interface PluginsPanelProps {
   platformOperator: boolean;
   onError: (message: string) => void;
   onChanged: () => Promise<void>;
+  extensionViews?: readonly AdminExtensionViewLink[] | undefined;
+  onNavigate?: ((path: string) => void) | undefined;
 }
 
 export function PluginsPanel({
@@ -26,8 +29,10 @@ export function PluginsPanel({
   platformOperator,
   onError,
   onChanged,
+  extensionViews,
+  onNavigate,
 }: PluginsPanelProps) {
-  const { tr } = useAdminLocale();
+  const { tr, locale } = useAdminLocale();
   const [busyPluginId, setBusyPluginId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "attention">("all");
@@ -117,6 +122,9 @@ export function PluginsPanel({
             : plugin.status === "activating" ? tr("Activating")
             : plugin.status === "deactivating" ? tr("Deactivating")
             : failed ? tr("Plugin lifecycle failed") : tr("Unknown plugin state");
+          const matchingViews = (extensionViews ?? []).filter(
+            (view) => view.pluginId === plugin.id || view.pluginId === plugin.manifestId
+          );
           return (
             <Card key={plugin.id} className="p-5 bg-card border-border shadow-2xs space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -198,6 +206,36 @@ export function PluginsPanel({
               </div>
               {scoped && siteEnabled && (
                 <ScopedPluginSettingsEditor plugin={plugin} onError={onError} />
+              )}
+              {scoped && siteEnabled && globalActive && matchingViews.length > 0 && (
+                <div className="pt-2 border-t border-border space-y-2" data-testid={`plugin-native-pages-${plugin.id}`}>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                    {tr("Native Admin Pages")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {matchingViews.map((view) => {
+                      const path = `/admin/extensions/${encodeURIComponent(view.pluginId)}/${encodeURIComponent(view.viewId)}`;
+                      const title = (locale === "ar" ? view.title.ar : view.title.en) || view.title.en || view.viewId;
+                      return (
+                        <a
+                          key={view.viewId}
+                          href={path}
+                          onClick={(e) => {
+                            if (onNavigate) {
+                              e.preventDefault();
+                              onNavigate(path);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-secondary hover:bg-accent text-secondary-foreground hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label={`${tr("Open page")}: ${title}`}
+                        >
+                          <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                          <span dir="auto">{title}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               {platformOperator && scoped && globalActive && siteEnabled && (
                 <FailedPluginEventsPanel pluginId={plugin.id} onError={onError} />

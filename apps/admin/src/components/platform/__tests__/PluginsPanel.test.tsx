@@ -12,8 +12,9 @@ vi.mock("../../../lib/api", () => ({
   deactivatePluginApi: vi.fn(),
   setPluginPublicationStateApi: vi.fn(),
 }));
+let mockLocale: "en" | "ar" = "en";
 vi.mock("../../../lib/admin-locale", () => ({
-  useAdminLocale: () => ({ tr: (value: string) => value }),
+  useAdminLocale: () => ({ tr: (value: string) => value, locale: mockLocale }),
 }));
 vi.mock("../ScopedPluginSettingsEditor", () => ({
   ScopedPluginSettingsEditor: () => <div data-testid="settings" />,
@@ -184,6 +185,109 @@ describe("P0-4 plugin lifecycle status and recovery UX", () => {
         platformOperator onError={onError} onChanged={onChanged} />);
     });
     expect(container.textContent).toContain("No platform plugins installed.");
+  });
+
+  it("cross-links active and publication-enabled plugins to their Native Admin pages (ADMIN-07)", async () => {
+    const onNavigate = vi.fn();
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("active", { publicationEnabled: true })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Native Admin Pages");
+    expect(container.textContent).toContain("Course Management");
+    const link = container.querySelector('a[href="/admin/extensions/db-1/courses"]') as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    await act(async () => {
+      link.click();
+    });
+    expect(onNavigate).toHaveBeenCalledWith("/admin/extensions/db-1/courses");
+  });
+
+  it("hides Native Admin page links when plugin is inactive, disabled or lacking matching views (ADMIN-07)", async () => {
+    const onNavigate = vi.fn();
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    // Inactive plugin
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("inactive", { publicationEnabled: true })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).not.toContain("Native Admin Pages");
+    expect(container.querySelector('a[href="/admin/extensions/db-1/courses"]')).toBeNull();
+
+    // Publication-disabled plugin
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("active", { publicationEnabled: false })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).not.toContain("Native Admin Pages");
+    expect(container.querySelector('a[href="/admin/extensions/db-1/courses"]')).toBeNull();
+  });
+
+  it("displays localized Arabic titles in RTL locale for Native Admin links (ADMIN-07)", async () => {
+    mockLocale = "ar";
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    try {
+      await act(async () => {
+        root.render(
+          <PluginsPanel
+            plugins={[plugin("active", { publicationEnabled: true })]}
+            platformOperator
+            onError={onError}
+            onChanged={onChanged}
+            extensionViews={[testView]}
+          />,
+        );
+      });
+      expect(container.textContent).toContain("إدارة الدورات");
+    } finally {
+      mockLocale = "en";
+    }
   });
 
 });
