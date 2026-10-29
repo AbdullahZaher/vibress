@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
@@ -177,10 +178,11 @@ describe("Tier 2 Independently Isolated Plugin Runtime (M4)", () => {
   });
 
   describe("Tier 2 Process Isolation and Adversarial Hardening (RT-02, RT-04, RT-05)", () => {
-    const compiledWorkerPath = path.resolve(
-      __dirname,
-      "../dist/runtime/tier2-sandbox-worker.js",
-    );
+    const compiledWorkerPath = existsSync(
+      path.resolve(__dirname, "../dist/runtime/tier2-sandbox-worker.js"),
+    )
+      ? path.resolve(__dirname, "../dist/runtime/tier2-sandbox-worker.js")
+      : path.resolve(__dirname, "../src/runtime/tier2-sandbox-worker.ts");
 
     it("proves the child process cannot read Host environment secrets (Scrubbed Environment)", async () => {
       // Set host secrets in current process

@@ -221,22 +221,27 @@ export class Tier2PluginSupervisor extends EventEmitter {
       ...(entrypointPath ? { VIBRESS_PLUGIN_ENTRYPOINT: entrypointPath } : {}),
     };
 
-    const nodeArgs = [
-      `--max-old-space-size=${this.maxOldSpaceSizeMb}`,
-      "--no-addons",
-      "--disallow-code-generation-from-strings",
-    ];
-
     let script = this.workerScriptPath;
-    if (!script) {
+    if (!script || !existsSync(script)) {
       const candidates = [
         path.resolve(__dirname, "tier2-sandbox-worker.js"),
         path.resolve(__dirname, "../../dist/runtime/tier2-sandbox-worker.js"),
         path.resolve(process.cwd(), "packages/domains/plugins/dist/runtime/tier2-sandbox-worker.js"),
         path.resolve(__dirname, "dist/runtime/tier2-sandbox-worker.js"),
+        path.resolve(__dirname, "tier2-sandbox-worker.ts"),
+        path.resolve(process.cwd(), "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"),
       ];
       script = candidates.find((p) => existsSync(p)) || candidates[0];
     }
+    const isTypeScript = Boolean(script?.endsWith(".ts"));
+
+    const nodeArgs = [
+      `--max-old-space-size=${this.maxOldSpaceSizeMb}`,
+      "--no-addons",
+      "--disallow-code-generation-from-strings",
+      ...(isTypeScript ? ["--import", "tsx"] : []),
+    ];
+
     const child = fork(script!, [], {
       env: sanitizedEnv,
       execArgv: nodeArgs,
