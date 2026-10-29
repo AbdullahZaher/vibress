@@ -158,9 +158,23 @@ describe("NUI-07 Genuine Packaged SDK Consumer and Contract Conformance", () => 
     fs.writeFileSync(
       runtimeScript,
       `
-import { SDK_VERSION, validateManifest, defineNativeAdminPageV1 } from "@vibress/plugin-sdk";
+import {
+  SDK_VERSION, validateManifest, defineNativeAdminPageV1,
+  NATIVE_ADMIN_PAGE_SCHEMA_VERSION, NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION,
+} from "@vibress/plugin-sdk";
 const input = { schemaVersion: 1, viewId: "test", title: { en: "Test", ar: "اختبار" }, components: [{ type: "stat", id: "total", field: "total", label: { en: "Total", ar: "الإجمالي" } }] };
-if (SDK_VERSION !== "1.0.0" || typeof validateManifest !== "function" ||
+const manifest = {
+  id: "compat-fixture", name: "Compatibility", version: "1.2.0",
+  vibressApiVersion: SDK_VERSION, entrypoint: "dist/plugin.mjs", capabilities: [],
+};
+let rejectsPackageVersionAsAbi = false;
+try { validateManifest({ ...manifest, vibressApiVersion: "1.2.0" }); }
+catch { rejectsPackageVersionAsAbi = true; }
+if (SDK_VERSION !== "1.0.0" ||
+    NATIVE_ADMIN_PAGE_SCHEMA_VERSION !== 1 ||
+    NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION !== 1 ||
+    validateManifest(manifest).vibressApiVersion !== "1.0.0" ||
+    !rejectsPackageVersionAsAbi ||
     defineNativeAdminPageV1(input) !== input) {
   process.exit(1);
 }
@@ -195,6 +209,8 @@ console.log(JSON.stringify({ SDK_VERSION, hasValidateManifest: true }));
 
     // Public API symbols must be declared
     expect(dts).toContain("SDK_VERSION");
+    expect(dts).toContain("NATIVE_ADMIN_PAGE_SCHEMA_VERSION");
+    expect(dts).toContain("NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION");
     expect(dts).toContain("PluginModule");
     expect(dts).toContain("PluginAdminDataResourceV1");
     expect(dts).toContain("PluginAdminDomainWorkflowV1");
@@ -308,11 +324,12 @@ import {
   defineNativeAdminPageV1, defineNativeAdminResourceV1,
   defineNativeAdminActionV1, defineNativeDomainWorkflowV1,
   definePluginModule,
+  NATIVE_ADMIN_PAGE_SCHEMA_VERSION, NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION,
 } from "@vibress/plugin-sdk";
 
 const title = { en: "Records", ar: "السجلات" };
 const page = defineNativeAdminPageV1({
-  schemaVersion: 1, viewId: "records", title,
+  schemaVersion: NATIVE_ADMIN_PAGE_SCHEMA_VERSION, viewId: "records", title,
   components: [{ type: "stat", id: "total", label: title, field: "total" }],
 });
 const resource = defineNativeAdminResourceV1({
@@ -322,7 +339,7 @@ const action = defineNativeAdminActionV1({
   id: "create-item", resourceId: "items", operation: "create",
 });
 const workflow = defineNativeDomainWorkflowV1({
-  schemaVersion: 1, viewId: "records", routeId: "records",
+  schemaVersion: NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION, viewId: "records", routeId: "records",
   resourceId: "items", idField: "recordId", versionField: "version",
   operationField: "operation", operations: ["create", "save"],
   fields: [{ key: "title", label: title, maxLength: 120 }],

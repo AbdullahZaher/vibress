@@ -225,6 +225,18 @@ export function definePluginModule<const T extends PluginModule>(module: T): T {
 
 export const SDK_VERSION = "1.0.0";
 
+/**
+ * SDK-NUI-01: current declarative Native UI wire schema versions, NOT SDK
+ * package semver or proof that the Host has approved this plugin release.
+ * The Host independently validates each declaration using its own Zod
+ * contracts and enforces authorization and release allowlists per request.
+ *
+ * These constants only describe the V1 contract supported by this SDK.
+ * A future wire version must be explicitly versioned and admitted by Host.
+ */
+export const NATIVE_ADMIN_PAGE_SCHEMA_VERSION = 1 as const;
+export const NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION = 1 as const;
+
 export interface PluginCapabilityDefinition {
   id: string;
   name: string;

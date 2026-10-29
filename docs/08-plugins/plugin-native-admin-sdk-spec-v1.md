@@ -253,6 +253,15 @@ Retry semantics must be explicit: Host storage writes use CAS/unique keys; domai
 
 ## 7. Compatibility and version negotiation
 
+**Implemented V1 baseline:** See the [SDK/Native V1 compatibility policy](plugin-sdk-compatibility-policy.md).
+The public SDK exports `NATIVE_ADMIN_PAGE_SCHEMA_VERSION = 1` and
+`NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION = 1` alongside the unchanged
+`SDK_VERSION = "1.0.0"`. These are separate descriptive constants.
+The current Host checks the V1 page/workflow with Zod and an exact manifest
+ABI; it does **not** expose a general minimum Native Host-version handshake.
+Any V2 feature negotiation below is a **proposal**, not implemented.
+
+
 Five distinct identifiers must be documented:
 
 - **SDK package semver** (`packages/plugin-sdk/package.json`; presently `1.2.0`, private).

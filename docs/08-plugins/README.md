@@ -6,9 +6,9 @@ supported for untrusted plugins** or complete for external SDK release.
 
 ## Unified forward roadmap and Native SDK — revised 2026-10-28
 
-**Forward-looking plan:** [Plugin Platform Unified Roadmap v3](plugin-platform-master-roadmap-v3.md) and [Native Admin UI SDK developer contract proposal](plugin-native-admin-sdk-spec-v1.md). Both describe **planned requirements**, not completed features. Read the [v3 security, compatibility and adoption review](plugin-roadmap-v3-review-and-adoption.md) before implementation. Existing `@vibress/plugin-sdk` Native descriptors are experimental; proposed `define*` helpers and schema v2 are not shipped.
+**Forward-looking plan:** [Plugin Platform Unified Roadmap v3](plugin-platform-master-roadmap-v3.md) and [Native Admin UI SDK developer contract proposal](plugin-native-admin-sdk-spec-v1.md). Both describe **planned requirements**, not completed features. Read the [v3 security, compatibility and adoption review](plugin-roadmap-v3-review-and-adoption.md) before implementation. Existing `@vibress/plugin-sdk` Native descriptors and pure V1 `defineNative*V1` helpers are experimental; future v2 builders and schema v2 are not shipped. See the [SDK/Native V1 compatibility policy](plugin-sdk-compatibility-policy.md).
 
-**Source-of-truth separation:** The [M0–M6 execution ledger](plugin-platform-master-execution-plan.md) remains authoritative for branch implementation status and exact-commit evidence. Merged PR #96 added a default-off Native Admin UI implementation; its release allowlists are **not** automatically approved by the merge. PR #89 remains a Draft integration branch requiring separate reconciliation with `main`. These documents do not authorize marketplace execution or production rollout.
+**Source-of-truth separation:** The [M0–M6 execution ledger](plugin-platform-master-execution-plan.md) remains authoritative for branch implementation status and exact-commit evidence. Merged PR #96 added a default-off Native Admin UI implementation; its release allowlists are **not** automatically approved by the merge. PR #89 remains Draft; its branch has incorporated the PR #96 `main` baseline but still needs exact-head checks and formal acceptance. These documents do not authorize marketplace execution or production rollout.
 
 ## Active platform completion program (2026-10-24)
 
