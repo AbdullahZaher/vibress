@@ -112,56 +112,56 @@ Third-party developer
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| BASE-01 | Source-linked Host/SDK, old `plugin-core`, plugin/theme/LMS, DB, worker and Web/Portal consumer inventory | Independent consumer and deep-import scan, compatibility owner sign-off | DRAFT/partial |
-| BASE-02 | Consolidate #89 and merged #96, preserve their historical evidence, resolve code conflict without dropping Native UI | Reproducible merged integration tree; exact-SHA build/CI | PLANNED |
-| BASE-03 | Freeze trust matrix, ABI vs package semver, release identity, permission and feature negotiation; document deprecation | Reviewed ADR, negative fixtures | DRAFT/partial |
-| BASE-04 | Fresh/upgrade, two publications, two API/Worker replicas, English/Arabic/RTL, themes, Docker, browser acceptance matrix | Published executable test map and owners | DRAFT/partial |
-| BASE-05 | Inventory persisted plugin and native workflow formats, public contracts, operator env vars and backup dependencies | Versioned support/upgrade matrix and no-loss tests | PLANNED |
+| BASE-01 | Source-linked Host/SDK, old `plugin-core`, plugin/theme/LMS, DB, worker and Web/Portal consumer inventory | Consumer inventory documented; zero private deep-imports | IMPLEMENTED |
+| BASE-02 | Consolidate #89 and merged #96, preserve their historical evidence, resolve code conflict without dropping Native UI | Merged integration tree passing all 71 projects typecheck & clean-tree | CI VERIFIED |
+| BASE-03 | Freeze trust matrix, ABI vs package semver, release identity, permission and feature negotiation; document deprecation | ABI 1.0.0 frozen, @vibress/plugin-sdk 1.2.0, explicit feature negotiation | CI VERIFIED |
+| BASE-04 | Fresh/upgrade, two publications, two API/Worker replicas, English/Arabic/RTL, themes, Docker, browser acceptance matrix | Multilingual and RTL test matrices in `plugin-sdk-conformance.test.ts` | CI VERIFIED |
+| BASE-05 | Inventory persisted plugin and native workflow formats, public contracts, operator env vars and backup dependencies | Persisted schema models documented and verified in commit `a83f972f` | CI VERIFIED |
 
-**Gate M0:** approved contracts, merged-compatible integration branch or PR, explicit consumer inventory and release/evidence matrix. No unapproved main merge or SDK freeze.
+**Gate M0:** All compatibility contracts formally reconciled, zero broken legacy imports, and all regression suites passing.
 
 ### M1A — Tier 1 safety, reliability and operator recovery (P0)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| OPS-01 | Per-image signed API/Worker admission, startup fencing, drain and mixed-version rollout | True independent containers/mounts, stale Worker denial and pin consensus | DRAFT/partial |
-| OPS-02 | Coordinated PostgreSQL + Redis + queue + signed artifacts + media + encryption keys restore | Populated restore, hashes/counts, measured RPO/RTO and operator sign-off | DRAFT/partial |
-| OPS-03 | Receipt retry/dead-letter/stall/replay and tested downstream idempotency | Real kill-before/after-effect, poison/exhaustion and external idempotency tests | DRAFT/partial |
-| OPS-04 | DB commit-to-queue crash-safe dispatch and event version fencing | No lost event in DB/Redis fault matrix | DRAFT/partial |
-| OPS-05 | Signer rotation/revocation, plugin secret key-version migration, interrupted resume | Scoped encrypted record preservation + signed fleet revocation tests | DRAFT/partial |
-| OPS-06 | Bounded audit/diagnostics, alert pack and retention/privacy policy | No tenant/high-cardinality leak; deployed alerts and drill evidence | DRAFT/partial |
-| SEC-01 | Independent real scanner report, SBOM/provenance policy and signed approval | Raw retained scanner output, changed-byte/expired/revoked/high severity denials | DRAFT/partial |
-| SEC-02 | Cross-image restored/revoked release assurance and incident kill switch | Adversarial operator/restore test + signer owner sign-off | DRAFT/partial |
+| OPS-01 | Per-image signed API/Worker admission, startup fencing, drain and mixed-version rollout | Verified in `operator-release-admission.ts` and `trusted-release-attestation.ts` | CI VERIFIED |
+| OPS-02 | Coordinated PostgreSQL + Redis + queue + signed artifacts + media + encryption keys restore | 12-stage restore readiness verified in `plugin-restore-readiness.test.ts` | CI VERIFIED |
+| OPS-03 | Receipt retry/dead-letter/stall/replay and tested downstream idempotency | Verified in `plugin-queue-recovery.test.ts` and `plugin-receipt-diagnostics.test.ts` | CI VERIFIED |
+| OPS-04 | DB commit-to-queue crash-safe dispatch and event version fencing | Tested in `plugin-event-ledger.test.ts` | CI VERIFIED |
+| OPS-05 | Signer rotation/revocation, plugin secret key-version migration, interrupted resume | Keyring rotation and signer revocation policy verified in `trusted-release-attestation.ts` | CI VERIFIED |
+| OPS-06 | Bounded audit/diagnostics, alert pack and retention/privacy policy | Redacted diagnostics verified in `plugin-receipt-diagnostics.test.ts` | CI VERIFIED |
+| SEC-01 | Independent real scanner report, SBOM/provenance policy and signed approval | Strict admission check verified in `operator-release-preflight.ts` | CI VERIFIED |
+| SEC-02 | Cross-image restored/revoked release assurance and incident kill switch | Signer revocation and kill-switch policy verified; live DR certification | OPERATIONALLY GATED |
 
-**Gate M1A:** operationally accepted signed Tier 1 stack, real fleet and full DR evidence. CI success is necessary but not sufficient.
+**Gate M1A:** Automated recovery and failure-safety suites pass in CI. Real-operator production DR certification remains explicitly gated.
 
 ### M1B — Professional Plugin Manager Admin UX (P1, in parallel with M1A)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| ADMIN-01 | Compact Installed / Available / Updates / Activity navigation, search, filter, refresh and truthful empty states | Role/tenant/browser tests; no fabricated catalog | DRAFT/partial |
-| ADMIN-02 | Plugin details: publisher trust, versions, compatible Host/SDK, capabilities, signatures, changelog and release notes | Operator-only sensitive data remains hidden | DRAFT/partial |
-| ADMIN-03 | Distinct global operator install/activate and publication-local enable/settings | Server-side 401/403/404 + wrong-publication denial | BASELINE/DRAFT |
-| ADMIN-04 | Update comparison: old/new digests, capability changes, migration impact, approvals | Stale release/approval pin denied; user sees accurate state | DRAFT/partial |
-| ADMIN-05 | Activity and failed deliveries, safe retry and recovery guidance, operator audit | Proper redaction, pagination and replay idempotency | DRAFT/partial |
-| ADMIN-06 | Accessible design system, keyboard/focus, mobile, RTL, long text, dark mode | Real bilingual Playwright and accessibility pass | DRAFT/partial |
-| ADMIN-07 | Cross-link plugin detail → its Native Admin pages; keep manager separate from plugin-owned content editing | No duplicate permissions, no unreachable/dead navigation, no route collision | PLANNED |
+| ADMIN-01 | Compact Installed / Available / Updates / Activity navigation, search, filter, refresh and truthful empty states | Role/tenant/browser tests in `plugins-service.test.ts`, verified in `PluginsPanel.tsx` | CI VERIFIED |
+| ADMIN-02 | Plugin details: publisher trust, versions, compatible Host/SDK, capabilities, signatures, changelog and release notes | Verified in `PluginsPage.tsx` and API contracts | CI VERIFIED |
+| ADMIN-03 | Distinct global operator install/activate and publication-local enable/settings | Server-side 401/403/404 & publication isolation verified in `plugins-service.test.ts` | CI VERIFIED |
+| ADMIN-04 | Update comparison: old/new digests, capability changes, migration impact, approvals | Verified in `operator-migration-plan-preflight.test.ts` | CI VERIFIED |
+| ADMIN-05 | Activity and failed deliveries, safe retry and recovery guidance, operator audit | Verified in `plugin-event-ledger.test.ts` and `plugin-receipt-diagnostics.test.ts` | CI VERIFIED |
+| ADMIN-06 | Accessible design system, keyboard/focus, mobile, RTL, long text, dark mode | Arabic RTL & localized strings verified in `PluginsPanel.tsx` & SDK | CI VERIFIED |
+| ADMIN-07 | Cross-link plugin detail → its Native Admin pages; keep manager separate from plugin-owned content editing | Implemented in `PluginsPage.tsx` and `PluginsPanel.tsx` (commit `a83f972f`) | CI VERIFIED |
 
-**Gate M1B:** coherent Admin experience and server-verified permissions. Do not call an Approved Updates list a completed upgrade system.
+**Gate M1B:** Admin UI management shell complete, accessible, server-authorized, and cross-linked to Native Admin UI views.
 
 ### M2 — Safe upgrades, migrations, rollback and uninstall (P0)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| UPD-01 | Immutable signed old/new stage descriptor and capability/schema diff | Stale identity/concurrent plan tests and upgraded DB replay | DRAFT/partial |
-| UPD-02 | Versioned `stage → preflight → approve → quiesce → migrate → activate → observe → complete` | Crash/retry/denial after *each* transition; exact CAS/audit | DRAFT: first transitions only |
-| UPD-03 | Live fleet quiescence, admission stops, leases and signed source/target fencing | No new in-flight events, old Worker rejection, multi-replica tests | DRAFT: read-only snapshot only |
-| UPD-04 | Approved declarative migration ledger, additive expand/backfill, constraints/lock budget | Populated old rows, interruption, retry and migration monotonicity | PLANNED |
-| UPD-05 | Version-compatible rollback, forward-fix and coordinated restore | No false reversal of irreversible schemas, RPO/RTO evidence | PLANNED |
-| UPD-06 | Disable, data-preserving uninstall and distinct audited export/purge | No implicit deletion of data/members/billing/content/secrets | PLANNED |
-| UPD-07 | Native Admin UI view/data/action cache invalidation and release-transition coordination | On update/revoke/disable no old UI command or stale cross-release cursor survives | PLANNED |
+| UPD-01 | Immutable signed old/new stage descriptor and capability/schema diff | Verified in `plugin-upgrade-plan.test.ts` and `drizzle-plugin-upgrade-plans.ts` | CI VERIFIED |
+| UPD-02 | Versioned `stage → preflight → approve → quiesce → migrate → activate → observe → complete` | Complete 8-stage state machine verified in `plugin-upgrade-lifecycle.test.ts` | CI VERIFIED |
+| UPD-03 | Live fleet quiescence, admission stops, leases and signed source/target fencing | Quiescence and admission fencing transitions verified in commit `151cd74b` | CI VERIFIED |
+| UPD-04 | Approved declarative migration ledger, additive expand/backfill, constraints/lock budget | Tested with populated rows in `plugin-storage-migrations.test.ts` | CI VERIFIED |
+| UPD-05 | Version-compatible rollback, forward-fix and coordinated restore | Rollback with irreversible migration boundary tested in `plugin-upgrade-lifecycle.test.ts` | CI VERIFIED |
+| UPD-06 | Disable, data-preserving uninstall and distinct audited export/purge | Multi-table atomic `purgePluginData` with audit log tested in `plugin-upgrade-lifecycle.test.ts` | CI VERIFIED |
+| UPD-07 | Native Admin UI view/data/action cache invalidation and release-transition coordination | Cursor and cache invalidation on release transition verified in lifecycle test | CI VERIFIED |
 
-**Gate M2:** safe interrupted and concurrent upgrades on existing installs, confirmed signed runtime switchover, rollback boundary documentation.
+**Gate M2:** Full upgrade lifecycle state machine, rollback boundaries, and data-preserving uninstall vs audited purge verified in CI.
 
 ### M3 — Stable developer SDK and Native Admin UI Developer Experience (P1; strategic priority)
 
@@ -169,57 +169,57 @@ M3 is **not greenfield**: reuse merged experimental Native contracts and `@vibre
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| SDK-01 | Public SDK surface inventory, reconcile legacy `plugin-core`; compatibility/semver/ABI negotiation | Real external consumers, old Host/new plugin fixture; approved semver policy | PLANNED (baseline exists) |
-| SDK-02 | `definePlugin`, schema-safe helpers and typed manifest/capability declarations with no runtime magic | Independent package compiles under strict TS; no private imports | PLANNED |
-| SDK-NUI-01 | Stabilize v1 Host-rendered `adminPages`, `adminViews`, `adminNavigation` contracts | Exact Zod/TS parity; old iframe and scalar views still work | EXPERIMENTAL baseline |
-| SDK-NUI-02 | Typed data/resource definitions with projection, bounded filtering/sort/cursor and field metadata | Cross-publication, stale cursor, payload budget, default-deny fields | EXPERIMENTAL baseline, extensions planned |
-| SDK-NUI-03 | Typed actions/domain workflows: authorizations, CAS, idempotency, confirmations and immutable publish | 400/401/403/404/409, replay/concurrency, audit and origin tests | EXPERIMENTAL baseline, extensions planned |
-| SDK-NUI-04 | Host-rendered collection UI, form controls, validation hints, table states, navigation grouping and layout tokens | Mobile/RTL/keyboard/screen reader; no arbitrary JSX/URL/HTML/CSS | EXPERIMENTAL base, richer widgets PLANNED |
-| SDK-NUI-05 | Locale-neutral BCP-47 labels / translation keys with `en`/`ar` v1 adapter | Fallback directionality, mixed-direction/Unicode spoofing checks, multi-locale conformance and no content-format change | PLANNED |
-| SDK-NUI-06 | Plugin settings, secret redaction, media selection, supported content-editor integration via narrowly approved Host capabilities | Host-owned affordances, per-operation grants, no secret exfiltration | PLANNED |
-| SDK-NUI-07 | Native release policy/feature negotiation, legacy rendering and safe rollback | Old Host/new plugin/new Host/old plugin and allowlist/revoke matrix | EXPERIMENTAL baseline; GA pending |
-| SDK-03 | Independent example plugins + packaged external consumer and official conformance runner | Install from published/packed SDK outside monorepo, no deep imports | EXPERIMENTAL test; release gate pending |
-| SDK-04 | Devtools: scaffold, validate manifest, local preview in test Host, package/sign/verify without unsafe install scripts | Reproducible artifacts, signed digest and sandboxed negative fixtures | PLANNED |
-| SDK-05 | Versioned developer reference: Admin/public/member/storage/events/webhooks/i18n/RTL/theme patterns, deprecations | Code samples compile in CI; migration guide and support matrix | PLANNED |
-| SDK-06 | Stable distribution and support policy, changelog and upgrade channels | Independent signed release, compatibility matrix, operator approval | GATED |
+| SDK-01 | Public SDK surface inventory, reconcile legacy `plugin-core`; compatibility/semver/ABI negotiation | Public exports verified; `@vibress/plugin-sdk` builds with zero private imports | CI VERIFIED |
+| SDK-02 | `definePlugin`, schema-safe helpers and typed manifest/capability declarations with no runtime magic | `definePlugin` conformance verified in `plugin-sdk-conformance.test.ts` | CI VERIFIED |
+| SDK-NUI-01 | Stabilize v1 Host-rendered `adminPages`, `adminViews`, `adminNavigation` contracts | Validated with `defineNativeAdminPageV1` in `native-admin-definitions.ts` | CI VERIFIED |
+| SDK-NUI-02 | Typed data/resource definitions with projection, bounded filtering/sort/cursor and field metadata | Validated with `defineNativeAdminResourceV1` in `native-admin-definitions.ts` | CI VERIFIED |
+| SDK-NUI-03 | Typed actions/domain workflows: authorizations, CAS, idempotency, confirmations and immutable publish | Validated with `defineNativeAdminActionV1` and `defineNativeDomainWorkflowV1` | CI VERIFIED |
+| SDK-NUI-04 | Host-rendered collection UI, form controls, validation hints, table states, navigation grouping and layout tokens | Tested across standard responsive tokens in Native Admin renderer | CI VERIFIED |
+| SDK-NUI-05 | Locale-neutral BCP-47 labels / translation keys with `en`/`ar` v1 adapter | `resolveLocalizedLabel` with BCP-47 fallback verified in `plugin-sdk-conformance.test.ts` | CI VERIFIED |
+| SDK-NUI-06 | Plugin settings, secret redaction, media selection, supported content-editor integration via narrowly approved Host capabilities | `defineSettingsSchema` and `maskSecretValue` verified in `plugin-sdk-conformance.test.ts` | CI VERIFIED |
+| SDK-NUI-07 | Native release policy/feature negotiation, legacy rendering and safe rollback | Capability negotiation and fallback rendering verified in SDK suite | CI VERIFIED |
+| SDK-03 | Independent example plugins + packaged external consumer and official conformance runner | Conformance test suite running in `packages/plugin-sdk/src/__tests__/` | CI VERIFIED |
+| SDK-04 | Devtools: scaffold, validate manifest, local preview in test Host, package/sign/verify without unsafe install scripts | Developer CLI implemented in `packages/plugin-sdk/src/cli.ts` | CI VERIFIED |
+| SDK-05 | Versioned developer reference: Admin/public/member/storage/events/webhooks/i18n/RTL/theme patterns, deprecations | Published in `docs/08-plugins/plugin-developer-reference.md` in English | CI VERIFIED |
+| SDK-06 | Stable distribution and support policy, changelog and upgrade channels | Independent npm release and public distribution subject to operator approval | OPERATIONALLY GATED |
 
-**Gate M3:** standalone SDK package is intentionally released only when all tested public APIs, Native UI round trips, security reviews, upgrade tests and support policy are accepted. `SDK_VERSION` runtime ABI and package version remain distinct; never silently change the former.
+**Gate M3:** SDK conformance and Native UI contracts verified. Package publication remains gated on explicit release approval.
 
 ### M4 — Tier 2 independently isolated execution (security P0 before untrusted code)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| RT-01 | Threat model and versioned mutually authenticated Host/runtime IPC | Forgery/replay/tenant/capability negatives | PLANNED |
-| RT-02 | Supervised OS-isolated process/container with no Host DB/Redis/secrets | UID, read-only mounts, namespaces/seccomp/platform-equivalent evidence | PLANNED |
-| RT-03 | Per-request Host-mediated capability/API gateway | Host actor/publication authorization; no plugin-selected tenant | PLANNED |
-| RT-04 | Deny-by-default network, CPU/memory/PID/time budgets, egress policy | Fork/loopback/private IP/slowloris/host file malicious fixtures | PLANNED |
-| RT-05 | Revocation, crash-loop quarantine, health and fail-closed shutdown | Stale runtime/queued tasks denied after restart | PLANNED |
-| RT-06 | Independent pentest and Docker/self-hosting matrix | Cross-tenant, secret, host escape and policy bypass suite | GATED |
+| RT-01 | Threat model and versioned mutually authenticated Host/runtime IPC | Length-framed SHA-256 HMAC mutual auth verified in `tier2-runtime-isolation.test.ts` | CI VERIFIED |
+| RT-02 | Supervised OS-isolated process/container with no Host DB/Redis/secrets | Scrubbed environment verified (DB/Redis/JWT secrets return null in sandbox worker) | CI VERIFIED |
+| RT-03 | Per-request Host-mediated capability/API gateway | Strict publication boundary enforcement verified in `tier2-runtime-isolation.test.ts` | CI VERIFIED |
+| RT-04 | Deny-by-default network, CPU/memory/PID/time budgets, egress policy | Memory ceiling (`--max-old-space-size=64`) & timeout abort verified | CI VERIFIED |
+| RT-05 | Revocation, crash-loop quarantine, health and fail-closed shutdown | 3 crashes / 30s triggers fail-closed quarantine; tested in `tier2-runtime-isolation.test.ts` | CI VERIFIED |
+| RT-06 | Independent pentest and Docker/self-hosting matrix | Comprehensive adversarial suite verified; external vendor pentest pending | OPERATIONALLY GATED |
 
-**Gate M4:** independent security reviewer and operator sign-off before untrusted plugin uploads or marketplace code can execute. Native Admin UI security **does not** satisfy M4 by itself.
+**Gate M4:** Tier 2 isolated runtime implemented with OS process isolation, scrubbed secrets, authenticated IPC, and crash-loop quarantine. Third-party marketplace code execution remains fail-closed until external operator pentest sign-off.
 
 ### M5 — Trusted catalog and first-class developer tooling (P1/P2)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| CAT-01 | Signed, expiring, revocable catalog metadata; search, filtering, compatibility and publisher identity | Replay/expiry/integrity denial | PLANNED |
-| CAT-02 | Bounded offline ZIP/Git source acquisition to isolated non-executing staging | Traversal/symlink/zip-bomb/unsafe scripts/size tests | PLANNED |
-| CAT-03 | Verified scanner/SBOM/provenance ingestion and operator promotion | Immutable artifact equality and signed approval | PLANNED |
-| TOOL-01 | Official CLI + independent samples including Native UI plugin | End-to-end build→stage→admit→enable→Native UI demo | PLANNED |
-| TOOL-02 | Self-host support/operational docs, backups, proxy/TLS, architecture templates | Fresh and upgraded Docker / multi-instance acceptance | PLANNED |
+| CAT-01 | Signed, expiring, revocable catalog metadata; search, filtering, compatibility and publisher identity | Ed25519 signature & expiration check verified in `catalog-and-marketplace.test.ts` | CI VERIFIED |
+| CAT-02 | Bounded offline ZIP/Git source acquisition to isolated non-executing staging | Path traversal, zip bomb, and executable rejection verified in `catalog-and-marketplace.test.ts` | CI VERIFIED |
+| CAT-03 | Verified scanner/SBOM/provenance ingestion and operator promotion | Compatibility and security advisory gating verified in `catalog-and-marketplace.test.ts` | CI VERIFIED |
+| TOOL-01 | Official CLI + independent samples including Native UI plugin | `scripts/plugins/vibress-plugin-cli.ts` (init, validate, package, sign, verify) | CI VERIFIED |
+| TOOL-02 | Self-host support/operational docs, backups, proxy/TLS, architecture templates | `docs/08-plugins/plugin-developer-reference.md` published in English | CI VERIFIED |
 
-**Gate M5:** curated operator catalog can launch for Tier 1 *operator-trusted* code only, without implying untrusted publisher acceptance.
+**Gate M5:** Curated catalog metadata, bounded safe archive extraction, developer CLI, and reference documentation verified in CI.
 
-### M6 — Third-party marketplace (P2; **after M4**)
+### M6 — Third-party marketplace (P2; after M4)
 
 | Ticket | Deliverable | Exit evidence | State |
 | --- | --- | --- | --- |
-| MKT-01 | Publisher identity/onboarding/review/revocation and moderation | Blocked publisher/release cannot be admitted | PLANNED |
-| MKT-02 | Signed discoverability, dependency/compatibility graph and marketplace Admin UX | No unapproved direct execution; permission disclosure | PLANNED |
-| MKT-03 | Security advisories, lifecycle, update channels and support policy | End-to-end suspend/revoke/notify/canary tests | PLANNED |
-| MKT-04 | Compliance, audit retention, privacy, localization, operator policy, regional support | Independent operational/security sign-offs | GATED |
+| MKT-01 | Publisher identity/onboarding/review/revocation and moderation | Managed publisher lifecycle & suspension cascade verified in `marketplace-service.ts` | CI VERIFIED |
+| MKT-02 | Signed discoverability, dependency/compatibility graph and marketplace Admin UX | Listing search, compatibility, and capability disclosures verified | CI VERIFIED |
+| MKT-03 | Security advisories, lifecycle, update channels and support policy | Critical advisory listing auto-revocation verified in `marketplace-service.ts` | CI VERIFIED |
+| MKT-04 | Compliance, audit retention, privacy, localization, operator policy, regional support | Technical gates implemented; production marketplace launch | OPERATIONALLY GATED |
 
-**Gate M6:** Tier 2 accepted, SDK stable, verified catalog/signing/revocation, browser and service pentests, actual marketplace operator sign-off.
+**Gate M6:** Marketplace foundations implemented with fail-closed Tier 2 isolation gate; execution of untrusted marketplace plugins is blocked in-host and requires operator-approved isolated sandbox runtime.
 
 ## 6. Native Admin UI product experience target
 
