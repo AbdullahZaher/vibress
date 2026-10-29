@@ -20,7 +20,7 @@ Three developer paths are intentionally supported:
 
 | Existing source | What already exists | What remains |
 | --- | --- | --- |
-| `packages/plugin-sdk/src/index.ts` | `PluginModule`, `adminViews`, `adminNavigation`, optional `adminPages`, `adminResources`, `adminActions`, `adminDomainWorkflows`; SDK ABI v1.0.0 | Stable public exports, ergonomic helpers, version negotiation, external release policy |
+| `packages/plugin-sdk/src/index.ts` | `PluginModule`, `adminViews`, `adminNavigation`, optional `adminPages`, `adminResources`, `adminActions`, `adminDomainWorkflows`; SDK ABI v1.0.0; experimental pure V1 definition helpers | Stable release/version negotiation, richer future helper contracts, external release policy |
 | `native-admin-ui.ts` | Experimental Host-rendered stat/field-list page types | Conformance freeze and richer bounded components, layouts, action references |
 | `native-admin-data.ts` | Model/resource projection and basic create/update action metadata | Explicit typed filtering, field presentation, schema-specified write/visibility controls and documented errors |
 | `native-domain-workflow.ts` | Bound create/save/publish form metadata | General domain workflow evolution with idempotency and strict Host admission (do not use generic storage to publish) |
@@ -77,7 +77,33 @@ export const plugin = {
 
 **Not a security grant:** the plugin manifest, operator release, exact artifact digest, approved capabilities, publication enablement, runtime module admission and Host routing still must be configured independently. Without Native approval it uses the documented compatible legacy behavior; malformed/denied Native metadata fails closed.
 
-### 4.1 Proposed vNext builder API (NOT IMPLEMENTED)
+### 4.1 Existing additive V1 TypeScript helpers (experimental)
+
+The SDK now offers `definePluginModule`, `defineNativeAdminPageV1`,
+`defineNativeAdminResourceV1`, `defineNativeAdminActionV1` and
+`defineNativeDomainWorkflowV1`. Each is a pure pass-through with
+literal-type inference for existing v1 metadata. For example:
+
+```ts
+import { defineNativeAdminPageV1 } from "@vibress/plugin-sdk";
+
+const page = defineNativeAdminPageV1({
+  schemaVersion: 1,
+  viewId: "overview",
+  title: { en: "Overview", ar: "نظرة عامة" },
+  components: [{
+    type: "stat", id: "total", field: "total",
+    label: { en: "Total", ar: "الإجمالي" },
+  }],
+});
+```
+
+The Host must still reject invalid runtime payloads and verify every linked
+route, field, actor, publication, capability and release. These helpers
+do **not** create Host endpoints or perform security validation. SDK remains
+private/experimental pending the separate release acceptance gates.
+
+### 4.2 Proposed vNext builder API (NOT IMPLEMENTED)
 
 The code below is a **target authoring experience**, not the present runtime API. Final naming and wire shape require API/SDK review. Helpers must return inert JSON-compatible declarations; no React runtime or private Host import is allowed.
 

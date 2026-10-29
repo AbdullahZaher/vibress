@@ -5,6 +5,12 @@ export type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
 import type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginNativeAdminPageV1, PluginNativeAdminComponentV1 } from "./native-admin-ui";
+export {
+  defineNativeAdminPageV1,
+  defineNativeAdminResourceV1,
+  defineNativeAdminActionV1,
+  defineNativeDomainWorkflowV1,
+} from "./native-admin-definitions";
 
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
@@ -206,6 +212,15 @@ export interface PluginModule {
   deactivate?(): void | Promise<void>;
   /** Third parameter is additive; bundled v1 handlers may ignore it. */
   onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
+}
+
+/**
+ * Pure module definition helper preserving literal types for TypeScript users.
+ * Not a manifest validator, plugin admission, authorization or version upgrade.
+ * A declaration is only effective after existing Host validation and approval.
+ */
+export function definePluginModule<const T extends PluginModule>(module: T): T {
+  return module;
 }
 
 export const SDK_VERSION = "1.0.0";
