@@ -190,6 +190,24 @@ SQL/Redis/artifact recovery point. Those requirements, plus measured RPO/RTO
 and operator sign-off, remain pending. Exact-HEAD CI evidence is required
 before counting this rehearsal as passed.
 
+## Encryption-key restoration regression (PostgreSQL integration)
+
+The existing PostgreSQL plugin-secret-rotation fixture now retains global and
+publication-scoped v2 ciphertext after an interrupted key configuration
+restore. A valid but stale keyring without the ciphertext's key ID must fail
+closed for both rows without altering their SQL bytes. Restoring the complete
+authorized v2 keyring must recover the original global and Arabic publication
+values; a forged publication scope must remain denied. An independent v1
+fixture verifies that losing the legacy `VIBRESS_ENCRYPTION_KEY` prevents
+decryption even when the v2 ring is healthy, and that restoring the original
+legacy key restores access. None of these checks log secret content.
+
+This is a regression of **persisted-record readability with restored key
+configuration**. It is **not** a backup or restore from an actual secret-vault
+provider, a security audit of backup custody, a coordinated full-stack DR
+rehearsal or evidence of a measured RPO/RTO. The exact-head CI suite must
+pass before crediting this check.
+
 ## Separate Redis RDB snapshot/restore drill (pending exact-head CI)
 
 After stopping the disposable API and Worker producers, M1A now also exercises

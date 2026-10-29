@@ -198,4 +198,46 @@ describe("PLUG-OPS-05 PostgreSQL secret rotation, restart and CAS", () => {
     await expect(rotatePluginSecretRows({ apply: false, maxRows: 10, pluginId }))
       .resolves.toEqual({ scanned: 2, needed: 0, changed: 0 });
   });
+  it("restores a complete secret keyring and legacy key without changing persisted records", async () => {
+    // Model a recovered PostgreSQL snapshot whose values were already
+    // rewrapped to key 'two'. Configuration restore must not modify those
+    // ciphertexts or silently fall back to a stale key.
+    const before = await stored();
+    expect(JSON.parse(before.global ?? "{}")).toMatchObject({ v: 2, kid: "two" });
+    expect(JSON.parse(before.scoped ?? "{}")).toMatchObject({ v: 2, kid: "two" });
+    const globalScope = { pluginId, key: "globalToken" };
+    const scopedScope = { pluginId, publicationId, key: "scopedToken" };
+
+    // Restoring an earlier, otherwise valid keyring without the active
+    // ciphertext key must deny both global and publication-local reads.
+    ring("one", { one: keyOne });
+    expect(() => decryptPluginSecret(before.global ?? "", globalScope))
+      .toThrow("Unknown plugin secret encryption key");
+    expect(() => decryptPluginSecret(before.scoped ?? "", scopedScope))
+      .toThrow("Unknown plugin secret encryption key");
+    expect(await stored()).toEqual(before);
+
+    // The same backed-up ciphertext becomes readable after restoring the
+    // complete authorized ring, with no migrations or SQL updates.
+    ring("two", { one: keyOne, two: keyTwo });
+    expect(decryptPluginSecret(before.global ?? "", globalScope))
+      .toBe(originalGlobal);
+    expect(decryptPluginSecret(before.scoped ?? "", scopedScope))
+      .toBe("replaced-in-db");
+    expect(() => decryptPluginSecret(before.scoped ?? "", {
+      ...scopedScope, publicationId: randomUUID(),
+    })).toThrow("Plugin secret decryption failed");
+
+    // The legacy v1 master key is a *separate* recovery dependency. Losing
+    // it must deny old rows even when the v2 ring is correct.
+    const legacyCipher = encryptSecret("legacy-recovery-sentinel", oldKey);
+    vi.stubEnv("VIBRESS_ENCRYPTION_KEY", "d".repeat(64));
+    expect(() => decryptPluginSecret(legacyCipher, globalScope))
+      .toThrow("Failed to decrypt secret");
+    vi.stubEnv("VIBRESS_ENCRYPTION_KEY", oldKey);
+    expect(decryptPluginSecret(legacyCipher, globalScope))
+      .toBe("legacy-recovery-sentinel");
+    expect(await stored()).toEqual(before);
+  });
+
 });
