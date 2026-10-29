@@ -111,7 +111,7 @@ const transitionInputSchema = z.object({
   expectedPlanSha256: sha,
   expectedRevision: z.number().int().positive().max(2147483646),
 }).strict();
-const abortInputSchema = transitionInputSchema;
+export const abortInputSchema = transitionInputSchema;
 const auditSchema = z.object({
   actorUserId: z.string().trim().min(1).max(128),
   requestId: z.string().trim().min(1).max(128),

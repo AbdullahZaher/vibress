@@ -1,11 +1,9 @@
-import { z } from "zod";
 import {
   type PluginCatalogEntry,
   type PluginPublisher,
   type PluginSecurityAdvisory,
   checkPluginAdmissibility,
   filterCatalogEntries,
-  PluginCatalogError,
 } from "./plugin-catalog.js";
 
 export type PublisherStatus = "pending" | "verified" | "suspended";

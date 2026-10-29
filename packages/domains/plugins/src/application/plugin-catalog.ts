@@ -1,4 +1,4 @@
-import { createPublicKey, verify, createHash } from "node:crypto";
+import { createPublicKey, verify } from "node:crypto";
 import { z } from "zod";
 
 export type PluginTrustTier = "curated_operator" | "community_reviewed" | "untrusted_marketplace";

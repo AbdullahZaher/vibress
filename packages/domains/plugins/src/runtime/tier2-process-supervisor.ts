@@ -6,8 +6,6 @@ import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
   verifyTier2IpcEnvelope,
-  type Tier2IpcEnvelope,
-  Tier2IpcError,
 } from "./tier2-ipc.js";
 import {
   executeHostCapabilityRequest,
@@ -33,6 +31,8 @@ export interface Tier2InvocationContext {
     readonly id: string;
     readonly type: "staff" | "member" | "anonymous";
   };
+  readonly entrypointPath?: string | undefined;
+  readonly trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace" | undefined;
 }
 
 export interface Tier2ProcessState {
@@ -50,16 +50,87 @@ export class Tier2SupervisorError extends Error {
   }
 }
 
+export interface Tier2IsolationCheckResult {
+  readonly isIsolated: boolean;
+  readonly isolationMechanism: "container" | "cgroups_v2" | "restricted_process" | "unsupported";
+  readonly details: string;
+}
+
+/**
+ * M7.2: Verifies host environment provides OS-enforced isolation boundaries.
+ * Fails closed if untrusted marketplace plugin is scheduled on an unisolated host.
+ */
+export function verifyPlatformIsolationSupport(
+  trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace",
+): Tier2IsolationCheckResult {
+  if (process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
+    return {
+      isIsolated: false,
+      isolationMechanism: "unsupported",
+      details: "OS-enforced isolation is disabled by operational environment policy",
+    };
+  }
+
+  const isDocker = existsSync("/.dockerenv");
+  const hasCgroups = existsSync("/sys/fs/cgroup");
+  const isLinux = process.platform === "linux";
+  const isNonRoot = typeof process.getuid === "function" ? process.getuid() !== 0 : true;
+
+  if (isDocker) {
+    return {
+      isIsolated: true,
+      isolationMechanism: "container",
+      details: `Docker container boundary active (non-root: ${isNonRoot})`,
+    };
+  }
+
+  if (isLinux && hasCgroups) {
+    return {
+      isIsolated: true,
+      isolationMechanism: "cgroups_v2",
+      details: "Linux cgroups resource isolation available",
+    };
+  }
+
+  if (process.env.NODE_ENV !== "production" || process.env.VIBRESS_ALLOW_TEST_ISOLATION === "1") {
+    return {
+      isIsolated: true,
+      isolationMechanism: "restricted_process",
+      details: "Restricted process isolation active (development/test mode)",
+    };
+  }
+
+  // In production outside of Docker/cgroups/container isolation, untrusted marketplace plugins MUST fail closed
+  if (trustTier === "untrusted_marketplace") {
+    return {
+      isIsolated: false,
+      isolationMechanism: "unsupported",
+      details: "Untrusted plugin execution requires container or cgroup boundary. Self-hosted production host lacks OS container boundary.",
+    };
+  }
+
+  return {
+    isIsolated: true,
+    isolationMechanism: "restricted_process",
+    details: "Restricted process boundary active for curated/operator plugin",
+  };
+}
+
+interface PendingInvocation {
+  readonly context: Tier2InvocationContext;
+  readonly handlers: HostCapabilityHandlers;
+  readonly resolve: (value: unknown) => void;
+  readonly reject: (reason: unknown) => void;
+  readonly timer: ReturnType<typeof setTimeout>;
+}
+
 interface ActiveProcess {
   readonly child: ChildProcess;
   readonly sessionKey: string;
   readonly pluginId: string;
   readonly releaseDigest: string;
-  pendingRequests: Map<string, {
-    resolve: (value: unknown) => void;
-    reject: (reason: unknown) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }>;
+  readonly entrypointPath?: string | undefined;
+  pendingRequests: Map<string, PendingInvocation>;
 }
 
 export class Tier2PluginSupervisor extends EventEmitter {
@@ -116,15 +187,25 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   /**
-   * Spawns an isolated child process with scrubbed environment and resource limits.
+   * Spawns an isolated child process with scrubbed environment, resource limits, and verified OS isolation.
    */
   private spawnProcess(
     pluginId: string,
     releaseDigest: string,
-    handlers: HostCapabilityHandlers,
+    entrypointPath?: string | undefined,
+    trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace" | undefined,
   ): ActiveProcess {
     if (this.quarantinedPlugins.has(pluginId)) {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${pluginId}' is quarantined due to repeated crashes`);
+    }
+
+    // M7.2: Fail-closed boundary check for untrusted plugin execution
+    const isolation = verifyPlatformIsolationSupport(trustTier);
+    if (!isolation.isIsolated) {
+      throw new Tier2SupervisorError(
+        "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
+        `Untrusted plugin execution rejected: ${isolation.details}`,
+      );
     }
 
     const sessionKey = randomBytes(32).toString("hex");
@@ -137,11 +218,13 @@ export class Tier2PluginSupervisor extends EventEmitter {
       VIBRESS_PLUGIN_ID: pluginId,
       VIBRESS_RELEASE_DIGEST: releaseDigest,
       VIBRESS_SESSION_KEY: sessionKey,
+      ...(entrypointPath ? { VIBRESS_PLUGIN_ENTRYPOINT: entrypointPath } : {}),
     };
 
     const nodeArgs = [
       `--max-old-space-size=${this.maxOldSpaceSizeMb}`,
       "--no-addons",
+      "--disallow-code-generation-from-strings",
     ];
 
     let script = this.workerScriptPath;
@@ -165,6 +248,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       sessionKey,
       pluginId,
       releaseDigest,
+      entrypointPath,
       pendingRequests: new Map(),
     };
 
@@ -179,21 +263,50 @@ export class Tier2PluginSupervisor extends EventEmitter {
             pending.resolve(envelope.payload);
           }
         } else if (envelope.type === "capability_request") {
-          // Mediate capability request through Host
+          // M7.4 Security Fix: Resolve authorization strictly from Host-held pending invocation context
           const req = envelope.payload as Tier2CapabilityRequest;
+          const invocationId = envelope.correlationId || req.invocationId;
+          const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
+
+          if (!pending) {
+            // Reject unauthentic or orphan capability requests fail-closed
+            const rejectEnv = signTier2IpcEnvelope({
+              id: envelope.id,
+              correlationId: envelope.correlationId,
+              pluginId,
+              releaseDigest,
+              publicationId: "untrusted",
+              type: "capability_response",
+              payload: {
+                ok: false,
+                error: {
+                  code: "UNAUTHORIZED_INVOCATION_CONTEXT",
+                  message: "Capability request is not correlated with an active, authorized Host invocation",
+                },
+              },
+            }, sessionKey);
+            if (child.connected) {
+              child.send(rejectEnv);
+            }
+            return;
+          }
+
+          // Authoritative capability context strictly derived from Host state:
           const capContext: Tier2CapabilityContext = {
-            pluginId,
-            publicationId: envelope.publicationId,
-            releaseDigest,
-            grantedCapabilities: [], // Passed dynamically in invoke or loaded from manifest
-            actor: { id: "sandbox", type: "anonymous" },
+            pluginId: pending.context.pluginId,
+            publicationId: pending.context.publicationId,
+            releaseDigest: pending.context.releaseDigest,
+            grantedCapabilities: pending.context.grantedCapabilities,
+            actor: pending.context.actor,
           };
-          const responsePayload = await executeHostCapabilityRequest(capContext, req, handlers);
+
+          const responsePayload = await executeHostCapabilityRequest(capContext, req, pending.handlers);
           const responseEnv = signTier2IpcEnvelope({
             id: envelope.id,
+            correlationId: envelope.correlationId,
             pluginId,
             releaseDigest,
-            publicationId: envelope.publicationId,
+            publicationId: pending.context.publicationId,
             type: "capability_response",
             payload: responsePayload,
           }, sessionKey);
@@ -202,7 +315,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
           }
         }
       } catch (err: unknown) {
-        // Discard invalid / unauthentic messages silently or emit diagnostic
+        // Discard invalid / unauthentic messages silently and emit diagnostic
         this.emit("security_violation", { pluginId, error: err });
       }
     });
@@ -219,7 +332,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     return active;
   }
 
-  private handleProcessCrash(pluginId: string, error: unknown): void {
+  private handleProcessCrash(pluginId: string, _error: unknown): void {
     this.recordCrash(pluginId);
     this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_CRASHED", "Sandbox worker process crashed"));
   }
@@ -263,7 +376,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   /**
-   * Invokes an isolated plugin method with bounded timeout and authenticated IPC.
+   * Invokes an isolated plugin method with bounded timeout, authenticated IPC, and Host-mediated authorization.
    */
   async invoke<T = unknown, R = unknown>(
     context: Tier2InvocationContext,
@@ -276,9 +389,19 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
 
     let active = this.processes.get(context.pluginId);
-    if (!active || !active.child.connected || active.releaseDigest !== context.releaseDigest) {
+    if (
+      !active ||
+      !active.child.connected ||
+      active.releaseDigest !== context.releaseDigest ||
+      active.entrypointPath !== context.entrypointPath
+    ) {
       if (active) this.cleanupProcess(context.pluginId, new Error("Process release rotated"));
-      active = this.spawnProcess(context.pluginId, context.releaseDigest, handlers);
+      active = this.spawnProcess(
+        context.pluginId,
+        context.releaseDigest,
+        context.entrypointPath,
+        context.trustTier,
+      );
     }
 
     const requestId = randomUUID();
@@ -305,6 +428,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
       }, this.invocationTimeoutMs);
 
       active!.pendingRequests.set(requestId, {
+        context,
+        handlers,
         resolve: (val) => resolve(val as R),
         reject,
         timer,

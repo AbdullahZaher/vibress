@@ -22,7 +22,8 @@ export type Tier2CapabilityAction =
 
 export interface Tier2CapabilityRequest {
   readonly action: Tier2CapabilityAction;
-  readonly publicationId: string;
+  readonly publicationId?: string | undefined;
+  readonly invocationId?: string | undefined;
   readonly params: Record<string, unknown>;
 }
 
@@ -52,6 +53,57 @@ const REQUIRED_CAPABILITY_MAP: Record<Tier2CapabilityAction, string> = {
   "secret.get": "extension.secrets.read",
 };
 
+const storageGetParamsSchema = z.object({
+  modelKey: z.string().min(1).max(64),
+  id: z.string().min(1).max(256),
+}).strict();
+
+const storageListParamsSchema = z.object({
+  modelKey: z.string().min(1).max(64),
+  limit: z.number().int().min(1).max(100).optional(),
+  cursor: z.string().max(256).optional(),
+}).strict();
+
+const storageCreateParamsSchema = z.object({
+  modelKey: z.string().min(1).max(64),
+  id: z.string().min(1).max(256),
+  fields: z.record(z.string(), z.unknown()),
+}).strict();
+
+const storageUpdateParamsSchema = z.object({
+  modelKey: z.string().min(1).max(64),
+  id: z.string().min(1).max(256),
+  expectedVersion: z.number().int().min(1),
+  fields: z.record(z.string(), z.unknown()),
+}).strict();
+
+const memberHasActivePlanParamsSchema = z.object({
+  planId: z.string().min(1).max(128),
+}).strict();
+
+const secretGetParamsSchema = z.object({
+  key: z.string().min(1).max(128),
+}).strict();
+
+function sanitizeErrorMessage(error: unknown): string {
+  if (error instanceof Tier2CapabilityError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    const msg = error.message;
+    // Redact internal database errors, sql queries, postgres details, or credentials
+    if (
+      /postgres|syntax error|select |insert |update |delete |from |where |relation |table |column |violates |keyring|secret|password|token/i.test(
+        msg,
+      )
+    ) {
+      return "Database or internal capability execution failed";
+    }
+    return msg.slice(0, 200);
+  }
+  return "Capability execution failed";
+}
+
 export interface HostCapabilityHandlers {
   storageGet?: (modelKey: string, id: string) => Promise<unknown>;
   storageList?: (modelKey: string, limit?: number, cursor?: string) => Promise<unknown>;
@@ -63,7 +115,7 @@ export interface HostCapabilityHandlers {
 }
 
 /**
- * RT-03: Per-request Host-mediated capability gateway.
+ * RT-03 / M7.4: Per-request Host-mediated capability gateway.
  * Evaluates actor, publication scope, and declared manifest capabilities.
  * Strictly prevents cross-publication leakage and ungranted capability execution.
  */
@@ -73,7 +125,7 @@ export async function executeHostCapabilityRequest(
   handlers: HostCapabilityHandlers,
 ): Promise<Tier2CapabilityResponse> {
   // 1. Enforce strict publication binding: plugin cannot request foreign publication data
-  if (request.publicationId !== context.publicationId) {
+  if (request.publicationId && request.publicationId !== context.publicationId) {
     return {
       ok: false,
       error: {
@@ -95,50 +147,59 @@ export async function executeHostCapabilityRequest(
     };
   }
 
-  // 3. Dispatch to host handler
+  // 3. Dispatch to host handler with runtime schema validation
   try {
     switch (request.action) {
       case "storage.get": {
-        const modelKey = String(request.params.modelKey || "");
-        const id = String(request.params.id || "");
-        if (!modelKey || !id || !handlers.storageGet) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing modelKey or id" } };
+        const parsed = storageGetParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.storageGet(modelKey, id);
+        if (!handlers.storageGet) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Storage handler not configured" } };
+        }
+        const data = await handlers.storageGet(parsed.data.modelKey, parsed.data.id);
         return { ok: true, data };
       }
 
       case "storage.list": {
-        const modelKey = String(request.params.modelKey || "");
-        const limit = typeof request.params.limit === "number" ? Math.min(request.params.limit, 100) : 20;
-        const cursor = typeof request.params.cursor === "string" ? request.params.cursor : undefined;
-        if (!modelKey || !handlers.storageList) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing modelKey" } };
+        const parsed = storageListParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.storageList(modelKey, limit, cursor);
+        if (!handlers.storageList) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Storage handler not configured" } };
+        }
+        const data = await handlers.storageList(parsed.data.modelKey, parsed.data.limit, parsed.data.cursor);
         return { ok: true, data };
       }
 
       case "storage.create": {
-        const modelKey = String(request.params.modelKey || "");
-        const id = String(request.params.id || "");
-        const fields = (request.params.fields as Record<string, unknown>) || {};
-        if (!modelKey || !id || !handlers.storageCreate) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing parameters" } };
+        const parsed = storageCreateParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.storageCreate(modelKey, id, fields);
+        if (!handlers.storageCreate) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Storage handler not configured" } };
+        }
+        const data = await handlers.storageCreate(parsed.data.modelKey, parsed.data.id, parsed.data.fields as Record<string, unknown>);
         return { ok: true, data };
       }
 
       case "storage.update": {
-        const modelKey = String(request.params.modelKey || "");
-        const id = String(request.params.id || "");
-        const expectedVersion = Number(request.params.expectedVersion || 0);
-        const fields = (request.params.fields as Record<string, unknown>) || {};
-        if (!modelKey || !id || !expectedVersion || !handlers.storageUpdate) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing parameters" } };
+        const parsed = storageUpdateParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.storageUpdate(modelKey, id, expectedVersion, fields);
+        if (!handlers.storageUpdate) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Storage handler not configured" } };
+        }
+        const data = await handlers.storageUpdate(
+          parsed.data.modelKey,
+          parsed.data.id,
+          parsed.data.expectedVersion,
+          parsed.data.fields as Record<string, unknown>,
+        );
         return { ok: true, data };
       }
 
@@ -151,28 +212,34 @@ export async function executeHostCapabilityRequest(
       }
 
       case "member.hasActivePlan": {
-        const planId = String(request.params.planId || "");
-        if (!planId || !handlers.memberHasActivePlan) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing planId" } };
+        const parsed = memberHasActivePlanParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.memberHasActivePlan(planId);
+        if (!handlers.memberHasActivePlan) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Plan entitlement check not available" } };
+        }
+        const data = await handlers.memberHasActivePlan(parsed.data.planId);
         return { ok: true, data };
       }
 
       case "secret.get": {
-        const key = String(request.params.key || "");
-        if (!key || !handlers.secretGet) {
-          return { ok: false, error: { code: "INVALID_PARAMS", message: "Missing key" } };
+        const parsed = secretGetParamsSchema.safeParse(request.params);
+        if (!parsed.success) {
+          return { ok: false, error: { code: "INVALID_PARAMS", message: parsed.error.message } };
         }
-        const data = await handlers.secretGet(key);
+        if (!handlers.secretGet) {
+          return { ok: false, error: { code: "NOT_SUPPORTED", message: "Secret retriever not available" } };
+        }
+        const data = await handlers.secretGet(parsed.data.key);
         return { ok: true, data };
       }
 
       default:
-        return { ok: false, error: { code: "UNKNOWN_ACTION", message: `Action '${request.action}' not recognized` } };
+        return { ok: false, error: { code: "UNKNOWN_ACTION", message: `Action '${(request as Tier2CapabilityRequest).action}' not recognized` } };
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Capability execution failed";
+    const message = sanitizeErrorMessage(error);
     return { ok: false, error: { code: "CAPABILITY_EXECUTION_FAILED", message } };
   }
 }

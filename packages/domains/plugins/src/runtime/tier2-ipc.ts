@@ -20,6 +20,7 @@ export type Tier2IpcMessageType =
 export interface Tier2IpcEnvelope<T = unknown> {
   readonly version: 1;
   readonly id: string;
+  readonly correlationId?: string | undefined;
   readonly timestamp: number;
   readonly pluginId: string;
   readonly releaseDigest: string;
@@ -32,6 +33,7 @@ export interface Tier2IpcEnvelope<T = unknown> {
 const envelopeSchema = z.object({
   version: z.literal(1),
   id: z.string().regex(uuidRegex),
+  correlationId: z.string().regex(uuidRegex).optional(),
   timestamp: z.number().int().positive(),
   pluginId: z.string().min(1).max(100),
   releaseDigest: z.string().min(8).max(128),
@@ -60,6 +62,7 @@ function computeHmac(
   fields: {
     version: number;
     id: string;
+    correlationId?: string | undefined;
     timestamp: number;
     pluginId: string;
     releaseDigest: string;
@@ -72,6 +75,7 @@ function computeHmac(
   const content = JSON.stringify([
     fields.version,
     fields.id,
+    fields.correlationId || "",
     fields.timestamp,
     fields.pluginId,
     fields.releaseDigest,
@@ -89,6 +93,7 @@ function computeHmac(
 export function signTier2IpcEnvelope<T>(
   data: Omit<Tier2IpcEnvelope<T>, "version" | "id" | "timestamp" | "hmacSha256"> & {
     id?: string | undefined;
+    correlationId?: string | undefined;
     timestamp?: number | undefined;
   },
   secretKey: string,
@@ -101,6 +106,7 @@ export function signTier2IpcEnvelope<T>(
   const envelopeData = {
     version: 1 as const,
     id,
+    ...(data.correlationId ? { correlationId: data.correlationId } : {}),
     timestamp,
     pluginId: data.pluginId,
     releaseDigest: data.releaseDigest,
