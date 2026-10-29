@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExtensionNativeAdminPageV1, ExtensionNativeDomainWorkflowV1 } from "@vibress/api-contracts";
 import {
   type AdminExtensionViewLink,
@@ -15,7 +15,6 @@ type Scalar = string | number | boolean;
 type NativeState =
   | { kind: "loading" }
   | { kind: "legacy" }
-  | { kind: "rechecking"; wasNative: boolean }
   | { kind: "error" }
   | { kind: "native"; page: ExtensionNativeAdminPageV1;
       publicationId: string | null; pluginId: string; viewId: string; routeId: string;
@@ -32,6 +31,9 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   const { locale, tr } = useAdminLocale();
   const [publicationRevision, setPublicationRevision] = useState(0);
   const [resumeRevision, setResumeRevision] = useState(0);
+  // Remember Native admission for each specific Host view/publication, even
+  // after a resource authorization failure has cleared the rendered page.
+  const lastNativeIdentityRef = useRef<string | null>(null);
   const [state, setState] = useState<NativeState>({ kind: "loading" });
   // Any protected child resource denial must also remove previously loaded
   // scalar page values, not just the resource table or editor.
@@ -48,11 +50,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   // admitted Native page into a legacy frame after release revocation.
   useEffect(() => {
     const recheck = () => {
-      setState((previous) => ({
-        kind: "rechecking",
-        wasNative: previous.kind === "native" ||
-          (previous.kind === "rechecking" && previous.wasNative),
-      }));
+      setState({ kind: "loading" });
       setResumeRevision((revision) => revision + 1);
     };
     const onVisible = () => {
@@ -70,13 +68,14 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
     let cancelled = false;
     let pending = false;
     const publicationId = getActivePublicationId();
+    const identity = JSON.stringify([link.pluginId, link.viewId, link.routeId, publicationId]);
     if (link.nativeProbeSupported !== true) {
       // Old API servers did not advertise the Native admission endpoint.
       // Preserve their separately authorized iframe/scalar behavior.
       setState({ kind: "legacy" });
       return;
     }
-    setState((previous) => previous.kind === "rechecking" ? previous : { kind: "loading" });
+    setState({ kind: "loading" });
     const refresh = async () => {
       if (pending || cancelled) return;
       pending = true;
@@ -85,14 +84,13 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         if (cancelled || getActivePublicationId() !== publicationId) return;
         if (response.mode === "legacy") {
           // Only the Host explicitly decides a compatible legacy fallback.
-          setState((previous) =>
-            previous.kind === "native" ||
-            (previous.kind === "rechecking" && previous.wasNative)
-              ? { kind: "error" } : { kind: "legacy" });
+          setState(lastNativeIdentityRef.current === identity
+            ? { kind: "error" } : { kind: "legacy" });
           return;
         }
         const data = await readExtensionAdminViewApi(link);
         if (cancelled || getActivePublicationId() !== publicationId) return;
+        lastNativeIdentityRef.current = identity;
         setState({
           kind: "native", page: response.page, publicationId, data,
           pluginId: link.pluginId, viewId: link.viewId, routeId: link.routeId,
@@ -113,7 +111,7 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   }, [link.pluginId, link.viewId, link.routeId, link.nativeProbeSupported, publicationRevision, resumeRevision]);
 
   if (state.kind === "legacy") return <PluginAdminView link={link} />;
-  if (state.kind === "loading" || state.kind === "rechecking") {
+  if (state.kind === "loading") {
     return <p role="status">{tr("Loading plugin view...")}</p>;
   }
   if (state.kind === "error") {

@@ -163,6 +163,13 @@ describe("Host-rendered native extension page", () => {
     expect(element.querySelector("table")).toBeNull();
     expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
     expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    // A previously admitted Native view cannot downgrade after a resource
+    // authorization failure just because the operator disabled Native mode.
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue({ mode: "legacy" });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(element.textContent).not.toContain("private summary");
   });
 
   it("redacts scalar data when resource discovery loses Staff authorization", async () => {
