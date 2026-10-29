@@ -163,6 +163,14 @@ describe("Host-rendered native extension page", () => {
     expect(element.querySelector("table")).toBeNull();
     expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
     expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    // A successful Native descriptor/scalar response cannot override a
+    // revoked resource grant, including after a tab refocus revalidation.
+    const previouslyLoadedScalars = vi.mocked(readExtensionAdminViewApi).mock.calls.length;
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.textContent).not.toContain("private summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(readExtensionAdminViewApi).toHaveBeenCalledTimes(previouslyLoadedScalars);
     // A previously admitted Native view cannot downgrade after a resource
     // authorization failure just because the operator disabled Native mode.
     vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue({ mode: "legacy" });

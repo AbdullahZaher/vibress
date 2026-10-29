@@ -2,6 +2,41 @@
 
 **State: HOLD — not yet production certified.** This document records mandatory gates, not completed tests or independent approvals.
 
+## SDK-NUI-03 read-only multi-replica acceptance (PR #89)
+
+**Baseline verified 2026-10-29:** On `5e1980ccda3cd625e7c9115861c8a38eb8e366a1`,
+[PR CI 40857258268](https://github.com/AbdullahZaher/vibress/actions/runs/40857258268),
+[push CI 40857247895](https://github.com/AbdullahZaher/vibress/actions/runs/40857247895)
+and [M1A drill 40857247684](https://github.com/AbdullahZaher/vibress/actions/runs/40857247684)
+all completed successfully. These are **baseline** results, not evidence that
+the new SDK-NUI-03 hardening below has passed until its own exact-head CI is green.
+
+The additive disposable
+`tests/integration/native-admin-multi-process-replica.test.ts` scenario H
+now probes two already-admitted API processes plus a separate API process
+using the *same verified signed release* with read approval but no action
+approval. The Host must return `mode: "native"` **without** a workflow,
+provide read-only discovery with `actions: []`, permit an authorized
+publication-local resource read, and reject a forged publication. After
+an isolated operator-disabled restart, it must return explicit `mode:
+"legacy"` while protected resource discovery and records return 404.
+The scenario is a mixed-policy **test fixture only**; operators must never
+intentionally run different allowlists across a production API fleet.
+
+The browser `NativeExtensionAdminView` must clear previously admitted
+data on focus/revalidation and **latch a child resource authorization
+denial per plugin/view/route/publication**. Later successful Native or
+scalar requests must not resurrect the denied view; a previously admitted
+Native view must not silently downgrade to an iframe after revocation.
+An explicitly Host-selected legacy mode remains available for a fresh
+page load or older API that never advertised Native support.
+
+**Approval boundary:** These changes do not alter existing routes, SDK
+ABI, manifest schemas, PostgreSQL data, permissions or operator release
+allowlists. The release remains default-off until security/operator
+sign-off, final exact-head CI and staged multi-replica rollback evidence;
+automated regressions are necessary but not sufficient for production.
+
 ## Automated release matrix
 
 | Verification | Evidence required |

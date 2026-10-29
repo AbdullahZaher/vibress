@@ -34,10 +34,17 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
   // Remember Native admission for each specific Host view/publication, even
   // after a resource authorization failure has cleared the rendered page.
   const lastNativeIdentityRef = useRef<string | null>(null);
+  // Resource/Staff denial is terminal for the current view + publication.
+  // A separate Native/scalar request may still succeed after the resource
+  // grant was revoked; it must not resurrect previously protected content.
+  const deniedIdentityRef = useRef<string | null>(null);
   const [state, setState] = useState<NativeState>({ kind: "loading" });
-  // Any protected child resource denial must also remove previously loaded
-  // scalar page values, not just the resource table or editor.
-  const onAuthorizationLost = useCallback(() => setState({ kind: "error" }), []);
+  const onAuthorizationLost = useCallback(() => {
+    deniedIdentityRef.current = JSON.stringify([
+      link.pluginId, link.viewId, link.routeId, getActivePublicationId(),
+    ]);
+    setState({ kind: "error" });
+  }, [link.pluginId, link.viewId, link.routeId]);
 
   useEffect(() => {
     const onPublicationChanged = () => setPublicationRevision((value) => value + 1);
@@ -78,10 +85,18 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
     setState({ kind: "loading" });
     const refresh = async () => {
       if (pending || cancelled) return;
+      if (deniedIdentityRef.current === identity) {
+        setState({ kind: "error" });
+        return;
+      }
       pending = true;
       try {
         const response = await readNativeExtensionAdminPageApi(link);
         if (cancelled || getActivePublicationId() !== publicationId) return;
+        if (deniedIdentityRef.current === identity) {
+          setState({ kind: "error" });
+          return;
+        }
         if (response.mode === "legacy") {
           // Only the Host explicitly decides a compatible legacy fallback.
           setState(lastNativeIdentityRef.current === identity
@@ -90,6 +105,10 @@ export function NativeExtensionAdminView({ link }: { link: AdminExtensionViewLin
         }
         const data = await readExtensionAdminViewApi(link);
         if (cancelled || getActivePublicationId() !== publicationId) return;
+        if (deniedIdentityRef.current === identity) {
+          setState({ kind: "error" });
+          return;
+        }
         lastNativeIdentityRef.current = identity;
         setState({
           kind: "native", page: response.page, publicationId, data,

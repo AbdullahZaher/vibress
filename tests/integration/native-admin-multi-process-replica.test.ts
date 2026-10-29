@@ -148,6 +148,7 @@ function spawnReplicaProcess(
   sigPath: string,
   releaseTag: string,
   allowedPorts: number[],
+  actionReleaseTag = releaseTag,
 ): ChildProcess {
   const tsxBin = path.resolve(repoRoot, "node_modules/.bin/tsx");
   const corsOrigins = allowedPorts
@@ -170,7 +171,7 @@ function spawnReplicaProcess(
         VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: sigPath,
         VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1",
         VIBRESS_NATIVE_ADMIN_UI_RELEASES: releaseTag,
-        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: releaseTag,
+        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: actionReleaseTag,
         VIBRESS_ENCRYPTION_KEY: encryptionKey,
         NODE_ENV: "test",
         LOG_LEVEL: "warn",
@@ -936,4 +937,99 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     expect(updatedCourse.fields.title_en).toBe(expectedWinnerTitle);
     expect(updatedCourse.fields.title_en).not.toBe(expectedLoserTitle);
   });
+  it("Scenario H: Read-only Native admission and operator rollback across independent replicas", async () => {
+    // Replica A/B have independently approved write releases. A third
+    // process exercises read-only mode, then an operator-disabled release.
+    // This is a disposable *mixed-policy test*, never a recommended fleet
+    // configuration: production rollout requires identical replica allowlists.
+    const nativePath = `/api/admin/v1/extensions/${manifest.id}/views/course-overview/native`;
+    const dataPath = `/api/admin/v1/extensions/${manifest.id}/data`;
+    const resourcePath = `/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const headers = {
+      Authorization: `Bearer ${staffSessionToken}`,
+      Cookie: `vibress_session=${staffSessionToken}`,
+      "x-publication-id": pubAId,
+    };
+    const baseA = `http://127.0.0.1:${portA}`;
+    const baseB = `http://127.0.0.1:${portB}`;
+    const baseC = `http://127.0.0.1:${portC}`;
+
+    // Confirm signed admission is independently visible on both original
+    // API replicas before comparing the read-only deployment.
+    for (const base of [baseA, baseB]) {
+      const response = await fetch(base + nativePath, { headers });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        mode: string; routeId?: string;
+      };
+      expect(body.mode).toBe("native");
+      expect(body.routeId).toBe("courses");
+    }
+
+    try {
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, approvedReleaseTag,
+        [portA, portB, portC], "", // Explicitly deny Native writes.
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const readOnlyResponse = await fetch(baseC + nativePath, { headers });
+      expect(readOnlyResponse.status).toBe(200);
+      const readOnlyBody = (await readOnlyResponse.json()) as {
+        mode: string; routeId?: string; workflow?: unknown;
+      };
+      expect(readOnlyBody.mode).toBe("native");
+      expect(readOnlyBody.routeId).toBe("courses");
+      expect(readOnlyBody.workflow).toBeUndefined();
+
+      const dataResponse = await fetch(baseC + dataPath, { headers });
+      expect(dataResponse.status).toBe(200);
+      const data = (await dataResponse.json()) as {
+        actions: unknown[]; resources: Array<{ id: string }>;
+      };
+      expect(data.actions).toEqual([]);
+      expect(data.resources.some((r) => r.id === "course-records")).toBe(true);
+
+      const recordsResponse = await fetch(baseC + resourcePath + "?limit=2", { headers });
+      expect(recordsResponse.status).toBe(200);
+      const records = (await recordsResponse.json()) as {
+        items: Array<{ id: string }>;
+      };
+      expect(records.items.map((r) => r.id))
+        .toEqual(["course-a-01", "course-a-02"]);
+
+      // The same read-only release cannot authorize a forged publication.
+      const wrongPublication = await fetch(baseC + nativePath, {
+        headers: { ...headers, "x-publication-id": "unknown-foreign-publication" },
+      });
+      expect(wrongPublication.status).toBe(403);
+
+      // Operators disable Native by removing the exact approved digest
+      // from every serving replica and restarting it. The Host may advertise
+      // explicit legacy mode, but the *already-open* Native browser view
+      // must clear its data and not silently switch to an iframe.
+      await terminateProcessGracefully(procC);
+      procC = null;
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, "",
+        [portA, portB, portC], "",
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const disabled = await fetch(baseC + nativePath, { headers });
+      expect(disabled.status).toBe(200);
+      expect(await disabled.json()).toEqual({ mode: "legacy" });
+
+      const disabledData = await fetch(baseC + dataPath, { headers });
+      expect(disabledData.status).toBe(404);
+      const disabledRecords = await fetch(baseC + resourcePath + "?limit=2", { headers });
+      expect(disabledRecords.status).toBe(404);
+    } finally {
+      await terminateProcessGracefully(procC);
+      procC = null;
+    }
+  }, 90000);
+
 });

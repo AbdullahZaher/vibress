@@ -185,6 +185,22 @@ The operator admission and preflight CLIs verify immutable plugin packages and t
    ```
 
 ### Procedure 4: Read-Only Native Rollout
+
+**Pre-approval gate (SDK-NUI-03):** First verify the exact immutable signed
+release and matching Native read allowlist on **all** API replicas. The
+integration test uses a separate disposable process with its Native action
+allowlist unset to prove that read approval neither advertises a mutation
+workflow nor returns generic storage actions. This controlled mixed-policy
+test is **not** a supported production topology. The same test restarts
+that process with Native disabled and asserts legacy admission plus
+404-denied Native resource routes. A browser tab that had already rendered
+Native must redact content when revalidating and must **not** silently
+switch to a legacy iframe after a revoked resource permission. Check
+Arabic/RTL, keyboard focus, session revocation, publication switch and
+operator rollback before signing off; retain both allowlists unset until
+explicit production approval.
+
+
 1. Ensure the plugin is admitted, active, and functioning in legacy iframe mode.
 2. Configure `VIBRESS_NATIVE_ADMIN_UI_RELEASES` on all serving API replicas:
    ```dotenv
