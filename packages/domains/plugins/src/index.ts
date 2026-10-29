@@ -41,8 +41,27 @@ export type { PluginActivityAction, PluginActivityRow, PluginActivityResult } fr
 export { preparePluginUpgradeStage, PluginUpgradePlanError } from "./application/plugin-upgrade-plan";
 export type { OperatorUpgradeStageInput, PluginUpgradeStageDetails } from "./application/plugin-upgrade-plan";
 export { DrizzlePluginUpgradePlanRepository } from "./infrastructure/drizzle-plugin-upgrade-plans";
-export { validateOperatorUpgradeAbort } from "./application/plugin-upgrade-plan";
-export type { OperatorUpgradeAbortInput, OperatorUpgradeAuditContext } from "./application/plugin-upgrade-plan";
+export {
+  validateOperatorUpgradeAbort,
+  validateOperatorUpgradeTransition,
+  validateOperatorUpgradeQuiesce,
+  validateOperatorUpgradeMigrate,
+  validateOperatorUpgradeActivate,
+  validateOperatorUpgradeObserve,
+  validateOperatorUpgradeComplete,
+  validateOperatorUpgradeRollback,
+} from "./application/plugin-upgrade-plan";
+export type {
+  OperatorUpgradeAbortInput,
+  OperatorUpgradeTransitionInput,
+  OperatorUpgradeQuiesceInput,
+  OperatorUpgradeMigrateInput,
+  OperatorUpgradeActivateInput,
+  OperatorUpgradeObserveInput,
+  OperatorUpgradeCompleteInput,
+  OperatorUpgradeRollbackInput,
+  OperatorUpgradeAuditContext,
+} from "./application/plugin-upgrade-plan";
 export { validateOperatorUpgradePreflight, validateOperatorUpgradeApproval } from "./application/plugin-upgrade-plan";
 export type {
   OperatorUpgradePreflightInput, OperatorUpgradeApprovalInput,

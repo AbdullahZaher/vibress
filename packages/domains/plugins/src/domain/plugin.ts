@@ -77,6 +77,8 @@ export interface PluginRepository {
   delete(id: string): Promise<void>;
   /** Prevent accidental uninstall after a forward-only plugin data migration. */
   hasAppliedMigrations?(id: string): Promise<boolean>;
+  /** Explicit, audited purge of all scoped plugin data, schemas, records, and settings. */
+  purgePluginData?(id: string, audit: PluginSettingAuditContext): Promise<void>;
 }
 
 export interface PluginSettingRepository {

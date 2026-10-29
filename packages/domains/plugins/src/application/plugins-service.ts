@@ -764,6 +764,26 @@ export class PluginsService {
     domainEvents.emit("plugin.unregistered", { pluginId: id, actorId });
   }
 
+  /**
+   * PLUG-UPD-06: Explicit, operator-authorized, audited purge of all scoped plugin data.
+   * Irreversibly purges stored settings, storage models, physical tables, records,
+   * schema migrations, and upgrade plans.
+   */
+  async purgePluginData(id: string, audit: PluginSettingAuditContext): Promise<void> {
+    const plugin = await this.pluginRepo.findById(id);
+    if (plugin && (plugin.status === "active" || plugin.status === "activating" || plugin.status === "deactivating")) {
+      throw new PluginDomainError(
+        "PLUGIN_ACTIVE", "Finish or recover the plugin lifecycle before purging stored data",
+      );
+    }
+    if (this.pluginRepo.purgePluginData) {
+      await this.pluginRepo.purgePluginData(id, audit);
+    } else {
+      await this.pluginRepo.delete(id);
+    }
+    domainEvents.emit("plugin.unregistered", { pluginId: id, actorId: audit.actorUserId });
+  }
+
   async listPlugins(): Promise<Plugin[]> {
     return this.pluginRepo.list();
   }

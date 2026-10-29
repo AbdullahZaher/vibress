@@ -7,6 +7,10 @@ import {
   pluginPublicationStates,
   pluginPublicationSettings,
   pluginSchemaMigrations,
+  pluginStorageModels,
+  pluginPhysicalModels,
+  pluginMemberRecords,
+  pluginUpgradePlans,
   auditEvents,
 } from "@vibress/database";
 import { eq, and, inArray, sql } from "drizzle-orm";
@@ -24,8 +28,10 @@ import {
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
+  constructor(private readonly db: () => ReturnType<typeof getDb> = getDb) {}
+
   async create(data: RegisterPluginData, audit?: PluginSettingAuditContext): Promise<Plugin> {
-    const db = getDb();
+    const db = this.db();
     const now = new Date();
     const [row] = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -59,7 +65,7 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async findById(id: string): Promise<Plugin | null> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db
       .select()
       .from(plugins)
@@ -71,7 +77,7 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async findByManifestId(manifestId: string): Promise<Plugin | null> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db
       .select()
       .from(plugins)
@@ -86,7 +92,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     id: string, status: PluginStatus, _error?: string,
     audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
-    const row = await getDb().transaction(async (tx) => {
+    const row = await this.db().transaction(async (tx) => {
       const [updated] = await tx.update(plugins)
         .set({ status, updatedAt: new Date() })
         .where(eq(plugins.id, id)).returning();
@@ -110,7 +116,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     status: PluginStatus,
   ): Promise<Plugin | null> {
     if (expected.length === 0) return null;
-    const [row] = await getDb().update(plugins)
+    const [row] = await this.db().update(plugins)
       .set({ status, updatedAt: new Date() })
       .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
       .returning();
@@ -122,7 +128,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     data: Partial<RegisterPluginData>,
     audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
-    const db = getDb();
+    const db = this.db();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
@@ -171,7 +177,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
     if (data.hooks !== undefined) payload.hooks = data.hooks;
     if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
-    const row = await getDb().transaction(async (tx) => {
+    const row = await this.db().transaction(async (tx) => {
       const [updated] = await tx.update(plugins)
         .set(payload)
         .where(and(eq(plugins.id, id),
@@ -191,13 +197,13 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async list(): Promise<Plugin[]> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db.select().from(plugins).orderBy(plugins.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
 
   async hasAppliedMigrations(id: string): Promise<boolean> {
-    const rows = await getDb()
+    const rows = await this.db()
       .select({ pluginId: pluginSchemaMigrations.pluginId })
       .from(pluginSchemaMigrations)
       .where(eq(pluginSchemaMigrations.pluginId, id))
@@ -206,8 +212,32 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async delete(id: string): Promise<void> {
-    const db = getDb();
+    const db = this.db();
     await db.delete(plugins).where(eq(plugins.id, id));
+  }
+
+  async purgePluginData(id: string, audit: PluginSettingAuditContext): Promise<void> {
+    const db = this.db();
+    await db.transaction(async (tx) => {
+      await tx.delete(pluginPublicationSettings).where(eq(pluginPublicationSettings.pluginId, id));
+      await tx.delete(pluginPublicationStates).where(eq(pluginPublicationStates.pluginId, id));
+      await tx.delete(pluginMemberRecords).where(eq(pluginMemberRecords.pluginId, id));
+      await tx.delete(pluginPhysicalModels).where(eq(pluginPhysicalModels.pluginId, id));
+      await tx.delete(pluginStorageModels).where(eq(pluginStorageModels.pluginId, id));
+      await tx.delete(pluginSchemaMigrations).where(eq(pluginSchemaMigrations.pluginId, id));
+      await tx.delete(pluginUpgradePlans).where(eq(pluginUpgradePlans.pluginId, id));
+      await tx.delete(pluginSettings).where(eq(pluginSettings.pluginId, id));
+      await tx.delete(plugins).where(eq(plugins.id, id));
+      await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(),
+        publicationId: null,
+        actorUserId: audit.actorUserId,
+        requestId: audit.requestId,
+        action: "plugin.data_purged",
+        targetType: "plugin",
+        targetId: id,
+      });
+    });
   }
 
   private mapToDomain(row: PluginRow): Plugin {

@@ -97,26 +97,77 @@ const approvalInputSchema = preflightInputSchema.extend({
   reviewedCapabilitiesRemoved: z.array(capability).max(64),
 }).strict();
 
-const abortInputSchema = z.object({
+export type OperatorUpgradeTransitionInput = OperatorUpgradeAbortInput;
+export type OperatorUpgradeQuiesceInput = OperatorUpgradeTransitionInput;
+export type OperatorUpgradeMigrateInput = OperatorUpgradeTransitionInput;
+export type OperatorUpgradeActivateInput = OperatorUpgradeTransitionInput;
+export type OperatorUpgradeObserveInput = OperatorUpgradeTransitionInput;
+export type OperatorUpgradeCompleteInput = OperatorUpgradeTransitionInput;
+export type OperatorUpgradeRollbackInput = OperatorUpgradeTransitionInput;
+
+const transitionInputSchema = z.object({
   pluginId: z.string().uuid(),
   planId: z.string().uuid(),
   expectedPlanSha256: sha,
   expectedRevision: z.number().int().positive().max(2147483646),
 }).strict();
+const abortInputSchema = transitionInputSchema;
 const auditSchema = z.object({
   actorUserId: z.string().trim().min(1).max(128),
   requestId: z.string().trim().min(1).max(128),
 }).strict();
 
+export function validateOperatorUpgradeTransition(
+  input: unknown, audit: unknown, errorCode: string,
+): { readonly input: OperatorUpgradeTransitionInput; readonly audit: OperatorUpgradeAuditContext } {
+  const parsedInput = transitionInputSchema.safeParse(input);
+  const parsedAudit = auditSchema.safeParse(audit);
+  if (!parsedInput.success || !parsedAudit.success) {
+    throw new PluginUpgradePlanError(errorCode);
+  }
+  return { input: parsedInput.data, audit: parsedAudit.data };
+}
+
 export function validateOperatorUpgradeAbort(
   input: unknown, audit: unknown,
 ): { readonly input: OperatorUpgradeAbortInput; readonly audit: OperatorUpgradeAuditContext } {
-  const parsedInput = abortInputSchema.safeParse(input);
-  const parsedAudit = auditSchema.safeParse(audit);
-  if (!parsedInput.success || !parsedAudit.success) {
-    throw new PluginUpgradePlanError("PLUGIN_UPGRADE_ABORT_INVALID_INPUT");
-  }
-  return { input: parsedInput.data, audit: parsedAudit.data };
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_ABORT_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeQuiesce(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeQuiesceInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_QUIESCE_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeMigrate(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeMigrateInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_MIGRATE_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeActivate(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeActivateInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_ACTIVATE_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeObserve(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeObserveInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_OBSERVE_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeComplete(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeCompleteInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_COMPLETE_INVALID_INPUT");
+}
+
+export function validateOperatorUpgradeRollback(
+  input: unknown, audit: unknown,
+): { readonly input: OperatorUpgradeRollbackInput; readonly audit: OperatorUpgradeAuditContext } {
+  return validateOperatorUpgradeTransition(input, audit, "PLUGIN_UPGRADE_ROLLBACK_INVALID_INPUT");
 }
 
 export function validateOperatorUpgradePreflight(
