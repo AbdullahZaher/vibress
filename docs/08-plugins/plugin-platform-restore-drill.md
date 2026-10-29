@@ -164,6 +164,28 @@ observed API×2/Worker×2 behavior and retained event receipts, measure
 actual recovery time and recovered writes, and secure the operator-signed
 go/no-go report outside the source tree.
 
+## Separate Redis RDB snapshot/restore drill (pending exact-head CI)
+
+After stopping the disposable API and Worker producers, M1A now also exercises
+a real Redis `SAVE` into the current namespaced Compose Redis instance,
+copies the resulting RDB archive, then starts **a second, no-network Redis
+container using the exact same image ID**. The restore target has no host port
+and is independently removed on exit. The drill compares a known sentinel
+and a minimal queue-shaped hash before and after restore, while the source
+Redis instance is left intact. It refuses to run without GitHub Actions,
+the isolated-drill opt-in and an exact numeric run identifier, and checks
+the source Redis container belongs to the expected Compose project.
+
+A successful `PLUGIN_M1A_REDIS_SNAPSHOT_PASSED` marker will prove only that
+an RDB snapshot can be restored without changing the original Redis and
+that sampled persistent test metadata survived. **This is not a claim that
+Redis and PostgreSQL were snapshotted atomically**, that pending BullMQ leases
+remain executable after a complete disaster, or that the backup includes
+media, plugin release bytes, secrets or a real off-site storage provider.
+An operator must still coordinate and validate the same recovery point,
+queue/receipt correspondence, full encryption keyring and signed artifact
+mounts before releasing production traffic.
+
 ## Historical 0042 → 0048 populated core-upgrade drill (pending CI)
 
 An additional **disposable PostgreSQL database** in the M1A CI-only Compose

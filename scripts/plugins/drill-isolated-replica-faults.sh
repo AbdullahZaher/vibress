@@ -236,4 +236,9 @@ printf '%s\n' 'PLUGIN_M1A_SIGNED_RESTORE_PASSED: HMAC manifest, tamper/missing-s
 bash scripts/plugins/drill-historical-upgrade.sh \
   || die "historical core-schema upgrade acceptance failed"
 
-printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: four-process fault recovery, isolated PostgreSQL signed restore and historical 0042->current core migration (not full DR acceptance)'
+# RDB snapshot is restored into a SECOND Redis container with no network.
+# It is deliberately not presented as an atomic PostgreSQL+Redis backup set.
+bash scripts/plugins/drill-redis-snapshot.sh \
+  || die "isolated Redis RDB restore acceptance failed"
+
+printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: four-process fault recovery, isolated signed PostgreSQL and RDB recovery, and historical 0042->current core migration (not full DR acceptance)'

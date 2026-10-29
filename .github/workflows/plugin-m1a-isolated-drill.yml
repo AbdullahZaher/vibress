@@ -44,6 +44,7 @@ jobs:
         run: |
           bash -n scripts/plugins/drill-isolated-replica-faults.sh
           bash -n scripts/plugins/drill-historical-upgrade.sh
+          bash -n scripts/plugins/drill-redis-snapshot.sh
       - name: Exercise four live processes and disposable PostgreSQL/Redis outage
         env:
           VIBRESS_M1A_DISPOSABLE_DRILL: "1"
