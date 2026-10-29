@@ -82,7 +82,11 @@ export async function requestCapability<T = unknown>(
   });
 }
 
-function createPluginContext(publicationId: string, invocationId: string) {
+function createPluginContext(
+  publicationId: string,
+  invocationId: string,
+  grantedCapabilities: readonly string[] = [],
+) {
   return {
     manifestId: pluginId,
     name: pluginId,
@@ -95,8 +99,8 @@ function createPluginContext(publicationId: string, invocationId: string) {
     log(message: string, _level: "info" | "warn" | "error" = "info"): void {
       // Diagnostic logging within isolated sandbox
     },
-    hasCapability(_capability: string): boolean {
-      return true;
+    hasCapability(capability: string): boolean {
+      return Array.isArray(grantedCapabilities) && grantedCapabilities.includes(capability);
     },
     storage: {
       get: (modelKey: string, id: string) =>
@@ -125,7 +129,11 @@ process.on("message", async (rawMsg: unknown) => {
       process.exit(0);
     }
     if (envelope.type === "invoke") {
-      const { operation, data } = envelope.payload as { operation: string; data: unknown };
+      const { operation, data, grantedCapabilities = [] } = envelope.payload as {
+        operation: string;
+        data: unknown;
+        grantedCapabilities?: string[];
+      };
       let result: unknown;
 
       await ensurePluginLoaded();
@@ -156,7 +164,7 @@ process.on("message", async (rawMsg: unknown) => {
         result = await requestCapability(testReq.action, testReq.publicationId, testReq.params, envelope.id);
       } else if (loadedPluginModule) {
         // M7.3: Real plugin execution via SDK contracts
-        const ctx = createPluginContext(envelope.publicationId, envelope.id);
+        const ctx = createPluginContext(envelope.publicationId, envelope.id, grantedCapabilities);
         if (operation === "activate" && typeof loadedPluginModule.activate === "function") {
           await loadedPluginModule.activate(ctx);
           result = { activated: true };
@@ -167,19 +175,19 @@ process.on("message", async (rawMsg: unknown) => {
           const eventData = (data as { eventName: string; payload: unknown }) || { eventName: "custom", payload: data };
           await loadedPluginModule.onEvent(eventData.eventName, eventData.payload, ctx);
           result = { handled: true };
-        } else if (typeof loadedPluginModule.invoke === "function") {
+        } else if (operation === "invoke" && typeof loadedPluginModule.invoke === "function") {
           result = await loadedPluginModule.invoke(data, ctx);
         } else if (typeof loadedPluginModule[operation] === "function") {
           result = await loadedPluginModule[operation](data, ctx);
         } else if (typeof loadedPluginModule === "function") {
           result = await loadedPluginModule(data, ctx);
         } else {
-          result = { status: "success", operation, data };
+          throw new Error(`UNSUPPORTED_OPERATION: Operation '${operation}' is not supported by plugin '${pluginId}'`);
         }
       } else if (loadError) {
         throw new Error(`Failed to load plugin entrypoint: ${loadError.message}`);
       } else {
-        result = { status: "success", operation, data };
+        throw new Error(`UNSUPPORTED_OPERATION: Unknown operation '${operation}' in unconfigured plugin '${pluginId}'`);
       }
 
       const responseEnv = signTier2IpcEnvelope({
@@ -189,7 +197,10 @@ process.on("message", async (rawMsg: unknown) => {
         releaseDigest,
         publicationId: envelope.publicationId,
         type: "response",
-        payload: result,
+        payload: {
+          ok: true,
+          data: result,
+        },
       }, sessionKey);
 
       if (process.send) {
@@ -209,8 +220,9 @@ process.on("message", async (rawMsg: unknown) => {
           publicationId: envelope.publicationId,
           type: "response",
           payload: {
+            ok: false,
             error: {
-              code: "INVOCATION_FAILED",
+              code: (error as any)?.code || "INVOCATION_FAILED",
               message: error instanceof Error ? error.message : "Plugin execution failed",
             },
           },

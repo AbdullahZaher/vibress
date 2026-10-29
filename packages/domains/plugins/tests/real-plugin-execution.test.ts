@@ -12,7 +12,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
   const supervisorsToClean: Tier2PluginSupervisor[] = [];
   const fixtureEntrypoint = path.resolve(
     __dirname,
-    "fixtures/real-standalone-plugin/dist/index.js",
+    "fixtures/real-standalone-plugin/release/index.js",
   );
 
   afterEach(async () => {
@@ -94,6 +94,50 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       }>(context, "onEvent", { eventName: "post.published", payload: { postId: "post_123" } });
 
       expect(response.handled).toBe(true);
+    });
+
+    it("accurately reports hasCapability based on Host-granted capabilities", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_primary",
+        grantedCapabilities: ["extension.storage.read"], // member read omitted
+        actor: { id: "user_owner", type: "staff" },
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      const result = await supervisor.invoke<{
+        hasStorageRead: boolean;
+        hasMemberRead: boolean;
+      }>(context, "invoke", { op: "check_capability" });
+
+      expect(result.hasStorageRead).toBe(true);
+      expect(result.hasMemberRead).toBe(false);
+    });
+
+    it("rejects unknown or unsupported plugin operations with stable error contract", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_primary",
+        grantedCapabilities: [],
+        actor: { id: "user_owner", type: "staff" },
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      await expect(
+        supervisor.invoke(context, "unsupported_hook_operation", {}),
+      ).rejects.toThrowError(/UNSUPPORTED_OPERATION/i);
     });
   });
 
@@ -224,21 +268,18 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         entrypointPath: fixtureEntrypoint,
       };
 
-      // Real plugin attempts to call memberAccess.hasActivePlan
-      const result = await supervisor.invoke<{
-        error?: { code: string; message: string };
-      }>(
-        context,
-        "invoke",
-        {
-          op: "unauthorized_capability_attempt",
-          planId: "plan_enterprise",
-        },
-        handlers,
-      );
-
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toMatch(/Plugin lacks required capability/i);
+      // Real plugin attempts to call memberAccess.hasActivePlan -> must reject
+      await expect(
+        supervisor.invoke(
+          context,
+          "invoke",
+          {
+            op: "unauthorized_capability_attempt",
+            planId: "plan_enterprise",
+          },
+          handlers,
+        ),
+      ).rejects.toThrowError(/Plugin lacks required capability/i);
     });
 
     it("prevents cross-publication capability requests fail-closed", async () => {
@@ -259,22 +300,19 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         actor: { id: "staff_1", type: "staff" },
       };
 
-      // Directly test capability with foreign publication ID attempt
-      const result = await supervisor.invoke<{
-        error?: { code: string; message: string };
-      }>(
-        context,
-        "test_capability",
-        {
-          action: "storage.get",
-          publicationId: "pub_VICTIM_TENANT", // Attacker attempts to target victim publication!
-          params: { modelKey: "config", id: "keys" },
-        },
-        handlers,
-      );
-
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toMatch(/Plugin is forbidden from requesting capabilities across publication boundaries/i);
+      // Directly test capability with foreign publication ID attempt -> must reject
+      await expect(
+        supervisor.invoke(
+          context,
+          "test_capability",
+          {
+            action: "storage.get",
+            publicationId: "pub_VICTIM_TENANT", // Attacker attempts to target victim publication!
+            params: { modelKey: "config", id: "keys" },
+          },
+          handlers,
+        ),
+      ).rejects.toThrowError(/Plugin is forbidden from requesting capabilities across publication boundaries/i);
     });
   });
 
@@ -302,6 +340,82 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         );
       } finally {
         delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
+      }
+    });
+
+    it("denies untrusted marketplace plugin execution fail-closed when no verified per-plugin sandbox runner is active", async () => {
+      delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+      delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
+
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.untrusted-plugin-unisolated",
+        releaseDigest: "sha256:2222333344445555666677778888999900001111222233334444555566667777",
+        publicationId: "pub_test_untrusted",
+        grantedCapabilities: [],
+        actor: { id: "test", type: "anonymous" },
+        trustTier: "untrusted_marketplace",
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
+        /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+      );
+    });
+
+    it("admits untrusted plugin when verified sandbox runner boundary is active", async () => {
+      process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
+      try {
+        const supervisor = new Tier2PluginSupervisor({
+          invocationTimeoutMs: 3000,
+        });
+        supervisorsToClean.push(supervisor);
+
+        const context: Tier2InvocationContext = {
+          pluginId: "com.vibress.real-fixture-plugin",
+          releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+          publicationId: "pub_test_gvisor",
+          grantedCapabilities: [],
+          actor: { id: "test", type: "anonymous" },
+          trustTier: "untrusted_marketplace",
+          entrypointPath: fixtureEntrypoint,
+        };
+
+        const res = await supervisor.invoke<{ status: string }>(context, "echo", "sandboxed");
+        expect(res).toBeDefined();
+      } finally {
+        delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+      }
+    });
+
+    it("fails closed in production mode when worker artifact is missing or TypeScript", async () => {
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const supervisor = new Tier2PluginSupervisor({
+          workerScriptPath: path.resolve(__dirname, "non-existent-worker.js"),
+          invocationTimeoutMs: 3000,
+        });
+        supervisorsToClean.push(supervisor);
+
+        const context: Tier2InvocationContext = {
+          pluginId: "com.vibress.real-fixture-plugin",
+          releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+          publicationId: "pub_test_prod",
+          grantedCapabilities: [],
+          actor: { id: "test", type: "anonymous" },
+          entrypointPath: fixtureEntrypoint,
+        };
+
+        await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
+          /PRODUCTION_WORKER_ARTIFACT_MISSING/i,
+        );
+      } finally {
+        process.env.NODE_ENV = origEnv;
       }
     });
 

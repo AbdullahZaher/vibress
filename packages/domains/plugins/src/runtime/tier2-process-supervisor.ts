@@ -45,20 +45,21 @@ export interface Tier2ProcessState {
 
 export class Tier2SupervisorError extends Error {
   constructor(readonly code: string, message: string) {
-    super(message);
+    super(`[${code}] ${message}`);
     this.name = "Tier2SupervisorError";
   }
 }
 
 export interface Tier2IsolationCheckResult {
   readonly isIsolated: boolean;
-  readonly isolationMechanism: "container" | "cgroups_v2" | "restricted_process" | "unsupported";
+  readonly isolationMechanism: "sandbox_runner" | "container" | "cgroups_v2" | "restricted_process" | "unsupported";
   readonly details: string;
 }
 
 /**
  * M7.2: Verifies host environment provides OS-enforced isolation boundaries.
  * Fails closed if untrusted marketplace plugin is scheduled on an unisolated host.
+ * Distinguishes host container presence from verified per-plugin isolation.
  */
 export function verifyPlatformIsolationSupport(
   trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace",
@@ -71,48 +72,34 @@ export function verifyPlatformIsolationSupport(
     };
   }
 
-  const isDocker = existsSync("/.dockerenv");
-  const hasCgroups = existsSync("/sys/fs/cgroup");
-  const isLinux = process.platform === "linux";
-  const isNonRoot = typeof process.getuid === "function" ? process.getuid() !== 0 : true;
+  // Untrusted marketplace plugins require an independent, verified per-plugin sandbox runner (e.g. gVisor, bwrap, or isolated micro-runner container)
+  const sandboxRunner = process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+  const hasVerifiedRunner = Boolean(
+    sandboxRunner && ["gvisor", "bwrap", "nsjail", "container"].includes(sandboxRunner),
+  );
 
-  if (isDocker) {
-    return {
-      isIsolated: true,
-      isolationMechanism: "container",
-      details: `Docker container boundary active (non-root: ${isNonRoot})`,
-    };
-  }
-
-  if (isLinux && hasCgroups) {
-    return {
-      isIsolated: true,
-      isolationMechanism: "cgroups_v2",
-      details: "Linux cgroups resource isolation available",
-    };
-  }
-
-  if (process.env.NODE_ENV !== "production" || process.env.VIBRESS_ALLOW_TEST_ISOLATION === "1") {
-    return {
-      isIsolated: true,
-      isolationMechanism: "restricted_process",
-      details: "Restricted process isolation active (development/test mode)",
-    };
-  }
-
-  // In production outside of Docker/cgroups/container isolation, untrusted marketplace plugins MUST fail closed
   if (trustTier === "untrusted_marketplace") {
+    if (hasVerifiedRunner) {
+      return {
+        isIsolated: true,
+        isolationMechanism: "sandbox_runner",
+        details: `Verified per-plugin sandbox runner active: ${sandboxRunner}`,
+      };
+    }
+    // Fail closed: Host container presence (/.dockerenv, cgroups) does NOT provide per-plugin isolation for untrusted code
     return {
       isIsolated: false,
       isolationMechanism: "unsupported",
-      details: "Untrusted plugin execution requires container or cgroup boundary. Self-hosted production host lacks OS container boundary.",
+      details:
+        "Untrusted marketplace plugin execution denied: requires independent per-plugin isolation boundary (gVisor/bwrap/container). Host container presence alone is insufficient for multi-tenant untrusted execution.",
     };
   }
 
+  // Curated operator or community reviewed plugins run under restricted child process
   return {
     isIsolated: true,
     isolationMechanism: "restricted_process",
-    details: "Restricted process boundary active for curated/operator plugin",
+    details: "Restricted process boundary active with scrubbed environment and strict resource ceilings for operator/reviewed plugin",
   };
 }
 
@@ -221,19 +208,63 @@ export class Tier2PluginSupervisor extends EventEmitter {
       ...(entrypointPath ? { VIBRESS_PLUGIN_ENTRYPOINT: entrypointPath } : {}),
     };
 
+    const isProduction = process.env.NODE_ENV === "production";
     let script = this.workerScriptPath;
-    if (!script || !existsSync(script)) {
-      const candidates = [
-        path.resolve(__dirname, "tier2-sandbox-worker.js"),
-        path.resolve(__dirname, "../../dist/runtime/tier2-sandbox-worker.js"),
-        path.resolve(process.cwd(), "packages/domains/plugins/dist/runtime/tier2-sandbox-worker.js"),
-        path.resolve(__dirname, "dist/runtime/tier2-sandbox-worker.js"),
-        path.resolve(__dirname, "tier2-sandbox-worker.ts"),
-        path.resolve(process.cwd(), "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"),
-      ];
-      script = candidates.find((p) => existsSync(p)) || candidates[0];
+
+    if (isProduction) {
+      // Production MUST use compiled JavaScript worker artifact. TypeScript fallback is forbidden.
+      if (script && (!script.endsWith(".js") || !existsSync(script))) {
+        throw new Tier2SupervisorError(
+          "PRODUCTION_WORKER_ARTIFACT_MISSING",
+          `Tier 2 worker JavaScript bundle is invalid or missing at: ${script}. TypeScript execution is forbidden in production.`,
+        );
+      }
+      if (!script) {
+        const productionCandidates = [
+          path.resolve(__dirname, "tier2-sandbox-worker.js"),
+          path.resolve(__dirname, "../../dist/runtime/tier2-sandbox-worker.js"),
+          path.resolve(process.cwd(), "apps/api/dist/tier2-sandbox-worker.js"),
+          path.resolve(process.cwd(), "apps/worker/dist/tier2-sandbox-worker.js"),
+          path.resolve(process.cwd(), "packages/domains/plugins/dist/runtime/tier2-sandbox-worker.js"),
+          path.resolve(__dirname, "dist/runtime/tier2-sandbox-worker.js"),
+        ];
+        script = productionCandidates.find((p) => existsSync(p));
+        if (!script) {
+          throw new Tier2SupervisorError(
+            "PRODUCTION_WORKER_ARTIFACT_MISSING",
+            "Tier 2 worker JavaScript bundle is missing from production installation. Run production build before starting.",
+          );
+        }
+      }
+    } else {
+      // Development and test mode: prefer source .ts so tests always execute latest code without requiring stale builds
+      if (!script || !existsSync(script)) {
+        const devCandidates = [
+          path.resolve(__dirname, "tier2-sandbox-worker.ts"),
+          path.resolve(process.cwd(), "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"),
+          path.resolve(__dirname, "src/runtime/tier2-sandbox-worker.ts"),
+          path.resolve(__dirname, "tier2-sandbox-worker.js"),
+          path.resolve(__dirname, "../../dist/runtime/tier2-sandbox-worker.js"),
+          path.resolve(process.cwd(), "packages/domains/plugins/dist/runtime/tier2-sandbox-worker.js"),
+          path.resolve(__dirname, "dist/runtime/tier2-sandbox-worker.js"),
+        ];
+        script = devCandidates.find((p) => existsSync(p));
+        if (!script) {
+          throw new Tier2SupervisorError(
+            "WORKER_ARTIFACT_NOT_FOUND",
+            "Tier 2 worker artifact could not be resolved from source or dist directories.",
+          );
+        }
+      }
     }
-    const isTypeScript = Boolean(script?.endsWith(".ts"));
+
+    const isTypeScript = Boolean(script.endsWith(".ts"));
+    if (isProduction && isTypeScript) {
+      throw new Tier2SupervisorError(
+        "PRODUCTION_WORKER_ARTIFACT_MISSING",
+        "TypeScript worker fallback is strictly prohibited in production.",
+      );
+    }
 
     const nodeArgs = [
       `--max-old-space-size=${this.maxOldSpaceSizeMb}`,
@@ -247,6 +278,9 @@ export class Tier2PluginSupervisor extends EventEmitter {
       execArgv: nodeArgs,
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
+
+    child.stdout?.resume();
+    child.stderr?.resume();
 
     const active: ActiveProcess = {
       child,
@@ -265,7 +299,26 @@ export class Tier2PluginSupervisor extends EventEmitter {
           if (pending) {
             clearTimeout(pending.timer);
             active.pendingRequests.delete(envelope.id);
-            pending.resolve(envelope.payload);
+            const resPayload = envelope.payload as any;
+            if (resPayload && typeof resPayload === "object" && resPayload.ok === false && resPayload.error) {
+              pending.reject(
+                new Tier2SupervisorError(
+                  resPayload.error.code || "INVOCATION_FAILED",
+                  resPayload.error.message || "Plugin invocation failed",
+                ),
+              );
+            } else if (resPayload && typeof resPayload === "object" && resPayload.ok === true && "data" in resPayload) {
+              pending.resolve(resPayload.data);
+            } else if (resPayload && typeof resPayload === "object" && resPayload.error) {
+              pending.reject(
+                new Tier2SupervisorError(
+                  resPayload.error.code || "INVOCATION_FAILED",
+                  resPayload.error.message || "Plugin invocation failed",
+                ),
+              );
+            } else {
+              pending.resolve(resPayload);
+            }
           }
         } else if (envelope.type === "capability_request") {
           // M7.4 Security Fix: Resolve authorization strictly from Host-held pending invocation context
@@ -375,6 +428,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     try {
       if (active.child.connected) active.child.disconnect();
       active.child.kill("SIGKILL");
+      active.child.unref();
     } catch {
       // Child already terminated
     }
@@ -419,6 +473,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       payload: {
         operation,
         data: payload,
+        grantedCapabilities: context.grantedCapabilities ?? [],
       },
     }, active.sessionKey);
 

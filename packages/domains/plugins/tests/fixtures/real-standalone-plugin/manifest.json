@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "vibressApiVersion": "1.0.0",
   "description": "Production real plugin fixture for Tier 2 execution integration tests",
-  "entrypoint": "dist/index.js",
+  "entrypoint": "release/index.js",
   "capabilities": [
     "extension.storage.read",
     "extension.storage.write",
