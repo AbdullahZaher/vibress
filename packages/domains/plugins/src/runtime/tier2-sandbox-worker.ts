@@ -14,6 +14,34 @@ if (!sessionKey || !pluginId || !releaseDigest) {
   process.exit(1);
 }
 
+import * as net from "node:net";
+
+let currentGrantedCapabilities: readonly string[] = [];
+
+// Intercept outbound direct network sockets: disallow unless granted "extension.network"
+const originalSocketConnect = net.Socket.prototype.connect;
+(net.Socket.prototype as any).connect = function (this: net.Socket, ...args: any[]) {
+  if (!currentGrantedCapabilities.includes("extension.network")) {
+    const err = new Error("DIRECT_NETWORK_ACCESS_DENIED: Outbound network connections are forbidden without Host-granted 'extension.network' capability");
+    (err as any).code = "ECONNREFUSED";
+    process.nextTick(() => {
+      this.emit("error", err);
+    });
+    return this;
+  }
+  return (originalSocketConnect as any).apply(this, args);
+};
+
+if (typeof globalThis.fetch === "function") {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
+    if (!currentGrantedCapabilities.includes("extension.network")) {
+      return Promise.reject(new Error("DIRECT_NETWORK_ACCESS_DENIED: Outbound fetch is forbidden without Host-granted 'extension.network' capability"));
+    }
+    return originalFetch(input, init);
+  };
+}
+
 // Sandbox worker state
 let isTerminating = false;
 let loadedPluginModule: any = null;
@@ -134,6 +162,7 @@ process.on("message", async (rawMsg: unknown) => {
         data: unknown;
         grantedCapabilities?: string[];
       };
+      currentGrantedCapabilities = grantedCapabilities;
       let result: unknown;
 
       await ensurePluginLoaded();
@@ -152,6 +181,36 @@ process.on("message", async (rawMsg: unknown) => {
           jwtSecret: process.env.JWT_SECRET || null,
           keyring: process.env.KEYRING_PRIMARY || null,
         };
+      } else if (operation === "malicious_fs_probe") {
+        const probeTarget = (data as { targetPath?: string })?.targetPath || "/etc/hosts";
+        try {
+          const fs = await import("node:fs/promises");
+          const content = await fs.readFile(probeTarget, "utf8");
+          result = { readSuccess: true, bytesRead: content.length };
+        } catch (err: unknown) {
+          result = { readSuccess: false, error: (err as Error).message };
+        }
+      } else if (operation === "malicious_net_probe") {
+        try {
+          const net = await import("node:net");
+          const sock = net.createConnection({ host: "127.0.0.1", port: 5433, timeout: 500 });
+          await new Promise((resolve, reject) => {
+            sock.on("connect", () => { sock.destroy(); resolve(true); });
+            sock.on("error", reject);
+            sock.on("timeout", () => { sock.destroy(); reject(new Error("ETIMEDOUT")); });
+          });
+          result = { connected: true };
+        } catch (err: unknown) {
+          result = { connected: false, error: (err as Error).message };
+        }
+      } else if (operation === "malicious_process_probe") {
+        try {
+          const cp = await import("node:child_process");
+          const output = cp.execSync("whoami", { timeout: 1000 }).toString().trim();
+          result = { spawned: true, user: output };
+        } catch (err: unknown) {
+          result = { spawned: false, error: (err as Error).message };
+        }
       } else if (operation === "simulate_crash") {
         process.exit(137);
       } else if (operation === "infinite_loop") {

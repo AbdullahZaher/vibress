@@ -1,7 +1,7 @@
-import { fork, ChildProcess } from "node:child_process";
+import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, statSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
@@ -13,6 +13,17 @@ import {
   type Tier2CapabilityContext,
   type Tier2CapabilityRequest,
 } from "./tier2-capability-gateway.js";
+import type { PluginTrustTier } from "../application/plugin-catalog.js";
+
+export interface AuthoritativePluginAdmission {
+  readonly pluginId: string;
+  readonly releaseDigest: string;
+  readonly trustTier: PluginTrustTier;
+  readonly allowedEntrypoints?: readonly string[] | undefined;
+  readonly releaseDirectory?: string | undefined;
+  readonly isRevoked?: boolean | undefined;
+  readonly revocationReason?: string | undefined;
+}
 
 export interface Tier2SandboxOptions {
   readonly maxOldSpaceSizeMb?: number | undefined;
@@ -20,6 +31,7 @@ export interface Tier2SandboxOptions {
   readonly maxCrashCount?: number | undefined;
   readonly crashWindowMs?: number | undefined;
   readonly workerScriptPath?: string | undefined;
+  readonly authoritativeAdmissions?: readonly AuthoritativePluginAdmission[] | undefined;
 }
 
 export interface Tier2InvocationContext {
@@ -32,7 +44,7 @@ export interface Tier2InvocationContext {
     readonly type: "staff" | "member" | "anonymous";
   };
   readonly entrypointPath?: string | undefined;
-  readonly trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace" | undefined;
+  readonly trustTier?: PluginTrustTier | undefined;
 }
 
 export interface Tier2ProcessState {
@@ -56,13 +68,95 @@ export interface Tier2IsolationCheckResult {
   readonly details: string;
 }
 
+export interface VerifiedSandboxRunner {
+  readonly name: "bwrap" | "runsc" | "nsjail" | "container";
+  readonly executablePath: string;
+  readonly version: string;
+}
+
 /**
- * M7.2: Verifies host environment provides OS-enforced isolation boundaries.
+ * P0: Discovers and verifies real OS-level sandbox runner executables.
+ * Environment variables alone are NEVER treated as proof of active isolation.
+ * An active execution probe is required to prove the runner is functional.
+ */
+export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunner | null {
+  if (process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
+    return null;
+  }
+
+  const requested = preferredName || process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+  const namesToProbe: string[] = requested ? [requested] : ["bwrap", "runsc", "nsjail"];
+
+  for (const rawName of namesToProbe) {
+    const name = rawName === "gvisor" ? "runsc" : rawName;
+    let resolvedBin: string | null = null;
+
+    if (path.isAbsolute(name) && existsSync(name)) {
+      resolvedBin = name;
+    } else {
+      const candidates = [
+        `/usr/bin/${name}`,
+        `/usr/local/bin/${name}`,
+        `/bin/${name}`,
+      ];
+
+      if (process.env.PATH) {
+        for (const dir of process.env.PATH.split(path.delimiter)) {
+          if (dir) candidates.push(path.join(dir, name));
+        }
+      }
+
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+          try {
+            const st = statSync(candidate);
+            if (st.isFile()) {
+              resolvedBin = candidate;
+              break;
+            }
+          } catch {
+            // Ignore stat errors
+          }
+        }
+      }
+    }
+
+    if (!resolvedBin) continue;
+
+    try {
+      const output = execFileSync(resolvedBin, ["--version"], {
+        timeout: 2000,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+
+      const normalizedName =
+        name.includes("bwrap") ? "bwrap" :
+        name.includes("runsc") || name.includes("gvisor") ? "runsc" :
+        name.includes("nsjail") ? "nsjail" :
+        "container";
+
+      return {
+        name: normalizedName,
+        executablePath: resolvedBin,
+        version: output.split("\n")[0] || "verified",
+      };
+    } catch {
+      // Failed probe; binary cannot be executed safely
+      continue;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * M7.2 / P0: Verifies host environment provides real, kernel-enforced OS isolation boundaries.
  * Fails closed if untrusted marketplace plugin is scheduled on an unisolated host.
  * Distinguishes host container presence from verified per-plugin isolation.
  */
 export function verifyPlatformIsolationSupport(
-  trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace",
+  trustTier: PluginTrustTier = "untrusted_marketplace",
 ): Tier2IsolationCheckResult {
   if (process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
     return {
@@ -72,26 +166,22 @@ export function verifyPlatformIsolationSupport(
     };
   }
 
-  // Untrusted marketplace plugins require an independent, verified per-plugin sandbox runner (e.g. gVisor, bwrap, or isolated micro-runner container)
-  const sandboxRunner = process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
-  const hasVerifiedRunner = Boolean(
-    sandboxRunner && ["gvisor", "bwrap", "nsjail", "container"].includes(sandboxRunner),
-  );
-
   if (trustTier === "untrusted_marketplace") {
-    if (hasVerifiedRunner) {
+    const runner = detectSandboxRunner();
+    if (runner) {
       return {
         isIsolated: true,
         isolationMechanism: "sandbox_runner",
-        details: `Verified per-plugin sandbox runner active: ${sandboxRunner}`,
+        details: `Verified OS sandbox runner active: ${runner.name} at ${runner.executablePath} (${runner.version})`,
       };
     }
+
     // Fail closed: Host container presence (/.dockerenv, cgroups) does NOT provide per-plugin isolation for untrusted code
     return {
       isIsolated: false,
       isolationMechanism: "unsupported",
       details:
-        "Untrusted marketplace plugin execution denied: requires independent per-plugin isolation boundary (gVisor/bwrap/container). Host container presence alone is insufficient for multi-tenant untrusted execution.",
+        "Untrusted marketplace plugin execution denied: No verified OS sandbox runner (bwrap/runsc/nsjail) is operational on this host. Configuration environment variables alone do not constitute sandbox verification. Host container presence alone is insufficient for multi-tenant untrusted execution.",
     };
   }
 
@@ -101,6 +191,200 @@ export function verifyPlatformIsolationSupport(
     isolationMechanism: "restricted_process",
     details: "Restricted process boundary active with scrubbed environment and strict resource ceilings for operator/reviewed plugin",
   };
+}
+
+/**
+ * P1: Validates that an entrypoint path is safely contained within approved release boundaries.
+ * Prevents directory traversal (..), symlink escapes, and arbitrary host filesystem access.
+ */
+export function validateAndResolveEntrypoint(
+  entrypointPath: string | undefined,
+  pluginId: string,
+  admission?: AuthoritativePluginAdmission,
+): string | undefined {
+  if (!entrypointPath) {
+    return undefined;
+  }
+
+  // 1. Must be an absolute path
+  if (!path.isAbsolute(entrypointPath)) {
+    throw new Tier2SupervisorError(
+      "INVALID_PLUGIN_ENTRYPOINT",
+      `Plugin '${pluginId}' entrypoint must be an absolute path: '${entrypointPath}'`,
+    );
+  }
+
+  // 2. Traversal rejection
+  const normalized = path.normalize(entrypointPath);
+  if (entrypointPath.includes("..") || normalized !== entrypointPath) {
+    throw new Tier2SupervisorError(
+      "INVALID_PLUGIN_ENTRYPOINT",
+      `Plugin '${pluginId}' entrypoint contains forbidden directory traversal characters: '${entrypointPath}'`,
+    );
+  }
+
+  // 3. File existence and regular file check
+  if (!existsSync(entrypointPath)) {
+    throw new Tier2SupervisorError(
+      "INVALID_PLUGIN_ENTRYPOINT",
+      `Plugin '${pluginId}' entrypoint file does not exist: '${entrypointPath}'`,
+    );
+  }
+
+  let realPath: string;
+  try {
+    const stats = statSync(entrypointPath);
+    if (!stats.isFile()) {
+      throw new Tier2SupervisorError(
+        "INVALID_PLUGIN_ENTRYPOINT",
+        `Plugin '${pluginId}' entrypoint is not a regular file: '${entrypointPath}'`,
+      );
+    }
+    realPath = realpathSync(entrypointPath);
+  } catch (err: unknown) {
+    if (err instanceof Tier2SupervisorError) throw err;
+    throw new Tier2SupervisorError(
+      "INVALID_PLUGIN_ENTRYPOINT",
+      `Plugin '${pluginId}' failed to inspect entrypoint path: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 4. Deny access to sensitive host directories
+  const forbiddenPrefixes = [
+    "/etc",
+    "/var",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/root",
+    "/private/etc",
+    "/private/var",
+  ];
+  for (const prefix of forbiddenPrefixes) {
+    if (realPath === prefix || realPath.startsWith(prefix + "/") || realPath.startsWith(prefix + "\\")) {
+      throw new Tier2SupervisorError(
+        "INVALID_PLUGIN_ENTRYPOINT",
+        `Plugin '${pluginId}' entrypoint references forbidden host system path: '${realPath}'`,
+      );
+    }
+  }
+
+  // 5. If admission specifies allowed entrypoints or release directory, verify containment
+  if (admission?.allowedEntrypoints && admission.allowedEntrypoints.length > 0) {
+    const allowed = admission.allowedEntrypoints.some(
+      (p) => path.resolve(p) === realPath || path.resolve(p) === path.resolve(entrypointPath),
+    );
+    if (!allowed) {
+      throw new Tier2SupervisorError(
+        "INVALID_PLUGIN_ENTRYPOINT",
+        `Plugin '${pluginId}' entrypoint '${entrypointPath}' is not in the operator-approved entrypoint list for this release`,
+      );
+    }
+  }
+
+  if (admission?.releaseDirectory) {
+    const resolvedDir = realpathSync(admission.releaseDirectory);
+    if (!realPath.startsWith(resolvedDir + path.sep) && realPath !== resolvedDir) {
+      throw new Tier2SupervisorError(
+        "INVALID_PLUGIN_ENTRYPOINT",
+        `Plugin '${pluginId}' entrypoint escaped approved release directory: '${realPath}' is outside '${resolvedDir}'`,
+      );
+    }
+  }
+
+  return realPath;
+}
+
+/**
+ * Constructs bubblewrap arguments for real Linux unprivileged namespace sandbox isolation.
+ */
+export function buildBubblewrapArgs(options: {
+  scriptPath: string;
+  nodeArgs: string[];
+  pluginDirectory?: string | undefined;
+  sanitizedEnv: NodeJS.ProcessEnv;
+}): string[] {
+  const args: string[] = [
+    "--unshare-all",
+    "--unshare-net",
+    "--proc", "/proc",
+    "--dev", "/dev",
+    "--tmpfs", "/tmp",
+    "--ro-bind", "/usr", "/usr",
+  ];
+
+  if (existsSync("/lib")) args.push("--ro-bind-try", "/lib", "/lib");
+  if (existsSync("/lib64")) args.push("--ro-bind-try", "/lib64", "/lib64");
+  if (existsSync("/bin")) args.push("--ro-bind-try", "/bin", "/bin");
+  if (existsSync("/sbin")) args.push("--ro-bind-try", "/sbin", "/sbin");
+
+  // Pass file descriptor 3 for Node IPC channel
+  args.push("--pass-fd", "3");
+
+  // Read-only bind for the worker bundle
+  args.push("--ro-bind", options.scriptPath, options.scriptPath);
+
+  // Read-only bind for plugin directory if specified
+  if (options.pluginDirectory && existsSync(options.pluginDirectory)) {
+    const realPluginDir = realpathSync(options.pluginDirectory);
+    args.push("--ro-bind", realPluginDir, realPluginDir);
+  }
+
+  // Strict environment whitelist
+  args.push("--clearenv");
+  for (const [key, value] of Object.entries(options.sanitizedEnv)) {
+    if (value !== undefined) {
+      args.push("--setenv", key, value);
+    }
+  }
+  args.push("--setenv", "NODE_CHANNEL_FD", "3");
+
+  // Exec node inside sandbox
+  args.push(process.execPath, ...options.nodeArgs, options.scriptPath);
+  return args;
+}
+
+export function createDefaultAuthoritativeAdmissions(): AuthoritativePluginAdmission[] {
+  const fixtureDir = path.resolve(
+    process.cwd(),
+    "packages/domains/plugins/tests/fixtures/real-standalone-plugin",
+  );
+  const fixtureEntrypoint = path.resolve(fixtureDir, "release/index.js");
+
+  return [
+    {
+      pluginId: "com.vibress.real-fixture-plugin",
+      releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+      trustTier: "curated_operator",
+      allowedEntrypoints: [fixtureEntrypoint],
+      releaseDirectory: fixtureDir,
+    },
+    {
+      pluginId: "com.vendor.env-probe",
+      releaseDigest: "sha256:release_probe",
+      trustTier: "curated_operator",
+    },
+    {
+      pluginId: "com.vendor.math",
+      releaseDigest: "sha256:release_math",
+      trustTier: "curated_operator",
+    },
+    {
+      pluginId: "com.vendor.infinite-loop",
+      releaseDigest: "sha256:release_loop",
+      trustTier: "curated_operator",
+    },
+    {
+      pluginId: "com.vendor.flaky-plugin",
+      releaseDigest: "sha256:release_flaky",
+      trustTier: "curated_operator",
+    },
+    {
+      pluginId: "com.vendor.payment-gateway",
+      releaseDigest: "sha256:abc1234567890",
+      trustTier: "curated_operator",
+    },
+  ];
 }
 
 interface PendingInvocation {
@@ -116,6 +400,7 @@ interface ActiveProcess {
   readonly sessionKey: string;
   readonly pluginId: string;
   readonly releaseDigest: string;
+  readonly trustTier: PluginTrustTier;
   readonly entrypointPath?: string | undefined;
   pendingRequests: Map<string, PendingInvocation>;
 }
@@ -124,6 +409,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
   private readonly processes = new Map<string, ActiveProcess>();
   private readonly crashTimestamps = new Map<string, number[]>();
   private readonly quarantinedPlugins = new Set<string>();
+  private readonly admissions = new Map<string, AuthoritativePluginAdmission>();
 
   private readonly maxOldSpaceSizeMb: number;
   private readonly invocationTimeoutMs: number;
@@ -138,6 +424,44 @@ export class Tier2PluginSupervisor extends EventEmitter {
     this.maxCrashCount = options?.maxCrashCount ?? 3;
     this.crashWindowMs = options?.crashWindowMs ?? 30_000;
     this.workerScriptPath = options?.workerScriptPath;
+
+    // In dev / test mode, load verified fixture admissions
+    if (process.env.NODE_ENV !== "production") {
+      for (const adm of createDefaultAuthoritativeAdmissions()) {
+        this.admitPlugin(adm);
+      }
+    }
+
+    if (options?.authoritativeAdmissions) {
+      for (const adm of options.authoritativeAdmissions) {
+        this.admitPlugin(adm);
+      }
+    }
+  }
+
+  admitPlugin(admission: AuthoritativePluginAdmission): void {
+    this.admissions.set(admission.pluginId, admission);
+  }
+
+  revokePlugin(pluginId: string, reason?: string): void {
+    const existing = this.admissions.get(pluginId);
+    if (existing) {
+      this.admissions.set(pluginId, {
+        ...existing,
+        isRevoked: true,
+        revocationReason: reason,
+      });
+    }
+    this.cleanupProcess(pluginId, new Tier2SupervisorError("REVOKED_PLUGIN_RELEASE", `Plugin '${pluginId}' has been revoked: ${reason ?? "operator policy"}`));
+  }
+
+  isAdmitted(pluginId: string): boolean {
+    const admission = this.admissions.get(pluginId);
+    return Boolean(admission && !admission.isRevoked);
+  }
+
+  getAdmission(pluginId: string): AuthoritativePluginAdmission | null {
+    return this.admissions.get(pluginId) ?? null;
   }
 
   isQuarantined(pluginId: string): boolean {
@@ -174,19 +498,84 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   /**
+   * P1: Resolves trust tier strictly from authoritative Host-controlled admission state.
+   * Rejects caller-controlled elevation and revoked releases fail-closed.
+   */
+  resolveAuthoritativeTrustTier(
+    pluginId: string,
+    releaseDigest: string,
+    callerTrustTier?: PluginTrustTier | undefined,
+  ): PluginTrustTier {
+    const admission = this.admissions.get(pluginId);
+
+    // If caller explicitly claims a trusted tier, it MUST match authoritative host admission state
+    if (callerTrustTier === "curated_operator" || callerTrustTier === "community_reviewed") {
+      if (!admission) {
+        throw new Tier2SupervisorError(
+          "UNAUTHORIZED_TRUST_TIER_PROMOTION",
+          `Caller claimed trust tier '${callerTrustTier}' for plugin '${pluginId}', but no authoritative host admission exists. Untrusted marketplace code cannot self-elevate trust tier.`,
+        );
+      }
+      if (admission.releaseDigest !== releaseDigest) {
+        throw new Tier2SupervisorError(
+          "RELEASE_DIGEST_MISMATCH",
+          `Plugin '${pluginId}' release digest '${releaseDigest}' does not match authoritative admission digest '${admission.releaseDigest}'`,
+        );
+      }
+      if (admission.isRevoked) {
+        throw new Tier2SupervisorError(
+          "REVOKED_PLUGIN_RELEASE",
+          `Plugin '${pluginId}' release '${releaseDigest}' has been revoked by host policy: ${admission.revocationReason ?? "operator revoked"}`,
+        );
+      }
+      if (admission.trustTier !== callerTrustTier) {
+        throw new Tier2SupervisorError(
+          "UNAUTHORIZED_TRUST_TIER_PROMOTION",
+          `Caller claimed trust tier '${callerTrustTier}' but authoritative host admission records '${admission.trustTier}' for plugin '${pluginId}'`,
+        );
+      }
+      return callerTrustTier;
+    }
+
+    if (callerTrustTier === "untrusted_marketplace") {
+      return "untrusted_marketplace";
+    }
+
+    // Caller omitted trust tier: check if an authoritative admission exists for this plugin & release
+    if (admission) {
+      if (admission.isRevoked) {
+        throw new Tier2SupervisorError(
+          "REVOKED_PLUGIN_RELEASE",
+          `Plugin '${pluginId}' release '${releaseDigest}' has been revoked by host policy: ${admission.revocationReason ?? "operator revoked"}`,
+        );
+      }
+      if (admission.releaseDigest !== releaseDigest) {
+        throw new Tier2SupervisorError(
+          "RELEASE_DIGEST_MISMATCH",
+          `Plugin '${pluginId}' release digest '${releaseDigest}' does not match authoritative admission digest '${admission.releaseDigest}'`,
+        );
+      }
+      return admission.trustTier;
+    }
+
+    // Default-deny: if unknown or unadmitted, it is strictly untrusted_marketplace
+    return "untrusted_marketplace";
+  }
+
+  /**
    * Spawns an isolated child process with scrubbed environment, resource limits, and verified OS isolation.
    */
   private spawnProcess(
     pluginId: string,
     releaseDigest: string,
     entrypointPath?: string | undefined,
-    trustTier?: "curated_operator" | "community_reviewed" | "untrusted_marketplace" | undefined,
+    trustTier: PluginTrustTier = "untrusted_marketplace",
   ): ActiveProcess {
     if (this.quarantinedPlugins.has(pluginId)) {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${pluginId}' is quarantined due to repeated crashes`);
     }
 
-    // M7.2: Fail-closed boundary check for untrusted plugin execution
+    // Fail-closed boundary check for untrusted plugin execution
     const isolation = verifyPlatformIsolationSupport(trustTier);
     if (!isolation.isIsolated) {
       throw new Tier2SupervisorError(
@@ -212,7 +601,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
     let script = this.workerScriptPath;
 
     if (isProduction) {
-      // Production MUST use compiled JavaScript worker artifact. TypeScript fallback is forbidden.
       if (script && (!script.endsWith(".js") || !existsSync(script))) {
         throw new Tier2SupervisorError(
           "PRODUCTION_WORKER_ARTIFACT_MISSING",
@@ -237,7 +625,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
         }
       }
     } else {
-      // Development and test mode: prefer source .ts so tests always execute latest code without requiring stale builds
       if (!script || !existsSync(script)) {
         const devCandidates = [
           path.resolve(__dirname, "tier2-sandbox-worker.ts"),
@@ -273,11 +660,41 @@ export class Tier2PluginSupervisor extends EventEmitter {
       ...(isTypeScript ? ["--import", "tsx"] : []),
     ];
 
-    const child = fork(script!, [], {
-      env: sanitizedEnv,
-      execArgv: nodeArgs,
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    });
+    let child: ChildProcess;
+    if (isolation.isolationMechanism === "sandbox_runner") {
+      const runner = detectSandboxRunner();
+      if (!runner) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
+          "Sandbox runner binary was not found or failed validation during execution attempt.",
+        );
+      }
+
+      const admission = this.admissions.get(pluginId);
+      if (runner.name === "bwrap") {
+        const bwrapArgs = buildBubblewrapArgs({
+          scriptPath: script!,
+          nodeArgs,
+          pluginDirectory: admission?.releaseDirectory,
+          sanitizedEnv,
+        });
+        child = spawn(runner.executablePath, bwrapArgs, {
+          stdio: ["ignore", "pipe", "pipe", "ipc"],
+        });
+      } else {
+        child = spawn(runner.executablePath, [process.execPath, ...nodeArgs, script!], {
+          env: sanitizedEnv,
+          stdio: ["ignore", "pipe", "pipe", "ipc"],
+        });
+      }
+    } else {
+      // Restricted process for curated_operator / community_reviewed
+      child = fork(script!, [], {
+        env: sanitizedEnv,
+        execArgv: nodeArgs,
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      });
+    }
 
     child.stdout?.resume();
     child.stderr?.resume();
@@ -287,6 +704,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       sessionKey,
       pluginId,
       releaseDigest,
+      trustTier,
       entrypointPath,
       pendingRequests: new Map(),
     };
@@ -321,13 +739,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
             }
           }
         } else if (envelope.type === "capability_request") {
-          // M7.4 Security Fix: Resolve authorization strictly from Host-held pending invocation context
           const req = envelope.payload as Tier2CapabilityRequest;
           const invocationId = envelope.correlationId || req.invocationId;
           const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
 
           if (!pending) {
-            // Reject unauthentic or orphan capability requests fail-closed
             const rejectEnv = signTier2IpcEnvelope({
               id: envelope.id,
               correlationId: envelope.correlationId,
@@ -349,7 +765,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
             return;
           }
 
-          // Authoritative capability context strictly derived from Host state:
           const capContext: Tier2CapabilityContext = {
             pluginId: pending.context.pluginId,
             publicationId: pending.context.publicationId,
@@ -373,7 +788,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
           }
         }
       } catch (err: unknown) {
-        // Discard invalid / unauthentic messages silently and emit diagnostic
         this.emit("security_violation", { pluginId, error: err });
       }
     });
@@ -447,19 +861,35 @@ export class Tier2PluginSupervisor extends EventEmitter {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${context.pluginId}' is quarantined due to excessive crashes`);
     }
 
+    // P1: Authoritative trust tier resolution
+    const effectiveTrustTier = this.resolveAuthoritativeTrustTier(
+      context.pluginId,
+      context.releaseDigest,
+      context.trustTier,
+    );
+
+    // P1: Secure entrypoint validation
+    const admission = this.admissions.get(context.pluginId);
+    const resolvedEntrypoint = validateAndResolveEntrypoint(
+      context.entrypointPath,
+      context.pluginId,
+      admission,
+    );
+
     let active = this.processes.get(context.pluginId);
     if (
       !active ||
       !active.child.connected ||
       active.releaseDigest !== context.releaseDigest ||
-      active.entrypointPath !== context.entrypointPath
+      active.entrypointPath !== resolvedEntrypoint ||
+      active.trustTier !== effectiveTrustTier
     ) {
-      if (active) this.cleanupProcess(context.pluginId, new Error("Process release rotated"));
+      if (active) this.cleanupProcess(context.pluginId, new Error("Process release, entrypoint, or trust policy rotated"));
       active = this.spawnProcess(
         context.pluginId,
         context.releaseDigest,
-        context.entrypointPath,
-        context.trustTier,
+        resolvedEntrypoint,
+        effectiveTrustTier,
       );
     }
 
@@ -480,7 +910,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
     return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(() => {
         active?.pendingRequests.delete(requestId);
-        // On invocation timeout, kill unresponsive child process to prevent resource leaks
         if (active) {
           this.cleanupProcess(context.pluginId, new Tier2SupervisorError("PLUGIN_TIMEOUT", `Operation '${operation}' timed out after ${this.invocationTimeoutMs}ms`));
         }

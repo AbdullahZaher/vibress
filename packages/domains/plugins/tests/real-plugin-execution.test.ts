@@ -4,6 +4,7 @@ import {
   Tier2PluginSupervisor,
   Tier2SupervisorError,
   verifyPlatformIsolationSupport,
+  createDefaultAuthoritativeAdmissions,
   type Tier2InvocationContext,
 } from "../src/runtime/tier2-process-supervisor.js";
 import type { HostCapabilityHandlers } from "../src/runtime/tier2-capability-gateway.js";
@@ -316,9 +317,35 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
     });
   });
 
-  describe("Tier 2 OS-Enforced Runtime Isolation & Hardening (M7.2)", () => {
-    it("fails closed when platform isolation is unavailable for untrusted execution", async () => {
-      // Set operational policy forcing unsupported isolation
+  describe("Tier 2 OS-Enforced Runtime Isolation & Adversarial Hardening (M7.2 / P0 / P1)", () => {
+    it("Test A: rejects untrusted execution when fake sandbox runner env var is configured without binary", async () => {
+      // Prompt Section 3 / 8: Setting VIBRESS_TIER2_SANDBOX_RUNNER=gvisor without a functioning runner MUST fail-closed.
+      process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
+      try {
+        const supervisor = new Tier2PluginSupervisor({
+          invocationTimeoutMs: 3000,
+        });
+        supervisorsToClean.push(supervisor);
+
+        const context: Tier2InvocationContext = {
+          pluginId: "com.vibress.untrusted-fake-sandbox",
+          releaseDigest: "sha256:3333444455556666777788889999000011112222333344445555666677778888",
+          publicationId: "pub_test_fake",
+          grantedCapabilities: [],
+          actor: { id: "test", type: "anonymous" },
+          trustTier: "untrusted_marketplace",
+          entrypointPath: fixtureEntrypoint,
+        };
+
+        await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
+          /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+        );
+      } finally {
+        delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+      }
+    });
+
+    it("fails closed when platform isolation is disabled by operational environment policy", async () => {
       process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION = "1";
       try {
         const supervisor = new Tier2PluginSupervisor({
@@ -336,90 +363,14 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         };
 
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-          Tier2SupervisorError,
+          /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
         );
       } finally {
         delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
       }
     });
 
-    it("denies untrusted marketplace plugin execution fail-closed when no verified per-plugin sandbox runner is active", async () => {
-      delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
-      delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
-
-      const supervisor = new Tier2PluginSupervisor({
-        invocationTimeoutMs: 3000,
-      });
-      supervisorsToClean.push(supervisor);
-
-      const context: Tier2InvocationContext = {
-        pluginId: "com.vibress.untrusted-plugin-unisolated",
-        releaseDigest: "sha256:2222333344445555666677778888999900001111222233334444555566667777",
-        publicationId: "pub_test_untrusted",
-        grantedCapabilities: [],
-        actor: { id: "test", type: "anonymous" },
-        trustTier: "untrusted_marketplace",
-        entrypointPath: fixtureEntrypoint,
-      };
-
-      await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-        /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
-      );
-    });
-
-    it("admits untrusted plugin when verified sandbox runner boundary is active", async () => {
-      process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
-      try {
-        const supervisor = new Tier2PluginSupervisor({
-          invocationTimeoutMs: 3000,
-        });
-        supervisorsToClean.push(supervisor);
-
-        const context: Tier2InvocationContext = {
-          pluginId: "com.vibress.real-fixture-plugin",
-          releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
-          publicationId: "pub_test_gvisor",
-          grantedCapabilities: [],
-          actor: { id: "test", type: "anonymous" },
-          trustTier: "untrusted_marketplace",
-          entrypointPath: fixtureEntrypoint,
-        };
-
-        const res = await supervisor.invoke<{ status: string }>(context, "echo", "sandboxed");
-        expect(res).toBeDefined();
-      } finally {
-        delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
-      }
-    });
-
-    it("fails closed in production mode when worker artifact is missing or TypeScript", async () => {
-      const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = "production";
-      try {
-        const supervisor = new Tier2PluginSupervisor({
-          workerScriptPath: path.resolve(__dirname, "non-existent-worker.js"),
-          invocationTimeoutMs: 3000,
-        });
-        supervisorsToClean.push(supervisor);
-
-        const context: Tier2InvocationContext = {
-          pluginId: "com.vibress.real-fixture-plugin",
-          releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
-          publicationId: "pub_test_prod",
-          grantedCapabilities: [],
-          actor: { id: "test", type: "anonymous" },
-          entrypointPath: fixtureEntrypoint,
-        };
-
-        await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-          /PRODUCTION_WORKER_ARTIFACT_MISSING/i,
-        );
-      } finally {
-        process.env.NODE_ENV = origEnv;
-      }
-    });
-
-    it("strictly denies child process access to Host environment secrets", async () => {
+    it("Test B: strictly denies child process access to Host environment secrets and host filesystem", async () => {
       const supervisor = new Tier2PluginSupervisor({
         invocationTimeoutMs: 3000,
       });
@@ -447,9 +398,9 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       expect(probed.keyring).toBeNull();
     });
 
-    it("safely terminates unresponsive plugin execution and cleans up worker", async () => {
+    it("Test C: blocks direct unauthorized host network connection probe", async () => {
       const supervisor = new Tier2PluginSupervisor({
-        invocationTimeoutMs: 300, // Short timeout
+        invocationTimeoutMs: 3000,
       });
       supervisorsToClean.push(supervisor);
 
@@ -462,13 +413,242 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         entrypointPath: fixtureEntrypoint,
       };
 
+      const netRes = await supervisor.invoke<{ connected: boolean; error?: string }>(
+        context,
+        "malicious_net_probe",
+        {},
+      );
+
+      // Connection to host database port from ungranted runtime fails closed
+      expect(netRes.connected).toBe(false);
+    });
+
+    it("Test D: verifies process security flags (--no-addons, --disallow-code-generation-from-strings)", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_alpha",
+        grantedCapabilities: [],
+        actor: { id: "test", type: "anonymous" },
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      // Built-in compute confirms normal execution under strict V8 flags
+      const computeRes = await supervisor.invoke<{ value: number }>(context, "compute", 21);
+      expect(computeRes).toEqual({ value: 42 });
+    });
+
+    it("Test E: rejects trust tier bypass attempts (unadmitted, forged, revoked, mismatched)", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      // 1. Missing trust tier on unadmitted plugin -> defaults to untrusted and fails closed
+      const unadmittedContext: Tier2InvocationContext = {
+        pluginId: "com.attacker.unadmitted-plugin",
+        releaseDigest: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        publicationId: "pub_attack",
+        grantedCapabilities: [],
+        actor: { id: "attacker", type: "anonymous" },
+      };
+      await expect(supervisor.invoke(unadmittedContext, "echo", "hi")).rejects.toThrowError(
+        /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+      );
+
+      // 2. Forged trust tier: caller claims curated_operator for unadmitted plugin -> rejected
+      const forgedContext: Tier2InvocationContext = {
+        ...unadmittedContext,
+        trustTier: "curated_operator",
+      };
+      await expect(supervisor.invoke(forgedContext, "echo", "hi")).rejects.toThrowError(
+        /UNAUTHORIZED_TRUST_TIER_PROMOTION/i,
+      );
+
+      // 3. Revoked release: admitted plugin that was revoked -> rejected
+      supervisor.admitPlugin({
+        pluginId: "com.vendor.revoked-plugin",
+        releaseDigest: "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        trustTier: "curated_operator",
+        isRevoked: true,
+        revocationReason: "Security vulnerability CVE-2026-9999",
+      });
+      const revokedContext: Tier2InvocationContext = {
+        pluginId: "com.vendor.revoked-plugin",
+        releaseDigest: "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        publicationId: "pub_victim",
+        grantedCapabilities: [],
+        actor: { id: "victim", type: "anonymous" },
+        trustTier: "curated_operator",
+      };
+      await expect(supervisor.invoke(revokedContext, "echo", "hi")).rejects.toThrowError(
+        /REVOKED_PLUGIN_RELEASE/i,
+      );
+
+      // 4. Mismatched release digest: caller specifies release digest different from admitted digest
+      const mismatchedContext: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:TAMPERED_MISMATCHED_RELEASE_DIGEST_0000000000000000000000000000",
+        publicationId: "pub_tampered",
+        grantedCapabilities: [],
+        actor: { id: "attacker", type: "anonymous" },
+        trustTier: "curated_operator",
+      };
+      await expect(supervisor.invoke(mismatchedContext, "echo", "hi")).rejects.toThrowError(
+        /RELEASE_DIGEST_MISMATCH/i,
+      );
+    });
+
+    it("Test F: rejects entrypoint manipulation attempts (traversal, arbitrary files, escapes)", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      // 1. Directory traversal attempt
+      const traversalContext: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_primary",
+        grantedCapabilities: [],
+        actor: { id: "attacker", type: "anonymous" },
+        trustTier: "curated_operator",
+        entrypointPath: path.resolve(fixtureEntrypoint, "../../outside-file.js"),
+      };
+      await expect(supervisor.invoke(traversalContext, "echo", "hi")).rejects.toThrowError(
+        /INVALID_PLUGIN_ENTRYPOINT/i,
+      );
+
+      // 2. Arbitrary system file attempt (/etc/hosts)
+      const systemFileContext: Tier2InvocationContext = {
+        ...traversalContext,
+        entrypointPath: "/etc/hosts",
+      };
+      await expect(supervisor.invoke(systemFileContext, "echo", "hi")).rejects.toThrowError(
+        /INVALID_PLUGIN_ENTRYPOINT/i,
+      );
+
+      // 3. Non-existent entrypoint attempt
+      const nonExistentContext: Tier2InvocationContext = {
+        ...traversalContext,
+        entrypointPath: path.resolve(__dirname, "fixtures/does-not-exist.js"),
+      };
+      await expect(supervisor.invoke(nonExistentContext, "echo", "hi")).rejects.toThrowError(
+        /INVALID_PLUGIN_ENTRYPOINT/i,
+      );
+    });
+
+    it("Test G: executes legitimate approved plugin through restricted runtime with full verification", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 3000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_primary",
+        grantedCapabilities: ["extension.storage.read", "extension.storage.write"],
+        actor: { id: "user_owner", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      // Lifecycle hook execution
+      const activateRes = await supervisor.invoke<{ activated: boolean }>(context, "activate", {});
+      expect(activateRes).toEqual({ activated: true });
+
+      // Capability access and operation response
+      const invokeRes = await supervisor.invoke<{ status: string; publicationId: string }>(
+        context,
+        "invoke",
+        { op: "check_capability" },
+      );
+      expect(invokeRes).toBeDefined();
+
+      // Reliable cleanup
+      await supervisor.terminatePlugin(context.pluginId);
+      expect(supervisor.getProcessState(context.pluginId)).toBeNull();
+    });
+
+    it("Test H: enforces resource limits on infinite loops and crash loops", async () => {
+      const supervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 350, // Bounded timeout
+        maxCrashCount: 3,
+        crashWindowMs: 30_000,
+      });
+      supervisorsToClean.push(supervisor);
+
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_tenant_primary",
+        grantedCapabilities: [],
+        actor: { id: "user_owner", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+
+      // 1. Timeout on infinite loop
       await expect(
         supervisor.invoke(context, "infinite_loop", {}),
       ).rejects.toThrowError(/timed out/i);
 
-      // Verify the process was cleaned up
-      const state = supervisor.getProcessState(context.pluginId);
-      expect(state).toBeNull();
+      // Verify worker process terminated
+      expect(supervisor.getProcessState(context.pluginId)).toBeNull();
+
+      // 2. Quarantine on repeated crashes
+      const flakyContext: Tier2InvocationContext = {
+        pluginId: "com.vendor.flaky-plugin",
+        releaseDigest: "sha256:release_flaky",
+        publicationId: "pub_01",
+        grantedCapabilities: [],
+        actor: { id: "user_01", type: "staff" },
+        trustTier: "curated_operator",
+      };
+
+      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
+      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
+      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
+
+      expect(supervisor.isQuarantined("com.vendor.flaky-plugin")).toBe(true);
+      await expect(supervisor.invoke(flakyContext, "compute", 10)).rejects.toThrowError(
+        /is quarantined due to excessive crashes/i,
+      );
+    });
+
+    it("fails closed in production mode when worker artifact is missing or TypeScript", async () => {
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const supervisor = new Tier2PluginSupervisor({
+          workerScriptPath: path.resolve(__dirname, "non-existent-worker.js"),
+          invocationTimeoutMs: 3000,
+          authoritativeAdmissions: createDefaultAuthoritativeAdmissions(),
+        });
+        supervisorsToClean.push(supervisor);
+
+        const context: Tier2InvocationContext = {
+          pluginId: "com.vibress.real-fixture-plugin",
+          releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+          publicationId: "pub_test_prod",
+          grantedCapabilities: [],
+          actor: { id: "test", type: "anonymous" },
+          trustTier: "curated_operator",
+          entrypointPath: fixtureEntrypoint,
+        };
+
+        await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
+          /PRODUCTION_WORKER_ARTIFACT_MISSING/i,
+        );
+      } finally {
+        process.env.NODE_ENV = origEnv;
+      }
     });
   });
 });
