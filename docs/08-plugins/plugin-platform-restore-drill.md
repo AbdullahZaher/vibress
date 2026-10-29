@@ -164,6 +164,32 @@ observed API×2/Worker×2 behavior and retained event receipts, measure
 actual recovery time and recovered writes, and secure the operator-signed
 go/no-go report outside the source tree.
 
+## Historical 0042 → 0048 populated core-upgrade drill (pending CI)
+
+An additional **disposable PostgreSQL database** in the M1A CI-only Compose
+project now receives the **exact committed core Drizzle migration SQL and
+journal** from immutable Vibress commit
+[`3f39f29bd34625545ab8a1699415b8c98ee557c7`](https://github.com/AbdullahZaher/vibress/commit/3f39f29bd34625545ab8a1699415b8c98ee557c7)
+(through migration `0042`). The workflow fetches this pinned Git tree and
+fails closed if its SHA or expected migration boundary does not match.
+
+After that historical schema is created, the drill inserts two publications
+(Arabic and English), their independently disabled plugin installations,
+legacy global encrypted-value fixture, publication-specific localized settings,
+and one immutable plugin schema/migration-model record. It snapshots the exact
+persisted rows, runs the **current** production migration runner and candidate
+SQL through `0048`, then compares all historical row values. It reruns the
+candidate migrations to confirm no replay mutation, checks new catalogs begin
+empty and proves append-only ledger enforcement survived the upgrade.
+
+**Evidence requires a successful exact-head CI run containing
+`PLUGIN_HISTORICAL_UPGRADE_PASSED`.** This is a genuine historical
+**database-schema migration with populated rows**, not a full historical
+application runtime or artifact rollback. It deliberately does not build or
+launch the old API/Worker binaries, re-run historical external plugin ESM,
+restore media/Redis/production encryption keys or authorize an irreversible
+plugin schema rollback. Those remain explicit production-release blockers.
+
 ## Signed database restore extension to the disposable M1A drill
 
 The isolated four-process drill is extended to create a second, separately

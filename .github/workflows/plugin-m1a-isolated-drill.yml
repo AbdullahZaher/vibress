@@ -17,6 +17,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+      - name: Fetch pinned historical migration baseline (immutable SHA)
+        run: |
+          git fetch --no-tags --depth=1 origin 3f39f29bd34625545ab8a1699415b8c98ee557c7
+          test "$(git rev-parse --verify 3f39f29bd34625545ab8a1699415b8c98ee557c7^{commit})" = "3f39f29bd34625545ab8a1699415b8c98ee557c7"
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -37,7 +41,9 @@ jobs:
           VIBRESS_M1A_DISPOSABLE_DRILL: "1"
         run: pnpm exec tsx scripts/plugins/drill-signed-fleet.ts
       - name: Check drill shell syntax
-        run: bash -n scripts/plugins/drill-isolated-replica-faults.sh
+        run: |
+          bash -n scripts/plugins/drill-isolated-replica-faults.sh
+          bash -n scripts/plugins/drill-historical-upgrade.sh
       - name: Exercise four live processes and disposable PostgreSQL/Redis outage
         env:
           VIBRESS_M1A_DISPOSABLE_DRILL: "1"

@@ -230,4 +230,10 @@ restored="$("${compose[@]}" exec -T postgres psql -X -U vibress -d vibress_m1a_s
 [[ "$restored" == "1" ]] || die "authenticated restore lost the original sentinel"
 printf '%s\n' 'PLUGIN_M1A_SIGNED_RESTORE_PASSED: HMAC manifest, tamper/missing-signature rejection and populated SQL recovery'
 
-printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: four-process fault recovery, isolated PostgreSQL clone and authenticated SQL restore (not complete DR acceptance)'
+# Separately prove a real, pinned historical 0042 schema with populated
+# publication-scoped plugin data upgrades through current 0048. No old
+# extension ESM or old API runtime is started by this schema drill.
+bash scripts/plugins/drill-historical-upgrade.sh \
+  || die "historical core-schema upgrade acceptance failed"
+
+printf '%s\n' 'PLUGIN_M1A_LIVE_DRILL_PASSED: four-process fault recovery, isolated PostgreSQL signed restore and historical 0042->current core migration (not full DR acceptance)'
