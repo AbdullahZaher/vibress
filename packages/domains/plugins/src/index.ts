@@ -70,4 +70,8 @@ export type {
 export * from "./runtime/tier2-ipc";
 export * from "./runtime/tier2-capability-gateway";
 export * from "./runtime/tier2-process-supervisor";
+export * from "./application/plugin-catalog";
+export * from "./application/plugin-archive-extractor";
+export * from "./application/marketplace-service";
+
 
