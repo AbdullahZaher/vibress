@@ -100,7 +100,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => {
-      if (!canUpload) throw new Error("You do not have permission to upload media.");
+      if (!canUpload) throw new Error(tr("You do not have permission to upload media."));
       return uploadMediaApi(file);
     },
     onSuccess: () => {
@@ -115,7 +115,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
   const updateMutation = useMutation({
     mutationFn: ({ id, displayName }: { id: string; displayName: string }) => {
-      if (!canEdit) throw new Error("You do not have permission to edit media.");
+      if (!canEdit) throw new Error(tr("You do not have permission to edit media."));
       return updateMediaApi(id, { displayName });
     },
     onSuccess: (res) => {
@@ -130,8 +130,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => {
-      if (!canDelete) throw new Error("You do not have permission to delete media.");
-      if (isLoadingRefs || isRefsError) throw new Error("Verify media references before deleting.");
+      if (!canDelete) throw new Error(tr("You do not have permission to delete media."));
+      if (isLoadingRefs || isRefsError) throw new Error(tr("Verify media references before deleting."));
       return deleteMediaApi(id);
     },
     onSuccess: () => {
@@ -193,6 +193,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
               multiple
               onChange={handleFileUpload}
               className="sr-only"
+              disabled={uploadMutation.isPending}
             />
           </label>
         ) : undefined}

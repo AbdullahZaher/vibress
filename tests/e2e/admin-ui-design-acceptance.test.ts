@@ -113,6 +113,92 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     await screenshot(page, info, "editor-mobile-320");
   });
 
+  test("posts: server pagination remains usable without horizontal overflow at 320px", async ({ page }, info) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+    await login(page);
+    await page.route("**/api/admin/v1/posts?*", async (route) => {
+      const url = new URL(route.request().url());
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const limit = Number(url.searchParams.get("limit") || 25);
+      const total = 26;
+      const count = Math.max(0, Math.min(limit, total - offset));
+      const posts = Array.from({ length: count }, (_, index) => {
+        const number = offset + index + 1;
+        return {
+          id: `post-${number}`,
+          title: `Acceptance post ${number}`,
+          slug: `acceptance-post-${number}`,
+          status: "draft",
+          publishedAt: null,
+          scheduledAt: null,
+          updatedAt: "2026-10-30T10:00:00.000Z",
+          authors: [],
+        };
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts, total }),
+      });
+    });
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText(/Showing 1–25 of 26/)).toBeVisible();
+    await assertDocumentFits(page);
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(page.getByText(/Showing 26–26 of 26/)).toBeVisible();
+    await assertDocumentFits(page);
+    await screenshot(page, info, "posts-mobile-320-pagination");
+  });
+
+  test("posts: bulk deletion is confirmed and reports the refreshed empty state", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
+    let items = [
+      { id: "bulk-post-1", title: "Bulk acceptance one", slug: "bulk-one", status: "draft", publishedAt: null, scheduledAt: null, updatedAt: "2026-10-30T10:00:00.000Z", authors: [] },
+      { id: "bulk-post-2", title: "Bulk acceptance two", slug: "bulk-two", status: "draft", publishedAt: null, scheduledAt: null, updatedAt: "2026-10-29T10:00:00.000Z", authors: [] },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      const request = route.request();
+      if (request.method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ posts: items, total: items.length }),
+        });
+        return;
+      }
+      if (request.method() === "DELETE") {
+        const id = new URL(request.url()).pathname.split("/").pop();
+        items = items.filter((item) => item.id !== id);
+        await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        return;
+      }
+      await route.continue();
+    });
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText("Bulk acceptance one")).toBeVisible();
+    await page.getByRole("checkbox", { name: "Select all on this page" }).check();
+    const toolbar = page.getByRole("toolbar", { name: "Bulk actions" });
+    await expect(toolbar).toBeVisible();
+    await toolbar.getByRole("button", { name: "Delete" }).click();
+    const dialog = page.locator('[role="dialog"]').last();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Confirm delete" }).click();
+    await expect(page.getByText("No posts found")).toBeVisible();
+  });
+
+  test("staff interface language preference is independent and persists per account", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
+    const languageToggle = page.getByRole("button", { name: "Switch interface language" });
+    await expect(languageToggle).toBeVisible();
+    await languageToggle.click();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await assertDocumentFits(page);
+  });
+
   test("Arabic RTL: direction, drawer position and keyboard focus", async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route("**/api/admin/v1/locales/context", (route) =>

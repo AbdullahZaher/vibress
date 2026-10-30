@@ -24,6 +24,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Verify media references before deleting.": "تحقق من أماكن استخدام الوسيط قبل حذفه.",
+  "You do not have permission to upload media.": "لا تملك صلاحية رفع الوسائط.",
+  "You do not have permission to edit media.": "لا تملك صلاحية تعديل الوسائط.",
+  "You do not have permission to delete media.": "لا تملك صلاحية حذف الوسائط.",
   "Editorial overview": "نظرة عامة تحريرية",
   "Your editorial workspace at a glance.": "مساحة عملك التحريرية في لمحة.",
   "No dashboard data is available for your role.": "لا تتوفر بيانات لوحة تحكم لهذا الدور.",
