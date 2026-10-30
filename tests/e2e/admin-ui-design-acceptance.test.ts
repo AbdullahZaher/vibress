@@ -150,6 +150,42 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     await screenshot(page, info, "posts-mobile-320-pagination");
   });
 
+  test("pages: server pagination and sorting controls work at 320px", async ({ page }, info) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+    await login(page);
+    await page.route("**/api/admin/v1/pages?*", async (route) => {
+      const url = new URL(route.request().url());
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const limit = Number(url.searchParams.get("limit") || 25);
+      const total = 26;
+      const count = Math.max(0, Math.min(limit, total - offset));
+      const pages = Array.from({ length: count }, (_, index) => {
+        const number = offset + index + 1;
+        return {
+          id: `page-${number}`,
+          title: `Acceptance page ${number}`,
+          slug: `acceptance-page-${number}`,
+          status: "draft",
+          publishedAt: null,
+          updatedAt: "2026-10-30T10:00:00.000Z",
+          authors: [],
+        };
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ pages, total }),
+      });
+    });
+    await page.goto(`${BASE}/admin/pages`);
+    await expect(page.getByText(/Showing 1–25 of 26/)).toBeVisible();
+    await assertDocumentFits(page);
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(page.getByText(/Showing 26–26 of 26/)).toBeVisible();
+    await assertDocumentFits(page);
+    await screenshot(page, info, "pages-mobile-320-pagination");
+  });
+
   test("posts: bulk deletion is confirmed and reports the refreshed empty state", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page);
