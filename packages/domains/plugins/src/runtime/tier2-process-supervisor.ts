@@ -330,6 +330,16 @@ export function verifyReleaseIntegrity(
   releaseDigest: string,
   admission: AuthoritativePluginAdmission,
 ): void {
+  if (admission.trustTier === "untrusted_marketplace" && (
+    !admission.releaseDirectory ||
+    !admission.releaseArtifactManifest ||
+    Object.keys(admission.releaseArtifactManifest).length === 0
+  )) {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE",
+      "Untrusted release integrity verification requires a complete approved directory and manifest",
+    );
+  }
   if (admission.isRevoked) {
     throw new Tier2SupervisorError(
       "REVOKED_PLUGIN_RELEASE",
@@ -556,6 +566,7 @@ interface PendingInvocation {
   readonly resolve: (value: unknown) => void;
   readonly reject: (reason: unknown) => void;
   readonly timer: ReturnType<typeof setTimeout>;
+  capabilityRequestCount: number;
 }
 
 interface ActiveProcess {
@@ -658,7 +669,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
 
   isAdmitted(pluginId: string): boolean {
     const admission = this.admissions.get(pluginId);
-    return Boolean(admission && !admission.isRevoked);
+    return Boolean(admission && !admission.isRevoked && !admission.isPublisherRevoked);
   }
 
   getAdmission(pluginId: string): AuthoritativePluginAdmission | null {
@@ -1065,7 +1076,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
           throw new Tier2SupervisorError("IPC_REPLAY_DENIED", "Repeated sandbox capability request");
         }
         if (active.seenCapabilityMessageIds.size >= 4096) {
-          throw new Tier2SupervisorError("IPC_MESSAGE_LIMIT", "Sandbox capability request quota exceeded");
+          // Completed invocations cannot be replayed: the Host no longer
+          // retains their correlation IDs. Keep the deduplication window
+          // bounded instead of exhausting a legitimate long-lived worker.
+          const oldest = active.seenCapabilityMessageIds.values().next().value;
+          if (oldest) active.seenCapabilityMessageIds.delete(oldest);
         }
         active.seenCapabilityMessageIds.add(envelope.id);
         const req = envelope.payload as Tier2CapabilityRequest;
@@ -1074,6 +1089,12 @@ export class Tier2PluginSupervisor extends EventEmitter {
 
         if (pending && envelope.publicationId !== pending.context.publicationId) {
           throw new Tier2SupervisorError("IPC_CONTEXT_MISMATCH", "Sandbox capability publication does not match the invocation");
+        }
+        if (pending) {
+          pending.capabilityRequestCount += 1;
+          if (pending.capabilityRequestCount > 128) {
+            throw new Tier2SupervisorError("IPC_MESSAGE_LIMIT", "Sandbox invocation exceeded its Host capability request limit");
+          }
         }
 
         if (!pending) {
@@ -1302,6 +1323,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
         resolve: (val) => resolve(val as R),
         reject,
         timer,
+        capabilityRequestCount: 0,
       });
 
       this.sendToProcess(active!, envelope, (err) => {
