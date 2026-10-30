@@ -151,6 +151,28 @@ export class Tier2KernelCgroupLease {
     }
   }
 
+  /** Read-only evidence from the kernel; do not infer limits from exit codes. */
+  readKernelCounters(): {
+    readonly memoryOomKills: number;
+    readonly cpuThrottledPeriods: number;
+    readonly pidLimitEvents: number;
+  } {
+    const counter = (file: string, name: string): number => {
+      const row = readFileSync(path.join(this.group, file), "utf8")
+        .split("\n").find((line) => line.startsWith(name + " "));
+      const value = row ? Number(row.split(/\s+/)[1]) : NaN;
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Tier2KernelResourceError("CGROUP_COUNTER_UNAVAILABLE", `Kernel resource counter ${file}:${name} is invalid`);
+      }
+      return value;
+    };
+    return {
+      memoryOomKills: counter("memory.events", "oom_kill"),
+      cpuThrottledPeriods: counter("cpu.stat", "nr_throttled"),
+      pidLimitEvents: counter("pids.events", "max"),
+    };
+  }
+
   /** Kernel kills bwrap and all inherited descendants, including fork bombs. */
   killTree(): void {
     if (this.closed) return;
