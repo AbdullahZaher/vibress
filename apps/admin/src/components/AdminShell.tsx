@@ -21,7 +21,13 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   onLogout,
   can,
 }) => {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return window.localStorage.getItem("vibress-admin-theme") !== "light";
+    } catch {
+      return true;
+    }
+  });
   const { locale } = useAdminLocale();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -59,6 +65,11 @@ export const AdminShell: React.FC<AdminShellProps> = ({
     } else {
       document.documentElement.classList.remove("dark");
     }
+    try {
+      window.localStorage.setItem("vibress-admin-theme", darkMode ? "dark" : "light");
+    } catch {
+      // Private browsing may disable storage; retain this session's preference.
+    }
   }, [darkMode]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut
@@ -74,6 +85,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canPublishPosts = can("posts.publish");
+  const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath);
 
 
   return (
@@ -109,7 +121,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       />
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}
-      <main className="flex-1 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto p-4 sm:p-6 md:p-8">
+      <main id="admin-main" className={`flex-1 min-w-0 min-h-0 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto ${isEditorRoute ? "p-0" : "p-4 sm:p-6 md:p-8"}`}>
         {renderAdminRoute({
           pathname: currentPath,
           user,

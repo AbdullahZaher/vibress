@@ -40,7 +40,7 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
         {backAction}
         <div className="min-w-0">
           {breadcrumb && (
-            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
               {breadcrumb}
             </p>
           )}
@@ -51,7 +51,7 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
             {title}
           </h1>
           {description && (
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-sm leading-relaxed text-muted-foreground mt-1">
               {description}
             </p>
           )}

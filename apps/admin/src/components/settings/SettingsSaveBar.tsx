@@ -55,7 +55,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-5 right-5 z-50 flex items-center gap-2 p-3.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
+          className="fixed top-5 end-5 z-50 flex items-center gap-2 p-3.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
         >
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{successMsg}</span>
@@ -65,7 +65,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
         <div
           role="alert"
           aria-live="assertive"
-          className="fixed top-5 right-5 z-50 flex items-center gap-2 p-3.5 bg-destructive/15 border border-destructive/30 text-destructive rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
+          className="fixed top-5 end-5 z-50 flex items-center gap-2 p-3.5 bg-destructive/15 border border-destructive/30 text-destructive rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
         >
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{errorMsg}</span>
@@ -74,9 +74,9 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
 
       {/* Floating Save Action Bar */}
       {isDirty && (
-        <div className="fixed bottom-6 inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-in slide-in-from-bottom-5 duration-200">
-          <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-card/95 border border-primary/30 shadow-2xl backdrop-blur-md text-foreground max-w-lg w-full justify-between">
-            <div className="flex items-center gap-2.5">
+        <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-in slide-in-from-bottom-5 duration-200">
+          <div className="pointer-events-auto flex flex-col min-[420px]:flex-row items-stretch min-[420px]:items-center gap-3 px-4 py-3 rounded-2xl bg-card/95 border border-primary/30 shadow-2xl backdrop-blur-md text-foreground max-w-lg w-full justify-between">
+            <div className="flex min-w-0 items-center gap-2.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
@@ -92,13 +92,13 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onDiscard}
                 disabled={saving}
-                className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                className="min-h-10 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
                 {tr("Discard")}
@@ -107,7 +107,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 size="sm"
                 onClick={onSave}
                 disabled={saving}
-                className="h-8 text-xs gap-1.5 cursor-pointer shadow-sm"
+                className="min-h-10 text-sm gap-1.5 cursor-pointer shadow-sm"
               >
                 {saving ? (
                   <RefreshCw className="h-3 w-3 animate-spin" />
