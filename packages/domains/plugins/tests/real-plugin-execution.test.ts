@@ -318,6 +318,65 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
   });
 
   describe("Tier 2 OS-Enforced Runtime Isolation & Adversarial Hardening (M7.2 / P0 / P1)", () => {
+    it("never treats runner detection as proof of certified containment", () => {
+      const isolation = verifyPlatformIsolationSupport("untrusted_marketplace");
+      expect(isolation.isIsolated).toBe(false);
+      expect(isolation.isolationMechanism).toBe("unsupported");
+    });
+
+    it("rejects revoked and mismatched untrusted releases before sandbox admission", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 500 });
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.untrusted-admitted";
+      const releaseDigest = "sha256:" + "a".repeat(64);
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "untrusted_marketplace",
+        isRevoked: true,
+      });
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_01",
+        grantedCapabilities: [],
+        actor: { id: "member_01", type: "member" },
+        trustTier: "untrusted_marketplace",
+      };
+      await expect(supervisor.invoke(context, "echo", {})).rejects.toThrowError(/REVOKED_PLUGIN_RELEASE/);
+      supervisor.admitPlugin({ pluginId, releaseDigest, trustTier: "untrusted_marketplace" });
+      await expect(supervisor.invoke({ ...context, releaseDigest: "sha256:" + "b".repeat(64) }, "echo", {}))
+        .rejects.toThrowError(/RELEASE_DIGEST_MISMATCH/);
+      await expect(supervisor.invoke(context, "echo", {}))
+        .rejects.toThrowError(/UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/);
+    });
+
+    it("rejects an entrypoint whose bytes differ from Host-pinned SHA-256", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 500 });
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.pinned-artifact";
+      const releaseDigest = "sha256:" + "c".repeat(64);
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "curated_operator",
+        releaseDirectory: path.dirname(fixtureEntrypoint),
+        allowedEntrypoints: [fixtureEntrypoint],
+        entrypointSha256: "0".repeat(64),
+      });
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_01",
+        grantedCapabilities: [],
+        actor: { id: "staff_01", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+      await expect(supervisor.invoke(context, "activate", {}))
+        .rejects.toThrowError(/ENTRYPOINT_INTEGRITY_MISMATCH/);
+    });
+
     it("Test A: rejects untrusted execution when fake sandbox runner env var is configured without binary", async () => {
       // Prompt Section 3 / 8: Setting VIBRESS_TIER2_SANDBOX_RUNNER=gvisor without a functioning runner MUST fail-closed.
       process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
