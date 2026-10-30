@@ -1559,6 +1559,41 @@ export class Tier2PluginSupervisor extends EventEmitter {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${context.pluginId}' is quarantined due to excessive crashes`);
     }
 
+    // After a restart the Supervisor Map is empty; the durable Host DB, not
+    // an invocation's claimed trust tier, must bootstrap marketplace admission.
+    // Check the current observed policy AFTER await to reject out-of-order
+    // responses from concurrent first invocations or later revocations.
+    if (!this.admissions.has(context.pluginId) &&
+        context.trustTier === "untrusted_marketplace") {
+      if (!this.loadMarketplaceAdmission) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_ADMISSION_AUTHORITY_UNAVAILABLE",
+          "Marketplace execution requires durable Host admission",
+        );
+      }
+      const fetched = await this.loadMarketplaceAdmission(
+        context.pluginId, context.publicationId,
+      );
+      const latest = this.admissions.get(context.pluginId);
+      const stub: AuthoritativePluginAdmission = {
+        pluginId: context.pluginId,
+        releaseDigest: context.releaseDigest,
+        trustTier: "untrusted_marketplace",
+      };
+      const verified = validateMarketplaceAdmissionRefresh(
+        context.pluginId, latest ?? stub, fetched,
+      );
+      if (verified.isRevoked || verified.isPublisherRevoked ||
+          verified.releaseDigest !== context.releaseDigest) {
+        throw new Tier2SupervisorError(
+          "REVOKED_PLUGIN_RELEASE", "Durable Host policy does not admit this release",
+        );
+      }
+      if (!latest || verified.policyRevision !== latest.policyRevision) {
+        this.admitPlugin(verified);
+      }
+    }
+
     // P1: Authoritative trust tier resolution
     const effectiveTrustTier = this.resolveAuthoritativeTrustTier(
       context.pluginId,
