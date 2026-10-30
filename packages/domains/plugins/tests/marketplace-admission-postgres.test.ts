@@ -167,8 +167,8 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
       expect(auditRows.rows.map((record: { action: string }) => record.action).sort()).toEqual([
         "plugin.marketplace_admission_approved",
         "plugin.marketplace_admission_approved",
-        "plugin.marketplace_admission_revoked",
         "plugin.marketplace_admission_approved",
+        "plugin.marketplace_admission_revoked",
         "plugin.marketplace_publisher_revoked",
       ]);
 
