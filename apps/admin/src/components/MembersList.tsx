@@ -34,7 +34,6 @@ interface MembersListProps {
 
 export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) => {
   const { tr, formatDate } = useAdminLocale();
-  const isActionPending = disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -125,6 +124,8 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
       setActionError(err instanceof Error ? err.message : tr("Unable to revoke member sessions."));
     },
   });
+  const isActionPending = disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending;
+
 
   const members = data?.members || [];
   const memberDetail = detailData?.member;

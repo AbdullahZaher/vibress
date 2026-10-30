@@ -24,6 +24,14 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "No tags created yet.": "لم يتم إنشاء وسوم بعد.",
+  "Resolve": "معالجة",
+  "Reject": "رفض",
+  "Hide": "إخفاء",
+  "Restore": "استعادة",
+  "Delete Comment": "حذف التعليق",
+  "View Moderation History": "عرض سجل الإشراف",
+  "Resolve report": "معالجة البلاغ",
   "Close dialog": "إغلاق النافذة",
   "Delete tag?": "حذف الوسم؟",
   "This tag will be removed. Existing content will not be deleted.": "سيتم حذف الوسم دون حذف المحتوى المرتبط به.",

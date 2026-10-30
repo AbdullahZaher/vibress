@@ -256,7 +256,7 @@ export function CommentsPanel({
                             variant="outline"
                             size="sm"
                             onClick={() => handleApprove(c.id)}
-                            className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
+                            className="min-h-10 text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
                           >
                             <Check className="h-3 w-3" /> Approve
                           </Button>
@@ -264,7 +264,7 @@ export function CommentsPanel({
                             variant="outline"
                             size="sm"
                             onClick={() => setReasonModal({ commentId: c.id, action: "reject", title: "Reject Comment" })}
-                            className="h-7 text-xs border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
+                            className="min-h-10 text-sm border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
                           >
                             <X className="h-3 w-3" /> Reject
                           </Button>
@@ -276,7 +276,7 @@ export function CommentsPanel({
                           variant="outline"
                           size="sm"
                           onClick={() => setReasonModal({ commentId: c.id, action: "hide", title: "Hide Comment" })}
-                          className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground gap-1"
+                          className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
                         >
                           <EyeOff className="h-3 w-3" /> Hide
                         </Button>
@@ -287,7 +287,7 @@ export function CommentsPanel({
                           variant="outline"
                           size="sm"
                           onClick={() => handleRestore(c.id)}
-                          className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground gap-1"
+                          className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
                         >
                           <RotateCcw className="h-3 w-3" /> Restore
                         </Button>
@@ -298,7 +298,7 @@ export function CommentsPanel({
                           variant="ghost"
                           size="sm"
                           onClick={() => setReasonModal({ commentId: c.id, action: "delete", title: "Delete Comment" })}
-                          className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                          className="min-h-10 min-w-10 px-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10"
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>

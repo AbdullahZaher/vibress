@@ -76,7 +76,7 @@ export function ReportsPanel({
                 <TableCell className="ps-6 font-semibold text-xs text-foreground">
                   <div className="flex flex-col">
                     <span className="capitalize">{r.reason.replace("_", " ")}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
+                    <span className="text-xs text-muted-foreground font-mono">
                       {formatDate(r.createdAt, { dateStyle: "medium", timeStyle: "short" })}
                     </span>
                   </div>
@@ -101,8 +101,8 @@ export function ReportsPanel({
                     {tr(r.status)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-end pe-6">
-                  {r.status === "open" && canModerate ? (
+                {canModerate && <TableCell className="text-end pe-6">
+                  {r.status === "open" ? (
                     <div className="flex items-center justify-end gap-1.5">
                       <Button
                         variant="outline"
@@ -126,7 +126,7 @@ export function ReportsPanel({
                       {r.resolvedAt ? formatDate(r.resolvedAt, { dateStyle: "medium" }) : "-"}
                     </span>
                   )}
-                </TableCell>
+                </TableCell>}
               </TableRow>
             ))
           )}

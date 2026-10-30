@@ -206,8 +206,9 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
         </Card>}
 
         {/* Tags List Card */}
-        <Card className="lg:col-span-2 border-border/70 shadow-2xs p-0 overflow-hidden">
-          <Table>
+        <Card className={canCreate || (canEdit && Boolean(editingId)) ? "lg:col-span-2 border-border/70 shadow-2xs p-0 overflow-hidden" : "lg:col-span-1 border-border/70 shadow-2xs p-0 overflow-hidden"}>
+          <div className="overflow-x-auto">
+          <Table className="min-w-[620px]">
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="pl-6 text-xs">{tr("Name")}</TableHead>
@@ -231,10 +232,10 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
               ) : tags.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
-                    className="h-28 text-center text-xs text-muted-foreground"
+                    colSpan={canEdit || canDelete ? 4 : 3}
+                    className="h-28 text-center text-sm text-muted-foreground"
                   >
-                    No tags created yet.
+                    {tr("No tags created yet.")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -287,6 +288,7 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
               )}
             </TableBody>
           </Table>
+          </div>
         </Card>
       </div>
 
