@@ -10,7 +10,7 @@ interface MobileHeaderProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onNavigate: (path: string) => void;
-  canPublishPosts: boolean;
+  canCreatePosts: boolean;
   locale?: 'en' | 'ar';
   onToggleLocale?: () => void;
 }
@@ -22,7 +22,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   darkMode,
   onToggleDarkMode,
   onNavigate,
-  canPublishPosts,
+  canCreatePosts,
   locale = 'en',
   onToggleLocale,
 }) => {
@@ -33,6 +33,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
       return "Analytics";
     if (currentPath.startsWith("/admin/posts/new")) return "New Post";
     if (currentPath.startsWith("/admin/posts/drafts")) return "Drafts";
+    if (currentPath.startsWith("/admin/posts/review")) return "In review";
     if (currentPath.startsWith("/admin/posts/scheduled")) return "Scheduled";
     if (currentPath.startsWith("/admin/posts/published")) return "Published";
     if (currentPath.startsWith("/admin/posts/")) return "Edit Post";
@@ -92,7 +93,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
       {/* Right Section: Quick Action + Search + Theme Toggle */}
       <div className="flex shrink-0 items-center gap-1">
-        {canPublishPosts && (
+        {canCreatePosts && (
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/new")}

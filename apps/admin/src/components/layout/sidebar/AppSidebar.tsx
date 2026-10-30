@@ -17,7 +17,7 @@ interface AppSidebarProps {
   onToggleDarkMode: () => void;
   onNavigate: (path: string) => void;
   onLogout: () => void;
-  canPublishPosts: boolean;
+  canCreatePosts: boolean;
   canReadTranslations: boolean;
   canReadPlugins: boolean;
   extensionViews: readonly AdminExtensionViewLink[];
@@ -35,7 +35,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onToggleDarkMode,
   onNavigate,
   onLogout,
-  canPublishPosts,
+  canCreatePosts,
   canReadTranslations,
   canReadPlugins,
   extensionViews,
@@ -124,7 +124,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         <NavContent
           currentPath={currentPath}
           onNavigate={handleNavigate}
-          canPublishPosts={canPublishPosts}
+          canCreatePosts={canCreatePosts}
           canReadTranslations={canReadTranslations}
         />
         <NavExtensionViews

@@ -40,7 +40,7 @@ interface CommandPaletteProps {
   onToggleDarkMode: () => void;
   darkMode: boolean;
   onLogout: () => void;
-  canPublishPosts: boolean;
+  canCreatePosts: boolean;
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -50,7 +50,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onToggleDarkMode,
   darkMode,
   onLogout,
-  canPublishPosts,
+  canCreatePosts,
 }) => {
   const { tr } = useAdminLocale();
   const [query, setQuery] = useState("");
@@ -61,7 +61,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const items: CommandItem[] = useMemo(() => {
     const list: CommandItem[] = [
       // Actions
-      ...(canPublishPosts
+      ...(canCreatePosts
         ? [
             {
               id: "action-new-post",
@@ -342,7 +342,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: tr(item.title),
       ...(item.description ? { description: tr(item.description) } : {}),
     }));
-  }, [canPublishPosts, darkMode, onNavigate, onToggleDarkMode, onLogout, tr]);
+  }, [canCreatePosts, darkMode, onNavigate, onToggleDarkMode, onLogout, tr]);
 
   // Filter items by search query
   const filteredItems = useMemo(() => {

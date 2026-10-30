@@ -85,8 +85,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const canPublishPosts = can("posts.publish");
-  const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath) && !/^\/admin\/posts\/(drafts|scheduled|published)\/?$/.test(currentPath);
+  const canCreatePosts = can("posts.create");
+  const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath) && !/^\/admin\/posts\/(drafts|review|scheduled|published)\/?$/.test(currentPath);
 
 
   return (
@@ -99,7 +99,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         onNavigate={onNavigate}
-        canPublishPosts={canPublishPosts}
+        canCreatePosts={canCreatePosts}
         locale={locale}
         onToggleLocale={onToggleLocale}
       />
@@ -112,7 +112,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         onNavigate={onNavigate}
         onLogout={onLogout}
-        canPublishPosts={canPublishPosts}
+        canCreatePosts={canCreatePosts}
         canReadTranslations={can("translations.read")}
         canReadPlugins={can("plugins.read")}
         extensionViews={extensionViews.filter((view) => can(view.permission))}
@@ -143,7 +143,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         darkMode={darkMode}
         onLogout={onLogout}
-        canPublishPosts={canPublishPosts}
+        canCreatePosts={canCreatePosts}
       />
     </div>
   );

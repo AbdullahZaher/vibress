@@ -15,14 +15,14 @@ import {
 interface NavContentProps {
   currentPath: string;
   onNavigate: (path: string) => void;
-  canPublishPosts: boolean;
+  canCreatePosts: boolean;
   canReadTranslations: boolean;
 }
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
   onNavigate,
-  canPublishPosts,
+  canCreatePosts,
   canReadTranslations,
 }) => {
   const { data: localePolicy } = usePublicationLocales();
@@ -31,11 +31,12 @@ export const NavContent: React.FC<NavContentProps> = ({
 
   const isPostsActive = currentPath.startsWith("/admin/posts");
   useEffect(() => {
-    if (["/admin/posts/drafts", "/admin/posts/scheduled", "/admin/posts/published"].includes(currentPath)) {
+    if (["/admin/posts/drafts", "/admin/posts/review", "/admin/posts/scheduled", "/admin/posts/published"].includes(currentPath)) {
       setPostsExpanded(true);
     }
   }, [currentPath]);
   const isDraftsActive = currentPath === "/admin/posts/drafts";
+  const isReviewActive = currentPath === "/admin/posts/review";
   const isScheduledActive = currentPath === "/admin/posts/scheduled";
   const isPublishedActive = currentPath === "/admin/posts/published";
 
@@ -78,7 +79,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         </div>
 
         {/* Plus Action Button */}
-        {canPublishPosts && (
+        {canCreatePosts && (
           <button
             type="button"
             onClick={(e) => {
@@ -108,6 +109,18 @@ export const NavContent: React.FC<NavContentProps> = ({
             }`}
           >
             {tr("Drafts")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate("/admin/posts/review")}
+            aria-current={isReviewActive ? "page" : undefined}
+            className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+              isReviewActive
+                ? "text-foreground font-semibold bg-sidebar-accent/60"
+                : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
+            }`}
+          >
+            {tr("In review")}
           </button>
           <button
             type="button"

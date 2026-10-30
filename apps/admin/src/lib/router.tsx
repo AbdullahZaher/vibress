@@ -201,36 +201,75 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin",
     exact: true,
-    render: ({ user }) => <AnalyticsDashboard user={user} />,
+    render: ({ user, onNavigate, can }) => (
+      <AnalyticsDashboard
+        user={user}
+        onNavigate={onNavigate}
+        canReadAnalytics={can("analytics.read")}
+        canReadPosts={can("posts.read")}
+      />
+    ),
   },
   // 2. Posts Routes
   {
     pattern: "/admin/posts",
     exact: true,
-    render: ({ onNavigate, can }) => (
-      <PostsList onNavigate={onNavigate} canPublish={can("posts.publish")} canViewAnalytics={can("analytics.read")} />
-    ),
-  },
-  {
-    pattern: "/admin/posts/drafts",
-    exact: true,
+    requiredPermission: "posts.read",
     render: ({ onNavigate, can }) => (
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
+        canCreate={can("posts.create")}
+        canEdit={can("posts.edit")}
+        canDelete={can("posts.delete")}
+      />
+    ),
+  },
+  {
+    pattern: "/admin/posts/drafts",
+    exact: true,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate, can }) => (
+      <PostsList
+        onNavigate={onNavigate}
+        canPublish={can("posts.publish")}
+        canViewAnalytics={can("analytics.read")}
+        canCreate={can("posts.create")}
+        canEdit={can("posts.edit")}
+        canDelete={can("posts.delete")}
         filterStatus="draft"
+      />
+    ),
+  },
+  {
+    pattern: "/admin/posts/review",
+    exact: true,
+    requiredPermission: "posts.read",
+    render: ({ onNavigate, can }) => (
+      <PostsList
+        onNavigate={onNavigate}
+        canPublish={can("posts.publish")}
+        canViewAnalytics={can("analytics.read")}
+        canCreate={can("posts.create")}
+        canEdit={can("posts.edit")}
+        canDelete={can("posts.delete")}
+        filterStatus="in_review"
       />
     ),
   },
   {
     pattern: "/admin/posts/scheduled",
     exact: true,
+    requiredPermission: "posts.read",
     render: ({ onNavigate, can }) => (
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
+        canCreate={can("posts.create")}
+        canEdit={can("posts.edit")}
+        canDelete={can("posts.delete")}
         filterStatus="scheduled"
       />
     ),
@@ -238,11 +277,15 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/posts/published",
     exact: true,
+    requiredPermission: "posts.read",
     render: ({ onNavigate, can }) => (
       <PostsList
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
+        canCreate={can("posts.create")}
+        canEdit={can("posts.edit")}
+        canDelete={can("posts.delete")}
         filterStatus="published"
       />
     ),
@@ -250,6 +293,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/posts/new",
     exact: true,
+    requiredPermission: "posts.create",
     render: ({ user, onNavigate, can }) => (
       <PostEditor
         currentUserId={user.id}
@@ -261,6 +305,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/posts/:postId",
     exact: true,
+    requiredPermission: "posts.edit",
     render: ({ user, match, onNavigate, can }) => (
       <PostEditor
         postId={match.params.postId}
@@ -274,13 +319,22 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/pages",
     exact: true,
+    requiredPermission: "pages.read",
     render: ({ onNavigate, can }) => (
-      <PagesList onNavigate={onNavigate} canPublish={can("pages.publish")} canViewAnalytics={can("analytics.read")} />
+      <PagesList
+        onNavigate={onNavigate}
+        canPublish={can("pages.publish")}
+        canViewAnalytics={can("analytics.read")}
+        canCreate={can("pages.create")}
+        canEdit={can("pages.edit")}
+        canDelete={can("pages.delete")}
+      />
     ),
   },
   {
     pattern: "/admin/pages/new",
     exact: true,
+    requiredPermission: "pages.create",
     render: ({ user, onNavigate, can }) => (
       <PageEditor
         currentUserId={user.id}
@@ -292,6 +346,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/pages/:pageId",
     exact: true,
+    requiredPermission: "pages.edit",
     render: ({ user, match, onNavigate, can }) => (
       <PageEditor
         pageId={match.params.pageId}
