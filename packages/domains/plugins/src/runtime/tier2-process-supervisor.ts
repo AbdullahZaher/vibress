@@ -1,4 +1,4 @@
-import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
+import { fork, execFileSync, ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, statSync, realpathSync } from "node:fs";
@@ -167,21 +167,14 @@ export function verifyPlatformIsolationSupport(
   }
 
   if (trustTier === "untrusted_marketplace") {
-    const runner = detectSandboxRunner();
-    if (runner) {
-      return {
-        isIsolated: true,
-        isolationMechanism: "sandbox_runner",
-        details: `Verified OS sandbox runner active: ${runner.name} at ${runner.executablePath} (${runner.version})`,
-      };
-    }
-
-    // Fail closed: Host container presence (/.dockerenv, cgroups) does NOT provide per-plugin isolation for untrusted code
+    // Binary discovery/version checks are not evidence of kernel containment.
+    // Keep marketplace execution disabled until the independently isolated
+    // runner and IPC transport have passed real Linux adversarial acceptance.
     return {
       isIsolated: false,
       isolationMechanism: "unsupported",
       details:
-        "Untrusted marketplace plugin execution denied: No verified OS sandbox runner (bwrap/runsc/nsjail) is operational on this host. Configuration environment variables alone do not constitute sandbox verification. Host container presence alone is insufficient for multi-tenant untrusted execution.",
+        "Untrusted execution is disabled pending end-to-end kernel sandbox certification. A sandbox executable or configuration value does not authorize execution.",
     };
   }
 
@@ -508,6 +501,15 @@ export class Tier2PluginSupervisor extends EventEmitter {
   ): PluginTrustTier {
     const admission = this.admissions.get(pluginId);
 
+    // Host revocation and release pinning apply to every tier, even when a
+    // caller explicitly requests the untrusted marketplace tier.
+    if (admission?.isRevoked) {
+      throw new Tier2SupervisorError("REVOKED_PLUGIN_RELEASE", "Plugin release was revoked by host policy");
+    }
+    if (admission && admission.releaseDigest !== releaseDigest) {
+      throw new Tier2SupervisorError("RELEASE_DIGEST_MISMATCH", "Plugin release does not match Host admission");
+    }
+
     // If caller explicitly claims a trusted tier, it MUST match authoritative host admission state
     if (callerTrustTier === "curated_operator" || callerTrustTier === "community_reviewed") {
       if (!admission) {
@@ -575,7 +577,13 @@ export class Tier2PluginSupervisor extends EventEmitter {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${pluginId}' is quarantined due to repeated crashes`);
     }
 
-    // Fail-closed boundary check for untrusted plugin execution
+    // Hard stop independent of runner detection or environment overrides.
+    if (trustTier === "untrusted_marketplace") {
+      throw new Tier2SupervisorError(
+        "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
+        "Untrusted execution requires a certified, independently isolated runner",
+      );
+    }
     const isolation = verifyPlatformIsolationSupport(trustTier);
     if (!isolation.isIsolated) {
       throw new Tier2SupervisorError(
@@ -660,41 +668,12 @@ export class Tier2PluginSupervisor extends EventEmitter {
       ...(isTypeScript ? ["--import", "tsx"] : []),
     ];
 
-    let child: ChildProcess;
-    if (isolation.isolationMechanism === "sandbox_runner") {
-      const runner = detectSandboxRunner();
-      if (!runner) {
-        throw new Tier2SupervisorError(
-          "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
-          "Sandbox runner binary was not found or failed validation during execution attempt.",
-        );
-      }
-
-      const admission = this.admissions.get(pluginId);
-      if (runner.name === "bwrap") {
-        const bwrapArgs = buildBubblewrapArgs({
-          scriptPath: script!,
-          nodeArgs,
-          pluginDirectory: admission?.releaseDirectory,
-          sanitizedEnv,
-        });
-        child = spawn(runner.executablePath, bwrapArgs, {
-          stdio: ["ignore", "pipe", "pipe", "ipc"],
-        });
-      } else {
-        child = spawn(runner.executablePath, [process.execPath, ...nodeArgs, script!], {
-          env: sanitizedEnv,
-          stdio: ["ignore", "pipe", "pipe", "ipc"],
-        });
-      }
-    } else {
-      // Restricted process for curated_operator / community_reviewed
-      child = fork(script!, [], {
-        env: sanitizedEnv,
-        execArgv: nodeArgs,
-        stdio: ["ignore", "pipe", "pipe", "ipc"],
-      });
-    }
+    // No untrusted release reaches the ordinary Host child-process path.
+    const child = fork(script!, [], {
+      env: sanitizedEnv,
+      execArgv: nodeArgs,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
 
     child.stdout?.resume();
     child.stderr?.resume();
