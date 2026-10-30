@@ -82,7 +82,7 @@ function ChangeBadge({
 function displayAnalyticsDate(value: string, locale: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA" : "en-US", {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-ca-gregory" : "en-US", {
     day: "numeric", month: "short",
   }).format(date);
 }

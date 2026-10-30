@@ -372,7 +372,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             {tr("Page")}
           </span>
           <div className="h-4 w-[1px] bg-border hidden sm:block" />
-          <Badge variant={status === "published" ? "published" : "draft"}>
+          <Badge variant={status === "published" ? "published" : status === "scheduled" ? "scheduled" : "draft"}>
             {tr(({ published: "Published", draft: "Draft", scheduled: "Scheduled", archived: "Archived" } as Record<string, string>)[status] ?? status.replaceAll("_", " "))}
           </Badge>
           {autosaveState === "saving" && (
@@ -453,7 +453,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               placeholder={tr("Page Title")}
               aria-label={tr("Page Title")}
-              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/75 leading-tight p-0 text-foreground"
+              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground leading-tight p-0 text-foreground"
               rows={1}
               onInput={(e) => {
                 e.currentTarget.style.height = "auto";

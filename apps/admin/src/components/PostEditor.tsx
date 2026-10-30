@@ -1005,7 +1005,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder={tr("Post Title")}
               aria-label={tr("Post Title")}
-              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/75 leading-tight p-0 text-foreground"
+              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground leading-tight p-0 text-foreground"
               rows={1}
               onInput={(e) => {
                 e.currentTarget.style.height = "auto";
