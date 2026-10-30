@@ -295,8 +295,12 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       });
       supervisorsToClean.push(supervisor);
 
+      let hostCalls = 0;
       const handlers: HostCapabilityHandlers = {
-        storageGet: async () => ({ leaked: "attacker-read-foreign-data" }),
+        storageGet: async () => {
+          hostCalls += 1;
+          return { safePublication: "pub_legitimate_tenant" };
+        },
       };
 
       const context: Tier2InvocationContext = {
@@ -320,6 +324,17 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
           handlers,
         ),
       ).rejects.toThrowError(/Plugin is forbidden from requesting capabilities across publication boundaries/i);
+      // Authorization must be fail-closed without dispatching the foreign
+      // publication request, rather than a timeout that happens to deny it.
+      expect(hostCalls).toBe(0);
+      // The same approved worker must still serve a valid, same-publication
+      // request after an unauthorized request (no accidental quarantine).
+      await expect(supervisor.invoke(context, "test_capability", {
+        action: "storage.get",
+        publicationId: context.publicationId,
+        params: { modelKey: "config", id: "keys" },
+      }, handlers)).resolves.toEqual({ safePublication: context.publicationId });
+      expect(hostCalls).toBe(1);
     });
   });
 
