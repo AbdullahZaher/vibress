@@ -32,7 +32,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       echoed: request.body.value,
       netNamespace: readlinkSync("/proc/self/ns/net"),
     };
-    process.stdout.write(JSON.stringify({ body, mac: sign(body) }) + "\\n");
+    process.stdout.write(JSON.stringify({ body, mac: sign(body) }) + String.fromCharCode(10));
   } catch {
     process.exit(5);
   }
