@@ -969,6 +969,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
         });
       });
       streamReader.onError((err) => {
+        // Events from a retired process must never terminate its replacement.
+        if (this.processes.get(processKey) !== active) return;
         this.emit("security_violation", { pluginId, error: err });
         // Dropping a malformed frame but continuing to trust the same peer
         // permits repeated probing of the Host IPC parser.
