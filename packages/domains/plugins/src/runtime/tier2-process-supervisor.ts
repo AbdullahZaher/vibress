@@ -911,6 +911,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     };
 
     let child: ChildProcess;
+    let blockedLauncher: ChildProcess | undefined;
     let resourceLease: Tier2KernelCgroupLease | undefined;
 
     if (isolation.isolationMechanism === "sandbox_runner") {
@@ -936,6 +937,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
         child = spawn(runner.executablePath, bwrapArgs, {
           stdio: ["pipe", "pipe", "pipe", "pipe"],
         });
+        blockedLauncher = child;
         const barrier = child.stdio[3];
         if (!child.pid || !(barrier instanceof Writable)) {
           throw new Tier2SupervisorError(
@@ -958,8 +960,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
       } catch (error: unknown) {
         // If cgroup.procs attachment fails, the blocked launcher was never
         // enrolled: cgroup.kill alone cannot terminate it.
-        if (child!) {
-          try { child.kill("SIGKILL"); } catch { /* exited during setup */ }
+        if (blockedLauncher) {
+          try { blockedLauncher.kill("SIGKILL"); } catch { /* exited during setup */ }
         }
         resourceLease.killTree();
         resourceLease.dispose();
