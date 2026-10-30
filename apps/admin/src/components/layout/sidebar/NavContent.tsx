@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { usePublicationLocales } from "../../../lib/usePublicationLocales";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import {
@@ -30,12 +30,17 @@ export const NavContent: React.FC<NavContentProps> = ({
   const [postsExpanded, setPostsExpanded] = useState(true);
 
   const isPostsActive = currentPath.startsWith("/admin/posts");
+  useEffect(() => {
+    if (["/admin/posts/drafts", "/admin/posts/scheduled", "/admin/posts/published"].includes(currentPath)) {
+      setPostsExpanded(true);
+    }
+  }, [currentPath]);
   const isDraftsActive = currentPath === "/admin/posts/drafts";
   const isScheduledActive = currentPath === "/admin/posts/scheduled";
   const isPublishedActive = currentPath === "/admin/posts/published";
 
   return (
-    <div className="space-y-0.5 text-sm">
+    <nav aria-label={tr("Content")} className="space-y-0.5 text-sm">
       <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
       {/* Posts Item with Tree Chevron & Quick Plus Create */}
       <div
@@ -65,6 +70,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts")}
+            aria-current={currentPath === "/admin/posts" ? "page" : undefined}
             className="font-medium text-start truncate cursor-pointer flex-1"
           >
             {tr("Posts")}
@@ -94,6 +100,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/drafts")}
+            aria-current={isDraftsActive ? "page" : undefined}
             className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isDraftsActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
@@ -105,6 +112,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/scheduled")}
+            aria-current={isScheduledActive ? "page" : undefined}
             className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isScheduledActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
@@ -116,6 +124,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/published")}
+            aria-current={isPublishedActive ? "page" : undefined}
             className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isPublishedActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
@@ -131,6 +140,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/pages")}
+            aria-current={currentPath.startsWith("/admin/pages") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/pages")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -146,6 +156,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/translations")}
+            aria-current={currentPath.startsWith("/admin/translations") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/translations")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -161,6 +172,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/tags")}
+            aria-current={currentPath.startsWith("/admin/tags") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/tags")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -175,6 +187,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/media")}
+            aria-current={currentPath.startsWith("/admin/media") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/media")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -189,6 +202,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/members")}
+            aria-current={currentPath.startsWith("/admin/members") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/members")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -203,6 +217,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/comments")}
+            aria-current={currentPath.startsWith("/admin/comments") ? "page" : undefined}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/comments")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
@@ -212,7 +227,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         <MessageSquare className="h-4 w-4 shrink-0" />
         <span>{tr("Comments")}</span>
       </button>
-    </div>
+    </nav>
   );
 };
 

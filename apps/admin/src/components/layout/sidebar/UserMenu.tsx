@@ -59,7 +59,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({
       <button
         type="button"
         aria-expanded={isOpen}
-        aria-haspopup="true"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full text-start flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
         title={tr("Account menu")}

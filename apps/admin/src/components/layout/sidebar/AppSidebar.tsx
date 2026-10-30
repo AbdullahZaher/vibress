@@ -161,7 +161,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           />
 
           {/* Slide-in Sidebar Panel */}
-          <div className="relative z-50 flex h-full max-w-[80vw] animate-in ltr:slide-in-from-left rtl:slide-in-from-right duration-200 ease-out">
+          <div className="relative z-50 flex h-full w-[min(18rem,85vw)] animate-in ltr:slide-in-from-left rtl:slide-in-from-right duration-200 ease-out">
             {sidebarContent}
           </div>
         </div>
