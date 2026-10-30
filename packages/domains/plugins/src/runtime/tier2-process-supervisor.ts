@@ -2,6 +2,7 @@ import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { isDeepStrictEqual } from "node:util";
 import { existsSync, readFileSync, readdirSync, lstatSync, statSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import {
@@ -87,7 +88,7 @@ export function validateMarketplaceAdmissionRefresh(
     );
   }
   if (current.policyRevision === previous.policyRevision &&
-      JSON.stringify(current) !== JSON.stringify(previous)) {
+      !isDeepStrictEqual(current, previous)) {
     throw new Tier2SupervisorError(
       "UNTRUSTED_ADMISSION_REVISION_CONFLICT",
       "Host admission content changed without a new authoritative revision",
@@ -1606,7 +1607,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
         throw error;
       }
       if (refreshed.policyRevision !== latestObserved.policyRevision ||
-          JSON.stringify(refreshed) !== JSON.stringify(latestObserved)) {
+          !isDeepStrictEqual(refreshed, latestObserved)) {
         this.admitPlugin(refreshed);
       }
       effectiveAdmission = this.admissions.get(context.pluginId)!;
