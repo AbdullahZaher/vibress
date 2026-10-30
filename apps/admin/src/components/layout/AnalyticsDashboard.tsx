@@ -10,7 +10,7 @@ import {
   FileText,
   ChartNoAxesCombined,
 } from "lucide-react";
-import { ApiUser } from "../../lib/api";
+import { ApiUser, apiRequest } from "../../lib/api";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -25,6 +25,9 @@ import {
 
 interface AnalyticsDashboardProps {
   user: ApiUser;
+  onNavigate: (path: string) => void;
+  canReadAnalytics: boolean;
+  canReadPosts: boolean;
 }
 
 const DATE_OPTIONS: Array<{ label: string; range: AnalyticsRange }> = [
@@ -97,7 +100,7 @@ function AreaChart({
   metric: "views" | "visitors" | "members";
   color: string;
 }) {
-  const { tr, locale } = useAdminLocale();
+  const { tr, locale, formatNumber } = useAdminLocale();
   const [showData, setShowData] = useState(false);
   const values = points.map((point) => point[metric]);
   const max = Math.max(1, ...values);
@@ -136,7 +139,7 @@ function AreaChart({
             <span key={tick}>{format(tick)}</span>
           ))}
         </div>
-        <div className="relative h-32 min-w-0 flex-1" role="img" aria-label={`${tr("Activity trend")}: ${tr(metric)} ${start || ""} – ${end || ""}`}>
+        <div className="relative h-32 min-w-0 flex-1" role="group" aria-label={`${tr("Activity trend")}: ${tr(metric)} ${start || ""} – ${end || ""}`}>
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
             {[0, 1, 2, 3, 4].map((tick) => <span key={tick} className="w-full border-t border-border/60" />)}
           </div>
@@ -149,6 +152,23 @@ function AreaChart({
               </defs>
               <path d={area} fill={`url(#${gradientId})`} />
               <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+              {coords.map((point, index) => (
+                <circle
+                  key={points[index]?.date || index}
+                  cx={point.x}
+                  cy={point.y}
+                  r="1.8"
+                  fill={color}
+                  stroke="var(--color-card)"
+                  strokeWidth="0.8"
+                  tabIndex={0}
+                  role="img"
+                  aria-label={`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}
+                  className="outline-none focus-visible:stroke-foreground focus-visible:stroke-2"
+                >
+                  <title>{`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}</title>
+                </circle>
+              ))}
             </svg>
         </div>
       </div>
@@ -230,8 +250,13 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
-  const { tr, locale } = useAdminLocale();
+export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
+  user,
+  onNavigate,
+  canReadAnalytics,
+  canReadPosts,
+}) => {
+  const { tr, locale, formatDate, formatNumber } = useAdminLocale();
   const [analyticsTab, setAnalyticsTab] = useState<
     "overview" | "web" | "newsletters" | "growth"
   >("overview");
@@ -252,7 +277,26 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
   const overviewQuery = useQuery({
     queryKey: ["analytics", "overview", activeRange],
     queryFn: () => getAnalyticsOverviewApi(activeRange),
+    enabled: canReadAnalytics,
     staleTime: 60 * 1000,
+  });
+
+  const editorialQueueQuery = useQuery({
+    queryKey: ["dashboard", "editorial-queue", user.id],
+    queryFn: async () => {
+      const [drafts, review, scheduled] = await Promise.all([
+        apiRequest<{ total: number }>("/posts?status=draft&limit=1"),
+        apiRequest<{ total: number }>("/posts?status=in_review&limit=1"),
+        apiRequest<{ total: number }>("/posts?status=scheduled&limit=1"),
+      ]);
+      return {
+        drafts: drafts.total || 0,
+        review: review.total || 0,
+        scheduled: scheduled.total || 0,
+      };
+    },
+    enabled: canReadPosts,
+    staleTime: 30 * 1000,
   });
 
   const data: AnalyticsOverview | undefined = overviewQuery.data;
@@ -274,8 +318,60 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
         description={tr("Monitor publication traffic, readership engagement, and subscriber growth.")}
       />
 
+      {/* Editorial work queue: show the next operational actions before analytics. */}
+      {canReadPosts && (
+        <section className="space-y-3" aria-labelledby="editorial-work-queue-title">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div className="space-y-1">
+              <h2 id="editorial-work-queue-title" className="text-base font-semibold tracking-tight text-foreground">{tr("Editorial workflow")}</h2>
+              <p className="text-sm text-muted-foreground">{tr("Items that need attention")}</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="min-h-10" onClick={() => onNavigate("/admin/posts")}>
+              {tr("View all posts")}
+            </Button>
+          </div>
+          {editorialQueueQuery.isLoading ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-busy="true">
+              {[0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl border border-border/70 bg-card" />)}
+            </div>
+          ) : editorialQueueQuery.isError ? (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-card px-4 py-3">
+              <p className="text-sm text-muted-foreground">{tr("Unable to load editorial tasks")}</p>
+              <Button type="button" variant="outline" size="sm" className="min-h-10" onClick={() => void editorialQueueQuery.refetch()}>{tr("Retry")}</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {([
+                { key: "review", label: "In review", description: "Content waiting for editorial review", count: editorialQueueQuery.data?.review ?? 0, path: "/admin/posts/review", icon: <Eye className="size-4" aria-hidden="true" /> },
+                { key: "drafts", label: "Drafts", description: "Unpublished posts in progress", count: editorialQueueQuery.data?.drafts ?? 0, path: "/admin/posts/drafts", icon: <FileText className="size-4" aria-hidden="true" /> },
+                { key: "scheduled", label: "Scheduled", description: "Posts queued for publication", count: editorialQueueQuery.data?.scheduled ?? 0, path: "/admin/posts/scheduled", icon: <Calendar className="size-4" aria-hidden="true" /> },
+              ]).map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => onNavigate(item.path)}
+                  className="group flex min-h-28 min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 text-start shadow-2xs transition-colors hover:border-primary/40 hover:bg-muted/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    {item.icon}
+                    {tr(item.label)}
+                  </span>
+                  <span className="flex items-end justify-between gap-3">
+                    <span className="min-w-0 space-y-1">
+                      <span className="block text-2xl font-semibold tabular-nums tracking-tight text-foreground">{formatNumber(item.count)}</span>
+                      <span className="block text-xs leading-relaxed text-muted-foreground">{tr(item.description)}</span>
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-primary">{tr("Open")}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Navigation Tabs & Date Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div role="group" aria-label={tr("Analytics")} className="flex w-full min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <button
@@ -327,14 +423,20 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
-      {overviewQuery.isLoading && <LoadingState />}
-      {overviewQuery.isError && (
+      {!canReadAnalytics && (
+        <Card className="border-border/70 p-5 text-sm text-muted-foreground">
+          {tr("Analytics access is not available for your account.")}
+        </Card>
+      )}
+
+      {canReadAnalytics && overviewQuery.isLoading && <LoadingState />}
+      {canReadAnalytics && overviewQuery.isError && (
         <ErrorState onRetry={() => overviewQuery.refetch()} />
       )}
 
-      {overviewQuery.isSuccess && data && (
+      {canReadAnalytics && overviewQuery.isSuccess && data && (
         <>
           {/* TAB 1: OVERVIEW */}
           {analyticsTab === "overview" && (
@@ -417,7 +519,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
                           {data.latestPost.title}
                         </h4>
                         <p className="text-xs text-muted-foreground">
-                          {tr("Published")} · {new Date(data.latestPost.publishedAt).toLocaleDateString(locale === "ar" ? "ar-SA" : "en-US")}
+                          {tr("Published")} · {formatDate(data.latestPost.publishedAt, { day: "numeric", month: "short", year: "numeric" })}
                         </p>
                         <div className="pt-1">
                           <Badge

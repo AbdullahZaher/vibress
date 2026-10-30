@@ -1,5 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listMediaApi,
@@ -14,6 +14,7 @@ import {
 import { Button } from "./ui/button";
 import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
+import { EditorialPagination } from "./common/EditorialPagination";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
@@ -32,7 +33,12 @@ export const MediaLibrary: React.FC = () => {
   const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(24);
+  const [sortBy, setSortBy] = useState<"createdAt" | "displayName" | "sizeBytes">("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -52,14 +58,32 @@ export const MediaLibrary: React.FC = () => {
     enabled: !!selectedAsset,
   });
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => { setPage(0); }, [selectedType]);
+
   const filterType =
     selectedType === "all"
       ? undefined
       : (selectedType as "image" | "video" | "audio" | "file");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["media", { search, assetType: filterType }],
-    queryFn: () => listMediaApi({ search, assetType: filterType, limit: 100 }),
+    queryKey: ["media", { search: debouncedSearch, assetType: filterType, page, pageSize, sortBy, sortOrder }],
+    queryFn: () => listMediaApi({
+      search: debouncedSearch,
+      assetType: filterType,
+      limit: pageSize,
+      offset: page * pageSize,
+      sortBy,
+      sortOrder,
+    }),
+    placeholderData: (previousData) => previousData,
   });
 
   const uploadMutation = useMutation({
@@ -163,14 +187,14 @@ export const MediaLibrary: React.FC = () => {
           {["all", "image", "video", "audio", "file"].map((type) => (
             <button
               key={type}
+              type="button"
               onClick={() => setSelectedType(type)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
-                selectedType === type
-                  ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              aria-pressed={selectedType === type}
+              className={selectedType === type
+                ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted px-3 text-sm font-semibold text-foreground shadow-2xs"
+                : "min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"}
             >
-              {type === "all" ? "All Media" : `${type}s`}
+              {tr(type === "all" ? "All Media" : type === "image" ? "Images" : type === "video" ? "Videos" : type === "audio" ? "Audio" : "Files")}
             </button>
           ))}
         </div>
@@ -182,9 +206,26 @@ export const MediaLibrary: React.FC = () => {
             placeholder={tr("Filter assets by filename...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="ps-8 h-8 text-xs bg-card border-border/70"
+            aria-label={tr("Filter assets by filename...")}
+            className="h-11 w-full ps-9 text-sm"
           />
         </div>
+        <label className="flex min-h-11 items-center gap-2 text-xs text-muted-foreground">
+          <span>{tr("Sort by")}</span>
+          <select
+            value={sortBy}
+            onChange={(event) => { setSortBy(event.target.value as typeof sortBy); setPage(0); }}
+            className="min-h-11 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            aria-label={tr("Sort by")}
+          >
+            <option value="createdAt">{tr("Recently added")}</option>
+            <option value="displayName">{tr("Name")}</option>
+            <option value="sizeBytes">{tr("File size")}</option>
+          </select>
+        </label>
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")}>
+          {sortOrder === "desc" ? tr("Newest first") : tr("Oldest first")}
+        </Button>
       </div>
 
       {/* Content Grid */}
@@ -207,12 +248,14 @@ export const MediaLibrary: React.FC = () => {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-6">
           {assets.map((asset: ApiMediaAsset) => (
-            <div
+            <button
               key={asset.id}
+              type="button"
               onClick={() => openDetail(asset)}
-              className="group relative rounded-xl border border-border bg-card overflow-hidden cursor-pointer hover:border-sidebar-border shadow-2xs transition-all flex flex-col"
+              aria-label={`${tr("Open asset details")}: ${asset.displayName}`}
+              className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-start shadow-2xs transition-all hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <div className="aspect-square bg-muted/40 flex items-center justify-center relative overflow-hidden">
                 {asset.assetType === "image" ? (
@@ -237,16 +280,24 @@ export const MediaLibrary: React.FC = () => {
                   {(asset.sizeBytes / 1024).toFixed(0)} KB
                 </p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
+
+      <EditorialPagination
+        page={page}
+        pageSize={pageSize}
+        total={data?.total ?? 0}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+      />
 
       {/* Asset Detail Modal */}
       <Dialog
         isOpen={!!selectedAsset}
         onClose={() => setSelectedAsset(null)}
-        title="Asset Preview & Details"
+        title={tr("Asset Preview & Details")}
       >
         {selectedAsset && (
           <div className="space-y-4 pt-2">
