@@ -956,6 +956,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
           barrier.end();
         });
       } catch (error: unknown) {
+        // If cgroup.procs attachment fails, the blocked launcher was never
+        // enrolled: cgroup.kill alone cannot terminate it.
+        if (child!) {
+          try { child.kill("SIGKILL"); } catch { /* exited during setup */ }
+        }
         resourceLease.killTree();
         resourceLease.dispose();
         throw error;
