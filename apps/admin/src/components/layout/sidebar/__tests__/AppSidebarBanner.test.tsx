@@ -28,7 +28,7 @@ describe("AppSidebarBanner React Component", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders the notification card with title, description, and sparkles badge", async () => {
+  it("renders a compact notice and expands to reveal details", async () => {
     vi.spyOn(whatsNewApi, "getWhatsNewApi").mockResolvedValue({
       item: {
         id: "analytics-email-sequences",
@@ -48,11 +48,13 @@ describe("AppSidebarBanner React Component", () => {
 
     const banner = container.querySelector('[data-testid="whats-new-banner"]');
     expect(banner).not.toBeNull();
-    expect(container.textContent).toContain("WHAT'S NEW?");
+    expect(container.textContent).toContain("What's new");
     expect(container.textContent).toContain("Analytics for email sequences");
-    expect(container.textContent).toContain(
-      "Understand how your automated emails are performing.",
-    );
+    expect(container.textContent).not.toContain("Understand how your automated emails are performing.");
+    const toggle = banner?.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
+    await act(async () => { toggle?.click(); });
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("Understand how your automated emails are performing.");
   });
 
   it("renders close button with accessible aria-label", async () => {
@@ -167,6 +169,8 @@ describe("AppSidebarBanner React Component", () => {
       root.render(<AppSidebarBanner onNavigate={onNavigateMock} />);
     });
 
+    const expand = container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
+    await act(async () => { expand?.click(); });
     const link = container.querySelector("a");
     expect(link).not.toBeNull();
     expect(link?.textContent).toContain("Learn more");

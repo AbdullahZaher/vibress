@@ -1,157 +1,79 @@
-import React, { useState, useEffect } from "react";
-import {
-  Sparkles,
-  Bell,
-  Zap,
-  Info,
-  Star,
-  Rocket,
-  ArrowRight,
-  X,
-  LucideIcon,
-} from "lucide-react";
-import { Badge } from "../../ui/badge";
-import {
-  getWhatsNewApi,
-  dismissWhatsNewApi,
-  isSafeWhatsNewUrl,
-  WhatsNewItem,
-} from "../../../lib/api/whats-new";
+import React, { useEffect, useId, useState } from "react";
+import { Bell, ChevronDown, Sparkles, X } from "lucide-react";
+import { useAdminLocale } from "../../../lib/admin-locale";
+import { getWhatsNewApi, dismissWhatsNewApi, isSafeWhatsNewUrl, type WhatsNewItem } from "../../../lib/api/whats-new";
 
-const WHATS_NEW_ICONS: Record<string, LucideIcon> = {
-  sparkles: Sparkles,
-  bell: Bell,
-  zap: Zap,
-  info: Info,
-  star: Star,
-  rocket: Rocket,
-};
+interface AppSidebarBannerProps { onNavigate?: (path: string) => void; }
 
-interface AppSidebarBannerProps {
-  onNavigate?: (path: string) => void;
-}
-
-export const AppSidebarBanner: React.FC<AppSidebarBannerProps> = ({
-  onNavigate,
-}) => {
+/** Compact, expandable release notice. Details never obscure primary navigation. */
+export const AppSidebarBanner: React.FC<AppSidebarBannerProps> = ({ onNavigate }) => {
+  const { tr } = useAdminLocale();
+  const detailsId = useId();
   const [item, setItem] = useState<WhatsNewItem | null>(null);
-  const [isDismissed, setIsDismissed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadWhatsNew() {
-      try {
-        const response = await getWhatsNewApi();
-        if (isMounted) {
-          setItem(response.item ?? null);
-          setLoaded(true);
-        }
-      } catch {
-        // Fail silently without breaking Admin: render null
-        if (isMounted) {
-          setItem(null);
-          setLoaded(true);
-        }
-      }
-    }
-
-    loadWhatsNew();
-
-    return () => {
-      isMounted = false;
-    };
+    let active = true;
+    void getWhatsNewApi().then((response) => {
+      if (active) setItem(response.item ?? null);
+    }).catch(() => { if (active) setItem(null); });
+    return () => { active = false; };
   }, []);
 
-  const handleDismiss = async () => {
+  const dismiss = () => {
     if (!item) return;
-
-    const notificationId = item.id;
-    // 1. Optimistic UI update: immediately hide card
-    setIsDismissed(true);
-
-    // 2. Persist dismissal to authenticated user profile in DB
-    try {
-      await dismissWhatsNewApi(notificationId);
-    } catch {
-      // Failed dismissal is logged silently; idempotent retry on next action
-    }
+    const id = item.id;
+    setDismissed(true);
+    void dismissWhatsNewApi(id).catch(() => {
+      // Keep dismissed locally even when persistence is unavailable.
+    });
   };
-
-  const handleActionClick = (e: React.MouseEvent) => {
+  const onLink = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!item?.url || !isSafeWhatsNewUrl(item.url)) return;
-
     if (item.url.startsWith("/") && onNavigate) {
-      e.preventDefault();
+      event.preventDefault();
       onNavigate(item.url);
     }
   };
 
-  // If not loaded, no eligible item, or dismissed: render nothing (null)
-  if (!loaded || !item || isDismissed) {
-    return null;
-  }
-
-  // Safe icon lookup (fallback to Sparkles)
-  const IconComponent =
-    (item.icon && WHATS_NEW_ICONS[item.icon.toLowerCase()]) || Sparkles;
-
-  const hasSafeUrl = Boolean(item.url && isSafeWhatsNewUrl(item.url));
+  if (!item || dismissed) return null;
+  const safeUrl = item.url && isSafeWhatsNewUrl(item.url) ? item.url : null;
 
   return (
-    <div
-      data-testid="whats-new-banner"
-      data-notification-id={item.id}
-      className="relative group"
-    >
-      {/* Vibress Signature Wide Spread Ambient Glow (Behind Card) */}
-      <div className="absolute -inset-1.5 bg-gradient-to-r from-purple-600 via-pink-500 to-indigo-600 rounded-2xl opacity-20 dark:opacity-25 blur-lg group-hover:opacity-40 group-hover:blur-xl transition-all duration-500" />
-
-      {/* Card Content Container */}
-      <div className="relative p-3.5 rounded-xl bg-card border border-border text-card-foreground shadow-sm space-y-1.5 transition-all overflow-hidden">
-        {/* Top-Right & Bottom-Left Rich Mesh Glow inside card */}
-        <div className="absolute -top-12 -right-12 w-36 h-36 bg-gradient-to-br from-purple-500/40 via-pink-500/30 to-transparent rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-gradient-to-tr from-indigo-500/30 via-purple-500/20 to-blue-500/0 rounded-full blur-xl pointer-events-none" />
-
-        <div className="relative flex items-center justify-between z-10">
-          <Badge
-            variant="outline"
-            className="text-[10px] font-bold text-purple-600 dark:text-purple-300 border-purple-500/30 bg-purple-500/15 gap-1 px-1.5 py-0 shadow-2xs"
-          >
-            <IconComponent className="h-3 w-3 text-purple-500" /> WHAT'S NEW?
-          </Badge>
-          <button
-            type="button"
-            onClick={handleDismiss}
-            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer p-0.5 rounded-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
-            title="Close notification"
-            aria-label="Close notification"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-
-        <h4 className="relative text-xs font-bold leading-snug text-foreground z-10">
-          {item.title}
-        </h4>
-        <p className="relative text-[11px] text-muted-foreground leading-normal z-10">
-          {item.description}
-        </p>
-
-        {hasSafeUrl && (
-          <div className="relative pt-1 z-10">
-            <a
-              href={item.url}
-              onClick={handleActionClick}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:underline transition-colors focus:outline-none focus:ring-1 focus:ring-purple-500 rounded-xs"
-            >
-              Learn more
-              <ArrowRight className="h-2.5 w-2.5" />
-            </a>
-          </div>
-        )}
+    <section data-testid="whats-new-banner" data-notification-id={item.id}
+      aria-label={tr("What's new")}
+      className="rounded-xl border border-sidebar-border bg-card/70 text-card-foreground">
+      <div className="flex items-center gap-1 p-1.5">
+        <button type="button" onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded} aria-controls={detailsId}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-start hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            {item.icon === "sparkles" ? <Sparkles className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-xs font-semibold text-muted-foreground">{tr("What's new")}</span>
+            <span dir="auto" className="truncate text-xs font-medium text-foreground">{item.title}</span>
+          </span>
+          <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+        <button type="button" onClick={dismiss} title={tr("Close notification")}
+          aria-label={tr("Close notification")}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+          <X className="size-4" aria-hidden="true" />
+        </button>
       </div>
-    </div>
+      {expanded && (
+        <div id={detailsId} className="border-t border-border/60 px-3.5 pb-3 pt-2">
+          <p dir="auto" className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+          {safeUrl && (
+            <a href={safeUrl} onClick={onLink}
+              className="mt-2 inline-flex min-h-9 items-center rounded-md text-xs font-semibold text-foreground underline underline-offset-4 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">
+              {tr("Learn more")}
+            </a>
+          )}
+        </div>
+      )}
+    </section>
   );
 };
