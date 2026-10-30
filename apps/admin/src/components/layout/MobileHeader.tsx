@@ -73,7 +73,9 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <Menu className="h-4 w-4" />
         </button>
 
-        <div
+        <button
+          type="button"
+          aria-label={tr("Dashboard")}
           className="flex min-w-0 items-center gap-2 cursor-pointer"
           onClick={() => onNavigate("/admin")}
         >
@@ -85,7 +87,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <span className="font-semibold text-sm tracking-tight text-foreground truncate max-w-[84px] min-[400px]:max-w-[140px]">
             {tr(getPageTitle())}
           </span>
-        </div>
+        </button>
       </div>
 
       {/* Right Section: Quick Action + Search + Theme Toggle */}

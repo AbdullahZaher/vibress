@@ -284,3 +284,12 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload admin design-review screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: admin-ui-design-review-${{ github.run_id }}
+          path: test-results/**/design-*.png
+          if-no-files-found: ignore
+          retention-days: 7
