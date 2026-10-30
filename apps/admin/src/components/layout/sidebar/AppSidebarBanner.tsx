@@ -53,7 +53,7 @@ export const AppSidebarBanner: React.FC<AppSidebarBannerProps> = ({ onNavigate }
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-xs font-semibold text-muted-foreground">{tr("What's new")}</span>
-            <span dir="auto" className="truncate text-xs font-medium text-foreground">{item.title}</span>
+            <span dir="auto" className="truncate text-xs font-medium text-foreground">{tr(item.title)}</span>
           </span>
           <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
         </button>
@@ -65,7 +65,7 @@ export const AppSidebarBanner: React.FC<AppSidebarBannerProps> = ({ onNavigate }
       </div>
       {expanded && (
         <div id={detailsId} className="border-t border-border/60 px-3.5 pb-3 pt-2">
-          <p dir="auto" className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+          <p dir="auto" className="text-xs leading-relaxed text-muted-foreground">{tr(item.description)}</p>
           {safeUrl && (
             <a href={safeUrl} onClick={onLink}
               className="mt-2 inline-flex min-h-9 items-center rounded-md text-xs font-semibold text-foreground underline underline-offset-4 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring">

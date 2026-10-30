@@ -23,6 +23,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Collaborative Studio Editing": "التحرير التعاوني في الاستوديو",
+  "Edit and build content together in real time.": "حرّر المحتوى وأنشئه مع فريقك لحظيًا.",
+  "Analytics for email sequences": "تحليلات سلاسل الرسائل البريدية",
+  "Understand how your automated emails are performing.": "تعرّف على أداء رسائلك البريدية الآلية.",
   "Staff": "الفريق",
   "What's new": "المستجدات",
   "Learn more": "اعرف المزيد",
