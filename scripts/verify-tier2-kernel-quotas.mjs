@@ -79,8 +79,9 @@ async function probe(label, source, verify) {
     }, 12_000);
     let result;
     try { result = await exit; } finally { clearTimeout(watchdog); }
-    await verify({ result, stdout, stderr, lease });
-    console.log(`PASS ${label}:`, JSON.stringify({ result, stdout: stdout.trim() }));
+    const counters = lease.readKernelCounters();
+    await verify({ result, stdout, stderr, counters });
+    console.log(`PASS ${label}:`, JSON.stringify({ result, counters, stdout: stdout.trim() }));
   } finally {
     if (child && child.exitCode === null) {
       lease.killTree();
@@ -99,7 +100,8 @@ await probe("memory.max", `
     b.fill(0x5c);
     items.push(b);
   }
-`, ({ result, stdout, stderr }) => {
+`, ({ result, stdout, stderr, counters }) => {
+  assert.ok(counters.memoryOomKills > 0, "kernel memory.events must report a real OOM kill");
   assert.equal(stdout, "", "memory exhaustion must never complete normally");
   assert.ok(result.signal === "SIGKILL" || result.code !== 0, "memory exhausted worker must die");
   assert.ok(!stderr.includes("Operation not permitted"), "Bubblewrap failed instead of enforcing memory limits");
@@ -110,7 +112,8 @@ await probe("cpu.max", `
   const end=Date.now()+3000;
   while(Date.now()<end) Math.sqrt(Math.random());
   process.stdout.write("CPU_DONE");
-`, ({ result, stdout, stderr }) => {
+`, ({ result, stdout, stderr, counters }) => {
+  assert.ok(counters.cpuThrottledPeriods > 0, "kernel cpu.stat must prove actual CPU throttling");
   assert.deepEqual(result, { code: 0, signal: null }, `CPU worker failed: ${stderr}`);
   assert.equal(stdout, "CPU_DONE");
 });
@@ -125,7 +128,8 @@ await probe("pids.max", `
   }
   setTimeout(()=>process.stdout.write("PIDS_DENIED:"+denied),1200);
   setTimeout(()=>process.exit(0),1500);
-`, ({ result, stdout, stderr }) => {
+`, ({ result, stdout, stderr, counters }) => {
+  assert.ok(counters.pidLimitEvents > 0, "kernel pids.events must report hitting pids.max");
   assert.deepEqual(result, { code: 0, signal: null }, `PID worker failed: ${stderr}`);
   assert.match(stdout, /PIDS_DENIED:[1-9]\d*/, "kernel must refuse one or more child processes");
 });
