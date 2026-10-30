@@ -24,6 +24,9 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Editorial overview": "نظرة عامة تحريرية",
+  "Your editorial workspace at a glance.": "مساحة عملك التحريرية في لمحة.",
+  "No dashboard data is available for your role.": "لا تتوفر بيانات لوحة تحكم لهذا الدور.",
   "Descending": "تنازلي",
   "Ascending": "تصاعدي",
   "Loading media library...": "جارٍ تحميل مكتبة الوسائط...",

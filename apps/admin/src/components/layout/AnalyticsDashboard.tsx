@@ -316,8 +316,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Title Header */}
       <AdminPageHeader
-        title={tr("Analytics")}
-        description={tr("Monitor publication traffic, readership engagement, and subscriber growth.")}
+        title={tr(canReadAnalytics ? "Analytics" : "Editorial overview")}
+        description={tr(canReadAnalytics ? "Monitor publication traffic, readership engagement, and subscriber growth." : "Your editorial workspace at a glance.")}
       />
 
       {/* Editorial work queue: show the next operational actions before analytics. */}
@@ -427,9 +427,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         </div>
       </div>}
 
-      {!canReadAnalytics && (
+      {!canReadAnalytics && !canReadPosts && (
         <Card className="border-border/70 p-5 text-sm text-muted-foreground">
-          {tr("Analytics access is not available for your account.")}
+          {tr("No dashboard data is available for your role.")}
         </Card>
       )}
 

@@ -51,6 +51,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Detail Modal
@@ -61,7 +62,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // References Query
-  const { data: refSummaryData, isLoading: isLoadingRefs } = useQuery<{
+  const { data: refSummaryData, isLoading: isLoadingRefs, isError: isRefsError } = useQuery<{
     summary: ApiMediaReferenceSummary;
   }>({
     queryKey: ["media-references", selectedAsset?.id],
@@ -98,7 +99,10 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadMediaApi(file),
+    mutationFn: (file: File) => {
+      if (!canUpload) throw new Error("You do not have permission to upload media.");
+      return uploadMediaApi(file);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       setUploadError(null);
@@ -110,16 +114,26 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
-      updateMediaApi(id, { displayName }),
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) => {
+      if (!canEdit) throw new Error("You do not have permission to edit media.");
+      return updateMediaApi(id, { displayName });
+    },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       setSelectedAsset(res.media);
+      setUpdateError(null);
+    },
+    onError: (err: unknown) => {
+      setUpdateError(err instanceof Error ? err.message : "Failed to update media.");
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteMediaApi(id),
+    mutationFn: (id: string) => {
+      if (!canDelete) throw new Error("You do not have permission to delete media.");
+      if (isLoadingRefs || isRefsError) throw new Error("Verify media references before deleting.");
+      return deleteMediaApi(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       setSelectedAsset(null);
@@ -133,11 +147,13 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canUpload) return;
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
       uploadMutation.mutate(file);
     });
+    e.currentTarget.value = "";
   };
 
   const handleCopyUrl = (url: string, id: string) => {
@@ -153,7 +169,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
   const handleSaveDisplayName = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAsset) return;
+    if (!canEdit || !selectedAsset) return;
+    setUpdateError(null);
     updateMutation.mutate({
       id: selectedAsset.id,
       displayName: displayNameDraft,
@@ -188,8 +205,13 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
       )}
 
       {deleteError && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
           {deleteError}
+        </div>
+      )}
+      {updateError && (
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+          {updateError}
         </div>
       )}
 
@@ -387,7 +409,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                 </p>
                 {isLoadingRefs ? (
                   <p className="text-muted-foreground">
-                    {tr("{tr("Checking references...")}")}
+                    {tr("Checking references...")}
                   </p>
                 ) : refSummaryData?.summary ? (
                   <p className="text-muted-foreground font-mono">
@@ -395,7 +417,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   </p>
                 ) : (
                   <p className="text-muted-foreground font-mono">
-                    {tr("{tr("No usage recorded")}")}
+                    {tr("No usage recorded")}
                   </p>
                 )}
               </div>
@@ -407,6 +429,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      disabled={isLoadingRefs || isRefsError || deleteMutation.isPending}
                       onClick={() => setDeleteConfirmOpen(true)}
                       className="min-h-11 gap-1 text-sm text-destructive hover:bg-destructive/10"
                     >
@@ -444,7 +467,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
           <Button
             type="button"
             variant="destructive"
-            disabled={!canDelete || deleteMutation.isPending || !selectedAsset}
+            disabled={!canDelete || isLoadingRefs || isRefsError || deleteMutation.isPending || !selectedAsset}
             onClick={() => { if (selectedAsset) deleteMutation.mutate(selectedAsset.id); }}
           >
             {deleteMutation.isPending ? tr("Processing...") : tr("Confirm delete")}
