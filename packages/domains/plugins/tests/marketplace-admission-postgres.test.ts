@@ -173,7 +173,7 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
       ]);
 
       await clientA.query(
-        "UPDATE plugin_marketplace_admissions SET revoked=false, admission='{}'::jsonb WHERE plugin_id=$1",
+        "UPDATE plugin_marketplace_admissions SET revoked=false, publisher_id='publisher_corruption_probe', admission='{}'::jsonb WHERE plugin_id=$1",
         [pluginId],
       );
       await expect(b.loadMarketplaceAdmission(pluginId, pubA))
