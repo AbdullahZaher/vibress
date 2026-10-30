@@ -1,4 +1,5 @@
 import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
+import { Writable } from "node:stream";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
@@ -17,6 +18,7 @@ import {
   type Tier2CapabilityRequest,
 } from "./tier2-capability-gateway.js";
 import type { PluginTrustTier } from "../application/plugin-catalog.js";
+import { Tier2KernelCgroupLease } from "./tier2-kernel-resource-limits.js";
 
 export interface AuthoritativePluginAdmission {
   readonly pluginId: string;
@@ -459,12 +461,15 @@ export function buildBubblewrapArgs(options: {
   nodeArgs: string[];
   pluginDirectory?: string | undefined;
   sanitizedEnv: NodeJS.ProcessEnv;
+  /** Additional pipe held by Host until the launcher is attached to cgroup v2. */
+  blockFd?: number | undefined;
 }): string[] {
   const args: string[] = [
     "--unshare-all",
     "--unshare-net",
     "--new-session",
     "--die-with-parent",
+    ...(options.blockFd === undefined ? [] : ["--block-fd", String(options.blockFd)]),
     "--ro-bind", "/usr", "/usr",
   ];
 
@@ -577,6 +582,7 @@ interface ActiveProcess {
   /** Scoped identity for process reuse and asynchronous cleanup. */
   readonly processKey: string;
   readonly child: ChildProcess;
+  readonly resourceLease?: Tier2KernelCgroupLease | undefined;
   readonly seenCapabilityMessageIds: Set<string>;
   readonly sessionKey: string;
   readonly pluginId: string;
@@ -905,6 +911,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     };
 
     let child: ChildProcess;
+    let resourceLease: Tier2KernelCgroupLease | undefined;
 
     if (isolation.isolationMechanism === "sandbox_runner") {
       const runner = detectSandboxRunner();
@@ -914,16 +921,45 @@ export class Tier2PluginSupervisor extends EventEmitter {
           "Sandbox runner became unavailable",
         );
       }
-      const bwrapArgs = buildBubblewrapArgs({
-        scriptPath: script!,
-        pluginDirectory: entrypointPath ? path.dirname(entrypointPath) : undefined,
-        sanitizedEnv,
-        nodeArgs,
-      });
-
-      child = spawn(runner.executablePath, bwrapArgs, {
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      // A delegated cgroup must exist with verified limits BEFORE any plugin
+      // code may run. Bwrap blocks on inherited fd 3 until Host attaches its
+      // launcher to the cgroup; descendants inherit kernel-enforced ceilings.
+      resourceLease = Tier2KernelCgroupLease.create();
+      try {
+        const bwrapArgs = buildBubblewrapArgs({
+          scriptPath: script!,
+          pluginDirectory: entrypointPath ? path.dirname(entrypointPath) : undefined,
+          sanitizedEnv,
+          nodeArgs,
+          blockFd: 3,
+        });
+        child = spawn(runner.executablePath, bwrapArgs, {
+          stdio: ["pipe", "pipe", "pipe", "pipe"],
+        });
+        const barrier = child.stdio[3];
+        if (!child.pid || !(barrier instanceof Writable)) {
+          throw new Tier2SupervisorError(
+            "CGROUP_LAUNCH_BLOCK_FAILED",
+            "Sandbox could not create a supervised execution barrier",
+          );
+        }
+        resourceLease.attachBlockedLauncher(child.pid);
+        // No release before cgroup.procs membership and all three kernel
+        // resource ceilings are confirmed. A write error terminates the tree.
+        barrier.write("1", (error) => {
+          if (error) {
+            resourceLease?.killTree();
+            this.cleanupProcess(processKey, new Tier2SupervisorError(
+              "CGROUP_LAUNCH_BLOCK_FAILED", "Sandbox execution barrier failed",
+            ));
+          }
+          barrier.end();
+        });
+      } catch (error: unknown) {
+        resourceLease.killTree();
+        resourceLease.dispose();
+        throw error;
+      }
     } else {
       child = fork(script!, [], {
         env: sanitizedEnv,
@@ -935,6 +971,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     const active: ActiveProcess = {
       processKey,
       child,
+      ...(resourceLease ? { resourceLease } : {}),
       seenCapabilityMessageIds: new Set(),
       sessionKey,
       pluginId,
@@ -1209,6 +1246,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
     const active = this.processes.get(processKey);
     if (!active) return;
     this.processes.delete(processKey);
+    // Fail-closed process-tree kill, even when a descendant ignores SIGTERM.
+    active.resourceLease?.dispose();
 
     for (const [, pending] of active.pendingRequests) {
       clearTimeout(pending.timer);
