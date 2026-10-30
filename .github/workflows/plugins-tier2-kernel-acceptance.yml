@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/plugins-tier2-kernel-acceptance.yml"
       - "scripts/verify-tier2-bubblewrap-isolation.mjs"
+      - "scripts/verify-tier2-bubblewrap-ipc.mjs"
       - "packages/domains/plugins/src/runtime/tier2-process-supervisor.ts"
       - "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"
   workflow_dispatch:
@@ -36,6 +37,9 @@ jobs:
 
       - name: Prove real kernel containment (fail-closed)
         run: node scripts/verify-tier2-bubblewrap-isolation.mjs
+
+      - name: Probe Node stdio IPC across real namespace boundary
+        run: node scripts/verify-tier2-bubblewrap-ipc.mjs
 
       - name: Explain remaining M8 activation blockers
         run: |
