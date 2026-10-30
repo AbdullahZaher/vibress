@@ -1,6 +1,6 @@
-# ADR — Tier 2 untrusted plugin containment (design only)
+# ADR — Tier 2 untrusted plugin containment (design, implementation, and release gates)
 
-**Status:** Proposed, **not implemented**. **Date:** 2026-10-24.
+**Status:** Partially implemented; untrusted production execution remains **disabled** pending resource isolation and independent acceptance. **Initial ADR:** 2026-10-24; **security checkpoint:** 2026-10-30.
 **Scope:** security blocker H-01 for any future ZIP/GitHub/marketplace execution path.
 **Maintainer:** Vibress core operator/platform architecture.
 
@@ -95,7 +95,7 @@ An unavailable kernel capability causes failure, **not a skipped success**.
 
 ## M8 production sandbox integration & verification status — 2026-10-30
 
-Milestones M8.3 through M8.6 have been completed and verified across the codebase:
+The following M8.3–M8.6 implementation components were added and exercised by dedicated tests. These results **do not** certify production untrusted execution or global Marketplace rollout:
 
 1. **M8.3 Real Bubblewrap Worker Integration & Authenticated Stream IPC:**
    - The production Tier 2 worker (`tier2-sandbox-worker.ts` and compiled production bundle) implements dual-transport operation: Node IPC for operator-trusted forks, and bounded length-prefixed binary stdio IPC (`StreamIpcReader` / `encodeTier2IpcFrame`) when executed inside Bubblewrap.
@@ -125,3 +125,50 @@ Milestones M8.3 through M8.6 have been completed and verified across the codebas
 
 **Operator Guidance:**
 Untrusted marketplace plugins require a Linux host or container environment capable of unprivileged user namespaces (`CLONE_NEWUSER`). Operator-curated and community-reviewed plugins continue to run smoothly via process isolation. Marketplace General Availability remains gated pending full public registry rollout.
+
+## Security closure checkpoint — 2026-10-30 (PR #89)
+
+This checkpoint supersedes any earlier claim that M8's kernel probes alone
+authorize marketplace execution. The runtime is **fail-closed** for untrusted
+marketplace code even when an OS-capable Bubblewrap binary is installed: the
+current Supervisor does not yet enforce a delegated per-plugin CPU/memory/PID
+cgroup with measured resource exhaustion acceptance. V8 heap caps, namespaces,
+and invocation timeouts do not substitute for that boundary.
+
+Implementation hardening:
+
+- Reject missing Host admissions with `PLUGIN_NOT_ADMITTED`; a caller's
+  `untrusted_marketplace` trust-tier label is never installation authority.
+- Require a pinned, nonempty approved release directory and SHA-256 artifact
+  manifest, allowlisted entrypoint, Host-approved publication scope and
+  capability ceiling before selecting an untrusted sandbox.
+- Reject untrusted release symlinks, injected files, invalid manifest paths,
+  invalid digests, release changes and publisher/release revocation.
+- Isolate untrusted worker process identity by plugin, publication, actor type
+  and actor ID; operator-trusted processes keep their historical reuse
+  semantics. Admission rotation, publisher revocation and plugin revocation
+  tear down all related processes.
+- Verify the claimed release/plugin/publication identity on signed IPC
+  responses and capability requests; reject capability replay and
+  per-invocation capability flooding. Terminate a stdio sandbox on malformed
+  or mismatched authenticated frames. These guards protect the Host gateway;
+  an HMAC session secret accessible to the child is **not** a sandbox against
+  arbitrary code within that child.
+
+**Outstanding release blockers (not waived by green CI):**
+
+1. Integrate and prove per-sandbox Linux resource ceilings, process-tree
+   termination and Docker/self-hosted policy compatibility; do not provide a
+   Boolean/ENV bypass to turn off this gate.
+2. Run real Supervisor → Bubblewrap → production worker → Host capability
+   gateway acceptance against two publications and multiple actors. The
+   standalone Linux lifecycle probe uses a test Host and does not prove this.
+3. Establish immutable Host-owned artifact mounts, signed persisted admission
+   and cross-replica revocation propagation. A complete manifest checked
+   before launch is not, alone, protection against a Host-side TOCTOU change.
+4. Complete operational disaster recovery and multi-replica rollout drills,
+   review SDK/Native Admin compatibility, and obtain independent security
+   sign-off. Keep the PR Draft until all security release gates are evidenced.
+
+Operator-trusted Tier 1/curated code remains explicitly trusted; it is **not**
+made safe for hostile code by the Tier 2 controls described here.
