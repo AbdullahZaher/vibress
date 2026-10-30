@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Globe,
   Eye,
+  FileText,
 } from "lucide-react";
 import { ApiUser } from "../../lib/api";
 import { Card } from "../ui/card";
@@ -83,64 +84,80 @@ function AreaChart({
   metric: "views" | "visitors" | "members";
   color: string;
 }) {
-  const values = points.map((p) => p[metric]);
-  const max = Math.max(...values, 1);
-  const n = values.length;
-
-  let path = "";
-  let area = "";
-  if (n > 0) {
-    const coords = values.map((v, i) => {
-      const x = n === 1 ? 50 : (i / (n - 1)) * 100;
-      const y = 92 - (v / max) * 82;
-      return { x, y };
-    });
-    path = coords
-      .map(
-        (c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(1)},${c.y.toFixed(1)}`,
-      )
-      .join(" ");
-    area = `${path} L 100,100 L 0,100 Z`;
-  }
-
-  const { tr } = useAdminLocale();
-  const start = points[0]?.date || "";
-  const end = points[points.length - 1]?.date || "";
+  const { tr, locale } = useAdminLocale();
+  const [showData, setShowData] = useState(false);
+  const values = points.map((point) => point[metric]);
+  const max = Math.max(1, ...values);
+  const ceiling = Math.ceil(max / 4) * 4;
+  const hasData = values.some((value) => value > 0);
+  const format = (value: number) => value.toLocaleString(locale);
+  const coords = values.map((value, index) => ({
+    x: values.length === 1 ? 50 : (index / Math.max(1, values.length - 1)) * 100,
+    y: 96 - (value / ceiling) * 90,
+  }));
+  const line = coords.map((point, index) =>
+    `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
+  ).join(" ");
+  const area = coords.length ? `${line} L 100 100 L 0 100 Z` : "";
+  const start = points[0]?.date;
+  const end = points[points.length - 1]?.date;
+  const gradientId = `chart-gradient-${metric}`;
 
   return (
-    <div className="pt-2">
-      <div className="h-28 w-full relative">
-        {n === 0 || values.every((v) => v === 0) ? (
-          <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-            {tr("No traffic yet")}
+    <div className="space-y-3">
+      <div className="flex items-stretch gap-3">
+        <div aria-hidden="true" className="flex h-32 shrink-0 flex-col justify-between text-end text-[11px] tabular-nums text-muted-foreground">
+          {[ceiling, ceiling * 0.75, ceiling * 0.5, ceiling * 0.25, 0].map((tick) => (
+            <span key={tick}>{format(tick)}</span>
+          ))}
+        </div>
+        <div className="relative h-32 min-w-0 flex-1" role="img" aria-label={`${tr("Activity trend")}: ${tr(metric)} ${start || ""} – ${end || ""}`}>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+            {[0, 1, 2, 3, 4].map((tick) => <span key={tick} className="w-full border-t border-border/60" />)}
           </div>
-        ) : (
-          <svg
-            className="w-full h-full overflow-visible"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-          >
-            <defs>
-              <linearGradient id={`grad-${metric}-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={color} stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-            <path d={area} fill={`url(#grad-${metric}-${color.replace("#", "")})`} />
-            <path
-              d={path}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
+          {!hasData ? (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">{tr("No traffic yet")}</div>
+          ) : (
+            <svg aria-hidden="true" className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                  <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d={area} fill={`url(#${gradientId})`} />
+              <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            </svg>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap gap-x-2 tabular-nums">
+          {start && <time dateTime={start}>{start}</time>}
+          {end && <><span aria-hidden="true">—</span><time dateTime={end}>{end}</time></>}
+        </div>
+        {points.length > 0 && (
+          <button type="button" aria-expanded={showData} onClick={() => setShowData((open) => !open)}
+            className="shrink-0 min-h-9 rounded-lg px-3 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+            {showData ? tr("Hide data") : tr("View data")}
+          </button>
         )}
       </div>
-      {start && end && (
-        <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono pt-2">
-          <span>{start}</span>
-          <span>{end}</span>
+      {showData && points.length > 0 && (
+        <div className="max-h-48 overflow-auto rounded-lg border border-border">
+          <table className="w-full text-start text-xs">
+            <caption className="sr-only">{tr("Activity trend")}</caption>
+            <thead className="sticky top-0 bg-muted text-muted-foreground"><tr>
+              <th scope="col" className="px-3 py-2 text-start font-semibold">{tr("Date")}</th>
+              <th scope="col" className="px-3 py-2 text-end font-semibold">{tr(metric)}</th>
+            </tr></thead>
+            <tbody>{points.map((point, index) => (
+              <tr key={`${point.date}-${index}`} className="border-t border-border/60">
+                <td className="px-3 py-2 tabular-nums">{point.date}</td>
+                <td className="px-3 py-2 text-end tabular-nums">{format(point[metric])}</td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
       )}
     </div>
@@ -192,9 +209,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
-  user,
-}) => {
+export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = () => {
   const { tr, locale } = useAdminLocale();
   const [analyticsTab, setAnalyticsTab] = useState<
     "overview" | "web" | "newsletters" | "growth"
@@ -240,12 +255,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <button
               key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
               onClick={() => setAnalyticsTab(t)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer capitalize ${
+              aria-pressed={analyticsTab === t}
+              className={`min-h-10 px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer capitalize ${
                 analyticsTab === t
                   ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
@@ -261,7 +277,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             variant="outline"
             size="sm"
             onClick={() => setIsDateOpen(!isDateOpen)}
-            className="h-8 text-xs font-medium text-foreground border-border bg-card hover:bg-accent gap-2 cursor-pointer"
+            aria-expanded={isDateOpen}
+            className="min-h-10 text-sm font-medium text-foreground border-border bg-card hover:bg-accent gap-2 cursor-pointer"
           >
             <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
             <span>{tr(dateLabel)}</span>
@@ -277,7 +294,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     setDateLabel(opt.label);
                     setIsDateOpen(false);
                   }}
-                  className={`w-full text-start px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                  className={`w-full text-start min-h-10 px-3 py-2 text-sm transition-colors cursor-pointer ${
                     dateLabel === opt.label
                       ? "bg-sidebar-accent text-foreground font-semibold"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -328,7 +345,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <AreaChart
                     points={data.timeseries}
                     metric="members"
-                    color="#3b82f6"
+                    color="#60a5fa"
                   />
                 </Card>
 
@@ -358,7 +375,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <AreaChart
                     points={data.timeseries}
                     metric="visitors"
-                    color="#10b981"
+                    color="#3eb083"
                   />
                 </Card>
               </div>
@@ -371,20 +388,15 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 {data.latestPost ? (
                   <Card className="p-5 border-border/70 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="h-28 w-44 rounded-lg bg-neutral-950 border border-border overflow-hidden shrink-0 flex items-center justify-center relative group shadow-sm">
-                        <span className="text-2xl font-serif italic font-bold tracking-tight text-neutral-300 group-hover:scale-105 transition-transform duration-300">
-                          Vibress
-                        </span>
+                      <div aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60 text-muted-foreground sm:h-24 sm:w-28">
+                        <FileText className="size-7" />
                       </div>
                       <div className="space-y-1 min-w-0">
-                        <h4 className="font-bold text-base text-foreground hover:text-primary transition-colors cursor-pointer truncate">
+                        <h4 className="font-bold text-base text-foreground truncate">
                           {data.latestPost.title}
                         </h4>
                         <p className="text-xs text-muted-foreground">
-                          {tr("By")} {user.name} –{" "}
-                          {new Date(
-                            data.latestPost.publishedAt,
-                          ).toLocaleDateString(locale)}
+                          {tr("Published")} · {new Date(data.latestPost.publishedAt).toLocaleDateString(locale)}
                         </p>
                         <div className="pt-1">
                           <Badge
@@ -416,7 +428,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               {/* Top Posts in the period */}
               <div className="space-y-3">
                 <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  {tr("TOP POSTS IN THE LAST 30 DAYS")}
+                  {tr("Top posts")} · {tr(dateLabel)}
                 </h3>
                 {data.topPosts.length === 0 ? (
                   <Card className="p-5 border-border/70 shadow-2xs text-xs text-muted-foreground">
@@ -433,10 +445,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                           <span className="text-xs font-mono font-bold text-muted-foreground w-4">
                             {idx + 1}
                           </span>
-                          <div className="h-10 w-14 rounded bg-neutral-950 border border-border flex items-center justify-center shrink-0">
-                            <span className="text-xs font-serif italic text-neutral-300">
-                              #{idx + 1}
-                            </span>
+                          <div aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                            <FileText className="size-4" />
                           </div>
                           <div className="truncate">
                             <h4 className="font-bold text-xs text-foreground truncate">
@@ -468,6 +478,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setTrafficMetric("views")}
+                    aria-pressed={trafficMetric === "views"}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                       trafficMetric === "views"
                         ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
@@ -478,6 +489,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </button>
                   <button
                     onClick={() => setTrafficMetric("visitors")}
+                    aria-pressed={trafficMetric === "visitors"}
                     className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                       trafficMetric === "visitors"
                         ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
@@ -491,7 +503,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <AreaChart
                   points={data.timeseries}
                   metric={trafficMetric}
-                  color="#6366f1"
+                  color="#3eb083"
                 />
               </Card>
 
