@@ -85,7 +85,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
               {dirtyCount > 0 && (
                 <Badge
                   variant="secondary"
-                  className="text-[10px] font-mono px-1.5 py-0 h-4.5 bg-muted"
+                  className="text-xs font-medium px-2 py-0.5 bg-muted"
                 >
                   {dirtyCount} {dirtyCount === 1 ? tr("field") : tr("fields")}
                 </Badge>
@@ -100,7 +100,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 disabled={saving}
                 className="min-h-10 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                <RotateCcw className="h-3 w-3 mr-1" />
+                <RotateCcw className="h-3 w-3 me-1" />
                 {tr("Discard")}
               </Button>
               <Button

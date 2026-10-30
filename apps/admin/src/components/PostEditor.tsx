@@ -93,7 +93,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr } = useAdminLocale();
+  const { tr, formatNumber } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -789,25 +789,25 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       case "saving":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3 animate-spin" /> Saving...
+            <Clock className="h-3 w-3 animate-spin" /> {tr("Saving...")}
           </span>
         );
       case "saved":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+            <CheckCircle2 className="h-3.5 w-3.5" /> {tr("Saved")}
           </span>
         );
       case "failed":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-foreground font-mono font-medium">
-            <AlertCircle className="h-3 w-3" /> Save failed
+            <AlertCircle className="h-3 w-3" /> {tr("Save failed")}
           </span>
         );
       case "conflict":
         return (
           <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
-            <AlertCircle className="h-3 w-3" /> Version conflict
+            <AlertCircle className="h-3 w-3" /> {tr("Version conflict")}
           </span>
         );
       default:
@@ -819,7 +819,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     return (
       <div className="flex items-center justify-center p-12 text-muted-foreground gap-2">
         <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <span>Loading article editor...</span>
+        <span>{tr("Loading article editor...")}</span>
       </div>
     );
   }
@@ -875,7 +875,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           {renderAutosaveStatus()}
           <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums ms-2">
             <FileText className="h-3.5 w-3.5" />
-            {docStats.words} words ({docStats.readingTime} min read)
+            {formatNumber(docStats.words)} {tr("words")} ({formatNumber(docStats.readingTime)} {tr("min read")})
           </span>
         </div>
 
@@ -888,7 +888,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             title={tr("Compare Revisions")}
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
-            Diff
+            {tr("Diff")}
           </Button>
 
           {postId && (
@@ -902,7 +902,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               title="Editorial Collaboration & Presence"
             >
               <Users className="h-3.5 w-3.5" />
-              Collaborate
+              {tr("Collaborate")}
             </Button>
           )}
 
@@ -948,7 +948,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           <Button
             onClick={handleSave}
             disabled={saving || autosaveState === "conflict"}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-1.5 shadow-sm"
+            className="min-h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm gap-1.5 shadow-sm"
           >
             <Save className="h-3.5 w-3.5" />
             {saving ? tr("Saving...") : postId ? tr("Update") : tr("Save Draft")}
@@ -970,7 +970,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           {autosaveState === "conflict" && (
             <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
               <div>
-                <strong>Version Conflict Detected:</strong> This post was updated in another session.
+                <strong>{tr("Version Conflict Detected:")}</strong> {tr("This content was updated in another session.")}
               </div>
               <Button
                 variant="outline"
@@ -978,7 +978,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                 onClick={() => window.location.reload()}
                 className="h-8 text-xs font-semibold ms-4 shrink-0"
               >
-                Reload Latest
+                {tr("Reload Latest")}
               </Button>
             </div>
           )}
@@ -1005,7 +1005,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder={tr("Post Title")}
               aria-label={tr("Post Title")}
-              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground"
+              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/75 leading-tight p-0 text-foreground"
               rows={1}
               onInput={(e) => {
                 e.currentTarget.style.height = "auto";

@@ -118,7 +118,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <button
             type="button"
             onClick={onToggleLocale}
-            className="flex h-8 px-2 items-center justify-center rounded-lg border border-border/60 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+            className="flex min-h-10 px-2 items-center justify-center rounded-lg border border-border/60 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             title="Toggle Arabic / English"
             aria-label="Toggle language"
           >

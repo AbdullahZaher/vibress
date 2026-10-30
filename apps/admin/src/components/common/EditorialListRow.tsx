@@ -99,16 +99,16 @@ export function EditorialListRow({
 
       <div className="min-w-0 flex-1 space-y-0.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 dir="auto" className="max-w-full break-words text-start text-[13px] font-semibold leading-tight text-foreground transition-colors group-hover:text-primary sm:text-sm">
+          <h3 dir="auto" className="max-w-full break-words text-start text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-primary sm:text-sm">
             {displayTitle}
           </h3>
           {featured && (
-            <span className="rounded bg-primary/10 px-1 py-0 text-[10px] font-medium text-primary">
+            <span className="rounded bg-primary/10 px-1 py-0 text-xs font-medium text-primary">
               {tr("Featured")}
             </span>
           )}
         </div>
-        <p className="text-[11px] leading-4 text-muted-foreground">
+        <p className="text-xs leading-4 text-muted-foreground">
           {authorName && (
             <>
               {tr("By")} <span dir="auto">{authorName}</span>
@@ -117,7 +117,7 @@ export function EditorialListRow({
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
         </p>
-        <p className={`text-[11px] font-medium leading-4 ${statusColor}`}>
+        <p className={`text-xs font-medium leading-4 ${statusColor}`}>
           {statusLabels[status] ?? tr("Draft")}
         </p>
       </div>
@@ -129,7 +129,7 @@ export function EditorialListRow({
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
             variant="outline"
             onClick={onStatistics}
-            className="h-9 w-9 rounded-lg"
+            className="h-10 w-10 rounded-lg"
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
@@ -139,7 +139,7 @@ export function EditorialListRow({
             accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
             variant="outline"
             onClick={onEdit}
-            className="h-9 w-9 rounded-lg"
+            className="h-10 w-10 rounded-lg"
           >
             <Pencil className="size-4" aria-hidden="true" />
           </IconButton>

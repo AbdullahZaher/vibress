@@ -166,7 +166,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 key={pillar.id}
                 type="button"
                 onClick={() => scrollToSection(pillar.id, true)}
-                className={`flex min-h-10 items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
+                aria-pressed={isActive}
+                className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-xs font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"

@@ -23,6 +23,20 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "What's new": "المستجدات",
+  "Learn more": "اعرف المزيد",
+  "Close notification": "إغلاق الإشعار",
+  "No activity in this period": "لا يوجد نشاط خلال هذه الفترة",
+  "Activity will appear here when data is available.": "ستظهر البيانات هنا عند تسجيل نشاط جديد.",
+  "Save failed": "فشل الحفظ",
+  "Version conflict": "تعارض في النسخة",
+  "Version Conflict Detected:": "تم اكتشاف تعارض في النسخة:",
+  "This content was updated in another session.": "تم تعديل هذا المحتوى من جلسة أخرى.",
+  "Reload Latest": "تحميل أحدث نسخة",
+  "Saved": "تم الحفظ",
+  "words": "كلمة",
+  "min read": "دقيقة قراءة",
+  "Switch interface language": "تغيير لغة الواجهة",
   "Activity trend": "اتجاه النشاط",
   "View data": "عرض البيانات",
   "Hide data": "إخفاء البيانات",
