@@ -33,7 +33,12 @@ if (process.platform !== "linux" || !bwrap || !existsSync(PYTHON)) {
   writeFileSync(secretPath, secretValue, { mode: 0o600 });
   chmodSync(secretDir, 0o700);
 
-  const server = createServer((socket) => socket.end("HOST_NETWORK_REACHABLE"));
+  const server = createServer((socket) => {
+    // The positive-control client may disconnect after connect: avoid an
+    // unhandled ECONNRESET on the server-side fixture socket.
+    socket.on("error", () => {});
+    socket.end("HOST_NETWORK_REACHABLE");
+  });
   try {
     execFileSync(bwrap, ["--version"], { timeout: 2000, stdio: "ignore" });
     const hostNetNamespace = readlinkSync("/proc/self/ns/net");
