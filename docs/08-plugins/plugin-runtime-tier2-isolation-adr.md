@@ -64,3 +64,56 @@ Never set an environment variable to bypass this gate.
 
 The marketplace catalog and developer tooling may remain available without granting
 third-party code execution. Do not mark Marketplace General Availability as approved.
+
+## M8 evidence and deployment gating — 2026-10-30
+
+**Kernel namespace acceptance is a separate gate from end-to-end plugin execution.**
+A real Linux Bubblewrap probe now lives at
+`scripts/verify-tier2-bubblewrap-isolation.mjs`, exercised by
+`.github/workflows/plugins-tier2-kernel-acceptance.yml`.
+It creates a Host-only file and a live Host loopback listener (with an
+outside-sandbox positive control), then starts a process in distinct
+network, PID, and mount namespaces. It asserts the Host file, Host-only
+environment variable, and Host loopback server cannot be reached.
+An unavailable kernel capability causes failure, **not a skipped success**.
+
+- GitHub Ubuntu 24.04 hosted runner: kernel probe **failed** with
+  `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+  Do not disable namespace restrictions or weaken the test to make it pass.
+  This runner configuration does not satisfy the current kernel acceptance gate.
+- GitHub Ubuntu 22.04 hosted runner: standalone Bubblewrap kernel
+  acceptance **passed** (workflow run `41044941227`).
+  This does not certify the plugin runtime.
+- `detectSandboxRunner` is diagnostic-only and now discovers only a
+  trusted root-owned Bubblewrap executable from fixed system paths.
+  Neither a binary probe nor `VIBRESS_TIER2_SANDBOX_RUNNER` grants
+  permission to execute marketplace code.
+
+**M8 release blockers still open:**
+
+1. Implement and independently test a bounded, authenticated IPC transport
+   for an actual Vibress Node.js plugin worker inside Bubblewrap. Node's
+   default `fork()` IPC must not be assumed to cross a non-Node launcher.
+2. Bind the complete immutable, admitted release (all importable files,
+   not merely a single optional entrypoint digest) to its Host-owned
+   trust tier, signature, revocation and exact publication installation.
+   Guard against modifications between verification and execution.
+3. Prove real adversarial plugin lifecycle execution, direct filesystem
+   access rejection, Host/private-network denial, cross-publication
+   capability denial, malformed IPC, concurrent calls, crash recovery
+   and release revocation inside the actual sandbox.
+4. Enforce kernel/process resource quotas (memory, CPU, PIDs, open files,
+   stdout/stderr and IPC throughput) and exercise fork-bombs and OOM
+   scenarios without degrading API/Worker availability. V8 heap and
+   timeouts alone are not enough.
+5. Verify rootless Docker/self-hosted compatibility, immutable runner
+   packaging, operator instructions, fresh install and upgrade behavior;
+   publish an explicit allowlist/rollout procedure only after security
+   acceptance. Avoid privileged Docker socket exposure.
+
+**Operator procedure until these gates close:** Keep
+`untrusted_marketplace` execution disabled. Operator-reviewed plugins
+may continue through their existing explicitly trusted path; they are
+**not** isolated from the Host as arbitrary adversarial code. Neither
+the standalone Bubblewrap test nor green CI constitutes authorization
+to enable public Marketplace execution.
