@@ -34,3 +34,4 @@ export * from "./enterprise-auth";
 export * from "./plugin-events";
 export * from "./plugin-member-records";
 export * from "./plugin-upgrades";
+export * from "./plugin-marketplace-admissions";
