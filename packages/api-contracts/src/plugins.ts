@@ -363,6 +363,26 @@ const PluginEventPayloadSchema = z.record(
   .refine((fields) => !["publicationId", "workspaceId", "tenantId", "pluginId", "manifestId"]
     .some((key) => Object.hasOwn(fields, key)), "Caller cannot select event authority");
 
+/** PLUG-OPS-06: audited historical plugin actions (not raw event payloads). */
+export const PluginActivityListQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(10000).default(0),
+  limit: z.coerce.number().int().min(1).max(25).default(25),
+}).strict();
+export const PluginActivityActionSchema = z.enum([
+  "plugin.publication_settings_updated",
+  "plugin.publication_secret_revoked",
+  "plugin.publication_enabled",
+  "plugin.publication_disabled",
+  "plugin.event_replay_requested",
+]);
+export const PluginActivityListResponseSchema = z.object({
+  items: z.array(z.object({
+    action: PluginActivityActionSchema,
+    createdAt: z.string().datetime(),
+  }).strict()).max(25),
+  nextOffset: z.number().int().nonnegative().nullable(),
+}).strict();
+
 /** EXT-401 operator-only failed-event inspection and audited replay. The
  * publication is NEVER a caller-controlled field; only Staff context binds it. */
 export const PluginEventRecoveryParamsSchema = PluginPublicationParamsSchema.extend({

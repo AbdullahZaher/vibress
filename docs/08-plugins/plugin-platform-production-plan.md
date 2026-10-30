@@ -6,6 +6,8 @@
 
 This is the current work plan for making Vibress plugins a professionally operated, self-hostable product. The existing [implementation roadmap](external-extensions-roadmap.md), [security operations standard](external-extensions-security-operations.md), [SDK release gates](external-sdk-release-gates.md) and [trust-model ADR](../14-decisions/plugin-trust-model.md) remain the detailed contracts. The order below expresses dependencies, **not** committed release dates.
 
+> **Planning update (2026-10-28):** The [Unified Roadmap v3](plugin-platform-master-roadmap-v3.md) is the proposed forward-looking scope, with a separate [Native Admin UI SDK proposal](plugin-native-admin-sdk-spec-v1.md) and [security/compatibility review](plugin-roadmap-v3-review-and-adoption.md). The [original Master Execution Plan — M0–M6](plugin-platform-master-execution-plan.md) remains the implementation-status and verification ledger until a reconciled integrated branch is accepted. This P0-1–P0-4 document is a historical technical baseline, not a production-ready SDK or authorization to enable Native feature allowlists.
+
 ## Verified starting point
 
 - Operator-approved ESM release discovery is available at `GET /api/admin/v1/plugins/trusted-available`; registration is available at `POST /api/admin/v1/plugins/register-trusted`. Neither endpoint downloads or installs executable code.

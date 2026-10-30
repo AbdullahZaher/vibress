@@ -14,7 +14,7 @@ import {
   PluginContext,
   PluginModule,
 } from "@vibress/plugin-sdk";
-import { encryptSecret, decryptSecret } from "@vibress/security";
+import { encryptPluginSecret, decryptPluginSecret } from "@vibress/security";
 import { domainEvents } from "@vibress/events";
 import { isDeepStrictEqual } from "node:util";
 import type { ApprovedPluginPhysicalModel } from "./plugin-storage-migrations";
@@ -213,6 +213,7 @@ export class PluginsService {
     manifestInput: unknown,
     actorId: string | null,
     expectedReleaseId?: string,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
     let manifest: PluginManifest;
     try {
@@ -293,21 +294,25 @@ export class PluginsService {
       let updated: Plugin | null;
       if (expectedReleaseId !== undefined &&
           this.host.requiresPublicationEnablement?.(existing) === true) {
-        updated = await this.pluginRepo.tryUpdateMetadataIfInactive?.(
-          existing.id, metadata, { version: existing.version, updatedAt: existing.updatedAt },
+        const expected = { version: existing.version, updatedAt: existing.updatedAt };
+        updated = await (audit
+          ? this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata, expected, audit)
+          : this.pluginRepo.tryUpdateMetadataIfInactive?.(existing.id, metadata, expected)
         ) ?? null;
         if (!updated) {
           throw new PluginDomainError("PLUGIN_TRANSITION_IN_PROGRESS",
             "Plugin activated or changed during release admission");
         }
       } else {
-        updated = await this.pluginRepo.updateMetadata(existing.id, metadata);
+        updated = await (audit
+          ? this.pluginRepo.updateMetadata(existing.id, metadata, audit)
+          : this.pluginRepo.updateMetadata(existing.id, metadata));
       }
       domainEvents.emit("plugin.updated", { pluginId: updated.id, actorId });
       return updated;
     }
 
-    const plugin = await this.pluginRepo.create({
+    const data = {
       manifestId: manifest.id,
       name: manifest.name,
       version: manifest.version,
@@ -317,7 +322,10 @@ export class PluginsService {
       capabilities: manifest.capabilities,
       hooks: manifest.hooks || [],
       settingsSchema: manifest.settingsSchema,
-    });
+    };
+    const plugin = await (audit
+      ? this.pluginRepo.create(data, audit)
+      : this.pluginRepo.create(data));
     domainEvents.emit("plugin.registered", { pluginId: plugin.id, actorId });
     return plugin;
   }
@@ -327,7 +335,9 @@ export class PluginsService {
    * activate(). On failure the plugin is marked 'error' — visible but
    * reported as a domain error. In-process crashes are NOT isolated.
    */
-  async activatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+  async activatePlugin(
+    id: string, actorId: string | null, audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
     this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
@@ -405,7 +415,9 @@ export class PluginsService {
       throw safeError;
     }
 
-    const activated = await this.pluginRepo.updateStatus(id, "active");
+    const activated = await (audit
+      ? this.pluginRepo.updateStatus(id, "active", undefined, audit)
+      : this.pluginRepo.updateStatus(id, "active"));
     domainEvents.emit("plugin.activated", { pluginId: id, actorId });
     return activated;
   }
@@ -454,8 +466,12 @@ export class PluginsService {
       }
     }
 
-    // Policy and tenant scope must be checked before loading/executing plugin code.
-    const module = await this.host.loadModule(plugin);
+    // On a long-lived replica, a replacement signed module must not even be
+    // imported (its ESM top-level would execute) before we detect a stale
+    // in-process release. Host rechecks the pin at the import boundary.
+    const releaseKey = await this.activationKey(plugin);
+    this.assertLocalRelease(plugin, releaseKey);
+    const module = await this.host.loadModule(plugin, releaseKey);
     if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not exported");
     }
@@ -505,7 +521,11 @@ export class PluginsService {
         throw new PluginDomainError("CROSS_PUBLICATION_VIOLATION", "Cross-publication violation");
       }
     }
-    const module = await this.host.loadModule(plugin);
+    // Reject a mixed-release replica before loading executable module bytes.
+    // Pass the same identity to the Host for its independent import-time check.
+    const releaseKey = await this.activationKey(plugin);
+    this.assertLocalRelease(plugin, releaseKey);
+    const module = await this.host.loadModule(plugin, releaseKey);
     if (!module || typeof module.onEvent !== "function") {
       throw new PluginDomainError("PLUGIN_HOOK_NOT_FOUND", "Event handler is not available");
     }
@@ -552,7 +572,9 @@ export class PluginsService {
     await module.onEvent(eventName, payload, context);
   }
 
-  async deactivatePlugin(id: string, actorId: string | null): Promise<Plugin> {
+  async deactivatePlugin(
+    id: string, actorId: string | null, audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
     this.assertRuntimeAllowed();
     const plugin = await this.pluginRepo.findById(id);
     if (!plugin)
@@ -606,7 +628,9 @@ export class PluginsService {
         );
       }
     }
-    const deactivated = await this.pluginRepo.updateStatus(id, "inactive");
+    const deactivated = await (audit
+      ? this.pluginRepo.updateStatus(id, "inactive", undefined, audit)
+      : this.pluginRepo.updateStatus(id, "inactive"));
     const localKey = this.localReleaseKeys.get(id);
     if (localKey) this.initializedHere.delete(localKey);
     for (const [key, instance] of this.activeInstances) {
@@ -740,6 +764,26 @@ export class PluginsService {
     domainEvents.emit("plugin.unregistered", { pluginId: id, actorId });
   }
 
+  /**
+   * PLUG-UPD-06: Explicit, operator-authorized, audited purge of all scoped plugin data.
+   * Irreversibly purges stored settings, storage models, physical tables, records,
+   * schema migrations, and upgrade plans.
+   */
+  async purgePluginData(id: string, audit: PluginSettingAuditContext): Promise<void> {
+    const plugin = await this.pluginRepo.findById(id);
+    if (plugin && (plugin.status === "active" || plugin.status === "activating" || plugin.status === "deactivating")) {
+      throw new PluginDomainError(
+        "PLUGIN_ACTIVE", "Finish or recover the plugin lifecycle before purging stored data",
+      );
+    }
+    if (this.pluginRepo.purgePluginData) {
+      await this.pluginRepo.purgePluginData(id, audit);
+    } else {
+      await this.pluginRepo.delete(id);
+    }
+    domainEvents.emit("plugin.unregistered", { pluginId: id, actorId: audit.actorUserId });
+  }
+
   async listPlugins(): Promise<Plugin[]> {
     return this.pluginRepo.list();
   }
@@ -823,6 +867,7 @@ export class PluginsService {
   async registerOperatorPlugin(
     manifestId: string, actorId: string | null, expectedReleaseId?: string,
     acknowledgeUpgrade = false,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
     let approved: PluginManifest | undefined;
     try {
@@ -860,7 +905,7 @@ export class PluginsService {
       throw new PluginDomainError("PLUGIN_REGISTRY_UNAVAILABLE", "Trusted plugin registry is unavailable");
     }
     // Host rechecks the same digest identity before the persistence boundary.
-    return this.registerPlugin(approved, actorId, expectedReleaseId);
+    return this.registerPlugin(approved, actorId, expectedReleaseId, audit);
   }
 
   /**
@@ -938,6 +983,7 @@ export class PluginsService {
     pluginId: string,
     publicationId: string,
     enabled: boolean,
+    audit?: PluginSettingAuditContext,
   ): Promise<boolean> {
     if (!publicationId) {
       throw new PluginDomainError("PLUGIN_PUBLICATION_REQUIRED", "Publication is required");
@@ -957,7 +1003,11 @@ export class PluginsService {
     if (enabled && plugin.status !== "active") {
       throw new PluginDomainError("PLUGIN_INACTIVE", "Activate the installed plugin before enabling it");
     }
-    await this.publicationStates.setEnabled(pluginId, publicationId, enabled);
+    if (audit) {
+      await this.publicationStates.setEnabled(pluginId, publicationId, enabled, audit);
+    } else {
+      await this.publicationStates.setEnabled(pluginId, publicationId, enabled);
+    }
     domainEvents.emit("plugin.publication_changed", { pluginId, publicationId, enabled });
     return enabled;
   }
@@ -1194,7 +1244,7 @@ export class PluginsService {
         key,
         isSecret,
         value: isSecret ? null : value,
-        encryptedValue: isSecret && value !== null ? encryptSecret(value) : null,
+        encryptedValue: isSecret && value !== null ? encryptPluginSecret(value, { pluginId, publicationId, key }) : null,
       });
     }
     if (entries.length > 0) {
@@ -1311,7 +1361,7 @@ export class PluginsService {
     if (!encrypted) return null;
     let plaintext: string;
     try {
-      plaintext = decryptSecret(encrypted);
+      plaintext = decryptPluginSecret(encrypted, { pluginId, publicationId, key });
     } catch {
       // Corruption is an operational problem, not a missing setting: fail closed.
       throw new PluginDomainError("PLUGIN_SECRET_CORRUPT", "Plugin secret cannot be decrypted");
@@ -1378,7 +1428,7 @@ export class PluginsService {
           pluginId,
           key,
           null,
-          encryptSecret(String(value)),
+          encryptPluginSecret(String(value), { pluginId, key }),
           true,
         );
       } else {
@@ -1439,7 +1489,7 @@ export class PluginsService {
     const encrypted = await this.settingRepo.getSecret(pluginId, key);
     if (!encrypted) return null;
     try {
-      return decryptSecret(encrypted);
+      return decryptPluginSecret(encrypted, { pluginId, key });
     } catch {
       return null;
     }

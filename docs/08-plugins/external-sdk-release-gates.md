@@ -5,6 +5,8 @@ untrusted ZIP/plugin marketplace.** This document records what needs to
 be proven after merging PR #77, not a release sign-off. Existing bundled
 plugin compatibility remains supported.
 
+**SDK-NUI-01 contract reference:** [SDK/Native V1 compatibility and version policy](plugin-sdk-compatibility-policy.md). The private package's npm semver, exact `SDK_VERSION` Host ABI, Native page/workflow V1 schema and signed release identity are separate. SDK authoring constants are not a production support negotiation mechanism.
+
 ## Runtime and distribution compatibility
 
 | Contract | Current fact | Release gate |

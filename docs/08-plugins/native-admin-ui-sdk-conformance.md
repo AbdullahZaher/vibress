@@ -2,6 +2,37 @@
 
 The supported `@vibress/plugin-sdk` `SDK_VERSION = "1.0.0"` API-route ABI is unchanged. The repository includes both a **source-level independent SDK consumer conformance fixture** at `tests/integration/native-admin-independent-consumer.test.ts` and an **isolated packaged SDK consumer acceptance test** at `tests/integration/native-admin-independent-packaged-consumer.test.ts`. The packaged consumer test builds the SDK package deterministically from clean checkouts, validates exported TypeScript definitions without leaking Host internals, tests runtime admission of conforming descriptors, verifies fail-closed handling for invalid declarations, confirms legacy plugin compatibility, and enforces that an external consumer directory cannot resolve internal Host packages (`@vibress/domains/plugins`, `@vibress/database`). This fixture is **not** a separately published or signed extension and cannot establish deployed multi-version compatibility on its own. New optional `adminPages`, `adminResources`, `adminActions` and `adminDomainWorkflows` metadata remain experimental and must never be marketed as a generally available stable SDK without the external release gate.
 
+## V1 ABI and Native version policy (SDK-NUI-01)
+
+The [compatibility/version policy](plugin-sdk-compatibility-policy.md) separates
+package version `1.2.0` (private), the exact Host route ABI
+`SDK_VERSION = "1.0.0"`, Native page `NATIVE_ADMIN_PAGE_SCHEMA_VERSION = 1`,
+and Native workflow `NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION = 1`.
+SDK constants are authoring aids, not Host runtime capability negotiation.
+Unknown Host ABI and page/workflow schema versions must fail closed; old
+plugins without Native declarations continue using existing Host view paths.
+No minimum Native Host-version declaration is currently negotiated by V1.
+The independent packaged consumer and API-contract tests provide focused
+evidence; real old Host-image upgrade compatibility remains a release blocker.
+
+## Additive authoring helpers (SDK-NUI-02 experimental)
+
+`@vibress/plugin-sdk` now includes pure, additive authoring helpers:
+`definePluginModule`, `defineNativeAdminPageV1`,
+`defineNativeAdminResourceV1`, `defineNativeAdminActionV1` and
+`defineNativeDomainWorkflowV1`. They preserve literal TypeScript types
+and return the supplied descriptor **unchanged**. They do **not** validate
+runtime input, change `SDK_VERSION = "1.0.0"`, enable Native rendering,
+allow SDK publication, register routes or grant permissions. Existing
+`PluginModule` and `{en, ar}` declarations remain valid without helpers.
+
+Use these only with the **existing v1 descriptor shapes**. The roadmap's
+`defineAdminPage`, `defineDomainAction` and schema v2 sketches remain
+unimplemented. The Host independently applies its Zod schemas, publication
+authorization, approved release-digest policy, record-level checks and
+write-action allowlist. The independent packaged consumer test compiles
+the helpers with strict TypeScript and rejects a future schema version.
+
 ## Bounded read-only example
 
 ```ts

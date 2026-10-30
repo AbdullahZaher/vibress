@@ -158,8 +158,24 @@ describe("NUI-07 Genuine Packaged SDK Consumer and Contract Conformance", () => 
     fs.writeFileSync(
       runtimeScript,
       `
-import { SDK_VERSION, validateManifest } from "@vibress/plugin-sdk";
-if (SDK_VERSION !== "1.0.0" || typeof validateManifest !== "function") {
+import {
+  SDK_VERSION, validateManifest, defineNativeAdminPageV1,
+  NATIVE_ADMIN_PAGE_SCHEMA_VERSION, NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION,
+} from "@vibress/plugin-sdk";
+const input = { schemaVersion: 1, viewId: "test", title: { en: "Test", ar: "اختبار" }, components: [{ type: "stat", id: "total", field: "total", label: { en: "Total", ar: "الإجمالي" } }] };
+const manifest = {
+  id: "compat-fixture", name: "Compatibility", version: "1.2.0",
+  vibressApiVersion: SDK_VERSION, entrypoint: "dist/plugin.mjs", capabilities: [],
+};
+let rejectsPackageVersionAsAbi = false;
+try { validateManifest({ ...manifest, vibressApiVersion: "1.2.0" }); }
+catch { rejectsPackageVersionAsAbi = true; }
+if (SDK_VERSION !== "1.0.0" ||
+    NATIVE_ADMIN_PAGE_SCHEMA_VERSION !== 1 ||
+    NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION !== 1 ||
+    validateManifest(manifest).vibressApiVersion !== "1.0.0" ||
+    !rejectsPackageVersionAsAbi ||
+    defineNativeAdminPageV1(input) !== input) {
   process.exit(1);
 }
 console.log(JSON.stringify({ SDK_VERSION, hasValidateManifest: true }));
@@ -193,10 +209,17 @@ console.log(JSON.stringify({ SDK_VERSION, hasValidateManifest: true }));
 
     // Public API symbols must be declared
     expect(dts).toContain("SDK_VERSION");
+    expect(dts).toContain("NATIVE_ADMIN_PAGE_SCHEMA_VERSION");
+    expect(dts).toContain("NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION");
     expect(dts).toContain("PluginModule");
     expect(dts).toContain("PluginAdminDataResourceV1");
     expect(dts).toContain("PluginAdminDomainWorkflowV1");
     expect(dts).toContain("PluginNativeAdminPageV1");
+    expect(dts).toContain("defineNativeAdminPageV1");
+    expect(dts).toContain("defineNativeAdminResourceV1");
+    expect(dts).toContain("defineNativeAdminActionV1");
+    expect(dts).toContain("defineNativeDomainWorkflowV1");
+    expect(dts).toContain("definePluginModule");
 
     // Host private internals must NOT leak into the public SDK declaration
     expect(dts).not.toContain("@vibress/database");
@@ -289,6 +312,72 @@ export const plugin: PluginModule = {
         stdio: "pipe",
       });
     }).not.toThrow();
+  });
+
+  it("compiles V1 Native builders from a packed SDK without exposing Host internals", () => {
+    expect(tmpConsumerDir).toBeTruthy();
+    const dir = tmpConsumerDir!;
+    const compiler = path.join(dir, "node_modules/typescript/bin/tsc");
+
+    fs.writeFileSync(path.join(dir, "native-builders.ts"), `
+import {
+  defineNativeAdminPageV1, defineNativeAdminResourceV1,
+  defineNativeAdminActionV1, defineNativeDomainWorkflowV1,
+  definePluginModule,
+  NATIVE_ADMIN_PAGE_SCHEMA_VERSION, NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION,
+} from "@vibress/plugin-sdk";
+
+const title = { en: "Records", ar: "السجلات" };
+const page = defineNativeAdminPageV1({
+  schemaVersion: NATIVE_ADMIN_PAGE_SCHEMA_VERSION, viewId: "records", title,
+  components: [{ type: "stat", id: "total", label: title, field: "total" }],
+});
+const resource = defineNativeAdminResourceV1({
+  id: "items", modelKey: "items", viewId: "records", fields: ["title"],
+});
+const action = defineNativeAdminActionV1({
+  id: "create-item", resourceId: "items", operation: "create",
+});
+const workflow = defineNativeDomainWorkflowV1({
+  schemaVersion: NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION, viewId: "records", routeId: "records",
+  resourceId: "items", idField: "recordId", versionField: "version",
+  operationField: "operation", operations: ["create", "save"],
+  fields: [{ key: "title", label: title, maxLength: 120 }],
+});
+export const plugin = definePluginModule({
+  activate() {}, adminPages: [page], adminResources: [resource],
+  adminActions: [action], adminDomainWorkflows: [workflow],
+});
+const version: 1 = page.schemaVersion;
+const operation: "create" = action.operation;
+void version;
+void operation;
+`);
+    const valid = spawnSync(process.execPath, [
+      compiler, "--noEmit", "--strict", "--skipLibCheck", "false",
+      "--target", "ES2022", "--module", "NodeNext",
+      "--moduleResolution", "NodeNext", "native-builders.ts",
+    ], { cwd: dir, encoding: "utf8" });
+    expect(valid.error).toBeUndefined();
+    expect(valid.status, valid.stdout + valid.stderr).toBe(0);
+
+    fs.writeFileSync(path.join(dir, "native-invalid-version.ts"), `
+import { defineNativeAdminPageV1 } from "@vibress/plugin-sdk";
+defineNativeAdminPageV1({
+  schemaVersion: 2, viewId: "records",
+  title: { en: "Records", ar: "السجلات" },
+  components: [{ type: "stat", id: "total",
+    label: { en: "Total", ar: "الإجمالي" }, field: "total" }],
+});
+`);
+    const invalid = spawnSync(process.execPath, [
+      compiler, "--noEmit", "--strict", "--skipLibCheck", "false",
+      "--target", "ES2022", "--module", "NodeNext",
+      "--moduleResolution", "NodeNext", "native-invalid-version.ts",
+    ], { cwd: dir, encoding: "utf8" });
+    expect(invalid.error).toBeUndefined();
+    expect(invalid.status).not.toBe(0);
+    expect(invalid.stdout + invalid.stderr).toContain("TS2322");
   });
 
   it("strictly rejects external consumer attempts to import private Host internal packages", () => {

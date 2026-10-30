@@ -6,7 +6,7 @@ import {
 } from "@vibress/api-contracts";
 import {
   PluginEventWorker, processTrustedPluginEvent, processAdmittedPluginEvent,
-  type PluginEventExecution,
+  createTrustedWorkerPluginHost, relayClaimedPluginEvent, type PluginEventExecution,
 } from "../plugin-event-worker";
 
 const DIGEST = "a".repeat(64);
@@ -66,6 +66,78 @@ function execution(options: {
 }
 
 describe("EXT-401 publication-scoped durable event worker", () => {
+  it("forwards the release pin through the Worker Host's pre-import boundary", async () => {
+    const loadModule = vi.fn(async (_plugin: Plugin, _key?: string) => null);
+    const listTrustedFingerprints = vi.fn(async () =>
+      new Map([["hello-public", DIGEST]]));
+    const host = createTrustedWorkerPluginHost({ loadModule, listTrustedFingerprints });
+    const expectedReleaseKey = JSON.stringify([
+      "plugin-row-a", "1.0.0", "dist/index.mjs", DIGEST,
+    ]);
+    const installed = plugin();
+    await host.loadModule(installed, expectedReleaseKey);
+    expect(loadModule).toHaveBeenCalledOnce();
+    expect(loadModule).toHaveBeenCalledWith(installed, expectedReleaseKey);
+    expect(host.requiresPublicationEnablement?.(installed)).toBe(true);
+    await expect(host.getOperatorAdminFingerprints?.()).resolves.toEqual(
+      new Map([["hello-public", DIGEST]]),
+    );
+    expect(listTrustedFingerprints).toHaveBeenCalledOnce();
+  });
+
+  it("records a successful Redis publish before marking the durable receipt queued", async () => {
+    const calls: string[] = [];
+    const ledger = {
+      markQueued: vi.fn(async () => { calls.push("queued"); }),
+      returnPending: vi.fn(async () => { calls.push("pending"); }),
+    };
+    const publish = vi.fn(async () => { calls.push("redis"); });
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .resolves.toBe("enqueued");
+    expect(calls).toEqual(["redis", "queued"]);
+    expect(ledger.returnPending).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledWith(job);
+  });
+
+  it("returns an unsent durable receipt for retry if Redis publishing fails", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => undefined),
+      returnPending: vi.fn(async () => undefined),
+    };
+    const publish = vi.fn(async () => { throw new Error("private Redis connection"); });
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .resolves.toBe("retry");
+    expect(ledger.returnPending).toHaveBeenCalledWith(job.id);
+    expect(ledger.markQueued).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dispatch lease if PostgreSQL fails after Redis accepted the job", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => { throw new Error("private DB connection"); }),
+      returnPending: vi.fn(async () => undefined),
+    };
+    const publish = vi.fn(async () => undefined);
+    const job = { id: "plugin-" + DIGEST, envelope: event() };
+    await expect(relayClaimedPluginEvent(job, ledger, publish))
+      .rejects.toThrow("private DB connection");
+    expect(publish).toHaveBeenCalledOnce();
+    expect(ledger.returnPending).not.toHaveBeenCalled();
+  });
+
+  it("does not hide a failed PostgreSQL return-to-pending update", async () => {
+    const ledger = {
+      markQueued: vi.fn(async () => undefined),
+      returnPending: vi.fn(async () => { throw new Error("DB unavailable"); }),
+    };
+    const publish = vi.fn(async () => { throw new Error("Redis unavailable"); });
+    await expect(relayClaimedPluginEvent({
+      id: "plugin-" + DIGEST, envelope: event(),
+    }, ledger, publish)).rejects.toThrow("DB unavailable");
+    expect(ledger.markQueued).not.toHaveBeenCalled();
+  });
+
   it("fails readiness until the trusted event consumer is started", () => {
     vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_LOCKFILE", "/operator/approved.json");
     try {
@@ -168,13 +240,63 @@ describe("EXT-401 publication-scoped durable event worker", () => {
     ["renamed manifest", { installed: plugin({ manifestId: "other" }) }],
     ["revoked capability", { installed: plugin({ capabilities: [] }) }],
     ["undeclared hook", { installed: plugin({ hooks: [] }) }],
-    ["revoked digest", { fingerprints: new Map<string, string>() }],
-    ["replaced digest", { fingerprints: new Map([["hello-public", "b".repeat(64)]]) }],
     ["publication disabled", { enabled: false }],
   ] as const)("retires %s without executing old events", async (_caseName, options) => {
     const h = execution(options);
     await expect(processTrustedPluginEvent(event(), h)).resolves.toBe("retired");
     expect(h.dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing on this replica", new Map<string, string>()],
+    ["different on this replica", new Map([["hello-public", "b".repeat(64)]])],
+  ])("keeps admitted events retryable when the worker release is %s", async (
+    _caseName, fingerprints,
+  ) => {
+    const { pluginEventJobId } = await import("@vibress/plugins");
+    const id = pluginEventJobId(event());
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const h = execution({ fingerprints });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, h))
+      .rejects.toThrow("PLUGIN_WORKER_RELEASE_MISMATCH");
+    expect(receipts.finalize).not.toHaveBeenCalled();
+    expect(h.dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not finalize an admitted event when the Host requires a new replica", async () => {
+    const { pluginEventJobId } = await import("@vibress/plugins");
+    const id = pluginEventJobId(event());
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const host = execution({
+      failure: new (await import("@vibress/plugins")).PluginDomainError(
+        "PLUGIN_RESTART_REQUIRED", "Plugin release changed; restart this runtime",
+      ),
+    });
+    await expect(processAdmittedPluginEvent(event(), id, receipts, host))
+      .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
+    expect(receipts.finalize).not.toHaveBeenCalled();
+    expect(host.dispatchEvent).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a valid admission pending if approval disappears during dispatch", async () => {
+    const { PluginDomainError, pluginEventJobId } = await import("@vibress/plugins");
+    const receipts = {
+      isAdmitted: vi.fn(async () => true),
+      finalize: vi.fn(async () => undefined),
+    };
+    const h = execution({ failure: new PluginDomainError(
+      "PLUGIN_RELEASE_NOT_APPROVED", "Release approval disappeared",
+    ) });
+    await expect(processAdmittedPluginEvent(
+      event(), pluginEventJobId(event()), receipts, h,
+    )).rejects.toMatchObject({ code: "PLUGIN_RELEASE_NOT_APPROVED" });
+    expect(receipts.finalize).not.toHaveBeenCalled();
   });
 
   it("retries genuine handler failures through BullMQ rather than swallowing them", async () => {

@@ -7,6 +7,10 @@ import {
   pluginPublicationStates,
   pluginPublicationSettings,
   pluginSchemaMigrations,
+  pluginStorageModels,
+  pluginPhysicalModels,
+  pluginMemberRecords,
+  pluginUpgradePlans,
   auditEvents,
 } from "@vibress/database";
 import { eq, and, inArray, sql } from "drizzle-orm";
@@ -24,10 +28,13 @@ import {
 } from "../domain/plugin";
 
 export class DrizzlePluginRepository implements PluginRepository {
-  async create(data: RegisterPluginData): Promise<Plugin> {
-    const db = getDb();
+  constructor(private readonly db: () => ReturnType<typeof getDb> = getDb) {}
+
+  async create(data: RegisterPluginData, audit?: PluginSettingAuditContext): Promise<Plugin> {
+    const db = this.db();
     const now = new Date();
-    const [row] = await db
+    const [row] = await db.transaction(async (tx) => {
+    const [created] = await tx
       .insert(plugins)
       .values({
         id: data.id || crypto.randomUUID(),
@@ -45,12 +52,20 @@ export class DrizzlePluginRepository implements PluginRepository {
         updatedAt: now,
       })
       .returning();
+      if (!created) throw new Error("Failed to insert plugin");
+      if (audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.registered", targetType: "plugin", targetId: created.id,
+      });
+      return [created];
+    });
     if (!row) throw new Error("Failed to insert plugin");
     return this.mapToDomain(row);
   }
 
   async findById(id: string): Promise<Plugin | null> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db
       .select()
       .from(plugins)
@@ -62,7 +77,7 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async findByManifestId(manifestId: string): Promise<Plugin | null> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db
       .select()
       .from(plugins)
@@ -73,14 +88,25 @@ export class DrizzlePluginRepository implements PluginRepository {
     return this.mapToDomain(row);
   }
 
-  async updateStatus(id: string, status: PluginStatus): Promise<Plugin> {
-    const db = getDb();
-    const [row] = await db
-      .update(plugins)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(plugins.id, id))
-      .returning();
-    if (!row) throw new Error(`Plugin not found: ${id}`);
+  async updateStatus(
+    id: string, status: PluginStatus, _error?: string,
+    audit?: PluginSettingAuditContext,
+  ): Promise<Plugin> {
+    const row = await this.db().transaction(async (tx) => {
+      const [updated] = await tx.update(plugins)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(plugins.id, id)).returning();
+      if (!updated) throw new Error(`Plugin not found: ${id}`);
+      if (audit && (status === "active" || status === "inactive")) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(), publicationId: null,
+          actorUserId: audit.actorUserId, requestId: audit.requestId,
+          action: status === "active" ? "plugin.activated" : "plugin.deactivated",
+          targetType: "plugin", targetId: updated.id,
+        });
+      }
+      return updated;
+    });
     return this.mapToDomain(row);
   }
 
@@ -90,7 +116,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     status: PluginStatus,
   ): Promise<Plugin | null> {
     if (expected.length === 0) return null;
-    const [row] = await getDb().update(plugins)
+    const [row] = await this.db().update(plugins)
       .set({ status, updatedAt: new Date() })
       .where(and(eq(plugins.id, id), inArray(plugins.status, [...expected])))
       .returning();
@@ -100,8 +126,9 @@ export class DrizzlePluginRepository implements PluginRepository {
   async updateMetadata(
     id: string,
     data: Partial<RegisterPluginData>,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin> {
-    const db = getDb();
+    const db = this.db();
     const payload: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) payload.name = data.name;
     if (data.version !== undefined) payload.version = data.version;
@@ -114,11 +141,20 @@ export class DrizzlePluginRepository implements PluginRepository {
     if (data.hooks !== undefined) payload.hooks = data.hooks;
     if (data.settingsSchema !== undefined)
       payload.settingsSchema = data.settingsSchema;
-    const [row] = await db
+    const [row] = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(plugins)
       .set(payload)
       .where(eq(plugins.id, id))
       .returning();
+      if (!updated) throw new Error(`Plugin not found: ${id}`);
+      if (audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
+      });
+      return [updated];
+    });
     if (!row) throw new Error(`Plugin not found: ${id}`);
     return this.mapToDomain(row);
   }
@@ -127,6 +163,7 @@ export class DrizzlePluginRepository implements PluginRepository {
     id: string,
     data: Partial<RegisterPluginData>,
     expected: Pick<Plugin, "version" | "updatedAt">,
+    audit?: PluginSettingAuditContext,
   ): Promise<Plugin | null> {
     // Force a monotonic optimistic-lock value even for two writes in the same
     // JS millisecond. The prior row timestamp must also match in the UPDATE.
@@ -140,27 +177,33 @@ export class DrizzlePluginRepository implements PluginRepository {
     if (data.capabilities !== undefined) payload.capabilities = data.capabilities;
     if (data.hooks !== undefined) payload.hooks = data.hooks;
     if (data.settingsSchema !== undefined) payload.settingsSchema = data.settingsSchema;
-    const [row] = await getDb().update(plugins)
-      .set(payload)
-      .where(and(eq(plugins.id, id),
-        eq(plugins.version, expected.version),
-        // Historic rows populated by PostgreSQL defaultNow() can retain
-        // microseconds which JS Date cannot represent. Normalize both sides
-        // to milliseconds without weakening the monotonic CAS token.
-        sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
-        inArray(plugins.status, ["registered", "inactive", "error"])))
-      .returning();
+    const row = await this.db().transaction(async (tx) => {
+      const [updated] = await tx.update(plugins)
+        .set(payload)
+        .where(and(eq(plugins.id, id),
+          eq(plugins.version, expected.version),
+          // Preserve the existing optimistic guard for persisted timestamps.
+          sql`date_trunc('milliseconds', ${plugins.updatedAt}) = ${expected.updatedAt}::timestamptz`,
+          inArray(plugins.status, ["registered", "inactive", "error"])))
+        .returning();
+      if (updated && audit) await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.updated", targetType: "plugin", targetId: updated.id,
+      });
+      return updated;
+    });
     return row ? this.mapToDomain(row) : null;
   }
 
   async list(): Promise<Plugin[]> {
-    const db = getDb();
+    const db = this.db();
     const rows = await db.select().from(plugins).orderBy(plugins.createdAt);
     return rows.map((r) => this.mapToDomain(r));
   }
 
   async hasAppliedMigrations(id: string): Promise<boolean> {
-    const rows = await getDb()
+    const rows = await this.db()
       .select({ pluginId: pluginSchemaMigrations.pluginId })
       .from(pluginSchemaMigrations)
       .where(eq(pluginSchemaMigrations.pluginId, id))
@@ -169,8 +212,32 @@ export class DrizzlePluginRepository implements PluginRepository {
   }
 
   async delete(id: string): Promise<void> {
-    const db = getDb();
+    const db = this.db();
     await db.delete(plugins).where(eq(plugins.id, id));
+  }
+
+  async purgePluginData(id: string, audit: PluginSettingAuditContext): Promise<void> {
+    const db = this.db();
+    await db.transaction(async (tx) => {
+      await tx.delete(pluginPublicationSettings).where(eq(pluginPublicationSettings.pluginId, id));
+      await tx.delete(pluginPublicationStates).where(eq(pluginPublicationStates.pluginId, id));
+      await tx.delete(pluginMemberRecords).where(eq(pluginMemberRecords.pluginId, id));
+      await tx.delete(pluginPhysicalModels).where(eq(pluginPhysicalModels.pluginId, id));
+      await tx.delete(pluginStorageModels).where(eq(pluginStorageModels.pluginId, id));
+      await tx.delete(pluginSchemaMigrations).where(eq(pluginSchemaMigrations.pluginId, id));
+      await tx.delete(pluginUpgradePlans).where(eq(pluginUpgradePlans.pluginId, id));
+      await tx.delete(pluginSettings).where(eq(pluginSettings.pluginId, id));
+      await tx.delete(plugins).where(eq(plugins.id, id));
+      await tx.insert(auditEvents).values({
+        id: crypto.randomUUID(),
+        publicationId: null,
+        actorUserId: audit.actorUserId,
+        requestId: audit.requestId,
+        action: "plugin.data_purged",
+        targetType: "plugin",
+        targetId: id,
+      });
+    });
   }
 
   private mapToDomain(row: PluginRow): Plugin {
@@ -286,13 +353,29 @@ export class DrizzlePluginPublicationStateRepository implements PluginPublicatio
     return rows[0]?.enabled === true;
   }
 
-  async setEnabled(pluginId: string, publicationId: string, enabled: boolean): Promise<void> {
-    await getDb().insert(pluginPublicationStates)
-      .values({ pluginId, publicationId, enabled })
-      .onConflictDoUpdate({
-        target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
-        set: { enabled, updatedAt: new Date() },
-      });
+  async setEnabled(
+    pluginId: string, publicationId: string, enabled: boolean,
+    audit?: PluginSettingAuditContext,
+  ): Promise<void> {
+    await getDb().transaction(async (tx) => {
+      const updated = await tx.insert(pluginPublicationStates)
+        .values({ pluginId, publicationId, enabled })
+        .onConflictDoUpdate({
+          target: [pluginPublicationStates.pluginId, pluginPublicationStates.publicationId],
+          set: { enabled, updatedAt: new Date() },
+          setWhere: sql`${pluginPublicationStates.enabled} IS DISTINCT FROM ${enabled}`,
+        }).returning({ pluginId: pluginPublicationStates.pluginId });
+      // An idempotent repeat has no state change and must not fabricate an
+      // audit transition. First explicit false set is still a real decision.
+      if (audit && updated.length === 1) {
+        await tx.insert(auditEvents).values({
+          id: crypto.randomUUID(), publicationId,
+          actorUserId: audit.actorUserId, requestId: audit.requestId,
+          action: enabled ? "plugin.publication_enabled" : "plugin.publication_disabled",
+          targetType: "plugin", targetId: pluginId,
+        });
+      }
+    });
   }
 }
 

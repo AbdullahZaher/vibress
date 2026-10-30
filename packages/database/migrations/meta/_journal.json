@@ -330,6 +330,34 @@
       "when": 1792792800000,
       "tag": "0046_member_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793059200000,
+      "tag": "0047_plugin_upgrade_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793145600000,
+      "tag": "0048_plugin_upgrade_preflight_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793156400000,
+      "tag": "0049_plugin_marketplace_admissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793156400001,
+      "tag": "0050_plugin_marketplace_publisher_revocations",
+      "breakpoints": true
     }
   ]
 }

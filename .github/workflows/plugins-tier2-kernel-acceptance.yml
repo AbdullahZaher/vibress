@@ -1,0 +1,62 @@
+name: Plugins Tier 2 Kernel Isolation Acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/plugins-tier2-kernel-acceptance.yml"
+      - "scripts/verify-tier2-bubblewrap-isolation.mjs"
+      - "scripts/verify-tier2-bubblewrap-ipc.mjs"
+      - "scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs"
+      - "packages/domains/plugins/src/runtime/tier2-process-supervisor.ts"
+      - "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"
+      - "packages/domains/plugins/src/runtime/tier2-ipc.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugins-tier2-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bubblewrap-kernel-probe:
+    name: Linux Bubblewrap kernel namespace & real plugin lifecycle
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Bubblewrap
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap python3
+
+      - name: Prove real kernel containment (fail-closed)
+        run: node scripts/verify-tier2-bubblewrap-isolation.mjs
+
+      - name: Probe Node stdio IPC across real namespace boundary
+        run: node scripts/verify-tier2-bubblewrap-ipc.mjs
+
+      - name: Build production worker bundles
+        run: |
+          pnpm --filter @vibress/plugin-sdk build
+          pnpm --filter @vibress/plugins build
+          node scripts/build-production-bundles.mjs
+
+      - name: Verify real Vibress plugin lifecycle inside Bubblewrap
+        run: node scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs

@@ -4,8 +4,8 @@
 
 ARG APP=admin
 
-FROM node:26-alpine AS base
-RUN npm install -g pnpm@11.17.0
+FROM node:24-alpine AS base
+RUN npm install -g pnpm@11.22.0
 WORKDIR /repo
 
 FROM base AS builder

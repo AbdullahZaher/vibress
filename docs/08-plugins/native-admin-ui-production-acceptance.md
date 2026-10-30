@@ -2,6 +2,95 @@
 
 **State: HOLD — not yet production certified.** This document records mandatory gates, not completed tests or independent approvals.
 
+## SDK-NUI-03 read-only multi-replica acceptance (PR #89)
+
+**Correction from final CI of `bbc54811069d90bd64bbe2e67c9a83a71d0b4124`:**
+[PR CI 40866001820](https://github.com/AbdullahZaher/vibress/actions/runs/40866001820)
+and [push CI 40865993974](https://github.com/AbdullahZaher/vibress/actions/runs/40865993974)
+failed in *Scenario H* because its disposable API process passed an **empty**
+`VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` string (and, on rollback, an empty
+`VIBRESS_NATIVE_ADMIN_UI_RELEASES` string). The Host correctly rejects
+these malformed operator settings on startup. The test fixture now
+**omits** disabled env keys instead of weakening production validation;
+[M1A 40865994023](https://github.com/AbdullahZaher/vibress/actions/runs/40865994023)
+passed on that earlier commit, but does not certify the amended scenario.
+
+**Populated-install replay added:** *Scenario I* runs the real forward
+migrator again against the already migrated and populated disposable
+PostgreSQL database while two independent API processes continue serving.
+It compares five publication-A and two publication-B bilingual course
+records and versions across replicas before/after the replay, checks the
+physical model catalog is unchanged and confirms forged tenant selectors
+remain denied. This tests migration **re-entrance on existing current-version
+content**; it does **not** simulate deploying historical API binaries or
+a down-migration. A full previous-version-image to current-version upgrade,
+actual operator-signed package rollback, production backup restoration,
+and staging approval remain separate release blockers.
+
+
+**Baseline verified 2026-10-29:** On `5e1980ccda3cd625e7c9115861c8a38eb8e366a1`,
+[PR CI 40857258268](https://github.com/AbdullahZaher/vibress/actions/runs/40857258268),
+[push CI 40857247895](https://github.com/AbdullahZaher/vibress/actions/runs/40857247895)
+and [M1A drill 40857247684](https://github.com/AbdullahZaher/vibress/actions/runs/40857247684)
+all completed successfully. These are **baseline** results, not evidence that
+the new SDK-NUI-03 hardening below has passed until its own exact-head CI is green.
+
+The additive disposable
+`tests/integration/native-admin-multi-process-replica.test.ts` scenario H
+now probes two already-admitted API processes plus a separate API process
+using the *same verified signed release* with read approval but no action
+approval. The Host must return `mode: "native"` **without** a workflow,
+provide read-only discovery with `actions: []`, permit an authorized
+publication-local resource read, and reject a forged publication. After
+an isolated operator-disabled restart, it must return explicit `mode:
+"legacy"` while protected resource discovery and records return 404.
+The scenario is a mixed-policy **test fixture only**; operators must never
+intentionally run different allowlists across a production API fleet.
+
+The browser `NativeExtensionAdminView` must clear previously admitted
+data on focus/revalidation and **latch a child resource authorization
+denial per plugin/view/route/publication**. Later successful Native or
+scalar requests must not resurrect the denied view; a previously admitted
+Native view must not silently downgrade to an iframe after revocation.
+An explicitly Host-selected legacy mode remains available for a fresh
+page load or older API that never advertised Native support.
+
+**Approval boundary:** These changes do not alter existing routes, SDK
+ABI, manifest schemas, PostgreSQL data, permissions or operator release
+allowlists. The release remains default-off until security/operator
+sign-off, final exact-head CI and staged multi-replica rollback evidence;
+automated regressions are necessary but not sufficient for production.
+
+## SDK-NUI-04 — signed recovery and read-only rollback rehearsal (pending exact-head CI)
+
+The current disposable multi-process integration adds a **read-only release
+rollback and readmission** check on a database with prior, real bilingual
+course edits. It snapshots publication-A/B rows and versions, removes the
+Native release allowlist on an isolated API process, verifies Native resource
+routes fail closed, then re-admits the **same signed digest** on a restarted
+process without schema or data resets. It requires both publications to return
+the exact original snapshots, including Arabic text and versions, and
+continues to deny a foreign publication. This tests **operator flag rollback
+of Native rendering**, not reverting an installed plugin's database schema.
+
+The separate CI-only M1A recovery drill now exercises the real production
+`scripts/restore.sh` HMAC signature preflight against an additional empty
+database in a namespaced disposable PostgreSQL stack. A valid compressed
+dump of the populated test installation is accompanied by a signed manifest;
+missing signature and tampered manifest are rejected before database writes.
+The unchanged signed archive must restore the original sentinel. Application
+API/Worker writers have already been stopped; the private signing key used by
+this test is an ephemeral *nonproduction* fixture.
+
+**Evidence is pending:** these are authored acceptance checks and do not
+become proof until CI and M1A succeed on the new commit. In particular, they
+do not restore Redis/queues, media, encryption keys or actual operator-signed
+third-party release mounts. Nor do they test a pinned historical API/Worker
+binary against a real pre-upgrade database snapshot or reverse an irreversible
+plugin schema migration. Those tests, upgrade fencing, full staging DR,
+measured RPO/RTO and explicit Security/Operator approvals are still blockers
+to Native production enablement.
+
 ## Automated release matrix
 
 | Verification | Evidence required |

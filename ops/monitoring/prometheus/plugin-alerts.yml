@@ -1,0 +1,87 @@
+# PLUG-OPS-06 optional operator-installed Prometheus rules.
+# Requires one scrape target per Worker replica labelled job="vibress-worker".
+# Never sum samples across replicas or treat these as exact fleet totals.
+# Not enabled by Vibress/Compose automatically. See OPS-06 runbook.
+groups:
+  - name: vibress-plugin-delivery
+    interval: 1m
+    rules:
+      - alert: VibressPluginWorkerScrapeDown
+        expr: up{job="vibress-worker"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress Worker metrics target is unreachable"
+          description: "Verify the internal Worker metrics endpoint, network, and scraper configuration before assessing plugin delivery."
+
+      - alert: VibressPluginWorkerTargetMissing
+        expr: absent(up{job="vibress-worker"})
+        for: 5m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "No Vibress Worker metrics target is configured"
+          description: "Confirm that all Worker replicas are discoverable by Prometheus; missing targets must not be interpreted as a healthy queue."
+
+      - alert: VibressPluginConsumerUnavailable
+        expr: (plugin_events_consumer_ready{job="vibress-worker"} == 0) and on (job, instance) (up{job="vibress-worker"} == 1)
+        for: 3m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress plugin event consumer is unavailable"
+          description: "Investigate Worker admission, Redis and signed release consistency. Do not replay unknown receipts automatically."
+
+      - alert: VibressPluginReceiptProbeMissing
+        expr: (plugin_events_consumer_ready{job="vibress-worker"} == 1) unless on (job, instance) plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker"}
+        for: 5m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress plugin receipt probe has never completed"
+          description: "Inspect the Worker receipt sampling loop; missing telemetry is not evidence of zero backlog."
+
+      - alert: VibressPluginReceiptProbeFailed
+        expr: (plugin_events_receipt_probe_ok{job="vibress-worker"} == 0) and on (job, instance) (up{job="vibress-worker"} == 1)
+        for: 3m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress durable receipt probe is failing"
+          description: "Check database connectivity. Existing backlog gauges are stale and must not be interpreted as zero."
+
+      - alert: VibressPluginReceiptProbeStalled
+        expr: (time() - plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker"} > 180) and on (job, instance) (up{job="vibress-worker"} == 1)
+        for: 2m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress durable receipt probe has stopped updating"
+          description: "Last-known probe status may be outdated even if it reported success. Investigate the Worker loop."
+
+      - alert: VibressPluginReceiptBacklogStale
+        expr: (plugin_events_receipt_stale_sampled{job="vibress-worker",state=~"pending|dispatching"} > 0) and on (job, instance) (plugin_events_receipt_probe_ok{job="vibress-worker"} == 1) and on (job, instance) ((time() - plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker"}) < 180) and on (job, instance) (up{job="vibress-worker"} == 1)
+        for: 4m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress durable plugin event receipts are delayed"
+          description: "A bounded sample of durable event receipts is stale. Inspect the database and Redis relay; samples are lower bounds, not fleet totals."
+
+      - alert: VibressPluginReceiptSampleSaturated
+        expr: (plugin_events_receipt_sample_saturated{job="vibress-worker",state=~"pending|dispatching"} == 1) and on (job, instance) (plugin_events_receipt_probe_ok{job="vibress-worker"} == 1) and on (job, instance) ((time() - plugin_events_receipt_probe_timestamp_seconds{job="vibress-worker"}) < 180) and on (job, instance) (up{job="vibress-worker"} == 1)
+        for: 4m
+        labels:
+          severity: warning
+          component: plugins
+        annotations:
+          summary: "Vibress durable receipt sampling limit reached"
+          description: "At least 251 receipts exist in a sampled status. This is a lower bound and not an exact queue length."

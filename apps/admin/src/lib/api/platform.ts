@@ -432,6 +432,21 @@ export async function registerOperatorTrustedPluginApi(
   });
 }
 
+/** PLUG-OPS-06: whitelisted audit actions, publication resolved by Staff API. */
+export interface AdminPluginActivity {
+  action: "plugin.publication_settings_updated" | "plugin.publication_secret_revoked" |
+    "plugin.publication_enabled" | "plugin.publication_disabled" | "plugin.event_replay_requested";
+  createdAt: string;
+}
+export async function listPluginActivityApi(
+  id: string, offset = 0,
+): Promise<{ items: AdminPluginActivity[]; nextOffset: number | null }> {
+  const query = new URLSearchParams({ offset: String(offset), limit: "25" });
+  return apiRequest(`/plugins/${encodeURIComponent(id)}/activity?${query}`, {
+    cache: "no-store",
+  });
+}
+
 /** EXT-401 Host-authorized and publication-scoped failed plugin events. */
 export interface AdminFailedPluginEvent {
   eventId: string;

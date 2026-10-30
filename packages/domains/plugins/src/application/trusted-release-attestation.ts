@@ -16,6 +16,34 @@ export interface TrustedPluginAttestationOptions {
 const MAX_LOCKFILE_BYTES = 128 * 1024;
 const MAX_PUBLIC_KEY_BYTES = 8 * 1024;
 const MAX_SIGNATURE_BYTES = 256;
+const MAX_REVOKED_SIGNERS = 32;
+const SHA256_FINGERPRINT = /^[a-f0-9]{64}$/;
+
+/**
+ * Optional operator-owned denylist. A revoked signer MUST be rejected even
+ * when its signature and the old deployment pin still verify. Never obtain
+ * this policy from plugin metadata or signed release content.
+ *
+ * An explicit but malformed policy fails closed; the absence of this env var
+ * retains existing v1 self-hosted installations unchanged.
+ */
+function assertSignerNotRevoked(signerSha256: string | undefined): void {
+  const policy = process.env.VIBRESS_TRUSTED_PLUGIN_REVOKED_PUBLIC_KEYS_SHA256;
+  if (policy === undefined) return;
+  const fingerprints = policy.split(",").map((value) => value.trim());
+  if (fingerprints.length < 1 || fingerprints.length > MAX_REVOKED_SIGNERS ||
+      fingerprints.some((value) => !SHA256_FINGERPRINT.test(value)) ||
+      new Set(fingerprints).size !== fingerprints.length) {
+    throw new Error("INVALID_OPERATOR_SIGNER_REVOCATION_POLICY");
+  }
+  if (!signerSha256) {
+    // Do not allow an unsigned lockfile to circumvent an opted-in denylist.
+    throw new Error("OPERATOR_SIGNATURE_REQUIRED");
+  }
+  if (fingerprints.includes(signerSha256)) {
+    throw new Error("OPERATOR_SIGNER_REVOKED");
+  }
+}
 
 async function readBoundedFile(filePath: string, maxBytes: number): Promise<Buffer> {
   if (!path.isAbsolute(filePath)) throw new Error("Invalid trusted plugin lockfile attestation path");
@@ -128,6 +156,9 @@ export async function readTrustedPluginLockfileWithVerification(
       throw new Error("Trusted plugin lockfile signature verification failed");
     }
   }
+  // Check independently of the expected SPKI pin. Rotating deployment pins
+  // must not silently reauthorize a known-compromised operator signer.
+  assertSignerNotRevoked(publicKeySha256);
   const parsed: unknown = JSON.parse(decodeUtf8(lockfileBytes));
   return {
     lockfile: parsed,

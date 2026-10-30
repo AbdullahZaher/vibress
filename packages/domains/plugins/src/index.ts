@@ -29,3 +29,52 @@ export { assessQueueRecovery } from "./application/plugin-queue-recovery";
 export type {
   QueueRecoveryReceipt, QueueRecoveryJob, QueueRecoveryState,
 } from "./application/plugin-queue-recovery";
+
+export {
+  readPluginReceiptDiagnostics, summarizePluginReceiptAges,
+} from "./application/plugin-receipt-diagnostics";
+export type {
+  PluginReceiptDiagnostics, PluginReceiptStateDiagnostic, ActivePluginReceiptStatus,
+} from "./application/plugin-receipt-diagnostics";
+export { listPluginActivity } from "./application/plugin-activity";
+export type { PluginActivityAction, PluginActivityRow, PluginActivityResult } from "./application/plugin-activity";
+export { preparePluginUpgradeStage, PluginUpgradePlanError } from "./application/plugin-upgrade-plan";
+export type { OperatorUpgradeStageInput, PluginUpgradeStageDetails } from "./application/plugin-upgrade-plan";
+export { DrizzlePluginUpgradePlanRepository } from "./infrastructure/drizzle-plugin-upgrade-plans";
+export {
+  validateOperatorUpgradeAbort,
+  validateOperatorUpgradeTransition,
+  validateOperatorUpgradeQuiesce,
+  validateOperatorUpgradeMigrate,
+  validateOperatorUpgradeActivate,
+  validateOperatorUpgradeObserve,
+  validateOperatorUpgradeComplete,
+  validateOperatorUpgradeRollback,
+} from "./application/plugin-upgrade-plan";
+export type {
+  OperatorUpgradeAbortInput,
+  OperatorUpgradeTransitionInput,
+  OperatorUpgradeQuiesceInput,
+  OperatorUpgradeMigrateInput,
+  OperatorUpgradeActivateInput,
+  OperatorUpgradeObserveInput,
+  OperatorUpgradeCompleteInput,
+  OperatorUpgradeRollbackInput,
+  OperatorUpgradeAuditContext,
+} from "./application/plugin-upgrade-plan";
+export { validateOperatorUpgradePreflight, validateOperatorUpgradeApproval } from "./application/plugin-upgrade-plan";
+export type {
+  OperatorUpgradePreflightInput, OperatorUpgradeApprovalInput,
+} from "./application/plugin-upgrade-plan";
+
+export * from "./runtime/tier2-ipc";
+export * from "./runtime/tier2-capability-gateway";
+export * from "./runtime/tier2-process-supervisor";
+export * from "./application/plugin-catalog";
+export * from "./application/plugin-archive-extractor";
+export * from "./application/marketplace-service";
+
+
+
+export { DrizzleMarketplaceAdmissionRepository, MarketplaceAdmissionError, parseDurableMarketplaceAdmission, createDurableMarketplaceTier2Supervisor } from "./infrastructure/drizzle-marketplace-admissions";
+export type { OperatorMarketplaceReleaseGrant, MarketplaceOperatorAudit } from "./infrastructure/drizzle-marketplace-admissions";

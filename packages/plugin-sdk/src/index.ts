@@ -5,6 +5,19 @@ export type { PluginAdminDomainWorkflowV1 } from "./native-domain-workflow";
 import type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginAdminDataResourceV1, PluginAdminDataActionV1 } from "./native-admin-data";
 export type { PluginNativeAdminPageV1, PluginNativeAdminComponentV1 } from "./native-admin-ui";
+export {
+  defineNativeAdminPageV1,
+  defineNativeAdminResourceV1,
+  defineNativeAdminActionV1,
+  defineNativeDomainWorkflowV1,
+  resolveLocalizedLabel,
+  defineSettingsSchema,
+  maskSecretValue,
+  type PluginLocalizedLabel,
+  type PluginSettingType,
+  type PluginSettingFieldDescriptor,
+  type PluginSettingsSchemaDescriptor,
+} from "./native-admin-definitions.js";
 
 /**
  * @vibress/plugin-sdk — the ONLY surface plugins may import.
@@ -208,7 +221,28 @@ export interface PluginModule {
   onEvent?(eventName: string, payload: unknown, context?: PluginContext): void | Promise<void>;
 }
 
+/**
+ * Pure module definition helper preserving literal types for TypeScript users.
+ * Not a manifest validator, plugin admission, authorization or version upgrade.
+ * A declaration is only effective after existing Host validation and approval.
+ */
+export function definePluginModule<const T extends PluginModule>(module: T): T {
+  return module;
+}
+
 export const SDK_VERSION = "1.0.0";
+
+/**
+ * SDK-NUI-01: current declarative Native UI wire schema versions, NOT SDK
+ * package semver or proof that the Host has approved this plugin release.
+ * The Host independently validates each declaration using its own Zod
+ * contracts and enforces authorization and release allowlists per request.
+ *
+ * These constants only describe the V1 contract supported by this SDK.
+ * A future wire version must be explicitly versioned and admitted by Host.
+ */
+export const NATIVE_ADMIN_PAGE_SCHEMA_VERSION = 1 as const;
+export const NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION = 1 as const;
 
 export interface PluginCapabilityDefinition {
   id: string;
@@ -541,6 +575,25 @@ export function validateManifest(manifest: unknown): PluginManifest {
 }
 
 /**
+ * SDK-02: Type-safe, declarative plugin definition helper.
+ * Validates manifest properties strictly according to Vibress Plugin SDK specification.
+ */
+export interface PluginDefinition {
+  readonly manifest: PluginManifest;
+  readonly adminPages?: readonly PluginNativeAdminPageV1[] | undefined;
+  readonly adminResources?: readonly PluginAdminDataResourceV1[] | undefined;
+  readonly adminActions?: readonly PluginAdminDataActionV1[] | undefined;
+  readonly domainWorkflows?: readonly PluginAdminDomainWorkflowV1[] | undefined;
+  readonly activate?: ((context: PluginContext) => Promise<void> | void) | undefined;
+  readonly deactivate?: ((context: PluginContext) => Promise<void> | void) | undefined;
+}
+
+export function definePlugin<const T extends PluginDefinition>(definition: T): T {
+  validateManifest(definition.manifest);
+  return definition;
+}
+
+/**
  * Verifies SHA-256 cryptographic checksum of plugin code or package artifact.
  */
 export function verifyPluginChecksum(
@@ -575,3 +628,6 @@ export async function executeWithTimeout<T>(
     if (timer) clearTimeout(timer);
   }
 }
+
+export * from "./cli.js";
+

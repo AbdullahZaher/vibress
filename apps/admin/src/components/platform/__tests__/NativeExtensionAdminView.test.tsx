@@ -163,6 +163,21 @@ describe("Host-rendered native extension page", () => {
     expect(element.querySelector("table")).toBeNull();
     expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
     expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    // A successful Native descriptor/scalar response cannot override a
+    // revoked resource grant, including after a tab refocus revalidation.
+    const previouslyLoadedScalars = vi.mocked(readExtensionAdminViewApi).mock.calls.length;
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.textContent).not.toContain("private summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(readExtensionAdminViewApi).toHaveBeenCalledTimes(previouslyLoadedScalars);
+    // A previously admitted Native view cannot downgrade after a resource
+    // authorization failure just because the operator disabled Native mode.
+    vi.mocked(readNativeExtensionAdminPageApi).mockResolvedValue({ mode: "legacy" });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(element.textContent).not.toContain("private summary");
   });
 
   it("redacts scalar data when resource discovery loses Staff authorization", async () => {
@@ -196,6 +211,27 @@ describe("Host-rendered native extension page", () => {
       root.render(<NativeExtensionAdminView link={link} />);
     });
     expect(element.textContent).not.toContain(hostile);
+  });
+
+  it("redacts cached Native data on window focus and rejects a revoked legacy downgrade", async () => {
+    let resolveRecheck: ((response: { mode: "legacy" }) => void) | undefined;
+    vi.mocked(readNativeExtensionAdminPageApi)
+      .mockResolvedValueOnce(native)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveRecheck = resolve; }));
+    vi.mocked(readExtensionAdminViewApi).mockResolvedValue({ title: "private Native summary" });
+    await render();
+    expect(element.textContent).toContain("private Native summary");
+
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(element.textContent).not.toContain("private Native summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(element.querySelector('[role="status"]')).not.toBeNull();
+
+    await act(async () => { resolveRecheck?.({ mode: "legacy" }); });
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element.textContent).not.toContain("private Native summary");
+    expect(element.querySelector('[data-testid="legacy-frame"]')).toBeNull();
+    expect(readExtensionAdminViewApi).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed on a native endpoint denial rather than showing a frame", async () => {

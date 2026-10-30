@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SDK_VERSION, type PluginModule } from "@vibress/plugin-sdk";
-import { ExtensionNativeDomainWorkflowV1Schema } from "@vibress/api-contracts";
+import {
+  SDK_VERSION, NATIVE_ADMIN_PAGE_SCHEMA_VERSION,
+  NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION, validateManifest,
+  type PluginModule,
+} from "@vibress/plugin-sdk";
+import {
+  ExtensionNativeAdminPageV1Schema,
+  ExtensionNativeDomainWorkflowV1Schema,
+} from "@vibress/api-contracts";
 import { admitNativeAdminPage } from "../../apps/api/src/plugins/native-admin-registry";
 import { admitNativeDataRegistry } from "../../apps/api/src/plugins/native-data-registry";
 import { admitNativeDomainWorkflow } from "../../apps/api/src/plugins/native-domain-workflow";
@@ -61,6 +68,33 @@ describe("NUI-07 independent consumer compatibility", () => {
       expect(ExtensionNativeDomainWorkflowV1Schema.safeParse(workflow.workflow).success)
         .toBe(true);
     }
+  });
+
+  it("keeps package version, exact Host ABI and Native V1 schema versions distinct", () => {
+    const manifest = {
+      id: "compat-fixture", name: "Compatibility Fixture", version: "1.2.0",
+      vibressApiVersion: SDK_VERSION, entrypoint: "dist/plugin.mjs",
+      capabilities: [],
+    };
+    expect(validateManifest(manifest).vibressApiVersion).toBe("1.0.0");
+    // Package version 1.2.0 must NEVER become a Host ABI alias.
+    expect(() => validateManifest({ ...manifest, vibressApiVersion: "1.2.0" }))
+      .toThrow("Unsupported Vibress API version");
+    expect(() => validateManifest({ ...manifest, vibressApiVersion: "2.0.0" }))
+      .toThrow("Unsupported Vibress API version");
+
+    const page = independentPlugin.adminPages?.[0];
+    const workflow = independentPlugin.adminDomainWorkflows?.[0];
+    if (!page || !workflow) throw Error("Missing V1 compatibility fixtures");
+    expect(NATIVE_ADMIN_PAGE_SCHEMA_VERSION).toBe(1);
+    expect(NATIVE_DOMAIN_WORKFLOW_SCHEMA_VERSION).toBe(1);
+    expect(ExtensionNativeAdminPageV1Schema.safeParse(page).success).toBe(true);
+    expect(ExtensionNativeDomainWorkflowV1Schema.safeParse(workflow).success).toBe(true);
+    expect(ExtensionNativeAdminPageV1Schema.safeParse({ ...page, schemaVersion: 2 }).success)
+      .toBe(false);
+    expect(ExtensionNativeDomainWorkflowV1Schema.safeParse({
+      ...workflow, schemaVersion: 2,
+    }).success).toBe(false);
   });
 
   it("keeps legacy-only plugins valid with no Native contribution", () => {

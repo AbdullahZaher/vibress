@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { verifyOperatorReleaseAdmission, verifyTrustedPluginRelease } from "../operator-release-preflight";
 import { pluginPhysicalModelDigest } from "@vibress/plugins";
+import { BundledPluginHost } from "../plugin-host";
 
 const directories: string[] = [];
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
@@ -83,6 +84,50 @@ afterEach(async () => {
 });
 
 describe("P0-3 offline operator release admission", () => {
+  it("enforces full signed admission again before strict API registration", async () => {
+    const f = await fixture();
+    f.configureSignature();
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY", "strict");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", f.lockfileSha256);
+    const host = new BundledPluginHost(f.lockfile);
+    await expect(host.verifyOperatorRegistration()).resolves.toBeUndefined();
+
+    // Strict registration MUST NOT silently downgrade to a legacy preflight.
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", "");
+    await expect(host.verifyOperatorRegistration())
+      .rejects.toThrow("OPERATOR_RELEASE_PIN_REQUIRED");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", "f".repeat(64));
+    await expect(host.verifyOperatorRegistration())
+      .rejects.toThrow("OPERATOR_RELEASE_REPLICA_MISMATCH");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", f.lockfileSha256);
+
+    // A reviewed artifact that changes after admission is rejected before
+    // registration changes persistent plugin metadata; executable bytes
+    // are never imported during this read-only preflight.
+    await writeFile(f.reviewPath, "{}");
+    await expect(host.verifyOperatorRegistration())
+      .rejects.toThrow("APPROVED_ARTIFACT_MISMATCH");
+  });
+
+  it("rejects signed but unreviewed releases at the strict API registration boundary", async () => {
+    const f = await fixture();
+    f.configureSignature();
+    const noReview = { ...f.payload, plugins: [{
+      ...f.entry, release: {
+        ...f.entry.release, securityReview: undefined,
+      },
+    }] };
+    const expected = await f.approve(noReview);
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY", "strict");
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256", expected);
+    await expect(new BundledPluginHost(f.lockfile).verifyOperatorRegistration())
+      .rejects.toThrow("OPERATOR_RELEASE_EVIDENCE_REQUIRED");
+    // Absence of a strict flag must not silently migrate legacy installations.
+    vi.stubEnv("VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY", "");
+    await expect(new BundledPluginHost(f.lockfile).verifyOperatorRegistration())
+      .resolves.toBeUndefined();
+  });
+
   it("reports the same verified signed release on each replica without executing it", async () => {
     const f = await fixture();
     f.configureSignature();

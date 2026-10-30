@@ -3,8 +3,10 @@ import {
   pluginEventReceipts, eq, and, inArray, sql, asc,
 } from "@vibress/database";
 import {
-  verifyTrustedPluginRelease, assertPluginRestoreReadiness,
+  verifyTrustedPluginRelease, verifyOperatorReleaseAdmission,
+  assertPluginRestoreReadiness,
 } from "@vibress/plugins";
+import { selectPluginRestoreAdmission } from "./restore-admission-policy";
 
 /**
  * EXT-403: run AFTER restoring a signed PostgreSQL snapshot and staging the
@@ -12,11 +14,17 @@ import {
  * Reads metadata only. No plugin code, secret decryption, DDL or jobs run.
  */
 async function check(): Promise<void> {
-  const lockfile = process.env.VIBRESS_TRUSTED_PLUGIN_LOCKFILE;
-  if (!lockfile && process.env.VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE === "1") {
-    throw new Error("PLUGIN_RESTORE_APPROVAL_REQUIRED");
-  }
-  const approved = lockfile ? await verifyTrustedPluginRelease(lockfile) : [];
+  const admission = selectPluginRestoreAdmission(process.env);
+  // Strict restore must enforce the SAME signed, reviewed, pinned admission
+  // as strict API/Worker startup. Legacy preflight remains unchanged when
+  // the operator has not opted into strict policy.
+  const approved = admission.mode === "strict"
+    ? (await verifyOperatorReleaseAdmission(
+      admission.lockfile, admission.expectedLockfileSha256,
+    )).releases
+    : admission.mode === "legacy"
+      ? await verifyTrustedPluginRelease(admission.lockfile)
+      : [];
   const db = getDb();
   const enabled = await db.select({
     manifestId: plugins.manifestId,

@@ -29,6 +29,7 @@ async function buildAll() {
   fs.mkdirSync('apps/api/dist', { recursive: true });
   fs.mkdirSync('apps/worker/dist', { recursive: true });
   fs.mkdirSync('packages/database/dist', { recursive: true });
+  fs.mkdirSync('packages/domains/plugins/dist/runtime', { recursive: true });
 
   await Promise.all([
     // 1. API entrypoint
@@ -72,6 +73,22 @@ async function buildAll() {
       ...COMMON_CONFIG,
       entryPoints: ['packages/database/src/migrate.ts'],
       outfile: 'packages/database/dist/migrate.js',
+    }),
+    // 4. Tier 2 Isolated Plugin Sandbox Worker (compiled production artifact)
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts'],
+      outfile: 'apps/api/dist/tier2-sandbox-worker.js',
+    }),
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts'],
+      outfile: 'apps/worker/dist/tier2-sandbox-worker.js',
+    }),
+    esbuild.build({
+      ...COMMON_CONFIG,
+      entryPoints: ['packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts'],
+      outfile: 'packages/domains/plugins/dist/runtime/tier2-sandbox-worker.js',
     }),
   ]);
 

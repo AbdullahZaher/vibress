@@ -148,6 +148,7 @@ function spawnReplicaProcess(
   sigPath: string,
   releaseTag: string,
   allowedPorts: number[],
+  actionReleaseTag = releaseTag,
 ): ChildProcess {
   const tsxBin = path.resolve(repoRoot, "node_modules/.bin/tsx");
   const corsOrigins = allowedPorts
@@ -169,8 +170,11 @@ function spawnReplicaProcess(
         VIBRESS_TRUSTED_PLUGIN_PUBLIC_KEY_FILE: keyPath,
         VIBRESS_TRUSTED_PLUGIN_SIGNATURE_FILE: sigPath,
         VIBRESS_TRUSTED_PLUGIN_REQUIRE_SIGNATURE: "1",
-        VIBRESS_NATIVE_ADMIN_UI_RELEASES: releaseTag,
-        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: releaseTag,
+        // These environment variables are optional *or* strict release IDs.
+        // An empty string fails Host config validation before HTTP startup.
+        // Setting undefined intentionally omits disabled flags from child env.
+        VIBRESS_NATIVE_ADMIN_UI_RELEASES: releaseTag || undefined,
+        VIBRESS_NATIVE_ADMIN_ACTION_RELEASES: actionReleaseTag || undefined,
         VIBRESS_ENCRYPTION_KEY: encryptionKey,
         NODE_ENV: "test",
         LOG_LEVEL: "warn",
@@ -936,4 +940,202 @@ describe("Priority 1: Real Independent Multi-Process API Replicas with PostgreSQ
     expect(updatedCourse.fields.title_en).toBe(expectedWinnerTitle);
     expect(updatedCourse.fields.title_en).not.toBe(expectedLoserTitle);
   });
+  it("Scenario H: Read-only Native admission and operator rollback across independent replicas", async () => {
+    // Replica A/B have independently approved write releases. A third
+    // process exercises read-only mode, then an operator-disabled release.
+    // This is a disposable *mixed-policy test*, never a recommended fleet
+    // configuration: production rollout requires identical replica allowlists.
+    const nativePath = `/api/admin/v1/extensions/${manifest.id}/views/course-overview/native`;
+    const dataPath = `/api/admin/v1/extensions/${manifest.id}/data`;
+    const resourcePath = `/api/admin/v1/extensions/${manifest.id}/resources/course-records`;
+    const headers = {
+      Authorization: `Bearer ${staffSessionToken}`,
+      Cookie: `vibress_session=${staffSessionToken}`,
+      "x-publication-id": pubAId,
+    };
+    const baseA = `http://127.0.0.1:${portA}`;
+    const baseB = `http://127.0.0.1:${portB}`;
+    const baseC = `http://127.0.0.1:${portC}`;
+
+    // Confirm signed admission is independently visible on both original
+    // API replicas before comparing the read-only deployment.
+    for (const base of [baseA, baseB]) {
+      const response = await fetch(base + nativePath, { headers });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        mode: string; routeId?: string;
+      };
+      expect(body.mode).toBe("native");
+      expect(body.routeId).toBe("courses");
+    }
+
+    try {
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, approvedReleaseTag,
+        [portA, portB, portC], "", // Explicitly deny Native writes.
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const readOnlyResponse = await fetch(baseC + nativePath, { headers });
+      expect(readOnlyResponse.status).toBe(200);
+      const readOnlyBody = (await readOnlyResponse.json()) as {
+        mode: string; routeId?: string; workflow?: unknown;
+      };
+      expect(readOnlyBody.mode).toBe("native");
+      expect(readOnlyBody.routeId).toBe("courses");
+      expect(readOnlyBody.workflow).toBeUndefined();
+
+      const dataResponse = await fetch(baseC + dataPath, { headers });
+      expect(dataResponse.status).toBe(200);
+      const data = (await dataResponse.json()) as {
+        actions: unknown[]; resources: Array<{ id: string }>;
+      };
+      expect(data.actions).toEqual([]);
+      expect(data.resources.some((r) => r.id === "course-records")).toBe(true);
+
+      const recordsResponse = await fetch(baseC + resourcePath + "?limit=2", { headers });
+      expect(recordsResponse.status).toBe(200);
+      const records = (await recordsResponse.json()) as {
+        items: Array<{ id: string }>;
+      };
+      expect(records.items.map((r) => r.id))
+        .toEqual(["course-a-01", "course-a-02"]);
+
+      // Capture complete persisted bilingual fields and row versions BEFORE
+      // rollback; this survives earlier concurrent edits from Scenario G.
+      const snapshot = async (publicationId: string) => {
+        const response = await fetch(baseC + resourcePath + "?limit=10", {
+          headers: { ...headers, "x-publication-id": publicationId },
+        });
+        expect(response.status).toBe(200);
+        return (await response.json()) as {
+          items: Array<{
+            id: string; version: number;
+            fields: Record<string, string | number | boolean | null>;
+          }>;
+        };
+      };
+      const beforeAlpha = await snapshot(pubAId);
+      const beforeBeta = await snapshot(pubBId);
+      expect(beforeAlpha.items).toHaveLength(5);
+      expect(beforeBeta.items).toHaveLength(2);
+      expect(beforeAlpha.items[1]?.fields.title_ar).toBe("دورة ألفا 2");
+      expect(beforeBeta.items[0]?.fields.title_ar).toBe("دورة بيتا 1");
+
+      // The same read-only release cannot authorize a forged publication.
+      const wrongPublication = await fetch(baseC + nativePath, {
+        headers: { ...headers, "x-publication-id": "unknown-foreign-publication" },
+      });
+      expect(wrongPublication.status).toBe(403);
+
+      // Operators disable Native by removing the exact approved digest
+      // from every serving replica and restarting it. The Host may advertise
+      // explicit legacy mode, but the *already-open* Native browser view
+      // must clear its data and not silently switch to an iframe.
+      await terminateProcessGracefully(procC);
+      procC = null;
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, "",
+        [portA, portB, portC], "",
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const disabled = await fetch(baseC + nativePath, { headers });
+      expect(disabled.status).toBe(200);
+      expect(await disabled.json()).toEqual({ mode: "legacy" });
+
+      const disabledData = await fetch(baseC + dataPath, { headers });
+      expect(disabledData.status).toBe(404);
+      const disabledRecords = await fetch(baseC + resourcePath + "?limit=2", { headers });
+      expect(disabledRecords.status).toBe(404);
+
+      // Restore the SAME signed, reviewed read-only release without running
+      // migrations or resetting the existing PostgreSQL database. A release
+      // rollback changes admission, not durable plugin-owned content.
+      await terminateProcessGracefully(procC);
+      procC = null;
+      procC = spawnReplicaProcess(
+        portC, disposableDbUrl, sharedSecret,
+        lockfilePath, keyPath, sigPath, approvedReleaseTag,
+        [portA, portB, portC], "",
+      );
+      await waitForHealthy(baseC + "/health/live");
+
+      const readmitted = await fetch(baseC + nativePath, { headers });
+      expect(readmitted.status).toBe(200);
+      const readmittedBody = (await readmitted.json()) as {
+        mode: string; workflow?: unknown;
+      };
+      expect(readmittedBody.mode).toBe("native");
+      expect(readmittedBody.workflow).toBeUndefined();
+      expect(await snapshot(pubAId)).toEqual(beforeAlpha);
+      expect(await snapshot(pubBId)).toEqual(beforeBeta);
+      const stillForbidden = await fetch(baseC + resourcePath + "?limit=2", {
+        headers: { ...headers, "x-publication-id": "unknown-foreign-publication" },
+      });
+      expect(stillForbidden.status).toBe(403);
+    } finally {
+      await terminateProcessGracefully(procC);
+      procC = null;
+    }
+  }, 90000);
+
+  it("Scenario I: Running migrations again on a populated installation preserves plugin data", async () => {
+    const baseA = `http://127.0.0.1:${portA}/api/admin/v1/extensions/${manifest.id}/resources/course-records?limit=20`;
+    const baseB = `http://127.0.0.1:${portB}/api/admin/v1/extensions/${manifest.id}/resources/course-records?limit=20`;
+    const baseHeaders = {
+      Authorization: `Bearer ${staffSessionToken}`,
+      Cookie: `vibress_session=${staffSessionToken}`,
+    };
+    const headersA = { ...baseHeaders, "x-publication-id": pubAId };
+    const headersB = { ...baseHeaders, "x-publication-id": pubBId };
+    const read = async (url: string, headers: typeof headersA) => {
+      const response = await fetch(url, { headers });
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        items: Array<{
+          id: string; version: number;
+          fields: Record<string, string | number | boolean | null>;
+        }>;
+      };
+    };
+    const [originalA, originalB] = await Promise.all([
+      read(baseA, headersA),
+      read(baseB, headersB),
+    ]);
+    expect(originalA.items).toHaveLength(5);
+    expect(originalB.items).toHaveLength(2);
+    // Scenario G updates course-a-01; use the actual pre-migration snapshot
+    // for that record. Verify the untouched second Arabic row explicitly.
+    expect(originalA.items[1]?.fields.title_ar).toBe("دورة ألفا 2");
+    expect(originalB.items[0]?.fields.title_ar).toBe("دورة بيتا 1");
+
+    const modelBefore = await getDb().select().from(pluginPhysicalModels)
+      .where(eq(pluginPhysicalModels.pluginId, registeredPluginId));
+    expect(modelBefore.length).toBeGreaterThan(0);
+
+    // Model an existing installation: run the same forward migrator with
+    // real bilingual content, physical plugin models, sessions and two API
+    // processes already present. Never rewind or edit released migrations.
+    await runMigrations();
+
+    const [afterA, afterB] = await Promise.all([
+      read(baseB, headersA),
+      read(baseA, headersB),
+    ]);
+    expect(afterA).toEqual(originalA);
+    expect(afterB).toEqual(originalB);
+    const modelAfter = await getDb().select().from(pluginPhysicalModels)
+      .where(eq(pluginPhysicalModels.pluginId, registeredPluginId));
+    expect(modelAfter).toEqual(modelBefore);
+
+    // Unknown tenant selector must remain denied after upgrade replay.
+    const forged = await fetch(baseA, {
+      headers: { ...headersA, "x-publication-id": "other-tenant" },
+    });
+    expect(forged.status).toBe(403);
+  }, 45000);
+
 });

@@ -12,8 +12,9 @@ vi.mock("../../../lib/api", () => ({
   deactivatePluginApi: vi.fn(),
   setPluginPublicationStateApi: vi.fn(),
 }));
+let mockLocale: "en" | "ar" = "en";
 vi.mock("../../../lib/admin-locale", () => ({
-  useAdminLocale: () => ({ tr: (value: string) => value }),
+  useAdminLocale: () => ({ tr: (value: string) => value, locale: mockLocale }),
 }));
 vi.mock("../ScopedPluginSettingsEditor", () => ({
   ScopedPluginSettingsEditor: () => <div data-testid="settings" />,
@@ -126,4 +127,167 @@ describe("P0-4 plugin lifecycle status and recovery UX", () => {
     expect(deactivatePluginApi).not.toHaveBeenCalled();
     expect(setPluginPublicationStateApi).not.toHaveBeenCalled();
   });
+  it("searches name, manifest ID and version without changing plugin permissions", async () => {
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[
+        plugin("active", { id: "a", name: "Alpha", manifestId: "alpha" }),
+        plugin("registered", { id: "b", name: "Beta", manifestId: "beta-addon", version: "2.7.0" }),
+      ]} platformOperator={false} onError={onError} onChanged={onChanged} />);
+    });
+    const search = container.querySelector('input[type="search"]') as HTMLInputElement;
+    expect(search).not.toBeNull();
+    expect(search.labels?.[0]?.textContent).toBe("Search installed plugins");
+    await act(async () => {
+      const setNativeValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype, "value",
+      )?.set;
+      setNativeValue?.call(search, "beta-addon");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Beta");
+    expect(container.textContent).not.toContain("Alpha");
+    expect(button(container, "Activate")).toBeUndefined();
+    expect(activatePluginApi).not.toHaveBeenCalled();
+  });
+
+  it("filters lifecycle states and distinguishes no matches from no installs", async () => {
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[
+        plugin("active", { id: "active", name: "Working" }),
+        plugin("error", { id: "failed", name: "Broken" }),
+        plugin("inactive", { id: "old", name: "Dormant" }),
+        plugin("active", { id: "legacy", name: "Incompatible", hostCompatible: false }),
+      ]} platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    const selector = container.querySelector("select") as HTMLSelectElement;
+    expect(selector.labels?.[0]?.textContent).toBe("Filter plugin status");
+    await act(async () => {
+      selector.value = "attention";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Broken");
+    expect(container.textContent).toContain("Incompatible");
+    expect(container.textContent).not.toContain("Dormant");
+    expect(container.textContent).not.toContain("Working");
+    await act(async () => {
+      selector.value = "inactive";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Dormant");
+    expect(container.textContent).not.toContain("Broken");
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[plugin("active")]}
+        platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    expect(container.textContent).toContain("No plugins match your search or status filter.");
+    await act(async () => {
+      root.render(<PluginsPanel plugins={[]}
+        platformOperator onError={onError} onChanged={onChanged} />);
+    });
+    expect(container.textContent).toContain("No platform plugins installed.");
+  });
+
+  it("cross-links active and publication-enabled plugins to their Native Admin pages (ADMIN-07)", async () => {
+    const onNavigate = vi.fn();
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("active", { publicationEnabled: true })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).toContain("Native Admin Pages");
+    expect(container.textContent).toContain("Course Management");
+    const link = container.querySelector('a[href="/admin/extensions/db-1/courses"]') as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    await act(async () => {
+      link.click();
+    });
+    expect(onNavigate).toHaveBeenCalledWith("/admin/extensions/db-1/courses");
+  });
+
+  it("hides Native Admin page links when plugin is inactive, disabled or lacking matching views (ADMIN-07)", async () => {
+    const onNavigate = vi.fn();
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    // Inactive plugin
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("inactive", { publicationEnabled: true })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).not.toContain("Native Admin Pages");
+    expect(container.querySelector('a[href="/admin/extensions/db-1/courses"]')).toBeNull();
+
+    // Publication-disabled plugin
+    await act(async () => {
+      root.render(
+        <PluginsPanel
+          plugins={[plugin("active", { publicationEnabled: false })]}
+          platformOperator
+          onError={onError}
+          onChanged={onChanged}
+          extensionViews={[testView]}
+          onNavigate={onNavigate}
+        />,
+      );
+    });
+    expect(container.textContent).not.toContain("Native Admin Pages");
+    expect(container.querySelector('a[href="/admin/extensions/db-1/courses"]')).toBeNull();
+  });
+
+  it("displays localized Arabic titles in RTL locale for Native Admin links (ADMIN-07)", async () => {
+    mockLocale = "ar";
+    const testView = {
+      pluginId: "db-1",
+      viewId: "courses",
+      routeId: "courses",
+      label: { en: "Courses", ar: "الدورات" },
+      title: { en: "Course Management", ar: "إدارة الدورات" },
+      permission: "plugins.read" as const,
+    };
+    try {
+      await act(async () => {
+        root.render(
+          <PluginsPanel
+            plugins={[plugin("active", { publicationEnabled: true })]}
+            platformOperator
+            onError={onError}
+            onChanged={onChanged}
+            extensionViews={[testView]}
+          />,
+        );
+      });
+      expect(container.textContent).toContain("إدارة الدورات");
+    } finally {
+      mockLocale = "en";
+    }
+  });
+
 });

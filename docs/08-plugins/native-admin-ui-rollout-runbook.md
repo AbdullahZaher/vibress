@@ -185,6 +185,22 @@ The operator admission and preflight CLIs verify immutable plugin packages and t
    ```
 
 ### Procedure 4: Read-Only Native Rollout
+
+**Pre-approval gate (SDK-NUI-03):** First verify the exact immutable signed
+release and matching Native read allowlist on **all** API replicas. The
+integration test uses a separate disposable process with its Native action
+allowlist unset to prove that read approval neither advertises a mutation
+workflow nor returns generic storage actions. This controlled mixed-policy
+test is **not** a supported production topology. The same test restarts
+that process with Native disabled and asserts legacy admission plus
+404-denied Native resource routes. A browser tab that had already rendered
+Native must redact content when revalidating and must **not** silently
+switch to a legacy iframe after a revoked resource permission. Check
+Arabic/RTL, keyboard focus, session revocation, publication switch and
+operator rollback before signing off; retain both allowlists unset until
+explicit production approval.
+
+
 1. Ensure the plugin is admitted, active, and functioning in legacy iframe mode.
 2. Configure `VIBRESS_NATIVE_ADMIN_UI_RELEASES` on all serving API replicas:
    ```dotenv
@@ -225,10 +241,10 @@ In the event of an unexpected defect, security incident, or unverified plugin be
    - Unset `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` across API replicas.
    - Reload API replicas.
    - All mutation endpoints immediately reject requests with 404/403.
-2. **Option B: Total Native UI Disablement (Instant Fallback to Legacy)**:
-   - Unset both `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES`.
-   - Reload API replicas.
-   - Admin UI immediately switches back to the legacy isolated iframe / scalar view.
+2. **Option B: Total Native UI Disablement (Fail Closed for an Active Native Session)**:
+   - Unset both `VIBRESS_NATIVE_ADMIN_UI_RELEASES` and `VIBRESS_NATIVE_ADMIN_ACTION_RELEASES` on **every** API replica.
+   - Reload API replicas; verify the exact disabled configuration on each replica.
+   - A fresh page admission may return `mode: "legacy"` and use the separately authorized legacy view. **A tab that previously rendered Native data must not silently switch to an iframe.** Its Native renderer redacts data and shows a safe error after revalidation (on focus/visibility return or the bounded polling interval); re-open the page only after the Host authorizes the legacy route. An old tab is not proof of immediate revocation: terminate compromised Staff sessions and invalidate credentials separately.
 3. **Option C: Per-Publication Plugin Deactivation**:
    - In Admin SPA, navigate to **Settings > Plugins** and toggle plugin to **Inactive**.
    - API immediately revokes access across all replicas (returns 404).

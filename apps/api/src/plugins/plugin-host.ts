@@ -6,7 +6,7 @@ import {
   plugin as contentMetricsPlugin,
 } from "./official/example-plugin";
 import { TrustedExternalPluginHost } from "./trusted-external-plugin-host";
-import { verifyTrustedPluginRelease } from "@vibress/plugins";
+import { verifyOperatorReleaseAdmission, verifyTrustedPluginRelease } from "@vibress/plugins";
 
 /**
  * Trusted plugin host: loads only bundled, controlled-source plugins.
@@ -52,6 +52,16 @@ export class BundledPluginHost implements PluginHost {
   async verifyOperatorRegistration(): Promise<void> {
     const lockfile = this.external.getOperatorLockfilePath();
     if (!lockfile) throw new Error("Trusted plugin lockfile is unavailable");
+    if (process.env.VIBRESS_TRUSTED_PLUGIN_ADMISSION_POLICY === "strict") {
+      // A verified file digest alone is not sufficient for an opted-in strict
+      // production deployment. Recheck the independently pinned lockfile,
+      // Ed25519 signer and reviewed evidence at the registration boundary.
+      const expected = process.env.VIBRESS_TRUSTED_PLUGIN_EXPECTED_LOCKFILE_SHA256;
+      if (!expected) throw new Error("OPERATOR_RELEASE_PIN_REQUIRED");
+      await verifyOperatorReleaseAdmission(lockfile, expected);
+      return;
+    }
+    // Preserve the legacy operator-approved profile outside strict mode.
     await verifyTrustedPluginRelease(lockfile);
   }
 

@@ -1,7 +1,7 @@
 # Syntax: docker build -f docker/worker.Dockerfile .
 # Build context must be the repository root.
 
-FROM node:26-alpine AS base
+FROM node:24-alpine AS base
 RUN apk upgrade --no-cache && npm install -g pnpm@11.22.0
 WORKDIR /repo
 
@@ -24,7 +24,7 @@ RUN mkdir -p /repo/runtime_node_modules && \
     cp -rL node_modules/.pnpm/node-gyp-build@*/node_modules/node-gyp-build /repo/runtime_node_modules/node-gyp-build
 
 # ---- Runtime: non-root, minimal immutable runtime, hardened container ----
-FROM node:26-alpine AS runtime
+FROM node:24-alpine AS runtime
 ARG VIBRESS_VERSION=1.2.0
 ARG GIT_SHA=HEAD
 ARG BUILD_DATE=""
@@ -40,8 +40,9 @@ ENV NODE_ENV=production
 ENV VIBRESS_VERSION=${VIBRESS_VERSION}
 ENV GIT_SHA=${GIT_SHA}
 
-# Upgrade Alpine packages and remove npm/npx
+# Upgrade Alpine packages, install bubblewrap sandbox runner, and remove npm/npx
 RUN apk upgrade --no-cache && \
+    apk add --no-cache bubblewrap && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /repo

@@ -621,6 +621,39 @@ describe("PluginsService", () => {
       .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
     expect(activate).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledOnce();
+    // The new digest's top-level ESM must not be imported into an old replica.
+    expect(hostWith.loadModule).toHaveBeenCalledTimes(1);
+    expect(hostWith.loadModule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "p1" }),
+      JSON.stringify(["p1", "1.0.0", "index.ts", "a".repeat(64)]),
+    );
+  });
+
+  it("rejects a changed signed release before importing the legacy hook", async () => {
+    let fingerprint = "a".repeat(64);
+    const handler = vi.fn(async () => undefined);
+    const externalHost = {
+      requiresPublicationEnablement: () => true,
+      getOperatorAdminFingerprints: vi.fn(async () =>
+        new Map([["test-plugin", fingerprint]])),
+      loadModule: vi.fn(async () => ({ activate: vi.fn(), onEvent: handler })),
+    };
+    const repository: PluginRepository = {
+      ...pluginRepo,
+      findById: vi.fn(async () => makePlugin({ status: "active", hooks: ["onEvent"] })),
+    };
+    const stateRepo = {
+      hasAnyState: vi.fn(async () => true),
+      isEnabled: vi.fn(async () => true),
+      setEnabled: vi.fn(async () => undefined),
+    };
+    const pluginService = new PluginsService(repository, settingRepo, externalHost, stateRepo);
+    await pluginService.executeHook("p1", "onEvent", {}, "pub-a");
+    fingerprint = "b".repeat(64);
+    await expect(pluginService.executeHook("p1", "onEvent", {}, "pub-a"))
+      .rejects.toMatchObject({ code: "PLUGIN_RESTART_REQUIRED" });
+    expect(externalHost.loadModule).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it("rejects a revoked operator fingerprint before initializing external code", async () => {
@@ -1213,6 +1246,10 @@ describe("PluginsService", () => {
   });
 
   it("stores scoped settings atomically, encrypts secrets and passes only owning publication context", async () => {
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_ACTIVE_KEY_ID", "rotation_a");
+    vi.stubEnv("VIBRESS_PLUGIN_SECRET_KEYS_JSON", JSON.stringify({
+      rotation_a: "b".repeat(64),
+    }));
     const encryptedByScope = new Map<string, {
       key: string;
       value: string | null;
@@ -1271,8 +1308,9 @@ describe("PluginsService", () => {
     );
     const recorded = encryptedByScope.get("p1:pub-a");
     expect(recorded?.find((entry) => entry.key === "apiToken")?.value).toBeNull();
-    expect(recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue)
-      .not.toContain("secret-in-publication-a");
+    const storedCiphertext = recorded?.find((entry) => entry.key === "apiToken")?.encryptedValue;
+    expect(storedCiphertext).not.toContain("secret-in-publication-a");
+    expect(JSON.parse(storedCiphertext ?? "{}")).toMatchObject({ v: 2, kid: "rotation_a" });
     const masked = await service.listPublicationSettings("p1", "pub-a");
     expect(JSON.stringify(masked)).not.toContain("secret-in-publication-a");
     expect(masked.find((entry) => entry.key === "apiToken")?.masked).toBe(true);
