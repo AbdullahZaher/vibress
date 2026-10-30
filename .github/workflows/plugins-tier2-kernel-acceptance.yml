@@ -53,7 +53,9 @@ jobs:
         run: node scripts/verify-tier2-bubblewrap-ipc.mjs
 
       - name: Build production worker bundles
-        run: node scripts/build-production-bundles.mjs
+        run: |
+          pnpm --filter @vibress/plugin-sdk build
+          node scripts/build-production-bundles.mjs
 
       - name: Verify real Vibress plugin lifecycle inside Bubblewrap
         run: node scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs
