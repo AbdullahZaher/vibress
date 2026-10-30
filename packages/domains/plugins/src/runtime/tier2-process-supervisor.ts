@@ -1524,11 +1524,22 @@ export class Tier2PluginSupervisor extends EventEmitter {
           "Marketplace execution requires a durable Host admission authority",
         );
       }
-      const refreshed = validateMarketplaceAdmissionRefresh(
-        context.pluginId,
-        admission,
-        await this.loadMarketplaceAdmission(context.pluginId),
-      );
+      let refreshed: AuthoritativePluginAdmission;
+      try {
+        refreshed = validateMarketplaceAdmissionRefresh(
+          context.pluginId,
+          admission,
+          await this.loadMarketplaceAdmission(context.pluginId),
+        );
+      } catch (error: unknown) {
+        // A lost authority connection, a revoked/missing release, or an
+        // out-of-order policy read must retire previously executing workers.
+        this.cleanupPluginProcesses(context.pluginId, new Tier2SupervisorError(
+          "UNTRUSTED_ADMISSION_AUTHORITY_UNAVAILABLE",
+          "Marketplace Host admission could not be refreshed safely",
+        ));
+        throw error;
+      }
       if (refreshed.policyRevision !== admission.policyRevision ||
           JSON.stringify(refreshed) !== JSON.stringify(admission)) {
         this.admitPlugin(refreshed);
