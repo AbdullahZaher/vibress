@@ -58,6 +58,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
       {/* User Card Trigger */}
       <button
         type="button"
+        aria-label={tr("Account menu")}
         aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className="w-full text-start flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
