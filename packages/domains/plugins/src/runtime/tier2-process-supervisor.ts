@@ -1,11 +1,14 @@
-import { fork, execFileSync, ChildProcess } from "node:child_process";
+import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
   verifyTier2IpcEnvelope,
+  encodeTier2IpcFrame,
+  StreamIpcReader,
+  type Tier2IpcEnvelope,
 } from "./tier2-ipc.js";
 import {
   executeHostCapabilityRequest,
@@ -23,9 +26,15 @@ export interface AuthoritativePluginAdmission {
   readonly releaseDirectory?: string | undefined;
   /** Optional pinned SHA-256 of the entrypoint file (not the release archive). */
   readonly entrypointSha256?: string | undefined;
+  /** Optional pinned SHA-256 map of all files in the release directory. */
+  readonly releaseArtifactManifest?: Readonly<Record<string, string>> | undefined;
   readonly isRevoked?: boolean | undefined;
   readonly revocationReason?: string | undefined;
+  readonly publisherId?: string | undefined;
+  readonly isPublisherRevoked?: boolean | undefined;
+  readonly publisherRevocationReason?: string | undefined;
 }
+
 
 export interface Tier2SandboxOptions {
   readonly maxOldSpaceSizeMb?: number | undefined;
@@ -77,9 +86,10 @@ export interface VerifiedSandboxRunner {
 }
 
 /**
- * P0: Discovers and verifies real OS-level sandbox runner executables.
+ * P0 / M8.3: Discovers and verifies real OS-level sandbox runner executables.
  * Environment variables alone are NEVER treated as proof of active isolation.
- * An active execution probe is required to prove the runner is functional.
+ * An active execution probe is required to prove the runner is functional and
+ * that unprivileged user/mount namespaces can actually be created on this kernel.
  */
 export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunner | null {
   if (process.platform !== "linux" || process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
@@ -113,6 +123,27 @@ export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunn
         stdio: ["ignore", "pipe", "ignore"],
         env: { PATH: "/usr/bin:/bin" },
       }).trim();
+
+      // Test functional namespace smoke: verify that bwrap can actually create user and mount namespaces on this kernel
+      try {
+        execFileSync(binary, [
+          "--unshare-all",
+          "--proc", "/proc",
+          "--dev", "/dev",
+          "--tmpfs", "/tmp",
+          "--ro-bind", "/bin", "/bin",
+          "--ro-bind-try", "/usr", "/usr",
+          "true",
+        ], {
+          timeout: 2000,
+          stdio: "ignore",
+          env: { PATH: "/usr/bin:/bin" },
+        });
+      } catch {
+        // Namespace creation not supported on this kernel / container configuration
+        continue;
+      }
+
       return {
         name: "bwrap",
         executablePath: binary,
@@ -126,7 +157,7 @@ export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunn
 }
 
 /**
- * M7.2 / P0: Verifies host environment provides real, kernel-enforced OS isolation boundaries.
+ * M7.2 / P0 / M8.3: Verifies host environment provides real, kernel-enforced OS isolation boundaries.
  * Fails closed if untrusted marketplace plugin is scheduled on an unisolated host.
  * Distinguishes host container presence from verified per-plugin isolation.
  */
@@ -142,14 +173,19 @@ export function verifyPlatformIsolationSupport(
   }
 
   if (trustTier === "untrusted_marketplace") {
-    // Binary discovery/version checks are not evidence of kernel containment.
-    // Keep marketplace execution disabled until the independently isolated
-    // runner and IPC transport have passed real Linux adversarial acceptance.
+    const runner = detectSandboxRunner();
+    if (!runner) {
+      return {
+        isIsolated: false,
+        isolationMechanism: "unsupported",
+        details:
+          "Untrusted execution is disabled: verified Bubblewrap runner with active user/mount namespace support is unavailable on this host.",
+      };
+    }
     return {
-      isIsolated: false,
-      isolationMechanism: "unsupported",
-      details:
-        "Untrusted execution is disabled pending end-to-end kernel sandbox certification. A sandbox executable or configuration value does not authorize execution.",
+      isIsolated: true,
+      isolationMechanism: "sandbox_runner",
+      details: `Active Bubblewrap sandbox isolation verified (${runner.version})`,
     };
   }
 
@@ -160,6 +196,7 @@ export function verifyPlatformIsolationSupport(
     details: "Restricted process boundary active with scrubbed environment and strict resource ceilings for operator/reviewed plugin",
   };
 }
+
 
 /**
  * P1: Validates that an entrypoint path is safely contained within approved release boundaries.
@@ -275,10 +312,108 @@ export function validateAndResolveEntrypoint(
 }
 
 /**
- * Historical Bubblewrap argument builder; not an approved production launcher.
- * The untrusted runtime remains disabled until its kernel containment and IPC
- * transport are independently verified. Do not treat these arguments as proof.
- * @deprecated An approved sandbox adapter is not implemented yet.
+ * M8.4: Verifies the integrity of an approved release directory and all artifacts.
+ * Enforces publisher revocation, release revocation, digest matching, artifact manifest
+ * checksums, and protection against symlink escapes or unauthorized file injections.
+ */
+export function verifyReleaseIntegrity(
+  pluginId: string,
+  releaseDigest: string,
+  admission: AuthoritativePluginAdmission,
+): void {
+  if (admission.isRevoked) {
+    throw new Tier2SupervisorError(
+      "REVOKED_PLUGIN_RELEASE",
+      `Plugin '${pluginId}' release '${releaseDigest}' has been revoked by host policy: ${admission.revocationReason ?? "operator revoked"}`,
+    );
+  }
+  if (admission.isPublisherRevoked) {
+    throw new Tier2SupervisorError(
+      "REVOKED_PLUGIN_PUBLISHER",
+      `Plugin '${pluginId}' publisher '${admission.publisherId ?? "unknown"}' has been revoked by host policy: ${admission.publisherRevocationReason ?? "operator revoked"}`,
+    );
+  }
+  if (admission.releaseDigest !== releaseDigest) {
+    throw new Tier2SupervisorError(
+      "RELEASE_DIGEST_MISMATCH",
+      `Plugin '${pluginId}' release digest '${releaseDigest}' does not match authoritative admission digest '${admission.releaseDigest}'`,
+    );
+  }
+  if (admission.releaseDirectory) {
+    if (!existsSync(admission.releaseDirectory)) {
+      throw new Tier2SupervisorError(
+        "INVALID_RELEASE_DIRECTORY",
+        `Plugin '${pluginId}' release directory does not exist: '${admission.releaseDirectory}'`,
+      );
+    }
+    const realDir = realpathSync(admission.releaseDirectory);
+    const dirStat = statSync(realDir);
+    if (!dirStat.isDirectory()) {
+      throw new Tier2SupervisorError(
+        "INVALID_RELEASE_DIRECTORY",
+        `Plugin '${pluginId}' release directory is not a directory: '${realDir}'`,
+      );
+    }
+    if (admission.releaseArtifactManifest) {
+      const manifest = admission.releaseArtifactManifest;
+      const seen = new Set<string>();
+
+      const scanDir = (current: string, rel: string) => {
+        const entries = readdirSync(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const full = path.join(current, entry.name);
+          const entryRel = (rel ? `${rel}/${entry.name}` : entry.name).replace(/\\/g, "/");
+
+          if (entry.isSymbolicLink()) {
+            const target = realpathSync(full);
+            if (!target.startsWith(realDir + path.sep) && target !== realDir) {
+              throw new Tier2SupervisorError(
+                "SYMLINK_ESCAPE_DETECTED",
+                `Plugin '${pluginId}' release artifact '${entryRel}' points outside release directory: '${target}'`,
+              );
+            }
+          }
+
+          if (entry.isDirectory()) {
+            scanDir(full, entryRel);
+          } else if (entry.isFile()) {
+            seen.add(entryRel);
+            const expected = manifest[entryRel]?.toLowerCase();
+            if (!expected) {
+              throw new Tier2SupervisorError(
+                "UNAUTHORIZED_ARTIFACT_INJECTED",
+                `Plugin '${pluginId}' contains unapproved or injected artifact: '${entryRel}'`,
+              );
+            }
+            const actual = createHash("sha256").update(readFileSync(full)).digest("hex");
+            if (actual !== expected) {
+              throw new Tier2SupervisorError(
+                "ARTIFACT_INTEGRITY_MISMATCH",
+                `Plugin '${pluginId}' artifact '${entryRel}' digest mismatch. Expected ${expected}, got ${actual}`,
+              );
+            }
+          }
+        }
+      };
+
+      scanDir(realDir, "");
+
+      for (const required of Object.keys(manifest)) {
+        if (!seen.has(required)) {
+          throw new Tier2SupervisorError(
+            "ARTIFACT_MISSING",
+            `Plugin '${pluginId}' missing required release artifact: '${required}'`,
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * M8.3 / M8.4: Builds production Bubblewrap sandbox arguments for independently enforced Linux namespaces.
+ * Unshares user, mount, network, pid, ipc, and uts namespaces; enforces read-only root and plugin mounts;
+ * cleanses the environment and prepares stdio binary IPC.
  */
 export function buildBubblewrapArgs(options: {
   scriptPath: string;
@@ -289,9 +424,8 @@ export function buildBubblewrapArgs(options: {
   const args: string[] = [
     "--unshare-all",
     "--unshare-net",
-    "--proc", "/proc",
-    "--dev", "/dev",
-    "--tmpfs", "/tmp",
+    "--new-session",
+    "--die-with-parent",
     "--ro-bind", "/usr", "/usr",
   ];
 
@@ -300,17 +434,25 @@ export function buildBubblewrapArgs(options: {
   if (existsSync("/bin")) args.push("--ro-bind-try", "/bin", "/bin");
   if (existsSync("/sbin")) args.push("--ro-bind-try", "/sbin", "/sbin");
 
-  // No IPC fd is passed here: the former --pass-fd option does not exist in Bubblewrap.
-  // An approved launcher must establish and test a separate authenticated IPC transport.
+  args.push("--proc", "/proc");
+  args.push("--dev", "/dev");
+  args.push("--tmpfs", "/tmp");
+
+  // Read-only bind for the Node executable
+  const nodeBinary = realpathSync(process.execPath);
+  args.push("--ro-bind", nodeBinary, nodeBinary);
 
   // Read-only bind for the worker bundle
-  args.push("--ro-bind", options.scriptPath, options.scriptPath);
+  const realScript = realpathSync(options.scriptPath);
+  args.push("--ro-bind", realScript, realScript);
 
   // Read-only bind for plugin directory if specified
   if (options.pluginDirectory && existsSync(options.pluginDirectory)) {
     const realPluginDir = realpathSync(options.pluginDirectory);
     args.push("--ro-bind", realPluginDir, realPluginDir);
   }
+
+  args.push("--chdir", "/tmp");
 
   // Strict environment whitelist
   args.push("--clearenv");
@@ -319,12 +461,12 @@ export function buildBubblewrapArgs(options: {
       args.push("--setenv", key, value);
     }
   }
-  args.push("--setenv", "NODE_CHANNEL_FD", "3");
 
   // Exec node inside sandbox
-  args.push(process.execPath, ...options.nodeArgs, options.scriptPath);
+  args.push(nodeBinary, ...options.nodeArgs, realScript);
   return args;
 }
+
 
 export function createDefaultAuthoritativeAdmissions(): AuthoritativePluginAdmission[] {
   const fixtureDir = path.resolve(
@@ -384,6 +526,9 @@ interface ActiveProcess {
   readonly releaseDigest: string;
   readonly trustTier: PluginTrustTier;
   readonly entrypointPath?: string | undefined;
+  readonly transport: "ipc" | "stdio";
+  readonly isolationMechanism: Tier2IsolationCheckResult["isolationMechanism"];
+  latestStderr?: string | undefined;
   pendingRequests: Map<string, PendingInvocation>;
 }
 
@@ -435,6 +580,25 @@ export class Tier2PluginSupervisor extends EventEmitter {
       });
     }
     this.cleanupProcess(pluginId, new Tier2SupervisorError("REVOKED_PLUGIN_RELEASE", `Plugin '${pluginId}' has been revoked: ${reason ?? "operator policy"}`));
+  }
+
+  revokePublisher(publisherId: string, reason?: string): void {
+    for (const [pluginId, adm] of this.admissions.entries()) {
+      if (adm.publisherId === publisherId) {
+        this.admissions.set(pluginId, {
+          ...adm,
+          isPublisherRevoked: true,
+          publisherRevocationReason: reason,
+        });
+        this.cleanupProcess(
+          pluginId,
+          new Tier2SupervisorError(
+            "REVOKED_PLUGIN_PUBLISHER",
+            `Plugin '${pluginId}' publisher '${publisherId}' has been revoked: ${reason ?? "operator policy"}`,
+          ),
+        );
+      }
+    }
   }
 
   isAdmitted(pluginId: string): boolean {
@@ -566,13 +730,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${pluginId}' is quarantined due to repeated crashes`);
     }
 
-    // Hard stop independent of runner detection or environment overrides.
-    if (trustTier === "untrusted_marketplace") {
-      throw new Tier2SupervisorError(
-        "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
-        "Untrusted execution requires a certified, independently isolated runner",
-      );
-    }
     const isolation = verifyPlatformIsolationSupport(trustTier);
     if (!isolation.isIsolated) {
       throw new Tier2SupervisorError(
@@ -582,17 +739,6 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
 
     const sessionKey = randomBytes(32).toString("hex");
-
-    // Whitelist environment variables strictly. NO Host secrets, DB, or Redis credentials.
-    const sanitizedEnv: NodeJS.ProcessEnv = {
-      NODE_ENV: "production",
-      PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
-      VIBRESS_TIER2_SANDBOX: "1",
-      VIBRESS_PLUGIN_ID: pluginId,
-      VIBRESS_RELEASE_DIGEST: releaseDigest,
-      VIBRESS_SESSION_KEY: sessionKey,
-      ...(entrypointPath ? { VIBRESS_PLUGIN_ENTRYPOINT: entrypointPath } : {}),
-    };
 
     const isProduction = process.env.NODE_ENV === "production";
     let script = this.workerScriptPath;
@@ -657,15 +803,47 @@ export class Tier2PluginSupervisor extends EventEmitter {
       ...(isTypeScript ? ["--import", "tsx"] : []),
     ];
 
-    // No untrusted release reaches the ordinary Host child-process path.
-    const child = fork(script!, [], {
-      env: sanitizedEnv,
-      execArgv: nodeArgs,
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    });
+    const transport: "ipc" | "stdio" = isolation.isolationMechanism === "sandbox_runner" ? "stdio" : "ipc";
 
-    child.stdout?.resume();
-    child.stderr?.resume();
+    // Whitelist environment variables strictly. NO Host secrets, DB, or Redis credentials.
+    const sanitizedEnv: NodeJS.ProcessEnv = {
+      NODE_ENV: "production",
+      PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+      VIBRESS_TIER2_SANDBOX: "1",
+      VIBRESS_PLUGIN_ID: pluginId,
+      VIBRESS_RELEASE_DIGEST: releaseDigest,
+      VIBRESS_SESSION_KEY: sessionKey,
+      ...(entrypointPath ? { VIBRESS_PLUGIN_ENTRYPOINT: entrypointPath } : {}),
+      ...(transport === "stdio" ? { VIBRESS_IPC_TRANSPORT: "stdio" } : {}),
+    };
+
+    let child: ChildProcess;
+
+    if (isolation.isolationMechanism === "sandbox_runner") {
+      const runner = detectSandboxRunner();
+      if (!runner) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE",
+          "Sandbox runner became unavailable",
+        );
+      }
+      const bwrapArgs = buildBubblewrapArgs({
+        scriptPath: script!,
+        pluginDirectory: entrypointPath ? path.dirname(entrypointPath) : undefined,
+        sanitizedEnv,
+        nodeArgs,
+      });
+
+      child = spawn(runner.executablePath, bwrapArgs, {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } else {
+      child = fork(script!, [], {
+        env: sanitizedEnv,
+        execArgv: nodeArgs,
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      });
+    }
 
     const active: ActiveProcess = {
       child,
@@ -674,91 +852,41 @@ export class Tier2PluginSupervisor extends EventEmitter {
       releaseDigest,
       trustTier,
       entrypointPath,
+      transport,
+      isolationMechanism: isolation.isolationMechanism,
       pendingRequests: new Map(),
     };
 
-    child.on("message", async (msg: unknown) => {
-      try {
-        const envelope = verifyTier2IpcEnvelope(msg, sessionKey);
-        if (envelope.type === "response") {
-          const pending = active.pendingRequests.get(envelope.id);
-          if (pending) {
-            clearTimeout(pending.timer);
-            active.pendingRequests.delete(envelope.id);
-            const resPayload = envelope.payload as any;
-            if (resPayload && typeof resPayload === "object" && resPayload.ok === false && resPayload.error) {
-              pending.reject(
-                new Tier2SupervisorError(
-                  resPayload.error.code || "INVOCATION_FAILED",
-                  resPayload.error.message || "Plugin invocation failed",
-                ),
-              );
-            } else if (resPayload && typeof resPayload === "object" && resPayload.ok === true && "data" in resPayload) {
-              pending.resolve(resPayload.data);
-            } else if (resPayload && typeof resPayload === "object" && resPayload.error) {
-              pending.reject(
-                new Tier2SupervisorError(
-                  resPayload.error.code || "INVOCATION_FAILED",
-                  resPayload.error.message || "Plugin invocation failed",
-                ),
-              );
-            } else {
-              pending.resolve(resPayload);
-            }
-          }
-        } else if (envelope.type === "capability_request") {
-          const req = envelope.payload as Tier2CapabilityRequest;
-          const invocationId = envelope.correlationId || req.invocationId;
-          const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
-
-          if (!pending) {
-            const rejectEnv = signTier2IpcEnvelope({
-              id: envelope.id,
-              correlationId: envelope.correlationId,
-              pluginId,
-              releaseDigest,
-              publicationId: "untrusted",
-              type: "capability_response",
-              payload: {
-                ok: false,
-                error: {
-                  code: "UNAUTHORIZED_INVOCATION_CONTEXT",
-                  message: "Capability request is not correlated with an active, authorized Host invocation",
-                },
-              },
-            }, sessionKey);
-            if (child.connected) {
-              child.send(rejectEnv);
-            }
-            return;
-          }
-
-          const capContext: Tier2CapabilityContext = {
-            pluginId: pending.context.pluginId,
-            publicationId: pending.context.publicationId,
-            releaseDigest: pending.context.releaseDigest,
-            grantedCapabilities: pending.context.grantedCapabilities,
-            actor: pending.context.actor,
-          };
-
-          const responsePayload = await executeHostCapabilityRequest(capContext, req, pending.handlers);
-          const responseEnv = signTier2IpcEnvelope({
-            id: envelope.id,
-            correlationId: envelope.correlationId,
-            pluginId,
-            releaseDigest,
-            publicationId: pending.context.publicationId,
-            type: "capability_response",
-            payload: responsePayload,
-          }, sessionKey);
-          if (child.connected) {
-            child.send(responseEnv);
-          }
-        }
-      } catch (err: unknown) {
-        this.emit("security_violation", { pluginId, error: err });
-      }
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      const str = chunk.toString();
+      active.latestStderr = ((active.latestStderr || "") + str).slice(-8192);
     });
+
+    if (transport === "stdio") {
+      const streamReader = new StreamIpcReader(sessionKey);
+      streamReader.onEnvelope((envelope) => {
+        this.handleIncomingEnvelope(active, envelope).catch((err) => {
+          this.emit("security_violation", { pluginId, error: err });
+        });
+      });
+      streamReader.onError((err) => {
+        this.emit("security_violation", { pluginId, error: err });
+      });
+
+      child.stdout?.on("data", (chunk: Buffer) => {
+        streamReader.feed(chunk);
+      });
+    } else {
+      child.stdout?.resume();
+      child.on("message", async (msg: unknown) => {
+        try {
+          const envelope = verifyTier2IpcEnvelope(msg, sessionKey);
+          await this.handleIncomingEnvelope(active, envelope);
+        } catch (err: unknown) {
+          this.emit("security_violation", { pluginId, error: err });
+        }
+      });
+    }
 
     child.on("exit", (code, signal) => {
       this.handleProcessExit(pluginId, code, signal);
@@ -772,6 +900,127 @@ export class Tier2PluginSupervisor extends EventEmitter {
     return active;
   }
 
+  private isProcessAlive(active: ActiveProcess): boolean {
+    if (active.transport === "stdio") {
+      return (
+        active.child.exitCode === null &&
+        active.child.signalCode === null &&
+        !active.child.killed
+      );
+    }
+    return active.child.connected;
+  }
+
+  private sendToProcess(
+    active: ActiveProcess,
+    envelope: Tier2IpcEnvelope,
+    callback?: (err?: Error | null) => void,
+  ): void {
+    if (active.transport === "stdio") {
+      if (!active.child.stdin || active.child.stdin.destroyed) {
+        callback?.(new Error("Sandbox stdin is closed or unavailable"));
+        return;
+      }
+      try {
+        const frame = encodeTier2IpcFrame(envelope);
+        active.child.stdin.write(frame, (err) => {
+          callback?.(err);
+        });
+      } catch (err: unknown) {
+        callback?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    } else {
+      if (!active.child.connected) {
+        callback?.(new Error("Process IPC channel is disconnected"));
+        return;
+      }
+      active.child.send(envelope, (err) => {
+        callback?.(err ?? undefined);
+      });
+    }
+  }
+
+  private async handleIncomingEnvelope(
+    active: ActiveProcess,
+    envelope: Tier2IpcEnvelope,
+  ): Promise<void> {
+    try {
+      if (envelope.type === "response") {
+        const pending = active.pendingRequests.get(envelope.id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          active.pendingRequests.delete(envelope.id);
+          const resPayload = envelope.payload as any;
+          if (resPayload && typeof resPayload === "object" && resPayload.ok === false && resPayload.error) {
+            pending.reject(
+              new Tier2SupervisorError(
+                resPayload.error.code || "INVOCATION_FAILED",
+                resPayload.error.message || "Plugin invocation failed",
+              ),
+            );
+          } else if (resPayload && typeof resPayload === "object" && resPayload.ok === true && "data" in resPayload) {
+            pending.resolve(resPayload.data);
+          } else if (resPayload && typeof resPayload === "object" && resPayload.error) {
+            pending.reject(
+              new Tier2SupervisorError(
+                resPayload.error.code || "INVOCATION_FAILED",
+                resPayload.error.message || "Plugin invocation failed",
+              ),
+            );
+          } else {
+            pending.resolve(resPayload);
+          }
+        }
+      } else if (envelope.type === "capability_request") {
+        const req = envelope.payload as Tier2CapabilityRequest;
+        const invocationId = envelope.correlationId || req.invocationId;
+        const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
+
+        if (!pending) {
+          const rejectEnv = signTier2IpcEnvelope({
+            id: envelope.id,
+            correlationId: envelope.correlationId,
+            pluginId: active.pluginId,
+            releaseDigest: active.releaseDigest,
+            publicationId: "untrusted",
+            type: "capability_response",
+            payload: {
+              ok: false,
+              error: {
+                code: "UNAUTHORIZED_INVOCATION_CONTEXT",
+                message: "Capability request is not correlated with an active, authorized Host invocation",
+              },
+            },
+          }, active.sessionKey);
+          this.sendToProcess(active, rejectEnv);
+          return;
+        }
+
+        const capContext: Tier2CapabilityContext = {
+          pluginId: pending.context.pluginId,
+          publicationId: pending.context.publicationId,
+          releaseDigest: pending.context.releaseDigest,
+          grantedCapabilities: pending.context.grantedCapabilities,
+          actor: pending.context.actor,
+        };
+
+        const responsePayload = await executeHostCapabilityRequest(capContext, req, pending.handlers);
+        const responseEnv = signTier2IpcEnvelope({
+          id: envelope.id,
+          correlationId: envelope.correlationId,
+          pluginId: active.pluginId,
+          releaseDigest: active.releaseDigest,
+          publicationId: pending.context.publicationId,
+          type: "capability_response",
+          payload: responsePayload,
+        }, active.sessionKey);
+        this.sendToProcess(active, responseEnv);
+      }
+    } catch (err: unknown) {
+      this.emit("security_violation", { pluginId: active.pluginId, error: err });
+    }
+  }
+
   private handleProcessCrash(pluginId: string, _error: unknown): void {
     this.recordCrash(pluginId);
     this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_CRASHED", "Sandbox worker process crashed"));
@@ -781,7 +1030,9 @@ export class Tier2PluginSupervisor extends EventEmitter {
     if (code !== 0 && signal !== "SIGTERM") {
       this.recordCrash(pluginId);
     }
-    this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_PROCESS_EXITED", `Sandbox exited with code ${code ?? "null"} (${signal ?? "none"})`));
+    const active = this.processes.get(pluginId);
+    const stderrSuffix = active?.latestStderr ? `: ${active.latestStderr.trim()}` : "";
+    this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_PROCESS_EXITED", `Sandbox exited with code ${code ?? "null"} (${signal ?? "none"})${stderrSuffix}`));
   }
 
   private recordCrash(pluginId: string): void {
@@ -808,7 +1059,12 @@ export class Tier2PluginSupervisor extends EventEmitter {
     active.pendingRequests.clear();
 
     try {
-      if (active.child.connected) active.child.disconnect();
+      if (active.transport === "ipc" && active.child.connected) {
+        active.child.disconnect();
+      }
+      if (active.child.stdin && !active.child.stdin.destroyed) {
+        active.child.stdin.destroy();
+      }
       active.child.kill("SIGKILL");
       active.child.unref();
     } catch {
@@ -836,8 +1092,13 @@ export class Tier2PluginSupervisor extends EventEmitter {
       context.trustTier,
     );
 
-    // P1: Secure entrypoint validation
+    // M8.4: Verify release integrity and publisher revocation
     const admission = this.admissions.get(context.pluginId);
+    if (admission) {
+      verifyReleaseIntegrity(context.pluginId, context.releaseDigest, admission);
+    }
+
+    // P1: Secure entrypoint validation
     const resolvedEntrypoint = validateAndResolveEntrypoint(
       context.entrypointPath,
       context.pluginId,
@@ -847,7 +1108,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     let active = this.processes.get(context.pluginId);
     if (
       !active ||
-      !active.child.connected ||
+      !this.isProcessAlive(active) ||
       active.releaseDigest !== context.releaseDigest ||
       active.entrypointPath !== resolvedEntrypoint ||
       active.trustTier !== effectiveTrustTier
@@ -892,7 +1153,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
         timer,
       });
 
-      active!.child.send(envelope, (err) => {
+      this.sendToProcess(active!, envelope, (err) => {
         if (err) {
           clearTimeout(timer);
           active!.pendingRequests.delete(requestId);

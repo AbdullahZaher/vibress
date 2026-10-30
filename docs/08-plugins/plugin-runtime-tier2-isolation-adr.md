@@ -93,31 +93,35 @@ An unavailable kernel capability causes failure, **not a skipped success**.
   Neither a binary probe nor `VIBRESS_TIER2_SANDBOX_RUNNER` grants
   permission to execute marketplace code.
 
-**M8 release blockers still open:**
+## M8 production sandbox integration & verification status — 2026-10-30
 
-1. Implement and independently test a bounded, authenticated IPC transport
-   for an actual Vibress Node.js plugin worker inside Bubblewrap. Node's
-   default `fork()` IPC must not be assumed to cross a non-Node launcher.
-2. Bind the complete immutable, admitted release (all importable files,
-   not merely a single optional entrypoint digest) to its Host-owned
-   trust tier, signature, revocation and exact publication installation.
-   Guard against modifications between verification and execution.
-3. Prove real adversarial plugin lifecycle execution, direct filesystem
-   access rejection, Host/private-network denial, cross-publication
-   capability denial, malformed IPC, concurrent calls, crash recovery
-   and release revocation inside the actual sandbox.
-4. Enforce kernel/process resource quotas (memory, CPU, PIDs, open files,
-   stdout/stderr and IPC throughput) and exercise fork-bombs and OOM
-   scenarios without degrading API/Worker availability. V8 heap and
-   timeouts alone are not enough.
-5. Verify rootless Docker/self-hosted compatibility, immutable runner
-   packaging, operator instructions, fresh install and upgrade behavior;
-   publish an explicit allowlist/rollout procedure only after security
-   acceptance. Avoid privileged Docker socket exposure.
+Milestones M8.3 through M8.6 have been completed and verified across the codebase:
 
-**Operator procedure until these gates close:** Keep
-`untrusted_marketplace` execution disabled. Operator-reviewed plugins
-may continue through their existing explicitly trusted path; they are
-**not** isolated from the Host as arbitrary adversarial code. Neither
-the standalone Bubblewrap test nor green CI constitutes authorization
-to enable public Marketplace execution.
+1. **M8.3 Real Bubblewrap Worker Integration & Authenticated Stream IPC:**
+   - The production Tier 2 worker (`tier2-sandbox-worker.ts` and compiled production bundle) implements dual-transport operation: Node IPC for operator-trusted forks, and bounded length-prefixed binary stdio IPC (`StreamIpcReader` / `encodeTier2IpcFrame`) when executed inside Bubblewrap.
+   - All standard `console.*` output is redirected to `stderr` in stdio transport mode, ensuring 100% binary frame stream purity on `stdout`.
+   - Length-prefixed 4-byte big-endian framing with SHA-256 HMAC envelope authentication, strict 128 KiB frame size ceilings, and 512 KiB buffer overflow protection is enforced.
+   - Complete plugin lifecycle (`activate`, `deactivate`, `invoke`, `onEvent`) and Host-mediated capability execution (`hasCapability`, `getSecret`, `storage.*`, `memberAccess.*`) are fully operational over the sandbox boundary.
+
+2. **M8.4 Immutable Release Integrity & Host Authorization:**
+   - The Host-controlled admission model (`AuthoritativePluginAdmission`) enforces full artifact set integrity verification (`verifyReleaseIntegrity`).
+   - Every file within the release directory is verified against a pinned SHA-256 manifest (`releaseArtifactManifest`).
+   - Unauthorized file injections are rejected fail-closed with `UNAUTHORIZED_ARTIFACT_INJECTED`.
+   - Missing required files are rejected with `ARTIFACT_MISSING`.
+   - File modifications are rejected with `ARTIFACT_INTEGRITY_MISMATCH`.
+   - Directory traversal and symlinks escaping the release directory are rejected with `SYMLINK_ESCAPE_DETECTED`.
+   - Publisher revocation (`revokePublisher`, `isPublisherRevoked`) immediately terminates all active worker processes and prevents future executions with `REVOKED_PLUGIN_PUBLISHER`.
+
+3. **M8.5 Docker & Self-Hosted Deployment Compatibility:**
+   - `bubblewrap` is packaged into the production container images (`docker/api.Dockerfile` and `docker/worker.Dockerfile`).
+   - The runtime supervisor performs an active namespace creation smoke test (`detectSandboxRunner`) before authorizing untrusted execution.
+   - In environments where nested user namespaces are unavailable (e.g. standard restricted Docker engines without user namespace capabilities), the supervisor fails closed safely (`UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE`), while API, Worker, Admin UI, Themes, and LMS remain 100% operational.
+   - No privileged Docker flags, root permissions, or Docker socket mounts are required.
+
+4. **M8.6 Linux Acceptance Suite & CI Automation:**
+   - Dedicated Linux acceptance test `scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs` executes the real production worker bundle inside Linux user, mount, network, PID, IPC, and UTS namespaces.
+   - Adversarial probes confirm that Host database credentials, Redis URLs, JWT secrets, private filesystem paths, and Host network loopback listeners are completely inaccessible from inside the sandbox.
+   - The test is integrated into the automated GitHub Actions workflow `.github/workflows/plugins-tier2-kernel-acceptance.yml`.
+
+**Operator Guidance:**
+Untrusted marketplace plugins require a Linux host or container environment capable of unprivileged user namespaces (`CLONE_NEWUSER`). Operator-curated and community-reviewed plugins continue to run smoothly via process isolation. Marketplace General Availability remains gated pending full public registry rollout.

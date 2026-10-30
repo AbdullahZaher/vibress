@@ -1,11 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import * as path from "node:path";
+import * as os from "node:os";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import {
   Tier2PluginSupervisor,
   Tier2SupervisorError,
   verifyPlatformIsolationSupport,
+  verifyReleaseIntegrity,
   detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
   type Tier2InvocationContext,
@@ -774,6 +776,228 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         );
       } finally {
         process.env.NODE_ENV = origEnv;
+      }
+    });
+  });
+
+  describe("M8.4 Authoritative Immutable Release & Artifact Manifest Verification", () => {
+    it("rejects execution when publisher has been revoked by host policy", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 1000 });
+      supervisorsToClean.push(supervisor);
+
+      const pluginId = "com.vendor.malicious-publisher-plugin";
+      const releaseDigest = "sha256:pubrevoked00000000000000000000000000000000000000000000000000000000";
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "curated_operator",
+        publisherId: "pub_rogue_01",
+        isPublisherRevoked: true,
+        publisherRevocationReason: "Publisher compromised via credential leak",
+      });
+
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_tenant_01",
+        grantedCapabilities: [],
+        actor: { id: "staff_01", type: "staff" },
+        trustTier: "curated_operator",
+      };
+
+      await expect(supervisor.invoke(context, "echo", {})).rejects.toThrowError(
+        /REVOKED_PLUGIN_PUBLISHER/i,
+      );
+    });
+
+    it("supports dynamic publisher revocation via revokePublisher() and terminates active processes", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 3000 });
+      supervisorsToClean.push(supervisor);
+
+      const pluginId = "com.vendor.active-publisher-plugin";
+      const releaseDigest = "sha256:dynamicpub000000000000000000000000000000000000000000000000000000";
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "curated_operator",
+        publisherId: "vendor_corp_99",
+      });
+
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_tenant_01",
+        grantedCapabilities: [],
+        actor: { id: "staff_01", type: "staff" },
+        trustTier: "curated_operator",
+      };
+
+      const res = await supervisor.invoke<{ echoed: string }>(context, "echo", "before_revocation");
+      expect(res.echoed).toBe("before_revocation");
+      expect(supervisor.getProcessState(pluginId)).not.toBeNull();
+
+      // Revoke publisher
+      supervisor.revokePublisher("vendor_corp_99", "Security breach incident INC-8821");
+
+      // Verify running process was killed immediately
+      expect(supervisor.getProcessState(pluginId)).toBeNull();
+
+      // Next invocation fails closed
+      await expect(supervisor.invoke(context, "echo", "after_revocation")).rejects.toThrowError(
+        /REVOKED_PLUGIN_PUBLISHER/i,
+      );
+    });
+
+    it("verifies complete approved release artifact manifest and permits valid release", async () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-test-manifest-valid-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      try {
+        const fileA = path.join(tmpDir, "index.js");
+        const fileB = path.join(tmpDir, "helper.js");
+        const subDir = path.join(tmpDir, "lib");
+        mkdirSync(subDir, { recursive: true });
+        const fileC = path.join(subDir, "util.js");
+
+        writeFileSync(fileA, "module.exports = { activate: () => ({ activated: true }) };");
+        writeFileSync(fileB, "module.exports = { helper: true };");
+        writeFileSync(fileC, "module.exports = { util: true };");
+
+        const hash = (p: string) => createHash("sha256").update(readFileSync(p)).digest("hex");
+
+        const manifest = {
+          "index.js": hash(fileA),
+          "helper.js": hash(fileB),
+          "lib/util.js": hash(fileC),
+        };
+
+        const admission = {
+          pluginId: "com.vendor.manifest-valid",
+          releaseDigest: "sha256:validmanifest0000000000000000000000000000000000000000000000000000",
+          trustTier: "curated_operator" as const,
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: manifest,
+        };
+
+        expect(() => {
+          verifyReleaseIntegrity(admission.pluginId, admission.releaseDigest, admission);
+        }).not.toThrow();
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects release with injected unauthorized artifact (UNAUTHORIZED_ARTIFACT_INJECTED)", () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-test-manifest-injected-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      try {
+        const fileA = path.join(tmpDir, "index.js");
+        const fileInjected = path.join(tmpDir, "backdoor.js");
+
+        writeFileSync(fileA, "module.exports = { valid: true };");
+        writeFileSync(fileInjected, "module.exports = { pwn: true };");
+
+        const hash = (p: string) => createHash("sha256").update(readFileSync(p)).digest("hex");
+
+        const admission = {
+          pluginId: "com.vendor.manifest-injected",
+          releaseDigest: "sha256:injected0000000000000000000000000000000000000000000000000000000000",
+          trustTier: "curated_operator" as const,
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: {
+            "index.js": hash(fileA),
+          },
+        };
+
+        expect(() => {
+          verifyReleaseIntegrity(admission.pluginId, admission.releaseDigest, admission);
+        }).toThrowError(/UNAUTHORIZED_ARTIFACT_INJECTED/i);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects release with missing required artifact (ARTIFACT_MISSING)", () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-test-manifest-missing-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      try {
+        const fileA = path.join(tmpDir, "index.js");
+        writeFileSync(fileA, "module.exports = { valid: true };");
+
+        const admission = {
+          pluginId: "com.vendor.manifest-missing",
+          releaseDigest: "sha256:missing00000000000000000000000000000000000000000000000000000000000",
+          trustTier: "curated_operator" as const,
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: {
+            "index.js": createHash("sha256").update(readFileSync(fileA)).digest("hex"),
+            "required-asset.png": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          },
+        };
+
+        expect(() => {
+          verifyReleaseIntegrity(admission.pluginId, admission.releaseDigest, admission);
+        }).toThrowError(/ARTIFACT_MISSING/i);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects release with artifact hash mismatch (ARTIFACT_INTEGRITY_MISMATCH)", () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-test-manifest-tampered-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      try {
+        const fileA = path.join(tmpDir, "index.js");
+        writeFileSync(fileA, "module.exports = { tampered: true };");
+
+        const admission = {
+          pluginId: "com.vendor.manifest-tampered",
+          releaseDigest: "sha256:tampered0000000000000000000000000000000000000000000000000000000000",
+          trustTier: "curated_operator" as const,
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: {
+            "index.js": "0".repeat(64), // Mismatched SHA-256
+          },
+        };
+
+        expect(() => {
+          verifyReleaseIntegrity(admission.pluginId, admission.releaseDigest, admission);
+        }).toThrowError(/ARTIFACT_INTEGRITY_MISMATCH/i);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects release with symlink escaping release directory (SYMLINK_ESCAPE_DETECTED)", () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-test-manifest-symlink-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      try {
+        const outsideTarget = path.join(os.tmpdir(), "vibress-outside-secret.txt");
+        writeFileSync(outsideTarget, "SENSITIVE_OUTSIDE_DATA");
+
+        const fileA = path.join(tmpDir, "index.js");
+        writeFileSync(fileA, "module.exports = { ok: true };");
+
+        const symlinkFile = path.join(tmpDir, "symlink-escape.js");
+        symlinkSync(outsideTarget, symlinkFile);
+
+        const admission = {
+          pluginId: "com.vendor.manifest-symlink",
+          releaseDigest: "sha256:symlink00000000000000000000000000000000000000000000000000000000000",
+          trustTier: "curated_operator" as const,
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: {
+            "index.js": createHash("sha256").update(readFileSync(fileA)).digest("hex"),
+            "symlink-escape.js": createHash("sha256").update(readFileSync(outsideTarget)).digest("hex"),
+          },
+        };
+
+        expect(() => {
+          verifyReleaseIntegrity(admission.pluginId, admission.releaseDigest, admission);
+        }).toThrowError(/SYMLINK_ESCAPE_DETECTED/i);
+
+        rmSync(outsideTarget, { force: true });
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
       }
     });
   });

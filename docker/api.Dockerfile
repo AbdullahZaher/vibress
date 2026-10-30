@@ -41,8 +41,9 @@ ENV NODE_ENV=production
 ENV VIBRESS_VERSION=${VIBRESS_VERSION}
 ENV GIT_SHA=${GIT_SHA}
 
-# Upgrade Alpine packages and remove npm/npx
+# Upgrade Alpine packages, install bubblewrap sandbox runner, and remove npm/npx
 RUN apk upgrade --no-cache && \
+    apk add --no-cache bubblewrap && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /repo

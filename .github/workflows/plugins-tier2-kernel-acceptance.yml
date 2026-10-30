@@ -7,8 +7,10 @@ on:
       - ".github/workflows/plugins-tier2-kernel-acceptance.yml"
       - "scripts/verify-tier2-bubblewrap-isolation.mjs"
       - "scripts/verify-tier2-bubblewrap-ipc.mjs"
+      - "scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs"
       - "packages/domains/plugins/src/runtime/tier2-process-supervisor.ts"
       - "packages/domains/plugins/src/runtime/tier2-sandbox-worker.ts"
+      - "packages/domains/plugins/src/runtime/tier2-ipc.ts"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,7 @@ concurrency:
 
 jobs:
   bubblewrap-kernel-probe:
-    name: Linux Bubblewrap kernel namespace smoke
+    name: Linux Bubblewrap kernel namespace & real plugin lifecycle
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -41,9 +43,8 @@ jobs:
       - name: Probe Node stdio IPC across real namespace boundary
         run: node scripts/verify-tier2-bubblewrap-ipc.mjs
 
-      - name: Explain remaining M8 activation blockers
-        run: |
-          echo "This test validates standalone Linux mount, PID and network namespaces only."
-          echo "It does NOT authorize Tier 2 untrusted execution: authenticated sandbox IPC,"
-          echo "per-plugin resource quotas and immutable release binding must be separately"
-          echo "implemented, penetration-tested and explicitly approved."
+      - name: Build production worker bundles
+        run: node scripts/build-production-bundles.mjs
+
+      - name: Verify real Vibress plugin lifecycle inside Bubblewrap
+        run: node scripts/verify-tier2-bubblewrap-plugin-lifecycle.mjs

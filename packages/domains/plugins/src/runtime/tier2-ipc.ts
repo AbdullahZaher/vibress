@@ -178,7 +178,7 @@ export function decodeTier2IpcFrame(buffer: Buffer): { envelope: Tier2IpcEnvelop
   }
   if (buffer.length < 4 + frameLength) return null;
   const frameBytes = buffer.subarray(4, 4 + frameLength);
-  const remaining = buffer.subarray(4 + frameLength);
+  const remaining = Buffer.from(buffer.subarray(4 + frameLength));
   let parsed: unknown;
   try {
     parsed = JSON.parse(frameBytes.toString("utf8"));
@@ -187,3 +187,63 @@ export function decodeTier2IpcFrame(buffer: Buffer): { envelope: Tier2IpcEnvelop
   }
   return { envelope: parsed as Tier2IpcEnvelope, remaining };
 }
+
+/**
+ * Bounded, authenticated IPC stream reader for stdio / pipe transports.
+ * Enforces frame size boundaries, buffer overflow protection, and HMAC authentication.
+ */
+export class StreamIpcReader {
+  private buffer = Buffer.alloc(0);
+  private readonly maxBufferSize: number;
+  private readonly secretKey: string;
+  private readonly envelopeListeners: Array<(envelope: Tier2IpcEnvelope) => void> = [];
+  private readonly errorListeners: Array<(error: Error) => void> = [];
+
+  constructor(secretKey: string, options?: { maxBufferSize?: number | undefined }) {
+    this.secretKey = secretKey;
+    this.maxBufferSize = options?.maxBufferSize ?? 512 * 1024; // 512 KiB default ceiling
+  }
+
+  onEnvelope(listener: (envelope: Tier2IpcEnvelope) => void): void {
+    this.envelopeListeners.push(listener);
+  }
+
+  onError(listener: (error: Error) => void): void {
+    this.errorListeners.push(listener);
+  }
+
+  feed(chunk: Buffer): void {
+    if (this.buffer.length + chunk.length > this.maxBufferSize) {
+      const err = new Tier2IpcError("IPC_BUFFER_OVERFLOW", `IPC stream incoming buffer exceeded maximum allowed limit of ${this.maxBufferSize} bytes`);
+      for (const listener of this.errorListeners) listener(err);
+      return;
+    }
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+
+    while (this.buffer.length >= 4) {
+      let decoded: { envelope: Tier2IpcEnvelope; remaining: Buffer } | null;
+      try {
+        decoded = decodeTier2IpcFrame(this.buffer);
+      } catch (err: unknown) {
+        this.buffer = Buffer.alloc(0);
+        const error = err instanceof Error ? err : new Error(String(err));
+        for (const listener of this.errorListeners) listener(error);
+        return;
+      }
+      if (!decoded) break;
+      this.buffer = Buffer.from(decoded.remaining);
+      try {
+        const verified = verifyTier2IpcEnvelope(decoded.envelope, this.secretKey);
+        for (const listener of this.envelopeListeners) listener(verified);
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        for (const listener of this.errorListeners) listener(error);
+      }
+    }
+  }
+
+  reset(): void {
+    this.buffer = Buffer.alloc(0);
+  }
+}
+
