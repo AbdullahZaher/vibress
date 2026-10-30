@@ -550,6 +550,8 @@ interface PendingInvocation {
 }
 
 interface ActiveProcess {
+  /** Scoped identity for process reuse and asynchronous cleanup. */
+  readonly processKey: string;
   readonly child: ChildProcess;
   readonly sessionKey: string;
   readonly pluginId: string;
@@ -563,6 +565,8 @@ interface ActiveProcess {
 }
 
 export class Tier2PluginSupervisor extends EventEmitter {
+  // Trusted operator processes retain legacy per-plugin reuse; untrusted code
+  // is scoped to publication and actor to prevent shared module state.
   private readonly processes = new Map<string, ActiveProcess>();
   private readonly crashTimestamps = new Map<string, number[]>();
   private readonly quarantinedPlugins = new Set<string>();
@@ -597,7 +601,18 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   admitPlugin(admission: AuthoritativePluginAdmission): void {
+    // Replacing Host admission immediately retires workers using old policy.
+    this.cleanupPluginProcesses(
+      admission.pluginId,
+      new Tier2SupervisorError("PLUGIN_ADMISSION_CHANGED", "Host plugin admission changed"),
+    );
     this.admissions.set(admission.pluginId, admission);
+  }
+
+  private cleanupPluginProcesses(pluginId: string, error: Error): void {
+    for (const [key, active] of this.processes) {
+      if (active.pluginId === pluginId) this.cleanupProcess(key, error);
+    }
   }
 
   revokePlugin(pluginId: string, reason?: string): void {
@@ -609,7 +624,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
         revocationReason: reason,
       });
     }
-    this.cleanupProcess(pluginId, new Tier2SupervisorError("REVOKED_PLUGIN_RELEASE", `Plugin '${pluginId}' has been revoked: ${reason ?? "operator policy"}`));
+    this.cleanupPluginProcesses(pluginId, new Tier2SupervisorError("REVOKED_PLUGIN_RELEASE", `Plugin '${pluginId}' has been revoked: ${reason ?? "operator policy"}`));
   }
 
   revokePublisher(publisherId: string, reason?: string): void {
@@ -620,7 +635,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
           isPublisherRevoked: true,
           publisherRevocationReason: reason,
         });
-        this.cleanupProcess(
+        this.cleanupPluginProcesses(
           pluginId,
           new Tier2SupervisorError(
             "REVOKED_PLUGIN_PUBLISHER",
@@ -650,7 +665,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   getProcessState(pluginId: string): Tier2ProcessState | null {
-    const active = this.processes.get(pluginId);
+    const active = Array.from(this.processes.values()).find((item) => item.pluginId === pluginId);
     const crashes = this.crashTimestamps.get(pluginId)?.length ?? 0;
     if (!active) {
       if (this.quarantinedPlugins.has(pluginId)) {
@@ -771,6 +786,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     releaseDigest: string,
     entrypointPath?: string | undefined,
     trustTier: PluginTrustTier = "untrusted_marketplace",
+    processKey: string = pluginId,
   ): ActiveProcess {
     if (this.quarantinedPlugins.has(pluginId)) {
       throw new Tier2SupervisorError("PLUGIN_CRASH_LOOP_QUARANTINED", `Plugin '${pluginId}' is quarantined due to repeated crashes`);
@@ -892,6 +908,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
 
     const active: ActiveProcess = {
+      processKey,
       child,
       sessionKey,
       pluginId,
@@ -935,14 +952,14 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
 
     child.on("exit", (code, signal) => {
-      this.handleProcessExit(pluginId, code, signal);
+      this.handleProcessExit(active, code, signal);
     });
 
     child.on("error", (err) => {
-      this.handleProcessCrash(pluginId, err);
+      this.handleProcessCrash(active, err);
     });
 
-    this.processes.set(pluginId, active);
+    this.processes.set(processKey, active);
     return active;
   }
 
@@ -1067,18 +1084,20 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
   }
 
-  private handleProcessCrash(pluginId: string, _error: unknown): void {
-    this.recordCrash(pluginId);
-    this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_CRASHED", "Sandbox worker process crashed"));
+  private handleProcessCrash(active: ActiveProcess, _error: unknown): void {
+    // A late exit from an earlier worker must not terminate its replacement.
+    if (this.processes.get(active.processKey) !== active) return;
+    this.recordCrash(active.pluginId);
+    this.cleanupProcess(active.processKey, new Tier2SupervisorError("PLUGIN_CRASHED", "Sandbox worker process crashed"));
   }
 
-  private handleProcessExit(pluginId: string, code: number | null, signal: NodeJS.Signals | null): void {
+  private handleProcessExit(active: ActiveProcess, code: number | null, signal: NodeJS.Signals | null): void {
+    if (this.processes.get(active.processKey) !== active) return;
     if (code !== 0 && signal !== "SIGTERM") {
-      this.recordCrash(pluginId);
+      this.recordCrash(active.pluginId);
     }
-    const active = this.processes.get(pluginId);
-    const stderrSuffix = active?.latestStderr ? `: ${active.latestStderr.trim()}` : "";
-    this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_PROCESS_EXITED", `Sandbox exited with code ${code ?? "null"} (${signal ?? "none"})${stderrSuffix}`));
+    const stderrSuffix = active.latestStderr ? `: ${active.latestStderr.trim()}` : "";
+    this.cleanupProcess(active.processKey, new Tier2SupervisorError("PLUGIN_PROCESS_EXITED", `Sandbox exited with code ${code ?? "null"} (${signal ?? "none"})${stderrSuffix}`));
   }
 
   private recordCrash(pluginId: string): void {
@@ -1093,10 +1112,10 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
   }
 
-  private cleanupProcess(pluginId: string, error: Error): void {
-    const active = this.processes.get(pluginId);
+  private cleanupProcess(processKey: string, error: Error): void {
+    const active = this.processes.get(processKey);
     if (!active) return;
-    this.processes.delete(pluginId);
+    this.processes.delete(processKey);
 
     for (const [, pending] of active.pendingRequests) {
       clearTimeout(pending.timer);
@@ -1171,7 +1190,12 @@ export class Tier2PluginSupervisor extends EventEmitter {
       admission,
     );
 
-    let active = this.processes.get(context.pluginId);
+    // A malicious plugin may retain JavaScript module state between calls.
+    // Untrusted workers must never be shared across publications or actors.
+    const processKey = effectiveTrustTier === "untrusted_marketplace"
+      ? `U:${JSON.stringify([context.pluginId, context.publicationId, context.actor.type, context.actor.id])}`
+      : `T:${context.pluginId}`;
+    let active = this.processes.get(processKey);
     if (
       !active ||
       !this.isProcessAlive(active) ||
@@ -1179,12 +1203,13 @@ export class Tier2PluginSupervisor extends EventEmitter {
       active.entrypointPath !== resolvedEntrypoint ||
       active.trustTier !== effectiveTrustTier
     ) {
-      if (active) this.cleanupProcess(context.pluginId, new Error("Process release, entrypoint, or trust policy rotated"));
+      if (active) this.cleanupProcess(processKey, new Error("Process release, entrypoint, or trust policy rotated"));
       active = this.spawnProcess(
         context.pluginId,
         context.releaseDigest,
         resolvedEntrypoint,
         effectiveTrustTier,
+        processKey,
       );
     }
 
@@ -1206,7 +1231,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       const timer = setTimeout(() => {
         active?.pendingRequests.delete(requestId);
         if (active) {
-          this.cleanupProcess(context.pluginId, new Tier2SupervisorError("PLUGIN_TIMEOUT", `Operation '${operation}' timed out after ${this.invocationTimeoutMs}ms`));
+          this.cleanupProcess(processKey, new Tier2SupervisorError("PLUGIN_TIMEOUT", `Operation '${operation}' timed out after ${this.invocationTimeoutMs}ms`));
         }
         reject(new Tier2SupervisorError("PLUGIN_TIMEOUT", `Sandbox invocation timed out after ${this.invocationTimeoutMs}ms`));
       }, this.invocationTimeoutMs);
@@ -1233,18 +1258,15 @@ export class Tier2PluginSupervisor extends EventEmitter {
    * Graceful or immediate termination of a sandbox worker.
    */
   async terminatePlugin(pluginId: string): Promise<void> {
-    const active = this.processes.get(pluginId);
-    if (!active) return;
-    this.cleanupProcess(pluginId, new Tier2SupervisorError("PLUGIN_TERMINATED", "Plugin worker was terminated"));
+    this.cleanupPluginProcesses(pluginId, new Tier2SupervisorError("PLUGIN_TERMINATED", "Plugin worker was terminated"));
   }
 
   /**
    * Terminate all managed sandbox workers.
    */
   async terminateAll(): Promise<void> {
-    const ids = Array.from(this.processes.keys());
-    for (const id of ids) {
-      await this.terminatePlugin(id);
+    for (const key of Array.from(this.processes.keys())) {
+      this.cleanupProcess(key, new Tier2SupervisorError("PLUGIN_TERMINATED", "Plugin worker was terminated"));
     }
   }
 
