@@ -6,6 +6,7 @@ import {
   Tier2PluginSupervisor,
   Tier2SupervisorError,
   verifyPlatformIsolationSupport,
+  detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
   type Tier2InvocationContext,
 } from "../src/runtime/tier2-process-supervisor.js";
@@ -320,6 +321,13 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
   });
 
   describe("Tier 2 OS-Enforced Runtime Isolation & Adversarial Hardening (M7.2 / P0 / P1)", () => {
+    it("refuses unsupported and arbitrary sandbox runner paths", () => {
+      expect(detectSandboxRunner("gvisor")).toBeNull();
+      expect(detectSandboxRunner("nsjail")).toBeNull();
+      expect(detectSandboxRunner("/tmp/untrusted-bwrap")).toBeNull();
+      expect(detectSandboxRunner("../bwrap")).toBeNull();
+    });
+
     it("never treats runner detection as proof of certified containment", () => {
       const isolation = verifyPlatformIsolationSupport("untrusted_marketplace");
       expect(isolation.isIsolated).toBe(false);
