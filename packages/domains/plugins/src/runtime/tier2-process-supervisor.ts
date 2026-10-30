@@ -1579,11 +1579,22 @@ export class Tier2PluginSupervisor extends EventEmitter {
         );
       }
       let refreshed: AuthoritativePluginAdmission;
+      let latestObserved: AuthoritativePluginAdmission;
       try {
+        const returned = await this.loadMarketplaceAdmission(context.pluginId);
+        // Concurrent invocations can complete DB reads out of order. Always
+        // compare a reply with the CURRENT observed revision after await,
+        // never against a snapshot captured before awaiting the database.
+        latestObserved = this.admissions.get(context.pluginId)!;
+        if (!latestObserved) {
+          throw new Tier2SupervisorError(
+            "UNTRUSTED_ADMISSION_NOT_AUTHORIZED", "Marketplace admission disappeared while refreshing",
+          );
+        }
         refreshed = validateMarketplaceAdmissionRefresh(
           context.pluginId,
-          admission,
-          await this.loadMarketplaceAdmission(context.pluginId),
+          latestObserved,
+          returned,
         );
       } catch (error: unknown) {
         // A lost authority connection, a revoked/missing release, or an
@@ -1594,8 +1605,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
         ));
         throw error;
       }
-      if (refreshed.policyRevision !== admission.policyRevision ||
-          JSON.stringify(refreshed) !== JSON.stringify(admission)) {
+      if (refreshed.policyRevision !== latestObserved.policyRevision ||
+          JSON.stringify(refreshed) !== JSON.stringify(latestObserved)) {
         this.admitPlugin(refreshed);
       }
       effectiveAdmission = this.admissions.get(context.pluginId)!;
