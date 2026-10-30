@@ -1,5 +1,5 @@
 import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
@@ -18,7 +18,7 @@ import {
   type Tier2CapabilityRequest,
 } from "./tier2-capability-gateway.js";
 import type { PluginTrustTier } from "../application/plugin-catalog.js";
-import { Tier2KernelCgroupLease } from "./tier2-kernel-resource-limits.js";
+import { Tier2KernelCgroupLease, parseBubblewrapChildPid } from "./tier2-kernel-resource-limits.js";
 
 export interface AuthoritativePluginAdmission {
   readonly pluginId: string;
@@ -463,6 +463,7 @@ export function buildBubblewrapArgs(options: {
   sanitizedEnv: NodeJS.ProcessEnv;
   /** Additional pipe held by Host until the launcher is attached to cgroup v2. */
   blockFd?: number | undefined;
+  infoFd?: number | undefined;
 }): string[] {
   const args: string[] = [
     "--unshare-all",
@@ -470,6 +471,7 @@ export function buildBubblewrapArgs(options: {
     "--new-session",
     "--die-with-parent",
     ...(options.blockFd === undefined ? [] : ["--block-fd", String(options.blockFd)]),
+    ...(options.infoFd === undefined ? [] : ["--info-fd", String(options.infoFd)]),
     "--ro-bind", "/usr", "/usr",
   ];
 
@@ -569,6 +571,51 @@ export function tier2ProcessIsolationKey(
     : `T:${context.pluginId}`;
 }
 
+
+/**
+ * Bubblewrap forks an internal child before the --block-fd checkpoint.
+ * Read its authenticated-by-local-process (not plugin-supplied) PID from
+ * --info-fd, fail on malformed/truncated output, and never release the
+ * sandbox until BOTH its launcher and child are attached to cgroup v2.
+ */
+function awaitBubblewrapChildPid(stream: Readable, child: ChildProcess): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    let info = "";
+    const timer = setTimeout(
+      () => finish(new Tier2SupervisorError("CGROUP_CHILD_PID_TIMEOUT", "Sandbox child identity was not reported")),
+      5000,
+    );
+    timer.unref();
+    const onData = (chunk: Buffer | string) => {
+      info += chunk.toString();
+      if (info.length > 4096) {
+        finish(new Tier2SupervisorError("CGROUP_CHILD_PID_INVALID", "Oversized sandbox child identity"));
+      }
+    };
+    const onEnd = () => {
+      try { finish(null, parseBubblewrapChildPid(info)); }
+      catch (error: unknown) { finish(error instanceof Error ? error : new Error("Invalid sandbox child identity")); }
+    };
+    const onError = (error: Error) => finish(error);
+    const onExit = () => finish(new Tier2SupervisorError("CGROUP_CHILD_PID_MISSING", "Sandbox exited before reporting its child PID"));
+    const finish = (error: Error | null, pid?: number) => {
+      clearTimeout(timer);
+      stream.off("data", onData);
+      stream.off("end", onEnd);
+      stream.off("error", onError);
+      child.off("error", onError);
+      child.off("exit", onExit);
+      if (error || pid === undefined) reject(error ?? new Error("Missing sandbox child PID"));
+      else resolve(pid);
+    };
+    stream.on("data", onData);
+    stream.once("end", onEnd);
+    stream.once("error", onError);
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
+}
+
 interface PendingInvocation {
   readonly context: Tier2InvocationContext;
   readonly handlers: HostCapabilityHandlers;
@@ -583,6 +630,7 @@ interface ActiveProcess {
   readonly processKey: string;
   readonly child: ChildProcess;
   readonly resourceLease?: Tier2KernelCgroupLease | undefined;
+  readonly startupReady?: Promise<void> | undefined;
   readonly seenCapabilityMessageIds: Set<string>;
   readonly sessionKey: string;
   readonly pluginId: string;
@@ -913,6 +961,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     let child: ChildProcess;
     let blockedLauncher: ChildProcess | undefined;
     let resourceLease: Tier2KernelCgroupLease | undefined;
+    let startupReady: Promise<void> | undefined;
 
     if (isolation.isolationMechanism === "sandbox_runner") {
       const runner = detectSandboxRunner();
@@ -933,30 +982,47 @@ export class Tier2PluginSupervisor extends EventEmitter {
           sanitizedEnv,
           nodeArgs,
           blockFd: 3,
+          infoFd: 4,
         });
         child = spawn(runner.executablePath, bwrapArgs, {
-          stdio: ["pipe", "pipe", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
         });
         blockedLauncher = child;
         const barrier = child.stdio[3];
-        if (!child.pid || !(barrier instanceof Writable)) {
+        const childIdentity = child.stdio[4];
+        if (!child.pid || !(barrier instanceof Writable) || !(childIdentity instanceof Readable)) {
           throw new Tier2SupervisorError(
             "CGROUP_LAUNCH_BLOCK_FAILED",
-            "Sandbox could not create a supervised execution barrier",
+            "Sandbox could not create supervised execution and child-identity pipes",
           );
         }
         resourceLease.attachBlockedLauncher(child.pid);
-        // No release before cgroup.procs membership and all three kernel
-        // resource ceilings are confirmed. A write error terminates the tree.
-        barrier.write("1", (error) => {
-          if (error) {
-            resourceLease?.killTree();
+        const lease = resourceLease;
+        // Bwrap can fork its sandbox child BEFORE its --block-fd checkpoint.
+        // Its actual child PID is reported through --info-fd. Attach BOTH PIDs
+        // before writing the barrier, otherwise the child could escape quotas.
+        startupReady = awaitBubblewrapChildPid(childIdentity, child)
+          .then(async (sandboxPid) => {
+            if (sandboxPid === child.pid) {
+              throw new Tier2SupervisorError("CGROUP_CHILD_PID_INVALID", "Sandbox child and launcher share a PID");
+            }
+            lease.attachBlockedLauncher(sandboxPid);
+            await new Promise<void>((resolve, reject) => {
+              barrier.once("error", reject);
+              barrier.end("1", () => {
+                barrier.off("error", reject);
+                resolve();
+              });
+            });
+          })
+          .catch((error: unknown) => {
+            lease.killTree();
             this.cleanupProcess(processKey, new Tier2SupervisorError(
-              "CGROUP_LAUNCH_BLOCK_FAILED", "Sandbox execution barrier failed",
+              "CGROUP_LAUNCH_BLOCK_FAILED",
+              error instanceof Error ? error.message : "Sandbox could not be attached before execution",
             ));
-          }
-          barrier.end();
-        });
+            throw error;
+          });
       } catch (error: unknown) {
         // If cgroup.procs attachment fails, the blocked launcher was never
         // enrolled: cgroup.kill alone cannot terminate it.
@@ -979,6 +1045,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       processKey,
       child,
       ...(resourceLease ? { resourceLease } : {}),
+      ...(startupReady ? { startupReady } : {}),
       seenCapabilityMessageIds: new Set(),
       sessionKey,
       pluginId,
@@ -1366,6 +1433,13 @@ export class Tier2PluginSupervisor extends EventEmitter {
         effectiveTrustTier,
         processKey,
       );
+    }
+
+    if (active.startupReady) {
+      await active.startupReady;
+      if (this.processes.get(processKey) !== active || !this.isProcessAlive(active)) {
+        throw new Tier2SupervisorError("CGROUP_LAUNCH_BLOCK_FAILED", "Sandbox became unavailable before invocation");
+      }
     }
 
     const requestId = randomUUID();
