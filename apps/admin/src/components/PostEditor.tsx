@@ -836,13 +836,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span className="hidden sm:inline">Back to Posts</span>
+            <span className="hidden sm:inline">{tr("Back to Posts")}</span>
           </Button>
           <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
-            POST
+            {tr("Post")}
           </span>
           <div className="h-4 w-[1px] bg-border hidden sm:block" />
           <select
+            aria-label={tr("Publication status")}
             value={status}
             onChange={async (e) => {
               const newStatus = e.target.value;
@@ -861,15 +862,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                 setStatus(newStatus);
               }
             }}
-            className="text-[11px] font-semibold tracking-wider px-2.5 py-1 rounded-md border border-border/70 bg-card hover:border-border text-foreground uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            className="min-h-10 text-sm font-semibold px-2.5 py-2 rounded-md border border-border/70 bg-card hover:border-border text-foreground uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-ring transition-colors"
           >
-            <option value="draft">Draft</option>
-            <option value="in_review">In Review</option>
-            <option value="changes_requested">Changes Requested</option>
-            <option value="approved">Approved</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
+            <option value="draft">{tr("Draft")}</option>
+            <option value="in_review">{tr("In Review")}</option>
+            <option value="changes_requested">{tr("Changes Requested")}</option>
+            <option value="approved">{tr("Approved")}</option>
+            <option value="scheduled">{tr("Scheduled")}</option>
+            <option value="published">{tr("Published")}</option>
+            <option value="archived">{tr("Archived")}</option>
           </select>
           {renderAutosaveStatus()}
           <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums ms-2">
@@ -929,7 +930,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                   onClick={handleUnpublish}
                   className="text-xs"
                 >
-                  Unpublish
+                  {tr("Unpublish")}
                 </Button>
               ) : (
                 <Button
@@ -938,7 +939,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                   onClick={handlePublish}
                   className="text-xs font-semibold"
                 >
-                  Publish Now
+                  {tr("Publish Now")}
                 </Button>
               )}
             </>
@@ -950,7 +951,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-1.5 shadow-sm"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Saving..." : postId ? "Update" : "Save Draft"}
+            {saving ? tr("Saving...") : postId ? tr("Update") : tr("Save Draft")}
           </Button>
 
           <IconButton

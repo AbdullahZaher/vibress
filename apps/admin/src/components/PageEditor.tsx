@@ -366,14 +366,14 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span className="hidden sm:inline">Back to Pages</span>
+            <span className="hidden sm:inline">{tr("Back to Pages")}</span>
           </Button>
           <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
-            PAGE
+            {tr("Page")}
           </span>
           <div className="h-4 w-[1px] bg-border hidden sm:block" />
           <Badge variant={status === "published" ? "published" : "draft"}>
-            {status.toUpperCase()}
+            {tr(status === "published" ? "Published" : "Draft")}
           </Badge>
           {autosaveState === "saving" && (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -409,7 +409,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-1.5 shadow-sm"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Saving..." : pageId ? "Update Page" : "Create Page"}
+            {saving ? tr("Saving...") : pageId ? tr("Update Page") : tr("Create Page")}
           </Button>
 
           <IconButton
