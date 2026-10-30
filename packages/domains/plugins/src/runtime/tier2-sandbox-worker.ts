@@ -103,15 +103,16 @@ export async function requestCapability<T = unknown>(
   params: Record<string, unknown>,
   invocationId?: string,
 ): Promise<T> {
+  const targetPublicationId = publicationId || "untrusted";
   const id = (await import("node:crypto")).randomUUID();
   const envelope = signTier2IpcEnvelope({
     id,
     ...(invocationId ? { correlationId: invocationId } : {}),
     pluginId,
     releaseDigest,
-    publicationId,
+    publicationId: targetPublicationId,
     type: "capability_request",
-    payload: { action, publicationId, params, invocationId },
+    payload: { action, publicationId: targetPublicationId, params, invocationId },
   }, sessionKey);
 
   return new Promise<T>((resolve, reject) => {
@@ -244,8 +245,9 @@ async function processEnvelope(envelope: Tier2IpcEnvelope): Promise<void> {
             // loop indefinitely
           }
         } else if (operation === "test_capability") {
-          const testReq = data as { action: string; publicationId: string; params: Record<string, unknown> };
-          result = await requestCapability(testReq.action, testReq.publicationId, testReq.params, envelope.id);
+          const testReq = (data as { action: string; publicationId?: string; params?: Record<string, unknown> }) || {};
+          const targetPubId = testReq.publicationId || envelope.publicationId || "untrusted";
+          result = await requestCapability(testReq.action, targetPubId, testReq.params || {}, envelope.id);
         } else if (loadedPluginModule) {
           const ctx = createPluginContext(envelope.publicationId, envelope.id, grantedCapabilities);
           if (operation === "activate" && typeof loadedPluginModule.activate === "function") {

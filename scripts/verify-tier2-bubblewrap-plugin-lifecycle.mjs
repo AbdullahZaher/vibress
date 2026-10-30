@@ -257,9 +257,9 @@ function handleCapabilityRequest(envelope) {
     correlationId: envelope.correlationId,
     pluginId,
     releaseDigest,
-    publicationId: envelope.publicationId,
+    publicationId: envelope.publicationId || publicationId,
     type: "capability_response",
-    payload: errorData ? { ok: false, error: errorData } : responseData,
+    payload: errorData ? { ok: false, error: errorData } : { ok: true, data: responseData },
   });
   sendToSandbox(responseEnv);
 }
