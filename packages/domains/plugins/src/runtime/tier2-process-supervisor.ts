@@ -1,7 +1,7 @@
 import { fork, execFileSync, ChildProcess } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, statSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
@@ -21,6 +21,8 @@ export interface AuthoritativePluginAdmission {
   readonly trustTier: PluginTrustTier;
   readonly allowedEntrypoints?: readonly string[] | undefined;
   readonly releaseDirectory?: string | undefined;
+  /** Optional pinned SHA-256 of the entrypoint file (not the release archive). */
+  readonly entrypointSha256?: string | undefined;
   readonly isRevoked?: boolean | undefined;
   readonly revocationReason?: string | undefined;
 }
@@ -285,11 +287,25 @@ export function validateAndResolveEntrypoint(
     }
   }
 
+  if (admission?.entrypointSha256) {
+    const expected = admission.entrypointSha256.toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(expected)) {
+      throw new Tier2SupervisorError("INVALID_PLUGIN_ENTRYPOINT", "Approved entrypoint digest is invalid");
+    }
+    const actual = createHash("sha256").update(readFileSync(realPath)).digest("hex");
+    if (actual !== expected) {
+      throw new Tier2SupervisorError("ENTRYPOINT_INTEGRITY_MISMATCH", "Plugin entrypoint does not match its approved SHA-256");
+    }
+  }
+
   return realPath;
 }
 
 /**
- * Constructs bubblewrap arguments for real Linux unprivileged namespace sandbox isolation.
+ * Historical Bubblewrap argument builder; not an approved production launcher.
+ * The untrusted runtime remains disabled until its kernel containment and IPC
+ * transport are independently verified. Do not treat these arguments as proof.
+ * @deprecated An approved sandbox adapter is not implemented yet.
  */
 export function buildBubblewrapArgs(options: {
   scriptPath: string;
@@ -311,8 +327,8 @@ export function buildBubblewrapArgs(options: {
   if (existsSync("/bin")) args.push("--ro-bind-try", "/bin", "/bin");
   if (existsSync("/sbin")) args.push("--ro-bind-try", "/sbin", "/sbin");
 
-  // Pass file descriptor 3 for Node IPC channel
-  args.push("--pass-fd", "3");
+  // No IPC fd is passed here: the former --pass-fd option does not exist in Bubblewrap.
+  // An approved launcher must establish and test a separate authenticated IPC transport.
 
   // Read-only bind for the worker bundle
   args.push("--ro-bind", options.scriptPath, options.scriptPath);
