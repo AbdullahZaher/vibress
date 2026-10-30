@@ -165,7 +165,8 @@ process.on("message", async (rawMsg: unknown) => {
         data: unknown;
         grantedCapabilities?: string[];
       };
-      return invocationGrants.run(grantedCapabilities, async () => {
+      // Await so the outer handler serializes plugin errors into typed IPC responses.
+      return await invocationGrants.run(grantedCapabilities, async () => {
       let result: unknown;
 
       await ensurePluginLoaded();
