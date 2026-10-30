@@ -55,6 +55,7 @@ jobs:
       - name: Build production worker bundles
         run: |
           pnpm --filter @vibress/plugin-sdk build
+          pnpm --filter @vibress/plugins build
           node scripts/build-production-bundles.mjs
 
       - name: Verify real Vibress plugin lifecycle inside Bubblewrap

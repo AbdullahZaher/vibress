@@ -66,18 +66,55 @@ const publicationId = "pub_prod_acceptance_01";
 const TIER2_MAX_FRAME_BYTES = 128 * 1024;
 
 function signEnvelope(envelope) {
-  const { hmac: _, ...canonical } = envelope;
-  const canonicalString = JSON.stringify(canonical, Object.keys(canonical).sort());
-  const hmac = createHmac("sha256", sessionKey).update(canonicalString).digest("hex");
-  return { ...canonical, hmac };
+  const version = 1;
+  const id = envelope.id || randomUUID();
+  const correlationId = envelope.correlationId || undefined;
+  const timestamp = envelope.timestamp || Date.now();
+  const envelopeData = {
+    version,
+    id,
+    ...(correlationId ? { correlationId } : {}),
+    timestamp,
+    pluginId: envelope.pluginId,
+    releaseDigest: envelope.releaseDigest,
+    publicationId: envelope.publicationId,
+    type: envelope.type,
+    payload: envelope.payload,
+  };
+  const content = JSON.stringify([
+    version,
+    id,
+    correlationId || "",
+    timestamp,
+    envelope.pluginId,
+    envelope.releaseDigest,
+    envelope.publicationId,
+    envelope.type,
+    envelope.payload,
+  ]);
+  const hmacSha256 = createHmac("sha256", sessionKey).update(content).digest("hex");
+  return {
+    ...envelopeData,
+    hmacSha256,
+  };
 }
 
 function verifyEnvelope(envelope) {
-  const { hmac, ...canonical } = envelope;
-  if (!hmac) throw new Error("Missing HMAC");
-  const canonicalString = JSON.stringify(canonical, Object.keys(canonical).sort());
-  const expectedHmac = createHmac("sha256", sessionKey).update(canonicalString).digest("hex");
-  if (hmac !== expectedHmac) throw new Error("HMAC mismatch");
+  if (envelope.version !== 1) throw new Error("Invalid envelope version");
+  if (!envelope.hmacSha256) throw new Error("Missing hmacSha256");
+  const content = JSON.stringify([
+    envelope.version,
+    envelope.id,
+    envelope.correlationId || "",
+    envelope.timestamp,
+    envelope.pluginId,
+    envelope.releaseDigest,
+    envelope.publicationId,
+    envelope.type,
+    envelope.payload,
+  ]);
+  const expectedHmac = createHmac("sha256", sessionKey).update(content).digest("hex");
+  if (envelope.hmacSha256 !== expectedHmac) throw new Error("HMAC mismatch");
   return envelope;
 }
 
@@ -328,7 +365,7 @@ async function runAcceptanceSuite() {
     type: "invoke",
     payload: { operation: "echo", data: "forged" },
   });
-  forged.hmac = "deadbeef".repeat(8);
+  forged.hmacSha256 = "deadbeef".repeat(8);
   sendToSandbox(forged);
   // Verify next legitimate invocation still succeeds
   const echoRes = await invokeSandbox("echo", "healthy");
