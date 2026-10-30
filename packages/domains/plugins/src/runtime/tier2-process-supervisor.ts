@@ -186,10 +186,15 @@ export function verifyPlatformIsolationSupport(
           "Untrusted execution is disabled: verified Bubblewrap runner with active user/mount namespace support is unavailable on this host.",
       };
     }
+    // Namespace creation is only one layer. This Host does not yet
+    // attach a verified, individually delegated cgroup v2 (CPU, memory, PIDs)
+    // before starting the worker. A V8 heap cap or timeout is not a kernel
+    // resource boundary. Keep untrusted execution disabled until that
+    // controller is integrated and exercised by an end-to-end acceptance test.
     return {
-      isIsolated: true,
-      isolationMechanism: "sandbox_runner",
-      details: `Active Bubblewrap sandbox isolation verified (${runner.version})`,
+      isIsolated: false,
+      isolationMechanism: "unsupported",
+      details: `Bubblewrap namespaces available (${runner.version}) but mandatory per-plugin kernel resource quotas are not certified`,
     };
   }
 
@@ -557,6 +562,7 @@ interface ActiveProcess {
   /** Scoped identity for process reuse and asynchronous cleanup. */
   readonly processKey: string;
   readonly child: ChildProcess;
+  readonly seenCapabilityMessageIds: Set<string>;
   readonly sessionKey: string;
   readonly pluginId: string;
   readonly releaseDigest: string;
@@ -914,6 +920,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     const active: ActiveProcess = {
       processKey,
       child,
+      seenCapabilityMessageIds: new Set(),
       sessionKey,
       pluginId,
       releaseDigest,
@@ -938,6 +945,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
       });
       streamReader.onError((err) => {
         this.emit("security_violation", { pluginId, error: err });
+        // Dropping a malformed frame but continuing to trust the same peer
+        // permits repeated probing of the Host IPC parser.
+        this.cleanupProcess(processKey, new Tier2SupervisorError(
+          "IPC_PROTOCOL_VIOLATION", "Sandbox sent an invalid IPC frame",
+        ));
       });
 
       child.stdout?.on("data", (chunk: Buffer) => {
@@ -1012,9 +1024,16 @@ export class Tier2PluginSupervisor extends EventEmitter {
     envelope: Tier2IpcEnvelope,
   ): Promise<void> {
     try {
+      if (this.processes.get(active.processKey) !== active) return;
+      if (envelope.pluginId !== active.pluginId || envelope.releaseDigest !== active.releaseDigest) {
+        throw new Tier2SupervisorError("IPC_CONTEXT_MISMATCH", "Sandbox message identity does not match the admitted worker");
+      }
       if (envelope.type === "response") {
         const pending = active.pendingRequests.get(envelope.id);
         if (pending) {
+          if (envelope.publicationId !== pending.context.publicationId) {
+            throw new Tier2SupervisorError("IPC_CONTEXT_MISMATCH", "Sandbox response publication does not match the invocation");
+          }
           clearTimeout(pending.timer);
           active.pendingRequests.delete(envelope.id);
           const resPayload = envelope.payload as any;
@@ -1039,9 +1058,23 @@ export class Tier2PluginSupervisor extends EventEmitter {
           }
         }
       } else if (envelope.type === "capability_request") {
+        // A replay within the same invocation could duplicate Host-side effects.
+        // Keep a bounded replay window per supervised process; retire a peer
+        // that exceeds this window rather than silently accepting old messages.
+        if (active.seenCapabilityMessageIds.has(envelope.id)) {
+          throw new Tier2SupervisorError("IPC_REPLAY_DENIED", "Repeated sandbox capability request");
+        }
+        if (active.seenCapabilityMessageIds.size >= 4096) {
+          throw new Tier2SupervisorError("IPC_MESSAGE_LIMIT", "Sandbox capability request quota exceeded");
+        }
+        active.seenCapabilityMessageIds.add(envelope.id);
         const req = envelope.payload as Tier2CapabilityRequest;
         const invocationId = envelope.correlationId || req.invocationId;
         const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
+
+        if (pending && envelope.publicationId !== pending.context.publicationId) {
+          throw new Tier2SupervisorError("IPC_CONTEXT_MISMATCH", "Sandbox capability publication does not match the invocation");
+        }
 
         if (!pending) {
           const rejectEnv = signTier2IpcEnvelope({
@@ -1085,6 +1118,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
       }
     } catch (err: unknown) {
       this.emit("security_violation", { pluginId: active.pluginId, error: err });
+      if (active.transport === "stdio") {
+        this.cleanupProcess(active.processKey, new Tier2SupervisorError(
+          "IPC_SECURITY_VIOLATION", "Sandbox IPC authorization or protocol violation",
+        ));
+      }
     }
   }
 
