@@ -503,7 +503,14 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/tags",
     exact: true,
-    render: () => <TagsManager />,
+    requiredPermission: "tags.read",
+    render: ({ can }) => (
+      <TagsManager
+        canCreate={can("tags.create")}
+        canEdit={can("tags.edit")}
+        canDelete={can("tags.delete")}
+      />
+    ),
   },
   {
     pattern: "/admin/media",
@@ -520,7 +527,8 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/members",
     exact: false,
-    render: () => <MembersList />,
+    requiredPermission: "members.read",
+    render: ({ can }) => <MembersList canManage={can("members.manage")} />,
   },
   // Dedicated Plugins management page (publication permission checked by router).
   {
@@ -591,14 +599,14 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/comments",
     exact: true,
-    requiredPermission: "comments.manage",
-    render: () => <CommentsModeration />,
+    requiredPermission: "comments.read",
+    render: ({ can }) => <CommentsModeration canModerate={can("comments.moderate")} />,
   },
   {
     pattern: "/admin/community",
     exact: true,
-    requiredPermission: "comments.manage",
-    render: () => <CommentsModeration />,
+    requiredPermission: "comments.read",
+    render: ({ can }) => <CommentsModeration canModerate={can("comments.moderate")} />,
   },
   {
     pattern: "/admin/settings/advanced",

@@ -41,6 +41,14 @@ interface CommandPaletteProps {
   darkMode: boolean;
   onLogout: () => void;
   canCreatePosts: boolean;
+  canCreatePages: boolean;
+  canReadAnalytics: boolean;
+  canReadPosts: boolean;
+  canReadPages: boolean;
+  canReadTags: boolean;
+  canReadMedia: boolean;
+  canReadMembers: boolean;
+  canReadComments: boolean;
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -51,6 +59,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   darkMode,
   onLogout,
   canCreatePosts,
+  canCreatePages,
+  canReadAnalytics,
+  canReadPosts,
+  canReadPages,
+  canReadTags,
+  canReadMedia,
+  canReadMembers,
+  canReadComments,
 }) => {
   const { tr } = useAdminLocale();
   const [query, setQuery] = useState("");
@@ -61,28 +77,24 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const items: CommandItem[] = useMemo(() => {
     const list: CommandItem[] = [
       // Actions
-      ...(canCreatePosts
-        ? [
-            {
-              id: "action-new-post",
-              title: "Create New Post",
-              description: "Write a new blog article or story",
-              category: "Actions" as const,
-              icon: <Plus className="h-4 w-4 text-emerald-500" />,
-              keywords: ["new", "post", "write", "article", "create", "blog"],
-              action: () => onNavigate("/admin/posts/new"),
-            },
-            {
-              id: "action-new-page",
-              title: "Create New Page",
-              description: "Create a standalone static page",
-              category: "Actions" as const,
-              icon: <Plus className="h-4 w-4 text-sky-500" />,
-              keywords: ["new", "page", "create", "static"],
-              action: () => onNavigate("/admin/pages/new"),
-            },
-          ]
-        : []),
+      ...(canCreatePosts ? [{
+        id: "action-new-post",
+        title: "Create New Post",
+        description: "Write a new blog article or story",
+        category: "Actions" as const,
+        icon: <Plus className="h-4 w-4 text-emerald-500" />,
+        keywords: ["new", "post", "write", "article", "create", "blog"],
+        action: () => onNavigate("/admin/posts/new"),
+      }] : []),
+      ...(canCreatePages ? [{
+        id: "action-new-page",
+        title: "Create New Page",
+        description: "Create a standalone static page",
+        category: "Actions" as const,
+        icon: <Plus className="h-4 w-4 text-sky-500" />,
+        keywords: ["new", "page", "create", "static"],
+        action: () => onNavigate("/admin/pages/new"),
+      }] : []),
       {
         id: "action-theme-toggle",
         title: darkMode ? "Switch to Light Mode" : "Switch to Dark Mode",
@@ -337,12 +349,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
     ];
 
-    return list.map((item) => ({
+    return list.filter((item) => {
+      if (["content-posts", "content-drafts", "content-scheduled", "content-published"].includes(item.id)) return canReadPosts;
+      if (item.id === "content-pages") return canReadPages;
+      if (item.id === "content-tags") return canReadTags;
+      if (item.id === "content-media") return canReadMedia;
+      if (item.id === "content-members") return canReadMembers;
+      if (item.id === "content-comments") return canReadComments;
+      if (item.id === "nav-analytics") return canReadAnalytics || canReadPosts || canReadPages;
+      return true;
+    }).map((item) => ({
       ...item,
       title: tr(item.title),
       ...(item.description ? { description: tr(item.description) } : {}),
     }));
-  }, [canCreatePosts, darkMode, onNavigate, onToggleDarkMode, onLogout, tr]);
+  }, [canCreatePosts, canCreatePages, canReadAnalytics, canReadPosts, canReadPages, canReadTags, canReadMedia, canReadMembers, canReadComments, darkMode, onNavigate, onToggleDarkMode, onLogout, tr]);
 
   // Filter items by search query
   const filteredItems = useMemo(() => {

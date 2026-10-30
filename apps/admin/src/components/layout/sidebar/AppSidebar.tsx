@@ -18,6 +18,12 @@ interface AppSidebarProps {
   onNavigate: (path: string) => void;
   onLogout: () => void;
   canCreatePosts: boolean;
+  canReadPosts: boolean;
+  canReadPages: boolean;
+  canReadTags: boolean;
+  canReadMedia: boolean;
+  canReadMembers: boolean;
+  canReadComments: boolean;
   canReadTranslations: boolean;
   canReadPlugins: boolean;
   extensionViews: readonly AdminExtensionViewLink[];
@@ -36,6 +42,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onNavigate,
   onLogout,
   canCreatePosts,
+  canReadPosts,
+  canReadPages,
+  canReadTags,
+  canReadMedia,
+  canReadMembers,
+  canReadComments,
   canReadTranslations,
   canReadPlugins,
   extensionViews,
@@ -125,6 +137,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           currentPath={currentPath}
           onNavigate={handleNavigate}
           canCreatePosts={canCreatePosts}
+          canReadPosts={canReadPosts}
+          canReadPages={canReadPages}
+          canReadTags={canReadTags}
+          canReadMedia={canReadMedia}
+          canReadMembers={canReadMembers}
+          canReadComments={canReadComments}
           canReadTranslations={canReadTranslations}
         />
         <NavExtensionViews

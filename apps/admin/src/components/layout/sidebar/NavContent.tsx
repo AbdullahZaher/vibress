@@ -16,6 +16,12 @@ interface NavContentProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   canCreatePosts: boolean;
+  canReadPosts: boolean;
+  canReadPages: boolean;
+  canReadTags: boolean;
+  canReadMedia: boolean;
+  canReadMembers: boolean;
+  canReadComments: boolean;
   canReadTranslations: boolean;
 }
 
@@ -23,6 +29,12 @@ export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
   onNavigate,
   canCreatePosts,
+  canReadPosts,
+  canReadPages,
+  canReadTags,
+  canReadMedia,
+  canReadMembers,
+  canReadComments,
   canReadTranslations,
 }) => {
   const { data: localePolicy } = usePublicationLocales();
@@ -43,6 +55,8 @@ export const NavContent: React.FC<NavContentProps> = ({
   return (
     <nav aria-label={tr("Content")} className="space-y-0.5 text-sm">
       <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
+      {canReadPosts && (
+        <>
       {/* Posts Item with Tree Chevron & Quick Plus Create */}
       <div
         className={`group/posts relative flex items-center justify-between px-2.5 py-2.5 rounded-lg transition-colors ${
@@ -149,7 +163,11 @@ export const NavContent: React.FC<NavContentProps> = ({
         </div>
       )}
 
-      {/* Pages */}
+        </>
+      )}
+
+      {canReadPages && (
+              {/* Pages */}
       <button
         type="button"
         onClick={() => onNavigate("/admin/pages")}
@@ -163,6 +181,7 @@ export const NavContent: React.FC<NavContentProps> = ({
         <File className="h-4 w-4 shrink-0" />
         <span>{tr("Pages")}</span>
       </button>
+      )}
 
       {/* Translations & Localization */}
       {localePolicy?.isMultilingual && canReadTranslations && (
@@ -181,6 +200,8 @@ export const NavContent: React.FC<NavContentProps> = ({
       </button>
 
       )}
+      {canReadTags && (
+        <>
       {/* Tags */}
       <button
         type="button"
@@ -196,6 +217,11 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Tags")}</span>
       </button>
 
+        </>
+      )}
+
+      {canReadMedia && (
+        <>
       {/* Media */}
       <button
         type="button"
@@ -211,6 +237,11 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Media")}</span>
       </button>
 
+        </>
+      )}
+
+      {canReadMembers && (
+        <>
       {/* Members */}
       <button
         type="button"
@@ -226,6 +257,11 @@ export const NavContent: React.FC<NavContentProps> = ({
         <span>{tr("Members")}</span>
       </button>
 
+        </>
+      )}
+
+      {canReadComments && (
+        <>
       {/* Comments & Moderation */}
       <button
         type="button"
@@ -243,4 +279,7 @@ export const NavContent: React.FC<NavContentProps> = ({
     </nav>
   );
 };
+
+        </>
+      )}
 

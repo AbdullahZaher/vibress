@@ -86,6 +86,14 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canCreatePosts = can("posts.create");
+  const canReadPosts = can("posts.read");
+  const canReadPages = can("pages.read");
+  const canReadTags = can("tags.read");
+  const canReadMedia = can("media.read");
+  const canReadMembers = can("members.read");
+  const canReadComments = can("comments.read");
+  const canCreatePages = can("pages.create");
+  const canReadAnalytics = can("analytics.read");
   const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath) && !/^\/admin\/posts\/(drafts|review|scheduled|published)\/?$/.test(currentPath);
 
 
@@ -113,6 +121,12 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onNavigate={onNavigate}
         onLogout={onLogout}
         canCreatePosts={canCreatePosts}
+        canReadPosts={canReadPosts}
+        canReadPages={canReadPages}
+        canReadTags={canReadTags}
+        canReadMedia={canReadMedia}
+        canReadMembers={canReadMembers}
+        canReadComments={canReadComments}
         canReadTranslations={can("translations.read")}
         canReadPlugins={can("plugins.read")}
         extensionViews={extensionViews.filter((view) => can(view.permission))}
@@ -144,6 +158,14 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         darkMode={darkMode}
         onLogout={onLogout}
         canCreatePosts={canCreatePosts}
+        canCreatePages={canCreatePages}
+        canReadAnalytics={canReadAnalytics}
+        canReadPosts={canReadPosts}
+        canReadPages={canReadPages}
+        canReadTags={canReadTags}
+        canReadMedia={canReadMedia}
+        canReadMembers={canReadMembers}
+        canReadComments={canReadComments}
       />
     </div>
   );
