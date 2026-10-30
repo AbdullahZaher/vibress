@@ -184,7 +184,7 @@ export const MediaLibrary: React.FC = () => {
       )}
 
       {/* Filter Toolbar */}
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div role="group" aria-label={tr("Filter by media type")} className="flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-1">
           {["all", "image", "video", "audio", "file"].map((type) => (
             <button
@@ -201,7 +201,7 @@ export const MediaLibrary: React.FC = () => {
           ))}
         </div>
 
-        <div className="relative min-w-0 w-full lg:w-64">
+        <div className="relative min-w-0 w-full sm:w-64 xl:w-64">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
             type="text"
@@ -335,7 +335,7 @@ export const MediaLibrary: React.FC = () => {
             <form onSubmit={handleSaveDisplayName} className="space-y-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">
-                  Display Name
+                  {tr("Display Name")}
                 </label>
                 <Input
                   type="text"
@@ -347,7 +347,7 @@ export const MediaLibrary: React.FC = () => {
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">
-                  Direct URL
+                  {tr("Direct URL")}
                 </label>
                 <div className="flex items-center gap-2">
                   <Input
@@ -376,7 +376,7 @@ export const MediaLibrary: React.FC = () => {
                 </p>
                 {isLoadingRefs ? (
                   <p className="text-muted-foreground">
-                    {tr("Checking references...")}
+                    {tr("{tr("Checking references...")}")}
                   </p>
                 ) : refSummaryData?.summary ? (
                   <p className="text-muted-foreground font-mono">
@@ -384,7 +384,7 @@ export const MediaLibrary: React.FC = () => {
                   </p>
                 ) : (
                   <p className="text-muted-foreground font-mono">
-                    {tr("No usage recorded")}
+                    {tr("{tr("No usage recorded")}")}
                   </p>
                 )}
               </div>
@@ -397,7 +397,7 @@ export const MediaLibrary: React.FC = () => {
                   onClick={() => setDeleteConfirmOpen(true)}
                   className="text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
                 >
-                  <Trash2 className="h-4 w-4" /> Delete Asset
+                  <Trash2 className="h-4 w-4" /> {tr("Delete Asset")}
                 </Button>
 
                 <Button
