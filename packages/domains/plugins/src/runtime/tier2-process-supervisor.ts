@@ -116,7 +116,7 @@ export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunn
       return {
         name: "bwrap",
         executablePath: binary,
-        version: version.split("\\n")[0]?.slice(0, 128) || "detected",
+        version: version.split("\n")[0]?.slice(0, 128) || "detected",
       };
     } catch {
       // No fallback or privilege downgrade.
