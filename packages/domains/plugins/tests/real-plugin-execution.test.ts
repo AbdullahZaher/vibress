@@ -393,6 +393,43 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         .rejects.toThrowError(/UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE/);
     });
 
+    it("marks a publisher-revoked release as not admitted", () => {
+      const supervisor = new Tier2PluginSupervisor();
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.publisher-revoked-admission";
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest: "sha256:" + "c".repeat(64),
+        trustTier: "curated_operator",
+        publisherId: "publisher_compromised",
+      });
+      expect(supervisor.isAdmitted(pluginId)).toBe(true);
+      supervisor.revokePublisher("publisher_compromised");
+      expect(supervisor.isAdmitted(pluginId)).toBe(false);
+    });
+
+    it("invalidates a running trusted worker when its Host admission changes", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 3000 });
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.admission-rotation";
+      const releaseDigest = "sha256:" + "e".repeat(64);
+      const admission = { pluginId, releaseDigest, trustTier: "curated_operator" as const };
+      supervisor.admitPlugin(admission);
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_primary",
+        grantedCapabilities: [],
+        actor: { id: "staff", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+      await expect(supervisor.invoke(context, "compute", 4)).resolves.toEqual({ value: 8 });
+      expect(supervisor.getProcessState(pluginId)).not.toBeNull();
+      supervisor.admitPlugin(admission);
+      expect(supervisor.getProcessState(pluginId)).toBeNull();
+    });
+
     it("rejects untrusted release execution without a Host-approved publication", async () => {
       const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 500 });
       supervisorsToClean.push(supervisor);
