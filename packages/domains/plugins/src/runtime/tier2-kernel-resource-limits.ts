@@ -48,6 +48,28 @@ export function parseUnifiedCgroupPath(contents: string): string {
   return memberPath;
 }
 
+/**
+ * Bubblewrap emits the actual sandbox child PID through --info-fd.
+ * Its initial launcher can fork BEFORE --block-fd, so attaching only the
+ * launcher would leave this child outside the resource-limited cgroup.
+ */
+export function parseBubblewrapChildPid(contents: string): number {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(contents);
+  } catch {
+    throw new Tier2KernelResourceError("INVALID_SANDBOX_PID", "Malformed Bubblewrap child identity");
+  }
+  if (!decoded || typeof decoded !== "object" || !("child-pid" in decoded)) {
+    throw new Tier2KernelResourceError("INVALID_SANDBOX_PID", "Bubblewrap did not report a child process");
+  }
+  const pid = decoded["child-pid"];
+  if (!Number.isSafeInteger(pid) || typeof pid !== "number" || pid <= 0) {
+    throw new Tier2KernelResourceError("INVALID_SANDBOX_PID", "Bubblewrap child PID is invalid");
+  }
+  return pid;
+}
+
 function readTokens(file: string): Set<string> {
   return new Set(readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean));
 }
