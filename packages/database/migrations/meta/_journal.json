@@ -351,6 +351,13 @@
       "when": 1793156400000,
       "tag": "0049_plugin_marketplace_admissions",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793156400001,
+      "tag": "0050_plugin_marketplace_publisher_revocations",
+      "breakpoints": true
     }
   ]
 }
