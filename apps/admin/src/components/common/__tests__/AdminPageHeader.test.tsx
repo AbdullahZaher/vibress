@@ -45,7 +45,7 @@ describe("AdminPageHeader component", () => {
     const desc = container.querySelector("p");
     expect(desc).not.toBeNull();
     expect(desc?.textContent?.trim()).toBe("Manage your published posts and drafts");
-    expect(desc?.className).toContain("text-xs text-muted-foreground mt-0.5");
+    expect(desc?.className).toContain("text-sm leading-relaxed text-muted-foreground mt-1");
   });
 
   it("renders page action buttons on desktop/mobile", async () => {

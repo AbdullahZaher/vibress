@@ -16,7 +16,7 @@ export interface AdminPageHeaderProps {
  * Standardized Admin Page Header component.
  * Follows the visual reference from the Posts page header:
  * - Bold title (text-xl sm:text-2xl font-bold tracking-tight text-foreground)
- * - Muted description directly below the title (text-xs text-muted-foreground mt-0.5)
+ * - Readable muted description (text-sm leading-relaxed text-muted-foreground mt-1)
  * - No leading icon next to the page title
  * - Responsive action controls right-aligned on desktop and adapt to mobile
  */
