@@ -39,6 +39,8 @@ export interface AuthoritativePluginAdmission {
   readonly publisherId?: string | undefined;
   readonly isPublisherRevoked?: boolean | undefined;
   readonly publisherRevocationReason?: string | undefined;
+  /** Monotonically increasing revision from durable Host admission authority. */
+  readonly policyRevision?: number | undefined;
 }
 
 
@@ -49,6 +51,49 @@ export interface Tier2SandboxOptions {
   readonly crashWindowMs?: number | undefined;
   readonly workerScriptPath?: string | undefined;
   readonly authoritativeAdmissions?: readonly AuthoritativePluginAdmission[] | undefined;
+  /** Durable Host-controlled admission lookup. Mandatory for untrusted execution. */
+  readonly loadMarketplaceAdmission?: (
+    pluginId: string,
+  ) => Promise<AuthoritativePluginAdmission | null>;
+}
+
+/**
+ * Compare persisted Host admission against the previously observed policy.
+ * No callsite-provided tier or plugin ID can upgrade an admission, and a
+ * delayed DB reply cannot roll a worker back to an earlier policy revision.
+ */
+export function validateMarketplaceAdmissionRefresh(
+  pluginId: string,
+  previous: AuthoritativePluginAdmission,
+  current: AuthoritativePluginAdmission | null,
+): AuthoritativePluginAdmission {
+  if (!current || current.pluginId !== pluginId || current.trustTier !== "untrusted_marketplace") {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_ADMISSION_NOT_AUTHORIZED",
+      "Durable Host admission is absent or does not authorize this marketplace plugin",
+    );
+  }
+  if (!Number.isSafeInteger(current.policyRevision) || (current.policyRevision ?? 0) <= 0) {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_ADMISSION_REVISION_INVALID",
+      "Marketplace admission must have an authoritative positive policy revision",
+    );
+  }
+  if (previous.policyRevision !== undefined &&
+      current.policyRevision! < previous.policyRevision) {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_ADMISSION_STALE",
+      "An older Host admission revision cannot replace a newer policy",
+    );
+  }
+  if (current.policyRevision === previous.policyRevision &&
+      JSON.stringify(current) !== JSON.stringify(previous)) {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_ADMISSION_REVISION_CONFLICT",
+      "Host admission content changed without a new authoritative revision",
+    );
+  }
+  return current;
 }
 
 export interface Tier2InvocationContext {
@@ -713,6 +758,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
   private readonly maxCrashCount: number;
   private readonly crashWindowMs: number;
   private readonly workerScriptPath?: string | undefined;
+  private readonly loadMarketplaceAdmission?: Tier2SandboxOptions["loadMarketplaceAdmission"];
 
   constructor(options?: Tier2SandboxOptions) {
     super();
@@ -721,6 +767,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
     this.maxCrashCount = options?.maxCrashCount ?? 3;
     this.crashWindowMs = options?.crashWindowMs ?? 30_000;
     this.workerScriptPath = options?.workerScriptPath;
+    this.loadMarketplaceAdmission = options?.loadMarketplaceAdmission;
 
     // In dev / test mode, load verified fixture admissions
     if (process.env.NODE_ENV !== "production") {
@@ -742,7 +789,9 @@ export class Tier2PluginSupervisor extends EventEmitter {
       admission.pluginId,
       new Tier2SupervisorError("PLUGIN_ADMISSION_CHANGED", "Host plugin admission changed"),
     );
-    this.admissions.set(admission.pluginId, admission);
+    // Caller mutations and changes to returned getAdmission() objects must
+    // not silently alter the Host's authorization snapshot.
+    this.admissions.set(admission.pluginId, structuredClone(admission));
   }
 
   private cleanupPluginProcesses(pluginId: string, error: Error): void {
@@ -788,7 +837,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
   }
 
   getAdmission(pluginId: string): AuthoritativePluginAdmission | null {
-    return this.admissions.get(pluginId) ?? null;
+    const admission = this.admissions.get(pluginId);
+    return admission ? structuredClone(admission) : null;
   }
 
   isQuarantined(pluginId: string): boolean {
@@ -1462,13 +1512,54 @@ export class Tier2PluginSupervisor extends EventEmitter {
         );
       }
     }
-    verifyReleaseIntegrity(context.pluginId, context.releaseDigest, admission);
+    // A per-process Map is not durable revocation authority. For marketplace
+    // code, the Supervisor MUST consult the persisted Host policy every time
+    // it is about to execute. Its provider must independently authenticate
+    // publication/plugin ownership; the caller's IDs alone are not grants.
+    let effectiveAdmission = admission;
+    if (effectiveTrustTier === "untrusted_marketplace") {
+      if (!this.loadMarketplaceAdmission) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_ADMISSION_AUTHORITY_UNAVAILABLE",
+          "Marketplace execution requires a durable Host admission authority",
+        );
+      }
+      const refreshed = validateMarketplaceAdmissionRefresh(
+        context.pluginId,
+        admission,
+        await this.loadMarketplaceAdmission(context.pluginId),
+      );
+      if (refreshed.policyRevision !== admission.policyRevision ||
+          JSON.stringify(refreshed) !== JSON.stringify(admission)) {
+        this.admitPlugin(refreshed);
+      }
+      effectiveAdmission = this.admissions.get(context.pluginId)!;
+      if (effectiveAdmission.isRevoked || effectiveAdmission.isPublisherRevoked) {
+        this.cleanupPluginProcesses(context.pluginId, new Tier2SupervisorError(
+          "REVOKED_PLUGIN_RELEASE", "Durable Host policy revoked this plugin",
+        ));
+        throw new Tier2SupervisorError(
+          "REVOKED_PLUGIN_RELEASE", "Durable Host policy revoked this plugin",
+        );
+      }
+      if (effectiveAdmission.releaseDigest !== context.releaseDigest ||
+          !effectiveAdmission.approvedPublicationIds?.includes(context.publicationId) ||
+          !context.grantedCapabilities.every((cap) =>
+            effectiveAdmission.approvedCapabilities?.includes(cap) === true
+          )) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_ADMISSION_CHANGED",
+          "Current Host release, publication or capability grant does not match the request",
+        );
+      }
+    }
+    verifyReleaseIntegrity(context.pluginId, context.releaseDigest, effectiveAdmission);
 
     // P1: Secure entrypoint validation
     const resolvedEntrypoint = validateAndResolveEntrypoint(
       context.entrypointPath,
       context.pluginId,
-      admission,
+      effectiveAdmission,
     );
 
     // A malicious plugin may retain JavaScript module state between calls.
