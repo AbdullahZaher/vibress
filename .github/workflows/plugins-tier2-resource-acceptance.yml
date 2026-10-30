@@ -1,0 +1,38 @@
+name: Plugins Tier 2 Mandatory Kernel Resource Acceptance
+
+# This test is an explicit release/security sign-off gate, not a generic CI
+# pass. Ordinary hosted GitHub runners do not delegate writable cgroup v2
+# controllers to application processes. A secured, unprivileged runner with
+# a genuinely delegated subtree must be prepared by the operator.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-cgroup-v2:
+    name: Delegated Linux memory/CPU/PIDs adversarial containment
+    runs-on: [self-hosted, linux, vibress-tier2-cgroup-v2]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile production Tier 2 cgroup resource controller
+        run: pnpm --filter @vibress/plugins build
+
+      - name: Validate real Bubblewrap resource isolation (no mock, no skip)
+        run: node scripts/verify-tier2-kernel-quotas.mjs
