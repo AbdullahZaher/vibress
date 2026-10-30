@@ -8,6 +8,7 @@ import {
   Tier2SupervisorError,
   verifyPlatformIsolationSupport,
   verifyReleaseIntegrity,
+  tier2ProcessIsolationKey,
   detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
   type Tier2InvocationContext,
@@ -328,6 +329,31 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       expect(detectSandboxRunner("nsjail")).toBeNull();
       expect(detectSandboxRunner("/tmp/untrusted-bwrap")).toBeNull();
       expect(detectSandboxRunner("../bwrap")).toBeNull();
+    });
+
+    it("separates untrusted worker keys by publication and actor while keeping trusted compatibility", () => {
+      const base: Tier2InvocationContext = {
+        pluginId: "com.vendor.scope-probe",
+        releaseDigest: "sha256:" + "1".repeat(64),
+        publicationId: "publication_a",
+        grantedCapabilities: [],
+        actor: { id: "member_a", type: "member" },
+      };
+      const a = tier2ProcessIsolationKey(base, "untrusted_marketplace");
+      const b = tier2ProcessIsolationKey({ ...base, publicationId: "publication_b" }, "untrusted_marketplace");
+      const c = tier2ProcessIsolationKey({
+        ...base, actor: { id: "member_b", type: "member" },
+      }, "untrusted_marketplace");
+      expect(a).not.toBe(b);
+      expect(a).not.toBe(c);
+      expect(tier2ProcessIsolationKey(base, "curated_operator"))
+        .toBe(tier2ProcessIsolationKey({ ...base, publicationId: "publication_b" }, "curated_operator"));
+    });
+
+    it("keeps untrusted runtime disabled without enforceable kernel resource quotas", () => {
+      const isolation = verifyPlatformIsolationSupport("untrusted_marketplace");
+      expect(isolation.isIsolated).toBe(false);
+      expect(isolation.isolationMechanism).toBe("unsupported");
     });
 
     it("requires a functional sandbox runner rather than trusting an environment variable", () => {
