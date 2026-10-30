@@ -355,20 +355,20 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   }
 
   return (
-    <div className="relative flex flex-col h-[calc(100vh-theme(spacing.16))] w-full bg-background -mt-4">
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
       {/* Editor Header Bar */}
-      <header className="flex items-center justify-between gap-4 px-6 py-4 shrink-0 bg-background/95 backdrop-blur z-10">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-4 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/50">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onNavigate("/admin/pages")}
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             <span className="hidden sm:inline">Back to Pages</span>
           </Button>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
+          <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
             PAGE
           </span>
           <div className="h-4 w-[1px] bg-border hidden sm:block" />
@@ -391,7 +391,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           {pageId && canPublish && (
             <Button
               variant="outline"
@@ -399,7 +399,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
               onClick={handlePublishToggle}
               className="text-xs"
             >
-              {status === "published" ? "Unpublish" : "Publish Page"}
+              {status === "published" ? tr("Unpublish") : tr("Publish Page")}
             </Button>
           )}
 
@@ -423,7 +423,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       </header>
 
       {/* Main Canvas */}
-      <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 pb-32">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 py-8 sm:py-10 pb-32">
         <div className="w-full max-w-[1140px] mx-auto space-y-8">
           {autosaveState === "conflict" && (
             <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">

@@ -35,6 +35,7 @@ import {
   Settings,
   Users,
   ArrowLeftRight,
+  MoreHorizontal,
 } from "lucide-react";
 import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
@@ -824,20 +825,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   }
 
   return (
-    <div className="relative flex flex-col h-[calc(100vh-theme(spacing.16))] w-full bg-background -mt-4">
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
       {/* Editor Header Bar */}
-      <header className="flex items-center justify-between gap-4 px-6 py-4 shrink-0 bg-background/95 backdrop-blur z-10">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-4 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/50">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onNavigate("/admin/posts")}
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             <span className="hidden sm:inline">Back to Posts</span>
           </Button>
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
+          <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
             POST
           </span>
           <div className="h-4 w-[1px] bg-border hidden sm:block" />
@@ -877,13 +878,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowDiffModal(true)}
-            className="text-xs text-muted-foreground hover:text-foreground gap-1.5"
-            title="Compare Revisions"
+            className="hidden md:inline-flex text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            title={tr("Compare Revisions")}
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
             Diff
@@ -894,7 +895,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => setShowCollabPanel((prev) => !prev)}
-              className={`text-xs gap-1.5 ${
+              className={`hidden md:inline-flex text-xs gap-1.5 ${
                 showCollabPanel ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
               title="Editorial Collaboration & Presence"
@@ -904,6 +905,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             </Button>
           )}
 
+          <details className="group relative md:hidden">
+            <summary aria-label={tr("More actions")} className="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+              <MoreHorizontal className="size-5" aria-hidden="true" />
+            </summary>
+            <div className="absolute end-0 top-full z-30 mt-2 min-w-44 rounded-xl border border-border bg-popover p-1 shadow-xl">
+              <button type="button" onClick={() => setShowDiffModal(true)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-start text-sm text-popover-foreground hover:bg-muted">
+                <ArrowLeftRight className="size-4" />{tr("Compare Revisions")}
+              </button>
+              {postId && (
+                <button type="button" onClick={() => setShowCollabPanel((prev) => !prev)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-start text-sm text-popover-foreground hover:bg-muted">
+                  <Users className="size-4" />{tr("Collaborate")}
+                </button>
+              )}
+            </div>
+          </details>
           {postId && canPublish && (
             <>
               {status === "published" ? (
@@ -948,7 +964,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       </header>
 
       {/* Main Canvas */}
-      <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 pb-32">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 py-8 sm:py-10 pb-32">
         <div className="w-full max-w-[1140px] mx-auto space-y-8">
           {autosaveState === "conflict" && (
             <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
