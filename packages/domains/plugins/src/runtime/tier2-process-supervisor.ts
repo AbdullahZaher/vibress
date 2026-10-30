@@ -1093,13 +1093,37 @@ export class Tier2PluginSupervisor extends EventEmitter {
         const invocationId = envelope.correlationId || req.invocationId;
         const pending = invocationId ? active.pendingRequests.get(invocationId) : undefined;
 
-        if (pending && envelope.publicationId !== pending.context.publicationId) {
-          throw new Tier2SupervisorError("IPC_CONTEXT_MISMATCH", "Sandbox capability publication does not match the invocation");
-        }
         if (pending) {
           pending.capabilityRequestCount += 1;
           if (pending.capabilityRequestCount > 128) {
             throw new Tier2SupervisorError("IPC_MESSAGE_LIMIT", "Sandbox invocation exceeded its Host capability request limit");
+          }
+          if (envelope.publicationId !== pending.context.publicationId) {
+            // The caller-controlled envelope publication is not authority.
+            // Reject this capability request without invoking any Host handler,
+            // but return a signed response so the worker can reject the parent
+            // invocation instead of hanging until its timeout.
+            const denyEnv = signTier2IpcEnvelope({
+              id: envelope.id,
+              correlationId: envelope.correlationId,
+              pluginId: active.pluginId,
+              releaseDigest: active.releaseDigest,
+              publicationId: pending.context.publicationId,
+              type: "capability_response",
+              payload: {
+                ok: false,
+                error: {
+                  code: "CROSS_PUBLICATION_DENIED",
+                  message: "Plugin is forbidden from requesting capabilities across publication boundaries",
+                },
+              },
+            }, active.sessionKey);
+            this.sendToProcess(active, denyEnv);
+            this.emit("security_violation", {
+              pluginId: active.pluginId,
+              error: new Tier2SupervisorError("CROSS_PUBLICATION_DENIED", "Sandbox requested a foreign publication"),
+            });
+            return;
           }
         }
 
