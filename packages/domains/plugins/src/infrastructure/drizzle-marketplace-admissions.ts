@@ -88,24 +88,25 @@ export class DrizzleMarketplaceAdmissionRepository {
     pluginId: string,
     publicationId: string,
   ): Promise<AuthoritativePluginAdmission | null> {
-    const db = this.db();
-    const [row] = await db.select().from(pluginMarketplaceAdmissions)
-      .where(eq(pluginMarketplaceAdmissions.pluginId, pluginId)).limit(1);
-    if (!row) return null;
-    const admission = parseRow(row);
-    if (admission.isRevoked || !admission.approvedPublicationIds?.includes(publicationId)) {
-      return null;
-    }
-    const [state] = await db.select({ enabled: pluginPublicationStates.enabled, status: plugins.status })
-      .from(pluginPublicationStates)
-      .innerJoin(plugins, eq(plugins.id, pluginPublicationStates.pluginId))
-      .where(and(
-        eq(pluginPublicationStates.pluginId, pluginId),
+    // One PostgreSQL statement provides one consistent READ COMMITTED
+    // snapshot of the admission, plugin lifecycle and publication activation.
+    // Two independent queries could admit a revoked row using a later state.
+    const [found] = await this.db().select({ admission: pluginMarketplaceAdmissions })
+      .from(pluginMarketplaceAdmissions)
+      .innerJoin(plugins, eq(plugins.id, pluginMarketplaceAdmissions.pluginId))
+      .innerJoin(pluginPublicationStates, and(
+        eq(pluginPublicationStates.pluginId, pluginMarketplaceAdmissions.pluginId),
         eq(pluginPublicationStates.publicationId, publicationId),
         eq(pluginPublicationStates.enabled, true),
+      ))
+      .where(and(
+        eq(pluginMarketplaceAdmissions.pluginId, pluginId),
+        eq(pluginMarketplaceAdmissions.revoked, false),
         eq(plugins.status, "active"),
       )).limit(1);
-    return state?.enabled && state.status === "active" ? admission : null;
+    if (!found) return null;
+    const admission = parseRow(found.admission);
+    return admission.approvedPublicationIds?.includes(publicationId) ? admission : null;
   }
 
   /**
