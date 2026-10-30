@@ -177,24 +177,14 @@ export function verifyPlatformIsolationSupport(
   }
 
   if (trustTier === "untrusted_marketplace") {
-    const runner = detectSandboxRunner();
-    if (!runner) {
-      return {
-        isIsolated: false,
-        isolationMechanism: "unsupported",
-        details:
-          "Untrusted execution is disabled: verified Bubblewrap runner with active user/mount namespace support is unavailable on this host.",
-      };
-    }
-    // Namespace creation is only one layer. This Host does not yet
-    // attach a verified, individually delegated cgroup v2 (CPU, memory, PIDs)
-    // before starting the worker. A V8 heap cap or timeout is not a kernel
-    // resource boundary. Keep untrusted execution disabled until that
-    // controller is integrated and exercised by an end-to-end acceptance test.
+    // A detected Bubblewrap binary is not sufficient to isolate kernel
+    // resources. Until mandatory cgroup v2 quotas and their acceptance tests
+    // exist, deny immediately; running synchronous runner probes on every
+    // rejected invocation would itself expose the Host to CPU/latency DoS.
     return {
       isIsolated: false,
       isolationMechanism: "unsupported",
-      details: `Bubblewrap namespaces available (${runner.version}) but mandatory per-plugin kernel resource quotas are not certified`,
+      details: "Untrusted execution disabled pending certified per-plugin kernel CPU, memory and PID resource quotas",
     };
   }
 
