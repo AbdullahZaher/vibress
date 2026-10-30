@@ -382,6 +382,34 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         .resolves.toEqual({ activated: true });
     });
 
+    it("keeps network grants scoped to concurrent invocations", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 3000 });
+      supervisorsToClean.push(supervisor);
+      const base: Tier2InvocationContext = {
+        pluginId: "com.vibress.real-fixture-plugin",
+        releaseDigest: "sha256:1111222233334444555566667777888899990000111122223333444455556666",
+        publicationId: "pub_01",
+        grantedCapabilities: [],
+        actor: { id: "staff_01", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+      const [allowed, denied] = await Promise.all([
+        supervisor.invoke<{ denied: boolean }>(
+          { ...base, grantedCapabilities: ["extension.network"] },
+          "invoke",
+          { op: "probe_network_grant", delayMs: 30 },
+        ),
+        supervisor.invoke<{ denied: boolean }>(
+          base,
+          "invoke",
+          { op: "probe_network_grant", delayMs: 5 },
+        ),
+      ]);
+      expect(allowed.denied).toBe(false);
+      expect(denied.denied).toBe(true);
+    });
+
     it("rejects an entrypoint whose bytes differ from Host-pinned SHA-256", async () => {
       const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 500 });
       supervisorsToClean.push(supervisor);
