@@ -2,7 +2,7 @@ import { fork, spawn, execFileSync, ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, lstatSync, statSync, realpathSync } from "node:fs";
 import * as path from "node:path";
 import {
   signTier2IpcEnvelope,
@@ -313,6 +313,60 @@ export function validateAndResolveEntrypoint(
 }
 
 /**
+ * Files verified by SHA-256 must not be writable/replaced by the non-root
+ * API/Worker identity between verification and Bubblewrap's ro-bind mount.
+ * A read-only bind does not make a mutable source directory immutable.
+ *
+ * An operator must stage marketplace code in a ROOT-owned, non-writable tree
+ * (including ancestors). This rejects normal writable publication/content
+ * volumes and symlink/hardlink aliases. It is not a defense against a
+ * compromised host administrator, external mount changes or direct block I/O.
+ */
+export function assertImmutableUntrustedReleaseTree(releaseDirectory: string): void {
+  if (process.platform !== "linux" || typeof process.getuid !== "function" ||
+      process.getuid() === 0 || !path.isAbsolute(releaseDirectory)) {
+    throw new Tier2SupervisorError(
+      "UNTRUSTED_RELEASE_NOT_IMMUTABLE",
+      "Marketplace artifacts require a non-root Linux worker and an operator-owned immutable release tree",
+    );
+  }
+
+  let current = path.parse(releaseDirectory).root;
+  const parts = path.relative(current, releaseDirectory).split(path.sep).filter(Boolean);
+  const ensureOwned = (file: string, isDirectory: boolean): void => {
+    let info: ReturnType<typeof lstatSync>;
+    try { info = lstatSync(file); } catch {
+      throw new Tier2SupervisorError("UNTRUSTED_RELEASE_NOT_IMMUTABLE", "Immutable release artifact is inaccessible");
+    }
+    if (info.uid !== 0 || (info.mode & 0o022) !== 0 ||
+        (isDirectory ? !info.isDirectory() : !info.isFile() || info.nlink !== 1)) {
+      throw new Tier2SupervisorError(
+        "UNTRUSTED_RELEASE_NOT_IMMUTABLE",
+        "Marketplace artifact or ancestor is writable, linked, or not owned by the host operator",
+      );
+    }
+  };
+  ensureOwned(current, true);
+  for (const part of parts) {
+    current = path.join(current, part);
+    ensureOwned(current, true);
+  }
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        ensureOwned(full, true);
+        visit(full);
+      } else {
+        // This also rejects symlinks, devices, sockets, and hardlinked files.
+        ensureOwned(full, false);
+      }
+    }
+  };
+  visit(releaseDirectory);
+}
+
+/**
  * M8.4: Verifies the integrity of an approved release directory and all artifacts.
  * Enforces publisher revocation, release revocation, digest matching, artifact manifest
  * checksums, and protection against symlink escapes or unauthorized file injections.
@@ -446,6 +500,9 @@ export function verifyReleaseIntegrity(
             `Plugin '${pluginId}' missing required release artifact: '${required}'`,
           );
         }
+      }
+      if (admission.trustTier === "untrusted_marketplace") {
+        assertImmutableUntrustedReleaseTree(realDir);
       }
     }
   }
