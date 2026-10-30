@@ -28,6 +28,10 @@ export interface AuthoritativePluginAdmission {
   readonly entrypointSha256?: string | undefined;
   /** Optional pinned SHA-256 map of all files in the release directory. */
   readonly releaseArtifactManifest?: Readonly<Record<string, string>> | undefined;
+  /** Host-approved publication scope for independently isolated marketplace code. */
+  readonly approvedPublicationIds?: readonly string[] | undefined;
+  /** Host-approved maximum capabilities (callers may request a subset only). */
+  readonly approvedCapabilities?: readonly string[] | undefined;
   readonly isRevoked?: boolean | undefined;
   readonly revocationReason?: string | undefined;
   readonly publisherId?: string | undefined;
@@ -1173,11 +1177,29 @@ export class Tier2PluginSupervisor extends EventEmitter {
         !admission.releaseArtifactManifest ||
         Object.keys(admission.releaseArtifactManifest).length === 0 ||
         !admission.allowedEntrypoints?.length ||
-        !context.entrypointPath
+        !context.entrypointPath ||
+        !admission.approvedPublicationIds?.length ||
+        !admission.approvedCapabilities
       ) {
         throw new Tier2SupervisorError(
           "UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE",
           "Untrusted execution requires a pinned complete release manifest and approved entrypoint",
+        );
+      }
+    }
+    if (effectiveTrustTier === "untrusted_marketplace") {
+      if (!admission.approvedPublicationIds?.includes(context.publicationId)) {
+        throw new Tier2SupervisorError(
+          "PUBLICATION_NOT_ADMITTED",
+          "Untrusted plugin has no Host-approved execution grant for this publication",
+        );
+      }
+      if (!context.grantedCapabilities.every((capability) =>
+        admission.approvedCapabilities?.includes(capability) === true
+      )) {
+        throw new Tier2SupervisorError(
+          "CAPABILITY_NOT_ADMITTED",
+          "Requested capabilities exceed the Host-approved release grant",
         );
       }
     }
