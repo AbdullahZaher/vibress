@@ -83,10 +83,12 @@ function ChangeBadge({
 }
 
 function displayAnalyticsDate(value: string, locale: string) {
-  const date = new Date(value);
+  const isDateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+  const date = new Date(isDateOnly ? `${value}T00:00:00Z` : value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-ca-gregory" : "en-US", {
     day: "numeric", month: "short",
+    ...(isDateOnly ? { timeZone: "UTC" } : {}),
   }).format(date);
 }
 
@@ -106,7 +108,7 @@ function AreaChart({
   const max = Math.max(1, ...values);
   const ceiling = Math.ceil(max / 4) * 4;
   const hasData = values.some((value) => value > 0);
-  const format = (value: number) => value.toLocaleString(locale);
+  const format = (value: number) => formatNumber(value);
   const coords = values.map((value, index) => ({
     x: values.length === 1 ? 50 : (index / Math.max(1, values.length - 1)) * 100,
     y: 96 - (value / ceiling) * 90,
@@ -143,7 +145,7 @@ function AreaChart({
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
             {[0, 1, 2, 3, 4].map((tick) => <span key={tick} className="w-full border-t border-border/60" />)}
           </div>
-          <svg aria-hidden="true" className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={color} stopOpacity="0.28" />

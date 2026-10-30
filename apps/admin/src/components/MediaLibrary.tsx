@@ -41,6 +41,7 @@ export const MediaLibrary: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Detail Modal
   const [selectedAsset, setSelectedAsset] = useState<ApiMediaAsset | null>(
@@ -112,6 +113,7 @@ export const MediaLibrary: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["media"] });
       setSelectedAsset(null);
+      setDeleteConfirmOpen(false);
       setDeleteError(null);
     },
     onError: (err: unknown) => {
@@ -157,13 +159,13 @@ export const MediaLibrary: React.FC = () => {
         title={tr("Media")}
         description={tr("Upload, organize, and manage visual assets across your publication.")}
         actions={
-          <label className="inline-flex items-center justify-center rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 cursor-pointer gap-2 shadow-2xs shrink-0">
+          <label className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-2xs transition-colors hover:bg-primary/90 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring cursor-pointer gap-2 shrink-0">
             <Upload className="h-4 w-4" /> {tr("Upload Files")}
             <input
               type="file"
               multiple
               onChange={handleFileUpload}
-              className="hidden"
+              className="sr-only"
             />
           </label>
         }
@@ -182,8 +184,8 @@ export const MediaLibrary: React.FC = () => {
       )}
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div role="group" aria-label={tr("Filter by media type")} className="flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-1">
           {["all", "image", "video", "audio", "file"].map((type) => (
             <button
               key={type}
@@ -199,8 +201,8 @@ export const MediaLibrary: React.FC = () => {
           ))}
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        <div className="relative min-w-0 w-full lg:w-64">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
             type="text"
             placeholder={tr("Filter assets by filename...")}
@@ -230,21 +232,21 @@ export const MediaLibrary: React.FC = () => {
 
       {/* Content Grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center p-12 text-muted-foreground text-xs gap-2">
+        <div className="flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground" role="status" aria-live="polite">
           <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          Loading media library...
+          {tr("Loading media library...")}
         </div>
       ) : isError ? (
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs">
-          Failed to load assets: {(error as Error)?.message}
+          {tr("Failed to load assets:")} {(error as Error)?.message}
         </div>
       ) : assets.length === 0 ? (
         <Card className="p-12 text-center text-muted-foreground space-y-2 border-border/70 shadow-2xs">
           <p className="text-xs font-medium text-foreground">
-            No media assets found
+            {tr("No media assets found")}
           </p>
           <p className="text-xs text-muted-foreground">
-            Upload images, audio, or video files to populate library.
+            {tr("Upload images, audio, or video files to populate library.")}
           </p>
         </Card>
       ) : (
@@ -370,19 +372,19 @@ export const MediaLibrary: React.FC = () => {
               {/* Usage References */}
               <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1 text-xs">
                 <p className="font-semibold text-foreground">
-                  Usage References:
+                  {tr("Usage References")}:
                 </p>
                 {isLoadingRefs ? (
                   <p className="text-muted-foreground">
-                    Checking references...
+                    {tr("Checking references...")}
                   </p>
                 ) : refSummaryData?.summary ? (
                   <p className="text-muted-foreground font-mono">
-                    Used in {refSummaryData.summary.totalReferences} location(s)
+                    {tr("Used in")} {refSummaryData.summary.totalReferences} {tr("locations")}
                   </p>
                 ) : (
                   <p className="text-muted-foreground font-mono">
-                    No usage recorded
+                    {tr("No usage recorded")}
                   </p>
                 )}
               </div>
@@ -392,7 +394,7 @@ export const MediaLibrary: React.FC = () => {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => deleteMutation.mutate(selectedAsset.id)}
+                  onClick={() => setDeleteConfirmOpen(true)}
                   className="text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
                 >
                   <Trash2 className="h-4 w-4" /> Delete Asset
@@ -403,12 +405,34 @@ export const MediaLibrary: React.FC = () => {
                   size="sm"
                   className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
-                  Save Changes
+                  {tr("Save Changes")}
                 </Button>
               </div>
             </form>
           </div>
         )}
+      </Dialog>
+
+      <Dialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => { if (!deleteMutation.isPending) setDeleteConfirmOpen(false); }}
+        title={tr("Delete media asset?")}
+        description={tr("Deleting a media asset may affect content that uses it. Review usage references before confirming.")}
+        className="max-w-md"
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeleteConfirmOpen(false)}>
+            {tr("Cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deleteMutation.isPending || !selectedAsset}
+            onClick={() => { if (selectedAsset) deleteMutation.mutate(selectedAsset.id); }}
+          >
+            {deleteMutation.isPending ? tr("Processing...") : tr("Confirm delete")}
+          </Button>
+        </div>
       </Dialog>
     </div>
   );

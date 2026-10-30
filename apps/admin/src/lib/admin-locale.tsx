@@ -24,6 +24,19 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Loading media library...": "جارٍ تحميل مكتبة الوسائط...",
+  "Failed to load assets:": "تعذّر تحميل الوسائط:",
+  "Upload images, audio, or video files to populate library.": "ارفع صورًا أو ملفات صوتية أو مقاطع فيديو لإثراء المكتبة.",
+  "Delete Asset": "حذف الوسيط",
+  "Save Changes": "حفظ التغييرات",
+  "Display Name": "اسم العرض",
+  "Direct URL": "الرابط المباشر",
+  "Checking references...": "جارٍ التحقق من أماكن الاستخدام...",
+  "Used in": "مستخدم في",
+  "locations": "مواضع",
+  "No usage recorded": "لا توجد استخدامات مسجلة",
+  "Delete media asset?": "حذف هذا الوسيط؟",
+  "Deleting a media asset may affect content that uses it. Review usage references before confirming.": "قد يؤثر حذف الوسيط في المحتوى الذي يستخدمه. راجع أماكن الاستخدام قبل التأكيد.",
   "Showing": "عرض",
   "of": "من",
   "Rows per page": "عدد الصفوف في الصفحة",
