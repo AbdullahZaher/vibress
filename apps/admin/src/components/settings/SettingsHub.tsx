@@ -166,7 +166,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 key={pillar.id}
                 type="button"
                 onClick={() => scrollToSection(pillar.id, true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+                className={`flex min-h-10 items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-xs font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -187,13 +187,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("Filter settings...")}
-            className="ps-8 text-xs h-8.5 bg-card border-border/70"
+            className="ps-8 text-sm min-h-10 bg-card border-border/70"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute end-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+              aria-label={tr("Clear search")}
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>

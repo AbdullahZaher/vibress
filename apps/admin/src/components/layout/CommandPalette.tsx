@@ -358,6 +358,35 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     });
   }, [items, query]);
 
+  // Keep focus in the dialog for keyboard users and restore it on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const dialog = inputRef.current?.closest('[role="dialog"]');
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )).filter((node) => node.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", trap);
+    return () => {
+      window.removeEventListener("keydown", trap);
+      previousFocus?.focus();
+    };
+  }, [isOpen]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) {
@@ -411,10 +440,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   return createPortal(
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr("Search commands, actions, settings...")}
         className="w-full max-w-xl rounded-2xl bg-card border border-border/90 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
@@ -424,6 +457,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <Search className="h-5 w-5 text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
+            aria-label={tr("Search commands, actions, settings...")}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -433,6 +467,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {query && (
             <button
               onClick={() => setQuery("")}
+              aria-label={tr("Clear search")}
               className="text-muted-foreground hover:text-foreground p-1 rounded-sm cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
@@ -496,7 +531,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <div className="flex items-center gap-1.5 shrink-0 ms-2">
                     <span
                       className={`text-[10px] capitalize px-1.5 py-0.5 rounded ${
                         isSelected
