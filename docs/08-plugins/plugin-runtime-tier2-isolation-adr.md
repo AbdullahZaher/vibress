@@ -278,3 +278,53 @@ descriptor/excessive logging tests, and an independent security P0/P1 review.
 
 Never label M8.8 complete or activate general marketplace execution solely
 because the standard CI and Bubblewrap namespace workflows are green.
+
+
+## M8.8 — PostgreSQL-backed release and publisher revocation (2026-10-30)
+
+This section supersedes the preceding checkpoint's statement that no durable
+admission repository exists. **The new storage adapter is implemented but
+production Tier 2 integration and live process revocation remain OPEN.**
+
+- Additive migrations `0049_plugin_marketplace_admissions.sql` and
+  `0050_plugin_marketplace_publisher_revocations.sql` add versioned release
+  approvals and persistent publisher-deny tombstones. Existing installations
+  start with **zero admitted marketplace releases**: no backfill, activation
+  or legacy trust promotion. Missing rows and tables deny execution.
+- `DrizzleMarketplaceAdmissionRepository` validates the persisted JSONB
+  with Zod, binds plugin ID, publication activation and plugin lifecycle in
+  **one SQL snapshot**, and returns no grant for a foreign/disabled
+  publication, revoked release or revoked publisher. Runtime DB failures
+  propagate to Supervisor's fail-closed admission policy.
+- Offline operator-only approval uses exact `policyRevision` compare-and-swap,
+  a plugin-row lock, publisher advisory lock, publication activation checks,
+  and an audit record in the same transaction. A revoked release **cannot
+  be resurrected** through this API.
+- Publisher revocation inserts an immutable deny tombstone and atomically
+  advances/revokes all its current release approvals. Approval takes the
+  same PostgreSQL transaction-level publisher lock, preventing an approval
+  racing past a concurrent publisher ban. A new plugin ID is still denied
+  after the old plugin has been removed.
+- `createDurableMarketplaceTier2Supervisor` explicitly composes the DB
+  loader into Supervisor. This is an **opt-in Host composition**, not an
+  invitation to call an operator approval from an HTTP route or plugin.
+  On a fresh process, the Supervisor may bootstrap ONLY from the DB; it
+  checks the current revision after asynchronous lookup, rejects stale
+  results, and rechecks authorization before each Host-mediated capability
+  request. The old trusted-operator runtime remains unchanged.
+- PostgreSQL tests use two separate clients with a disposable schema to
+  exercise read-after-commit, publication isolation, revision conflicts,
+  durable revocation, publisher bans, audit atomicity and corrupt JSON.
+  They do **not** simulate two running Linux sandbox processes.
+
+**Production blockers unchanged:** API/Worker currently use the trusted
+external-plugin Host, not a validated end-to-end Tier 2 pathway. An
+operator-authenticated, attestation-checked issuance workflow must be wired
+to the DB repository (no new plugin/public HTTP approval API). Idle/live
+sandbox processes need bounded-latency cross-replica interruption in addition
+to per-request DB rechecks. The cgroup-v2 malicious workload workflow must
+pass on an actually delegated Linux host; Docker, immutable release staging,
+backup/restore, and independent P0/P1 security sign-off remain required.
+
+The standard CI and Bubblewrap namespace acceptance are **not** authority
+to mark the plugin platform or Marketplace general availability complete.
