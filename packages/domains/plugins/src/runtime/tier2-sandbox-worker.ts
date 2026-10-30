@@ -15,13 +15,16 @@ if (!sessionKey || !pluginId || !releaseDigest) {
 }
 
 import * as net from "node:net";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-let currentGrantedCapabilities: readonly string[] = [];
+// Prevent concurrent invocations from exchanging network grants through shared state.
+// This is defense-in-depth for trusted plugins, not a kernel sandbox.
+const invocationGrants = new AsyncLocalStorage<readonly string[]>();
 
 // Intercept outbound direct network sockets: disallow unless granted "extension.network"
 const originalSocketConnect = net.Socket.prototype.connect;
 (net.Socket.prototype as any).connect = function (this: net.Socket, ...args: any[]) {
-  if (!currentGrantedCapabilities.includes("extension.network")) {
+  if (!invocationGrants.getStore()?.includes("extension.network")) {
     const err = new Error("DIRECT_NETWORK_ACCESS_DENIED: Outbound network connections are forbidden without Host-granted 'extension.network' capability");
     (err as any).code = "ECONNREFUSED";
     process.nextTick(() => {
@@ -35,7 +38,7 @@ const originalSocketConnect = net.Socket.prototype.connect;
 if (typeof globalThis.fetch === "function") {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
-    if (!currentGrantedCapabilities.includes("extension.network")) {
+    if (!invocationGrants.getStore()?.includes("extension.network")) {
       return Promise.reject(new Error("DIRECT_NETWORK_ACCESS_DENIED: Outbound fetch is forbidden without Host-granted 'extension.network' capability"));
     }
     return originalFetch(input, init);
@@ -162,7 +165,7 @@ process.on("message", async (rawMsg: unknown) => {
         data: unknown;
         grantedCapabilities?: string[];
       };
-      currentGrantedCapabilities = grantedCapabilities;
+      return invocationGrants.run(grantedCapabilities, async () => {
       let result: unknown;
 
       await ensurePluginLoaded();
@@ -265,6 +268,7 @@ process.on("message", async (rawMsg: unknown) => {
       if (process.send) {
         process.send(responseEnv);
       }
+      });
     }
   } catch (error: unknown) {
     // If an error occurred during invoke, send an error response if possible
