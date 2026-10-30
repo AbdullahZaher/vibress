@@ -1683,10 +1683,10 @@ importers:
     dependencies:
       '@lexical/rich-text':
         specifier: 0.13.1
-        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.13.1(lexical@0.13.1))(@lexical/utils@0.52.0(typescript@5.9.3))(lexical@0.13.1)
+        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(@lexical/utils@0.52.0(typescript@5.9.3))(lexical@0.13.1)
       '@lexical/selection':
-        specifier: 0.13.1
-        version: 0.13.1(lexical@0.13.1)
+        specifier: 0.52.0
+        version: 0.52.0(typescript@5.9.3)
       '@lexical/utils':
         specifier: 0.52.0
         version: 0.52.0(typescript@5.9.3)
@@ -1835,16 +1835,16 @@ importers:
         version: 0.13.1(lexical@0.13.1)
       '@lexical/markdown':
         specifier: 0.13.1
-        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.13.1(lexical@0.13.1))(lexical@0.13.1)
+        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(lexical@0.13.1)
       '@lexical/react':
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.32)
       '@lexical/rich-text':
         specifier: 0.13.1
-        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.13.1(lexical@0.13.1))(@lexical/utils@0.52.0(typescript@5.9.3))(lexical@0.13.1)
+        version: 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(@lexical/utils@0.52.0(typescript@5.9.3))(lexical@0.13.1)
       '@lexical/selection':
-        specifier: 0.13.1
-        version: 0.13.1(lexical@0.13.1)
+        specifier: 0.52.0
+        version: 0.52.0(typescript@5.9.3)
       '@lexical/table':
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
@@ -9105,6 +9105,19 @@ snapshots:
       - '@lexical/clipboard'
       - '@lexical/selection'
 
+  '@lexical/markdown@0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(lexical@0.13.1)':
+    dependencies:
+      '@lexical/code': 0.13.1(lexical@0.13.1)
+      '@lexical/link': 0.13.1(lexical@0.13.1)
+      '@lexical/list': 0.13.1(lexical@0.13.1)
+      '@lexical/rich-text': 0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(@lexical/utils@0.13.1(lexical@0.13.1))(lexical@0.13.1)
+      '@lexical/text': 0.13.1(lexical@0.13.1)
+      '@lexical/utils': 0.13.1(lexical@0.13.1)
+      lexical: 0.13.1
+    transitivePeerDependencies:
+      - '@lexical/clipboard'
+      - '@lexical/selection'
+
   '@lexical/offset@0.13.1(lexical@0.13.1)':
     dependencies:
       lexical: 0.13.1
@@ -9157,6 +9170,20 @@ snapshots:
     dependencies:
       '@lexical/clipboard': 0.13.1(lexical@0.13.1)
       '@lexical/selection': 0.13.1(lexical@0.13.1)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      lexical: 0.13.1
+
+  '@lexical/rich-text@0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(@lexical/utils@0.13.1(lexical@0.13.1))(lexical@0.13.1)':
+    dependencies:
+      '@lexical/clipboard': 0.13.1(lexical@0.13.1)
+      '@lexical/selection': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.13.1(lexical@0.13.1)
+      lexical: 0.13.1
+
+  '@lexical/rich-text@0.13.1(@lexical/clipboard@0.13.1(lexical@0.13.1))(@lexical/selection@0.52.0(typescript@5.9.3))(@lexical/utils@0.52.0(typescript@5.9.3))(lexical@0.13.1)':
+    dependencies:
+      '@lexical/clipboard': 0.13.1(lexical@0.13.1)
+      '@lexical/selection': 0.52.0(typescript@5.9.3)
       '@lexical/utils': 0.52.0(typescript@5.9.3)
       lexical: 0.13.1
 

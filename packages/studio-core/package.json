@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@lexical/rich-text": "0.13.1",
-    "@lexical/selection": "0.13.1",
+    "@lexical/selection": "0.52.0",
     "@lexical/utils": "0.52.0",
     "@vibress/studio-utils": "workspace:*",
     "lexical": "0.13.1",
