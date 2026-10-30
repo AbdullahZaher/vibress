@@ -9,6 +9,7 @@ import {
   verifyPlatformIsolationSupport,
   verifyReleaseIntegrity,
   assertImmutableUntrustedReleaseTree,
+  validateMarketplaceAdmissionRefresh,
   tier2ProcessIsolationKey,
   detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
@@ -444,6 +445,66 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       expect(supervisor.getProcessState(pluginId)).not.toBeNull();
       supervisor.admitPlugin(admission);
       expect(supervisor.getProcessState(pluginId)).toBeNull();
+    });
+
+    it("requires monotonically versioned durable Marketplace approval, not a local Map", () => {
+      const pluginId = "com.vendor.marketplace-revision";
+      const previous = {
+        pluginId,
+        releaseDigest: "sha256:" + "a".repeat(64),
+        trustTier: "untrusted_marketplace" as const,
+        policyRevision: 3,
+        approvedPublicationIds: ["pub_one"],
+        approvedCapabilities: ["extension.storage.read"],
+      };
+      expect(validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        policyRevision: 4,
+      }).policyRevision).toBe(4);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, null))
+        .toThrowError(/UNTRUSTED_ADMISSION_NOT_AUTHORIZED/);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        pluginId: "com.vendor.foreign",
+      })).toThrowError(/UNTRUSTED_ADMISSION_NOT_AUTHORIZED/);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        trustTier: "curated_operator",
+      })).toThrowError(/UNTRUSTED_ADMISSION_NOT_AUTHORIZED/);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        policyRevision: 2,
+      })).toThrowError(/UNTRUSTED_ADMISSION_STALE/);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        approvedCapabilities: ["extension.secrets.read"],
+      })).toThrowError(/UNTRUSTED_ADMISSION_REVISION_CONFLICT/);
+      expect(() => validateMarketplaceAdmissionRefresh(pluginId, previous, {
+        ...previous,
+        policyRevision: 0,
+      })).toThrowError(/UNTRUSTED_ADMISSION_REVISION_INVALID/);
+    });
+
+    it("keeps Host admission snapshots isolated from caller mutations", () => {
+      const supervisor = new Tier2PluginSupervisor();
+      supervisorsToClean.push(supervisor);
+      const approvedPublicationIds = ["pub_safe"];
+      const admission = {
+        pluginId: "com.vendor.snapshot-probe",
+        releaseDigest: "sha256:" + "9".repeat(64),
+        trustTier: "untrusted_marketplace" as const,
+        approvedPublicationIds,
+      };
+      supervisor.admitPlugin(admission);
+      approvedPublicationIds.push("pub_foreign");
+      expect(supervisor.getAdmission(admission.pluginId)?.approvedPublicationIds)
+        .toEqual(["pub_safe"]);
+      const exposed = supervisor.getAdmission(admission.pluginId);
+      if (exposed?.approvedPublicationIds && Array.isArray(exposed.approvedPublicationIds)) {
+        exposed.approvedPublicationIds.push("pub_unapproved");
+      }
+      expect(supervisor.getAdmission(admission.pluginId)?.approvedPublicationIds)
+        .toEqual(["pub_safe"]);
     });
 
     it("rejects untrusted release execution without a Host-approved publication", async () => {
