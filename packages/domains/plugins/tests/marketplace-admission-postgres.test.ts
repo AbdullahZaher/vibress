@@ -136,11 +136,28 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
         "INSERT INTO plugin_publication_states(plugin_id,publication_id,enabled) VALUES ($1,$2,true)",
         [pluginAfterRevocation, pubA],
       );
-      // The durable tombstone revokes the publisher, not only one plugin ID.
-      expect(await b.revokeOperatorPublisher("publisher_verified", audit, "compromised")).toBe(0);
-      expect(await a.revokeOperatorPublisher("publisher_verified", audit)).toBe(0);
-      await expect(a.approveOperatorRelease({
+      const otherApproved = await a.approveOperatorRelease({
         ...policy, pluginId: pluginAfterRevocation,
+      }, 0, audit);
+      expect(otherApproved.policyRevision).toBe(1);
+      // The durable tombstone revokes EVERY approved release of this publisher.
+      expect(await b.revokeOperatorPublisher("publisher_verified", audit, "compromised")).toBe(1);
+      expect(await a.revokeOperatorPublisher("publisher_verified", audit)).toBe(0);
+      expect(await a.loadMarketplaceAdmission(pluginAfterRevocation, pubA)).toBeNull();
+      const publisherRevoked = await clientA.query(
+        "SELECT policy_revision, revoked FROM plugin_marketplace_admissions WHERE plugin_id=$1",
+        [pluginAfterRevocation],
+      );
+      expect(publisherRevoked.rows[0]).toMatchObject({ policy_revision: "2", revoked: true });
+
+      const newPluginAfterBan = randomUUID();
+      await clientA.query("INSERT INTO plugins(id,status) VALUES ($1,'active')", [newPluginAfterBan]);
+      await clientA.query(
+        "INSERT INTO plugin_publication_states(plugin_id,publication_id,enabled) VALUES ($1,$2,true)",
+        [newPluginAfterBan, pubA],
+      );
+      await expect(a.approveOperatorRelease({
+        ...policy, pluginId: newPluginAfterBan,
       }, 0, audit)).rejects.toMatchObject({ code: "MARKETPLACE_PUBLISHER_REVOKED" });
       expect(await b.loadMarketplaceAdmission(pluginId, pubA)).toBeNull();
 
@@ -151,6 +168,7 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
         "plugin.marketplace_admission_approved",
         "plugin.marketplace_admission_approved",
         "plugin.marketplace_admission_revoked",
+        "plugin.marketplace_admission_approved",
         "plugin.marketplace_publisher_revoked",
       ]);
 
