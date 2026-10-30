@@ -330,10 +330,14 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       expect(detectSandboxRunner("../bwrap")).toBeNull();
     });
 
-    it("never treats runner detection as proof of certified containment", () => {
+    it("requires a functional sandbox runner rather than trusting an environment variable", () => {
       const isolation = verifyPlatformIsolationSupport("untrusted_marketplace");
-      expect(isolation.isIsolated).toBe(false);
-      expect(isolation.isolationMechanism).toBe("unsupported");
+      if (isolation.isIsolated) {
+        expect(isolation.isolationMechanism).toBe("sandbox_runner");
+        expect(detectSandboxRunner()).not.toBeNull();
+      } else {
+        expect(isolation.isolationMechanism).toBe("unsupported");
+      }
     });
 
     it("rejects revoked and mismatched untrusted releases before sandbox admission", async () => {
@@ -360,7 +364,54 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       await expect(supervisor.invoke({ ...context, releaseDigest: "sha256:" + "b".repeat(64) }, "echo", {}))
         .rejects.toThrowError(/RELEASE_DIGEST_MISMATCH/);
       await expect(supervisor.invoke(context, "echo", {}))
-        .rejects.toThrowError(/UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/);
+        .rejects.toThrowError(/UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE/);
+    });
+
+    it("rejects untrusted release execution without a Host-approved publication", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 500 });
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.untrusted-publication-bound";
+      const releaseDigest = "sha256:" + "f".repeat(64);
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "untrusted_marketplace",
+        releaseDirectory: path.dirname(fixtureEntrypoint),
+        allowedEntrypoints: [fixtureEntrypoint],
+        releaseArtifactManifest: {
+          "index.js": createHash("sha256").update(readFileSync(fixtureEntrypoint)).digest("hex"),
+        },
+        approvedPublicationIds: ["pub_owner"],
+        approvedCapabilities: ["extension.storage.read"],
+      });
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_foreign",
+        grantedCapabilities: [],
+        actor: { id: "member_01", type: "member" },
+        trustTier: "untrusted_marketplace",
+        entrypointPath: fixtureEntrypoint,
+      };
+      await expect(supervisor.invoke(context, "echo", {}))
+        .rejects.toThrowError(/PUBLICATION_NOT_ADMITTED/);
+      await expect(supervisor.invoke({
+        ...context,
+        publicationId: "pub_owner",
+        grantedCapabilities: ["extension.storage.write"],
+      }, "echo", {})).rejects.toThrowError(/CAPABILITY_NOT_ADMITTED/);
+    });
+
+    it("rejects untrusted release manifests with unsafe relative paths", () => {
+      const pluginId = "com.vendor.bad-manifest";
+      const releaseDigest = "sha256:" + "a".repeat(64);
+      expect(() => verifyReleaseIntegrity(pluginId, releaseDigest, {
+        pluginId,
+        releaseDigest,
+        trustTier: "untrusted_marketplace",
+        releaseDirectory: path.dirname(fixtureEntrypoint),
+        releaseArtifactManifest: { "../index.js": "a".repeat(64) },
+      })).toThrowError(/INVALID_RELEASE_ARTIFACT_MANIFEST/);
     });
 
     it("executes the operator-approved entrypoint when its SHA-256 matches", async () => {
@@ -446,7 +497,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         .rejects.toThrowError(/ENTRYPOINT_INTEGRITY_MISMATCH/);
     });
 
-    it("Test A: rejects untrusted execution when fake sandbox runner env var is configured without binary", async () => {
+    it("Test A: rejects an unadmitted release even when a fake sandbox runner is configured", async () => {
       // Prompt Section 3 / 8: Setting VIBRESS_TIER2_SANDBOX_RUNNER=gvisor without a functioning runner MUST fail-closed.
       process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
       try {
@@ -466,7 +517,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         };
 
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-          /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+          /PLUGIN_NOT_ADMITTED/i,
         );
       } finally {
         delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
@@ -488,7 +539,20 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
           grantedCapabilities: [],
           actor: { id: "test", type: "anonymous" },
           trustTier: "untrusted_marketplace",
+          entrypointPath: fixtureEntrypoint,
         };
+        supervisor.admitPlugin({
+          pluginId: context.pluginId,
+          releaseDigest: context.releaseDigest,
+          trustTier: "untrusted_marketplace",
+          releaseDirectory: path.dirname(fixtureEntrypoint),
+          allowedEntrypoints: [fixtureEntrypoint],
+          releaseArtifactManifest: {
+            "index.js": createHash("sha256").update(readFileSync(fixtureEntrypoint)).digest("hex"),
+          },
+          approvedPublicationIds: [context.publicationId],
+          approvedCapabilities: [],
+        });
 
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
           /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
@@ -577,7 +641,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       });
       supervisorsToClean.push(supervisor);
 
-      // 1. Missing trust tier on unadmitted plugin -> defaults to untrusted and fails closed
+      // 1. Missing admission rejects execution before sandbox selection
       const unadmittedContext: Tier2InvocationContext = {
         pluginId: "com.attacker.unadmitted-plugin",
         releaseDigest: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -586,7 +650,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         actor: { id: "attacker", type: "anonymous" },
       };
       await expect(supervisor.invoke(unadmittedContext, "echo", "hi")).rejects.toThrowError(
-        /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+        /PLUGIN_NOT_ADMITTED/i,
       );
 
       // 2. Forged trust tier: caller claims curated_operator for unadmitted plugin -> rejected
