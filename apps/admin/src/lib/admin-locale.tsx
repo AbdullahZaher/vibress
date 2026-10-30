@@ -24,6 +24,8 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Descending": "تنازلي",
+  "Ascending": "تصاعدي",
   "Loading media library...": "جارٍ تحميل مكتبة الوسائط...",
   "Failed to load assets:": "تعذّر تحميل الوسائط:",
   "Upload images, audio, or video files to populate library.": "ارفع صورًا أو ملفات صوتية أو مقاطع فيديو لإثراء المكتبة.",

@@ -29,7 +29,17 @@ import {
   Search,
 } from "lucide-react";
 
-export const MediaLibrary: React.FC = () => {
+interface MediaLibraryProps {
+  canUpload?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+}
+
+export const MediaLibrary: React.FC<MediaLibraryProps> = ({
+  canUpload = false,
+  canEdit = false,
+  canDelete = false,
+}) => {
   const { tr } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -158,7 +168,7 @@ export const MediaLibrary: React.FC = () => {
       <AdminPageHeader
         title={tr("Media")}
         description={tr("Upload, organize, and manage visual assets across your publication.")}
-        actions={
+        actions={canUpload ? (
           <label className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-2xs transition-colors hover:bg-primary/90 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring cursor-pointer gap-2 shrink-0">
             <Upload className="h-4 w-4" /> {tr("Upload Files")}
             <input
@@ -168,7 +178,7 @@ export const MediaLibrary: React.FC = () => {
               className="sr-only"
             />
           </label>
-        }
+        ) : undefined}
       />
 
       {uploadError && (
@@ -204,7 +214,7 @@ export const MediaLibrary: React.FC = () => {
         <div className="relative min-w-0 w-full sm:w-64 xl:w-64">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
-            type="text"
+            type="search"
             placeholder={tr("Filter assets by filename...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -226,7 +236,7 @@ export const MediaLibrary: React.FC = () => {
           </select>
         </label>
         <Button type="button" variant="outline" className="min-h-11" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")}>
-          {sortOrder === "desc" ? tr("Newest first") : tr("Oldest first")}
+          {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
         </Button>
       </div>
 
@@ -341,7 +351,8 @@ export const MediaLibrary: React.FC = () => {
                   type="text"
                   value={displayNameDraft}
                   onChange={(e) => setDisplayNameDraft(e.target.value)}
-                  className="h-8 text-xs bg-card border-border"
+                  readOnly={!canEdit}
+                  className="h-11 text-sm bg-card border-border"
                 />
               </div>
 
@@ -389,32 +400,38 @@ export const MediaLibrary: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex justify-between items-center pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDeleteConfirmOpen(true)}
-                  className="text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
-                >
-                  <Trash2 className="h-4 w-4" /> {tr("Delete Asset")}
-                </Button>
-
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  {tr("Save Changes")}
-                </Button>
-              </div>
+              {(canDelete || canEdit) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="min-h-11 gap-1 text-sm text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" /> {tr("Delete Asset")}
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="min-h-11 text-sm font-semibold"
+                      disabled={updateMutation.isPending}
+                    >
+                      {updateMutation.isPending ? tr("Saving...") : tr("Save Changes")}
+                    </Button>
+                  )}
+                </div>
+              )}
             </form>
           </div>
         )}
       </Dialog>
 
       <Dialog
-        isOpen={deleteConfirmOpen}
+        isOpen={canDelete && deleteConfirmOpen}
         onClose={() => { if (!deleteMutation.isPending) setDeleteConfirmOpen(false); }}
         title={tr("Delete media asset?")}
         description={tr("Deleting a media asset may affect content that uses it. Review usage references before confirming.")}
@@ -427,7 +444,7 @@ export const MediaLibrary: React.FC = () => {
           <Button
             type="button"
             variant="destructive"
-            disabled={deleteMutation.isPending || !selectedAsset}
+            disabled={!canDelete || deleteMutation.isPending || !selectedAsset}
             onClick={() => { if (selectedAsset) deleteMutation.mutate(selectedAsset.id); }}
           >
             {deleteMutation.isPending ? tr("Processing...") : tr("Confirm delete")}

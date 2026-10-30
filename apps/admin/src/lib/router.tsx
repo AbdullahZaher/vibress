@@ -508,7 +508,14 @@ export const adminRoutes: AdminRouteDefinition[] = [
   {
     pattern: "/admin/media",
     exact: false,
-    render: () => <MediaLibrary />,
+    requiredPermission: "media.read",
+    render: ({ can }) => (
+      <MediaLibrary
+        canUpload={can("media.upload")}
+        canEdit={can("media.edit")}
+        canDelete={can("media.delete")}
+      />
+    ),
   },
   {
     pattern: "/admin/members",

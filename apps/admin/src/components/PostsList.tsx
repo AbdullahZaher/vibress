@@ -309,7 +309,7 @@ export const PostsList: React.FC<PostsListProps> = ({
               </select>
             </label>
             <Button type="button" variant="outline" className="min-h-11 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
-              {sortOrder === "desc" ? tr("Newest first") : tr("Oldest first")}
+              {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
             </Button>
           </div>
         </div>
