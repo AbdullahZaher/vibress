@@ -55,6 +55,7 @@ export interface Tier2SandboxOptions {
   /** Durable Host-controlled admission lookup. Mandatory for untrusted execution. */
   readonly loadMarketplaceAdmission?: (
     pluginId: string,
+    publicationId: string,
   ) => Promise<AuthoritativePluginAdmission | null>;
 }
 
@@ -1420,6 +1421,46 @@ export class Tier2PluginSupervisor extends EventEmitter {
           return;
         }
 
+        // A revocation can commit while an invocation is running. Do not
+        // dispatch a Host capability based on admission captured at start.
+        // Re-read the durable authority for EVERY untrusted Host-side effect.
+        if (active.trustTier === "untrusted_marketplace") {
+          if (!this.loadMarketplaceAdmission) {
+            throw new Tier2SupervisorError(
+              "UNTRUSTED_ADMISSION_AUTHORITY_UNAVAILABLE",
+              "Durable marketplace admission authority is mandatory for Host capabilities",
+            );
+          }
+          const latest = this.admissions.get(active.pluginId);
+          if (!latest) {
+            throw new Tier2SupervisorError("UNTRUSTED_ADMISSION_NOT_AUTHORIZED", "Marketplace admission disappeared");
+          }
+          const current = validateMarketplaceAdmissionRefresh(
+            active.pluginId,
+            latest,
+            await this.loadMarketplaceAdmission(active.pluginId, pending.context.publicationId),
+          );
+          if (current.isRevoked || current.isPublisherRevoked ||
+              current.releaseDigest !== pending.context.releaseDigest ||
+              !current.approvedPublicationIds?.includes(pending.context.publicationId) ||
+              !pending.context.grantedCapabilities.every((cap) =>
+                current.approvedCapabilities?.includes(cap) === true
+              )) {
+            throw new Tier2SupervisorError(
+              "UNTRUSTED_ADMISSION_CHANGED",
+              "Durable Host grant was revoked or changed during invocation",
+            );
+          }
+          if (current.policyRevision !== latest.policyRevision ||
+              !isDeepStrictEqual(current, latest)) {
+            this.admitPlugin(current);
+            throw new Tier2SupervisorError(
+              "UNTRUSTED_ADMISSION_CHANGED",
+              "Marketplace admission changed; the worker must be restarted",
+            );
+          }
+        }
+
         const capContext: Tier2CapabilityContext = {
           pluginId: pending.context.pluginId,
           publicationId: pending.context.publicationId,
@@ -1582,7 +1623,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
       let refreshed: AuthoritativePluginAdmission;
       let latestObserved: AuthoritativePluginAdmission;
       try {
-        const returned = await this.loadMarketplaceAdmission(context.pluginId);
+        const returned = await this.loadMarketplaceAdmission(context.pluginId, context.publicationId);
         // Concurrent invocations can complete DB reads out of order. Always
         // compare a reply with the CURRENT observed revision after await,
         // never against a snapshot captured before awaiting the database.
