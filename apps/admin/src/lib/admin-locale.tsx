@@ -24,6 +24,18 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "You do not have permission to manage members.": "لا تملك صلاحية إدارة الأعضاء.",
+  "Member account disabled.": "تم تعطيل حساب العضو.",
+  "Member account enabled.": "تم تفعيل حساب العضو.",
+  "Revoked": "تم إلغاء",
+  "active sessions": "جلسة نشطة",
+  "Unable to revoke member sessions.": "تعذّر إلغاء جلسات العضو.",
+  "Disable member account?": "تعطيل حساب العضو؟",
+  "Enable member account?": "تفعيل حساب العضو؟",
+  "Revoke all member sessions?": "إلغاء جميع جلسات العضو؟",
+  "The member will no longer be able to sign in.": "لن يتمكن العضو من تسجيل الدخول بعد الآن.",
+  "The member will be able to sign in again.": "سيتمكن العضو من تسجيل الدخول مجددًا.",
+  "All active sessions for this member will be invalidated.": "سيتم إنهاء جميع الجلسات النشطة لهذا العضو.",
   "Verify media references before deleting.": "تحقق من أماكن استخدام الوسيط قبل حذفه.",
   "You do not have permission to upload media.": "لا تملك صلاحية رفع الوسائط.",
   "You do not have permission to edit media.": "لا تملك صلاحية تعديل الوسائط.",

@@ -28,8 +28,12 @@ import { Dialog } from "./ui/dialog";
 import { Avatar } from "./ui/avatar";
 import { Users, Search, UserX, UserCheck, ShieldAlert } from "lucide-react";
 
-export const MembersList: React.FC = () => {
-  const { tr } = useAdminLocale();
+interface MembersListProps {
+  canManage?: boolean;
+}
+
+export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) => {
+  const { tr, formatDate } = useAdminLocale();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -37,6 +41,8 @@ export const MembersList: React.FC = () => {
   >("all");
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"enable" | "disable" | "revoke" | null>(null);
 
   const queryParams: { search?: string; status?: string; limit?: number } = {
     limit: 50,
@@ -62,13 +68,18 @@ export const MembersList: React.FC = () => {
   });
 
   const disableMutation = useMutation({
-    mutationFn: (id: string) => disableMemberApi(id),
+    mutationFn: (id: string) => {
+      if (!canManage) throw new Error(tr("You do not have permission to manage members."));
+      return disableMemberApi(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["members"] });
       queryClient.invalidateQueries({
         queryKey: ["member-detail", selectedMemberId],
       });
       setActionError(null);
+      setActionSuccess(tr("Member account disabled."));
+      setPendingAction(null);
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -77,13 +88,18 @@ export const MembersList: React.FC = () => {
   });
 
   const enableMutation = useMutation({
-    mutationFn: (id: string) => enableMemberApi(id),
+    mutationFn: (id: string) => {
+      if (!canManage) throw new Error(tr("You do not have permission to manage members."));
+      return enableMemberApi(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["members"] });
       queryClient.invalidateQueries({
         queryKey: ["member-detail", selectedMemberId],
       });
       setActionError(null);
+      setActionSuccess(tr("Member account enabled."));
+      setPendingAction(null);
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -92,12 +108,20 @@ export const MembersList: React.FC = () => {
   });
 
   const revokeMutation = useMutation({
-    mutationFn: (id: string) => revokeMemberSessionsApi(id),
+    mutationFn: (id: string) => {
+      if (!canManage) throw new Error(tr("You do not have permission to manage members."));
+      return revokeMemberSessionsApi(id);
+    },
     onSuccess: (res) => {
-      alert(`Revoked ${res.revokedCount} active session(s).`);
+      setActionSuccess(`${tr("Revoked")} ${res.revokedCount} ${tr("active sessions")}.`);
+      setPendingAction(null);
+      setActionError(null);
       queryClient.invalidateQueries({
         queryKey: ["member-detail", selectedMemberId],
       });
+    },
+    onError: (err: unknown) => {
+      setActionError(err instanceof Error ? err.message : tr("Unable to revoke member sessions."));
     },
   });
 
@@ -114,19 +138,24 @@ export const MembersList: React.FC = () => {
       />
 
       {actionError && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
           {actionError}
+        </div>
+      )}
+      {actionSuccess && (
+        <div role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+          {actionSuccess}
         </div>
       )}
 
       {/* Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
           {(["all", "active", "disabled"] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setStatusFilter(filter)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
+              className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium capitalize transition-all cursor-pointer ${
                 statusFilter === filter
                   ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
@@ -140,11 +169,12 @@ export const MembersList: React.FC = () => {
         <div className="relative w-full sm:w-64">
           <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            type="text"
+            type="search"
             placeholder={tr("Search by email or name...")}
+            aria-label={tr("Search by email or name...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="ps-8 h-8 text-xs bg-card border-border/70"
+            className="h-11 ps-9 text-sm bg-card border-border/70"
           />
         </div>
       </div>
@@ -233,11 +263,7 @@ export const MembersList: React.FC = () => {
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground font-mono">
-                    {new Date(member.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {formatDate(member.createdAt, { month: "short", day: "numeric", year: "numeric" })}
                   </TableCell>
 
                   <TableCell className="text-end pe-6">
@@ -245,7 +271,7 @@ export const MembersList: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => setSelectedMemberId(member.id)}
-                      className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground cursor-pointer"
+                      className="min-h-11 text-sm border-border bg-card hover:bg-accent text-foreground cursor-pointer"
                     >
                       Manage
                     </Button>
@@ -322,7 +348,7 @@ export const MembersList: React.FC = () => {
             </div>
 
             {/* Account Moderation Actions */}
-            <div className="space-y-2 pt-2 border-t border-border">
+            {canManage && <div className="space-y-2 pt-2 border-t border-border">
               <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Account Actions
               </h4>
@@ -330,7 +356,7 @@ export const MembersList: React.FC = () => {
                 {memberDetail.disabledAt !== null ? (
                   <Button
                     size="sm"
-                    onClick={() => enableMutation.mutate(memberDetail.id)}
+                    onClick={() => setPendingAction("enable")}
                     className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     <UserCheck className="h-3.5 w-3.5" /> Enable Account
@@ -339,7 +365,7 @@ export const MembersList: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => disableMutation.mutate(memberDetail.id)}
+                    onClick={() => setPendingAction("disable")}
                     className="h-8 text-xs font-semibold gap-1.5 text-red-600 dark:text-red-400 border-red-500/20 hover:bg-red-500/10"
                   >
                     <UserX className="h-3.5 w-3.5" /> Disable Account
@@ -349,15 +375,40 @@ export const MembersList: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => revokeMutation.mutate(memberDetail.id)}
+                  onClick={() => setPendingAction("revoke")}
                   className="h-8 text-xs font-semibold gap-1.5 border-border bg-card hover:bg-accent text-foreground"
                 >
                   <ShieldAlert className="h-3.5 w-3.5" /> Revoke All Sessions
                 </Button>
               </div>
-            </div>
+            </div>}
           </div>
         ) : null}
+      </Dialog>
+
+      <Dialog
+        isOpen={!!pendingAction}
+        onClose={() => setPendingAction(null)}
+        title={tr(pendingAction === "disable" ? "Disable member account?" : pendingAction === "enable" ? "Enable member account?" : "Revoke all member sessions?")}
+        description={tr(pendingAction === "disable" ? "The member will no longer be able to sign in." : pendingAction === "enable" ? "The member will be able to sign in again." : "All active sessions for this member will be invalidated.")}
+        className="max-w-md"
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" disabled={disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending} onClick={() => setPendingAction(null)}>{tr("Cancel")}</Button>
+          <Button
+            type="button"
+            variant={pendingAction === "disable" ? "destructive" : "default"}
+            disabled={!canManage || disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending}
+            onClick={() => {
+              if (!memberDetail || !pendingAction || !canManage) return;
+              if (pendingAction === "disable") disableMutation.mutate(memberDetail.id);
+              else if (pendingAction === "enable") enableMutation.mutate(memberDetail.id);
+              else revokeMutation.mutate(memberDetail.id);
+            }}
+          >
+            {(disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending) ? tr("Processing...") : tr("Confirm")}
+          </Button>
+        </div>
       </Dialog>
     </div>
   );

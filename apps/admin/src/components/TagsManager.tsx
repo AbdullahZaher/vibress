@@ -12,6 +12,7 @@ import {
   CardContent,
 } from "./ui/card";
 import { Input } from "./ui/input";
+import { Dialog } from "./ui/dialog";
 import {
   Table,
   TableHeader,
@@ -29,7 +30,17 @@ interface Tag {
   description: string | null;
 }
 
-export const TagsManager: React.FC = () => {
+interface TagsManagerProps {
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+}
+
+export const TagsManager: React.FC<TagsManagerProps> = ({
+  canCreate = false,
+  canEdit = false,
+  canDelete = false,
+}) => {
   const { tr } = useAdminLocale();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +48,8 @@ export const TagsManager: React.FC = () => {
   const [description, setDescription] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchTags = async () => {
     setLoading(true);
@@ -59,7 +72,7 @@ export const TagsManager: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    if (!name.trim()) return;
+    if (!name.trim() || (editingId ? !canEdit : !canCreate)) return;
 
     try {
       if (editingId) {
@@ -84,19 +97,28 @@ export const TagsManager: React.FC = () => {
   };
 
   const handleEdit = (tag: Tag) => {
+    if (!canEdit) return;
     setEditingId(tag.id);
     setName(tag.name);
     setDescription(tag.description || "");
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete tag?")) return;
+  const handleDelete = (id: string) => {
+    if (canDelete) setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!canDelete || !deleteConfirmId || deleting) return;
+    setDeleting(true);
     try {
-      await apiRequest(`/tags/${id}`, { method: "DELETE" });
-      fetchTags();
+      await apiRequest(`/tags/${deleteConfirmId}`, { method: "DELETE" });
+      setDeleteConfirmId(null);
+      await fetchTags();
     } catch (err: unknown) {
       const errorObj = err as { message?: string };
       setErrorMsg(errorObj.message || "Failed to delete tag");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -109,14 +131,14 @@ export const TagsManager: React.FC = () => {
       />
 
       {errorMsg && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
+        <div role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm font-medium">
           {errorMsg}
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Create/Edit Form Card */}
-        <Card className="lg:col-span-1 h-fit border-border/70 shadow-2xs">
+        {(canCreate || (canEdit && editingId)) && <Card className="lg:col-span-1 h-fit border-border/70 shadow-2xs">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
               <TagIcon className="h-4 w-4 text-primary" />
@@ -139,7 +161,7 @@ export const TagsManager: React.FC = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={tr("e.g. Technology")}
-                  className="h-8 text-xs bg-card border-border"
+                  className="h-11 text-sm bg-card border-border"
                 />
               </div>
 
@@ -159,9 +181,9 @@ export const TagsManager: React.FC = () => {
                 <Button
                   type="submit"
                   size="sm"
-                  className="h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="min-h-11 text-sm font-semibold"
                 >
-                  {editingId ? "Update Tag" : "Create Tag"}
+                  {editingId ? tr("Update Tag") : tr("Create Tag")}
                 </Button>
                 {editingId && (
                   <Button
@@ -173,7 +195,7 @@ export const TagsManager: React.FC = () => {
                       setName("");
                       setDescription("");
                     }}
-                    className="h-8 text-xs"
+                    className="min-h-11 text-sm"
                   >
                     {tr("Cancel")}
                   </Button>
@@ -181,7 +203,7 @@ export const TagsManager: React.FC = () => {
               </div>
             </form>
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Tags List Card */}
         <Card className="lg:col-span-2 border-border/70 shadow-2xs p-0 overflow-hidden">
@@ -191,16 +213,16 @@ export const TagsManager: React.FC = () => {
                 <TableHead className="pl-6 text-xs">{tr("Name")}</TableHead>
                 <TableHead className="text-xs">{tr("Slug")}</TableHead>
                 <TableHead className="text-xs">{tr("Description")}</TableHead>
-                <TableHead className="text-right pr-6 text-xs">
+                {(canEdit || canDelete) && <TableHead className="text-end pe-6 text-xs">
                   {tr("Actions")}
-                </TableHead>
+                </TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={canEdit || canDelete ? 4 : 3}
                     className="h-28 text-center text-xs text-muted-foreground"
                   >
                     {tr("Loading tags...")}
@@ -234,26 +256,32 @@ export const TagsManager: React.FC = () => {
                       {tag.description || "—"}
                     </TableCell>
 
-                    <TableCell className="text-right pr-6">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <IconButton
-                          label={tr("Edit")}
-                          accessibleLabel={`${tr("Edit")}: ${tag.name}`}
-                          onClick={() => handleEdit(tag)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <Edit className="h-3.5 w-3.5" aria-hidden="true" />
-                        </IconButton>
-                        <IconButton
-                          label={tr("Delete")}
-                          accessibleLabel={`${tr("Delete")}: ${tag.name}`}
-                          onClick={() => handleDelete(tag.id)}
-                          className="text-red-600 dark:text-red-400 hover:bg-red-500/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </IconButton>
-                      </div>
-                    </TableCell>
+                    {(canEdit || canDelete) && (
+                      <TableCell className="text-end pe-6">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {canEdit && (
+                            <IconButton
+                              label={tr("Edit")}
+                              accessibleLabel={`${tr("Edit")}: ${tag.name}`}
+                              onClick={() => handleEdit(tag)}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <Edit className="size-4" aria-hidden="true" />
+                            </IconButton>
+                          )}
+                          {canDelete && (
+                            <IconButton
+                              label={tr("Delete")}
+                              accessibleLabel={`${tr("Delete")}: ${tag.name}`}
+                              onClick={() => handleDelete(tag.id)}
+                              className="text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                            </IconButton>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -261,6 +289,21 @@ export const TagsManager: React.FC = () => {
           </Table>
         </Card>
       </div>
+
+      <Dialog
+        isOpen={!!deleteConfirmId}
+        onClose={() => { if (!deleting) setDeleteConfirmId(null); }}
+        title={tr("Delete tag?")}
+        description={tr("This tag will be removed. Existing content will not be deleted.")}
+        className="max-w-md"
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteConfirmId(null)}>{tr("Cancel")}</Button>
+          <Button type="button" variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
+            {deleting ? tr("Processing...") : tr("Confirm delete")}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 };
