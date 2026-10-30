@@ -1325,7 +1325,8 @@ export class Tier2PluginSupervisor extends EventEmitter {
     return new Promise<R>((resolve, reject) => {
       const timer = setTimeout(() => {
         active?.pendingRequests.delete(requestId);
-        if (active) {
+        if (active && this.processes.get(processKey) === active) {
+          // A timer from a retired invocation must not kill a replacement.
           this.cleanupProcess(processKey, new Tier2SupervisorError("PLUGIN_TIMEOUT", `Operation '${operation}' timed out after ${this.invocationTimeoutMs}ms`));
         }
         reject(new Tier2SupervisorError("PLUGIN_TIMEOUT", `Sandbox invocation timed out after ${this.invocationTimeoutMs}ms`));
