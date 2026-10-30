@@ -153,7 +153,7 @@ export function EditorialListRow({
             aria-controls={actionsId}
             title={tr("More actions")}
             onClick={() => setActionsOpen((open) => !open)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           >
             <MoreHorizontal className="size-4" aria-hidden="true" />
           </button>
@@ -168,7 +168,7 @@ export function EditorialListRow({
                 <button
                   type="button"
                   onClick={() => { setActionsOpen(false); onPublishToggle(); }}
-                  className="flex min-h-9 w-full items-center rounded-md px-3 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                  className="flex min-h-10 w-full items-center rounded-md px-3 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {publishLabel}
                 </button>

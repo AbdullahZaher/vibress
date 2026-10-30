@@ -50,7 +50,7 @@ describe("EditorialListRow", () => {
     expect(row?.className).toContain("sm:py-2.5");
     expect(thumbnail?.className).toContain("h-12");
     expect(thumbnail?.className).toContain("sm:h-14");
-    expect(moreAction?.className).toContain("h-9");
+    expect(moreAction?.className).toContain("h-10");
     expect(editAction).not.toBeNull();
   });
 

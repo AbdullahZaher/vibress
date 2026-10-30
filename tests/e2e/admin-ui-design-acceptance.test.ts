@@ -35,6 +35,33 @@ async function assertDocumentFits(page: Page) {
 }
 
 test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibility", () => {
+  test("analytics with zero activity shows honest compact empty states", async ({ page }, info) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.route("**/api/admin/v1/analytics/overview?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          range: { range: "30d", from: "2026-10-01", to: "2026-10-30" },
+          summary: { views: 0, visitors: 0, members: 0, paidMembers: 0 },
+          comparison: Object.fromEntries(
+            ["views", "visitors", "members"].map((metric) =>
+              [metric, { current: 0, previous: 0, percentage: 0, isNew: false }])
+          ),
+          timeseries: [{ date: "2026-10-29", views: 0, visitors: 0, members: 0 }],
+          latestPost: null, topPosts: [], topContent: [], referrers: [],
+          newsletter: { sent: 0, openRate: 0, clickRate: 0 },
+          growth: { freeMembers: 0, paidMembers: 0 },
+        }),
+      });
+    });
+    await login(page);
+    await expect(page.getByText("No activity in this period")).toHaveCount(2);
+    await expect(page.getByText("+0%", { exact: true })).toHaveCount(0);
+    await assertDocumentFits(page);
+    await screenshot(page, info, "analytics-empty-mobile-320");
+  });
+
   test("desktop: light/dark typography and persisted theme", async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page);

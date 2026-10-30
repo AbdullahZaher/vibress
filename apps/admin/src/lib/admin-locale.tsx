@@ -23,6 +23,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Staff": "الفريق",
   "What's new": "المستجدات",
   "Learn more": "اعرف المزيد",
   "Close notification": "إغلاق الإشعار",

@@ -98,7 +98,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 {user.name}
               </span>
               <span className="text-xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold border border-primary/20">
-                Staff
+                {tr("Staff")}
               </span>
             </div>
             <p className="text-xs text-muted-foreground truncate mt-0.5">
