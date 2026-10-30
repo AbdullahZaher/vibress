@@ -71,7 +71,7 @@ function StepHeader({ step }: { step: Step }) {
 }
 
 export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
-  const { tr, setPublicationLanguage } = useAdminLocale();
+  const { tr, setUiLocale } = useAdminLocale();
   const [step, setStep] = useState<Step>("welcome");
   const [setupKey, setSetupKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -374,7 +374,7 @@ export const SetupWizard: React.FC<WizardProps> = ({ onComplete }) => {
                   onChange={(e) => {
                     const next = e.target.value;
                     setSiteLocale(next);
-                    setPublicationLanguage(next);
+                    setUiLocale(next);
                     setAdditionalLocales((prev) => prev.filter((loc) => loc !== next));
                   }}
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

@@ -1,4 +1,3 @@
-import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";

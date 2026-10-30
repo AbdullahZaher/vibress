@@ -54,8 +54,8 @@ export function Dialog({
         contentRef.current?.focus();
         return;
       }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
       const active = document.activeElement;
       if (event.shiftKey && (active === first || active === contentRef.current || !contentRef.current?.contains(active))) {
         event.preventDefault();

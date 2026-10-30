@@ -7,7 +7,7 @@ import { EditorialPagination } from "./common/EditorialPagination";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, Eye, X } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X } from "lucide-react";
 
 interface PostSummary {
   id: string;

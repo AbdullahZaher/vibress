@@ -22,7 +22,7 @@ import {
   TableHead,
   TableCell,
 } from "../ui/table";
-import { History, Check, X, EyeOff, RotateCcw, Trash2, Clock } from "lucide-react";
+import { History, Check, X, EyeOff, RotateCcw, Trash2 } from "lucide-react";
 
 interface CommentsPanelProps {
   comments: AdminComment[];
@@ -331,7 +331,7 @@ export function CommentsPanel({
       <Dialog
         isOpen={!!reasonModal}
         onClose={() => { setReasonModal(null); setModerationReason(""); }}
-        title={reasonModal ? tr(reasonModal.title) : undefined}
+        title={tr(reasonModal?.title ?? "Moderation action")}
         description={tr("Optionally provide a reason for this moderation action to record in the audit log.")}
         className="max-w-md"
       >
