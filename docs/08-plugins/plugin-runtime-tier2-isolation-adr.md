@@ -82,8 +82,12 @@ An unavailable kernel capability causes failure, **not a skipped success**.
   Do not disable namespace restrictions or weaken the test to make it pass.
   This runner configuration does not satisfy the current kernel acceptance gate.
 - GitHub Ubuntu 22.04 hosted runner: standalone Bubblewrap kernel
-  acceptance **passed** (workflow run `41044941227`).
-  This does not certify the plugin runtime.
+  acceptance **passed** (workflow run `41044941227`). A separate
+  authenticated, bounded JSON-over-stdio **Node.js feasibility probe** also
+  passed across the real Bubblewrap namespace in run `41045462302`, using
+  `scripts/verify-tier2-bubblewrap-ipc.mjs`. Both are experimental acceptance
+  probes; neither exercises the production Tier 2 supervisor/worker or
+  establishes a certified Host capability transport.
 - `detectSandboxRunner` is diagnostic-only and now discovers only a
   trusted root-owned Bubblewrap executable from fixed system paths.
   Neither a binary probe nor `VIBRESS_TIER2_SANDBOX_RUNNER` grants
