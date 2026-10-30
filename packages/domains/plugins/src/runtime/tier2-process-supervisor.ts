@@ -354,8 +354,26 @@ export function verifyReleaseIntegrity(
         `Plugin '${pluginId}' release directory is not a directory: '${realDir}'`,
       );
     }
+    if (admission.trustTier === "untrusted_marketplace" && !admission.releaseArtifactManifest) {
+      throw new Tier2SupervisorError(
+        "UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE",
+        "Untrusted releases require a complete approved artifact manifest",
+      );
+    }
     if (admission.releaseArtifactManifest) {
       const manifest = admission.releaseArtifactManifest;
+      for (const [file, digest] of Object.entries(manifest)) {
+        if (
+          !file || path.posix.isAbsolute(file) || file.includes("\\") ||
+          file.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
+          !/^[a-f0-9]{64}$/i.test(digest)
+        ) {
+          throw new Tier2SupervisorError(
+            "INVALID_RELEASE_ARTIFACT_MANIFEST",
+            "Approved release manifest contains an invalid path or file digest",
+          );
+        }
+      }
       const seen = new Set<string>();
 
       const scanDir = (current: string, rel: string) => {
@@ -364,6 +382,12 @@ export function verifyReleaseIntegrity(
           const full = path.join(current, entry.name);
           const entryRel = (rel ? `${rel}/${entry.name}` : entry.name).replace(/\\/g, "/");
 
+          if (entry.isSymbolicLink() && admission.trustTier === "untrusted_marketplace") {
+            throw new Tier2SupervisorError(
+              "UNTRUSTED_RELEASE_SYMLINK_DENIED",
+              `Untrusted release artifact '${entryRel}' cannot be a symbolic link`,
+            );
+          }
           if (entry.isSymbolicLink()) {
             const target = realpathSync(full);
             if (!target.startsWith(realDir + path.sep) && target !== realDir) {
@@ -378,11 +402,17 @@ export function verifyReleaseIntegrity(
             scanDir(full, entryRel);
           } else if (entry.isFile()) {
             seen.add(entryRel);
-            const expected = manifest[entryRel]?.toLowerCase();
+            const expected = Object.hasOwn(manifest, entryRel) ? manifest[entryRel]?.toLowerCase() : undefined;
             if (!expected) {
               throw new Tier2SupervisorError(
                 "UNAUTHORIZED_ARTIFACT_INJECTED",
                 `Plugin '${pluginId}' contains unapproved or injected artifact: '${entryRel}'`,
+              );
+            }
+            if (!/^[a-f0-9]{64}$/.test(expected)) {
+              throw new Tier2SupervisorError(
+                "INVALID_RELEASE_ARTIFACT_MANIFEST",
+                `Approved artifact '${entryRel}' has an invalid SHA-256`,
               );
             }
             const actual = createHash("sha256").update(readFileSync(full)).digest("hex");
@@ -693,7 +723,20 @@ export class Tier2PluginSupervisor extends EventEmitter {
     }
 
     if (callerTrustTier === "untrusted_marketplace") {
-      return "untrusted_marketplace";
+      if (!admission) {
+        throw new Tier2SupervisorError(
+          "PLUGIN_NOT_ADMITTED",
+          `Plugin '${pluginId}' has no authoritative Host release admission`,
+        );
+      }
+      // A caller must not demote a trusted admission and change its runtime policy.
+      if (admission.trustTier !== callerTrustTier) {
+        throw new Tier2SupervisorError(
+          "UNAUTHORIZED_TRUST_TIER_OVERRIDE",
+          `Requested tier differs from Host admission for plugin '${pluginId}'`,
+        );
+      }
+      return admission.trustTier;
     }
 
     // Caller omitted trust tier: check if an authoritative admission exists for this plugin & release
@@ -713,8 +756,11 @@ export class Tier2PluginSupervisor extends EventEmitter {
       return admission.trustTier;
     }
 
-    // Default-deny: if unknown or unadmitted, it is strictly untrusted_marketplace
-    return "untrusted_marketplace";
+    // Unknown releases are not merely untrusted: a sandbox is NOT admission.
+    throw new Tier2SupervisorError(
+      "PLUGIN_NOT_ADMITTED",
+      `Plugin '${pluginId}' has no authoritative Host release admission`,
+    );
   }
 
   /**
@@ -1094,9 +1140,29 @@ export class Tier2PluginSupervisor extends EventEmitter {
 
     // M8.4: Verify release integrity and publisher revocation
     const admission = this.admissions.get(context.pluginId);
-    if (admission) {
-      verifyReleaseIntegrity(context.pluginId, context.releaseDigest, admission);
+    if (!admission) {
+      throw new Tier2SupervisorError(
+        "PLUGIN_NOT_ADMITTED",
+        `Plugin '${context.pluginId}' has no authoritative Host release admission`,
+      );
     }
+    // Marketplace code cannot run with an absent/partial release manifest or
+    // an arbitrary entrypoint path supplied by the invocation caller.
+    if (effectiveTrustTier === "untrusted_marketplace") {
+      if (
+        !admission.releaseDirectory ||
+        !admission.releaseArtifactManifest ||
+        Object.keys(admission.releaseArtifactManifest).length === 0 ||
+        !admission.allowedEntrypoints?.length ||
+        !context.entrypointPath
+      ) {
+        throw new Tier2SupervisorError(
+          "UNTRUSTED_RELEASE_ADMISSION_INCOMPLETE",
+          "Untrusted execution requires a pinned complete release manifest and approved entrypoint",
+        );
+      }
+    }
+    verifyReleaseIntegrity(context.pluginId, context.releaseDigest, admission);
 
     // P1: Secure entrypoint validation
     const resolvedEntrypoint = validateAndResolveEntrypoint(
