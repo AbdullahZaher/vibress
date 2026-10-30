@@ -18,6 +18,7 @@ import {
   Tier2KernelCgroupLease,
   TIER2_KERNEL_RESOURCE_LIMITS,
   resolveDelegatedTier2CgroupParent,
+  parseBubblewrapChildPid,
 } from "../packages/domains/plugins/dist/runtime/tier2-kernel-resource-limits.js";
 
 if (process.platform !== "linux") throw new Error("FAIL: genuine Linux kernel required");
@@ -37,11 +38,6 @@ console.log("Delegated cgroup root:", resolveDelegatedTier2CgroupParent());
 console.log("Mandatory kernel limits:", TIER2_KERNEL_RESOURCE_LIMITS);
 
 const nodeBinary = realpathSync(process.execPath);
-const readNumber = (contents, key) => {
-  const line = contents.split("\n").find((part) => part.startsWith(key + " "));
-  return line ? Number(line.split(/\s+/)[1]) : NaN;
-};
-
 async function probe(label, source, verify) {
   const lease = Tier2KernelCgroupLease.create();
   // This is the ONLY test-only inspection hook. Production callers cannot
@@ -52,7 +48,7 @@ async function probe(label, source, verify) {
   try {
     const args = [
       "--unshare-all", "--unshare-net", "--new-session", "--die-with-parent",
-      "--block-fd", "3",
+      "--block-fd", "3", "--info-fd", "4",
       "--ro-bind", "/usr", "/usr",
       ...(existsSync("/lib") ? ["--ro-bind-try", "/lib", "/lib"] : []),
       ...(existsSync("/lib64") ? ["--ro-bind-try", "/lib64", "/lib64"] : []),
@@ -62,9 +58,11 @@ async function probe(label, source, verify) {
       "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
       nodeBinary, "-e", source,
     ];
-    child = spawn(bwrapPath, args, { stdio: ["ignore", "pipe", "pipe", "pipe"] });
+    child = spawn(bwrapPath, args, { stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
     const barrier = child.stdio[3];
-    assert.ok(child.pid && barrier && typeof barrier.write === "function", "blocked launcher fd must exist");
+    const identity = child.stdio[4];
+    assert.ok(child.pid && barrier && identity && typeof barrier.write === "function",
+      "blocked launcher and sandbox identity pipes must exist");
     lease.attachBlockedLauncher(child.pid);
     child.stdout.on("data", (buf) => { stdout = (stdout + buf.toString()).slice(-4096); });
     child.stderr.on("data", (buf) => { stderr = (stderr + buf.toString()).slice(-4096); });
@@ -72,6 +70,25 @@ async function probe(label, source, verify) {
       child.once("error", reject);
       child.once("exit", (code, signal) => resolve({ code, signal }));
     });
+    const childPid = await new Promise((resolve, reject) => {
+      let reported = "";
+      const timer = setTimeout(() => reject(new Error("FAIL: sandbox child PID was not reported")), 5000);
+      identity.on("data", (buf) => {
+        reported += buf.toString();
+        if (reported.length > 4096) reject(new Error("FAIL: sandbox identity output exceeded 4096 bytes"));
+      });
+      identity.once("end", () => {
+        clearTimeout(timer);
+        try { resolve(parseBubblewrapChildPid(reported)); } catch (error) { reject(error); }
+      });
+      identity.once("error", reject);
+      child.once("error", reject);
+      child.once("exit", () => reject(new Error("FAIL: sandbox exited without a verified child PID")));
+    });
+    assert.notEqual(childPid, child.pid, "sandbox child must have a distinct PID");
+    lease.attachBlockedLauncher(childPid);
+    // Bwrap forks before its block-fd checkpoint. The child must be joined,
+    // not only its trusted launcher; only now permit the sandbox to exec.
     barrier.end("1");
     const watchdog = setTimeout(() => {
       lease.killTree();
