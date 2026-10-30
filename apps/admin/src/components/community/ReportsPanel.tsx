@@ -57,14 +57,14 @@ export function ReportsPanel({
             <TableHead className="text-xs">{tr("Comment ID")}</TableHead>
             <TableHead className="text-xs">{tr("Reporter")}</TableHead>
             <TableHead className="text-xs">{tr("Status")}</TableHead>
-            <TableHead className="text-end pe-6 text-xs">{tr("Actions")}</TableHead>
+            {canModerate && <TableHead className="text-end pe-6 text-xs">{tr("Actions")}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {reports.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={canModerate ? 5 : 4}
                 className="h-32 text-center text-xs text-muted-foreground"
               >
                 {tr("No comment reports found.")}

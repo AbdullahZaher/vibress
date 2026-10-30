@@ -2,6 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 export function Dialog({
   isOpen,
@@ -18,6 +19,7 @@ export function Dialog({
   children: React.ReactNode;
   className?: string;
 }) {
+  const { tr } = useAdminLocale();
   const titleId = React.useId();
   const descriptionId = React.useId();
   const contentRef = React.useRef<HTMLDivElement>(null);
@@ -55,7 +57,7 @@ export function Dialog({
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = document.activeElement;
-      if (event.shiftKey && (active === first || !contentRef.current?.contains(active))) {
+      if (event.shiftKey && (active === first || active === contentRef.current || !contentRef.current?.contains(active))) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && (active === last || !contentRef.current?.contains(active))) {
@@ -98,10 +100,10 @@ export function Dialog({
           type="button"
           onClick={onClose}
           className="absolute top-4 end-4 inline-flex size-10 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 hover:bg-muted text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer"
-          aria-label="Close dialog"
+          aria-label={tr("Close dialog")}
         >
           <X className="h-4 w-4" aria-hidden="true" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{tr("Close")}</span>
         </button>
 
         {(title || description) && (

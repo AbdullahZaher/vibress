@@ -34,6 +34,7 @@ interface MembersListProps {
 
 export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) => {
   const { tr, formatDate } = useAdminLocale();
+  const isActionPending = disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -281,6 +282,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       {/* Member Detail Dialog */}
@@ -388,17 +390,17 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
 
       <Dialog
         isOpen={!!pendingAction}
-        onClose={() => setPendingAction(null)}
+        onClose={() => { if (!isActionPending) setPendingAction(null); }}
         title={tr(pendingAction === "disable" ? "Disable member account?" : pendingAction === "enable" ? "Enable member account?" : "Revoke all member sessions?")}
         description={tr(pendingAction === "disable" ? "The member will no longer be able to sign in." : pendingAction === "enable" ? "The member will be able to sign in again." : "All active sessions for this member will be invalidated.")}
         className="max-w-md"
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" disabled={disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending} onClick={() => setPendingAction(null)}>{tr("Cancel")}</Button>
+          <Button type="button" variant="outline" disabled={isActionPending} onClick={() => setPendingAction(null)}>{tr("Cancel")}</Button>
           <Button
             type="button"
             variant={pendingAction === "disable" ? "destructive" : "default"}
-            disabled={!canManage || disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending}
+            disabled={!canManage || isActionPending}
             onClick={() => {
               if (!memberDetail || !pendingAction || !canManage) return;
               if (pendingAction === "disable") disableMutation.mutate(memberDetail.id);
@@ -406,7 +408,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
               else revokeMutation.mutate(memberDetail.id);
             }}
           >
-            {(disableMutation.isPending || enableMutation.isPending || revokeMutation.isPending) ? tr("Processing...") : tr("Confirm")}
+            {isActionPending ? tr("Processing...") : tr("Confirm")}
           </Button>
         </div>
       </Dialog>

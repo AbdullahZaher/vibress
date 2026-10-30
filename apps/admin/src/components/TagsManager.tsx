@@ -136,7 +136,7 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${canCreate || (canEdit && Boolean(editingId)) ? "lg:grid-cols-3" : "lg:grid-cols-1"}`}>
         {/* Create/Edit Form Card */}
         {(canCreate || (canEdit && editingId)) && <Card className="lg:col-span-1 h-fit border-border/70 shadow-2xs">
           <CardHeader className="pb-3">
