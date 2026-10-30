@@ -172,3 +172,55 @@ Implementation hardening:
 
 Operator-trusted Tier 1/curated code remains explicitly trusted; it is **not**
 made safe for hostile code by the Tier 2 controls described here.
+
+
+## M8.7 — Real kernel resource controller implementation (2026-10-30)
+
+**Implementation authored; real delegated-host acceptance is NOT yet verified.
+This is NOT authorization to enable untrusted marketplace code.**
+
+- `tier2-kernel-resource-limits.ts` creates an independent Linux **cgroup v2**
+  for each untrusted Bubblewrap process tree, derived from the service's
+  own `/proc/self/cgroup` membership. It requires a genuine cgroup2 mount,
+  already-delegated `cpu`, `memory`, `pids` controllers and kernel
+  `cgroup.kill`; it never enables host-ancestor controllers or accepts a
+  caller-supplied path.
+- Before any untrusted worker code runs, the Host writes and reads back:
+  `memory.max=268435456`, `cpu.max=50000 100000`,
+  `pids.max=24`, and `memory.oom.group=1`.
+  The launcher starts with Bubblewrap `--block-fd 3` and a dedicated
+  Host-controlled pipe; Host attaches the **blocked** launcher to
+  `cgroup.procs` and verifies membership before releasing that pipe.
+  All sandbox descendants inherit the kernel ceilings. Setup or attachment
+  failure terminates the blocked launcher, never falling back to `fork()`.
+- `Tier2KernelCgroupLease` provides real `memory.events:oom_kill`,
+  `cpu.stat:nr_throttled`, and `pids.events:max` counters for acceptance
+  evidence. Process cleanup uses `cgroup.kill` and retries removal of the
+  empty per-plugin cgroup. Nonfatal failed cleanup is an operational concern
+  to instrument before general availability.
+- `tier2-kernel-resource-limits.test.ts` covers membership parsing,
+  bounded ceilings, and pre-exec Bubblewrap barrier argument generation.
+  These tests do **not** claim real resource enforcement.
+- `scripts/verify-tier2-kernel-quotas.mjs` runs **real** memory exhaustion,
+  CPU throttling and PID exhaustion probes, each within a fresh cgroup and
+  actual Bubblewrap namespace. It requires real kernel counter changes;
+  an unsupported host or mock will **fail**, not skip.
+- `.github/workflows/plugins-tier2-resource-acceptance.yml` is an explicit
+  **manual** release gate on a secured Linux runner labeled
+  `vibress-tier2-cgroup-v2` with delegated writable cgroup controllers.
+  Generic GitHub-hosted runners lack this delegation by default; do not add
+  privileged Docker, Docker socket mounts or a skip-as-success branch.
+  Run `pnpm --filter @vibress/plugins build` then
+  `node scripts/verify-tier2-kernel-quotas.mjs` on the properly delegated host.
+
+**Still closed:** `verifyPlatformIsolationSupport("untrusted_marketplace")`
+intentionally returns `isIsolated: false` until the **actual integrated
+Supervisor -> cgroup -> Bubblewrap -> worker -> Host gateway** has passed
+Linux acceptance and security review. A production-ready resource
+controller alone is not proof of safe end-to-end plugin execution.
+
+**Next gates:** real delegated-host acceptance, resource exhaustion including
+file descriptors/stdout flooding and descendants, process-tree cleanup,
+portable rootless Docker policies, Host-owned immutable artifacts and
+cross-replica revocation/restart tests. No marketplace activation, SDK
+publication or PR readiness change before these requirements are closed.
