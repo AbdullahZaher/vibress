@@ -704,8 +704,15 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       // Prompt Section 3 / 8: Setting VIBRESS_TIER2_SANDBOX_RUNNER=gvisor without a functioning runner MUST fail-closed.
       process.env.VIBRESS_TIER2_SANDBOX_RUNNER = "gvisor";
       try {
+        const checkedScopes: Array<[string, string]> = [];
         const supervisor = new Tier2PluginSupervisor({
           invocationTimeoutMs: 3000,
+          // An authoritative Host lookup that returns no approved release
+          // must reject before any runner can launch, including fake runners.
+          loadMarketplaceAdmission: async (pluginId, publicationId) => {
+            checkedScopes.push([pluginId, publicationId]);
+            return null;
+          },
         });
         supervisorsToClean.push(supervisor);
 
@@ -720,8 +727,11 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         };
 
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-          /PLUGIN_NOT_ADMITTED/i,
+          /UNTRUSTED_ADMISSION_NOT_AUTHORIZED/i,
         );
+        expect(checkedScopes).toEqual([[context.pluginId, context.publicationId]]);
+        expect(supervisor.getAdmission(context.pluginId)).toBeNull();
+        expect(supervisor.getProcessState(context.pluginId)).toBeNull();
       } finally {
         delete process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
       }
@@ -730,11 +740,6 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
     it("rejects mutable marketplace releases even when runtime isolation is explicitly unavailable", async () => {
       process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION = "1";
       try {
-        const supervisor = new Tier2PluginSupervisor({
-          invocationTimeoutMs: 3000,
-        });
-        supervisorsToClean.push(supervisor);
-
         const context: Tier2InvocationContext = {
           pluginId: "com.vibress.untrusted-plugin",
           releaseDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -744,10 +749,11 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
           trustTier: "untrusted_marketplace",
           entrypointPath: fixtureEntrypoint,
         };
-        supervisor.admitPlugin({
+        const admission = {
           pluginId: context.pluginId,
           releaseDigest: context.releaseDigest,
-          trustTier: "untrusted_marketplace",
+          trustTier: "untrusted_marketplace" as const,
+          policyRevision: 1,
           releaseDirectory: path.dirname(fixtureEntrypoint),
           allowedEntrypoints: [fixtureEntrypoint],
           releaseArtifactManifest: {
@@ -755,12 +761,28 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
           },
           approvedPublicationIds: [context.publicationId],
           approvedCapabilities: [],
+        };
+        const checkedScopes: Array<[string, string]> = [];
+        const supervisor = new Tier2PluginSupervisor({
+          invocationTimeoutMs: 3000,
+          // A genuine Host-approved policy must pass durable admission checks
+          // so this test proves that mutable artifacts are still rejected.
+          loadMarketplaceAdmission: async (pluginId, publicationId) => {
+            checkedScopes.push([pluginId, publicationId]);
+            return admission;
+          },
         });
+        supervisorsToClean.push(supervisor);
 
         expect(verifyPlatformIsolationSupport("untrusted_marketplace").isIsolated).toBe(false);
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
           /UNTRUSTED_RELEASE_NOT_IMMUTABLE/i,
         );
+        expect(checkedScopes).toEqual([
+          [context.pluginId, context.publicationId],
+          [context.pluginId, context.publicationId],
+        ]);
+        expect(supervisor.getProcessState(context.pluginId)).toBeNull();
       } finally {
         delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
       }
