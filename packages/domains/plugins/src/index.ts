@@ -76,5 +76,5 @@ export * from "./application/marketplace-service";
 
 
 
-export { DrizzleMarketplaceAdmissionRepository, MarketplaceAdmissionError, parseDurableMarketplaceAdmission } from "./infrastructure/drizzle-marketplace-admissions";
+export { DrizzleMarketplaceAdmissionRepository, MarketplaceAdmissionError, parseDurableMarketplaceAdmission, createDurableMarketplaceTier2Supervisor } from "./infrastructure/drizzle-marketplace-admissions";
 export type { OperatorMarketplaceReleaseGrant, MarketplaceOperatorAudit } from "./infrastructure/drizzle-marketplace-admissions";
