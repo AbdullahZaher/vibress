@@ -46,6 +46,27 @@ export async function invoke(input, ctx) {
     return await ctx.memberAccess.hasActivePlan(input.planId || "plan-pro");
   }
 
+  if (input.op === "probe_network_grant") {
+    // Exercise the worker's per-invocation network gate after an async gap.
+    await new Promise((resolve) => setTimeout(resolve, input.delayMs ?? 0));
+    const { Socket } = await import("node:net");
+    const socket = new Socket();
+    return new Promise((resolve) => {
+      socket.once("error", (error) => {
+        resolve({ denied: error.message.includes("DIRECT_NETWORK_ACCESS_DENIED") });
+      });
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve({ denied: false });
+      });
+      socket.setTimeout(500, () => {
+        socket.destroy();
+        resolve({ denied: false });
+      });
+      socket.connect(1, "127.0.0.1");
+    });
+  }
+
   if (input.op === "check_capability") {
     return {
       hasStorageRead: ctx.hasCapability("extension.storage.read"),
