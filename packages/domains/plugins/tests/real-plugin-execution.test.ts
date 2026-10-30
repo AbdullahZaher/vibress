@@ -8,6 +8,7 @@ import {
   Tier2SupervisorError,
   verifyPlatformIsolationSupport,
   verifyReleaseIntegrity,
+  assertImmutableUntrustedReleaseTree,
   tier2ProcessIsolationKey,
   detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
@@ -480,6 +481,27 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       }, "echo", {})).rejects.toThrowError(/CAPABILITY_NOT_ADMITTED/);
     });
 
+    it("rejects writable, same-user, or temporary marketplace artifacts before execution", () => {
+      const tmpDir = path.join(os.tmpdir(), "vibress-immutable-release-" + Date.now());
+      mkdirSync(tmpDir, { recursive: true });
+      const file = path.join(tmpDir, "index.js");
+      try {
+        writeFileSync(file, "export const plugin = true;");
+        const digest = createHash("sha256").update(readFileSync(file)).digest("hex");
+        expect(() => assertImmutableUntrustedReleaseTree(tmpDir))
+          .toThrowError(/UNTRUSTED_RELEASE_NOT_IMMUTABLE/);
+        expect(() => verifyReleaseIntegrity("com.vendor.mutable", "sha256:" + "d".repeat(64), {
+          pluginId: "com.vendor.mutable",
+          releaseDigest: "sha256:" + "d".repeat(64),
+          trustTier: "untrusted_marketplace",
+          releaseDirectory: tmpDir,
+          releaseArtifactManifest: { "index.js": digest },
+        })).toThrowError(/UNTRUSTED_RELEASE_NOT_IMMUTABLE/);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("rejects untrusted release manifests with unsafe relative paths", () => {
       const pluginId = "com.vendor.bad-manifest";
       const releaseDigest = "sha256:" + "a".repeat(64);
@@ -602,7 +624,7 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       }
     });
 
-    it("fails closed when platform isolation is disabled by operational environment policy", async () => {
+    it("rejects mutable marketplace releases even when runtime isolation is explicitly unavailable", async () => {
       process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION = "1";
       try {
         const supervisor = new Tier2PluginSupervisor({
@@ -632,8 +654,9 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
           approvedCapabilities: [],
         });
 
+        expect(verifyPlatformIsolationSupport("untrusted_marketplace").isIsolated).toBe(false);
         await expect(supervisor.invoke(context, "echo", "test")).rejects.toThrowError(
-          /UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/i,
+          /UNTRUSTED_RELEASE_NOT_IMMUTABLE/i,
         );
       } finally {
         delete process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION;
