@@ -31,3 +31,17 @@ export const pluginMarketplaceAdmissions = pgTable(
 );
 
 export type PluginMarketplaceAdmissionRow = typeof pluginMarketplaceAdmissions.$inferSelect;
+
+/** Persistent publisher-level deny list; never cleared by plugin reinstalls. */
+export const pluginMarketplacePublisherRevocations = pgTable(
+  "plugin_marketplace_publisher_revocations",
+  {
+    publisherId: text("publisher_id").primaryKey(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }).notNull().defaultNow(),
+    reason: text("reason"),
+    operatorUserId: text("operator_user_id").notNull(),
+  },
+);
+
+export type PluginMarketplacePublisherRevocationRow =
+  typeof pluginMarketplacePublisherRevocations.$inferSelect;
