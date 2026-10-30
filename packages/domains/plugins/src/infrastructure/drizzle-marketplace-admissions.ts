@@ -5,7 +5,11 @@ import {
   getDb, plugins, pluginMarketplaceAdmissions, pluginMarketplacePublisherRevocations,
   pluginPublicationStates, auditEvents,
 } from "@vibress/database";
-import type { AuthoritativePluginAdmission } from "../runtime/tier2-process-supervisor.js";
+import {
+  Tier2PluginSupervisor,
+  type AuthoritativePluginAdmission,
+  type Tier2SandboxOptions,
+} from "../runtime/tier2-process-supervisor.js";
 
 /**
  * Operator-owned, versioned PostgreSQL admission authority for Tier 2.
@@ -285,4 +289,21 @@ export class DrizzleMarketplaceAdmissionRepository {
       return policyRevision;
     });
   }
+}
+
+/**
+ * Explicit production Host composition. Does not enable Marketplace execution
+ * (the kernel isolation acceptance gate remains fail-closed). Consumers must
+ * NEVER replace this callback with a request- or plugin-controlled lookup.
+ */
+export function createDurableMarketplaceTier2Supervisor(
+  options: Omit<Tier2SandboxOptions, "loadMarketplaceAdmission"> = {},
+  repository: Pick<DrizzleMarketplaceAdmissionRepository, "loadMarketplaceAdmission"> =
+    new DrizzleMarketplaceAdmissionRepository(),
+): Tier2PluginSupervisor {
+  return new Tier2PluginSupervisor({
+    ...options,
+    loadMarketplaceAdmission: (pluginId, publicationId) =>
+      repository.loadMarketplaceAdmission(pluginId, publicationId),
+  });
 }
