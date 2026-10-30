@@ -718,6 +718,26 @@ function awaitBubblewrapChildPid(stream: Readable, child: ChildProcess): Promise
   });
 }
 
+const MAX_MARKETPLACE_STDERR_BYTES = 256 * 1024;
+const MAX_MARKETPLACE_STDOUT_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Whole-process output budget. Retiring a flooder avoids spending unbounded
+ * Host CPU parsing/absorbing attacker-controlled output in long-lived workers.
+ */
+export function countSandboxOutputBytes(previous: number, chunkBytes: number, maxBytes: number): number {
+  if (!Number.isSafeInteger(previous) || previous < 0 ||
+      !Number.isSafeInteger(chunkBytes) || chunkBytes < 0 ||
+      !Number.isSafeInteger(maxBytes) || maxBytes < 1 ||
+      chunkBytes > maxBytes - previous) {
+    throw new Tier2SupervisorError(
+      "SANDBOX_OUTPUT_LIMIT",
+      "Marketplace worker exceeded its Host output quota",
+    );
+  }
+  return previous + chunkBytes;
+}
+
 interface PendingInvocation {
   readonly context: Tier2InvocationContext;
   readonly handlers: HostCapabilityHandlers;
@@ -742,6 +762,8 @@ interface ActiveProcess {
   readonly transport: "ipc" | "stdio";
   readonly isolationMechanism: Tier2IsolationCheckResult["isolationMechanism"];
   latestStderr?: string | undefined;
+  stdoutBytes: number;
+  stderrBytes: number;
   pendingRequests: Map<string, PendingInvocation>;
 }
 
@@ -1161,10 +1183,27 @@ export class Tier2PluginSupervisor extends EventEmitter {
       entrypointPath,
       transport,
       isolationMechanism: isolation.isolationMechanism,
+      stdoutBytes: 0,
+      stderrBytes: 0,
       pendingRequests: new Map(),
     };
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
+      if (this.processes.get(active.processKey) !== active) return;
+      if (active.trustTier === "untrusted_marketplace") {
+        try {
+          active.stderrBytes = countSandboxOutputBytes(
+            active.stderrBytes,
+            Buffer.byteLength(chunk),
+            MAX_MARKETPLACE_STDERR_BYTES,
+          );
+        } catch {
+          this.cleanupProcess(active.processKey, new Tier2SupervisorError(
+            "SANDBOX_OUTPUT_LIMIT", "Marketplace worker exceeded its stderr quota",
+          ));
+          return;
+        }
+      }
       const str = chunk.toString();
       active.latestStderr = ((active.latestStderr || "") + str).slice(-8192);
     });
@@ -1188,6 +1227,21 @@ export class Tier2PluginSupervisor extends EventEmitter {
       });
 
       child.stdout?.on("data", (chunk: Buffer) => {
+        if (this.processes.get(active.processKey) !== active) return;
+        if (active.trustTier === "untrusted_marketplace") {
+          try {
+            active.stdoutBytes = countSandboxOutputBytes(
+              active.stdoutBytes,
+              chunk.byteLength,
+              MAX_MARKETPLACE_STDOUT_BYTES,
+            );
+          } catch {
+            this.cleanupProcess(active.processKey, new Tier2SupervisorError(
+              "SANDBOX_OUTPUT_LIMIT", "Marketplace worker exceeded its IPC output quota",
+            ));
+            return;
+          }
+        }
         streamReader.feed(chunk);
       });
     } else {
