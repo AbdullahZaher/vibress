@@ -119,8 +119,8 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             type="button"
             onClick={onToggleLocale}
             className="flex min-h-10 px-2 items-center justify-center rounded-lg border border-border/60 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-            title="Toggle Arabic / English"
-            aria-label="Toggle language"
+            title={tr("Switch interface language")}
+            aria-label={tr("Switch interface language")}
           >
             {locale === "ar" ? "EN" : "عربي"}
           </button>

@@ -15,10 +15,14 @@ type SetupState = "loading" | "uninstalled" | "installed" | "error";
 
 const AppContent: React.FC = () => {
   const { user, isLoading, isAuthenticated, login, logout, can } = useAuth();
-  const { refresh } = useAdminLocale();
+  const { refresh, setUserId } = useAdminLocale();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [setupState, setSetupState] = useState<SetupState>("loading");
   const [setupRetry, setSetupRetry] = useState(0);
+
+  useEffect(() => {
+    setUserId(user?.id ?? null);
+  }, [user?.id, setUserId]);
 
   useEffect(() => {
     const onPopState = () => setCurrentPath(window.location.pathname);

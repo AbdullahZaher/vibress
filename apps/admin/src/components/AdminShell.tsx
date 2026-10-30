@@ -28,7 +28,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       return true;
     }
   });
-  const { locale } = useAdminLocale();
+  const { locale, setUiLocale } = useAdminLocale();
+  const onToggleLocale = () => setUiLocale(locale === "ar" ? "en" : "ar");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [extensionViews, setExtensionViews] = useState<AdminExtensionViewLink[]>([]);
@@ -100,6 +101,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onNavigate={onNavigate}
         canPublishPosts={canPublishPosts}
         locale={locale}
+        onToggleLocale={onToggleLocale}
       />
 
       {/* Vibress Modular Sidebar */}
@@ -118,6 +120,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         onClose={() => setIsSidebarOpen(false)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         locale={locale}
+        onToggleLocale={onToggleLocale}
       />
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}

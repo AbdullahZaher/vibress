@@ -14,7 +14,8 @@ import {
 type AdminUiLocale = "en" | "ar";
 interface AdminLocaleContext {
   locale: AdminUiLocale;
-  setPublicationLanguage: (locale: string) => void;
+  setUiLocale: (locale: string) => void;
+  setUserId: (userId: string | null) => void;
   refresh: () => Promise<void>;
   tr: (english: string) => string;
   formatDate: (date: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
@@ -373,7 +374,6 @@ const translations: Record<string, string> = {
   "View Live Site": "عرض الموقع المنشور",
   "Advanced & Platform": "الإعدادات المتقدمة والمنصة",
   "Sign Out": "تسجيل الخروج",
-  "Staff": "فريق العمل",
   "Publication Management Console": "لوحة إدارة الموقع",
   "Vibress Admin": "إدارة Vibress",
   "Sign In": "تسجيل الدخول",
@@ -709,13 +709,40 @@ export function AdminLocaleProvider({
   initialLocale?: string;
 }) {
   const [locale, setLocale] = useState<AdminUiLocale>(normalize(initialLocale));
-  const setPublicationLanguage = useCallback((value: string) => {
-    setLocale(normalize(value));
+  const [userId, setUserIdState] = useState<string | null>(null);
+
+  const setUserId = useCallback((value: string | null) => {
+    setUserIdState(value);
   }, []);
+
+  const setUiLocale = useCallback((value: string) => {
+    const nextLocale = normalize(value);
+    setLocale(nextLocale);
+    if (userId && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(`vibress-admin-ui-locale:${userId}`, nextLocale);
+      } catch {
+        // Keep the in-memory preference when browser storage is unavailable.
+      }
+    }
+  }, [userId]);
+
   const refresh = useCallback(async () => {
-    // Authenticated staff may be editing a different publication than the
-    // public host's default. Prefer the staff-scoped and permission-checked
-    // configuration; use public site identity only on the login/setup shell.
+    // The staff interface language is a user preference, independent from the
+    // publication's primary language. Fall back to the publication only when
+    // this staff account has not selected an interface language.
+    if (userId && typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem(`vibress-admin-ui-locale:${userId}`);
+        if (saved === "ar" || saved === "en") {
+          setLocale(saved);
+          return;
+        }
+      } catch {
+        // Continue with the publication default if storage is unavailable.
+      }
+    }
+
     try {
       const config = await getPublicationLocaleContextApi();
       setLocale(normalize(config.primaryLocale));
@@ -737,7 +764,7 @@ export function AdminLocaleProvider({
     } catch {
       // Setup or API outage: retain the current displayed language.
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void refresh();
@@ -745,6 +772,7 @@ export function AdminLocaleProvider({
     window.addEventListener("vibress:locales-updated", onUpdate);
     return () => window.removeEventListener("vibress:locales-updated", onUpdate);
   }, [refresh]);
+
   useEffect(() => {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
@@ -768,14 +796,15 @@ export function AdminLocaleProvider({
   }, [locale]);
 
   const value = useMemo(() => ({
-    locale, setPublicationLanguage, refresh, tr, formatDate, formatNumber, formatRelativeTime,
-  }), [locale, setPublicationLanguage, refresh, tr, formatDate, formatNumber, formatRelativeTime]);
+    locale, setUiLocale, setUserId, refresh, tr, formatDate, formatNumber, formatRelativeTime,
+  }), [locale, setUiLocale, setUserId, refresh, tr, formatDate, formatNumber, formatRelativeTime]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
 const defaultAdminLocaleContext: AdminLocaleContext = {
   locale: "en",
-  setPublicationLanguage: () => {},
+  setUiLocale: () => {},
+  setUserId: () => {},
   refresh: async () => {},
   tr: (english: string) => english,
   formatDate: (date: Date | string | number, options?: Intl.DateTimeFormatOptions) =>
