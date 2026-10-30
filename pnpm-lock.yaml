@@ -1766,8 +1766,8 @@ importers:
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
       '@lexical/link':
-        specifier: 0.13.1
-        version: 0.13.1(lexical@0.13.1)
+        specifier: 0.52.0
+        version: 0.52.0(typescript@5.9.3)
       '@lexical/list':
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
@@ -1828,8 +1828,8 @@ importers:
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
       '@lexical/link':
-        specifier: 0.13.1
-        version: 0.13.1(lexical@0.13.1)
+        specifier: 0.52.0
+        version: 0.52.0(typescript@5.9.3)
       '@lexical/list':
         specifier: 0.13.1
         version: 0.13.1(lexical@0.13.1)
@@ -3255,6 +3255,14 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
+  '@lexical/a11y@0.52.0':
+    resolution: {integrity: sha512-FxcKnksrgeoPDxQgwHqTz81Tbv7vZnP2i09m7uU+zusNRt4g1dgbwSEq4Uee9yfLJ9qxM5P9YOGQTe0A6lAuAg==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   '@lexical/clipboard@0.13.1':
     resolution: {integrity: sha512-gMSbVeqb7S+XAi/EMMlwl+FCurLPugN2jAXcp5k5ZaUd7be8B+iupbYdoKkjt4qBhxmvmfe9k46GoC0QOPl/nw==}
     peerDependencies:
@@ -3301,6 +3309,14 @@ packages:
     peerDependencies:
       lexical: 0.13.1
 
+  '@lexical/html@0.52.0':
+    resolution: {integrity: sha512-lRyntwgHnISsUKZHh3T+g9qU1CwTOH5hlnc1UzWE7/RXrvtnSmJTTcJu+sfFdRCiBAlkiIhKuJBCCYu99LeI7Q==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   '@lexical/internal@0.52.0':
     resolution: {integrity: sha512-Y7jKqeh4Irf/FwNmAqHIk3b05HpMsHv2RyWPQ8+M7FAdEbT9N2mksjc8ZUZ3tHqDMi7FNiLkjZN/DwbdekUb1g==}
     peerDependencies:
@@ -3313,6 +3329,14 @@ packages:
     resolution: {integrity: sha512-7E3B2juL2UoMj2n+CiyFZ7tlpsdViAoIE7MpegXwfe/VQ66wFwk/VxGTa/69ng2EoF7E0kh+SldvGQDrWAWb1g==}
     peerDependencies:
       lexical: 0.13.1
+
+  '@lexical/link@0.52.0':
+    resolution: {integrity: sha512-9hl/SxbkK5P0q1Rn4rTnaLHetTnf4zb+zgJjQwHAkqmeS561gLq34RcoO2i1zhibe8b6xk8gyhIe2cOpPeAC7w==}
+    peerDependencies:
+      typescript: '>=5.2'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@lexical/list@0.13.1':
     resolution: {integrity: sha512-6U1pmNZcKLuOWiWRML8Raf9zSEuUCMlsOye82niyF6I0rpPgYo5UFghAAbGISDsyqzM1B2L4BgJ6XrCk/dJptg==}
@@ -9022,6 +9046,14 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
+  '@lexical/a11y@0.52.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      lexical: 0.52.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/clipboard@0.13.1(lexical@0.13.1)':
     dependencies:
       '@lexical/html': 0.13.1(lexical@0.13.1)
@@ -9073,6 +9105,16 @@ snapshots:
       '@lexical/utils': 0.13.1(lexical@0.13.1)
       lexical: 0.13.1
 
+  '@lexical/html@0.52.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.52.0(typescript@5.9.3)
+      '@lexical/internal': 0.52.0(typescript@5.9.3)
+      '@lexical/selection': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      lexical: 0.52.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/internal@0.52.0(typescript@5.9.3)':
     optionalDependencies:
       typescript: 5.9.3
@@ -9081,6 +9123,17 @@ snapshots:
     dependencies:
       '@lexical/utils': 0.13.1(lexical@0.13.1)
       lexical: 0.13.1
+
+  '@lexical/link@0.52.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/a11y': 0.52.0(typescript@5.9.3)
+      '@lexical/extension': 0.52.0(typescript@5.9.3)
+      '@lexical/html': 0.52.0(typescript@5.9.3)
+      '@lexical/internal': 0.52.0(typescript@5.9.3)
+      '@lexical/utils': 0.52.0(typescript@5.9.3)
+      lexical: 0.52.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/list@0.13.1(lexical@0.13.1)':
     dependencies:
