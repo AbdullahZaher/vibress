@@ -29,3 +29,38 @@ Tier 1 approved single-file ESM is loaded into the API/Worker **Node.js process*
 ## Non-goals and gating
 
 This document **does not** implement a sandbox. No Tier 2 marketplace or arbitrary uploaded ZIP/GitHub package execution is allowed until a separately reviewed implementation and all negative tests pass. Tier 1 remains explicit trusted-operator execution only.
+
+## Implementation status — M7 safety closure (2026-10-30)
+
+The Tier 2 supervisor implements signed IPC and Host-mediated capabilities for explicitly
+operator-admitted/reviewed plugins, but **does not yet provide certified kernel isolation
+for untrusted marketplace execution**. Those worker processes must be treated as trusted
+by the operator; environment scrubbing, V8 limits and JavaScript network interception
+are defense-in-depth, not an OS security boundary.
+
+The previously experimental runner discovery (Bubblewrap, runsc and nsjail) is
+**diagnostic only**. Successful executable/version discovery is not proof of namespace
+creation or isolation. The historical `buildBubblewrapArgs` helper does not implement a
+working, tested Node IPC transport and is not called for untrusted execution. In
+particular, Bubblewrap has no `--pass-fd` CLI option, so the old helper must not be
+treated as a production launcher. The supervisor rejects all
+`untrusted_marketplace` invocations, even if a runner binary is installed or an
+environment variable requests one, with
+`UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE`.
+
+The Host checks revocation and release identity for all trust tiers, including
+explicitly untrusted requests, before runtime selection. Trusted admissions may
+optionally pin `entrypointSha256`, the SHA-256 of the **entrypoint file**, which is
+distinct from the approved release-package digest. File-level verification alone
+does not make mutable directories safe: the admission pipeline must enforce immutable
+release artifacts and protect against replacement between verification and load.
+
+**Remaining mandatory acceptance before enabling untrusted execution:** select and
+integrate one sandbox backend, establish authenticated IPC across its actual process
+boundary, verify kernel namespace/network/filesystem/CPU/memory/PID containment in a
+real Linux environment, bind entrypoint bytes to an immutable approved release,
+exercise revoke/upgrade/multi-publication scenarios, and obtain security sign-off.
+Never set an environment variable to bypass this gate.
+
+The marketplace catalog and developer tooling may remain available without granting
+third-party code execution. Do not mark Marketplace General Availability as approved.
