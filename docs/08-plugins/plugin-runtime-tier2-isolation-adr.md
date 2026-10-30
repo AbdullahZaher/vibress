@@ -226,3 +226,55 @@ file descriptors/stdout flooding and descendants, process-tree cleanup,
 portable rootless Docker policies, Host-owned immutable artifacts and
 cross-replica revocation/restart tests. No marketplace activation, SDK
 publication or PR readiness change before these requirements are closed.
+
+
+## M8.8 security closure — 2026-10-30 (implementation checkpoint)
+
+**Not production-approved. The additional checks below deliberately do not
+turn on the `untrusted_marketplace` trust tier.**
+
+New defensive-in-depth checks:
+
+1. **Mutable release source / TOCTOU:** for untrusted releases,
+   `verifyReleaseIntegrity` now also requires an operator-owned, non-writable
+   Linux directory tree and non-root API/Worker identity, including EVERY
+   ancestor of the approved release path and all release files. Symlinks,
+   linked files, non-regular files, and writable same-user publication volumes
+   are rejected even if the manifest digest matched during an earlier check.
+   This prevents the ordinary non-root Host identity from swapping files
+   between verification and Bubblewrap's read-only bind. It does **not**
+   establish immutability against a compromised root operator, removable
+   mounts, or outside-the-Host changes; a final immutable artifact store and
+   tested install-to-run lifecycle remain required.
+2. **Durable admission / revocation contract:** `Tier2SandboxOptions` now
+   accepts `loadMarketplaceAdmission` (a Host-provided async source). When
+   marketplace code is eligible to execute, the Supervisor requires a lookup
+   before each invocation. The Host approval carries a monotonic
+   `policyRevision`; older, conflicting, missing, or invalid revisions are
+   rejected, and refresh failures terminate associated worker processes.
+   The provided callback must perform authoritative ownership/tenant checks
+   and return a durable, trusted record — the plugin cannot supply one.
+   There is NO production persistent provider connected yet. The in-memory
+   `admitPlugin` map and optional callback signature alone are insufficient
+   for immediate cross-replica revocation, live process interruption or
+   atomic release rotation. Actual database-backed integration, fanout and
+   adversarial two-replica tests remain **release blockers**.
+3. **Output flooding:** stdout framing remains bounded; an untrusted worker
+   is now retired after 8 MiB cumulative stdout IPC or 256 KiB stderr.
+   Trusted operator workers retain prior compatibility behavior. This adds
+   a bounded Host output policy but is not yet a Linux file-descriptor rlimit
+   or a process CPU ceiling.
+4. **Tests:** regression tests cover non-immutable artifact refusal, stale
+   admission revision, conflicting policy, missing/foreign admission,
+   detached caller snapshots and output-budget overflow.
+
+**Still mandatory for sign-off:** actual delegated Linux cgroup acceptance
+run on a correctly configured self-hosted runner, an end-to-end production
+Supervisor + kernel cgroup + Bubblewrap + Host gateway acceptance with two
+publications/actors, independently audited operator-owned immutable release
+staging, real persisted authorization/revocation across replicas including
+running processes, rootless Docker deployment and recovery drills, file
+descriptor/excessive logging tests, and an independent security P0/P1 review.
+
+Never label M8.8 complete or activate general marketplace execution solely
+because the standard CI and Bubblewrap namespace workflows are green.
