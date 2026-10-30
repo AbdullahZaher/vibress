@@ -73,6 +73,9 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
         );
       `);
       await clientA.query(migration());
+      await clientA.query(readFileSync(resolve(
+        process.cwd(), "packages/database/migrations/0050_plugin_marketplace_publisher_revocations.sql",
+      ), "utf8"));
       await clientA.query("INSERT INTO plugins(id,status) VALUES ($1,'active')", [pluginId]);
       await clientA.query(
         "INSERT INTO plugin_publication_states(plugin_id,publication_id,enabled) VALUES ($1,$2,true),($1,$3,false)",
@@ -127,13 +130,28 @@ describe("M8.8 durable Marketplace release admission — PostgreSQL", () => {
         [pluginId],
       );
       expect(row.rows[0]).toMatchObject({ policy_revision: "3", revoked: true });
+      const pluginAfterRevocation = randomUUID();
+      await clientA.query("INSERT INTO plugins(id,status) VALUES ($1,'active')", [pluginAfterRevocation]);
+      await clientA.query(
+        "INSERT INTO plugin_publication_states(plugin_id,publication_id,enabled) VALUES ($1,$2,true)",
+        [pluginAfterRevocation, pubA],
+      );
+      // The durable tombstone revokes the publisher, not only one plugin ID.
+      expect(await b.revokeOperatorPublisher("publisher_verified", audit, "compromised")).toBe(0);
+      expect(await a.revokeOperatorPublisher("publisher_verified", audit)).toBe(0);
+      await expect(a.approveOperatorRelease({
+        ...policy, pluginId: pluginAfterRevocation,
+      }, 0, audit)).rejects.toMatchObject({ code: "MARKETPLACE_PUBLISHER_REVOKED" });
+      expect(await b.loadMarketplaceAdmission(pluginId, pubA)).toBeNull();
+
       const auditRows = await clientA.query(
         "SELECT action FROM audit_events ORDER BY created_at, id",
       );
-      expect(auditRows.rows.map((record) => record.action).sort()).toEqual([
+      expect(auditRows.rows.map((record: { action: string }) => record.action).sort()).toEqual([
         "plugin.marketplace_admission_approved",
         "plugin.marketplace_admission_approved",
         "plugin.marketplace_admission_revoked",
+        "plugin.marketplace_publisher_revoked",
       ]);
 
       await clientA.query(
