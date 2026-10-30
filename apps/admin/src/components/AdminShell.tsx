@@ -85,7 +85,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   }, []);
 
   const canPublishPosts = can("posts.publish");
-  const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath);
+  const isEditorRoute = /^\/admin\/(posts|pages)\/(new|[^/]+)\/?$/.test(currentPath) && !/^\/admin\/posts\/(drafts|scheduled|published)\/?$/.test(currentPath);
 
 
   return (

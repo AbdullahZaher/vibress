@@ -2,9 +2,7 @@ import React, { useState } from "react";
 import { usePublicationLocales } from "../../../lib/usePublicationLocales";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import {
-  PenLine,
   ChevronDown,
-  ChevronUp,
   Plus,
   File,
   Tag as TagIcon,
@@ -30,7 +28,6 @@ export const NavContent: React.FC<NavContentProps> = ({
   const { data: localePolicy } = usePublicationLocales();
   const { tr } = useAdminLocale();
   const [postsExpanded, setPostsExpanded] = useState(true);
-  const [isIconHovered, setIsIconHovered] = useState(false);
 
   const isPostsActive = currentPath.startsWith("/admin/posts");
   const isDraftsActive = currentPath === "/admin/posts/drafts";
@@ -38,11 +35,12 @@ export const NavContent: React.FC<NavContentProps> = ({
   const isPublishedActive = currentPath === "/admin/posts/published";
 
   return (
-    <div className="space-y-0.5 text-[13px]">
+    <div className="space-y-0.5 text-sm">
+      <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
       {/* Posts Item with Tree Chevron & Quick Plus Create */}
       <div
-        className={`group/posts relative flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
-          isPostsActive && !postsExpanded
+        className={`group/posts relative flex items-center justify-between px-2.5 py-2.5 rounded-lg transition-colors ${
+          isPostsActive
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
@@ -55,20 +53,12 @@ export const NavContent: React.FC<NavContentProps> = ({
               e.stopPropagation();
               setPostsExpanded(!postsExpanded);
             }}
-            onMouseEnter={() => setIsIconHovered(true)}
-            onMouseLeave={() => setIsIconHovered(false)}
-            className="p-1 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-all shrink-0 cursor-pointer"
-            title={postsExpanded ? "Collapse Posts" : "Expand Posts"}
+            aria-label={postsExpanded ? tr("Collapse Posts") : tr("Expand Posts")}
+            aria-expanded={postsExpanded}
+            className="flex size-8 items-center justify-center rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-all shrink-0 cursor-pointer"
+            title={postsExpanded ? tr("Collapse Posts") : tr("Expand Posts")}
           >
-            {isIconHovered ? (
-              postsExpanded ? (
-                <ChevronUp className="h-4 w-4 transition-transform duration-200" />
-              ) : (
-                <ChevronDown className="h-4 w-4 transition-transform duration-200" />
-              )
-            ) : (
-              <PenLine className="h-4 w-4 transition-transform duration-200" />
-            )}
+            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${postsExpanded ? "" : "-rotate-90 rtl:rotate-90"}`} />
           </button>
 
           {/* Posts Label */}
@@ -77,7 +67,7 @@ export const NavContent: React.FC<NavContentProps> = ({
             onClick={() => onNavigate("/admin/posts")}
             className="font-medium text-start truncate cursor-pointer flex-1"
           >
-            Posts
+            {tr("Posts")}
           </button>
         </div>
 
@@ -89,7 +79,8 @@ export const NavContent: React.FC<NavContentProps> = ({
               e.stopPropagation();
               onNavigate("/admin/posts/new");
             }}
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all shrink-0 cursor-pointer"
+            aria-label={tr("Create new post")}
+            className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all shrink-0 cursor-pointer"
             title="Create new post"
           >
             <Plus size={15} />
@@ -99,11 +90,11 @@ export const NavContent: React.FC<NavContentProps> = ({
 
       {/* Sub-items Tree Structure under Posts */}
       {postsExpanded && (
-        <div className="relative ms-4 ps-3.5 border-s border-sidebar-border/70 space-y-0 text-[12px] my-0.5">
+        <div className="relative ms-4 ps-3.5 border-s border-sidebar-border/70 space-y-0 text-[13px] my-0.5">
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/drafts")}
-            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isDraftsActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -114,7 +105,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/scheduled")}
-            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isScheduledActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -125,7 +116,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/published")}
-            className={`w-full text-start py-1 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
+            className={`w-full text-start py-2 px-2 rounded-md transition-colors cursor-pointer block font-medium ${
               isPublishedActive
                 ? "text-foreground font-semibold bg-sidebar-accent/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40"
@@ -140,7 +131,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/pages")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/pages")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -155,7 +146,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/translations")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/translations")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -170,7 +161,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/tags")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/tags")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -184,21 +175,21 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/media")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/media")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >
         <ImageIcon className="h-4 w-4 shrink-0" />
-        <span>Media</span>
+        <span>{tr("Media")}</span>
       </button>
 
       {/* Members */}
       <button
         type="button"
         onClick={() => onNavigate("/admin/members")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/members")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -212,7 +203,7 @@ export const NavContent: React.FC<NavContentProps> = ({
       <button
         type="button"
         onClick={() => onNavigate("/admin/comments")}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
           currentPath.startsWith("/admin/comments")
             ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"

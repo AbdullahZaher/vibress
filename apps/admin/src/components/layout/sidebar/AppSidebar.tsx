@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { ApiUser } from "../../../lib/api";
 import { AppSidebarHeader } from "./AppSidebarHeader";
 import { NavMain } from "./NavMain";
@@ -8,6 +8,7 @@ import { AppSidebarBanner } from "./AppSidebarBanner";
 import { UserMenu } from "./UserMenu";
 import { NavExtensionViews } from "./NavExtensionViews";
 import type { AdminExtensionViewLink } from "../../../lib/api";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface AppSidebarProps {
   user: ApiUser;
@@ -44,6 +45,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   locale = 'en',
   onToggleLocale,
 }) => {
+  const { tr } = useAdminLocale();
+  const mobileDialogRef = useRef<HTMLDivElement>(null);
+
   // Navigation wrapper that auto-closes mobile sidebar
   const handleNavigate = (path: string) => {
     onNavigate(path);
@@ -73,8 +77,36 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = mobileDialogRef.current;
+    dialog?.querySelector<HTMLButtonElement>("[data-sidebar-close]")?.focus();
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !dialog) return;
+      const options = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter((node) => node.getClientRects().length > 0);
+      if (!options.length) return;
+      const first = options[0]!;
+      const last = options[options.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog?.addEventListener("keydown", trapFocus);
+    return () => {
+      dialog?.removeEventListener("keydown", trapFocus);
+      previousFocus?.focus();
+    };
+  }, [isOpen]);
+
   const sidebarContent = (
-    <aside className="w-64 h-full max-h-screen bg-sidebar border-e border-sidebar-border flex flex-col shrink-0 select-none overflow-hidden shadow-2xl md:shadow-none">
+    <aside className="w-[min(18rem,85vw)] h-full max-h-screen bg-sidebar border-e border-sidebar-border flex flex-col shrink-0 select-none overflow-hidden shadow-2xl md:shadow-none">
       {/* Top Header */}
       <div className="shrink-0">
         <AppSidebarHeader
@@ -87,7 +119,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       </div>
 
       {/* Middle Navigation Stream (Main & Content) */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-7">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-5">
         <NavMain currentPath={currentPath} onNavigate={handleNavigate} />
         <NavContent
           currentPath={currentPath}
@@ -120,7 +152,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
       {/* 2. Mobile Slide-Over Drawer with Backdrop */}
       {isOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div ref={mobileDialogRef} role="dialog" aria-modal="true" aria-label={tr("Navigation menu")} className="md:hidden fixed inset-0 z-50 flex">
           {/* Backdrop overlay */}
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"

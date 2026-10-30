@@ -56,9 +56,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   return (
     <div className="relative" ref={menuRef}>
       {/* User Card Trigger */}
-      <div
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
+        className="w-full text-start flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
         title={tr("Account menu")}
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
@@ -83,11 +86,11 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         <div className="text-muted-foreground hover:text-foreground p-1 transition-colors">
           <ChevronsUpDown className="h-4 w-4" />
         </div>
-      </div>
+      </button>
 
       {/* Popover Dropdown Menu */}
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-full min-w-[240px] rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute bottom-full start-0 mb-2 w-full min-w-[min(240px,calc(100vw-2rem))] rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150">
           {/* Header Identity */}
           <div className="px-2.5 py-2 border-b border-border/60 mb-1">
             <div className="flex items-center justify-between">

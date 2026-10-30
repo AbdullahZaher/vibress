@@ -1,6 +1,7 @@
 import React from "react";
 import { Search, Sun, Moon, X } from "lucide-react";
 import vibressLogo from "../../../assets/images/vibress-logo.png";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface AppSidebarHeaderProps {
   darkMode: boolean;
@@ -17,11 +18,14 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
   onOpenCommandPalette,
   onCloseSidebar,
 }) => {
+  const { tr } = useAdminLocale();
   return (
     <div className="space-y-3 px-4 pt-4 pb-2">
       {/* Brand Logo + Wordmark + Actions */}
       <div className="flex items-center justify-between px-1 pt-1 pb-1">
-        <div
+        <button
+          type="button"
+          aria-label={tr("Dashboard")}
           className="flex items-center gap-2 cursor-pointer min-w-0"
           onClick={() => {
             onNavigate("/admin");
@@ -33,13 +37,13 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           <span className="font-bold text-lg tracking-tight text-foreground truncate">
             Vibress
           </span>
-        </div>
+        </button>
 
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onToggleDarkMode}
-            className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
+            className="text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
             title="Toggle theme"
             aria-label="Toggle theme"
           >
@@ -54,8 +58,9 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           {onCloseSidebar && (
             <button
               type="button"
+              data-sidebar-close
               onClick={onCloseSidebar}
-              className="md:hidden text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
+              className="md:hidden text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
               title="Close menu"
               aria-label="Close menu"
             >
@@ -76,11 +81,11 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           }
           onCloseSidebar?.();
         }}
-        className="w-full flex h-9 items-center justify-between rounded-full border border-border/60 bg-muted/40 hover:bg-muted text-xs text-muted-foreground hover:text-foreground px-3.5 shadow-xs transition-colors cursor-pointer"
+        className="w-full flex h-10 items-center justify-between rounded-full border border-border/60 bg-muted/40 hover:bg-muted text-xs text-muted-foreground hover:text-foreground px-3.5 shadow-xs transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>Search & commands</span>
+          <span>{tr("Search & commands")}</span>
         </div>
         <kbd className="bg-card text-muted-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-border shadow-2xs">
           ⌘K
