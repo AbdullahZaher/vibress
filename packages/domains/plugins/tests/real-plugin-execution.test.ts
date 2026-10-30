@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   Tier2PluginSupervisor,
   Tier2SupervisorError,
@@ -349,6 +351,35 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         .rejects.toThrowError(/RELEASE_DIGEST_MISMATCH/);
       await expect(supervisor.invoke(context, "echo", {}))
         .rejects.toThrowError(/UNTRUSTED_RUNTIME_ISOLATION_UNAVAILABLE/);
+    });
+
+    it("executes the operator-approved entrypoint when its SHA-256 matches", async () => {
+      const supervisor = new Tier2PluginSupervisor({ invocationTimeoutMs: 3000 });
+      supervisorsToClean.push(supervisor);
+      const pluginId = "com.vendor.pinned-valid-artifact";
+      const releaseDigest = "sha256:" + "d".repeat(64);
+      const entrypointSha256 = createHash("sha256")
+        .update(readFileSync(fixtureEntrypoint))
+        .digest("hex");
+      supervisor.admitPlugin({
+        pluginId,
+        releaseDigest,
+        trustTier: "curated_operator",
+        releaseDirectory: path.dirname(fixtureEntrypoint),
+        allowedEntrypoints: [fixtureEntrypoint],
+        entrypointSha256,
+      });
+      const context: Tier2InvocationContext = {
+        pluginId,
+        releaseDigest,
+        publicationId: "pub_01",
+        grantedCapabilities: [],
+        actor: { id: "staff_01", type: "staff" },
+        trustTier: "curated_operator",
+        entrypointPath: fixtureEntrypoint,
+      };
+      await expect(supervisor.invoke(context, "activate", {}))
+        .resolves.toEqual({ activated: true });
     });
 
     it("rejects an entrypoint whose bytes differ from Host-pinned SHA-256", async () => {
