@@ -189,9 +189,11 @@ This is NOT authorization to enable untrusted marketplace code.**
   `memory.max=268435456`, `cpu.max=50000 100000`,
   `pids.max=24`, and `memory.oom.group=1`.
   The launcher starts with Bubblewrap `--block-fd 3` and a dedicated
-  Host-controlled pipe; Host attaches the **blocked** launcher to
-  `cgroup.procs` and verifies membership before releasing that pipe.
-  All sandbox descendants inherit the kernel ceilings. Setup or attachment
+  Host-controlled pipe. Because Bubblewrap forks its sandbox child before the
+  `--block-fd` checkpoint, Host additionally requires the actual child PID from
+  trusted `--info-fd 4`, attaches **both launcher and sandbox child** to
+  `cgroup.procs`, verifies membership, and only then releases the barrier.
+  Otherwise the forked child could escape the kernel ceilings. Setup or attachment
   failure terminates the blocked launcher, never falling back to `fork()`.
 - `Tier2KernelCgroupLease` provides real `memory.events:oom_kill`,
   `cpu.stat:nr_throttled`, and `pids.events:max` counters for acceptance
