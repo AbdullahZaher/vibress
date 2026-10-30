@@ -142,12 +142,12 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
               <TagIcon className="h-4 w-4 text-primary" />
-              {editingId ? "Edit Tag" : "New Tag"}
+              {editingId ? tr("Edit Tag") : tr("New Tag")}
             </CardTitle>
             <CardDescription className="text-xs">
               {editingId
-                ? "Update existing tag metadata."
-                : "Create a tag to organize posts."}
+                ? tr("Update existing tag metadata.")
+                : tr("Create a tag to organize posts.")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -173,7 +173,7 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={tr("Tag summary...")}
-                  className="h-8 text-xs bg-card border-border"
+                  className="h-11 text-sm bg-card border-border"
                 />
               </div>
 

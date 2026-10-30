@@ -300,7 +300,8 @@ export function CommentsPanel({
                           onClick={() => setReasonModal({ commentId: c.id, action: "delete", title: "Delete Comment" })}
                           className="min-h-10 min-w-10 px-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
+                          <span className="sr-only">{tr("Delete Comment")}</span>
                         </Button>
                       )}
 

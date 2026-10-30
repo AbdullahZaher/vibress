@@ -110,7 +110,7 @@ export function ReportsPanel({
                         onClick={() => handleResolve(r.id)}
                         className="min-h-10 text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
                       >
-                        <Check className="h-3 w-3" /> Resolve
+                        <Check className="h-3 w-3" /> {tr("Resolve")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -118,7 +118,7 @@ export function ReportsPanel({
                         onClick={() => handleDismiss(r.id)}
                         className="min-h-10 text-sm text-muted-foreground hover:text-foreground gap-1"
                       >
-                        <X className="h-3 w-3" /> Dismiss
+                        <X className="h-3 w-3" /> {tr("Dismiss")}
                       </Button>
                     </div>
                   ) : (

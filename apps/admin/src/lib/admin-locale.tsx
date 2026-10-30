@@ -24,6 +24,17 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "No active subscriptions found.": "لا توجد اشتراكات نشطة.",
+  "Plan": "الخطة",
+  "Account Actions": "إجراءات الحساب",
+  "Enable Account": "تفعيل الحساب",
+  "Disable Account": "تعطيل الحساب",
+  "Revoke All Sessions": "إلغاء جميع الجلسات",
+  "Edit Tag": "تعديل الوسم",
+  "New Tag": "وسم جديد",
+  "Update existing tag metadata.": "تحديث بيانات الوسم الحالي.",
+  "Create a tag to organize posts.": "أنشئ وسمًا لتنظيم المقالات.",
+  "Unable to verify media usage. Deletion is disabled until references can be checked.": "تعذّر التحقق من استخدام الوسيط. تم تعطيل الحذف حتى يمكن التحقق من أماكن استخدامه.",
   "No tags created yet.": "لم يتم إنشاء وسوم بعد.",
   "Resolve": "معالجة",
   "Reject": "رفض",

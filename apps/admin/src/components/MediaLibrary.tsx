@@ -200,7 +200,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
       />
 
       {uploadError && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
+        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
           {uploadError}
         </div>
       )}
@@ -387,7 +387,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   <Input
                     readOnly
                     value={selectedAsset.url ?? ""}
-                    className="h-8 text-xs font-mono bg-muted/40 border-border"
+                    className="h-11 text-sm font-mono bg-muted/40 border-border"
                   />
                   <IconButton
                     label={copiedId === selectedAsset.id ? tr("Copied") : tr("Copy URL")}
@@ -411,6 +411,10 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                 {isLoadingRefs ? (
                   <p className="text-muted-foreground">
                     {tr("Checking references...")}
+                  </p>
+                ) : isRefsError ? (
+                  <p role="alert" className="text-destructive">
+                    {tr("Unable to verify media usage. Deletion is disabled until references can be checked.")}
                   </p>
                 ) : refSummaryData?.summary ? (
                   <p className="text-muted-foreground font-mono">

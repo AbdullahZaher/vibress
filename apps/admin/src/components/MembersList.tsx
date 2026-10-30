@@ -305,7 +305,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
               />
               <div>
                 <h3 className="font-bold text-sm text-foreground">
-                  {memberDetail.name || "Anonymous Member"}
+                  {memberDetail.name || tr("Anonymous Member")}
                 </h3>
                 <p className="text-xs text-muted-foreground font-mono">
                   {memberDetail.email}
@@ -319,11 +319,11 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
             {/* Subscriptions */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Subscriptions
+                {tr("Subscriptions")}
               </h4>
               {memberSubs.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">
-                  No active subscriptions found.
+                  {tr("No active subscriptions found.")}
                 </p>
               ) : (
                 memberSubs.map((sub) => (
@@ -333,10 +333,10 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                   >
                     <div>
                       <span className="font-semibold text-foreground">
-                        Plan: {sub.planId}
+                        {tr("Plan")}: {sub.planId}
                       </span>
                       <p className="text-[11px] font-mono text-muted-foreground">
-                        Status: {sub.status}
+                        {tr("Status")}: {tr(sub.status)}
                       </p>
                     </div>
                     <Badge
@@ -353,25 +353,25 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
             {/* Account Moderation Actions */}
             {canManage && <div className="space-y-2 pt-2 border-t border-border">
               <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Account Actions
+                {tr("Account Actions")}
               </h4>
               <div className="flex flex-wrap gap-2">
                 {memberDetail.disabledAt !== null ? (
                   <Button
                     size="sm"
                     onClick={() => setPendingAction("enable")}
-                    className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="min-h-11 text-sm font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
-                    <UserCheck className="h-3.5 w-3.5" /> Enable Account
+                    <UserCheck className="h-3.5 w-3.5" /> {tr("Enable Account")}
                   </Button>
                 ) : (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPendingAction("disable")}
-                    className="h-8 text-xs font-semibold gap-1.5 text-red-600 dark:text-red-400 border-red-500/20 hover:bg-red-500/10"
+                    className="min-h-11 text-sm font-semibold gap-1.5 text-red-600 dark:text-red-400 border-red-500/20 hover:bg-red-500/10"
                   >
-                    <UserX className="h-3.5 w-3.5" /> Disable Account
+                    <UserX className="h-3.5 w-3.5" /> {tr("Disable Account")}
                   </Button>
                 )}
 
@@ -379,9 +379,9 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                   variant="outline"
                   size="sm"
                   onClick={() => setPendingAction("revoke")}
-                  className="h-8 text-xs font-semibold gap-1.5 border-border bg-card hover:bg-accent text-foreground"
+                  className="min-h-11 text-sm font-semibold gap-1.5 border-border bg-card hover:bg-accent text-foreground"
                 >
-                  <ShieldAlert className="h-3.5 w-3.5" /> Revoke All Sessions
+                  <ShieldAlert className="h-3.5 w-3.5" /> {tr("Revoke All Sessions")}
                 </Button>
               </div>
             </div>}
