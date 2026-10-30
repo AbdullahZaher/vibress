@@ -1,4 +1,5 @@
 import { AdminCommentReport, resolveCommentReportApi } from "../../lib/api";
+import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -16,14 +17,18 @@ interface ReportsPanelProps {
   reports: AdminCommentReport[];
   onError: (message: string) => void;
   onChanged: () => Promise<void>;
+  canModerate: boolean;
 }
 
 export function ReportsPanel({
   reports,
   onError,
   onChanged,
+  canModerate,
 }: ReportsPanelProps) {
+  const { tr, formatDate } = useAdminLocale();
   const handleResolve = async (id: string) => {
+    if (!canModerate) return;
     try {
       await resolveCommentReportApi(id, "resolved");
       await onChanged();
@@ -33,6 +38,7 @@ export function ReportsPanel({
   };
 
   const handleDismiss = async (id: string) => {
+    if (!canModerate) return;
     try {
       await resolveCommentReportApi(id, "dismissed");
       await onChanged();
@@ -43,14 +49,15 @@ export function ReportsPanel({
 
   return (
     <Card className="bg-transparent border-border shadow-2xs p-0 overflow-hidden">
-      <Table>
+      <div className="overflow-x-auto">
+      <Table className="min-w-[680px]">
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="ps-6 text-xs">Reason</TableHead>
-            <TableHead className="text-xs">Comment ID</TableHead>
-            <TableHead className="text-xs">Reporter</TableHead>
-            <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
+            <TableHead className="ps-6 text-xs">{tr("Reason")}</TableHead>
+            <TableHead className="text-xs">{tr("Comment ID")}</TableHead>
+            <TableHead className="text-xs">{tr("Reporter")}</TableHead>
+            <TableHead className="text-xs">{tr("Status")}</TableHead>
+            <TableHead className="text-end pe-6 text-xs">{tr("Actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -60,7 +67,7 @@ export function ReportsPanel({
                 colSpan={5}
                 className="h-32 text-center text-xs text-muted-foreground"
               >
-                No comment reports found.
+                {tr("No comment reports found.")}
               </TableCell>
             </TableRow>
           ) : (
@@ -70,7 +77,7 @@ export function ReportsPanel({
                   <div className="flex flex-col">
                     <span className="capitalize">{r.reason.replace("_", " ")}</span>
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {new Date(r.createdAt).toLocaleString()}
+                      {formatDate(r.createdAt, { dateStyle: "medium", timeStyle: "short" })}
                     </span>
                   </div>
                 </TableCell>
@@ -91,17 +98,17 @@ export function ReportsPanel({
                         : "bg-muted text-muted-foreground border-border"
                     }`}
                   >
-                    {r.status}
+                    {tr(r.status)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-end pe-6">
-                  {r.status === "open" ? (
+                  {r.status === "open" && canModerate ? (
                     <div className="flex items-center justify-end gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleResolve(r.id)}
-                        className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
+                        className="min-h-10 text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
                       >
                         <Check className="h-3 w-3" /> Resolve
                       </Button>
@@ -109,14 +116,14 @@ export function ReportsPanel({
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDismiss(r.id)}
-                        className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1"
+                        className="min-h-10 text-sm text-muted-foreground hover:text-foreground gap-1"
                       >
                         <X className="h-3 w-3" /> Dismiss
                       </Button>
                     </div>
                   ) : (
                     <span className="text-[11px] text-muted-foreground font-mono">
-                      {r.resolvedAt ? new Date(r.resolvedAt).toLocaleDateString() : "-"}
+                      {r.resolvedAt ? formatDate(r.resolvedAt, { dateStyle: "medium" }) : "-"}
                     </span>
                   )}
                 </TableCell>
@@ -125,6 +132,7 @@ export function ReportsPanel({
           )}
         </TableBody>
       </Table>
+      </div>
     </Card>
   );
 }

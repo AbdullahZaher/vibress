@@ -16,7 +16,7 @@ import { ReportsPanel } from "./community/ReportsPanel";
 
 type Tab = "comments" | "reports";
 
-export function CommunitySettings() {
+export function CommunitySettings({ canModerate = false }: { canModerate?: boolean }) {
   const { tr } = useAdminLocale();
   const [tab, setTab] = useState<Tab>("comments");
   const [comments, setComments] = useState<AdminComment[]>([]);
@@ -81,11 +81,12 @@ export function CommunitySettings() {
       )}
 
       {/* Navigation Tabs Bar */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => setTab("comments")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+          aria-pressed={tab === "comments"}
+          className={`min-h-11 px-3 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
             tab === "comments"
               ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground"
@@ -101,7 +102,8 @@ export function CommunitySettings() {
         <button
           type="button"
           onClick={() => setTab("reports")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+          aria-pressed={tab === "reports"}
+          className={`min-h-11 px-3 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
             tab === "reports"
               ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground"
@@ -135,6 +137,7 @@ export function CommunitySettings() {
               comments={comments}
               onError={setError}
               onChanged={refresh}
+              canModerate={canModerate}
             />
           </div>
 
@@ -143,6 +146,7 @@ export function CommunitySettings() {
               reports={reports}
               onError={setError}
               onChanged={refresh}
+              canModerate={canModerate}
             />
           </div>
         </>
