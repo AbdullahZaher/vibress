@@ -82,73 +82,46 @@ export interface VerifiedSandboxRunner {
  * An active execution probe is required to prove the runner is functional.
  */
 export function detectSandboxRunner(preferredName?: string): VerifiedSandboxRunner | null {
-  if (process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
+  if (process.platform !== "linux" || process.env.VIBRESS_FORCE_UNSUPPORTED_ISOLATION === "1") {
     return null;
   }
 
-  const requested = preferredName || process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
-  const namesToProbe: string[] = requested ? [requested] : ["bwrap", "runsc", "nsjail"];
+  // Diagnostic discovery ONLY. A version check never authorizes execution.
+  // Do not execute arbitrary PATH entries or caller-selected binaries as Host.
+  const requested = preferredName ?? process.env.VIBRESS_TIER2_SANDBOX_RUNNER;
+  const trustedPaths = ["/usr/bin/bwrap", "/usr/local/bin/bwrap", "/bin/bwrap"] as const;
+  if (requested && requested !== "bwrap" && !trustedPaths.some((candidate) => candidate === requested)) {
+    return null;
+  }
+  const candidates = requested && requested.startsWith("/")
+    ? [requested]
+    : [...trustedPaths];
 
-  for (const rawName of namesToProbe) {
-    const name = rawName === "gvisor" ? "runsc" : rawName;
-    let resolvedBin: string | null = null;
-
-    if (path.isAbsolute(name) && existsSync(name)) {
-      resolvedBin = name;
-    } else {
-      const candidates = [
-        `/usr/bin/${name}`,
-        `/usr/local/bin/${name}`,
-        `/bin/${name}`,
-      ];
-
-      if (process.env.PATH) {
-        for (const dir of process.env.PATH.split(path.delimiter)) {
-          if (dir) candidates.push(path.join(dir, name));
-        }
-      }
-
-      for (const candidate of candidates) {
-        if (existsSync(candidate)) {
-          try {
-            const st = statSync(candidate);
-            if (st.isFile()) {
-              resolvedBin = candidate;
-              break;
-            }
-          } catch {
-            // Ignore stat errors
-          }
-        }
-      }
-    }
-
-    if (!resolvedBin) continue;
-
+  for (const candidate of candidates) {
     try {
-      const output = execFileSync(resolvedBin, ["--version"], {
+      if (!existsSync(candidate)) continue;
+      const binary = realpathSync(candidate);
+      const stats = statSync(binary);
+      // Require a root-owned binary with no group/other write permission.
+      // A local executable in writable directories is not a trusted sandbox.
+      if (!stats.isFile() || stats.uid !== 0 || (stats.mode & 0o022) !== 0 || (stats.mode & 0o111) === 0) {
+        continue;
+      }
+      const version = execFileSync(binary, ["--version"], {
         timeout: 2000,
-        stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { PATH: "/usr/bin:/bin" },
       }).trim();
-
-      const normalizedName =
-        name.includes("bwrap") ? "bwrap" :
-        name.includes("runsc") || name.includes("gvisor") ? "runsc" :
-        name.includes("nsjail") ? "nsjail" :
-        "container";
-
       return {
-        name: normalizedName,
-        executablePath: resolvedBin,
-        version: output.split("\n")[0] || "verified",
+        name: "bwrap",
+        executablePath: binary,
+        version: version.split("\\n")[0]?.slice(0, 128) || "detected",
       };
     } catch {
-      // Failed probe; binary cannot be executed safely
-      continue;
+      // No fallback or privilege downgrade.
     }
   }
-
   return null;
 }
 
