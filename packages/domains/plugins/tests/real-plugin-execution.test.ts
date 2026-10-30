@@ -17,6 +17,7 @@ import {
   type Tier2InvocationContext,
 } from "../src/runtime/tier2-process-supervisor.js";
 import type { HostCapabilityHandlers } from "../src/runtime/tier2-capability-gateway.js";
+import { createDurableMarketplaceTier2Supervisor } from "../src/infrastructure/drizzle-marketplace-admissions.js";
 
 describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M7.4, M7.7)", () => {
   const supervisorsToClean: Tier2PluginSupervisor[] = [];
@@ -446,6 +447,33 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
       expect(supervisor.getProcessState(pluginId)).not.toBeNull();
       supervisor.admitPlugin(admission);
       expect(supervisor.getProcessState(pluginId)).toBeNull();
+    });
+
+    it("boots a Host-composed supervisor from the scoped DB authority and denies missing approval", async () => {
+      const lookups: Array<[string, string]> = [];
+      const supervisor = createDurableMarketplaceTier2Supervisor(
+        { invocationTimeoutMs: 500 },
+        {
+          loadMarketplaceAdmission: async (pluginId, publicationId) => {
+            lookups.push([pluginId, publicationId]);
+            return null;
+          },
+        },
+      );
+      supervisorsToClean.push(supervisor);
+      const context: Tier2InvocationContext = {
+        pluginId: "com.vendor.unadmitted-after-restart",
+        releaseDigest: "sha256:" + "a".repeat(64),
+        publicationId: "publication_strict",
+        grantedCapabilities: [],
+        actor: { id: "member_strict", type: "member" },
+        trustTier: "untrusted_marketplace",
+        entrypointPath: fixtureEntrypoint,
+      };
+      await expect(supervisor.invoke(context, "activate", {}))
+        .rejects.toThrowError(/UNTRUSTED_ADMISSION_NOT_AUTHORIZED/);
+      expect(lookups).toEqual([[context.pluginId, context.publicationId]]);
+      expect(supervisor.getProcessState(context.pluginId)).toBeNull();
     });
 
     it("requires monotonically versioned durable Marketplace approval, not a local Map", () => {
