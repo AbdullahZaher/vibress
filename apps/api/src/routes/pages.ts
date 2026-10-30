@@ -18,11 +18,13 @@ export async function pageRoutes(fastify: FastifyInstance) {
   fastify.get("/pages", {
     preHandler: [requireStaffSession, requirePermission("pages.read")],
     handler: async (req, reply) => {
-      const { status, search, limit, offset } = (req.query ?? {}) as {
+      const { status, search, limit, offset, sortBy, sortOrder } = (req.query ?? {}) as {
         status?: string;
         search?: string;
         limit?: string;
         offset?: string;
+        sortBy?: string;
+        sortOrder?: string;
       };
       const params: ListPagesFilter = {
         publicationId: req.publicationContext?.publicationId,
@@ -31,6 +33,8 @@ export async function pageRoutes(fastify: FastifyInstance) {
       if (search) params.search = search;
       if (limit) params.limit = parseInt(limit, 10);
       if (offset) params.offset = parseInt(offset, 10);
+      if (sortBy) params.sortBy = sortBy as ListPagesFilter["sortBy"];
+      if (sortOrder) params.sortOrder = sortOrder as ListPagesFilter["sortOrder"];
       const result = await pagesService.listPages(params);
 
       const pagesWithAuthors = await Promise.all(

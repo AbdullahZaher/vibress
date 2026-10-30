@@ -290,7 +290,8 @@ export class DrizzlePostRepository implements PostRepository {
       conditions.push(eq(posts.primaryAuthorId, filter.authorId));
     }
     if (filter.search && filter.search.trim()) {
-      conditions.push(ilike(posts.title, `%${filter.search.trim()}%`));
+      const query = `%${filter.search.trim()}%`;
+      conditions.push(or(ilike(posts.title, query), ilike(posts.slug, query))!);
     }
 
     if (filter.tagSlug) {

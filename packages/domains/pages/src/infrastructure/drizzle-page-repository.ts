@@ -1,5 +1,5 @@
 import { getDb, pages } from "@vibress/database";
-import { eq, and, isNull, ilike, count, lte, desc } from "drizzle-orm";
+import { eq, and, or, isNull, ilike, count, lte, desc, asc } from "drizzle-orm";
 import { PageRepository } from "../domain/repository";
 import {
   Page,
@@ -206,7 +206,8 @@ export class DrizzlePageRepository implements PageRepository {
       conditions.push(eq(pages.visibility, filter.visibility));
     }
     if (filter.search && filter.search.trim()) {
-      conditions.push(ilike(pages.title, `%${filter.search.trim()}%`));
+      const query = `%${filter.search.trim()}%`;
+      conditions.push(or(ilike(pages.title, query), ilike(pages.slug, query))!);
     }
 
     const whereClause = and(...conditions);
@@ -218,11 +219,21 @@ export class DrizzlePageRepository implements PageRepository {
 
     const totalCount = countRes[0]?.totalCount || 0;
 
+    let orderDirection =
+      filter.sortOrder === "asc" ? asc(pages.createdAt) : desc(pages.createdAt);
+    if (filter.sortBy === "updatedAt") {
+      orderDirection = filter.sortOrder === "asc" ? asc(pages.updatedAt) : desc(pages.updatedAt);
+    } else if (filter.sortBy === "publishedAt") {
+      orderDirection = filter.sortOrder === "asc" ? asc(pages.publishedAt) : desc(pages.publishedAt);
+    } else if (filter.sortBy === "title") {
+      orderDirection = filter.sortOrder === "asc" ? asc(pages.title) : desc(pages.title);
+    }
+
     const rows = await db
       .select()
       .from(pages)
       .where(whereClause)
-      .orderBy(desc(pages.createdAt))
+      .orderBy(orderDirection)
       .limit(limit)
       .offset(offset);
 

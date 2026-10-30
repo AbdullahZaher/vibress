@@ -10,17 +10,20 @@ export interface EditorialListRowProps {
   status: string;
   imageUrl?: string | null | undefined;
   featured?: boolean | undefined;
-  onEdit: () => void;
+  onEdit?: (() => void) | undefined;
   /** Opens existing analytics dashboard, if the user has analytics.read permission. */
   onStatistics?: (() => void) | undefined;
   onPublishToggle?: (() => void) | undefined;
-  onDelete: () => void;
+  onDelete?: (() => void) | undefined;
+  selected?: boolean | undefined;
+  onSelect?: ((selected: boolean) => void) | undefined;
+  selectionLabel?: string | undefined;
 }
 
 /** Shared, responsive editorial row for posts and pages. Actions remain explicit and permission-driven. */
 export function EditorialListRow({
   title, authorName, date, status, imageUrl, featured = false,
-  onEdit, onStatistics, onPublishToggle, onDelete,
+  onEdit, onStatistics, onPublishToggle, onDelete, selected = false, onSelect, selectionLabel,
 }: EditorialListRowProps) {
   const { tr, formatDate } = useAdminLocale();
   const [imageFailed, setImageFailed] = useState(false);
@@ -76,12 +79,25 @@ export function EditorialListRow({
   return (
     <div role="listitem" className="group relative flex items-center gap-2 px-1 py-2 transition-colors hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20 sm:gap-3 sm:py-2.5">
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
-      <button
-        type="button"
-        onClick={onEdit}
-        aria-label={`${tr("Edit")}: ${displayTitle}`}
-        className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
-      />
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={`${tr("Edit")}: ${displayTitle}`}
+          className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+        />
+      )}
+      {onSelect && (
+        <label className="relative z-10 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-muted/60">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(event) => onSelect(event.target.checked)}
+            aria-label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
+            className="size-4 accent-primary"
+          />
+        </label>
+      )}
       <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/70 text-muted-foreground/60 sm:h-14 sm:w-20">
         {imageUrl && !imageFailed ? (
           <img
@@ -133,7 +149,7 @@ export function EditorialListRow({
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
-        ) : (
+        ) : onEdit ? (
           <IconButton
             label={tr("Edit")}
             accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
@@ -143,8 +159,8 @@ export function EditorialListRow({
           >
             <Pencil className="size-4" aria-hidden="true" />
           </IconButton>
-        )}
-        <div ref={actionsRef} className="relative">
+        ) : null}
+        {(onPublishToggle || onDelete) && <div ref={actionsRef} className="relative">
           <button
             ref={triggerRef}
             type="button"
@@ -173,17 +189,19 @@ export function EditorialListRow({
                   {publishLabel}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => { setActionsOpen(false); onDelete(); }}
-                className="flex min-h-9 w-full items-center gap-2 rounded-md px-3 text-start text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                {tr("Delete")}
-              </button>
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => { setActionsOpen(false); onDelete(); }}
+                  className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-start text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {tr("Delete")}
+                </button>
+              )}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

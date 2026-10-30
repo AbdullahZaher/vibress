@@ -85,4 +85,6 @@ export interface ListPagesFilter {
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+  sortBy?: ("createdAt" | "updatedAt" | "publishedAt" | "title") | undefined;
+  sortOrder?: ("asc" | "desc") | undefined;
 }
