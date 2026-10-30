@@ -560,6 +560,20 @@ export function createDefaultAuthoritativeAdmissions(): AuthoritativePluginAdmis
   ];
 }
 
+/**
+ * An untrusted worker must not share imported-module state across publications
+ * or actors. Trusted operator plugins preserve historical per-plugin reuse.
+ * This key is internal process bookkeeping, not an authorization decision.
+ */
+export function tier2ProcessIsolationKey(
+  context: Pick<Tier2InvocationContext, "pluginId" | "publicationId" | "actor">,
+  trustTier: PluginTrustTier,
+): string {
+  return trustTier === "untrusted_marketplace"
+    ? `U:${JSON.stringify([context.pluginId, context.publicationId, context.actor.type, context.actor.id])}`
+    : `T:${context.pluginId}`;
+}
+
 interface PendingInvocation {
   readonly context: Tier2InvocationContext;
   readonly handlers: HostCapabilityHandlers;
@@ -1273,9 +1287,7 @@ export class Tier2PluginSupervisor extends EventEmitter {
 
     // A malicious plugin may retain JavaScript module state between calls.
     // Untrusted workers must never be shared across publications or actors.
-    const processKey = effectiveTrustTier === "untrusted_marketplace"
-      ? `U:${JSON.stringify([context.pluginId, context.publicationId, context.actor.type, context.actor.id])}`
-      : `T:${context.pluginId}`;
+    const processKey = tier2ProcessIsolationKey(context, effectiveTrustTier);
     let active = this.processes.get(processKey);
     if (
       !active ||
