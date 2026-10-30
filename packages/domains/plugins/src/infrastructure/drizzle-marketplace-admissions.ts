@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  getDb, plugins, pluginMarketplaceAdmissions, pluginPublicationStates, auditEvents,
+  getDb, plugins, pluginMarketplaceAdmissions, pluginMarketplacePublisherRevocations,
+  pluginPublicationStates, auditEvents,
 } from "@vibress/database";
 import type { AuthoritativePluginAdmission } from "../runtime/tier2-process-supervisor.js";
 
@@ -94,6 +95,10 @@ export class DrizzleMarketplaceAdmissionRepository {
     const [found] = await this.db().select({ admission: pluginMarketplaceAdmissions })
       .from(pluginMarketplaceAdmissions)
       .innerJoin(plugins, eq(plugins.id, pluginMarketplaceAdmissions.pluginId))
+      .leftJoin(pluginMarketplacePublisherRevocations, eq(
+        pluginMarketplacePublisherRevocations.publisherId,
+        pluginMarketplaceAdmissions.publisherId,
+      ))
       .innerJoin(pluginPublicationStates, and(
         eq(pluginPublicationStates.pluginId, pluginMarketplaceAdmissions.pluginId),
         eq(pluginPublicationStates.publicationId, publicationId),
@@ -102,6 +107,7 @@ export class DrizzleMarketplaceAdmissionRepository {
       .where(and(
         eq(pluginMarketplaceAdmissions.pluginId, pluginId),
         eq(pluginMarketplaceAdmissions.revoked, false),
+        isNull(pluginMarketplacePublisherRevocations.publisherId),
         eq(plugins.status, "active"),
       )).limit(1);
     if (!found) return null;
@@ -126,6 +132,17 @@ export class DrizzleMarketplaceAdmissionRepository {
       throw new MarketplaceAdmissionError("MARKETPLACE_REVISION_INVALID");
     }
     return this.db().transaction(async (tx) => {
+      // Serialize approvals with publisher-wide revocation using the SAME
+      // transaction advisory lock; no approval may race past its tombstone.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${admission.publisherId}, 0))`);
+      const [publisherRevocation] = await tx.select({
+        publisherId: pluginMarketplacePublisherRevocations.publisherId,
+      }).from(pluginMarketplacePublisherRevocations).where(eq(
+        pluginMarketplacePublisherRevocations.publisherId, admission.publisherId,
+      )).limit(1);
+      if (publisherRevocation) {
+        throw new MarketplaceAdmissionError("MARKETPLACE_PUBLISHER_REVOKED");
+      }
       const [plugin] = await tx.select({ id: plugins.id, status: plugins.status })
         .from(plugins).where(eq(plugins.id, admission.pluginId)).for("update").limit(1);
       if (!plugin || plugin.status !== "active") {
@@ -183,6 +200,57 @@ export class DrizzleMarketplaceAdmissionRepository {
         metadata: { policyRevision, releaseDigest: admission.releaseDigest },
       });
       return { ...admission, policyRevision, isRevoked: false };
+    });
+  }
+
+  /**
+   * Globally revoke a publisher. The tombstone persists even if all plugins
+   * are uninstalled, preventing a later approval of a different plugin ID.
+   * An ordinary operator cannot reset the tombstone through this repository.
+   */
+  async revokeOperatorPublisher(
+    publisherId: string,
+    audit: MarketplaceOperatorAudit,
+    reason?: string,
+  ): Promise<number> {
+    ensureOperatorAudit(audit);
+    if (!publisherId.trim() || publisherId.length > 256) {
+      throw new MarketplaceAdmissionError("MARKETPLACE_PUBLISHER_INVALID");
+    }
+    return this.db().transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${publisherId}, 0))`);
+      const [created] = await tx.insert(pluginMarketplacePublisherRevocations).values({
+        publisherId,
+        reason: reason?.slice(0, 256) ?? null,
+        operatorUserId: audit.actorUserId,
+      }).onConflictDoNothing().returning({
+        publisherId: pluginMarketplacePublisherRevocations.publisherId,
+      });
+      if (!created) return 0;
+      const existing = await tx.select({
+        pluginId: pluginMarketplaceAdmissions.pluginId,
+        policyRevision: pluginMarketplaceAdmissions.policyRevision,
+      }).from(pluginMarketplaceAdmissions).where(and(
+        eq(pluginMarketplaceAdmissions.publisherId, publisherId),
+        eq(pluginMarketplaceAdmissions.revoked, false),
+      )).orderBy(pluginMarketplaceAdmissions.pluginId).for("update");
+      for (const row of existing) {
+        const next = row.policyRevision + 1;
+        if (!Number.isSafeInteger(next)) {
+          throw new MarketplaceAdmissionError("MARKETPLACE_REVISION_EXHAUSTED");
+        }
+        await tx.update(pluginMarketplaceAdmissions).set({
+          revoked: true, policyRevision: next, updatedAt: new Date(),
+        }).where(eq(pluginMarketplaceAdmissions.pluginId, row.pluginId));
+      }
+      await tx.insert(auditEvents).values({
+        id: randomUUID(), publicationId: null,
+        actorUserId: audit.actorUserId, requestId: audit.requestId,
+        action: "plugin.marketplace_publisher_revoked",
+        targetType: "plugin_publisher", targetId: publisherId,
+        metadata: { affectedPluginCount: existing.length },
+      });
+      return existing.length;
     });
   }
 
