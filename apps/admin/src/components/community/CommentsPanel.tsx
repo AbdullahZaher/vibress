@@ -258,7 +258,7 @@ export function CommentsPanel({
                             onClick={() => handleApprove(c.id)}
                             className="min-h-10 text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
                           >
-                            <Check className="h-3 w-3" /> Approve
+                            <Check className="h-3 w-3" aria-hidden="true" /> {tr("Approve")}
                           </Button>
                           <Button
                             variant="outline"
@@ -266,7 +266,7 @@ export function CommentsPanel({
                             onClick={() => setReasonModal({ commentId: c.id, action: "reject", title: "Reject Comment" })}
                             className="min-h-10 text-sm border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
                           >
-                            <X className="h-3 w-3" /> Reject
+                            <X className="h-3 w-3" aria-hidden="true" /> {tr("Reject")}
                           </Button>
                         </>
                       )}
@@ -278,7 +278,7 @@ export function CommentsPanel({
                           onClick={() => setReasonModal({ commentId: c.id, action: "hide", title: "Hide Comment" })}
                           className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
                         >
-                          <EyeOff className="h-3 w-3" /> Hide
+                          <EyeOff className="h-3 w-3" aria-hidden="true" /> {tr("Hide")}
                         </Button>
                       )}
 
@@ -289,7 +289,7 @@ export function CommentsPanel({
                           onClick={() => handleRestore(c.id)}
                           className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
                         >
-                          <RotateCcw className="h-3 w-3" /> Restore
+                          <RotateCcw className="h-3 w-3" aria-hidden="true" /> {tr("Restore")}
                         </Button>
                       )}
 

@@ -163,7 +163,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {filter === "all" ? "All Members" : filter}
+              {filter === "all" ? tr("All Members") : tr(filter)}
             </button>
           ))}
         </div>
@@ -183,7 +183,8 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
 
       {/* Content Table Card */}
       <Card className="border-border/70 shadow-2xs p-0 overflow-hidden">
-        <Table>
+        <div className="overflow-x-auto">
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow className="border-border">
               <TableHead className="ps-6 text-xs">{tr("Member")}</TableHead>
@@ -208,7 +209,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                   colSpan={4}
                   className="h-32 text-center text-xs text-red-500"
                 >
-                  Failed to load members: {(error as Error)?.message}
+                  {tr("Failed to load members:")} {(error as Error)?.message}
                 </TableCell>
               </TableRow>
             ) : members.length === 0 ? (
@@ -237,7 +238,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                       />
                       <div className="flex flex-col">
                         <span className="font-semibold text-xs text-foreground">
-                          {member.name || "Anonymous Member"}
+                          {member.name || tr("Anonymous Member")}
                         </span>
                         <span className="text-[11px] text-muted-foreground font-mono">
                           {member.email}
@@ -252,14 +253,14 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                         variant="outline"
                         className="text-[10px] font-mono px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
                       >
-                        Disabled
+                        {tr("Disabled")}
                       </Badge>
                     ) : (
                       <Badge
                         variant="outline"
                         className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                       >
-                        Active
+                        {tr("Active")}
                       </Badge>
                     )}
                   </TableCell>
@@ -275,7 +276,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                       onClick={() => setSelectedMemberId(member.id)}
                       className="min-h-11 text-sm border-border bg-card hover:bg-accent text-foreground cursor-pointer"
                     >
-                      Manage
+                      {tr("Manage")}
                     </Button>
                   </TableCell>
                 </TableRow>

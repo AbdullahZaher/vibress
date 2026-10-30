@@ -75,7 +75,7 @@ export function ReportsPanel({
               <TableRow key={r.id} className="hover:bg-muted/40 border-border">
                 <TableCell className="ps-6 font-semibold text-xs text-foreground">
                   <div className="flex flex-col">
-                    <span className="capitalize">{r.reason.replace("_", " ")}</span>
+                    <span className="capitalize">{tr(r.reason.replace("_", " "))}</span>
                     <span className="text-xs text-muted-foreground font-mono">
                       {formatDate(r.createdAt, { dateStyle: "medium", timeStyle: "short" })}
                     </span>

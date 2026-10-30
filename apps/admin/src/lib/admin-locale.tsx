@@ -24,6 +24,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Failed to load members:": "تعذّر تحميل الأعضاء:",
   "No active subscriptions found.": "لا توجد اشتراكات نشطة.",
   "Plan": "الخطة",
   "Account Actions": "إجراءات الحساب",
