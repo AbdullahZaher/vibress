@@ -10,6 +10,7 @@ import {
   verifyReleaseIntegrity,
   assertImmutableUntrustedReleaseTree,
   validateMarketplaceAdmissionRefresh,
+  countSandboxOutputBytes,
   tier2ProcessIsolationKey,
   detectSandboxRunner,
   createDefaultAuthoritativeAdmissions,
@@ -483,6 +484,19 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         ...previous,
         policyRevision: 0,
       })).toThrowError(/UNTRUSTED_ADMISSION_REVISION_INVALID/);
+    });
+
+    it("bounds untrusted stdout/stderr accounting before Host processes floods", () => {
+      expect(countSandboxOutputBytes(0, 64, 100)).toBe(64);
+      expect(countSandboxOutputBytes(64, 36, 100)).toBe(100);
+      expect(() => countSandboxOutputBytes(100, 1, 100))
+        .toThrowError(/SANDBOX_OUTPUT_LIMIT/);
+      expect(() => countSandboxOutputBytes(0, 101, 100))
+        .toThrowError(/SANDBOX_OUTPUT_LIMIT/);
+      expect(() => countSandboxOutputBytes(-1, 5, 100))
+        .toThrowError(/SANDBOX_OUTPUT_LIMIT/);
+      expect(() => countSandboxOutputBytes(Number.MAX_SAFE_INTEGER, 1, 100))
+        .toThrowError(/SANDBOX_OUTPUT_LIMIT/);
     });
 
     it("keeps Host admission snapshots isolated from caller mutations", () => {
