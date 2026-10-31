@@ -34,7 +34,7 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
   return (
     <div
       id={id}
-      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${className}`}
+      className={`flex min-w-0 flex-col justify-between gap-4 pb-1 sm:flex-row sm:items-start sm:gap-6 ${className}`}
     >
       <div className={`min-w-0 ${backAction ? "flex items-center gap-3" : ""}`}>
         {backAction}
@@ -46,12 +46,12 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
           )}
           <h1
             id={titleId}
-            className="text-xl sm:text-2xl font-bold tracking-tight text-foreground"
+            className="break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-[28px]"
           >
             {title}
           </h1>
           {description && (
-            <p className="text-sm leading-relaxed text-muted-foreground mt-1">
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}

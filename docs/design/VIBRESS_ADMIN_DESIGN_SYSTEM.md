@@ -146,3 +146,34 @@ A change is not design-complete until:
 - Destructive actions are confirmed and provide a result.
 - E2E coverage exists for any changed critical workflow.
 - Typecheck, lint, unit tests, build and relevant E2E tests pass.
+
+## 7. Vibress Modern Workspace — 2026-10-31 refinements
+
+### Role review
+- **Product/UX:** Rebalance visual hierarchy so navigation recedes and editorial work remains the focus.
+- **Frontend:** Retain existing React/Tailwind 4 components and existing function/permission contracts; alter design primitives and page composition rather than routes.
+- **Accessibility/RTL:** Preserve keyboard focus and logical CSS spacing. Provide readable labels, semantic active filter states, and a visible skip link.
+- **QA:** Require both locale directions, themes, multiple viewports and automated checks before release claims.
+
+### Creative direction: Calm Density + Precision Minimalism
+- **Mood:** Focused, quiet, editorial and enterprise-grade; preserve Vibress identity.
+- **Palette:** Neutral canvas (`#f7f8fa` light, `#121416` dark), restrained sidebar (`#f3f5f7` / `#16191d`), inherited semantic status colors and one primary action.
+- **Typography:** Page title 24–28px semibold; sections ~18px; body and control text ≥14px; metadata ≥12px.
+- **Layout:** Existing 4/8px rhythm; more consistent 44px inputs, quiet navigation, flat cards and grouped settings rows.
+- **Effects:** No gratuitous glassmorphism, default card shadows, flashing motion or oversized illustrated placeholders. A small reading-first icon is acceptable where no real image exists.
+
+### Applied component rules
+1. `AdminShell`: skip-to-content, dynamic viewport height and independent editorial scrolling; preserve the Studio editor's separate padding mode.
+2. `AppSidebar`, `NavContent`: low-contrast sidebar canvas and proportionally tuned navigation spacing.
+3. `AdminPageHeader`, `Button`, `Input`, `Card`, `Table`: shared typographic, shape and elevation rules; avoid the arbitrary 10–11px table headers.
+4. `SettingsHub`, `SettingsSection`, `SettingsCardRow`: prominent content, calm active tabs, scan-friendly descriptions and wrapping actions.
+5. `AnalyticsDashboard`: editorial queue remains first; action cards gain readable numbers and consistent hierarchy; latest-post summary avoids an oversized decorative placeholder.
+6. `PostsList`, `PagesList`, `MembersList`, `MediaLibrary`: aligned filter states and consistent surfaces without changing query behavior.
+
+### Research and evidence
+- [Linear: A calmer interface for a product in motion (12 March 2026)](https://linear.app/now/behind-the-latest-design-refresh): give the working area precedence; harmonize headers, navigation and subtle boundaries.
+- [Vercel Geist Design System](https://vercel.com/geist/introduction): systematic typography, grids, semantic colors and reusable controls.
+- [W3C WCAG 2.2](https://www.w3.org/TR/wcag/): visible focus, reflow, control targets and text contrast.
+
+### Delivery and acceptance limitations
+**Source review and implemented changes are not equivalent to live visual QA.** The system must still be exercised in a real authenticated browser at 320, 390, 768, 1024 and 1440px for Arabic/English and both themes, including 200% text zoom, keyboard and destructive actions. Complete WCAG AA conformance, calibrated 9.5/10 scores and before/after screenshots must not be claimed without those observations.

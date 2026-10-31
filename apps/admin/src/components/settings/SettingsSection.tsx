@@ -16,16 +16,16 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
   children,
 }) => {
   return (
-    <section id={id} className="space-y-3 scroll-mt-6">
+    <section id={id} className="scroll-mt-24 space-y-4">
       {/* Clean Section Header */}
-      <div className="flex items-center justify-between pb-1">
+      <div className="flex min-w-0 items-start justify-between pb-1">
         <div>
-          <h2 className="text-base font-bold tracking-tight text-foreground flex items-center gap-2">
-            {icon && <span className="text-primary">{icon}</span>}
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
+            {icon && <span className="text-muted-foreground">{icon}</span>}
             {title}
           </h2>
           {description && (
-            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}
@@ -33,7 +33,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       </div>
 
       {/* Grouped Section Card Container */}
-      <div className="rounded-xl border border-border/70 bg-card/60 shadow-xs divide-y divide-border/40 overflow-hidden backdrop-blur-xs">
+      <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/80 bg-card">
         {children}
       </div>
     </section>

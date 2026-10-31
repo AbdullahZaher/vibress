@@ -16,9 +16,9 @@ interface NavContentProps {
   canReadTranslations: boolean;
 }
 
-const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary";
+const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-foreground/70";
 const inactiveClass = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground";
-const linkClass = "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring";
+const linkClass = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring";
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
@@ -96,7 +96,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           </div>
 
           {postsExpanded && (
-            <div id={postLinksId} className="my-1 ms-5 space-y-0.5 border-s border-sidebar-border/70 ps-3">
+            <div id={postLinksId} className="my-1 ms-5 space-y-0.5 border-s border-sidebar-border ps-3">
               {postLinks.map((item) => (
                 <button
                   key={item.path}

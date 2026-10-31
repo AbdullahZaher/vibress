@@ -312,7 +312,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const totalVisitors = data?.summary.visitors ?? 0;
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-8">
       {/* Page Title Header */}
       <AdminPageHeader
         title={tr("Dashboard")}
@@ -351,7 +351,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   key={item.key}
                   type="button"
                   onClick={() => onNavigate(item.path)}
-                  className="group flex min-h-28 min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-4 text-start shadow-2xs transition-colors hover:border-primary/40 hover:bg-muted/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="group flex min-h-32 min-w-0 flex-col justify-between rounded-xl border border-border/80 bg-card p-5 text-start transition-colors hover:border-ring/40 hover:bg-muted/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     {item.icon}
@@ -359,10 +359,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </span>
                   <span className="flex items-end justify-between gap-3">
                     <span className="min-w-0 space-y-1">
-                      <span className="block text-2xl font-semibold tabular-nums tracking-tight text-foreground">{formatNumber(item.count)}</span>
-                      <span className="block text-xs leading-relaxed text-muted-foreground">{tr(item.description)}</span>
+                      <span className="block text-3xl font-semibold tabular-nums tracking-tight text-foreground">{formatNumber(item.count)}</span>
+                      <span className="block text-sm leading-relaxed text-muted-foreground">{tr(item.description)}</span>
                     </span>
-                    <span className="shrink-0 text-xs font-medium text-primary">{tr("Open")}</span>
+                    <span className="shrink-0 text-sm font-medium text-foreground underline-offset-4 group-hover:underline">{tr("Open")}</span>
                   </span>
                 </button>
               ))}
@@ -381,7 +381,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               aria-pressed={analyticsTab === t}
               className={`min-h-11 shrink-0 whitespace-nowrap px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
                 analyticsTab === t
-                  ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                  ? "bg-card text-foreground border border-border font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -490,13 +490,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   {tr("LATEST POST PERFORMANCE")}
                 </h3>
                 {data.latestPost ? (
-                  <Card className="p-5 border-border/70 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60 text-muted-foreground sm:h-24 sm:w-28">
-                        <FileText className="size-7" />
+                      <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted/80 text-muted-foreground">
+                        <FileText className="size-5" />
                       </div>
                       <div className="space-y-1 min-w-0">
-                        <h4 className="font-bold text-base text-foreground truncate">
+                        <h4 dir="auto" className="truncate text-base font-semibold text-foreground">
                           {data.latestPost.title}
                         </h4>
                         <p className="text-xs text-muted-foreground">

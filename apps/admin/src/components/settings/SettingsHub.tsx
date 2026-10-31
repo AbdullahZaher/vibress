@@ -148,7 +148,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   }
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="mx-auto w-full max-w-7xl space-y-8 pb-28">
       {/* Page Header */}
       <AdminPageHeader
         title={tr("Settings")}
@@ -156,7 +156,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       />
 
       {/* Search and Section Sticky Filter Bar */}
-      <div className="sticky top-0 z-30 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 bg-background/95 backdrop-blur-md border border-border/80 rounded-xl shadow-xs">
+      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 rounded-xl border border-border/80 bg-background/95 p-2 backdrop-blur-md sm:flex-row sm:items-center">
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           {SETTINGS_REGISTRY.map((pillar) => {
@@ -167,10 +167,10 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 type="button"
                 onClick={() => scrollToSection(pillar.id, true)}
                 aria-pressed={isActive}
-                className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
+                className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring ${
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    ? "border-border bg-card text-foreground font-semibold"
+                    : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 }`}
               >
                 {getPillarIcon(pillar.iconName)}
@@ -188,7 +188,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("Filter settings...")}
-            className="ps-8 text-sm min-h-10 bg-card border-border/70"
+            className="min-h-11 border-border bg-card ps-9 text-sm"
           />
           {query && (
             <button

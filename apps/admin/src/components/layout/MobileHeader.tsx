@@ -67,7 +67,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-muted/40 text-foreground hover:bg-muted transition-colors cursor-pointer"
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
           aria-label={tr("Toggle navigation menu")}
           title={tr("Open menu")}
         >
@@ -93,7 +93,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/new")}
-            className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-ring"
             title={tr("Create new post")}
             aria-label={tr("Create new post")}
           >
@@ -104,7 +104,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          className="flex size-10 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+          className="flex size-10 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           title="Search / Command Palette"
           aria-label={tr("Search")}
         >
