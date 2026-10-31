@@ -24,6 +24,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Uploading...": "جارٍ رفع الملفات...",
   "Analytics overview": "نظرة عامة على التحليلات",
   "Refresh and retry the remaining items.": "حدّث القائمة وأعِد محاولة تنفيذ الإجراء على العناصر المتبقية.",
   "Unknown status": "حالة غير معروفة",

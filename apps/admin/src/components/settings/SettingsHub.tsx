@@ -10,6 +10,7 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
+import { ToggleButton } from "../ui/toggle-button";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -162,20 +163,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           {SETTINGS_REGISTRY.map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
-              <button
+              <ToggleButton
                 key={pillar.id}
-                type="button"
+                pressed={isActive}
                 onClick={() => scrollToSection(pillar.id, true)}
-                aria-pressed={isActive}
-                className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring ${
-                  isActive
-                    ? "border-border bg-muted text-foreground font-semibold"
-                    : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                }`}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
-              </button>
+              </ToggleButton>
             );
           })}
         </div>

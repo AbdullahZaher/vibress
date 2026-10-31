@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { ToggleButton } from "./ui/toggle-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -154,18 +155,13 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div role="group" aria-label={tr("Filter by member status")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
           {(["all", "active", "disabled"] as const).map((filter) => (
-            <button
+            <ToggleButton
               key={filter}
+              pressed={statusFilter === filter}
               onClick={() => setStatusFilter(filter)}
-              aria-pressed={statusFilter === filter}
-              className={`min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
-                statusFilter === filter
-                  ? "bg-muted text-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              }`}
             >
               {filter === "all" ? tr("All Members") : tr(filter)}
-            </button>
+            </ToggleButton>
           ))}
         </div>
 

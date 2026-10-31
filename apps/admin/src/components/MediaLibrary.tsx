@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { ToggleButton } from "./ui/toggle-button";
 import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { EditorialPagination } from "./common/EditorialPagination";
@@ -235,17 +236,13 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div role="group" aria-label={tr("Filter by media type")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto">
               {["all", "image", "video", "audio", "file"].map((type) => (
-                <button
+                <ToggleButton
                   key={type}
-                  type="button"
+                  pressed={selectedType === type}
                   onClick={() => setSelectedType(type)}
-                  aria-pressed={selectedType === type}
-                  className={selectedType === type
-                    ? "min-h-11 shrink-0 rounded-lg bg-muted px-3.5 text-sm font-semibold text-foreground"
-                    : "min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer"}
                 >
                   {tr(type === "all" ? "All Media" : type === "image" ? "Images" : type === "video" ? "Videos" : type === "audio" ? "Audio" : "Files")}
-                </button>
+                </ToggleButton>
               ))}
             </div>
 
