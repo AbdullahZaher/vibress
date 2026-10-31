@@ -12,7 +12,7 @@ import { readEditorialViewState, saveEditorialViewState } from "./common/editori
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2, Check } from "lucide-react";
 
 interface PostSummary {
   id: string;
@@ -100,10 +100,21 @@ export const PostsList: React.FC<PostsListProps> = ({
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
+  const [clearedNotice, setClearedNotice] = useState<string | null>(null);
+  const isFirstViewRender = useRef(true);
+
   useEffect(() => {
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
+    if (isFirstViewRender.current) {
+      isFirstViewRender.current = false;
+      return;
+    }
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      setClearedNotice(tr("Selection cleared for new view"));
+      window.setTimeout(() => setClearedNotice(null), 3000);
+      return new Set();
+    });
+  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder, tr]);
 
   const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
   const fetchPosts = useCallback(async () => {
@@ -318,8 +329,12 @@ export const PostsList: React.FC<PostsListProps> = ({
                 });
               }}
             >
-              <CheckSquare2 className="size-4" aria-hidden="true" />
-              {tr("Select")}
+              {selectionMode ? (
+                <Check className="size-4" aria-hidden="true" />
+              ) : (
+                <CheckSquare2 className="size-4" aria-hidden="true" />
+              )}
+              {tr(selectionMode ? "Done" : "Select")}
             </Button>
           )}
         </div>
@@ -355,13 +370,13 @@ export const PostsList: React.FC<PostsListProps> = ({
               className="min-h-11 px-0"
             />
             <span aria-live="polite" className="text-sm text-muted-foreground">
-              {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
+              {clearedNotice || (resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>)}
             </span>
           </div>
         )}
         {!selectionMode && (
           <span aria-live="polite" className="sr-only">
-            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`}
+            {clearedNotice || (resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`)}
           </span>
         )}
         {selectionMode && !resultsPending && !error && selectedIds.size > 0 && (

@@ -21,7 +21,7 @@ describe("EditorialSelectionCheckbox", () => {
     container.remove();
   });
 
-  it("renders unchecked state with accessible name", () => {
+  it("renders unchecked state with accessible name and native semantics", () => {
     act(() => {
       root.render(
         <EditorialSelectionCheckbox
@@ -36,11 +36,18 @@ describe("EditorialSelectionCheckbox", () => {
     expect(input).not.toBeNull();
     expect(input?.checked).toBe(false);
     expect(input?.getAttribute("aria-label")).toBe("Select post 1");
-    expect(input?.getAttribute("aria-checked")).toBe("false");
+    // Native checkboxes must NOT have redundant aria-checked attribute
+    expect(input?.hasAttribute("aria-checked")).toBe(false);
     expect(container.querySelector("svg")).toBeNull();
+
+    // Verify 44x44px touch target on label and 18x18px visual checkbox
+    const label = container.querySelector("label");
+    expect(label?.className).toContain("min-h-11");
+    expect(label?.className).toContain("min-w-11");
+    expect(input?.className).toContain("size-[18px]");
   });
 
-  it("renders checked state with Check icon and aria-checked=true", () => {
+  it("renders checked state with Check icon and native checked=true", () => {
     act(() => {
       root.render(
         <EditorialSelectionCheckbox
@@ -53,13 +60,13 @@ describe("EditorialSelectionCheckbox", () => {
 
     const input = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(input?.checked).toBe(true);
-    expect(input?.getAttribute("aria-checked")).toBe("true");
+    expect(input?.hasAttribute("aria-checked")).toBe(false);
     const icon = container.querySelector("svg");
     expect(icon).not.toBeNull();
     expect(icon?.classList.contains("lucide-check")).toBe(true);
   });
 
-  it("renders indeterminate state with Minus icon and aria-checked=mixed", () => {
+  it("renders indeterminate state with Minus icon and native indeterminate=true via ref", () => {
     act(() => {
       root.render(
         <EditorialSelectionCheckbox
@@ -73,7 +80,7 @@ describe("EditorialSelectionCheckbox", () => {
 
     const input = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(input?.indeterminate).toBe(true);
-    expect(input?.getAttribute("aria-checked")).toBe("mixed");
+    expect(input?.hasAttribute("aria-checked")).toBe(false);
     const icon = container.querySelector("svg");
     expect(icon).not.toBeNull();
     expect(icon?.classList.contains("lucide-minus")).toBe(true);

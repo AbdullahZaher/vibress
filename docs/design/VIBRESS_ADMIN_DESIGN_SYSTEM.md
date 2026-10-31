@@ -393,7 +393,49 @@ The top **Select** button followed the desired minimal, modern design; however, 
    - Posts and Pages share the exact same `EditorialSelectionCheckbox`, row layout, bulk toolbar, and indeterminate selection logic.
 
 ### Verification & Artifacts
-- **Unit Tests:** `apps/admin/src/components/common/__tests__/EditorialSelectionCheckbox.test.tsx` (6 tests) and `EditorialListRow.test.tsx` (15 tests) passing 100%.
-- **Full Suite:** 36 test files, 184 tests in `apps/admin` passing 100%.
+- **Unit Tests:** `apps/admin/src/components/common/__tests__/EditorialSelectionCheckbox.test.tsx` (6 tests) and `EditorialListRow.test.tsx` (20 tests) passing 100%.
+- **Full Suite:** 37 test files, 192 tests in `apps/admin` passing 100%.
 - **E2E Acceptance:** 11 Playwright acceptance tests in `tests/e2e/admin-ui-design-acceptance.test.ts` passing 100%.
 - **Responsive & Theme Verification:** Captured visual verification across Light and Dark themes, 320px, 390px, and 1440px viewports, and English LTR / Arabic RTL layouts.
+
+## 2026-10-31 — Final Editorial Selection UX & Accessibility Refinements (P1/P2 Audit)
+
+### 1. Checkbox Touch Targets (P1)
+- **Problem:** `EditorialSelectionCheckbox` specified a 44×44px interactive target, but `EditorialListRow.tsx` applied `size-8 min-h-8 min-w-8` override, constraining the actual hit area to 32×32px.
+- **Resolution:** Removed conflicting local size overrides. The wrapping `<label>` provides an unconstrained 44×44px (`min-h-11 min-w-11`) touch target meeting WCAG 2.2 AA target size criteria while keeping an 18×18px visual checkbox centered within the interaction area.
+
+### 2. Native Checkbox Accessibility (P1)
+- **Problem:** Native checkboxes with redundant `aria-checked` attributes caused conflicts with browser accessibility trees.
+- **Resolution:** In `EditorialSelectionCheckbox.tsx`, removed redundant `aria-checked` attribute. The component utilizes pure native checkbox semantics (`type="checkbox"`, `checked`, `disabled`) and updates `HTMLInputElement.indeterminate` via React `useRef`. Accessible labels (`aria-label`) and visible focus indicators (`focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) are preserved across light and dark modes.
+
+### 3. Row Interaction Model in Selection Mode (P1)
+- **Problem:** The full-row edit link remained active in selection mode, risking accidental navigation when users attempted to select items.
+- **Resolution:**
+  - **Selection Mode OFF:** The full-row edit action is mounted as an accessible sibling link/button (`!selectionMode && onEdit`), preserving Cmd/Ctrl-click, open-in-new-tab, and normal keyboard navigation.
+  - **Selection Mode ON:** The edit link/button is completely unmounted from the DOM. Row container clicks call `onSelect(!selected)`, toggling selection instead of navigating. Direct clicks on the checkbox or label perform exactly ONE toggle without double-toggling. Interactive child controls (such as the More Actions menu) remain operable and do not trigger row selection.
+
+### 4. Self-Explanatory Select / Done Button (P2)
+- **State Transition:**
+  - Inactive: **Select** with `CheckSquare2` icon and `aria-pressed="false"`.
+  - Active: **Done** with `Check` icon and `aria-pressed="true"`.
+- **Localization:** Localized in English ("Select" / "Done") and Arabic ("تحديد" / "تم").
+
+### 5. Predictable Filter, Sort, and Pagination Selection Lifecycle (P2)
+- **Lifecycle Invariant:** When users change filters, sort order, debounced search, page index, or page size, active selection mode is preserved (the user is not unexpectedly kicked out of selection mode).
+- **Stale ID Protection:** Selected IDs are cleared immediately to prevent stale IDs from triggering destructive bulk actions on new views.
+- **Subtle Accessible Announcement:** When selections are cleared due to view changes, a polite live region notice (`Selection cleared for new view` / `تم إلغاء التحديد للعرض الجديد`) is announced via `aria-live="polite"` without disruptive toast popups.
+
+### 6. Correct Bulk Actions Group Semantics (P2)
+- In `EditorialBulkActions.tsx`, updated container role from `role="toolbar"` to `role="group"` with `aria-label={tr("Bulk actions")}`. WAI-ARIA guidelines require `role="group"` for collections of independently tabbable button controls rather than arrow-navigated roving-tabindex toolbars.
+
+### 7. Refined Selected Row Visual Feedback (P2)
+- Replaced noticeable gray fills with an ultra-subtle, theme-aware tint (`bg-primary/[0.035]` light, `bg-primary/[0.055]` dark).
+- Clear, distinct separation between hover (`hover:bg-muted/20`), keyboard focus (`focus-within:bg-muted/20`), and row selection (`selected`), keeping thumbnails and text 100% crisp and legible.
+
+### 8. Quality Assurance & Test Verification
+- `pnpm --filter @vibress/admin typecheck`: 0 errors.
+- `pnpm --filter @vibress/admin lint`: 0 errors, 0 warnings.
+- `pnpm vitest run apps/admin`: 37 test files, 192 tests passing (100%).
+- `pnpm exec playwright test tests/e2e/admin-ui-design-acceptance.test.ts`: 11/11 tests passing (100%).
+- `pnpm --filter @vibress/admin build`: Production Vite build successful.
+- Real browser screenshots captured across viewports (320px, 390px, 1440px), light/dark themes, and Arabic RTL / English LTR.

@@ -56,7 +56,6 @@ export const EditorialSelectionCheckbox: React.FC<EditorialSelectionCheckboxProp
           checked={checked}
           disabled={disabled}
           aria-label={label}
-          aria-checked={indeterminate ? "mixed" : checked}
           onChange={(event) => onChange(event.target.checked)}
           className={cn(
             "size-[18px] cursor-pointer appearance-none rounded-[5px] border transition-all duration-150",

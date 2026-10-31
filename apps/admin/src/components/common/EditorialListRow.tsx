@@ -131,19 +131,29 @@ export function EditorialListRow({
         ? "text-status-review-fg"
         : "text-muted-foreground";
 
+  const handleRowClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectionMode || !onSelect) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, label, [role="menu"], [role="menuitem"]')) {
+      return;
+    }
+    onSelect(!selected);
+  };
+
   return (
     <div
       role="listitem"
       data-selected={selected ? "true" : undefined}
+      onClick={handleRowClick}
       className={cn(
         "group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-2 sm:px-3 py-2.5 transition-colors sm:gap-4 last:border-b-0",
         "hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20",
         selected && "bg-primary/[0.035] dark:bg-primary/[0.055]",
-        onEdit && "cursor-pointer"
+        (selectionMode ? onSelect : onEdit) && "cursor-pointer"
       )}
     >
-      {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
-      {onEdit && (editHref ? (
+      {/* Sibling edit link/button: rendered only when selection mode is inactive so row editing never activates during selection */}
+      {!selectionMode && onEdit && (editHref ? (
         <a
           href={editHref}
           onClick={(event) => {
@@ -169,7 +179,6 @@ export function EditorialListRow({
             checked={selected}
             onChange={onSelect}
             label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
-            className="size-8 min-h-8 min-w-8"
           />
         </div>
       )}
