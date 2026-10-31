@@ -241,3 +241,7 @@ The design direction of **Vibress Editorial Workspace** draws on the actual sour
 - Updated the sort labels on Posts and Pages to legible 14px type; no change to the server-backed sorting behavior.
 - Post images intentionally display only when the resource has a source image; invalid-source handling still requires browser verification for layout shift at real network speeds.
 - Ghost remains a conceptual benchmark, not a copied theme. See the preceding source links.
+
+
+### Follow-up: cross-screen coherence
+The second code/design review identified a real visual inconsistency: after converting Posts and Pages to flat editorial filters, Media, Members and Dashboard retained a separate, card-heavy segmented filter system. Harmonized all three with the same neutral selected state, unboxed filter rail, readable labels and 44px control targets. Kept search/filter queries, server sorting, table semantics, media actions and analytics data rendering unchanged. Regression checks must include the existing multi-screen browser screenshot suite; past screenshots are baseline only.

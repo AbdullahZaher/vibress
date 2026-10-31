@@ -373,16 +373,16 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div role="group" aria-label={tr("Analytics")} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 overflow-x-auto w-full sm:w-auto">
+        <div role="group" aria-label={tr("Analytics")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setAnalyticsTab(t)}
               aria-pressed={analyticsTab === t}
-              className={`min-h-9 shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
+              className={`min-h-11 shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
                 analyticsTab === t
-                  ? "bg-card text-foreground border border-border/70 shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                  ? "bg-muted text-foreground font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
@@ -396,7 +396,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             aria-label={tr("Date range")}
             value={dateLabel}
             onChange={(event) => setDateLabel(event.target.value)}
-            className="min-h-11 w-full appearance-none rounded-xl border border-border/80 bg-card py-2 pe-10 ps-10 text-sm font-medium text-foreground transition-all hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring shadow-2xs sm:w-auto cursor-pointer"
+            className="min-h-11 w-full appearance-none rounded-lg border border-border/80 bg-card py-2 pe-10 ps-10 text-sm font-medium text-foreground transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto cursor-pointer"
           >
             {DATE_OPTIONS.map((opt) => (
               <option key={opt.range} value={opt.label}>{tr(opt.label)}</option>
