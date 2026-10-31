@@ -16,6 +16,7 @@ interface PageSummary {
   slug: string;
   status: string;
   publishedAt: string | null;
+  scheduledAt?: string | null;
   updatedAt: string;
   authors?: Array<{ name: string; email: string }>;
 }
@@ -287,7 +288,7 @@ export const PagesList: React.FC<PagesListProps> = ({
             />
             {tr("Select all on this page")}
           </label>}
-          <span className="text-sm text-muted-foreground">{tr("Showing")} {formatNumber(total)} {tr("pages")}</span>
+          <span aria-live="polite" className="text-sm text-muted-foreground">{loading ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}</span>
         </div>
         {!loading && selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -343,11 +344,11 @@ export const PagesList: React.FC<PagesListProps> = ({
         ) : pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
             <FileText className="size-9 opacity-40" aria-hidden="true" />
-            <p className="font-medium text-foreground">{tr("No pages found")}</p>
+            <p className="font-medium text-foreground">{searchQuery || statusFilter !== "all" ? tr("No pages found") : tr("No pages yet")}</p>
             <p className="max-w-md text-sm">
               {searchQuery || statusFilter !== "all"
                 ? tr("Try a different search or filter.")
-                : tr("No pages yet. Create your first page to get started.")}
+                : tr("Create your first page to get started.")}
             </p>
             {(searchQuery || statusFilter !== "all") && (
               <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
@@ -368,7 +369,7 @@ export const PagesList: React.FC<PagesListProps> = ({
                 title={item.title}
                  resource="page"
                 authorName={item.authors?.[0]?.name}
-                date={item.status === "published" && item.publishedAt ? item.publishedAt : item.updatedAt}
+                date={item.status === "published" && item.publishedAt ? item.publishedAt : item.status === "scheduled" && item.scheduledAt ? item.scheduledAt : item.updatedAt}
                 status={item.status}
                 onEdit={canEdit ? () => onNavigate(`/admin/pages/${item.id}`) : undefined}
                 onStatistics={canViewAnalytics && item.status === "published" ? () => onNavigate("/admin") : undefined}

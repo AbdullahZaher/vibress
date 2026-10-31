@@ -24,6 +24,11 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "No posts yet": "لا توجد مقالات بعد",
+  "No pages yet": "لا توجد صفحات بعد",
+  "Create your first post to get started.": "أنشئ مقالتك الأولى للبدء.",
+  "Create your first page to get started.": "أنشئ صفحتك الأولى للبدء.",
+  "Results unavailable": "تعذّر تحميل النتائج",
   "All Pages": "جميع الصفحات",
   "Loading": "جارٍ التحميل",
   "Clear filters": "مسح الفلاتر",

@@ -270,3 +270,8 @@ Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github
 ### Final editorial copy polish
 - Ghost-style resource lists start with the resource name and a single primary **New Post / New Page** action; remove lengthy descriptive subtitle from those two high-frequency screens only.
 - Status selects show **All Posts** and **All Pages**, not an ambiguous unqualified `All`, especially on 320px Arabic screens. Keys remain localized with the existing Arabic dictionary.
+
+### Final content-state consistency
+- Distinguish an empty publication from a filtered zero-match result without repeating the same message twice. Keep one creation CTA and one clear-filters CTA, each conditionally visible.
+- Do not announce old `total` values while a new query is loading or has failed; show a localized result-state message.
+- For scheduled posts and pages, display the scheduled timestamp when the API provides it, instead of the unrelated last-edit date.
