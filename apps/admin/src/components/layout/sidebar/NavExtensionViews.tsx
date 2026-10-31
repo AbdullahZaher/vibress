@@ -56,16 +56,16 @@ export function NavExtensionViews({ items, currentPath, onNavigate }: Props) {
         const Icon = section.icon === "graduation-cap"
           ? GraduationCap : section.icon === "book-open" ? BookOpen : Puzzle;
         return (
-          <nav key={section.key} aria-label={section.label} className="space-y-1 text-[13px]">
+          <nav key={section.key} aria-label={section.label} className="space-y-1 text-sm">
             <p className="px-2.5 text-xs font-semibold text-muted-foreground" dir="auto">{section.label}</p>
             {section.items.map((item) => {
               const path = "/admin/extensions/" + item.pluginId + "/" + item.viewId;
               const active = currentPath === path;
               const className =
-                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-start font-medium transition-colors " +
+                "w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-start font-medium transition-colors " +
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary " +
                 (active
-                  ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+                  ? "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground");
               return (
                 <button

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { ChevronDown, Plus, File, Tag, Image as ImageIcon, Users, MessageSquare, Globe } from "lucide-react";
 import { usePublicationLocales } from "../../../lib/usePublicationLocales";
 import { useAdminLocale } from "../../../lib/admin-locale";
@@ -16,7 +16,7 @@ interface NavContentProps {
   canReadTranslations: boolean;
 }
 
-const activeClass = "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60";
+const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary";
 const inactiveClass = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground";
 const linkClass = "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring";
 
@@ -34,6 +34,7 @@ export const NavContent: React.FC<NavContentProps> = ({
 }) => {
   const { data: localePolicy } = usePublicationLocales();
   const { tr } = useAdminLocale();
+  const postLinksId = useId();
   const [postsExpanded, setPostsExpanded] = useState(true);
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export const NavContent: React.FC<NavContentProps> = ({
 
   return (
     <nav aria-label={tr("Content")} className="space-y-0.5 text-sm">
-      <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
+      <p className="px-2.5 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
 
       {canReadPosts && (
         <>
@@ -68,7 +69,7 @@ export const NavContent: React.FC<NavContentProps> = ({
               onClick={() => setPostsExpanded((expanded) => !expanded)}
               aria-label={postsExpanded ? tr("Collapse Posts") : tr("Expand Posts")}
               aria-expanded={postsExpanded}
-              aria-controls="sidebar-post-links"
+              aria-controls={postLinksId}
               className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring"
             >
               <ChevronDown className={`size-4 transition-transform ${postsExpanded ? "" : "-rotate-90 rtl:rotate-90"}`} aria-hidden="true" />
@@ -95,7 +96,7 @@ export const NavContent: React.FC<NavContentProps> = ({
           </div>
 
           {postsExpanded && (
-            <div id="sidebar-post-links" className="my-1 ms-5 space-y-0.5 border-s border-sidebar-border/70 ps-3">
+            <div id={postLinksId} className="my-1 ms-5 space-y-0.5 border-s border-sidebar-border/70 ps-3">
               {postLinks.map((item) => (
                 <button
                   key={item.path}

@@ -58,7 +58,7 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
         </div>
       </div>
       {(actions || children) && (
-        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
+        <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 self-start sm:w-auto sm:self-auto">
           {actions}
           {children}
         </div>

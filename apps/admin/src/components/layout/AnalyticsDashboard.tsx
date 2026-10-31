@@ -263,7 +263,6 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     "overview" | "web" | "newsletters" | "growth"
   >("overview");
   const [dateLabel, setDateLabel] = useState("Last 30 days");
-  const [isDateOpen, setIsDateOpen] = useState(false);
   const [trafficMetric, setTrafficMetric] = useState<"views" | "visitors">(
     "views",
   );
@@ -316,8 +315,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Title Header */}
       <AdminPageHeader
-        title={tr(canReadAnalytics ? "Analytics" : "Editorial overview")}
-        description={tr(canReadAnalytics ? "Monitor publication traffic, readership engagement, and subscriber growth." : "Your editorial workspace at a glance.")}
+        title={tr("Dashboard")}
+        description={tr("Your editorial workspace at a glance.")}
       />
 
       {/* Editorial work queue: show the next operational actions before analytics. */}
@@ -391,39 +390,19 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           ))}
         </div>
 
-        <div className="relative">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsDateOpen(!isDateOpen)}
-            aria-expanded={isDateOpen}
-            className="min-h-10 text-sm font-medium text-foreground border-border bg-card hover:bg-accent gap-2 cursor-pointer"
+        <div className="relative w-full shrink-0 sm:w-auto">
+          <Calendar className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <select
+            aria-label={tr("Date range")}
+            value={dateLabel}
+            onChange={(event) => setDateLabel(event.target.value)}
+            className="min-h-11 w-full appearance-none rounded-lg border border-border bg-card py-2 pe-10 ps-10 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
           >
-            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{tr(dateLabel)}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
-
-          {isDateOpen && (
-            <div className="absolute end-0 mt-1 w-44 rounded-lg bg-card border border-border shadow-lg py-1 z-30 space-y-0.5">
-              {DATE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.range}
-                  onClick={() => {
-                    setDateLabel(opt.label);
-                    setIsDateOpen(false);
-                  }}
-                  className={`w-full text-start min-h-10 px-3 py-2 text-sm transition-colors cursor-pointer ${
-                    dateLabel === opt.label
-                      ? "bg-sidebar-accent text-foreground font-semibold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  {tr(opt.label)}
-                </button>
-              ))}
-            </div>
-          )}
+            {DATE_OPTIONS.map((opt) => (
+              <option key={opt.range} value={opt.label}>{tr(opt.label)}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         </div>
       </div>}
 

@@ -311,7 +311,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                 <p className="text-xs font-semibold text-foreground truncate">
                   {asset.displayName}
                 </p>
-                <p className="text-[10px] text-muted-foreground font-mono">
+                <p className="text-xs text-muted-foreground font-mono">
                   {(asset.sizeBytes / 1024).toFixed(0)} KB
                 </p>
               </div>

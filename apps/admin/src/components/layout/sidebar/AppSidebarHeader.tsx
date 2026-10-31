@@ -26,7 +26,7 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
         <button
           type="button"
           aria-label={tr("Dashboard")}
-          className="flex items-center gap-2 cursor-pointer min-w-0"
+          className="flex min-h-11 items-center gap-2 cursor-pointer min-w-0 rounded-lg focus-visible:outline-2 focus-visible:outline-ring"
           onClick={() => {
             onNavigate("/admin");
             onCloseSidebar?.();
@@ -44,8 +44,8 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
             type="button"
             onClick={onToggleDarkMode}
             className="text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
-            title="Toggle theme"
-            aria-label="Toggle theme"
+            title={tr("Toggle theme")}
+            aria-label={tr("Toggle theme")}
           >
             {darkMode ? (
               <Sun className="h-4 w-4 text-amber-400" />
@@ -61,8 +61,8 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
               data-sidebar-close
               onClick={onCloseSidebar}
               className="md:hidden text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors shrink-0 cursor-pointer"
-              title="Close menu"
-              aria-label="Close menu"
+              title={tr("Close menu")}
+              aria-label={tr("Close menu")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -81,14 +81,14 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           }
           onCloseSidebar?.();
         }}
-        className="w-full flex h-10 items-center justify-between rounded-full border border-border/60 bg-muted/40 hover:bg-muted text-xs text-muted-foreground hover:text-foreground px-3.5 shadow-xs transition-colors cursor-pointer"
+        className="w-full flex min-h-11 items-center justify-between rounded-xl border border-sidebar-border bg-muted/30 hover:bg-sidebar-accent text-sm text-muted-foreground hover:text-foreground px-3.5 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring"
       >
         <div className="flex items-center gap-2">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
           <span>{tr("Search & commands")}</span>
         </div>
         <kbd className="bg-card text-muted-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-border shadow-2xs">
-          ⌘K
+          ⌘ / Ctrl K
         </kbd>
       </button>
     </div>
