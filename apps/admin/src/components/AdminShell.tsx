@@ -28,7 +28,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       return true;
     }
   });
-  const { locale, setUiLocale } = useAdminLocale();
+  const { locale, setUiLocale, tr } = useAdminLocale();
   const onToggleLocale = () => setUiLocale(locale === "ar" ? "en" : "ar");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -98,7 +98,10 @@ export const AdminShell: React.FC<AdminShellProps> = ({
 
 
   return (
-    <div className="h-screen max-h-screen w-screen bg-background text-foreground flex flex-col md:flex-row overflow-hidden font-sans">
+    <div className="vibress-admin-workspace flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-background font-sans text-foreground md:flex-row">
+      <a href="#admin-main" className="sr-only fixed start-3 top-3 z-[100] rounded-lg bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-lg focus:not-sr-only focus-visible:outline-2 focus-visible:outline-ring">
+        {tr("Skip to main content")}
+      </a>
       {/* Mobile Top Header */}
       <MobileHeader
         currentPath={currentPath}
@@ -138,7 +141,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
       />
 
       {/* Main Content Area — Delegated to declarative Admin Router with Error Boundaries */}
-      <main id="admin-main" className={`flex-1 min-w-0 min-h-0 h-full max-h-[calc(100vh-3.5rem)] md:max-h-screen overflow-y-auto ${isEditorRoute ? "p-0" : "p-4 sm:p-6 md:p-8"}`}>
+      <main id="admin-main" tabIndex={-1} className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${isEditorRoute ? "p-0" : "vibress-admin-content px-4 pb-10 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pt-10"}`}>
         {renderAdminRoute({
           pathname: currentPath,
           user,

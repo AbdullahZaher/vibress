@@ -24,6 +24,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Skip to main content": "التخطي إلى المحتوى الرئيسي",
   "This media is in use and cannot be deleted.": "هذا الوسيط مستخدم في محتوى آخر ولا يمكن حذفه.",
   "Failed to load members:": "تعذّر تحميل الأعضاء:",
   "No active subscriptions found.": "لا توجد اشتراكات نشطة.",
