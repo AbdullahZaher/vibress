@@ -61,7 +61,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   };
 
   return (
-    <header className="md:hidden sticky top-0 z-20 flex h-14 w-full items-center justify-between border-b border-border bg-background/95 backdrop-blur-md px-3.5 shadow-xs">
+    <header className="md:hidden sticky top-0 z-20 flex min-h-14 w-full items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur-md px-3">
       {/* Left Section: Hamburger button + Logo */}
       <div className="flex min-w-0 items-center gap-2">
         <button
@@ -74,21 +74,17 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <Menu className="h-4 w-4" />
         </button>
 
-        <button
-          type="button"
-          aria-label={tr("Dashboard")}
-          className="flex min-w-0 items-center gap-2 cursor-pointer"
-          onClick={() => onNavigate("/admin")}
-        >
+        <div className="flex min-w-0 items-center gap-2">
           <img
             src={vibressLogo}
-            alt="Vibress"
+            alt=""
+            aria-hidden="true"
             className="hidden min-[400px]:block h-5 w-auto object-contain"
           />
-          <span className="font-semibold text-sm tracking-tight text-foreground truncate max-w-[84px] min-[400px]:max-w-[140px]">
+          <span className="min-w-0 max-w-[100px] truncate text-sm font-semibold tracking-tight text-foreground min-[400px]:max-w-[170px]">
             {tr(getPageTitle())}
           </span>
-        </button>
+        </div>
       </div>
 
       {/* Right Section: Quick Action + Search + Theme Toggle */}
@@ -97,7 +93,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <button
             type="button"
             onClick={() => onNavigate("/admin/posts/new")}
-            className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
             title={tr("Create new post")}
             aria-label={tr("Create new post")}
           >
@@ -108,7 +104,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          className="flex size-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+          className="flex size-10 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
           title="Search / Command Palette"
           aria-label={tr("Search")}
         >

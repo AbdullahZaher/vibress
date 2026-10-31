@@ -30,9 +30,9 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
           type="button"
           onClick={() => onNavigate("/admin/plugins")}
           aria-current={isPluginsActive ? "page" : undefined}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
+          className={`w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer ${
             isPluginsActive
-              ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+              ? "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
           }`}
         >
@@ -46,9 +46,9 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
         type="button"
         onClick={() => onNavigate("/admin/settings")}
         aria-current={isSettingsActive ? "page" : undefined}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors cursor-pointer ${
+        className={`w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer ${
           isSettingsActive
-            ? "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60"
+            ? "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >
@@ -57,14 +57,15 @@ export const NavSettings: React.FC<NavSettingsProps> = ({
       </button>
 
       {/* Help */}
-      <button
-        type="button"
-        onClick={() => window.open("https://vibress.com/docs", "_blank")}
-        className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer"
+      <a
+        href="https://vibress.com/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-ring"
       >
         <HelpCircle className="h-4 w-4 shrink-0" />
         <span>{tr("Help")}</span>
-      </button>
+      </a>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import { useAdminLocale } from "../../lib/admin-locale";
 import {
@@ -73,6 +73,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
 
   const items: CommandItem[] = useMemo(() => {
     const list: CommandItem[] = [
@@ -427,10 +428,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   // Scroll active item into view
   useEffect(() => {
     if (!listRef.current) return;
-    const selectedEl = listRef.current.children[selectedIndex] as HTMLElement;
-    if (selectedEl) {
-      selectedEl.scrollIntoView({ block: "nearest" });
-    }
+    const selectedEl = listRef.current.children[selectedIndex] as HTMLElement | undefined;
+    selectedEl?.scrollIntoView?.({ block: "nearest" });
   }, [selectedIndex]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -445,7 +444,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         (prev) =>
           (prev - 1 + filteredItems.length) % Math.max(1, filteredItems.length),
       );
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       if (filteredItems[selectedIndex]) {
         filteredItems[selectedIndex].action();
@@ -479,6 +478,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <input
             ref={inputRef}
             aria-label={tr("Search commands, actions, settings...")}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={true}
+            aria-controls={listId}
+            aria-activedescendant={filteredItems.length ? `${listId}-option-${selectedIndex}` : undefined}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -500,9 +504,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Results List */}
-        <div className="overflow-y-auto p-2 space-y-1 flex-1">
+        <div ref={listRef} id={listId} role="listbox" aria-label={tr("Search commands, actions, settings...")} className="min-h-0 overflow-y-auto p-2 space-y-1 flex-1">
           {filteredItems.length === 0 ? (
-            <div className="p-8 text-center text-xs text-muted-foreground">
+            <div role="status" className="p-8 text-center text-sm text-muted-foreground">
               {tr("No matching commands found for")} {" "}
               <span className="font-semibold text-foreground">
                 &quot;{query}&quot;
@@ -514,13 +518,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               return (
                 <button
                   key={item.id}
+                  id={`${listId}-option-${idx}`}
+                  role="option"
+                  aria-selected={isSelected}
                   type="button"
+                  onFocus={() => setSelectedIndex(idx)}
                   onClick={() => {
                     item.action();
                     onClose();
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-start text-xs transition-colors cursor-pointer ${
+                  className={`w-full flex min-h-11 items-center justify-between gap-2 p-3 rounded-lg text-start text-sm transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
                     isSelected
                       ? "bg-primary text-primary-foreground font-medium"
                       : "text-foreground hover:bg-muted/50"
