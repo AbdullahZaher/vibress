@@ -245,7 +245,7 @@ export const PostsList: React.FC<PostsListProps> = ({
     : "";
 
   return (
-    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-6">
+    <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
         title={tr("Posts")}
         description={tr("Manage editorial articles, revisions, and publication schedules.")}
@@ -265,9 +265,9 @@ export const PostsList: React.FC<PostsListProps> = ({
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-border/80 bg-card p-4 sm:p-5" aria-label={tr("Content filters")}>
+      <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1" aria-label={tr("Content filters")}>
         <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div role="group" aria-label={tr("Filter by status")} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
+          <div role="group" aria-label={tr("Filter by status")} className="flex min-w-0 max-w-full gap-1 overflow-x-auto">
             {STATUS_FILTERS.map((status) => (
               <button
                 key={status.value}
@@ -275,7 +275,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 onClick={() => { setStatusFilter(status.value); setPage(0); }}
                 aria-pressed={statusFilter === status.value}
                 className={statusFilter === status.value
-                  ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted/70 px-3 text-sm font-semibold text-foreground"
+                  ? "min-h-11 shrink-0 rounded-lg bg-muted px-3 text-sm font-semibold text-foreground"
                   : "min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"}
               >
                 {tr(status.label)}
@@ -299,7 +299,7 @@ export const PostsList: React.FC<PostsListProps> = ({
               <select
                 value={sortBy}
                 onChange={(event) => { setSortBy(event.target.value as PostSortBy); setPage(0); }}
-                className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:w-44"
+                className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:w-44"
                 aria-label={tr("Sort by")}
               >
                 <option value="updatedAt">{tr("Recently updated")}</option>
@@ -325,7 +325,7 @@ export const PostsList: React.FC<PostsListProps> = ({
             />
             {tr("Select all on this page")}
           </label>
-          <span className="text-xs text-muted-foreground">{tr("Showing")} {formatNumber(total)} {tr("posts")}</span>
+          <span className="text-sm text-muted-foreground">{tr("Showing")} {formatNumber(total)} {tr("posts")}</span>
         </div>
         {selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -352,7 +352,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         )}
       </section>
 
-      <section className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card" aria-label={tr("Posts")}>
+      <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Posts")}>
         {loading && posts.length > 0 && <div className="h-0.5 w-full overflow-hidden bg-muted"><div className="h-full w-1/3 animate-pulse bg-primary" /></div>}
         {error && posts.length > 0 && <p role="alert" className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">{error}</p>}
         {posts.length === 0 ? (
@@ -367,7 +367,7 @@ export const PostsList: React.FC<PostsListProps> = ({
             )}
           </div>
         ) : (
-          <div role="list" aria-label={tr("Posts")} className="divide-y divide-border/70 px-2 sm:px-3">
+          <div role="list" aria-label={tr("Posts")} className="divide-y divide-border/60">
             {posts.map((post) => (
               <EditorialListRow
                 key={post.id}
