@@ -133,3 +133,4 @@ describe("EditorialSelectionCheckbox", () => {
     expect(label?.className).toContain("opacity-50");
   });
 });
+

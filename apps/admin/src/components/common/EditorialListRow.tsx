@@ -163,25 +163,13 @@ export function EditorialListRow({
           className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
         />
       ))}
-      {onSelect && (
-        <div
-          className={cn(
-            "relative z-20 flex shrink-0 items-center justify-center transition-all duration-150",
-            selectionMode || selected
-              ? "w-8 opacity-100"
-              : "w-0 -me-3 opacity-0 pointer-events-none sm:w-8 sm:me-0 sm:opacity-0 group-hover:w-8 group-hover:me-0 group-hover:opacity-100 group-hover:pointer-events-auto focus-within:w-8 focus-within:me-0 focus-within:opacity-100 focus-within:pointer-events-auto"
-          )}
-        >
+      {selectionMode && onSelect && (
+        <div className="relative z-20 flex shrink-0 items-center justify-center">
           <EditorialSelectionCheckbox
             checked={selected}
             onChange={onSelect}
             label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
-            className={cn(
-              "size-8 min-h-8 min-w-8 transition-opacity duration-150",
-              selectionMode || selected
-                ? "opacity-100 pointer-events-auto"
-                : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto"
-            )}
+            className="size-8 min-h-8 min-w-8"
           />
         </div>
       )}

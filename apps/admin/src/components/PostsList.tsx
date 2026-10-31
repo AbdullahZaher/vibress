@@ -102,6 +102,7 @@ export const PostsList: React.FC<PostsListProps> = ({
 
   useEffect(() => {
     setSelectedIds(new Set());
+    setSelectionMode(false);
   }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
 
   const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
@@ -155,7 +156,6 @@ export const PostsList: React.FC<PostsListProps> = ({
       const next = new Set(current);
       if (selected) {
         next.add(id);
-        setSelectionMode(true);
       } else {
         next.delete(id);
       }
@@ -306,7 +306,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           {selectionEnabled && (
             <Button
               type="button"
-              variant={selectionMode || selectedIds.size > 0 ? "subtle" : "ghost"}
+              variant={selectionMode ? "subtle" : "ghost"}
               size="sm"
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
@@ -341,36 +341,37 @@ export const PostsList: React.FC<PostsListProps> = ({
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
-          {selectionEnabled && !resultsPending && !error && posts.length > 0 && (
+        {selectionMode && selectionEnabled && !resultsPending && !error && posts.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
             <EditorialSelectionCheckbox
               checked={allVisibleSelected}
               indeterminate={isIndeterminate}
               disabled={resultsPending || posts.length === 0}
               onChange={(next) => {
                 setSelectedIds(next ? new Set(visibleIds) : new Set());
-                if (next) setSelectionMode(true);
               }}
               label={tr("Select all on this page")}
               showLabel
               className="min-h-11 px-0"
             />
-          )}
-          <span aria-live="polite" className="text-sm text-muted-foreground">
-            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
+            <span aria-live="polite" className="text-sm text-muted-foreground">
+              {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
+            </span>
+          </div>
+        )}
+        {!selectionMode && (
+          <span aria-live="polite" className="sr-only">
+            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`}
           </span>
-        </div>
-        {!resultsPending && !error && selectedIds.size > 0 && (
+        )}
+        {selectionMode && !resultsPending && !error && selectedIds.size > 0 && (
           <EditorialBulkActions
             selectedCount={selectedIds.size}
             showPublish={canPublish && selectedPosts.some((post) => post.status !== "published")}
             showUnpublish={canPublish && selectedPosts.some((post) => post.status === "published")}
             showDelete={canDelete}
             onAction={requestBulkAction}
-            onClear={() => {
-              setSelectedIds(new Set());
-              setSelectionMode(false);
-            }}
+            onClear={() => setSelectedIds(new Set())}
           />
         )}
       </section>
@@ -430,9 +431,9 @@ export const PostsList: React.FC<PostsListProps> = ({
                 editHref={canEdit ? `/admin/posts/${post.id}` : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(post) : undefined}
                 onDelete={canDelete ? () => requestDelete(post.id) : undefined}
-                onSelect={selectionEnabled ? (selected) => { toggleSelection(post.id, selected); if (selected) setSelectionMode(true); } : undefined}
+                onSelect={selectionEnabled && selectionMode ? (selected) => toggleSelection(post.id, selected) : undefined}
                 selectionMode={selectionMode}
-                selected={selectedIds.has(post.id)}
+                selected={selectionMode && selectedIds.has(post.id)}
                 selectionLabel={`${tr("Select")}: ${post.title || tr("(Untitled)")}`}
               />
             ))}

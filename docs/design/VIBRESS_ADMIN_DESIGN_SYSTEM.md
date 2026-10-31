@@ -383,17 +383,17 @@ The top **Select** button followed the desired minimal, modern design; however, 
 3. **Selected Row Surface:**
    - Replaced heavy gray wash with an ultra-subtle, theme-aware tint (`bg-primary/[0.035] dark:bg-primary/[0.055]`).
    - Clear distinction between row hover (`hover:bg-muted/20`), keyboard focus (`focus-within:bg-muted/20`), and selection (`selected`).
-4. **Progressive Disclosure & State Synchronization:**
-   - Top **Select** button acts as the explicit toggle for list-wide selection mode.
-   - When selection mode is inactive on desktop, row checkboxes remain concealed until revealed via pointer hover or keyboard focus.
-   - On touch devices or when selection mode is active, checkboxes are persistently displayed.
-   - "Select all on this page" calculates `isIndeterminate = someVisibleSelected && !allVisibleSelected` and renders the minus glyph.
-   - Clearing selection via `EditorialBulkActions` resets both selected IDs and selection mode.
+4. **Explicit Selection Mode & Clean Default Layout:**
+   - **Selection Mode OFF by Default:** All individual row checkboxes, the subheader "Select all on this page" row, and the bulk actions toolbar are completely unmounted when selection mode is inactive. No reserved layout space, margin hacks, or hover-revealed checkboxes clutter the default view.
+   - **Original Row Layout Restored:** In default mode, feature thumbnails sit directly at the leading edge of the row container with zero offset, restoring the pristine editorial layout.
+   - **Explicit Entry Point:** The top **Select** button in the filterbar is the single explicit toggle for selection mode.
+   - **Selection Mode ON:** Clicking **Select** mounts the subheader row ("Select all on this page" + count) and row checkboxes. When items are selected, the bulk actions toolbar reveals with full indeterminate state support.
+   - **Selection Mode OFF:** Clicking **Select** again immediately exits selection mode, clears all selected IDs, unmounts all selection controls and bulk actions, and restores the exact default row layout.
 5. **Cross-Resource Parity:**
    - Posts and Pages share the exact same `EditorialSelectionCheckbox`, row layout, bulk toolbar, and indeterminate selection logic.
 
 ### Verification & Artifacts
-- **Unit Tests:** `apps/admin/src/components/common/__tests__/EditorialSelectionCheckbox.test.tsx` (6 tests) and `EditorialListRow.test.tsx` (14 tests) passing 100%.
-- **Full Suite:** 36 test files, 183 tests in `apps/admin` passing 100%.
+- **Unit Tests:** `apps/admin/src/components/common/__tests__/EditorialSelectionCheckbox.test.tsx` (6 tests) and `EditorialListRow.test.tsx` (15 tests) passing 100%.
+- **Full Suite:** 36 test files, 184 tests in `apps/admin` passing 100%.
 - **E2E Acceptance:** 11 Playwright acceptance tests in `tests/e2e/admin-ui-design-acceptance.test.ts` passing 100%.
 - **Responsive & Theme Verification:** Captured visual verification across Light and Dark themes, 320px, 390px, and 1440px viewports, and English LTR / Arabic RTL layouts.

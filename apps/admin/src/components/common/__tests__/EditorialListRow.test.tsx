@@ -111,12 +111,22 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).not.toHaveBeenCalled();
   });
 
-  it("conceals row checkboxes until hover, keyboard focus or selection mode", () => {
+  it("hides selection checkbox completely when selection mode is inactive and reveals when active", () => {
     act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} />));
-    const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    expect(selection?.closest("label")?.className).toContain("opacity-0");
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} selectionMode />));
-    expect(selection?.closest("label")?.className).toContain("opacity-100");
+    const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(selection).not.toBeNull();
+    expect(selection?.closest("label")).not.toBeNull();
+  });
+
+  it("restores original row layout without reserved checkbox spacing when selection mode is inactive", () => {
+    act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} selectionMode={false} />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.querySelector('input[type="checkbox"]')).toBeNull();
+    const thumbnail = row?.querySelector('div[aria-hidden="true"]');
+    expect(thumbnail).not.toBeNull();
+    expect(thumbnail?.previousElementSibling?.tagName.toLowerCase()).toBe("button");
   });
 
   it("preserves publish and delete actions behind an accessible menu", () => {

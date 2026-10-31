@@ -216,6 +216,20 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     });
     await page.goto(`${BASE}/admin/posts`);
     await expect(page.getByText("Bulk acceptance one")).toBeVisible();
+    // Default mode: Selection mode is OFF; no row checkboxes and no "Select all" row are rendered
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toHaveCount(0);
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]')).toHaveCount(0);
+    // Explicit entry: click Select button to enter selection mode
+    const selectBtn = page.getByRole("button", { name: "Select" });
+    await selectBtn.click();
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toBeVisible();
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]').first()).toBeVisible();
+    // Toggle Select off to test clean exit and layout restoration
+    await selectBtn.click();
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toHaveCount(0);
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]')).toHaveCount(0);
+    // Re-enter selection mode to proceed with bulk deletion test
+    await selectBtn.click();
     await page.getByRole("checkbox", { name: "Select all on this page" }).check();
     const toolbar = page.getByRole("toolbar", { name: "Bulk actions" });
     await expect(toolbar).toBeVisible();
