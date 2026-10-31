@@ -279,3 +279,6 @@ Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github
 
 ### Ghost comparison: filter disclosure
 The latest Ghost `PostsListScreen` places a filter trigger and sort menu in the header, expanding a filter row only when active. After a second visual critique, Vibress's six permanent status tabs were still too dense and duplicated the sidebar quick views. Replaced them with one 44px accessible native status menu (localized **All Posts / All Pages**), alongside search and sorting. This keeps all states accessible without recreating the current Ghost's custom popover architecture or introducing dependencies.
+
+### Small-view sticky-header guard
+The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px). At 768 and 1024px a wrapping toolbar can be several rows tall, so leaving it in document flow avoids occluding most of the content and keyboard focus.

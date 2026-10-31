@@ -236,7 +236,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         </div>
       )}
 
-      <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1 md:sticky md:top-0 md:z-20 md:bg-card/95 md:backdrop-blur-md" aria-label={tr("Content filters")}>
+      <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1 xl:sticky xl:top-0 xl:z-20 xl:bg-card/95 xl:backdrop-blur-md" aria-label={tr("Content filters")}>
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <EditorialStatusFilter
