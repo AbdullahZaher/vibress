@@ -448,11 +448,11 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   {canDelete && (
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
+                      variant="destructive-outline"
+                      size="default"
                       disabled={isLoadingRefs || isRefsError || deleteMutation.isPending}
                       onClick={() => { setDeleteError(null); setDeleteConfirmOpen(true); }}
-                      className="min-h-11 gap-1 text-sm text-destructive hover:bg-destructive/10"
+                      className="w-full gap-2 sm:w-auto sm:min-w-36"
                     >
                       <Trash2 className="size-4" aria-hidden="true" /> {tr("Delete Asset")}
                     </Button>
@@ -460,8 +460,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   {canEdit && (
                     <Button
                       type="submit"
-                      size="sm"
-                      className="min-h-11 text-sm font-semibold"
+                      size="default"
+                      className="w-full sm:w-auto sm:min-w-36"
                       loading={updateMutation.isPending}
                       loadingLabel={tr("Saving...")}
                     >

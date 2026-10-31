@@ -34,7 +34,7 @@ export function EditorialBulkActions({
       <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">
         {formatNumber(selectedCount)} {tr("selected on this page")}
       </span>
-      <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:w-auto lg:grid-cols-4 lg:[grid-auto-columns:minmax(9rem,1fr)]">
+      <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:w-auto lg:grid-flow-col lg:auto-cols-[minmax(9rem,1fr)] lg:grid-cols-none">
         {showPublish && (
           <Button variant="outline" size="default" className={actionClass} onClick={() => onAction("publish")}>
             <Send className="size-4 shrink-0" aria-hidden="true" />
