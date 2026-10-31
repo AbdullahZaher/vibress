@@ -15,6 +15,7 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { ToggleButton } from "../ui/toggle-button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import {
   getAnalyticsOverviewApi,
@@ -313,7 +314,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const totalVisitors = data?.summary.visitors ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8">
+    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl space-y-8">
       {/* Page Title Header */}
       <AdminPageHeader
         title={tr("Dashboard")}
@@ -374,17 +375,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div role="group" aria-label={tr("Analytics")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
+        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" aria-label={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
-            <ToggleButton
-              key={t}
-              pressed={analyticsTab === t}
-              onClick={() => setAnalyticsTab(t)}
-            >
+            <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
-            </ToggleButton>
+            </TabsTrigger>
           ))}
-        </div>
+        </TabsList>
 
         <div className="relative w-full shrink-0 sm:w-auto">
           <Calendar className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -416,8 +413,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       {canReadAnalytics && overviewQuery.isSuccess && data && (
         <>
           {/* TAB 1: OVERVIEW */}
-          {analyticsTab === "overview" && (
-            <div className="space-y-8">
+          <TabsContent value="overview" className="mt-0 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Members KPI Card */}
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
@@ -565,12 +561,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 2: WEB TRAFFIC */}
-          {analyticsTab === "web" && (
-            <div className="space-y-6">
+          <TabsContent value="web" className="mt-0 space-y-6">
               <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <ToggleButton pressed={trafficMetric === "views"} onClick={() => setTrafficMetric("views")}>
@@ -673,12 +667,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   )}
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 3: NEWSLETTERS */}
-          {analyticsTab === "newsletters" && (
-            <div className="space-y-6">
+          <TabsContent value="newsletters" className="mt-0 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -705,12 +697,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 4: GROWTH */}
-          {analyticsTab === "growth" && (
-            <div className="space-y-6">
+          <TabsContent value="growth" className="mt-0 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -729,10 +719,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
         </>
       )}
-    </div>
+    </Tabs>
   );
 };

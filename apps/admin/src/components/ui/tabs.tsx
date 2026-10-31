@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 interface TabsContextValue {
   value: string;
   onValueChange: (value: string) => void;
+  baseId: string;
 }
 
 const TabsContext = React.createContext<TabsContextValue | undefined>(
@@ -21,8 +22,9 @@ export function Tabs({
   children: React.ReactNode;
   className?: string;
 }) {
+  const baseId = React.useId();
   return (
-    <TabsContext.Provider value={{ value, onValueChange }}>
+    <TabsContext.Provider value={{ value, onValueChange, baseId }}>
       <div className={cn("w-full", className)}>{children}</div>
     </TabsContext.Provider>
   );
@@ -44,11 +46,12 @@ export function TabsList({
     const activeIndex = tabs.indexOf(document.activeElement as HTMLButtonElement);
     if (activeIndex === -1) return;
 
+    const rtl = getComputedStyle(list).direction === "rtl";
     let targetIndex: number;
     if (event.key === "ArrowRight") {
-      targetIndex = (activeIndex + 1) % tabs.length;
+      targetIndex = (activeIndex + (rtl ? -1 : 1) + tabs.length) % tabs.length;
     } else if (event.key === "ArrowLeft") {
-      targetIndex = (activeIndex - 1 + tabs.length) % tabs.length;
+      targetIndex = (activeIndex + (rtl ? 1 : -1) + tabs.length) % tabs.length;
     } else if (event.key === "Home") {
       targetIndex = 0;
     } else if (event.key === "End") {
@@ -65,6 +68,7 @@ export function TabsList({
     <div
       ref={listRef}
       role="tablist"
+      aria-orientation="horizontal"
       onKeyDown={handleKeyDown}
       className={cn(
         "inline-flex min-h-11 items-center justify-start rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 gap-1 overflow-x-auto",
@@ -94,6 +98,8 @@ export function TabsTrigger({
     <button
       type="button"
       role="tab"
+      id={`${context.baseId}-tab-${value}`}
+      aria-controls={`${context.baseId}-panel-${value}`}
       aria-selected={isActive}
       tabIndex={isActive ? 0 : -1}
       onClick={() => context.onValueChange(value)}
@@ -127,6 +133,8 @@ export function TabsContent({
   return (
     <div
       role="tabpanel"
+      id={`${context.baseId}-panel-${value}`}
+      aria-labelledby={`${context.baseId}-tab-${value}`}
       tabIndex={0}
       className={cn(
         "mt-4 outline-none focus-visible:outline-2 focus-visible:outline-ring",

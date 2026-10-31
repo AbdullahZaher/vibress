@@ -10,7 +10,8 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
-import { ToggleButton } from "../ui/toggle-button";
+import { buttonVariants } from "../ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -158,19 +159,25 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Navigation Tabs */}
+        {/* Anchored section navigation, not toggle controls or content tabs. */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          {SETTINGS_REGISTRY.map((pillar) => {
+          {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
-              <ToggleButton
+              <a
                 key={pillar.id}
-                pressed={isActive}
-                onClick={() => scrollToSection(pillar.id, true)}
+                href={`#${pillar.anchor}`}
+                aria-current={isActive ? "location" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#${pillar.anchor}`);
+                  scrollToSection(pillar.id, true);
+                }}
+                className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
-              </ToggleButton>
+              </a>
             );
           })}
         </div>
