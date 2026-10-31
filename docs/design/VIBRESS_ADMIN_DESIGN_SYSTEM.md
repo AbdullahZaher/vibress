@@ -245,3 +245,23 @@ The design direction of **Vibress Editorial Workspace** draws on the actual sour
 
 ### Follow-up: cross-screen coherence
 The second code/design review identified a real visual inconsistency: after converting Posts and Pages to flat editorial filters, Media, Members and Dashboard retained a separate, card-heavy segmented filter system. Harmonized all three with the same neutral selected state, unboxed filter rail, readable labels and 44px control targets. Kept search/filter queries, server sorting, table semantics, media actions and analytics data rendering unchanged. Regression checks must include the existing multi-screen browser screenshot suite; past screenshots are baseline only.
+
+## Posts and Pages — focused Ghost-comparison refinement (2026-10-31)
+
+Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/posts-list-screen.tsx) and [`post-list-row.tsx`](https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/components/post-list-row.tsx); both Posts and Pages render the same list screen via a resource argument. Ghost uses a persistent list header, compact contextual filters, consistent feature-image geometry, and localized publishing metadata.
+
+### Confirmed defects and fixes
+- **Incomplete loading/error screen:** The former early returns hid the creation action, page header and filters; loading/error/retry are now always inside the result region.
+- **Mobile filter overflow:** Six desktop tabs were squeezed into an undiscoverable horizontal strip at 320px; use an accessible native status select below 768px and tabs above.
+- **Stale selection:** Sorting left previously selected item IDs checked; reset selection on both sort-field and sort-direction changes.
+- **Ragged editorial rows:** Post image failures caused columns to jump and missing images shifted titles. Keep image geometry reserved for Posts, using a subtle Lucide placeholder; Pages without feature images use clean text-first rows.
+- **Duplicate edit focus:** Two accessible buttons for the same edit operation caused repetitive keyboard stops; retain one row-level edit action and a separate authorized analytics action.
+- **Clipped context menus:** Menus within a scrollable admin shell could be cut at the bottom; portal the menu into the document layer and compute viewport-aware placement. Close on Escape, outside pointer, focus leave, scroll or resize; restore trigger focus on Escape.
+- **Inconsistent empty state:** Add clear-filter recovery for zero matching results, and first-content creation guidance for empty publications. Preserve localized Arabic text.
+- **Double separators:** Avoid both `divide-y` and explicit row borders within the same list.
+- **Desktop long-list workflow:** Keep the toolbar sticky from the tablet breakpoint without trapping mobile users behind a tall fixed header.
+
+### Quality gates
+- Automated: TypeScript, lint, editorial row tests, mobile filter tests, and full existing CI.
+- Browser: compare real authenticated Posts/Pages screenshots at 320, 390, 768, 1024 and 1440px; Arabic RTL and English LTR, both themes, 200% zoom, many items, zero items, reload, failed image, failed list fetch, last-row menu and bulk actions.
+- This is a reviewable implementation, **not** a certified 9.5/10 score until the browser gates above pass.

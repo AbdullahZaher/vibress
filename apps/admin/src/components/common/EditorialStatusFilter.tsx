@@ -1,5 +1,3 @@
-import React from "react";
-
 export interface EditorialStatusOption {
   value: string;
   label: string;
