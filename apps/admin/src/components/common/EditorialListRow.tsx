@@ -53,7 +53,7 @@ export function EditorialListRow({
       ? rect.left
       : rect.right - menuWidth;
     const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, leftUnclamped));
-    const top = openAbove ? Math.max(8, rect.top - 112 - 6) : rect.bottom + 6;
+    const top = openAbove ? Math.max(8, rect.top - 112 - 6) : Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 112 - 8));
     setMenuPosition({ top, left, maxHeight: Math.max(72, window.innerHeight - top - 8) });
     setActionsOpen(true);
   };
@@ -74,11 +74,18 @@ export function EditorialListRow({
     };
     menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const dismissOnScroll = () => setActionsOpen(false);
+    const dismissOnFocus = (event: FocusEvent) => {
+      if (event.target instanceof Node && !actionsRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
+        setActionsOpen(false);
+      }
+    };
+    document.addEventListener("focusin", dismissOnFocus);
     document.addEventListener("pointerdown", dismissOnPointer);
     window.addEventListener("scroll", dismissOnScroll, true);
     window.addEventListener("resize", dismissOnScroll);
     document.addEventListener("keydown", dismissOnEscape);
     return () => {
+      document.removeEventListener("focusin", dismissOnFocus);
       document.removeEventListener("pointerdown", dismissOnPointer);
       window.removeEventListener("scroll", dismissOnScroll, true);
       window.removeEventListener("resize", dismissOnScroll);
@@ -99,7 +106,7 @@ export function EditorialListRow({
     archived: tr("Archived"),
   };
   const statusColor = status === "published"
-    ? "text-status-published-fg"
+    ? "text-muted-foreground"
     : status === "scheduled"
       ? "text-status-scheduled-fg"
       : status === "in_review" || status === "changes_requested"
@@ -107,7 +114,7 @@ export function EditorialListRow({
         : "text-muted-foreground";
 
   return (
-    <div role="listitem" className="group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 sm:gap-4 sm:px-3 last:border-b-0">
+    <div role="listitem" data-selected={selected ? "true" : undefined} className={`group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 data-[selected=true]:bg-muted/50 sm:gap-4 sm:px-3 last:border-b-0 ${onEdit ? "cursor-pointer" : ""}`}>
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
       {onEdit && (
         <button
@@ -129,11 +136,11 @@ export function EditorialListRow({
         </label>
       )}
       {/* Reserve image geometry for every row to keep titles aligned across missing/broken images. */}
-      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
+      {(resource === "post" || Boolean(imageUrl)) && <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
         {imageUrl && !imageFailed ? (
           <img src={imageUrl} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} className="h-full w-full object-cover" />
         ) : resource === "page" ? <FileText className="size-4" /> : <ImageIcon className="size-4" />}
-      </div>
+      </div>}
 
       <div className="min-w-0 flex-1 space-y-1.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -166,7 +173,7 @@ export function EditorialListRow({
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
             variant="ghost"
             onClick={onStatistics}
-            className="h-10 w-10 rounded-lg border-0"
+            className="size-11 rounded-lg border-0"
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
@@ -180,7 +187,7 @@ export function EditorialListRow({
             aria-controls={actionsId}
             title={tr("More actions")}
             onClick={toggleMenu}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           >
             <MoreHorizontal className="size-4" aria-hidden="true" />
           </button>

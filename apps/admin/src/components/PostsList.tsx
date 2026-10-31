@@ -280,7 +280,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          {selectionEnabled && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+          {selectionEnabled && posts.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -348,8 +348,17 @@ export const PostsList: React.FC<PostsListProps> = ({
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
             <FileText className="size-9 opacity-40" aria-hidden="true" />
             <p className="font-medium text-foreground">{tr("No posts found")}</p>
-            <p className="max-w-md text-sm">{tr("Try a different search or filter.")}</p>
-            {!debouncedSearch && statusFilter === "all" && canCreate && (
+            <p className="max-w-md text-sm">
+              {searchQuery || statusFilter !== "all"
+                ? tr("Try a different search or filter.")
+                : tr("No posts yet. Create your first post to get started.")}
+            </p>
+            {(searchQuery || statusFilter !== "all") && (
+              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
+                {tr("Clear filters")}
+              </Button>
+            )}
+            {!debouncedSearch && !searchQuery && statusFilter === "all" && canCreate && (
               <Button size="sm" onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2">
                 <Plus className="size-4" aria-hidden="true" /> {tr("Create Post")}
               </Button>

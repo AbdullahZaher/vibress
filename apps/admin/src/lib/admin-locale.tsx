@@ -24,6 +24,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Loading": "جارٍ التحميل",
+  "Clear filters": "مسح الفلاتر",
+  "No posts yet. Create your first post to get started.": "لا توجد مقالات بعد. أنشئ مقالتك الأولى للبدء.",
+  "No pages yet. Create your first page to get started.": "لا توجد صفحات بعد. أنشئ صفحتك الأولى للبدء.",
   "Skip to main content": "التخطي إلى المحتوى الرئيسي",
   "This media is in use and cannot be deleted.": "هذا الوسيط مستخدم في محتوى آخر ولا يمكن حذفه.",
   "Failed to load members:": "تعذّر تحميل الأعضاء:",

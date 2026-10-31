@@ -8,7 +8,7 @@ import { EditorialPagination } from "./common/EditorialPagination";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileCode, AlertCircle, RefreshCw, Trash2, Send, X } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X } from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -277,7 +277,7 @@ export const PagesList: React.FC<PagesListProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          {selectionEnabled && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+          {selectionEnabled && pages.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -343,10 +343,19 @@ export const PagesList: React.FC<PagesListProps> = ({
           </div>
         ) : pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
-            <FileCode className="size-9 opacity-40" aria-hidden="true" />
+            <FileText className="size-9 opacity-40" aria-hidden="true" />
             <p className="font-medium text-foreground">{tr("No pages found")}</p>
-            <p className="max-w-md text-sm">{tr("Try a different search or filter.")}</p>
-            {!debouncedSearch && statusFilter === "all" && canCreate && (
+            <p className="max-w-md text-sm">
+              {searchQuery || statusFilter !== "all"
+                ? tr("Try a different search or filter.")
+                : tr("No pages yet. Create your first page to get started.")}
+            </p>
+            {(searchQuery || statusFilter !== "all") && (
+              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
+                {tr("Clear filters")}
+              </Button>
+            )}
+            {!debouncedSearch && !searchQuery && statusFilter === "all" && canCreate && (
               <Button size="sm" onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2">
                 <Plus className="size-4" aria-hidden="true" /> {tr("Create Page")}
               </Button>

@@ -49,7 +49,7 @@ describe("EditorialListRow", () => {
     expect(row?.querySelector("img")).toBeNull();
     expect(row?.querySelector("div[aria-hidden] svg")).not.toBeNull();
     expect(row?.textContent).toContain("Draft");
-    expect(moreAction?.className).toContain("h-10");
+    expect(moreAction?.className).toContain("size-11");
     expect(editAction).not.toBeNull();
     expect(row?.querySelectorAll('button[aria-label="Edit: Hello there"]').length).toBe(1);
   });
@@ -59,6 +59,22 @@ describe("EditorialListRow", () => {
     const thumbnail = container.querySelector<HTMLImageElement>('img[src="https://example.test/post.jpg"]');
     expect(thumbnail).not.toBeNull();
     expect(thumbnail?.getAttribute("alt")).toBe("");
+  });
+
+
+  it("keeps page titles aligned without rendering decorative thumbnails", () => {
+    act(() => root.render(<EditorialListRow {...base} resource="page" />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector('div[aria-hidden="true"] svg')).toBeNull();
+    expect(row?.textContent).toContain("Hello there");
+  });
+
+  it("highlights selected rows while keeping a single accessible edit action", () => {
+    act(() => root.render(<EditorialListRow {...base} selected />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.getAttribute("data-selected")).toBe("true");
+    expect(row?.querySelectorAll('button[aria-label="Edit: Hello there"]').length).toBe(1);
   });
 
   it("navigates when the row background is clicked, and exposes a keyboard-accessible row action", () => {
