@@ -245,9 +245,9 @@ export const PagesList: React.FC<PagesListProps> = ({
       {actionFeedback && (
         <div role={actionFeedback.type === "error" ? "alert" : "status"} className={actionFeedback.type === "error" ? "flex items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive" : "flex items-start justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300"}>
           <p className="min-w-0">{actionFeedback.message}</p>
-          <button type="button" onClick={() => setActionFeedback(null)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring" aria-label={tr("Dismiss")}>
+          <Button variant="ghost" size="icon-sm" onClick={() => setActionFeedback(null)} className="shrink-0" aria-label={tr("Dismiss")}>
             <X className="size-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       )}
 

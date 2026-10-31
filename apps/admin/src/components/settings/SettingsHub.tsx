@@ -10,7 +10,7 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
-import { buttonVariants } from "../ui/button";
+import { Button, buttonVariants } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Input } from "../ui/input";
 
@@ -190,17 +190,19 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("Filter settings...")}
-            className="min-h-11 border-border bg-card ps-9 text-sm"
+            className="min-h-11 border-border bg-card ps-9 pe-12 text-sm"
           />
           {query && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => setQuery("")}
               aria-label={tr("Clear search")}
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded cursor-pointer"
+              className="absolute end-1 top-1/2 -translate-y-1/2 text-muted-foreground"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              <X className="size-4" aria-hidden="true" />
+            </Button>
           )}
         </div>
       </div>
