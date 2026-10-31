@@ -40,9 +40,9 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   /** Busy state automatically disables the button and preserves its text footprint. */
-  loading?: boolean;
+  loading?: boolean | undefined;
   /** Localized accessible name while loading, e.g. "Saving…". */
-  loadingLabel?: string;
+  loadingLabel?: string | undefined;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
