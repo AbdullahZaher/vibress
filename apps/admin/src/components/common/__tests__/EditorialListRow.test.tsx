@@ -45,14 +45,13 @@ describe("EditorialListRow", () => {
     const row = container.querySelector<HTMLElement>('[role="listitem"]');
     const editAction = container.querySelector<HTMLButtonElement>('button[aria-label="Edit: Hello there"]');
     const moreAction = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
-    expect(row?.className).toContain("min-h-[76px]");
+    expect(row?.className).toContain("min-h-[80px]");
     expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector("div[aria-hidden] svg")).not.toBeNull();
     expect(row?.textContent).toContain("Draft");
     expect(moreAction?.className).toContain("h-10");
     expect(editAction).not.toBeNull();
-    const visibleEdit = Array.from(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])
-      .find(button => button.textContent?.trim() === "" && button.getAttribute("aria-label") === "Edit: Hello there" && !button.className.includes("inset-0"));
-    expect(visibleEdit?.className).toContain("hover:bg-accent");
+    expect(row?.querySelectorAll('button[aria-label="Edit: Hello there"]').length).toBe(1);
   });
 
   it("shows a thumbnail only when the post has a working feature image", () => {
@@ -97,7 +96,7 @@ describe("EditorialListRow", () => {
     const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="More actions: Hello there"]');
     act(() => trigger?.click());
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
-    const menu = container.querySelector('[role="group"]');
+    const menu = document.body.querySelector('[role="group"]');
     expect(menu?.textContent).toContain("Unpublish");
     const unpublish = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(b => b.textContent?.includes("Unpublish"));
     act(() => unpublish?.click());
@@ -105,7 +104,7 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).not.toHaveBeenCalled();
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
     act(() => trigger?.click());
-    const remove = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"] button'))
+    const remove = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="group"] button'))
       .find(b => b.textContent?.includes("Delete"));
     act(() => remove?.click());
     expect(base.onDelete).toHaveBeenCalledOnce();
@@ -119,9 +118,10 @@ describe("EditorialListRow", () => {
     expect(img?.getAttribute("alt")).toBe("");
     act(() => img?.dispatchEvent(new Event("error")));
     expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     const trigger = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
     act(() => trigger?.click());
-    expect(container.querySelector('[role="group"]')?.textContent).not.toContain("Publish");
+    expect(document.body.querySelector('[role="group"]')?.textContent).not.toContain("Publish");
   });
 
   it("dismisses the action menu with Escape and returns focus to its trigger", () => {

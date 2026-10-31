@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { BarChart3, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { BarChart3, FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { IconButton } from "../ui/icon-button";
 
 export interface EditorialListRowProps {
   title: string;
+  resource?: "post" | "page" | undefined;
   authorName?: string | null | undefined;
   date: string;
   status: string;
@@ -22,7 +24,7 @@ export interface EditorialListRowProps {
 
 /** Shared, responsive editorial row for posts and pages. Actions remain explicit and permission-driven. */
 export function EditorialListRow({
-  title, authorName, date, status, imageUrl, featured = false,
+  title, resource = "post", authorName, date, status, imageUrl, featured = false,
   onEdit, onStatistics, onPublishToggle, onDelete, selected = false, onSelect, selectionLabel,
 }: EditorialListRowProps) {
   const { tr, formatDate } = useAdminLocale();
@@ -30,14 +32,36 @@ export function EditorialListRow({
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsId = useId();
   const actionsRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => { setImageFailed(false); }, [imageUrl]);
 
+  const toggleMenu = () => {
+    if (actionsOpen) {
+      setActionsOpen(false);
+      return;
+    }
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = Math.min(192, window.innerWidth - 16);
+    const availableBelow = window.innerHeight - rect.bottom;
+    const openAbove = availableBelow < 112 && rect.top > availableBelow;
+    const leftUnclamped = getComputedStyle(trigger).direction === "rtl"
+      ? rect.left
+      : rect.right - menuWidth;
+    const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, leftUnclamped));
+    const top = openAbove ? Math.max(8, rect.top - 112 - 6) : rect.bottom + 6;
+    setMenuPosition({ top, left, maxHeight: Math.max(72, window.innerHeight - top - 8) });
+    setActionsOpen(true);
+  };
+
   useEffect(() => {
     if (!actionsOpen) return;
     const dismissOnPointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !actionsRef.current?.contains(event.target)) {
+      if (event.target instanceof Node && !actionsRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setActionsOpen(false);
       }
     };
@@ -48,10 +72,16 @@ export function EditorialListRow({
         triggerRef.current?.focus();
       }
     };
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const dismissOnScroll = () => setActionsOpen(false);
     document.addEventListener("pointerdown", dismissOnPointer);
+    window.addEventListener("scroll", dismissOnScroll, true);
+    window.addEventListener("resize", dismissOnScroll);
     document.addEventListener("keydown", dismissOnEscape);
     return () => {
       document.removeEventListener("pointerdown", dismissOnPointer);
+      window.removeEventListener("scroll", dismissOnScroll, true);
+      window.removeEventListener("resize", dismissOnScroll);
       document.removeEventListener("keydown", dismissOnEscape);
     };
   }, [actionsOpen]);
@@ -77,7 +107,7 @@ export function EditorialListRow({
         : "text-muted-foreground";
 
   return (
-    <div role="listitem" className="group relative flex min-h-[76px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 sm:gap-4 sm:px-3 last:border-b-0">
+    <div role="listitem" className="group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 sm:gap-4 sm:px-3 last:border-b-0">
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
       {onEdit && (
         <button
@@ -98,18 +128,12 @@ export function EditorialListRow({
           />
         </label>
       )}
-      {imageUrl && !imageFailed && (
-        <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted sm:h-14 sm:w-20">
-          <img
-            src={imageUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageFailed(true)}
-            className="h-full w-full object-cover"
-          />
-        </div>
-      )}
+      {/* Reserve image geometry for every row to keep titles aligned across missing/broken images. */}
+      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
+        {imageUrl && !imageFailed ? (
+          <img src={imageUrl} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} className="h-full w-full object-cover" />
+        ) : resource === "page" ? <FileText className="size-4" /> : <ImageIcon className="size-4" />}
+      </div>
 
       <div className="min-w-0 flex-1 space-y-1.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -136,7 +160,7 @@ export function EditorialListRow({
       </div>
 
       <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
-        {isPublished && onStatistics ? (
+        {isPublished && onStatistics && (
           <IconButton
             label={tr("Analytics Dashboard")}
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
@@ -146,17 +170,7 @@ export function EditorialListRow({
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
-        ) : onEdit ? (
-          <IconButton
-            label={tr("Edit")}
-            accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
-            variant="ghost"
-            onClick={onEdit}
-            className="h-10 w-10 rounded-lg border-0"
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-          </IconButton>
-        ) : null}
+        )}
         {(onPublishToggle || onDelete) && <div ref={actionsRef} className="relative">
           <button
             ref={triggerRef}
@@ -165,17 +179,19 @@ export function EditorialListRow({
             aria-expanded={actionsOpen}
             aria-controls={actionsId}
             title={tr("More actions")}
-            onClick={() => setActionsOpen((open) => !open)}
+            onClick={toggleMenu}
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           >
             <MoreHorizontal className="size-4" aria-hidden="true" />
           </button>
-          {actionsOpen && (
+          {actionsOpen && menuPosition && createPortal(
             <div
+              ref={menuRef}
               id={actionsId}
               role="group"
               aria-label={tr("More actions")}
-              className="absolute end-0 top-full z-30 mt-1 min-w-44 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+              className="fixed z-[90] min-w-44 overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+              style={{ top: menuPosition.top, left: menuPosition.left, width: Math.min(192, window.innerWidth - 16), maxHeight: menuPosition.maxHeight }}
             >
               {onPublishToggle && (
                 <button
@@ -196,7 +212,8 @@ export function EditorialListRow({
                   {tr("Delete")}
                 </button>
               )}
-            </div>
+            </div>,
+            document.body,
           )}
         </div>}
       </div>
