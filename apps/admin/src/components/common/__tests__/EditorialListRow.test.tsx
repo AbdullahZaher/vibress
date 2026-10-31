@@ -40,18 +40,23 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).toHaveBeenCalledOnce();
   });
 
-  it("uses compact thumbnails and spacing without shrinking action touch targets", () => {
+  it("shows an uncluttered two-line row without a fake thumbnail and keeps accessible actions", () => {
     act(() => root.render(<EditorialListRow {...base} />));
     const row = container.querySelector<HTMLElement>('[role="listitem"]');
-    const thumbnail = row?.querySelector<HTMLElement>("div.rounded-md");
     const editAction = container.querySelector<HTMLButtonElement>('button[aria-label="Edit: Hello there"]');
     const moreAction = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
-    expect(row?.className).toContain("py-2");
-    expect(row?.className).toContain("sm:py-2.5");
-    expect(thumbnail?.className).toContain("h-12");
-    expect(thumbnail?.className).toContain("sm:h-14");
+    expect(row?.className).toContain("min-h-[76px]");
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.textContent).toContain("Draft");
     expect(moreAction?.className).toContain("h-10");
     expect(editAction).not.toBeNull();
+  });
+
+  it("shows a thumbnail only when the post has a working feature image", () => {
+    act(() => root.render(<EditorialListRow {...base} imageUrl="https://example.test/post.jpg" />));
+    const thumbnail = container.querySelector<HTMLImageElement>('img[src="https://example.test/post.jpg"]');
+    expect(thumbnail).not.toBeNull();
+    expect(thumbnail?.getAttribute("alt")).toBe("");
   });
 
   it("navigates when the row background is clicked, and exposes a keyboard-accessible row action", () => {
