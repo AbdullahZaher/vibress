@@ -39,6 +39,15 @@ describe("IconButton", () => {
     act(() => button?.blur());
     expect(document.body.textContent).not.toContain("Refresh");
   });
+  it("hides the tooltip and blocks pointer activation when a busy icon action starts", () => {
+    act(() => root.render(<IconButton label="Refresh" loading><svg aria-hidden="true" /></IconButton>));
+    const button = container.querySelector("button");
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    act(() => button?.focus());
+    expect(document.body.textContent).not.toContain("Refresh");
+  });
+
   it("does not display tooltips on disabled buttons", () => {
     act(() => root.render(<IconButton label="Delete" disabled><svg aria-hidden="true" /></IconButton>));
     act(() => container.querySelector("button")?.focus());

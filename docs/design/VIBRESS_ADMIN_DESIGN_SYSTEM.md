@@ -328,3 +328,24 @@ The content list, not its controls, is the primary visual surface. A small searc
 Ghost's current React PostsListScreen reveals filter choices on demand; its PostListRow uses contextual selection and a distinct selected surface rather than a permanently visible checkbox column. Radix UI's menu documentation establishes the keyboard and focus conventions implemented with existing React primitives here, without adding dependencies. See official sources: https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/posts-list-screen.tsx and https://www.radix-ui.com/primitives/docs/components/dropdown-menu.
 
 Acceptance requires CI Typecheck/Lint/Unit/E2E/Build plus actual browser verification at 320/390/768/1024/1440 px, Arabic RTL and English LTR, light/dark, keyboard Tab/arrow/Escape, screenreader labels and touch selection. A numeric design score is not certified until actual screenshots have been checked.
+
+## 2026-10-31 — Button System v2
+
+### Rationale
+Shared buttons in Vibress must read as **one action system**, not a separate visual language per screen. References: [Radix Themes Button](https://www.radix-ui.com/themes/docs/components/button) (distinct size, appearance and loading axes) and [WCAG 2.2](https://www.w3.org/TR/WCAG22/#target-size-minimum) (AA pointer target floor 24px subject to exceptions; this product aims higher for touch actions).
+
+### Implementation
+- **Variants**: `default` (single highest-priority primary), `secondary` / `subtle` (supporting), `outline` (bounded neutral), `ghost` (quiet contextual controls), `destructive` (danger only), and `link` (text navigation). Neutral colors and borders use existing semantic tokens.
+- **Sizes**: xs=32px, sm=40px, default=44px, lg=48px, icon=44×44px, icon-sm=40×40px. `xs` is reserved for compact non-touch situations; 44px is preferred for touch. Avoid arbitrary local `h-8` overrides inside shared controls.
+- **States**: default/hover/focus-visible/pressed/disabled/loading. `loading` disables activation, keeps its original text footprint via invisible text and a centered indicator, and takes a localized `loadingLabel` for assistive technology. Reduced motion disables the spinner animation via `motion-reduce`.
+- **Form safety**: shared Button always defaults to `type="button"`; actual submit actions must explicitly use `type="submit"`. Icon-only controls require meaningful localized labels.
+- **Selection filters**: `ToggleButton` exposes `aria-pressed`, shares the size/token/focus system, and must not be substituted for actual page navigation or a tab panel. Applied to Settings, Members, Media and Analytics.
+- **Screen integration**: Post/Page editor Save uses stable geometry while saving; Media upload delegates to a keyboard-accessible Button that invokes a hidden file input; mobile toolbar uses IconButton and consistent 40px controls.
+- **Composition**: one principal solid action per header or dialog group; put cancel/preview behind quieter variants; destructive confirmation is separated and never shown as primary before user intent.
+
+### Regression gates
+1. TypeScript + Lint + Unit + E2E + Build must pass on the PR head.
+2. Review keyboard order, visible focus, 200% text scaling, disabled/loading announcements, pointer interactions and error retries across RTL Arabic and LTR English.
+3. Verify real screenshots at 320, 390, 768, 1024 and 1440 CSS px in both themes. Do not claim that any score, contrast audit or visual QA is certified without exercising those views.
+
+This branch is independent of in-flight PR #102 (editorial disclosure toolbar): the new shared Button/ToggleButton layer is compatible with its controls, and Posts/Pages files are intentionally not changed here to avoid merge overlap.

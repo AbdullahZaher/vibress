@@ -14,6 +14,7 @@ import { ApiUser, apiRequest } from "../../lib/api";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { ToggleButton } from "../ui/toggle-button";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import {
   getAnalyticsOverviewApi,
@@ -375,18 +376,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div role="group" aria-label={tr("Analytics")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
-            <button
+            <ToggleButton
               key={t}
+              pressed={analyticsTab === t}
               onClick={() => setAnalyticsTab(t)}
-              aria-pressed={analyticsTab === t}
-              className={`min-h-11 shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
-                analyticsTab === t
-                  ? "bg-muted text-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              }`}
             >
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
-            </button>
+            </ToggleButton>
           ))}
         </div>
 
@@ -577,28 +573,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             <div className="space-y-6">
               <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    onClick={() => setTrafficMetric("views")}
-                    aria-pressed={trafficMetric === "views"}
-                    className={`min-h-10 px-3 py-2 text-sm font-medium rounded-md transition-all cursor-pointer ${
-                      trafficMetric === "views"
-                        ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
+                  <ToggleButton pressed={trafficMetric === "views"} onClick={() => setTrafficMetric("views")}>
                     {tr("Total views")} ({formatCompact(totalViews)})
-                  </button>
-                  <button
-                    onClick={() => setTrafficMetric("visitors")}
-                    aria-pressed={trafficMetric === "visitors"}
-                    className={`min-h-10 px-3 py-2 text-sm font-medium rounded-md transition-all cursor-pointer ${
-                      trafficMetric === "visitors"
-                        ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
+                  </ToggleButton>
+                  <ToggleButton pressed={trafficMetric === "visitors"} onClick={() => setTrafficMetric("visitors")}>
                     {tr("Unique visitors")} ({formatCompact(totalVisitors)})
-                  </button>
+                  </ToggleButton>
                 </div>
 
                 <AreaChart
@@ -617,18 +597,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     </h3>
                     <div className="flex flex-wrap items-center gap-1">
                       {(["all", "posts", "pages"] as const).map((t) => (
-                        <button
-                          key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
+                        <ToggleButton
+                          key={t}
+                          pressed={topContentType === t}
                           onClick={() => setTopContentType(t)}
-                          aria-pressed={topContentType === t}
-                          className={`min-h-10 px-2.5 py-2 rounded-md text-sm transition-all cursor-pointer capitalize ${
-                            topContentType === t
-                              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                              : "text-muted-foreground hover:text-foreground font-medium"
-                          }`}
                         >
                           {tr(t.charAt(0).toUpperCase() + t.slice(1))}
-                        </button>
+                        </ToggleButton>
                       ))}
                     </div>
                   </div>
