@@ -43,7 +43,7 @@ export function IconButton({
   }, [position]);
 
   React.useEffect(() => {
-    if (disabled) hide();
+    if (disabled || loading) hide();
   }, [disabled, loading]);
 
   return (
