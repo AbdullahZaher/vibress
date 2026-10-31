@@ -56,7 +56,10 @@ export function EditorialChoiceMenu({
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
     };
-    const onMove = () => setOpen(false);
+    const onMove = (event: Event) => {
+      if (event.target instanceof Node && menu.current?.contains(event.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("keydown", onEscape);
