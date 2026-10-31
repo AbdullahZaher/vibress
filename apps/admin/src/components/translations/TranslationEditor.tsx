@@ -558,7 +558,7 @@ export const TranslationEditor: React.FC<TranslationEditorProps> = ({
                 </span>
               </div>
             </CardHeader>
-            <CardContent className="p-4 space-y-4 text-left" dir={getDirection(sourceLocale)}>
+            <CardContent className="p-4 space-y-4 text-start" dir={getDirection(sourceLocale)}>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground uppercase">
                   Source Title

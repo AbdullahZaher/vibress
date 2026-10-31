@@ -132,9 +132,9 @@ export function BroadcastsPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Subject</TableHead>
+              <TableHead className="ps-6 text-xs">Subject</TableHead>
               <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -153,18 +153,18 @@ export function BroadcastsPanel({
                   key={s.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {s.subject}
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant="outline"
-                      className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border"
+                      variant={s.status === "sent" ? "published" : s.status === "draft" ? "draft" : "review"}
+                      className="text-[10px] font-mono px-2 py-0.5"
                     >
                       {s.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <div className="flex items-center justify-end gap-1.5">
                       {s.status === "draft" && (
                         <Button

@@ -95,7 +95,7 @@ export function IntegrationsPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Name</TableHead>
+              <TableHead className="ps-6 text-xs">Name</TableHead>
               <TableHead className="text-xs">Key</TableHead>
               <TableHead className="text-xs">Type</TableHead>
             </TableRow>
@@ -116,7 +116,7 @@ export function IntegrationsPanel({
                   key={i.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {i.name}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground">

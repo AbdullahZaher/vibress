@@ -249,7 +249,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={tr("Search millions of high-resolution photos...")}
                   aria-label={tr("Search millions of high-resolution photos...")}
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-muted/40 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground/60"
+                  className="w-full ps-10 pe-10 py-2.5 rounded-xl bg-muted/40 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all placeholder:text-muted-foreground/60"
                 />
                 {query && (
                   <button
@@ -343,7 +343,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                               >
                                 {selectingThis ? (
                                   <>
-                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                    <Loader2 className="w-3 h-3 animate-spin me-1" />
                                     <span>{tr("Importing...")}</span>
                                   </>
                                 ) : (
@@ -377,7 +377,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                       >
                         {isLoadingMore ? (
                           <>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            <Loader2 className="w-4 h-4 animate-spin me-2" />
                             {tr("Loading...")}
                           </>
                         ) : (

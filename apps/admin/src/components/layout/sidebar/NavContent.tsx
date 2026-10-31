@@ -16,9 +16,9 @@ interface NavContentProps {
   canReadTranslations: boolean;
 }
 
-const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-foreground/70";
+const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary shadow-2xs";
 const inactiveClass = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground";
-const linkClass = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring";
+const linkClass = "flex min-h-10 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer";
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,

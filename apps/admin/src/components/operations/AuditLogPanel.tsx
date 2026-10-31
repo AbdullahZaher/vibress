@@ -19,10 +19,10 @@ export function AuditLogPanel({ audit }: AuditLogPanelProps) {
       <Table>
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="pl-6 text-xs">Timestamp</TableHead>
+            <TableHead className="ps-6 text-xs">Timestamp</TableHead>
             <TableHead className="text-xs">Actor</TableHead>
             <TableHead className="text-xs">Action</TableHead>
-            <TableHead className="text-right pr-6 text-xs">Resource</TableHead>
+            <TableHead className="text-end pe-6 text-xs">Resource</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -41,7 +41,7 @@ export function AuditLogPanel({ audit }: AuditLogPanelProps) {
                 key={ev.id}
                 className="hover:bg-muted/40 border-border text-xs"
               >
-                <TableCell className="pl-6 font-mono text-muted-foreground">
+                <TableCell className="ps-6 font-mono text-muted-foreground">
                   {new Date(ev.createdAt).toLocaleString()}
                 </TableCell>
                 <TableCell className="font-semibold text-foreground">
@@ -50,7 +50,7 @@ export function AuditLogPanel({ audit }: AuditLogPanelProps) {
                 <TableCell className="font-mono text-emerald-500 font-semibold">
                   {ev.action}
                 </TableCell>
-                <TableCell className="text-right pr-6 font-mono text-muted-foreground">
+                <TableCell className="text-end pe-6 font-mono text-muted-foreground">
                   {ev.targetType}:{ev.targetId}
                 </TableCell>
               </TableRow>

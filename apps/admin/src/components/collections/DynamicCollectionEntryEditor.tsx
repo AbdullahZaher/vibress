@@ -291,7 +291,7 @@ export function DynamicCollectionEntryEditor({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin me-2" />
         Loading entry editor...
       </div>
     );
@@ -435,7 +435,7 @@ export function DynamicCollectionEntryEditor({
           </h2>
           {hasLocalizableFields && (
             <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1 text-xs">
-              <Globe className="w-3.5 h-3.5 text-muted-foreground mr-1" />
+              <Globe className="w-3.5 h-3.5 text-muted-foreground me-1" />
               {enabledLocales.map((locale) => (
                 <button
                   key={locale}
@@ -504,7 +504,7 @@ export function DynamicCollectionEntryEditor({
                       </span>
                     </label>
                     {field.helpText && (
-                      <p className="text-xs text-muted-foreground mt-1 ml-7">{field.helpText}</p>
+                      <p className="text-xs text-muted-foreground mt-1 ms-7">{field.helpText}</p>
                     )}
                   </div>
                 );
@@ -787,7 +787,7 @@ export function DynamicCollectionEntryEditor({
                     <label className="block text-xs font-medium text-foreground/85 mb-1">
                       {field.name} {field.required && "*"}
                       {field.localizable && (
-                        <span className="text-[10px] uppercase font-bold text-primary ml-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
+                        <span className="text-[10px] uppercase font-bold text-primary ms-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
                           {activeLocaleTab}
                         </span>
                       )}
@@ -824,7 +824,7 @@ export function DynamicCollectionEntryEditor({
                   <label className="block text-xs font-medium text-foreground/85 mb-1">
                     {field.name} {field.required && "*"}
                     {field.localizable && (
-                      <span className="text-[10px] uppercase font-bold text-primary ml-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
+                      <span className="text-[10px] uppercase font-bold text-primary ms-1.5 px-1.5 py-0.5 bg-primary/10 rounded">
                         {activeLocaleTab}
                       </span>
                     )}

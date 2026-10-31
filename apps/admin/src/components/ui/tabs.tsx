@@ -35,10 +35,39 @@ export function TabsList({
   children: React.ReactNode;
   className?: string;
 }) {
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    const list = listRef.current;
+    if (!list) return;
+    const tabs = Array.from(list.querySelectorAll<HTMLButtonElement>('[role="tab"]:not([disabled])'));
+    const activeIndex = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (activeIndex === -1) return;
+
+    let targetIndex: number;
+    if (event.key === "ArrowRight") {
+      targetIndex = (activeIndex + 1) % tabs.length;
+    } else if (event.key === "ArrowLeft") {
+      targetIndex = (activeIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === "Home") {
+      targetIndex = 0;
+    } else if (event.key === "End") {
+      targetIndex = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[targetIndex]?.focus();
+    tabs[targetIndex]?.click();
+  };
+
   return (
     <div
+      ref={listRef}
+      role="tablist"
+      onKeyDown={handleKeyDown}
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+        "inline-flex min-h-11 items-center justify-start rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 gap-1 overflow-x-auto",
         className,
       )}
     >
@@ -64,12 +93,15 @@ export function TabsTrigger({
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={isActive}
+      tabIndex={isActive ? 0 : -1}
       onClick={() => context.onValueChange(value)}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+        "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none",
         isActive
-          ? "bg-background text-foreground shadow-sm"
-          : "hover:bg-background/50 hover:text-foreground",
+          ? "bg-card text-foreground shadow-2xs font-semibold border border-border/60"
+          : "text-muted-foreground hover:text-foreground hover:bg-card/50",
         className,
       )}
     >
@@ -94,8 +126,10 @@ export function TabsContent({
 
   return (
     <div
+      role="tabpanel"
+      tabIndex={0}
       className={cn(
-        "mt-4 ring-offset-background focus-visible:outline-none",
+        "mt-4 outline-none focus-visible:outline-2 focus-visible:outline-ring",
         className,
       )}
     >

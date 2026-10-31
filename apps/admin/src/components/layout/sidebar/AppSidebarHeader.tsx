@@ -81,14 +81,14 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           }
           onCloseSidebar?.();
         }}
-        className="flex min-h-11 w-full items-center justify-between rounded-lg border border-sidebar-border bg-card/60 px-3.5 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex min-h-10 w-full items-center justify-between rounded-lg border border-sidebar-border bg-card/60 px-3 text-sm text-muted-foreground transition-all hover:border-border hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <div className="flex items-center gap-2">
-          <Search className="h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="h-4 w-4 text-muted-foreground" />
           <span>{tr("Search & commands")}</span>
         </div>
-        <kbd className="bg-card text-muted-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-border shadow-2xs">
-          ⌘ / Ctrl K
+        <kbd className="inline-flex items-center justify-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium font-mono text-muted-foreground border border-border/80 shadow-2xs">
+          ⌘K
         </kbd>
       </button>
     </div>

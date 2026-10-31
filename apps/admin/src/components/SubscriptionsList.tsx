@@ -93,8 +93,8 @@ export function SubscriptionsList() {
       case "trialing":
         return (
           <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1"
+            variant="published"
+            className="text-[10px] font-mono px-2 py-0.5 gap-1"
           >
             <CheckCircle2 className="h-3 w-3" /> {subStatus}
           </Badge>
@@ -103,8 +103,8 @@ export function SubscriptionsList() {
       case "unpaid":
         return (
           <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1"
+            variant="review"
+            className="text-[10px] font-mono px-2 py-0.5 gap-1"
           >
             <AlertCircle className="h-3 w-3" /> {subStatus}
           </Badge>
@@ -112,8 +112,8 @@ export function SubscriptionsList() {
       default:
         return (
           <Badge
-            variant="outline"
-            className="text-[10px] font-mono px-2 py-0.5 bg-muted text-muted-foreground border-border gap-1"
+            variant="draft"
+            className="text-[10px] font-mono px-2 py-0.5 gap-1"
           >
             <ShieldAlert className="h-3 w-3" /> {subStatus}
           </Badge>
@@ -122,7 +122,7 @@ export function SubscriptionsList() {
   };
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Header */}
       <AdminPageHeader
         title={tr("Subscriptions")}
@@ -136,20 +136,20 @@ export function SubscriptionsList() {
       )}
 
       {/* Filter Tabs Bar */}
-      <div className="flex items-center gap-1.5">
+      <div className="inline-flex items-center p-1 rounded-lg bg-muted/60 border border-border/60 gap-1 overflow-x-auto max-w-full">
         {[
-          { label: "All Statuses", value: "" },
-          { label: "Active", value: "active" },
-          { label: "Past Due", value: "past_due" },
-          { label: "Canceled", value: "canceled" },
+          { label: tr("All Statuses"), value: "" },
+          { label: tr("Active"), value: "active" },
+          { label: tr("Past Due"), value: "past_due" },
+          { label: tr("Canceled"), value: "canceled" },
         ].map((item) => (
           <button
             key={item.value}
             onClick={() => setStatus(item.value)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
               status === item.value
-                ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-background text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/40"
             }`}
           >
             {item.label}
@@ -162,11 +162,11 @@ export function SubscriptionsList() {
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="ps-6 text-xs">Member ID</TableHead>
-              <TableHead className="text-xs">Plan ID</TableHead>
-              <TableHead className="text-xs">Interval</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
+              <TableHead className="ps-6 text-xs">{tr("Member ID")}</TableHead>
+              <TableHead className="text-xs">{tr("Plan ID")}</TableHead>
+              <TableHead className="text-xs">{tr("Interval")}</TableHead>
+              <TableHead className="text-xs">{tr("Status")}</TableHead>
+              <TableHead className="text-end pe-6 text-xs">{tr("Actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -179,7 +179,7 @@ export function SubscriptionsList() {
                   <div className="flex flex-col items-center justify-center space-y-1">
                     <CreditCard className="h-8 w-8 text-muted-foreground/40" />
                     <p className="text-xs font-medium">
-                      No subscriptions match filter.
+                      {tr("No subscriptions match filter.")}
                     </p>
                   </div>
                 </TableCell>
@@ -207,7 +207,7 @@ export function SubscriptionsList() {
                       onClick={() => viewDetail(sub.id)}
                       className="h-7 text-xs border-border bg-card hover:bg-accent text-foreground cursor-pointer"
                     >
-                      Details
+                      {tr("Details")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -221,7 +221,7 @@ export function SubscriptionsList() {
       <Dialog
         isOpen={!!selected}
         onClose={() => setSelected(null)}
-        title="Subscription Lifecycle Details"
+        title={tr("Subscription Lifecycle Details")}
       >
         {selected && (
           <div className="space-y-4 pt-2 text-xs">
@@ -245,7 +245,7 @@ export function SubscriptionsList() {
 
             <div className="space-y-2">
               <h4 className="font-bold text-muted-foreground uppercase tracking-wider text-[11px]">
-                Audit Lifecycle Events
+                {tr("Audit Lifecycle Events")}
               </h4>
               <div className="space-y-1 max-h-40 overflow-y-auto font-mono text-[11px]">
                 {events.map((ev, idx) => {
@@ -277,7 +277,7 @@ export function SubscriptionsList() {
                   onClick={() => handleCancel(selected.id)}
                   className="text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
                 >
-                  Cancel Subscription
+                  {tr("Cancel Subscription")}
                 </Button>
               </div>
             )}

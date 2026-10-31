@@ -59,9 +59,9 @@ export function TransferPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Job Type</TableHead>
+              <TableHead className="ps-6 text-xs">Job Type</TableHead>
               <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-right pr-6 text-xs">
+              <TableHead className="text-end pe-6 text-xs">
                 Created At
               </TableHead>
             </TableRow>
@@ -82,7 +82,7 @@ export function TransferPanel({
                   key={j.id}
                   className="hover:bg-muted/40 border-border text-xs"
                 >
-                  <TableCell className="pl-6 font-semibold text-foreground capitalize">
+                  <TableCell className="ps-6 font-semibold text-foreground capitalize">
                     {j.type}
                   </TableCell>
                   <TableCell>
@@ -93,7 +93,7 @@ export function TransferPanel({
                       {j.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right pr-6 font-mono text-muted-foreground">
+                  <TableCell className="text-end pe-6 font-mono text-muted-foreground">
                     {new Date(j.createdAt).toLocaleString()}
                   </TableCell>
                 </TableRow>

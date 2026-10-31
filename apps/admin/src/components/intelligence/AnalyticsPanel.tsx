@@ -20,9 +20,9 @@ export function AnalyticsPanel({ metrics, metricsRange }: AnalyticsPanelProps) {
       <Table>
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="pl-6 text-xs">Metric Date</TableHead>
+            <TableHead className="ps-6 text-xs">Metric Date</TableHead>
             <TableHead className="text-xs">Metric Name</TableHead>
-            <TableHead className="text-right pr-6 text-xs">
+            <TableHead className="text-end pe-6 text-xs">
               Total Count
             </TableHead>
           </TableRow>
@@ -44,13 +44,13 @@ export function AnalyticsPanel({ metrics, metricsRange }: AnalyticsPanelProps) {
                 key={idx}
                 className="hover:bg-muted/40 border-border font-mono text-xs"
               >
-                <TableCell className="pl-6 font-medium text-foreground">
+                <TableCell className="ps-6 font-medium text-foreground">
                   {m.date}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {m.name}
                 </TableCell>
-                <TableCell className="text-right pr-6 text-foreground font-semibold">
+                <TableCell className="text-end pe-6 text-foreground font-semibold">
                   {m.count}
                 </TableCell>
               </TableRow>
