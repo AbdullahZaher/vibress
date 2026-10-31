@@ -27,7 +27,7 @@ export function EditorialBulkActions({
   const actionClass = "min-h-11 w-full min-w-0 gap-2 px-3 text-sm font-medium";
   return (
     <div
-      role="toolbar"
+      role="group"
       aria-label={tr("Bulk actions")}
       className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-muted/20 p-3 sm:p-3.5"
     >

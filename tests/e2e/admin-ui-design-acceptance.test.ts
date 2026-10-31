@@ -216,10 +216,34 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     });
     await page.goto(`${BASE}/admin/posts`);
     await expect(page.getByText("Bulk acceptance one")).toBeVisible();
+    // Default mode: Selection mode is OFF; no row checkboxes and no "Select all" row are rendered
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toHaveCount(0);
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]')).toHaveCount(0);
+    // Explicit entry: click Select button to enter selection mode
+    const selectBtn = page.getByRole("button", { name: "Select", exact: true });
+    await expect(selectBtn).toHaveAttribute("aria-pressed", "false");
+    await selectBtn.click();
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toBeVisible();
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]').first()).toBeVisible();
+    // In selection mode, button transitions to "Done" with aria-pressed="true"
+    const doneBtn = page.getByRole("button", { name: "Done", exact: true });
+    await expect(doneBtn).toBeVisible();
+    await expect(doneBtn).toHaveAttribute("aria-pressed", "true");
+
+    // Toggle Done off to test clean exit and layout restoration
+    await doneBtn.click();
+    await expect(page.getByRole("checkbox", { name: "Select all on this page" })).toHaveCount(0);
+    await expect(page.locator('[role="listitem"] input[type="checkbox"]')).toHaveCount(0);
+    await expect(selectBtn).toBeVisible();
+    await expect(selectBtn).toHaveAttribute("aria-pressed", "false");
+
+    // Re-enter selection mode to proceed with bulk deletion test
+    await selectBtn.click();
+    await expect(doneBtn).toBeVisible();
     await page.getByRole("checkbox", { name: "Select all on this page" }).check();
-    const toolbar = page.getByRole("toolbar", { name: "Bulk actions" });
-    await expect(toolbar).toBeVisible();
-    await toolbar.getByRole("button", { name: "Delete" }).click();
+    const bulkGroup = page.getByRole("group", { name: "Bulk actions" });
+    await expect(bulkGroup).toBeVisible();
+    await bulkGroup.getByRole("button", { name: "Delete" }).click();
     const dialog = page.locator('[role="dialog"]').last();
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Confirm delete" }).click();

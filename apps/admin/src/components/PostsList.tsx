@@ -7,11 +7,12 @@ import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialChoiceMenu } from "./common/EditorialChoiceMenu";
 import { EditorialPagination } from "./common/EditorialPagination";
 import { EditorialBulkActions } from "./common/EditorialBulkActions";
+import { EditorialSelectionCheckbox } from "./common/EditorialSelectionCheckbox";
 import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2, Check } from "lucide-react";
 
 interface PostSummary {
   id: string;
@@ -99,9 +100,50 @@ export const PostsList: React.FC<PostsListProps> = ({
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
+  const [clearedNotice, setClearedNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const trRef = useRef(tr);
   useEffect(() => {
-    setSelectedIds(new Set());
-  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
+    trRef.current = tr;
+  }, [tr]);
+
+  const showClearedNotice = useCallback(() => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    setClearedNotice(trRef.current("Selection cleared for new view"));
+    noticeTimerRef.current = window.setTimeout(() => {
+      setClearedNotice(null);
+      noticeTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}`;
+  const previousViewKey = useRef(viewKey);
+  const selectedCountRef = useRef(selectedIds.size);
+  selectedCountRef.current = selectedIds.size;
+
+  useEffect(() => {
+    if (previousViewKey.current === viewKey) {
+      return;
+    }
+    previousViewKey.current = viewKey;
+
+    if (selectedCountRef.current > 0) {
+      setSelectedIds(new Set());
+      showClearedNotice();
+    }
+    setConfirmAction(null);
+  }, [viewKey, showClearedNotice]);
 
   const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
   const fetchPosts = useCallback(async () => {
@@ -145,13 +187,18 @@ export const PostsList: React.FC<PostsListProps> = ({
   const visibleIds = useMemo(() => posts.map((post) => post.id), [posts]);
   const selectedPosts = useMemo(() => posts.filter((post) => selectedIds.has(post.id)), [posts, selectedIds]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.length > 0 && visibleIds.some((id) => selectedIds.has(id));
+  const isIndeterminate = someVisibleSelected && !allVisibleSelected;
   const selectionEnabled = canDelete || canPublish;
 
   const toggleSelection = (id: string, selected: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (selected) next.add(id);
-      else next.delete(id);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
   };
@@ -179,7 +226,7 @@ export const PostsList: React.FC<PostsListProps> = ({
   };
 
   const runConfirmedAction = async () => {
-    if (!confirmAction || processing) return;
+    if (!confirmAction || processing || resolvedQueryKey !== queryKey) return;
     const action = confirmAction;
     const targets = posts.filter((post) => action.ids.includes(post.id)).filter((post) => {
       if (action.kind === "publish") return post.status !== "published";
@@ -221,6 +268,20 @@ export const PostsList: React.FC<PostsListProps> = ({
       .filter((post) => kind === "publish" ? post.status !== "published" : kind === "unpublish" ? post.status === "published" : true)
       .map((post) => post.id);
     if (ids.length) setConfirmAction({ kind, ids });
+  };
+
+  const handleToggleSelectionMode = () => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      setClearedNotice(null);
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    } else {
+      setSelectionMode(true);
+    }
   };
 
   const actionTitle = confirmAction?.kind === "delete"
@@ -299,17 +360,18 @@ export const PostsList: React.FC<PostsListProps> = ({
           {selectionEnabled && (
             <Button
               type="button"
-              variant={selectionMode || selectedIds.size > 0 ? "subtle" : "ghost"}
+              variant={selectionMode ? "subtle" : "ghost"}
               size="sm"
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
-              onClick={() => {
-                setSelectionMode((active) => !active);
-                setSelectedIds(new Set());
-              }}
+              onClick={handleToggleSelectionMode}
             >
-              <CheckSquare2 className="size-4" aria-hidden="true" />
-              {tr("Select")}
+              {selectionMode ? (
+                <Check className="size-4" aria-hidden="true" />
+              ) : (
+                <CheckSquare2 className="size-4" aria-hidden="true" />
+              )}
+              {tr(selectionMode ? "Done" : "Select")}
             </Button>
           )}
         </div>
@@ -331,29 +393,42 @@ export const PostsList: React.FC<PostsListProps> = ({
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
-          {selectionEnabled && !resultsPending && !error && posts.length > 0 && (
-            <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                disabled={resultsPending || posts.length === 0}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setSelectedIds(next ? new Set(visibleIds) : new Set());
-                  if (next) setSelectionMode(true);
-                }}
-                aria-label={tr("Select all on this page")}
-                className="size-4 accent-primary"
-              />
-              {tr("Select all on this page")}
-            </label>
-          )}
-          <span aria-live="polite" className="text-sm text-muted-foreground">
-            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
-          </span>
+        {selectionMode && selectionEnabled && !resultsPending && !error && posts.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
+            <EditorialSelectionCheckbox
+              checked={allVisibleSelected}
+              indeterminate={isIndeterminate}
+              disabled={resultsPending || posts.length === 0}
+              onChange={(next) => {
+                setSelectedIds(next ? new Set(visibleIds) : new Set());
+              }}
+              label={tr("Select all on this page")}
+              showLabel
+              className="min-h-11 px-0"
+            />
+            <div className="flex items-center gap-3">
+              {clearedNotice && (
+                <span className="text-xs font-medium text-muted-foreground animate-in fade-in motion-reduce:animate-none">
+                  {clearedNotice}
+                </span>
+              )}
+              <span className="text-sm text-muted-foreground">
+                {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
+              </span>
+            </div>
+          </div>
+        )}
+        {!selectionMode && (
+          <div className="flex items-center justify-end">
+            <span aria-live="polite" className="sr-only">
+              {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`}
+            </span>
+          </div>
+        )}
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {clearedNotice || ""}
         </div>
-        {!resultsPending && !error && selectedIds.size > 0 && (
+        {selectionMode && !resultsPending && !error && selectedIds.size > 0 && (
           <EditorialBulkActions
             selectedCount={selectedIds.size}
             showPublish={canPublish && selectedPosts.some((post) => post.status !== "published")}
@@ -420,9 +495,9 @@ export const PostsList: React.FC<PostsListProps> = ({
                 editHref={canEdit ? `/admin/posts/${post.id}` : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(post) : undefined}
                 onDelete={canDelete ? () => requestDelete(post.id) : undefined}
-                onSelect={selectionEnabled ? (selected) => { toggleSelection(post.id, selected); if (selected) setSelectionMode(true); } : undefined}
+                onSelect={selectionEnabled && selectionMode ? (selected) => toggleSelection(post.id, selected) : undefined}
                 selectionMode={selectionMode}
-                selected={selectedIds.has(post.id)}
+                selected={selectionMode && selectedIds.has(post.id)}
                 selectionLabel={`${tr("Select")}: ${post.title || tr("(Untitled)")}`}
               />
             ))}

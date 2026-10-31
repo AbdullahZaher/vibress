@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAdminLocale } from "../../lib/admin-locale";
+import { cn } from "@/lib/utils";
+import { EditorialSelectionCheckbox } from "./EditorialSelectionCheckbox";
 
 export interface EditorialListRowProps {
   title: string;
@@ -129,10 +131,29 @@ export function EditorialListRow({
         ? "text-status-review-fg"
         : "text-muted-foreground";
 
+  const handleRowClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!selectionMode || !onSelect) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, label, [role="menu"], [role="menuitem"]')) {
+      return;
+    }
+    onSelect(!selected);
+  };
+
   return (
-    <div role="listitem" data-selected={selected ? "true" : undefined} className={`group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/35 focus-within:z-20 focus-within:bg-muted/35 data-[selected=true]:bg-primary/7 sm:gap-4 sm:px-3 last:border-b-0 ${onEdit ? "cursor-pointer" : ""}`}>
-      {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
-      {onEdit && (editHref ? (
+    <div
+      role="listitem"
+      data-selected={selected ? "true" : undefined}
+      onClick={handleRowClick}
+      className={cn(
+        "group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-2 sm:px-3 py-2.5 transition-colors sm:gap-4 last:border-b-0",
+        "hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20",
+        selected && "bg-primary/[0.035] dark:bg-primary/[0.055]",
+        (selectionMode ? onSelect : onEdit) && "cursor-pointer"
+      )}
+    >
+      {/* Sibling edit link/button: rendered only when selection mode is inactive so row editing never activates during selection */}
+      {!selectionMode && onEdit && (editHref ? (
         <a
           href={editHref}
           onClick={(event) => {
@@ -152,20 +173,15 @@ export function EditorialListRow({
           className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
         />
       ))}
-      {onSelect && (
-        <label
-          className={`absolute start-3 top-1/2 z-20 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg border border-border/60 bg-card/95 shadow-sm transition-opacity focus-within:opacity-100 focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto ${selected || selectionMode ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"}`}
-        >
-          <input
-            type="checkbox"
+      {selectionMode && onSelect && (
+        <div className="relative z-20 flex shrink-0 items-center justify-center">
+          <EditorialSelectionCheckbox
             checked={selected}
-            onChange={(event) => onSelect(event.target.checked)}
-            aria-label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
-            className="size-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onChange={onSelect}
+            label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
           />
-        </label>
+        </div>
       )}
-      {/* Stable artwork geometry: contextual selection overlays the thumbnail instead of occupying a permanent column. */}
       <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
         {imageUrl && !imageFailed ? (
           <img src={imageUrl} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} className="h-full w-full object-cover" />

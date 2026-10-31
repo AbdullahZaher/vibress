@@ -24,8 +24,10 @@ describe("EditorialBulkActions — consistent group geometry", () => {
     act(() => root.render(
       <EditorialBulkActions selectedCount={6} showPublish showUnpublish showDelete onAction={onAction} onClear={onClear} />,
     ));
-    const toolbar = container.querySelector('[role="toolbar"]')!;
-    const buttons = [...toolbar.querySelectorAll("button")];
+    const group = container.querySelector('[role="group"]')!;
+    expect(group).not.toBeNull();
+    expect(group.getAttribute("aria-label")).toBe("Bulk actions");
+    const buttons = [...group.querySelectorAll("button")];
     expect(buttons).toHaveLength(4);
     for (const button of buttons) {
       expect(button.className).toContain("min-h-11");
@@ -35,7 +37,7 @@ describe("EditorialBulkActions — consistent group geometry", () => {
     }
     expect(buttons[2]?.className).toContain("border-destructive/35");
     expect(buttons[2]?.className).not.toContain("bg-destructive text-destructive-foreground");
-    expect(toolbar.textContent).toContain("6 selected on this page");
+    expect(group.textContent).toContain("6 selected on this page");
   });
   it("retains publish, unpublish, delete and clear callbacks", () => {
     act(() => root.render(
@@ -53,6 +55,6 @@ describe("EditorialBulkActions — consistent group geometry", () => {
     act(() => root.render(<EditorialBulkActions selectedCount={1} showPublish={false} showUnpublish={false} showDelete onAction={onAction} onClear={onClear} />));
     expect(container.querySelectorAll("button")).toHaveLength(2);
     act(() => root.render(<EditorialBulkActions selectedCount={0} showPublish showUnpublish showDelete onAction={onAction} onClear={onClear} />));
-    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
   });
 });
