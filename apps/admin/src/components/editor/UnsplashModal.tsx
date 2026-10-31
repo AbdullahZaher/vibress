@@ -376,14 +376,7 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                         onClick={() => performSearch(debouncedQuery, page + 1, true)}
                         className="px-6"
                       >
-                        {isLoadingMore ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin me-2" />
-                            {tr("Loading...")}
-                          </>
-                        ) : (
-                          `${tr("Load more photos")} (${photos.length} / ${totalPhotos})`
-                        )}
+                        {`${tr("Load more photos")} (${photos.length} / ${totalPhotos})`}
                       </Button>
                     </div>
                   )}
