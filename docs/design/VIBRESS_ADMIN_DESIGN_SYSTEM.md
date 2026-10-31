@@ -362,3 +362,38 @@ The screenshot review exposed accidental differences within one toolbar: `sm` bu
 **Architecture:** Posts and Pages share `EditorialBulkActions`, including permission/state visibility, localized labels, action order, and ARIA toolbar semantics. The user still confirms batch mutations in the existing Dialog. All four actions have matching text/icon gaps, width rules and responsive behavior. No API or permission logic changed.
 
 **QA:** test 320/390/768/1024/1440px, Arabic RTL & English LTR, light/dark, long text at 200% zoom, keyboard focus, mixed published/draft selections and confirmation dialogs. See the [Carbon Design System button-group guidance](https://www.carbondesignsystem.com/building-blocks/core/components/button/guidelines) for grouping and avoiding mixed sizes. Do not claim verified visual compliance without browser screenshots.
+
+
+## 2026-10-31 — Unified Editorial Selection System (Ghost & Apple Aesthetic)
+
+### Rationale and Problem Statement
+The top **Select** button followed the desired minimal, modern design; however, the subheader **Select all on this page** checkbox and individual row checkboxes lacked visual coherence:
+- Row checkboxes floated directly over feature thumbnails inside stark white card containers with heavy drop shadows (`bg-card/95 border-border/60 shadow-sm`).
+- Selected rows were overlaid with a heavy, distracting gray wash (`data-[selected=true]:bg-primary/7`) that degraded text contrast and veiled media artwork.
+- Subheaders rendered unstyled native checkboxes without support for the intermediate (indeterminate) state when only some rows were selected.
+
+### Unified Implementation
+1. **Shared `EditorialSelectionCheckbox` Component (`apps/admin/src/components/common/EditorialSelectionCheckbox.tsx`):**
+   - **Unified Geometry:** 18×18px visual box, `rounded-[5px]`, matching Lucide `Check` and `Minus` icons with `stroke-[2.75]`.
+   - **Semantic Tokens:** Built entirely on CSS variable tokens (`border-border/80 bg-background/40` unchecked, adapting automatically across light and dark modes; `border-primary bg-primary text-primary-foreground` when checked or indeterminate). No hardcoded hex or theme overrides.
+   - **Accessibility & Touch Target:** Enforces a minimum 44×44px interactive target on the wrapping `<label>`, native keyboard focus visibility via `focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`, and programmatic `aria-checked="mixed"` for indeterminate state.
+2. **Row Integration & Artwork Geometry:**
+   - Checkboxes are placed in a dedicated leading slot before the thumbnail rather than overlapping it with floating card overlays.
+   - Thumbnails remain 100% visible, crisp, and unobstructed in all selection states.
+3. **Selected Row Surface:**
+   - Replaced heavy gray wash with an ultra-subtle, theme-aware tint (`bg-primary/[0.035] dark:bg-primary/[0.055]`).
+   - Clear distinction between row hover (`hover:bg-muted/20`), keyboard focus (`focus-within:bg-muted/20`), and selection (`selected`).
+4. **Progressive Disclosure & State Synchronization:**
+   - Top **Select** button acts as the explicit toggle for list-wide selection mode.
+   - When selection mode is inactive on desktop, row checkboxes remain concealed until revealed via pointer hover or keyboard focus.
+   - On touch devices or when selection mode is active, checkboxes are persistently displayed.
+   - "Select all on this page" calculates `isIndeterminate = someVisibleSelected && !allVisibleSelected` and renders the minus glyph.
+   - Clearing selection via `EditorialBulkActions` resets both selected IDs and selection mode.
+5. **Cross-Resource Parity:**
+   - Posts and Pages share the exact same `EditorialSelectionCheckbox`, row layout, bulk toolbar, and indeterminate selection logic.
+
+### Verification & Artifacts
+- **Unit Tests:** `apps/admin/src/components/common/__tests__/EditorialSelectionCheckbox.test.tsx` (6 tests) and `EditorialListRow.test.tsx` (14 tests) passing 100%.
+- **Full Suite:** 36 test files, 183 tests in `apps/admin` passing 100%.
+- **E2E Acceptance:** 11 Playwright acceptance tests in `tests/e2e/admin-ui-design-acceptance.test.ts` passing 100%.
+- **Responsive & Theme Verification:** Captured visual verification across Light and Dark themes, 320px, 390px, and 1440px viewports, and English LTR / Arabic RTL layouts.

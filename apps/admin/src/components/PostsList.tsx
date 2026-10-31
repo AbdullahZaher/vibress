@@ -7,6 +7,7 @@ import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialChoiceMenu } from "./common/EditorialChoiceMenu";
 import { EditorialPagination } from "./common/EditorialPagination";
 import { EditorialBulkActions } from "./common/EditorialBulkActions";
+import { EditorialSelectionCheckbox } from "./common/EditorialSelectionCheckbox";
 import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -145,13 +146,19 @@ export const PostsList: React.FC<PostsListProps> = ({
   const visibleIds = useMemo(() => posts.map((post) => post.id), [posts]);
   const selectedPosts = useMemo(() => posts.filter((post) => selectedIds.has(post.id)), [posts, selectedIds]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.length > 0 && visibleIds.some((id) => selectedIds.has(id));
+  const isIndeterminate = someVisibleSelected && !allVisibleSelected;
   const selectionEnabled = canDelete || canPublish;
 
   const toggleSelection = (id: string, selected: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (selected) next.add(id);
-      else next.delete(id);
+      if (selected) {
+        next.add(id);
+        setSelectionMode(true);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
   };
@@ -304,8 +311,11 @@ export const PostsList: React.FC<PostsListProps> = ({
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
               onClick={() => {
-                setSelectionMode((active) => !active);
-                setSelectedIds(new Set());
+                setSelectionMode((active) => {
+                  const next = !active;
+                  if (!next) setSelectedIds(new Set());
+                  return next;
+                });
               }}
             >
               <CheckSquare2 className="size-4" aria-hidden="true" />
@@ -333,21 +343,18 @@ export const PostsList: React.FC<PostsListProps> = ({
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
           {selectionEnabled && !resultsPending && !error && posts.length > 0 && (
-            <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                disabled={resultsPending || posts.length === 0}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setSelectedIds(next ? new Set(visibleIds) : new Set());
-                  if (next) setSelectionMode(true);
-                }}
-                aria-label={tr("Select all on this page")}
-                className="size-4 accent-primary"
-              />
-              {tr("Select all on this page")}
-            </label>
+            <EditorialSelectionCheckbox
+              checked={allVisibleSelected}
+              indeterminate={isIndeterminate}
+              disabled={resultsPending || posts.length === 0}
+              onChange={(next) => {
+                setSelectedIds(next ? new Set(visibleIds) : new Set());
+                if (next) setSelectionMode(true);
+              }}
+              label={tr("Select all on this page")}
+              showLabel
+              className="min-h-11 px-0"
+            />
           )}
           <span aria-live="polite" className="text-sm text-muted-foreground">
             {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
@@ -360,7 +367,10 @@ export const PostsList: React.FC<PostsListProps> = ({
             showUnpublish={canPublish && selectedPosts.some((post) => post.status === "published")}
             showDelete={canDelete}
             onAction={requestBulkAction}
-            onClear={() => setSelectedIds(new Set())}
+            onClear={() => {
+              setSelectedIds(new Set());
+              setSelectionMode(false);
+            }}
           />
         )}
       </section>
