@@ -19,6 +19,7 @@ export function IconButton({
   const [position, setPosition] = React.useState<{
     left: number; top: number; above: boolean;
   } | null>(null);
+  const tooltipRef = React.useRef<HTMLSpanElement>(null);
 
   const show = () => {
     if (disabled || loading || !buttonRef.current) return;
@@ -31,6 +32,19 @@ export function IconButton({
     });
   };
   const hide = () => setPosition(null);
+
+  // Measure the actual tooltip, not just its center. This also works for Arabic/RTL labels.
+  React.useLayoutEffect(() => {
+    if (!position || !tooltipRef.current) return;
+    const width = tooltipRef.current.getBoundingClientRect().width;
+    if (!width) return;
+    const minLeft = 8 + width / 2;
+    const maxLeft = Math.max(minLeft, window.innerWidth - 8 - width / 2);
+    const clamped = Math.min(Math.max(position.left, minLeft), maxLeft);
+    if (Math.abs(position.left - clamped) > 0.5) {
+      setPosition((current) => current ? { ...current, left: clamped } : null);
+    }
+  }, [position]);
 
   React.useEffect(() => {
     if (!position) return;
@@ -67,6 +81,7 @@ export function IconButton({
       </Button>
       {position && typeof document !== "undefined" && createPortal(
         <span
+          ref={tooltipRef}
           aria-hidden="true"
           dir="auto"
           className="pointer-events-none fixed z-[9999] max-w-[min(18rem,calc(100vw-1rem))] rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs font-medium text-popover-foreground shadow-md"

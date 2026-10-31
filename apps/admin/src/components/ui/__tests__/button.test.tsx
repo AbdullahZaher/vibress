@@ -50,12 +50,41 @@ describe("Button System v2", () => {
     const node = container.querySelector("button")!;
     expect(node.disabled).toBe(true);
     expect(node.getAttribute("aria-busy")).toBe("true");
-    expect(node.getAttribute("aria-label")).toBe("Saving…");
+    expect(node.getAttribute("aria-label")).toBeNull();
+    expect(node.getAttribute("aria-describedby")).toBeTruthy();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Saving…");
     expect(node.textContent).toContain("Save changes");
-    expect(node.querySelector(".invisible")).not.toBeNull();
+    expect(node.querySelector(".opacity-0")).not.toBeNull();
     expect(node.querySelector("svg")).not.toBeNull();
     act(() => node.click());
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("preserves its accessible label when no loading message is provided", () => {
+    act(() => root.render(<Button loading><span>Save article</span></Button>));
+    const node = container.querySelector("button")!;
+    expect(node.getAttribute("aria-busy")).toBe("true");
+    expect(node.querySelector(".opacity-0")?.textContent).toBe("Save article");
+    expect(node.querySelector(".opacity-0")?.getAttribute("aria-hidden")).toBeNull();
+    expect(node.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("keeps the action name stable when a busy description is supplied", () => {
+    act(() => root.render(<Button aria-label="Publish article" loading loadingLabel="Publishing…"><svg aria-hidden="true" /></Button>));
+    const node = container.querySelector("button")!;
+    expect(node.getAttribute("aria-label")).toBe("Publish article");
+    expect(node.getAttribute("aria-describedby")).toBeTruthy();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Publishing…");
+  });
+
+  it("keeps link-style buttons free of size padding while allowing labels to wrap", () => {
+    const style = buttonVariants({ variant: "link", size: null });
+    expect(style).not.toContain("min-h-11");
+    expect(style).toContain("whitespace-normal");
+    act(() => root.render(<Button variant="link">Open details</Button>));
+    const element = container.querySelector("button")!;
+    expect(element.className).not.toContain("min-h-11");
+    expect(element.className).toContain("min-h-0");
   });
 
   it("preserves destructive, subdued, ghost and focus styles", () => {

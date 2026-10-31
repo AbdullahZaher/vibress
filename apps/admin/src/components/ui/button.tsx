@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * All spacing and colors come from semantic design tokens.
  */
 const buttonVariants = cva(
-  "relative inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 motion-safe:transition-[background-color,color,border-color,box-shadow,transform] motion-safe:duration-150",
+  "relative inline-flex min-w-0 items-center justify-center gap-2 whitespace-normal break-words text-center leading-snug rounded-lg text-sm font-medium cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 motion-safe:transition-[background-color,color,border-color,box-shadow,transform] motion-safe:duration-150",
   {
     variants: {
       variant: {
@@ -19,7 +19,7 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 motion-safe:active:scale-[0.99]",
         subtle: "bg-muted/70 text-foreground hover:bg-muted",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
-        link: "h-auto p-0 text-primary underline-offset-4 hover:underline",
+        link: "min-h-0 px-0 py-0 text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "min-h-11 px-4 py-2",
@@ -48,8 +48,9 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({
     className, variant, size, type = "button", disabled, loading = false,
-    loadingLabel, children, "aria-label": ariaLabel, ...props
+    loadingLabel, children, "aria-label": ariaLabel, "aria-describedby": describedBy, ...props
   }, ref) => {
+    const loadingDescriptionId = React.useId();
     return (
       <button
         {...props}
@@ -57,13 +58,15 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
-        aria-label={loading && loadingLabel ? loadingLabel : ariaLabel}
-        className={cn(buttonVariants({ variant, size, className }))}
+        aria-label={ariaLabel}
+        aria-describedby={loading && loadingLabel ? [describedBy, loadingDescriptionId].filter(Boolean).join(" ") : describedBy}
+        className={cn(buttonVariants({ variant, size: variant === "link" ? null : size, className }))}
       >
         {loading ? (
           <>
-            <span aria-hidden="true" className="invisible inline-flex items-center gap-2">{children}</span>
+            <span className="inline-flex items-center justify-center gap-2 opacity-0">{children}</span>
             <LoaderCircle aria-hidden="true" className="pointer-events-none absolute size-4 animate-spin motion-reduce:animate-none" />
+            {loadingLabel && <span id={loadingDescriptionId} role="status" className="sr-only">{loadingLabel}</span>}
           </>
         ) : children}
       </button>
