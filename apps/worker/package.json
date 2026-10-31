@@ -24,7 +24,7 @@
     "@vibress/queue": "workspace:*",
     "@vibress/revisions": "workspace:*",
     "bullmq": "^5.7.8",
-    "ioredis": "^5.4.1",
+    "ioredis": "^6.0.0",
     "@vibress/newsletters": "workspace:*",
     "@vibress/email": "workspace:*",
     "@vibress/members": "workspace:*",
