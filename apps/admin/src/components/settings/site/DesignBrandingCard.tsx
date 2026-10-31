@@ -219,9 +219,9 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
                 >
                   {uploadingIcon ? (
-                    <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
                   ) : (
-                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                    <ImageIcon className="h-3.5 w-3.5 me-1" />
                   )}
                   {iconUrl ? "Change icon" : "Upload icon"}
                 </Button>
@@ -264,9 +264,9 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
                 >
                   {uploadingLogo ? (
-                    <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
                   ) : (
-                    <ImageIcon className="h-3.5 w-3.5 mr-1" />
+                    <ImageIcon className="h-3.5 w-3.5 me-1" />
                   )}
                   {logoUrl ? "Change logo" : "Upload logo"}
                 </Button>

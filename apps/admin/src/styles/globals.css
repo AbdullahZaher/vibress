@@ -50,8 +50,8 @@
 @layer base {
   :root {
     /* Vibress Modern Workspace — Refined Light Mode Tokens */
-    --background: #f6f6f7;
-    --foreground: #17181b;
+    --background: #f8f9fa;
+    --foreground: #090a0f;
     --card: #ffffff;
     --card-foreground: #090a0f;
     --popover: #ffffff;
@@ -60,24 +60,24 @@
     --primary-foreground: #ffffff;
     --secondary: #f0f2f5;
     --secondary-foreground: #090a0f;
-    --muted: #f5f5f6;
-    --muted-foreground: #61666e;
-    --accent: #f1f2f3;
+    --muted: #f1f3f6;
+    --muted-foreground: #525e6f;
+    --accent: #edf0f4;
     --accent-foreground: #090a0f;
     --destructive: #b42318;
     --destructive-foreground: #ffffff;
-    --border: #e8e9eb;
-    --input: #e4e5e7;
+    --border: #e2e5e9;
+    --input: #e2e5e9;
     --ring: #090a0f;
     --radius: 0.5rem;
 
-    --sidebar-background: #f5f5f6;
-    --sidebar-foreground: #545961;
+    --sidebar-background: #f1f3f6;
+    --sidebar-foreground: #525e6f;
     --sidebar-primary: #090a0f;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e9eaed;
+    --sidebar-accent: #e4e7ec;
     --sidebar-accent-foreground: #090a0f;
-    --sidebar-border: #e8e9eb;
+    --sidebar-border: #e2e5e9;
     --sidebar-ring: #090a0f;
     --surface-elevated: #ffffff;
     --status-published-bg: #ecfdf5;
@@ -99,9 +99,9 @@
 
   .dark {
     /* Vibress Modern Workspace — Refined Dark Mode Tokens */
-    --background: #101112;
+    --background: #0d0f12;
     --foreground: #f4f6f8;
-    --card: #191a1d;
+    --card: #15181e;
     --card-foreground: #f4f6f8;
     --popover: #171b21;
     --popover-foreground: #f4f6f8;
@@ -109,23 +109,23 @@
     --primary-foreground: #0d0f12;
     --secondary: #1e222a;
     --secondary-foreground: #f4f6f8;
-    --muted: #252629;
+    --muted: #1c2027;
     --muted-foreground: #94a0b0;
     --accent: #1e222a;
     --accent-foreground: #f4f6f8;
     --destructive: #f87171;
     --destructive-foreground: #17191d;
-    --border: #323439;
-    --input: #34363a;
+    --border: #22262e;
+    --input: #22262e;
     --ring: #3eb083;
 
-    --sidebar-background: #141517;
+    --sidebar-background: #101216;
     --sidebar-foreground: #8e9ba9;
     --sidebar-primary: #f4f6f8;
     --sidebar-primary-foreground: #0d0f12;
-    --sidebar-accent: #292a2d;
+    --sidebar-accent: #1e2229;
     --sidebar-accent-foreground: #f4f6f8;
-    --sidebar-border: #303135;
+    --sidebar-border: #1e2229;
     --sidebar-ring: #3eb083;
     --surface-elevated: #1a1e24;
     --status-published-bg: rgba(16, 185, 129, 0.12);
@@ -204,7 +204,7 @@
 /* Modern Workspace: operational canvas only; Studio editor remains separate. */
 @layer components {
   .vibress-admin-content {
-    background: var(--card);
+    background: var(--background);
     scroll-padding-top: 5rem;
   }
   .vibress-admin-workspace [aria-current="page"] {
@@ -631,19 +631,5 @@ html[dir="rtl"] .studio-slash-header {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-}
-
-/* Ghost-inspired editorial chrome — scoped to non-Studio admin routes. */
-@layer components {
-  .vibress-editorial-filterbar {
-    background: var(--card);
-    border-block-end: 1px solid var(--border);
-  }
-  .vibress-editorial-list {
-    background: var(--card);
-  }
-  .vibress-editorial-list [role="listitem"]:hover {
-    background: var(--muted);
   }
 }

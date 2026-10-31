@@ -16,9 +16,9 @@ interface NavContentProps {
   canReadTranslations: boolean;
 }
 
-const activeClass = "bg-sidebar-accent text-foreground font-semibold";
+const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary shadow-2xs";
 const inactiveClass = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground";
-const linkClass = "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer";
+const linkClass = "flex min-h-10 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer";
 
 export const NavContent: React.FC<NavContentProps> = ({
   currentPath,
@@ -59,7 +59,7 @@ export const NavContent: React.FC<NavContentProps> = ({
 
   return (
     <nav aria-label={tr("Content")} className="space-y-0.5 text-sm">
-      <p className="px-3 pb-2 text-xs font-semibold text-muted-foreground">{tr("Content")}</p>
+      <p className="px-2.5 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
 
       {canReadPosts && (
         <>
@@ -103,7 +103,7 @@ export const NavContent: React.FC<NavContentProps> = ({
                   type="button"
                   onClick={() => onNavigate(item.path)}
                   aria-current={currentPath === item.path ? "page" : undefined}
-                  className={`min-h-11 w-full rounded-md px-2 text-start text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring ${currentPath === item.path ? "bg-sidebar-accent/60 font-semibold text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground"}`}
+                  className={`min-h-10 w-full rounded-md px-2 text-start text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring ${currentPath === item.path ? "bg-sidebar-accent/60 font-semibold text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground"}`}
                 >
                   {tr(item.label)}
                 </button>

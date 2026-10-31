@@ -211,7 +211,7 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
           <Table className="min-w-[620px]">
             <TableHeader>
               <TableRow className="border-border">
-                <TableHead className="pl-6 text-xs">{tr("Name")}</TableHead>
+                <TableHead className="ps-6 text-xs">{tr("Name")}</TableHead>
                 <TableHead className="text-xs">{tr("Slug")}</TableHead>
                 <TableHead className="text-xs">{tr("Description")}</TableHead>
                 {(canEdit || canDelete) && <TableHead className="text-end pe-6 text-xs">
@@ -244,7 +244,7 @@ export const TagsManager: React.FC<TagsManagerProps> = ({
                     key={tag.id}
                     className="hover:bg-muted/40 border-border"
                   >
-                    <TableCell className="pl-6 font-semibold text-xs text-foreground flex items-center gap-2">
+                    <TableCell className="ps-6 font-semibold text-xs text-foreground flex items-center gap-2">
                       <Hash className="h-3.5 w-3.5 text-muted-foreground" />
                       {tag.name}
                     </TableCell>

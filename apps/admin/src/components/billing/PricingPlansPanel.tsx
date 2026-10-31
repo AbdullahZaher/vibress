@@ -173,10 +173,10 @@ export function PricingPlansPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Plan Name</TableHead>
+              <TableHead className="ps-6 text-xs">Plan Name</TableHead>
               <TableHead className="text-xs">Amount</TableHead>
               <TableHead className="text-xs">Interval</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -195,7 +195,7 @@ export function PricingPlansPanel({
                   key={pl.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {pl.name}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-foreground">
@@ -204,7 +204,7 @@ export function PricingPlansPanel({
                   <TableCell className="text-xs font-mono text-muted-foreground capitalize">
                     {pl.billingInterval || "Monthly"}
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

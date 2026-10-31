@@ -96,14 +96,14 @@ export const UserMenu: React.FC<UserMenuProps> = ({
 
       {/* Popover Dropdown Menu */}
       {isOpen && (
-        <div className="absolute bottom-full start-0 mb-2 w-full min-w-[min(240px,calc(100vw-2rem))] rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute bottom-full start-0 mb-2 w-full min-w-[min(240px,calc(100vw-2rem))] rounded-xl bg-card border border-border/80 shadow-xl p-1.5 z-50 text-foreground animate-in fade-in zoom-in-95 duration-150">
           {/* Header Identity */}
           <div className="px-2.5 py-2 border-b border-border/60 mb-1">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-foreground truncate">
                 {user.name}
               </span>
-              <span className="text-xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold border border-primary/20">
+              <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold border border-primary/20">
                 {tr("Staff")}
               </span>
             </div>
@@ -119,10 +119,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
               target="_blank"
               rel="noreferrer"
               onClick={() => setIsOpen(false)}
-              className="flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors focus-visible:outline-2 focus-visible:outline-ring"
             >
               <div className="flex items-center gap-2">
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink className="h-4 w-4" />
                 <span>{tr("View Live Site")}</span>
               </div>
             </a>
@@ -135,10 +135,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     setIsOpen(false);
                     onNavigate("/admin/settings/general");
                   }}
-                  className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
+                  className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <div className="flex items-center gap-2">
-                    <Settings className="h-3.5 w-3.5" />
+                    <Settings className="h-4 w-4" />
                     <span>{tr("General Settings")}</span>
                   </div>
                 </button>
@@ -149,10 +149,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     setIsOpen(false);
                     onNavigate("/admin/settings/advanced");
                   }}
-                  className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
+                  className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <div className="flex items-center gap-2">
-                    <Shield className="h-3.5 w-3.5" />
+                    <Shield className="h-4 w-4" />
                     <span>{tr("Advanced & Platform")}</span>
                   </div>
                 </button>
@@ -166,7 +166,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 onClick={() => {
                   onToggleLocale();
                 }}
-                className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start"
+                className="w-full flex items-center justify-between px-2.5 min-h-10 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer text-start focus-visible:outline-2 focus-visible:outline-ring"
                 title={tr("Switch interface language")}
               >
                 <div className="flex items-center gap-2">
@@ -186,9 +186,9 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 setIsOpen(false);
                 onLogout();
               }}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-xs font-semibold text-start"
+              className="w-full flex items-center gap-2 px-2.5 min-h-10 py-2 rounded-lg text-destructive hover:bg-destructive/10 transition-colors cursor-pointer text-xs font-semibold text-start focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
               <span>{tr("Sign Out")}</span>
             </button>
           </div>

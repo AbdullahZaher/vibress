@@ -134,7 +134,7 @@ export const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
             <div className="p-6 space-y-4">
               {loading ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground text-xs">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading
+                  <RefreshCw className="h-4 w-4 animate-spin me-2" /> Loading
                   recommendations...
                 </div>
               ) : items.length === 0 && !isCreating ? (

@@ -90,9 +90,9 @@ export function ApiKeysPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Name</TableHead>
+              <TableHead className="ps-6 text-xs">Name</TableHead>
               <TableHead className="text-xs">Access Key Prefix</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -111,13 +111,13 @@ export function ApiKeysPanel({
                   key={k.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {k.name}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground">
                     {k.prefix}
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

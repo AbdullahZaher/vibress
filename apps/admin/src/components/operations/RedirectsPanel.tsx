@@ -124,10 +124,10 @@ export function RedirectsPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Source Path</TableHead>
+              <TableHead className="ps-6 text-xs">Source Path</TableHead>
               <TableHead className="text-xs">Destination</TableHead>
               <TableHead className="text-xs">Code</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -146,7 +146,7 @@ export function RedirectsPanel({
                   key={r.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-mono text-xs text-foreground">
+                  <TableCell className="ps-6 font-mono text-xs text-foreground">
                     {r.source}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground">
@@ -155,7 +155,7 @@ export function RedirectsPanel({
                   <TableCell className="text-xs font-mono font-semibold text-emerald-500">
                     {r.statusCode}
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

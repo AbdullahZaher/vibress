@@ -126,10 +126,10 @@ export function DiscountOffersPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Offer Name</TableHead>
+              <TableHead className="ps-6 text-xs">Offer Name</TableHead>
               <TableHead className="text-xs">Code</TableHead>
               <TableHead className="text-xs">Discount</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -148,7 +148,7 @@ export function DiscountOffersPanel({
                   key={off.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {off.name}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-foreground">
@@ -157,7 +157,7 @@ export function DiscountOffersPanel({
                   <TableCell className="text-xs font-mono text-emerald-500 font-semibold">
                     {off.discountValue}% Off
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

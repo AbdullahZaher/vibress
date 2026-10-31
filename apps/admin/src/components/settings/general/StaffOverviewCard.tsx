@@ -207,13 +207,13 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({
                   </div>
 
                   <div className="relative">
-                    <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Mail className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       type="email"
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
                       placeholder="colleague@domain.com"
-                      className="pl-8 text-xs h-8.5"
+                      className="ps-8 text-xs h-8.5"
                       required
                     />
                   </div>

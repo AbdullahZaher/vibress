@@ -38,9 +38,9 @@ export function SuppressionsPanel({
       <Table>
         <TableHeader>
           <TableRow className="border-border">
-            <TableHead className="pl-6 text-xs">Suppressed Email</TableHead>
+            <TableHead className="ps-6 text-xs">Suppressed Email</TableHead>
             <TableHead className="text-xs">Reason</TableHead>
-            <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+            <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -59,13 +59,13 @@ export function SuppressionsPanel({
                 key={sup.id}
                 className="hover:bg-muted/40 border-border"
               >
-                <TableCell className="pl-6 font-mono text-xs text-foreground">
+                <TableCell className="ps-6 font-mono text-xs text-foreground">
                   {sup.email}
                 </TableCell>
                 <TableCell className="text-xs font-mono text-muted-foreground">
                   {sup.reason}
                 </TableCell>
-                <TableCell className="text-right pr-6">
+                <TableCell className="text-end pe-6">
                   <Button
                     variant="ghost"
                     size="sm"

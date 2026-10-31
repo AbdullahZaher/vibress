@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { BarChart3, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, ImageIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { IconButton } from "../ui/icon-button";
+import { Badge } from "../ui/badge";
 
 export interface EditorialListRowProps {
   title: string;
@@ -68,16 +69,18 @@ export function EditorialListRow({
     approved: tr("Approved"),
     archived: tr("Archived"),
   };
-  const statusColor = status === "published"
-    ? "text-status-published-fg"
-    : status === "scheduled"
-      ? "text-status-scheduled-fg"
-      : status === "in_review" || status === "changes_requested"
-        ? "text-status-review-fg"
-        : "text-muted-foreground";
+  const badgeVariant = status === "published"
+    ? "published"
+    : status === "draft"
+      ? "draft"
+      : status === "scheduled"
+        ? "scheduled"
+        : status === "in_review" || status === "changes_requested"
+          ? "review"
+          : "outline";
 
   return (
-    <div role="listitem" className="group relative flex min-h-[76px] items-center gap-3 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 sm:gap-4 sm:px-3">
+    <div role="listitem" className="group relative flex items-center gap-2 px-3 py-2 transition-colors hover:bg-muted/30 focus-within:z-20 focus-within:bg-muted/30 sm:gap-3.5 sm:py-2.5 border-b border-border/40 last:border-b-0">
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
       {onEdit && (
         <button
@@ -98,8 +101,8 @@ export function EditorialListRow({
           />
         </label>
       )}
-      {imageUrl && !imageFailed && (
-        <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted sm:h-14 sm:w-20">
+      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/50 text-muted-foreground/60 sm:h-14 sm:w-20 shadow-2xs">
+        {imageUrl && !imageFailed ? (
           <img
             src={imageUrl}
             alt=""
@@ -108,30 +111,35 @@ export function EditorialListRow({
             onError={() => setImageFailed(true)}
             className="h-full w-full object-cover"
           />
-        </div>
-      )}
+        ) : (
+          <ImageIcon className="size-4 sm:size-5" aria-hidden="true" />
+        )}
+      </div>
 
-      <div className="min-w-0 flex-1 space-y-1.5 text-start">
+      <div className="min-w-0 flex-1 space-y-1 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 dir="auto" className="max-w-full break-words text-start text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:underline group-hover:underline-offset-4">
+          <h3 dir="auto" className="max-w-full break-words text-start text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-primary">
             {displayTitle}
           </h3>
           {featured && (
-            <span className="rounded bg-primary/10 px-1 py-0 text-xs font-medium text-primary">
+            <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] font-semibold py-0 px-1.5">
               {tr("Featured")}
-            </span>
+            </Badge>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] leading-5 text-muted-foreground">
+        <p className="text-xs leading-4 text-muted-foreground">
           {authorName && (
             <>
-              <span>{tr("By")} <span dir="auto">{authorName}</span></span>
-              <span aria-hidden="true">·</span>
+              {tr("By")} <span dir="auto">{authorName}</span>
+              <span aria-hidden="true"> · </span>
             </>
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
-          <span aria-hidden="true">·</span>
-          <span className={`font-medium ${statusColor}`}>{statusLabels[status] ?? tr("Draft")}</span>
+        </p>
+        <div className="pt-0.5">
+          <Badge variant={badgeVariant} className="text-[11px] font-medium py-0 px-2 rounded-md">
+            {statusLabels[status] ?? tr("Draft")}
+          </Badge>
         </div>
       </div>
 
@@ -140,9 +148,9 @@ export function EditorialListRow({
           <IconButton
             label={tr("Analytics Dashboard")}
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
-            variant="ghost"
+            variant="outline"
             onClick={onStatistics}
-            className="h-10 w-10 rounded-lg border-0"
+            className="h-10 w-10 rounded-lg"
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
@@ -150,7 +158,7 @@ export function EditorialListRow({
           <IconButton
             label={tr("Edit")}
             accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
-            variant="ghost"
+            variant="outline"
             onClick={onEdit}
             className="h-10 w-10 rounded-lg"
           >

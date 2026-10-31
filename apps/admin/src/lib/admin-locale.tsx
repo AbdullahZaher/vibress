@@ -838,19 +838,42 @@ export function AdminLocaleProvider({
   children: ReactNode;
   initialLocale?: string;
 }) {
-  const [locale, setLocale] = useState<AdminUiLocale>(normalize(initialLocale));
+  const [locale, setLocale] = useState<AdminUiLocale>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem("vibress-admin-ui-locale");
+        if (saved === "ar" || saved === "en") return saved;
+      } catch {
+        // Storage unavailable
+      }
+    }
+    return normalize(initialLocale);
+  });
   const [userId, setUserIdState] = useState<string | null>(null);
 
   const setUserId = useCallback((value: string | null) => {
     setUserIdState(value);
+    if (value && typeof window !== "undefined") {
+      try {
+        const userSaved = window.localStorage.getItem(`vibress-admin-ui-locale:${value}`);
+        if (userSaved === "ar" || userSaved === "en") {
+          setLocale(userSaved);
+        }
+      } catch {
+        // Storage unavailable
+      }
+    }
   }, []);
 
   const setUiLocale = useCallback((value: string) => {
     const nextLocale = normalize(value);
     setLocale(nextLocale);
-    if (userId && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(`vibress-admin-ui-locale:${userId}`, nextLocale);
+        window.localStorage.setItem("vibress-admin-ui-locale", nextLocale);
+        if (userId) {
+          window.localStorage.setItem(`vibress-admin-ui-locale:${userId}`, nextLocale);
+        }
       } catch {
         // Keep the in-memory preference when browser storage is unavailable.
       }
@@ -861,11 +884,18 @@ export function AdminLocaleProvider({
     // The staff interface language is a user preference, independent from the
     // publication's primary language. Fall back to the publication only when
     // this staff account has not selected an interface language.
-    if (userId && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       try {
-        const saved = window.localStorage.getItem(`vibress-admin-ui-locale:${userId}`);
-        if (saved === "ar" || saved === "en") {
-          setLocale(saved);
+        if (userId) {
+          const saved = window.localStorage.getItem(`vibress-admin-ui-locale:${userId}`);
+          if (saved === "ar" || saved === "en") {
+            setLocale(saved);
+            return;
+          }
+        }
+        const globalSaved = window.localStorage.getItem("vibress-admin-ui-locale");
+        if (globalSaved === "ar" || globalSaved === "en") {
+          setLocale(globalSaved);
           return;
         }
       } catch {
