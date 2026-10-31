@@ -24,6 +24,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Analytics overview": "نظرة عامة على التحليلات",
+  "Refresh and retry the remaining items.": "حدّث القائمة وأعِد محاولة تنفيذ الإجراء على العناصر المتبقية.",
+  "Unknown status": "حالة غير معروفة",
+  "Unpublish": "إلغاء النشر",
   "No posts yet": "لا توجد مقالات بعد",
   "No pages yet": "لا توجد صفحات بعد",
   "Create your first post to get started.": "أنشئ مقالتك الأولى للبدء.",

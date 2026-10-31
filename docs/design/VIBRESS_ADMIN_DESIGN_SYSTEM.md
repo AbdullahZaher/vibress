@@ -282,3 +282,9 @@ The latest Ghost `PostsListScreen` places a filter trigger and sort menu in the 
 
 ### Small-view sticky-header guard
 The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px). At 768 and 1024px a wrapping toolbar can be several rows tall, so leaving it in document flow avoids occluding most of the content and keyboard focus.
+
+### Follow-up: factual analytics and editor smoke tests (2026-10-31)
+- Move the global analytics overview action into the permission-gated page header instead of presenting a generic dashboard as per-post metrics.
+- Keep explicit real status text for unrecognized editorial states rather than mislabeling them Draft; increase metadata and pagination text to at least 14px.
+- Align Playwright Studio article creation with the current accessible **New Post** button, fixing three prior false timeouts at the old **Create Post** selector. Keep the Studio creation journey covered by E2E.
+- Localize the remaining partial-bulk-failure instruction.

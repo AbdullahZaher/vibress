@@ -88,7 +88,7 @@ async function selectCard(page: Page, cardSelector: string) {
 async function createDraft(page: Page, title: string): Promise<string> {
   await page.getByRole("button", { name: "Posts", exact: true }).click();
   await page.waitForTimeout(800);
-  await page.click('button:has-text("Create Post")');
+  await page.getByRole("button", { name: "New Post", exact: true }).click();
   await page.waitForTimeout(1000);
   await page.locator('textarea[aria-label="Post Title"]').fill(title);
   return title;

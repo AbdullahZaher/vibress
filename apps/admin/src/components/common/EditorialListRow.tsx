@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BarChart3, FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
+import { FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
-import { IconButton } from "../ui/icon-button";
 
 export interface EditorialListRowProps {
   title: string;
@@ -13,8 +12,6 @@ export interface EditorialListRowProps {
   imageUrl?: string | null | undefined;
   featured?: boolean | undefined;
   onEdit?: (() => void) | undefined;
-  /** Opens existing analytics dashboard, if the user has analytics.read permission. */
-  onStatistics?: (() => void) | undefined;
   onPublishToggle?: (() => void) | undefined;
   onDelete?: (() => void) | undefined;
   selected?: boolean | undefined;
@@ -25,7 +22,7 @@ export interface EditorialListRowProps {
 /** Shared, responsive editorial row for posts and pages. Actions remain explicit and permission-driven. */
 export function EditorialListRow({
   title, resource = "post", authorName, date, status, imageUrl, featured = false,
-  onEdit, onStatistics, onPublishToggle, onDelete, selected = false, onSelect, selectionLabel,
+  onEdit, onPublishToggle, onDelete, selected = false, onSelect, selectionLabel,
 }: EditorialListRowProps) {
   const { tr, formatDate } = useAdminLocale();
   const [imageFailed, setImageFailed] = useState(false);
@@ -153,7 +150,7 @@ export function EditorialListRow({
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] leading-5 text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm leading-5 text-muted-foreground">
           {authorName && (
             <>
               <span>{tr("By")} <span dir="auto">{authorName}</span></span>
@@ -162,22 +159,11 @@ export function EditorialListRow({
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
           <span aria-hidden="true">·</span>
-          <span className={`font-medium ${statusColor}`}>{statusLabels[status] ?? tr("Draft")}</span>
+          <span className={`font-medium ${statusColor}`}>{statusLabels[status] ?? (status.replace(/_/g, " ").trim() || tr("Unknown status"))}</span>
         </div>
       </div>
 
       <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
-        {isPublished && onStatistics && (
-          <IconButton
-            label={tr("Analytics Dashboard")}
-            accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
-            variant="ghost"
-            onClick={onStatistics}
-            className="size-11 rounded-lg border-0"
-          >
-            <BarChart3 className="size-4" aria-hidden="true" />
-          </IconButton>
-        )}
         {(onPublishToggle || onDelete) && <div ref={actionsRef} className="relative">
           <button
             ref={triggerRef}

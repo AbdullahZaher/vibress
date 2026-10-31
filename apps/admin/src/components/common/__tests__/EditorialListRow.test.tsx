@@ -88,22 +88,16 @@ describe("EditorialListRow", () => {
     expect(container.querySelector('[role="listitem"] h3')?.textContent).toBe("Hello there");
   });
 
-  it("opens analytics for published content without triggering the row editor", () => {
-    const onStatistics = vi.fn();
-    act(() => root.render(<EditorialListRow {...base} status="published" onStatistics={onStatistics} />));
-    const analytics = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Analytics Dashboard: Hello there"]',
-    );
-    expect(analytics).not.toBeNull();
+  it("keeps published rows focused on editing instead of showing a misleading per-item dashboard", () => {
+    act(() => root.render(<EditorialListRow {...base} status="published" />));
+    expect(container.querySelector('button[aria-label^="Analytics Dashboard"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Edit: Hello there"]')).not.toBeNull();
-    act(() => analytics?.click());
-    expect(onStatistics).toHaveBeenCalledOnce();
-    expect(base.onEdit).not.toHaveBeenCalled();
   });
 
-  it("does not show analytics without an authorized handler, even when published", () => {
-    act(() => root.render(<EditorialListRow {...base} status="published" />));
-    expect(container.querySelector('button[aria-label="Analytics Dashboard: Hello there"]')).toBeNull();
+  it("does not misrepresent an unfamiliar editorial status as Draft", () => {
+    act(() => root.render(<EditorialListRow {...base} status="under_legal_review" />));
+    expect(container.textContent).toContain("under legal review");
+    expect(container.textContent).not.toContain("Draft");
   });
 
   it("preserves publish and delete actions behind an accessible menu", () => {

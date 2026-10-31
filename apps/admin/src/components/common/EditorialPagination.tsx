@@ -27,11 +27,11 @@ export function EditorialPagination({
 
   return (
     <div className="flex min-w-0 flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-xs leading-relaxed text-muted-foreground" role="status" aria-live="polite">
+      <p className="text-sm leading-relaxed text-muted-foreground" role="status" aria-live="polite">
         {tr("Showing")} {formatNumber(firstItem)}–{formatNumber(lastItem)} {tr("of")} {formatNumber(total)}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>{tr("Rows per page")}</span>
           <select
             value={pageSize}
@@ -55,7 +55,7 @@ export function EditorialPagination({
           <ChevronLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
           {tr("Previous")}
         </Button>
-        <span className="min-w-16 text-center text-xs tabular-nums text-muted-foreground">
+        <span className="min-w-16 text-center text-sm tabular-nums text-muted-foreground">
           {formatNumber(currentPage + 1)} / {formatNumber(pageCount)}
         </span>
         <Button

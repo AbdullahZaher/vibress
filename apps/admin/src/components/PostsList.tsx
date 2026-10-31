@@ -8,7 +8,7 @@ import { EditorialPagination } from "./common/EditorialPagination";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X, BarChart3 } from "lucide-react";
 
 interface PostSummary {
   id: string;
@@ -193,7 +193,7 @@ export const PostsList: React.FC<PostsListProps> = ({
     setActionFeedback({
       type: failed ? "error" : "success",
       message: failed
-        ? `${formatNumber(succeeded)} ${tr("completed")}, ${formatNumber(failed)} ${tr("failed")}. Refresh and retry the remaining items.`
+        ? `${formatNumber(succeeded)} ${tr("completed")}, ${formatNumber(failed)} ${tr("failed")}. ${tr("Refresh and retry the remaining items.")}`
         : `${formatNumber(succeeded)} ${tr("items updated successfully")}.`,
     });
     await fetchPosts();
@@ -220,10 +220,19 @@ export const PostsList: React.FC<PostsListProps> = ({
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
         title={tr("Posts")}
-        actions={canCreate ? (
-          <Button onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2 self-start text-sm sm:self-auto">
-            <Plus className="size-4" aria-hidden="true" /> {tr("New Post")}
-          </Button>
+        actions={canCreate || canViewAnalytics ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canViewAnalytics && (
+              <Button type="button" variant="outline" onClick={() => onNavigate("/admin")} className="min-h-11 gap-2">
+                <BarChart3 className="size-4" aria-hidden="true" /> {tr("Analytics overview")}
+              </Button>
+            )}
+            {canCreate && (
+              <Button onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2">
+                <Plus className="size-4" aria-hidden="true" /> {tr("New Post")}
+              </Button>
+            )}
+          </div>
         ) : undefined}
       />
 
@@ -376,7 +385,6 @@ export const PostsList: React.FC<PostsListProps> = ({
                  resource="post"
                 featured={post.featured}
                 onEdit={canEdit ? () => onNavigate(`/admin/posts/${post.id}`) : undefined}
-                onStatistics={canViewAnalytics && post.status === "published" ? () => onNavigate("/admin") : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(post) : undefined}
                 onDelete={canDelete ? () => requestDelete(post.id) : undefined}
                 onSelect={selectionEnabled ? (selected) => toggleSelection(post.id, selected) : undefined}
