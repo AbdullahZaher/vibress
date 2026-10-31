@@ -32,6 +32,7 @@ export function readEditorialViewState(resource: EditorialResource, forcedStatus
     status: safeStatus(forcedStatus), search: "", page: 0, pageSize: 25, sortBy: "updatedAt", sortOrder: "desc",
   };
   if (typeof window === "undefined") return defaults;
+  if (!window.location.pathname.startsWith(`/admin/${resource}`)) return defaults;
 
   const params = new URLSearchParams(window.location.search);
   const hasUrlState = keys.some((key) => params.has(key));

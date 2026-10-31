@@ -288,3 +288,10 @@ The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px).
 - Keep explicit real status text for unrecognized editorial states rather than mislabeling them Draft; increase metadata and pagination text to at least 14px.
 - Align Playwright Studio article creation with the current accessible **New Post** button, fixing three prior false timeouts at the old **Create Post** selector. Keep the Studio creation journey covered by E2E.
 - Localize the remaining partial-bulk-failure instruction.
+
+
+### Query transition safety (2026-10-31)
+- List search, filter, sort and pagination persist as URL query state with tab-local backup when editors navigate back. Values are validated; no content bodies or credentials are stored.
+- Quick sidebar status views use distinct route keys and do not mutate the main Posts/Pages saved list state.
+- On every query transition, show only the loading skeleton, then the matching response or a retryable error. Previously loaded rows and bulk controls are unavailable until the new query succeeds, avoiding destructive actions against stale filters.
+- Pagination is suppressed during loading and failed requests; its count cannot suggest outdated results.

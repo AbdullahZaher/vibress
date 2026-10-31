@@ -83,13 +83,15 @@ export const PostsList: React.FC<PostsListProps> = ({
     saveEditorialViewState("posts", { status: statusFilter, search: debouncedSearch, page, pageSize, sortBy, sortOrder });
   }, [statusFilter, debouncedSearch, page, pageSize, sortBy, sortOrder]);
 
+  const previousSearch = useRef(initialView.search);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const nextSearch = searchQuery.trim();
-      setDebouncedSearch((current) => {
-        if (current !== nextSearch) setPage(0);
-        return nextSearch;
-      });
+      if (nextSearch !== previousSearch.current) {
+        previousSearch.current = nextSearch;
+        setDebouncedSearch(nextSearch);
+        setPage(0);
+      }
     }, 250);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
@@ -292,7 +294,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          {selectionEnabled && posts.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+          {selectionEnabled && !loading && !error && posts.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -305,7 +307,7 @@ export const PostsList: React.FC<PostsListProps> = ({
           </label>}
           <span aria-live="polite" className="text-sm text-muted-foreground">{loading ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}</span>
         </div>
-        {!loading && selectedIds.size > 0 && (
+        {!loading && !error && selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <span className="me-auto text-sm font-semibold text-foreground">{formatNumber(selectedIds.size)} {tr("selected on this page")}</span>
             {canPublish && selectedPosts.some((post) => post.status !== "published") && (
@@ -331,9 +333,7 @@ export const PostsList: React.FC<PostsListProps> = ({
       </section>
 
       <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Posts")}>
-        {loading && posts.length > 0 && <div role="status" aria-label={tr("Loading")} className="h-0.5 w-full overflow-hidden bg-muted"><div className="h-full w-1/3 animate-pulse bg-primary" /></div>}
-        {error && posts.length > 0 && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive"><span>{error}</span><Button size="sm" variant="outline" onClick={() => void fetchPosts()} className="min-h-10 gap-2"><RefreshCw className="size-4" aria-hidden="true" />{tr("Try again")}</Button></div>}
-        {loading && posts.length === 0 ? (
+        {loading ? (
           <div role="status" aria-label={tr("Loading")} aria-busy="true">
             {[1, 2, 3, 4].map((item) => (
               <div key={item} className="flex min-h-[76px] items-center gap-4 border-b border-border/50 py-3 last:border-b-0">
@@ -345,7 +345,7 @@ export const PostsList: React.FC<PostsListProps> = ({
               </div>
             ))}
           </div>
-        ) : error && posts.length === 0 ? (
+        ) : error ? (
           <div role="alert" className="flex flex-col items-start gap-3 py-12 text-sm">
             <div className="flex items-center gap-2 font-semibold text-destructive">
               <AlertCircle className="size-5" aria-hidden="true" />
@@ -386,7 +386,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 date={post.status === "published" && post.publishedAt ? post.publishedAt : post.status === "scheduled" && post.scheduledAt ? post.scheduledAt : post.updatedAt}
                 status={post.status}
                 imageUrl={post.featureImage?.url}
-                 resource="post"
+                resource="post"
                 featured={post.featured}
                 onEdit={canEdit ? () => onNavigate(`/admin/posts/${post.id}`) : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(post) : undefined}
@@ -400,6 +400,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         )}
       </section>
 
+      {!loading && !error && (
       <EditorialPagination
         page={page}
         pageSize={pageSize}
@@ -407,6 +408,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         onPageChange={setPage}
         onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
       />
+      )}
 
       <Dialog
         isOpen={!!confirmAction}
