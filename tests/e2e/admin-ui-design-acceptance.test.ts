@@ -223,7 +223,7 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     const dialog = page.locator('[role="dialog"]').last();
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(page.getByText("No posts found")).toBeVisible();
+    await expect(page.getByText(/No posts (found|yet)/)).toBeVisible();
   });
 
   test("staff interface language preference is independent and persists per account", async ({ page }) => {

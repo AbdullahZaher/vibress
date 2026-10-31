@@ -329,12 +329,17 @@ export const PagesList: React.FC<PagesListProps> = ({
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
-          {selectionEnabled && selectionMode && !resultsPending && !error && pages.length > 0 && (
+          {selectionEnabled && !resultsPending && !error && pages.length > 0 && (
             <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
                 checked={allVisibleSelected}
-                onChange={(event) => setSelectedIds(event.target.checked ? new Set(visibleIds) : new Set())}
+                disabled={resultsPending || pages.length === 0}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setSelectedIds(next ? new Set(visibleIds) : new Set());
+                  if (next) setSelectionMode(true);
+                }}
                 aria-label={tr("Select all on this page")}
                 className="size-4 accent-primary"
               />
