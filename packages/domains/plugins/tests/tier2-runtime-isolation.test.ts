@@ -60,7 +60,12 @@ describe("Tier 2 Independently Isolated Plugin Runtime (M4)", () => {
         payload: { operation: "calculateTax", amount: 100 },
       }, sessionKey);
 
-      const tampered = { ...envelope, hmacSha256: envelope.hmacSha256.replace(/^[a-f0-9]/, "0") };
+      // Always change the first hex char (a fixed "0" would be a no-op ~1/16 of runs).
+      const original = envelope.hmacSha256;
+      const tampered = {
+        ...envelope,
+        hmacSha256: (original[0] === "0" ? "1" : "0") + original.slice(1),
+      };
 
       expect(() => verifyTier2IpcEnvelope(tampered, sessionKey)).toThrowError(
         Tier2IpcError,
