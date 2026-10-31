@@ -24,6 +24,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Filter": "فلترة",
+  "Sort": "ترتيب",
+  "Active filters": "الفلاتر النشطة",
+
   "Analytics overview": "نظرة عامة على التحليلات",
   "Refresh and retry the remaining items.": "حدّث القائمة وأعِد محاولة تنفيذ الإجراء على العناصر المتبقية.",
   "Unknown status": "حالة غير معروفة",

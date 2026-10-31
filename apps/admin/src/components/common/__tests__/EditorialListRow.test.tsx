@@ -66,7 +66,7 @@ describe("EditorialListRow", () => {
     act(() => root.render(<EditorialListRow {...base} resource="page" />));
     const row = container.querySelector('[role="listitem"]');
     expect(row?.querySelector("img")).toBeNull();
-    expect(row?.querySelector('div[aria-hidden="true"] svg')).toBeNull();
+    expect(row?.querySelector('div[aria-hidden="true"] svg')).not.toBeNull();
     expect(row?.textContent).toContain("Hello there");
   });
 
@@ -98,6 +98,25 @@ describe("EditorialListRow", () => {
     act(() => root.render(<EditorialListRow {...base} status="under_legal_review" />));
     expect(container.textContent).toContain("under legal review");
     expect(container.textContent).not.toContain("Draft");
+  });
+
+  it("exposes real editor links with standard modifier-click behavior", () => {
+    act(() => root.render(<EditorialListRow {...base} editHref="/admin/posts/entry42" />));
+    const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Edit: Hello there"]');
+    expect(link?.getAttribute("href")).toBe("/admin/posts/entry42");
+    act(() => link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
+    expect(base.onEdit).toHaveBeenCalledOnce();
+    vi.clearAllMocks();
+    act(() => link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })));
+    expect(base.onEdit).not.toHaveBeenCalled();
+  });
+
+  it("conceals row checkboxes until hover, keyboard focus or selection mode", () => {
+    act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} />));
+    const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(selection?.closest("label")?.className).toContain("opacity-0");
+    act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} selectionMode />));
+    expect(selection?.closest("label")?.className).toContain("opacity-100");
   });
 
   it("preserves publish and delete actions behind an accessible menu", () => {
