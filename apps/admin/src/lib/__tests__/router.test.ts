@@ -134,17 +134,17 @@ describe("Admin Declarative Router", () => {
     });
   });
 
-  it("matches comments moderation route and requires comments.manage", () => {
+  it("allows read-only access to comments moderation with comments.read", () => {
     const route = adminRoutes.find((r) => r.pattern === "/admin/comments");
     expect(route).toBeDefined();
-    expect(route?.requiredPermission).toBe("comments.manage");
+    expect(route?.requiredPermission).toBe("comments.read");
     expect(route?.exact).toBe(true);
 
     const match = matchRoutePattern("/admin/comments", "/admin/comments", true);
     expect(match.matches).toBe(true);
   });
 
-  it("enforces 403 PermissionDenied when actor lacks comments.manage", () => {
+  it("enforces 403 PermissionDenied when actor lacks comments.read", () => {
     const dummyUser = {
       id: "author-123",
       email: "author@example.com",
@@ -153,7 +153,7 @@ describe("Admin Declarative Router", () => {
       permissions: ["posts.read"],
     };
 
-    // Case 1: Unauthorized (lacks comments.manage) -> returns PermissionDenied element
+    // Case 1: Unauthorized (lacks comments.read) -> returns PermissionDenied element
     const unauthorizedResult = renderAdminRoute({
       pathname: "/admin/comments",
       user: dummyUser,
@@ -164,19 +164,29 @@ describe("Admin Declarative Router", () => {
     expect(unauthorizedResult).toBeDefined();
     const element = unauthorizedResult as any;
     // RouteErrorBoundary wraps PermissionDenied
-    expect(element.props?.children?.props?.requiredPermission).toBe("comments.manage");
+    expect(element.props?.children?.props?.requiredPermission).toBe("comments.read");
 
-    // Case 2: Authorized (possesses comments.manage) -> renders Suspense/CommentsModeration
+    // Case 2: Reader with comments.read can view the moderation queue without mutation rights
     const authorizedResult = renderAdminRoute({
       pathname: "/admin/comments",
       user: dummyUser,
       onNavigate: () => {},
-      can: (perm) => perm === "comments.manage",
+      can: (perm) => perm === "comments.read",
     });
 
     expect(authorizedResult).toBeDefined();
     const authorizedElement = authorizedResult as any;
     expect(authorizedElement.props?.children?.props?.requiredPermission).toBeUndefined();
+    const readOnlyView = authorizedElement.props?.children?.props?.children;
+    expect(readOnlyView?.props?.canModerate).toBe(false);
+
+    const moderator = renderAdminRoute({
+      pathname: "/admin/comments",
+      user: dummyUser,
+      onNavigate: () => {},
+      can: (perm) => perm === "comments.read" || perm === "comments.moderate",
+    }) as any;
+    expect(moderator.props?.children?.props?.children?.props?.canModerate).toBe(true);
   });
 });
 

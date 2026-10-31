@@ -71,33 +71,27 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     await page.getByRole("button", { name: "Media", exact: true }).click();
     await page.waitForTimeout(2500);
 
-    // Click the image and try delete
-    const img = page.locator('img[alt="dp-final.png"]').first();
-    if (await img.isVisible({ timeout: 8000 }).catch(() => false)) {
-      await img.click();
-      await page.waitForTimeout(800);
-      if (
-        await page
-          .locator('button:has-text("Delete Asset")')
-          .isVisible({ timeout: 3000 })
-          .catch(() => false)
-      ) {
-        page.on("dialog", (d) => d.accept());
-        await page.locator('button:has-text("Delete Asset")').click();
-        await page.waitForTimeout(1500);
-        expect(
-          await page
-            .locator("text=/in use|Cannot delete/i")
-            .isVisible({ timeout: 5000 }),
-        ).toBe(true);
-        expect(
-          await page
-            .locator('img[alt="dp-final.png"]')
-            .first()
-            .isVisible({ timeout: 3000 }),
-        ).toBe(true);
-      }
-    }
+    // Open the asset and follow the accessible confirmation flow.
+    const thumbnail = page.getByRole("button", { name: "Open asset details: dp-final.png" });
+    await expect(thumbnail).toBeVisible();
+    await thumbnail.click();
+
+    const detail = page.getByRole("dialog", { name: "Asset Preview & Details" });
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText(/Used in\s+[1-9]/);
+
+    await detail.getByRole("button", { name: "Delete Asset" }).click();
+    const confirm = page.getByRole("dialog", { name: "Delete media asset?" });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Confirm delete" }).click();
+
+    // A 409 keeps the asset and provides feedback inside the active dialog.
+    await expect(confirm.getByRole("alert")).toContainText(
+      "This media is in use and cannot be deleted.",
+    );
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog", { name: "Asset Preview & Details" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "dp-final.png" })).toBeVisible();
 
     // Backend verification as ground truth
     const delRes = await request.delete(

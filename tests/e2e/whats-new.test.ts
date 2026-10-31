@@ -47,8 +47,12 @@ test.describe("Remote What's New Single Notification System", () => {
 
     const banners = page.locator('[data-testid="whats-new-banner"]');
     await expect(banners).toHaveCount(1);
-    await expect(banners).toContainText("WHAT'S NEW?");
+    await expect(banners).toContainText("What's new");
     await expect(banners).toContainText("Analytics for email sequences");
+    const toggle = banners.getByRole("button", { name: /Analytics for email sequences/ });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(banners).toContainText(
       "Understand how your automated emails are performing.",
     );
@@ -177,7 +181,10 @@ test.describe("Remote What's New Single Notification System", () => {
 
     await loginAdmin(page);
 
-    const learnMoreLink = page.getByRole("link", { name: "Learn more" });
+    const banner = page.locator('[data-testid="whats-new-banner"]');
+    await expect(banner).toContainText("Explore Analytics");
+    await banner.getByRole("button", { name: /Explore Analytics/ }).click();
+    const learnMoreLink = banner.getByRole("link", { name: "Learn more" });
     await expect(learnMoreLink).toBeVisible();
     await expect(learnMoreLink).toHaveAttribute("href", "/admin/analytics");
   });

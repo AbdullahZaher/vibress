@@ -9,6 +9,7 @@ import {
   getMediaReferencesApi,
   ApiMediaAsset,
   ApiMediaReferenceSummary,
+  ApiError,
 } from "../lib/api";
 
 import { Button } from "./ui/button";
@@ -142,7 +143,9 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
     },
     onError: (err: unknown) => {
       const e = err instanceof Error ? err : new Error(String(err));
-      setDeleteError(e.message || "Delete failed");
+      setDeleteError(e instanceof ApiError && e.code === "MEDIA_IN_USE"
+        ? tr("This media is in use and cannot be deleted.")
+        : e.message || tr("Delete failed"));
     },
   });
 
@@ -163,6 +166,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   };
 
   const openDetail = (asset: ApiMediaAsset) => {
+    setDeleteConfirmOpen(false);
+    setDeleteError(null);
     setSelectedAsset(asset);
     setDisplayNameDraft(asset.displayName);
   };
@@ -205,11 +210,6 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
         </div>
       )}
 
-      {deleteError && (
-        <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
-          {deleteError}
-        </div>
-      )}
       {updateError && (
         <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive">
           {updateError}
@@ -330,8 +330,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
       {/* Asset Detail Modal */}
       <Dialog
-        isOpen={!!selectedAsset}
-        onClose={() => setSelectedAsset(null)}
+        isOpen={!!selectedAsset && !deleteConfirmOpen}
+        onClose={() => { setSelectedAsset(null); setDeleteError(null); }}
         title={tr("Asset Preview & Details")}
       >
         {selectedAsset && (
@@ -435,7 +435,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                       variant="ghost"
                       size="sm"
                       disabled={isLoadingRefs || isRefsError || deleteMutation.isPending}
-                      onClick={() => setDeleteConfirmOpen(true)}
+                      onClick={() => { setDeleteError(null); setDeleteConfirmOpen(true); }}
                       className="min-h-11 gap-1 text-sm text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 className="size-4" aria-hidden="true" /> {tr("Delete Asset")}
@@ -460,13 +460,18 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
 
       <Dialog
         isOpen={canDelete && deleteConfirmOpen}
-        onClose={() => { if (!deleteMutation.isPending) setDeleteConfirmOpen(false); }}
+        onClose={() => { if (!deleteMutation.isPending) { setDeleteConfirmOpen(false); setDeleteError(null); } }}
         title={tr("Delete media asset?")}
         description={tr("Deleting a media asset may affect content that uses it. Review usage references before confirming.")}
         className="max-w-md"
       >
+        {deleteError && (
+          <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {deleteError}
+          </div>
+        )}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeleteConfirmOpen(false)}>
+          <Button type="button" variant="outline" disabled={deleteMutation.isPending} onClick={() => { setDeleteConfirmOpen(false); setDeleteError(null); }}>
             {tr("Cancel")}
           </Button>
           <Button
