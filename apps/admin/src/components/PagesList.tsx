@@ -5,6 +5,7 @@ import { AdminPageHeader } from "./common/AdminPageHeader";
 import { EditorialListRow } from "./common/EditorialListRow";
 import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialPagination } from "./common/EditorialPagination";
+import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
@@ -62,13 +63,14 @@ export const PagesList: React.FC<PagesListProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [statusFilter, setStatusFilter] = useState(filterStatus || "all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-  const [sortBy, setSortBy] = useState<PageSortBy>("updatedAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [initialView] = useState(() => readEditorialViewState("pages", filterStatus || "all"));
+  const [statusFilter, setStatusFilter] = useState(initialView.status);
+  const [searchQuery, setSearchQuery] = useState(initialView.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialView.search);
+  const [page, setPage] = useState(initialView.page);
+  const [pageSize, setPageSize] = useState(initialView.pageSize);
+  const [sortBy, setSortBy] = useState<PageSortBy>(initialView.sortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialView.sortOrder);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -76,14 +78,16 @@ export const PagesList: React.FC<PagesListProps> = ({
   const requestSequence = useRef(0);
 
   useEffect(() => {
-    setStatusFilter(filterStatus || "all");
-    setPage(0);
-  }, [filterStatus]);
+    saveEditorialViewState("pages", { status: statusFilter, search: debouncedSearch, page, pageSize, sortBy, sortOrder });
+  }, [statusFilter, debouncedSearch, page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
-      setPage(0);
+      const nextSearch = searchQuery.trim();
+      setDebouncedSearch((current) => {
+        if (current !== nextSearch) setPage(0);
+        return nextSearch;
+      });
     }, 250);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);

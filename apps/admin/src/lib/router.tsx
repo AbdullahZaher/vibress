@@ -215,8 +215,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PostsList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
@@ -230,8 +231,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts/drafts",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PostsList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
@@ -246,8 +248,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts/review",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PostsList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
@@ -262,8 +265,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts/scheduled",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PostsList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
@@ -278,8 +282,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/posts/published",
     exact: true,
     requiredPermission: "posts.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PostsList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("posts.publish")}
         canViewAnalytics={can("analytics.read")}
@@ -320,8 +325,9 @@ export const adminRoutes: AdminRouteDefinition[] = [
     pattern: "/admin/pages",
     exact: true,
     requiredPermission: "pages.read",
-    render: ({ onNavigate, can }) => (
+    render: ({ onNavigate, can, match }) => (
       <PagesList
+        key={match.pathname}
         onNavigate={onNavigate}
         canPublish={can("pages.publish")}
         canViewAnalytics={can("analytics.read")}
