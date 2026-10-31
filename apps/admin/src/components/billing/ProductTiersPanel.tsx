@@ -123,10 +123,10 @@ export function ProductTiersPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border">
-              <TableHead className="pl-6 text-xs">Tier Name</TableHead>
+              <TableHead className="ps-6 text-xs">Tier Name</TableHead>
               <TableHead className="text-xs">Key</TableHead>
               <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-right pr-6 text-xs">Actions</TableHead>
+              <TableHead className="text-end pe-6 text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -145,7 +145,7 @@ export function ProductTiersPanel({
                   key={p.id}
                   className="hover:bg-muted/40 border-border"
                 >
-                  <TableCell className="pl-6 font-semibold text-xs text-foreground">
+                  <TableCell className="ps-6 font-semibold text-xs text-foreground">
                     {p.name}
                   </TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground">
@@ -153,13 +153,13 @@ export function ProductTiersPanel({
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant="outline"
-                      className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      variant="published"
+                      className="text-[10px] font-mono px-2 py-0.5"
                     >
                       Active
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right pr-6">
+                  <TableCell className="text-end pe-6">
                     <Button
                       variant="ghost"
                       size="sm"

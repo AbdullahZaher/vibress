@@ -248,7 +248,7 @@ export const IntegrationsPlatformCard: React.FC<
 
               {loading ? (
                 <div className="flex items-center justify-center py-16 text-muted-foreground text-xs">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading
+                  <RefreshCw className="h-4 w-4 animate-spin me-2" /> Loading
                   platform records...
                 </div>
               ) : (

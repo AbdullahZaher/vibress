@@ -265,52 +265,55 @@ export const PostsList: React.FC<PostsListProps> = ({
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-border/80 bg-card p-4 sm:p-5" aria-label={tr("Content filters")}>
-        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div role="group" aria-label={tr("Filter by status")} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
-            {STATUS_FILTERS.map((status) => (
-              <button
-                key={status.value}
-                type="button"
-                onClick={() => { setStatusFilter(status.value); setPage(0); }}
-                aria-pressed={statusFilter === status.value}
-                className={statusFilter === status.value
-                  ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted/70 px-3 text-sm font-semibold text-foreground"
-                  : "min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"}
-              >
-                {tr(status.label)}
-              </button>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                type="search"
-                placeholder={tr("Search posts by title or slug...")}
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                aria-label={tr("Search posts by title or slug...")}
-                className="h-11 w-full ps-9 text-sm"
-              />
+      <section className="space-y-4 rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-2xs" aria-label={tr("Content filters")}>
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div role="group" aria-label={tr("Filter by status")} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 overflow-x-auto max-w-full">
+              {STATUS_FILTERS.map((status) => (
+                <button
+                  key={status.value}
+                  type="button"
+                  onClick={() => { setStatusFilter(status.value); setPage(0); }}
+                  aria-pressed={statusFilter === status.value}
+                  className={statusFilter === status.value
+                    ? "min-h-9 shrink-0 rounded-lg border border-border/70 bg-card px-3.5 text-sm font-semibold text-foreground shadow-2xs"
+                    : "min-h-9 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-card/40 hover:text-foreground cursor-pointer"}
+                >
+                  {tr(status.label)}
+                </button>
+              ))}
             </div>
-            <label className="flex min-h-11 items-center gap-2 text-xs text-muted-foreground">
-              <span className="shrink-0">{tr("Sort by")}</span>
-              <select
-                value={sortBy}
-                onChange={(event) => { setSortBy(event.target.value as PostSortBy); setPage(0); }}
-                className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:w-44"
-                aria-label={tr("Sort by")}
-              >
-                <option value="updatedAt">{tr("Recently updated")}</option>
-                <option value="createdAt">{tr("Newest created")}</option>
-                <option value="publishedAt">{tr("Publication date")}</option>
-                <option value="title">{tr("Title")}</option>
-              </select>
-            </label>
-            <Button type="button" variant="outline" className="min-h-11 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
-              {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
-            </Button>
+
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+              <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  type="search"
+                  placeholder={tr("Search posts by title or slug...")}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  aria-label={tr("Search posts by title or slug...")}
+                  className="h-10 w-full ps-9 text-sm rounded-lg border-border/80 bg-background"
+                />
+              </div>
+              <label className="flex min-h-10 items-center gap-2 text-xs text-muted-foreground">
+                <span className="shrink-0">{tr("Sort by")}</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => { setSortBy(event.target.value as PostSortBy); setPage(0); }}
+                  className="min-h-10 min-w-0 rounded-lg border border-border/80 bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer sm:w-40"
+                  aria-label={tr("Sort by")}
+                >
+                  <option value="updatedAt">{tr("Recently updated")}</option>
+                  <option value="createdAt">{tr("Newest created")}</option>
+                  <option value="publishedAt">{tr("Publication date")}</option>
+                  <option value="title">{tr("Title")}</option>
+                </select>
+              </label>
+              <Button type="button" variant="outline" size="sm" className="min-h-10 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
+                {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
+              </Button>
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">

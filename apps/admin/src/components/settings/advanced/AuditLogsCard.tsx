@@ -79,7 +79,7 @@ export const AuditLogsCard: React.FC<AuditLogsCardProps> = ({
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               {loading ? (
                 <div className="flex items-center justify-center py-16 text-muted-foreground text-xs">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Loading
+                  <RefreshCw className="h-4 w-4 animate-spin me-2" /> Loading
                   audit records...
                 </div>
               ) : events.length === 0 ? (

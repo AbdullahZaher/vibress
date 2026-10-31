@@ -85,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   {tr("Email Address")}
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -93,7 +93,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="user@vibress.com"
-                    className="pl-9 h-9 text-xs"
+                    className="ps-9 h-9 text-xs"
                   />
                 </div>
               </div>
@@ -106,14 +106,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   {tr("Password")}
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Lock className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="pl-9 h-9 text-xs"
+                    className="ps-9 h-9 text-xs"
                   />
                 </div>
               </div>

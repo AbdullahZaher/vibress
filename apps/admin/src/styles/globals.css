@@ -49,43 +49,43 @@
 
 @layer base {
   :root {
-    /* Vibress Light Mode Theme Tokens */
-    --background: #f7f8fa;
-    --foreground: #1c232b;
+    /* Vibress Modern Workspace — Refined Light Mode Tokens */
+    --background: #f8f9fa;
+    --foreground: #090a0f;
     --card: #ffffff;
-    --card-foreground: #0f172a;
+    --card-foreground: #090a0f;
     --popover: #ffffff;
-    --popover-foreground: #0f172a;
-    --primary: #0f172a;
+    --popover-foreground: #090a0f;
+    --primary: #090a0f;
     --primary-foreground: #ffffff;
-    --secondary: #f1f5f9;
-    --secondary-foreground: #0f172a;
-    --muted: #f1f3f5;
-    --muted-foreground: #5c6775;
-    --accent: #eff2f5;
-    --accent-foreground: #0f172a;
+    --secondary: #f0f2f5;
+    --secondary-foreground: #090a0f;
+    --muted: #f1f3f6;
+    --muted-foreground: #525e6f;
+    --accent: #edf0f4;
+    --accent-foreground: #090a0f;
     --destructive: #b42318;
     --destructive-foreground: #ffffff;
-    --border: #e3e7eb;
-    --input: #e3e7eb;
-    --ring: #0f172a;
+    --border: #e2e5e9;
+    --input: #e2e5e9;
+    --ring: #090a0f;
     --radius: 0.5rem;
 
-    --sidebar-background: #f3f5f7;
-    --sidebar-foreground: #536170;
-    --sidebar-primary: #0f172a;
+    --sidebar-background: #f1f3f6;
+    --sidebar-foreground: #525e6f;
+    --sidebar-primary: #090a0f;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e8edf1;
-    --sidebar-accent-foreground: #0f172a;
-    --sidebar-border: #e3e7eb;
-    --sidebar-ring: #0f172a;
+    --sidebar-accent: #e4e7ec;
+    --sidebar-accent-foreground: #090a0f;
+    --sidebar-border: #e2e5e9;
+    --sidebar-ring: #090a0f;
     --surface-elevated: #ffffff;
     --status-published-bg: #ecfdf5;
     --status-published-fg: #047857;
     --status-published-border: #a7f3d0;
     --status-draft-bg: #f1f5f9;
-    --status-draft-fg: #475569;
-    --status-draft-border: #e2e8f0;
+    --status-draft-fg: #334155;
+    --status-draft-border: #cbd5e1;
     --status-scheduled-bg: #eff6ff;
     --status-scheduled-fg: #1d4ed8;
     --status-scheduled-border: #bfdbfe;
@@ -98,42 +98,42 @@
   }
 
   .dark {
-    /* Vibress Official Dark Mode Theme Tokens (#15171a main bg, #1d1f23 cards, #2b2f36 borders, #738a94 muted text) */
-    --background: #121416;
-    --foreground: #f8fafc;
-    --card: #1c1f23;
-    --card-foreground: #f8fafc;
-    --popover: #1c1f23;
-    --popover-foreground: #f8fafc;
-    --primary: #f8fafc;
-    --primary-foreground: #15171a;
-    --secondary: #22252a;
-    --secondary-foreground: #f8fafc;
-    --muted: #22252a;
-    --muted-foreground: #acb8c2;
-    --accent: #22252a;
-    --accent-foreground: #f8fafc;
+    /* Vibress Modern Workspace — Refined Dark Mode Tokens */
+    --background: #0d0f12;
+    --foreground: #f4f6f8;
+    --card: #15181e;
+    --card-foreground: #f4f6f8;
+    --popover: #171b21;
+    --popover-foreground: #f4f6f8;
+    --primary: #f4f6f8;
+    --primary-foreground: #0d0f12;
+    --secondary: #1e222a;
+    --secondary-foreground: #f4f6f8;
+    --muted: #1c2027;
+    --muted-foreground: #94a0b0;
+    --accent: #1e222a;
+    --accent-foreground: #f4f6f8;
     --destructive: #f87171;
     --destructive-foreground: #17191d;
-    --border: #2b2f36;
-    --input: #2b2f36;
+    --border: #22262e;
+    --input: #22262e;
     --ring: #3eb083;
 
-    --sidebar-background: #16191d;
-    --sidebar-foreground: #8f9ca7;
-    --sidebar-primary: #f8fafc;
-    --sidebar-primary-foreground: #15171a;
-    --sidebar-accent: #272c31;
-    --sidebar-accent-foreground: #f8fafc;
-    --sidebar-border: #2a3036;
+    --sidebar-background: #101216;
+    --sidebar-foreground: #8e9ba9;
+    --sidebar-primary: #f4f6f8;
+    --sidebar-primary-foreground: #0d0f12;
+    --sidebar-accent: #1e2229;
+    --sidebar-accent-foreground: #f4f6f8;
+    --sidebar-border: #1e2229;
     --sidebar-ring: #3eb083;
-    --surface-elevated: #24272c;
+    --surface-elevated: #1a1e24;
     --status-published-bg: rgba(16, 185, 129, 0.12);
     --status-published-fg: #34d399;
     --status-published-border: rgba(16, 185, 129, 0.25);
-    --status-draft-bg: rgba(255, 255, 255, 0.06);
+    --status-draft-bg: rgba(148, 163, 184, 0.12);
     --status-draft-fg: #94a3b8;
-    --status-draft-border: rgba(255, 255, 255, 0.12);
+    --status-draft-border: rgba(148, 163, 184, 0.25);
     --status-scheduled-bg: rgba(59, 130, 246, 0.12);
     --status-scheduled-fg: #60a5fa;
     --status-scheduled-border: rgba(59, 130, 246, 0.25);
@@ -180,11 +180,25 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 120, 0.3);
+  background: rgba(120, 120, 120, 0.25);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 120, 120, 0.6);
+  background: rgba(120, 120, 120, 0.5);
+}
+
+::selection {
+  background-color: rgba(62, 176, 131, 0.25);
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Modern Workspace: operational canvas only; Studio editor remains separate. */

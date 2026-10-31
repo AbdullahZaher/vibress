@@ -10,23 +10,23 @@ const badgeVariants = cva(
         default:
           "border-transparent bg-primary text-primary-foreground shadow-2xs hover:bg-primary/90",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border-border/80 bg-secondary text-secondary-foreground hover:bg-secondary/80",
         published:
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+          "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
         draft:
-          "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20",
+          "bg-slate-500/10 text-slate-800 dark:text-slate-200 border-slate-500/25",
         scheduled:
-          "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+          "bg-blue-500/10 text-blue-800 dark:text-blue-300 border-blue-500/25",
         success:
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+          "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
         warning:
-          "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+          "bg-amber-500/10 text-amber-900 dark:text-amber-300 border-amber-500/25",
         review:
-          "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+          "bg-amber-500/10 text-amber-900 dark:text-amber-300 border-amber-500/25",
         info:
-          "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+          "bg-blue-500/10 text-blue-800 dark:text-blue-300 border-blue-500/25",
         destructive:
-          "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20",
+          "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/25",
         outline: "border-border text-foreground bg-transparent",
       },
     },

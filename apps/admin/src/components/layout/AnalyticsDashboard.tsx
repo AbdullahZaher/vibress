@@ -373,16 +373,16 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div role="group" aria-label={tr("Analytics")} className="flex w-full min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+        <div role="group" aria-label={tr("Analytics")} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 overflow-x-auto w-full sm:w-auto">
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <button
-              key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
+              key={t}
               onClick={() => setAnalyticsTab(t)}
               aria-pressed={analyticsTab === t}
-              className={`min-h-11 shrink-0 whitespace-nowrap px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
+              className={`min-h-9 shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
                 analyticsTab === t
-                  ? "bg-card text-foreground border border-border font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-card text-foreground border border-border/70 shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card/40"
               }`}
             >
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
@@ -396,7 +396,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             aria-label={tr("Date range")}
             value={dateLabel}
             onChange={(event) => setDateLabel(event.target.value)}
-            className="min-h-11 w-full appearance-none rounded-lg border border-border bg-card py-2 pe-10 ps-10 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
+            className="min-h-11 w-full appearance-none rounded-xl border border-border/80 bg-card py-2 pe-10 ps-10 text-sm font-medium text-foreground transition-all hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring shadow-2xs sm:w-auto cursor-pointer"
           >
             {DATE_OPTIONS.map((opt) => (
               <option key={opt.range} value={opt.label}>{tr(opt.label)}</option>
@@ -486,27 +486,24 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
               {/* Latest Post Performance */}
               <div className="space-y-3">
-                <h3 className="text-xs font-semibold text-muted-foreground tracking-wide">
-                  {tr("LATEST POST PERFORMANCE")}
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                  {tr("Latest post performance")}
                 </h3>
                 {data.latestPost ? (
-                  <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center">
+                  <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center shadow-2xs">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted/80 text-muted-foreground">
-                        <FileText className="size-5" />
+                      <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted/80 text-muted-foreground border border-border/60">
+                        <FileText className="size-5 text-foreground" />
                       </div>
-                      <div className="space-y-1 min-w-0">
+                      <div className="space-y-1.5 min-w-0">
                         <h4 dir="auto" className="truncate text-base font-semibold text-foreground">
                           {data.latestPost.title}
                         </h4>
                         <p className="text-xs text-muted-foreground">
                           {tr("Published")} · {formatDate(data.latestPost.publishedAt, { day: "numeric", month: "short", year: "numeric" })}
                         </p>
-                        <div className="pt-1">
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                          >
+                        <div>
+                          <Badge variant="published">
                             {tr("Published")}
                           </Badge>
                         </div>

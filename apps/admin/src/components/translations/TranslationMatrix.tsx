@@ -140,7 +140,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
               <Clock className="h-4 w-4 text-amber-500" />
               <span>{tr("Review Queue")}</span>
               {healthData && healthData.needsReviewCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                <span className="ms-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-white">
                   {healthData.needsReviewCount}
                 </span>
               )}
@@ -326,7 +326,7 @@ export const TranslationMatrix: React.FC<TranslationMatrixProps> = ({ onNavigate
       {/* Matrix Table */}
       <div className="rounded-xl border border-border/60 bg-card overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-start text-sm border-collapse">
             <thead>
               <tr className="border-b border-border/60 bg-muted/40 text-xs font-semibold text-muted-foreground">
                 <th className="py-3 px-4 w-10">

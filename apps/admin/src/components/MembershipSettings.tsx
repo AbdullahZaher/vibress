@@ -98,7 +98,7 @@ const MemberAccessPanel: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+        <RefreshCw className="h-5 w-5 animate-spin me-2" />
         <span>Loading access configuration...</span>
       </div>
     );
