@@ -462,9 +462,10 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                       type="submit"
                       size="sm"
                       className="min-h-11 text-sm font-semibold"
-                      disabled={updateMutation.isPending}
+                      loading={updateMutation.isPending}
+                      loadingLabel={tr("Saving...")}
                     >
-                      {updateMutation.isPending ? tr("Saving...") : tr("Save Changes")}
+                      {tr("Save Changes")}
                     </Button>
                   )}
                 </div>
@@ -493,10 +494,12 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
           <Button
             type="button"
             variant="destructive"
-            disabled={!canDelete || isLoadingRefs || isRefsError || deleteMutation.isPending || !selectedAsset}
+            disabled={!canDelete || isLoadingRefs || isRefsError || !selectedAsset}
+            loading={deleteMutation.isPending}
+            loadingLabel={tr("Processing...")}
             onClick={() => { if (selectedAsset) deleteMutation.mutate(selectedAsset.id); }}
           >
-            {deleteMutation.isPending ? tr("Processing...") : tr("Confirm delete")}
+            {tr("Confirm delete")}
           </Button>
         </div>
       </Dialog>

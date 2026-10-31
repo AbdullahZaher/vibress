@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * All spacing and colors come from semantic design tokens.
  */
 const buttonVariants = cva(
-  "relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 motion-safe:transition-[background-color,color,border-color,box-shadow,transform] motion-safe:duration-150",
+  "relative inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 motion-safe:transition-[background-color,color,border-color,box-shadow,transform] motion-safe:duration-150",
   {
     variants: {
       variant: {

@@ -387,7 +387,9 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
           <Button
             type="button"
             variant={pendingAction === "disable" ? "destructive" : "default"}
-            disabled={!canManage || isActionPending}
+            disabled={!canManage}
+            loading={isActionPending}
+            loadingLabel={tr("Processing...")}
             onClick={() => {
               if (!memberDetail || !pendingAction || !canManage) return;
               if (pendingAction === "disable") disableMutation.mutate(memberDetail.id);
@@ -395,7 +397,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
               else revokeMutation.mutate(memberDetail.id);
             }}
           >
-            {isActionPending ? tr("Processing...") : tr("Confirm")}
+            {tr("Confirm")}
           </Button>
         </div>
       </Dialog>
