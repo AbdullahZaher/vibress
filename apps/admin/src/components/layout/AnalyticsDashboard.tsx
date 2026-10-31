@@ -351,7 +351,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   key={item.key}
                   type="button"
                   onClick={() => onNavigate(item.path)}
-                  className="group flex min-h-32 min-w-0 flex-col justify-between rounded-xl border border-border/80 bg-card p-5 text-start transition-colors hover:border-ring/40 hover:bg-muted/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="group flex min-h-32 min-w-0 flex-col justify-between rounded-xl border border-border/70 bg-card p-5 text-start transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     {item.icon}

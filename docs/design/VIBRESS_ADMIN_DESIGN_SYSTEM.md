@@ -214,3 +214,21 @@ Automated verification run against the live PostgreSQL database, gateway server,
 
 ### Delivery and acceptance limitations
 **Source review and implemented changes are not equivalent to live visual QA.** The system must still be exercised in a real authenticated browser at 320, 390, 768, 1024 and 1440px for Arabic/English and both themes, including 200% text zoom, keyboard and destructive actions. Complete WCAG AA conformance, calibrated 9.5/10 scores and before/after screenshots must not be claimed without those observations.
+
+
+## Ghost-inspired editorial Admin — 31 October 2026
+
+The design direction of **Vibress Editorial Workspace** draws on the actual source of modern Ghost: [TryGhost/Ghost/apps/admin](https://github.com/TryGhost/Ghost/tree/main/apps/admin) and the [Shade design system](https://github.com/TryGhost/Ghost/tree/main/apps/shade). The former TryGhost/Admin repository is archived and not an accurate modern reference. Only interaction and composition principles are studied; no Ghost source, logos, or brand artwork are copied.
+
+### Research findings and product applications
+1. **Structured workspace:** Ghost Admin uses a quiet navigation area and independent work surface; Vibress applies an inset editorial canvas on desktop while leaving the fullscreen Studio editor unchanged.
+2. **Typographic focus:** The [Shade PageHeader](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/page-header.tsx) establishes clear title, metadata and action hierarchy; Vibress uses a 28–34px page title and retains one primary authorized create action.
+3. **List-first publishing:** The [Shade ListPage](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/page-templates/list-page.tsx) and [FilterBar](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/filter-bar.tsx) emphasize calm list chrome; Vibress removes excess filter containers, uses flat editorial rows, and leaves bulk selection and server-backed sorting intact.
+4. **Honest thumbnails:** Display actual post feature images only when available, not fake placeholders; prioritize title with inline author/date/status metadata and existing permission-gated contextual actions.
+5. **Searchable settings:** The [Shade SettingGroup](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/setting-group.tsx) keeps related controls together; Vibress preserves its searchable, permission-aware SettingsHub with less visual noise.
+
+### Implementation guardrails and review
+- **Architecture:** no API contract, server state, publisher lifecycle, Studio serialization or permission changes.
+- **RTL/localization:** preserve tr() translations, CSS logical spacing, date formatting, and dir=auto for mixed-script editorial titles.
+- **Accessibility:** preserve accessible row buttons, keyboard focus, the action menu and destructive confirmations. Never rely on status color alone: visible status text is retained.
+- **Release QA:** CI must finish; authenticated visual verification at 320, 390, 768, 1024 and 1440px in Arabic/English and light/dark, with keyboard, screen-reader, 200% text zoom and row-action checks, remains required before any claims of complete WCAG conformance.
