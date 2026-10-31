@@ -275,3 +275,7 @@ Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github
 - Distinguish an empty publication from a filtered zero-match result without repeating the same message twice. Keep one creation CTA and one clear-filters CTA, each conditionally visible.
 - Do not announce old `total` values while a new query is loading or has failed; show a localized result-state message.
 - For scheduled posts and pages, display the scheduled timestamp when the API provides it, instead of the unrelated last-edit date.
+
+
+### Ghost comparison: filter disclosure
+The latest Ghost `PostsListScreen` places a filter trigger and sort menu in the header, expanding a filter row only when active. After a second visual critique, Vibress's six permanent status tabs were still too dense and duplicated the sidebar quick views. Replaced them with one 44px accessible native status menu (localized **All Posts / All Pages**), alongside search and sorting. This keeps all states accessible without recreating the current Ghost's custom popover architecture or introducing dependencies.

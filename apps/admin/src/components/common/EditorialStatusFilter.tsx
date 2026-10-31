@@ -1,3 +1,5 @@
+import { ChevronDown } from "lucide-react";
+
 export interface EditorialStatusOption {
   value: string;
   label: string;
@@ -10,31 +12,19 @@ interface EditorialStatusFilterProps {
   onChange: (value: string) => void;
 }
 
-/** The same accessible filter for both publishing resources. On narrow screens use a native select. */
+/** Single accessible status selector for Posts and Pages; quick status views remain in the sidebar. */
 export function EditorialStatusFilter({ label, options, value, onChange }: EditorialStatusFilterProps) {
   return (
-    <div className="min-w-0 flex-1 xl:flex-none">
+    <div className="relative min-w-0 w-full shrink-0 sm:w-auto">
       <select
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-11 w-full rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:hidden"
+        className="min-h-11 w-full appearance-none rounded-lg border border-border bg-card py-2 pe-10 ps-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-w-44"
       >
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <div role="group" aria-label={label} className="hidden min-h-11 max-w-full items-center gap-1 overflow-x-auto md:flex">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={value === option.value}
-            onClick={() => onChange(option.value)}
-            className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-              value === option.value ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-            }`}
-          >{option.label}</button>
-        ))}
-      </div>
+      <ChevronDown aria-hidden="true" className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
     </div>
   );
 }
