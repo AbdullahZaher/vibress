@@ -3,6 +3,7 @@ import { useAdminLocale } from "../lib/admin-locale";
 import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { EditorialListRow } from "./common/EditorialListRow";
+import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialPagination } from "./common/EditorialPagination";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -88,7 +89,7 @@ export const PagesList: React.FC<PagesListProps> = ({
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [page, pageSize, statusFilter, debouncedSearch]);
+  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
 
   const fetchPages = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -203,35 +204,6 @@ export const PagesList: React.FC<PagesListProps> = ({
     if (ids.length) setConfirmAction({ kind, ids });
   };
 
-  if (loading && pages.length === 0) {
-    return (
-      <div className="mx-auto w-full max-w-7xl animate-pulse space-y-6" aria-busy="true">
-        <div className="flex items-center justify-between gap-4">
-          <div className="h-8 w-36 rounded-md bg-muted" />
-          <div className="h-11 w-32 rounded-md bg-muted" />
-        </div>
-        <div className="rounded-xl border border-border/70 bg-card p-4">
-          {[1, 2, 3, 4].map((item) => <div key={item} className="mb-3 h-14 rounded-lg bg-muted/40 last:mb-0" />)}
-        </div>
-      </div>
-    );
-  }
-
-  if (error && pages.length === 0) {
-    return (
-      <div className="mx-auto w-full max-w-7xl space-y-3 rounded-xl border border-destructive/20 bg-card p-6">
-        <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
-          <AlertCircle className="size-4" aria-hidden="true" />
-          {tr("Unable to load static pages")}
-        </div>
-        <p className="text-sm text-muted-foreground">{error}</p>
-        <Button variant="outline" onClick={() => void fetchPages()} className="min-h-11 gap-2">
-          <RefreshCw className="size-4" aria-hidden="true" /> {tr("Try again")}
-        </Button>
-      </div>
-    );
-  }
-
   const actionTitle = confirmAction?.kind === "delete"
     ? tr("Delete selected content?")
     : confirmAction?.kind === "publish"
@@ -244,7 +216,7 @@ export const PagesList: React.FC<PagesListProps> = ({
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
-        title={tr("Static Pages")}
+        title={tr("Pages")}
         description={tr("Manage standalone site pages, legal policies, and landing documents.")}
         actions={canCreate ? (
           <Button onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2 self-start text-sm sm:self-auto">
@@ -264,25 +236,16 @@ export const PagesList: React.FC<PagesListProps> = ({
 
       <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1" aria-label={tr("Content filters")}>
         <div className="flex min-w-0 flex-col gap-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div role="group" aria-label={tr("Filter by status")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto">
-              {STATUS_FILTERS.map((status) => (
-                <button
-                  key={status.value}
-                  type="button"
-                  onClick={() => { setStatusFilter(status.value); setPage(0); }}
-                  aria-pressed={statusFilter === status.value}
-                  className={statusFilter === status.value
-                    ? "min-h-11 shrink-0 rounded-lg bg-muted px-3.5 text-sm font-semibold text-foreground"
-                    : "min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer"}
-                >
-                  {tr(status.label)}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <EditorialStatusFilter
+              label={tr("Filter by status")}
+              options={STATUS_FILTERS.map((option) => ({ value: option.value, label: tr(option.label) }))}
+              value={statusFilter}
+              onChange={(value) => { setStatusFilter(value); setPage(0); }}
+            />
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-              <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+              <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none xl:w-64">
                 <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <Input
                   type="search"
@@ -314,20 +277,20 @@ export const PagesList: React.FC<PagesListProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          <label className="inline-flex min-h-10 items-center gap-2 text-sm text-muted-foreground">
+          {selectionEnabled && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={allVisibleSelected}
-              disabled={!selectionEnabled || pages.length === 0}
+              disabled={loading || pages.length === 0}
               onChange={(event) => setSelectedIds(event.target.checked ? new Set(visibleIds) : new Set())}
               className="size-4 accent-primary"
               aria-label={tr("Select all on this page")}
             />
             {tr("Select all on this page")}
-          </label>
+          </label>}
           <span className="text-sm text-muted-foreground">{tr("Showing")} {formatNumber(total)} {tr("pages")}</span>
         </div>
-        {selectedIds.size > 0 && (
+        {!loading && selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <span className="me-auto text-sm font-semibold text-foreground">{formatNumber(selectedIds.size)} {tr("selected on this page")}</span>
             {canPublish && selectedPages.some((item) => item.status !== "published") && (
@@ -353,9 +316,32 @@ export const PagesList: React.FC<PagesListProps> = ({
       </section>
 
       <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Pages")}>
-        {loading && pages.length > 0 && <div className="h-0.5 w-full overflow-hidden bg-muted"><div className="h-full w-1/3 animate-pulse bg-primary" /></div>}
-        {error && pages.length > 0 && <p role="alert" className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">{error}</p>}
-        {pages.length === 0 ? (
+        {loading && pages.length > 0 && <div role="status" aria-label={tr("Loading")} className="h-0.5 w-full overflow-hidden bg-muted"><div className="h-full w-1/3 animate-pulse bg-primary" /></div>}
+        {error && pages.length > 0 && <div role="alert" className="flex flex-wrap items-center justify-between gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive"><span>{error}</span><Button size="sm" variant="outline" onClick={() => void fetchPages()} className="min-h-10 gap-2"><RefreshCw className="size-4" aria-hidden="true" />{tr("Try again")}</Button></div>}
+        {loading && pages.length === 0 ? (
+          <div role="status" aria-label={tr("Loading")} aria-busy="true">
+            {[1, 2, 3, 4].map((item) => (
+              <div key={item} className="flex min-h-[76px] items-center gap-4 border-b border-border/50 py-3 last:border-b-0">
+                <span className="h-12 w-16 shrink-0 animate-pulse rounded-md bg-muted" />
+                <span className="w-full max-w-sm space-y-2">
+                  <span className="block h-4 w-2/3 animate-pulse rounded bg-muted" />
+                  <span className="block h-3 w-1/2 animate-pulse rounded bg-muted/70" />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : error && pages.length === 0 ? (
+          <div role="alert" className="flex flex-col items-start gap-3 py-12 text-sm">
+            <div className="flex items-center gap-2 font-semibold text-destructive">
+              <AlertCircle className="size-5" aria-hidden="true" />
+              {tr("Unable to load static pages")}
+            </div>
+            <p className="max-w-xl break-words text-muted-foreground">{error}</p>
+            <Button type="button" variant="outline" onClick={() => void fetchPages()} className="min-h-11 gap-2">
+              <RefreshCw className="size-4" aria-hidden="true" />{tr("Try again")}
+            </Button>
+          </div>
+        ) : pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
             <FileCode className="size-9 opacity-40" aria-hidden="true" />
             <p className="font-medium text-foreground">{tr("No pages found")}</p>
@@ -367,11 +353,12 @@ export const PagesList: React.FC<PagesListProps> = ({
             )}
           </div>
         ) : (
-          <div role="list" aria-label={tr("Pages")} className="divide-y divide-border/60">
+          <div role="list" aria-label={tr("Pages")} className="min-w-0">
             {pages.map((item) => (
               <EditorialListRow
                 key={item.id}
                 title={item.title}
+                 resource="page"
                 authorName={item.authors?.[0]?.name}
                 date={item.status === "published" && item.publishedAt ? item.publishedAt : item.updatedAt}
                 status={item.status}
