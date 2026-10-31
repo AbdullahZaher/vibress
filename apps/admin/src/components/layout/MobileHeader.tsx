@@ -30,7 +30,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   // Derive a human-friendly title for the top header based on the current path
   const getPageTitle = () => {
     if (currentPath === "/admin" || currentPath === "/admin/")
-      return "Analytics";
+      return "Dashboard";
     if (currentPath.startsWith("/admin/posts/new")) return "New Post";
     if (currentPath.startsWith("/admin/posts/drafts")) return "Drafts";
     if (currentPath.startsWith("/admin/posts/review")) return "In review";

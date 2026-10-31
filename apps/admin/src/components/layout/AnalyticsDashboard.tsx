@@ -315,8 +315,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     <div className="space-y-8 w-full max-w-7xl mx-auto">
       {/* Page Title Header */}
       <AdminPageHeader
-        title={tr(canReadAnalytics ? "Analytics" : "Editorial overview")}
-        description={tr(canReadAnalytics ? "Monitor publication traffic, readership engagement, and subscriber growth." : "Your editorial workspace at a glance.")}
+        title={tr("Dashboard")}
+        description={tr("Your editorial workspace at a glance.")}
       />
 
       {/* Editorial work queue: show the next operational actions before analytics. */}

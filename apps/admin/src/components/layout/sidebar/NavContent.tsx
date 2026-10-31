@@ -16,7 +16,7 @@ interface NavContentProps {
   canReadTranslations: boolean;
 }
 
-const activeClass = "bg-sidebar-accent text-foreground font-semibold border border-sidebar-border/60";
+const activeClass = "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary";
 const inactiveClass = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground";
 const linkClass = "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-start font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring";
 
@@ -59,7 +59,7 @@ export const NavContent: React.FC<NavContentProps> = ({
 
   return (
     <nav aria-label={tr("Content")} className="space-y-0.5 text-sm">
-      <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
+      <p className="px-2.5 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tr("Content")}</p>
 
       {canReadPosts && (
         <>

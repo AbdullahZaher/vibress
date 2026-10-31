@@ -1,6 +1,6 @@
 import React from "react";
 import { useAdminLocale } from "../../../lib/admin-locale";
-import { TrendingUp, AppWindow } from "lucide-react";
+import { LayoutDashboard, AppWindow } from "lucide-react";
 
 interface NavMainProps {
   currentPath: string;
@@ -30,8 +30,8 @@ export const NavMain: React.FC<NavMainProps> = ({
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >
-        <TrendingUp className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>{tr("Analytics")}</span>
+        <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>{tr("Dashboard")}</span>
       </button>
 
 

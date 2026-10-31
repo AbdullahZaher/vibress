@@ -28,6 +28,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   const { tr } = useAdminLocale();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -45,7 +46,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     if (isOpen) {
       document.addEventListener("keydown", handleKeyDown);
@@ -57,11 +61,13 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     <div className="relative" ref={menuRef}>
       {/* User Card Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         aria-label={tr("Account menu")}
         aria-expanded={isOpen}
+        aria-haspopup="true"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-start flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-all cursor-pointer select-none"
+        className="w-full min-h-11 text-start flex items-center justify-between p-2 rounded-xl bg-card border border-border hover:border-border/90 hover:bg-muted/30 transition-colors cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-ring"
         title={tr("Account menu")}
       >
         <div className="flex items-center gap-2.5 overflow-hidden">
