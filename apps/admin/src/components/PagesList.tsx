@@ -293,7 +293,7 @@ export const PagesList: React.FC<PagesListProps> = ({
                   className="min-h-11 w-full rounded-lg border-border/80 bg-card ps-9 text-sm"
                 />
               </div>
-              <label className="flex min-h-10 items-center gap-2 text-xs text-muted-foreground">
+              <label className="flex min-h-10 items-center gap-2 text-sm text-muted-foreground">
                 <span className="shrink-0">{tr("Sort by")}</span>
                 <select
                   value={sortBy}

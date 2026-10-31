@@ -3,7 +3,6 @@ import { BarChart3, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { IconButton } from "../ui/icon-button";
 
-
 export interface EditorialListRowProps {
   title: string;
   authorName?: string | null | undefined;
@@ -141,9 +140,9 @@ export function EditorialListRow({
           <IconButton
             label={tr("Analytics Dashboard")}
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
-            variant="outline"
+            variant="ghost"
             onClick={onStatistics}
-            className="h-10 w-10 rounded-lg"
+            className="h-10 w-10 rounded-lg border-0"
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
@@ -151,9 +150,9 @@ export function EditorialListRow({
           <IconButton
             label={tr("Edit")}
             accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
-            variant="outline"
+            variant="ghost"
             onClick={onEdit}
-            className="h-10 w-10 rounded-lg"
+            className="h-10 w-10 rounded-lg border-0"
           >
             <Pencil className="size-4" aria-hidden="true" />
           </IconButton>

@@ -50,6 +50,9 @@ describe("EditorialListRow", () => {
     expect(row?.textContent).toContain("Draft");
     expect(moreAction?.className).toContain("h-10");
     expect(editAction).not.toBeNull();
+    const visibleEdit = Array.from(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+      .find(button => button.textContent?.trim() === "" && button.getAttribute("aria-label") === "Edit: Hello there" && !button.className.includes("inset-0"));
+    expect(visibleEdit?.className).toContain("hover:bg-accent");
   });
 
   it("shows a thumbnail only when the post has a working feature image", () => {

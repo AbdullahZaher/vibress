@@ -232,3 +232,12 @@ The design direction of **Vibress Editorial Workspace** draws on the actual sour
 - **RTL/localization:** preserve tr() translations, CSS logical spacing, date formatting, and dir=auto for mixed-script editorial titles.
 - **Accessibility:** preserve accessible row buttons, keyboard focus, the action menu and destructive confirmations. Never rely on status color alone: visible status text is retained.
 - **Release QA:** CI must finish; authenticated visual verification at 320, 390, 768, 1024 and 1440px in Arabic/English and light/dark, with keyboard, screen-reader, 200% text zoom and row-action checks, remains required before any claims of complete WCAG conformance.
+
+
+### Second design review — October 31, 2026
+- The existing screenshots in `docs/design/screenshots/redesign/` document the pre-PR editorial UI (the old bordered filters and repeated placeholder images); they do not validate the new PR render.
+- Kept semantic status color **and** explicit status text. A calculation of CSS-token text contrast against the editorial white surface exceeds 4.5:1 for light-theme published, scheduled and review labels; full WCAG verification requires the running UI.
+- Updated row analytics/edit actions to use the shared borderless ghost variant, retaining 40px targets and visible focus so secondary actions do not compete with the article title.
+- Updated the sort labels on Posts and Pages to legible 14px type; no change to the server-backed sorting behavior.
+- Post images intentionally display only when the resource has a source image; invalid-source handling still requires browser verification for layout shift at real network speeds.
+- Ghost remains a conceptual benchmark, not a copied theme. See the preceding source links.
