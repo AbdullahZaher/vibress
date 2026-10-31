@@ -12,6 +12,8 @@ export interface EditorialListRowProps {
   imageUrl?: string | null | undefined;
   featured?: boolean | undefined;
   onEdit?: (() => void) | undefined;
+  editHref?: string | undefined;
+  selectionMode?: boolean | undefined;
   onPublishToggle?: (() => void) | undefined;
   onDelete?: (() => void) | undefined;
   selected?: boolean | undefined;
@@ -22,7 +24,7 @@ export interface EditorialListRowProps {
 /** Shared, responsive editorial row for posts and pages. Actions remain explicit and permission-driven. */
 export function EditorialListRow({
   title, resource = "post", authorName, date, status, imageUrl, featured = false,
-  onEdit, onPublishToggle, onDelete, selected = false, onSelect, selectionLabel,
+  onEdit, editHref, onPublishToggle, onDelete, selected = false, selectionMode = false, onSelect, selectionLabel,
 }: EditorialListRowProps) {
   const { tr, formatDate } = useAdminLocale();
   const [imageFailed, setImageFailed] = useState(false);
@@ -127,37 +129,51 @@ export function EditorialListRow({
         : "text-muted-foreground";
 
   return (
-    <div role="listitem" data-selected={selected ? "true" : undefined} className={`group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 data-[selected=true]:bg-muted/50 sm:gap-4 sm:px-3 last:border-b-0 ${onEdit ? "cursor-pointer" : ""}`}>
+    <div role="listitem" data-selected={selected ? "true" : undefined} className={`group relative flex min-h-[80px] items-center gap-3 border-b border-border/50 px-1 py-3 transition-colors hover:bg-muted/35 focus-within:z-20 focus-within:bg-muted/35 data-[selected=true]:bg-primary/7 sm:gap-4 sm:px-3 last:border-b-0 ${onEdit ? "cursor-pointer" : ""}`}>
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
-      {onEdit && (
+      {onEdit && (editHref ? (
+        <a
+          href={editHref}
+          onClick={(event) => {
+            if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+              event.preventDefault();
+              onEdit();
+            }
+          }}
+          aria-label={`${tr("Edit")}: ${displayTitle}`}
+          className="absolute inset-0 z-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+        />
+      ) : (
         <button
           type="button"
           onClick={onEdit}
           aria-label={`${tr("Edit")}: ${displayTitle}`}
           className="absolute inset-0 z-0 cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
         />
-      )}
+      ))}
       {onSelect && (
-        <label className="relative z-10 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-muted/60">
+        <label
+          className={`absolute start-3 top-1/2 z-20 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg border border-border/60 bg-card/95 shadow-sm transition-opacity focus-within:opacity-100 focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto ${selected || selectionMode ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"}`}
+        >
           <input
             type="checkbox"
             checked={selected}
             onChange={(event) => onSelect(event.target.checked)}
             aria-label={selectionLabel || `${tr("Select")}: ${displayTitle}`}
-            className="size-4 accent-primary"
+            className="size-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           />
         </label>
       )}
-      {/* Reserve image geometry for every row to keep titles aligned across missing/broken images. */}
-      {(resource === "post" || Boolean(imageUrl)) && <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
+      {/* Stable artwork geometry: contextual selection overlays the thumbnail instead of occupying a permanent column. */}
+      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/60 text-muted-foreground/50 sm:h-14 sm:w-20" aria-hidden="true">
         {imageUrl && !imageFailed ? (
           <img src={imageUrl} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} className="h-full w-full object-cover" />
         ) : resource === "page" ? <FileText className="size-4" /> : <ImageIcon className="size-4" />}
-      </div>}
+      </div>
 
       <div className="min-w-0 flex-1 space-y-1.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 dir="auto" className="max-w-full break-words text-start text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:underline group-hover:underline-offset-4">
+          <h3 dir="auto" className="max-w-full break-words text-start text-base font-semibold leading-snug text-foreground transition-colors group-hover:underline group-hover:underline-offset-4">
             {displayTitle}
           </h3>
           {featured && (

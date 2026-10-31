@@ -310,3 +310,21 @@ Empty states contain explanatory text and filter recovery only. The existing per
 
 ### Request-identity guard
 Posts/Pages now tie each loaded/error state to the exact page, size, filter, sort and debounced query key. Changes to status or sort immediately show a non-interactive pending view, before effects start the next API call. Stale previous errors are never presented as the new query result.
+
+
+## 2026-10-31 — Editorial disclosure controls (Ghost-informed)
+
+### Creative direction
+The content list, not its controls, is the primary visual surface. A small search control, `Filter` disclosure, `Sort` disclosure and optional `Select` mode replace always-visible native selects and a second sort-direction control. Both lists reuse `EditorialChoiceMenu` and `EditorialStatusFilter`, so RTL, contrast, focus and spacing remain aligned.
+
+- **Filter & Sort:** compact 44px triggers, hidden popover until clicked, checked option in a viewport-aware menu; native-like keyboard traversal (arrows, Home/End, Escape and focus restoration), outside dismissal and direction-aware placement. Applied also to pagination's page size.
+- **Active filters:** small removable chips show selected status or non-default sort, restoring context without leaving fields expanded.
+- **Selection:** the 40px checkbox overlay remains accessible by hover or keyboard focus on pointer devices, and through explicit `Select` mode for touch users. It doesn't occupy a permanent list column. The existing bulk toolbar is shown only for actual selected items and remains permission-gated.
+- **Navigation:** each editable article/page has a real `href` overlay, preserving Cmd/Ctrl-click and open-in-new-tab; ordinary activation still uses the SPA route.
+- **Layout:** status and metadata remain true to API values, list titles use 16px text, global analytics leaves the list header, and blank publications get a distinct empty heading from zero search results.
+- **Accessibility:** keep visible keyboard focus and available 44px trigger targets, no reliance on hover to expose touch selection, no loss of Arabic translations, page-sort/query persistence or user capabilities.
+
+### Comparison/reference and acceptance checks
+Ghost's current React PostsListScreen reveals filter choices on demand; its PostListRow uses contextual selection and a distinct selected surface rather than a permanently visible checkbox column. Radix UI's menu documentation establishes the keyboard and focus conventions implemented with existing React primitives here, without adding dependencies. See official sources: https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/posts-list-screen.tsx and https://www.radix-ui.com/primitives/docs/components/dropdown-menu.
+
+Acceptance requires CI Typecheck/Lint/Unit/E2E/Build plus actual browser verification at 320/390/768/1024/1440 px, Arabic RTL and English LTR, light/dark, keyboard Tab/arrow/Escape, screenreader labels and touch selection. A numeric design score is not certified until actual screenshots have been checked.

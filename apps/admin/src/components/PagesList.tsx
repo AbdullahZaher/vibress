@@ -4,12 +4,13 @@ import { apiRequest } from "../lib/api";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { EditorialListRow } from "./common/EditorialListRow";
 import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
+import { EditorialChoiceMenu } from "./common/EditorialChoiceMenu";
 import { EditorialPagination } from "./common/EditorialPagination";
 import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X, BarChart3 } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -51,7 +52,6 @@ const STATUS_FILTERS = [
 export const PagesList: React.FC<PagesListProps> = ({
   onNavigate,
   canPublish,
-  canViewAnalytics = false,
   canCreate = false,
   canEdit = false,
   canDelete = false,
@@ -73,6 +73,7 @@ export const PagesList: React.FC<PagesListProps> = ({
   const [sortBy, setSortBy] = useState<PageSortBy>(initialView.sortBy);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialView.sortOrder);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
@@ -234,19 +235,10 @@ export const PagesList: React.FC<PagesListProps> = ({
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
         title={tr("Pages")}
-        actions={canCreate || canViewAnalytics ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {canViewAnalytics && (
-              <Button type="button" variant="outline" onClick={() => onNavigate("/admin")} className="min-h-11 gap-2">
-                <BarChart3 className="size-4" aria-hidden="true" /> {tr("Analytics overview")}
-              </Button>
-            )}
-            {canCreate && (
-              <Button onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2">
-                <Plus className="size-4" aria-hidden="true" /> {tr("New Page")}
-              </Button>
-            )}
-          </div>
+        actions={canCreate ? (
+          <Button onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2">
+            <Plus className="size-4" aria-hidden="true" />{tr("New Page")}
+          </Button>
         ) : undefined}
       />
 
@@ -259,61 +251,104 @@ export const PagesList: React.FC<PagesListProps> = ({
         </div>
       )}
 
-      <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1 xl:sticky xl:top-0 xl:z-20 xl:bg-card/95 xl:backdrop-blur-md" aria-label={tr("Content filters")}>
-        <div className="flex min-w-0 flex-col gap-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <EditorialStatusFilter
-              label={tr("Filter by status")}
-              options={STATUS_FILTERS.map((option) => ({ value: option.value, label: tr(option.label) }))}
-              value={statusFilter}
-              onChange={(value) => { setStatusFilter(value); setPage(0); }}
+      <section className="vibress-editorial-filterbar space-y-3 py-2" aria-label={tr("Content filters")}>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="relative min-w-[9rem] flex-[1_1_13rem] sm:max-w-sm">
+            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              type="search"
+              placeholder={tr("Search pages by title or slug...")}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label={tr("Search pages by title or slug...")}
+              className="min-h-11 w-full rounded-lg border-border/70 bg-card ps-9 text-sm"
             />
-
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
-              <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none xl:w-64">
-                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
-                  type="search"
-                  placeholder={tr("Search pages by title or slug...")}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  aria-label={tr("Search pages by title or slug...")}
-                  className="min-h-11 w-full rounded-lg border-border/80 bg-card ps-9 text-sm"
-                />
-              </div>
-              <label className="flex min-h-10 items-center gap-2 text-sm text-muted-foreground">
-                <span className="shrink-0">{tr("Sort by")}</span>
-                <select
-                  value={sortBy}
-                  onChange={(event) => { setSortBy(event.target.value as PageSortBy); setPage(0); }}
-                  className="min-h-11 min-w-0 rounded-lg border border-border/80 bg-card px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer sm:w-40"
-                  aria-label={tr("Sort by")}
-                >
-                  <option value="updatedAt">{tr("Recently updated")}</option>
-                  <option value="createdAt">{tr("Newest created")}</option>
-                  <option value="publishedAt">{tr("Publication date")}</option>
-                  <option value="title">{tr("Title")}</option>
-                </select>
-              </label>
-              <Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
-                {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
-              </Button>
-            </div>
           </div>
+          <EditorialStatusFilter
+            label={tr("Filter")}
+            options={STATUS_FILTERS.map(option => ({ value: option.value, label: tr(option.label) }))}
+            value={statusFilter}
+            onChange={(value) => { setStatusFilter(value); setPage(0); }}
+          />
+          <EditorialChoiceMenu
+            label={tr("Sort")}
+            options={(
+              [
+                ["updatedAt", "Recently updated"],
+                ["createdAt", "Newest created"],
+                ["publishedAt", "Publication date"],
+                ["title", "Title"],
+              ] as const
+            ).flatMap(([field, title]) => [
+              { value: `${field}:desc`, label: `${tr(title)} · ${tr("Descending")}` },
+              { value: `${field}:asc`, label: `${tr(title)} · ${tr("Ascending")}` },
+            ])}
+            value={`${sortBy}:${sortOrder}`}
+            onChange={(value) => {
+              const [field, order] = value.split(":");
+              setSortBy(field as PageSortBy);
+              setSortOrder(order === "asc" ? "asc" : "desc");
+              setPage(0);
+            }}
+            active={sortBy !== "updatedAt" || sortOrder !== "desc"}
+            icon={<ArrowDownUp className="size-4" aria-hidden="true" />}
+          />
+          {selectionEnabled && (
+            <Button
+              type="button"
+              variant={selectionMode || selectedIds.size > 0 ? "secondary" : "ghost"}
+              size="sm"
+              className="min-h-11 gap-2"
+              aria-pressed={selectionMode}
+              onClick={() => {
+                setSelectionMode((active) => !active);
+                setSelectedIds(new Set());
+              }}
+            >
+              <CheckSquare2 className="size-4" aria-hidden="true" />
+              {tr("Select")}
+            </Button>
+          )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          {selectionEnabled && !resultsPending && !error && pages.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={allVisibleSelected}
-              disabled={resultsPending || pages.length === 0}
-              onChange={(event) => setSelectedIds(event.target.checked ? new Set(visibleIds) : new Set())}
-              className="size-4 accent-primary"
-              aria-label={tr("Select all on this page")}
-            />
-            {tr("Select all on this page")}
-          </label>}
-          <span aria-live="polite" className="text-sm text-muted-foreground">{resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}</span>
+        {(statusFilter !== "all" || sortBy !== "updatedAt" || sortOrder !== "desc") && (
+          <div className="flex flex-wrap items-center gap-2" aria-label={tr("Active filters")}>
+            {statusFilter !== "all" && (
+              <button type="button" className="inline-flex min-h-9 items-center gap-1 rounded-full bg-muted px-3 text-xs font-medium text-foreground hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-ring" onClick={() => { setStatusFilter("all"); setPage(0); }}>
+                {tr(STATUS_FILTERS.find(option => option.value === statusFilter)?.label || "All Pages")}
+                <X className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">{tr("Clear filters")}</span>
+              </button>
+            )}
+            {(sortBy !== "updatedAt" || sortOrder !== "desc") && (
+              <button type="button" className="inline-flex min-h-9 items-center gap-1 rounded-full bg-muted px-3 text-xs font-medium text-foreground hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-ring" onClick={() => { setSortBy("updatedAt"); setSortOrder("desc"); setPage(0); }}>
+                {tr("Sort")}: {tr(sortBy === "updatedAt" ? "Recently updated" : sortBy === "createdAt" ? "Newest created" : sortBy === "publishedAt" ? "Publication date" : "Title")}
+                <X className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">{tr("Clear filters")}</span>
+              </button>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
+          {selectionEnabled && !resultsPending && !error && pages.length > 0 && (
+            <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                disabled={resultsPending || pages.length === 0}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setSelectedIds(next ? new Set(visibleIds) : new Set());
+                  if (next) setSelectionMode(true);
+                }}
+                aria-label={tr("Select all on this page")}
+                className="size-4 accent-primary"
+              />
+              {tr("Select all on this page")}
+            </label>
+          )}
+          <span aria-live="polite" className="text-sm text-muted-foreground">
+            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}
+          </span>
         </div>
         {!resultsPending && !error && selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -367,11 +402,11 @@ export const PagesList: React.FC<PagesListProps> = ({
         ) : pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
             <FileText className="size-9 opacity-40" aria-hidden="true" />
-            <p className="font-medium text-foreground">{tr("No pages found")}</p>
+            <p className="font-medium text-foreground">{searchQuery || statusFilter !== "all" ? tr("No pages found") : tr("No pages yet")}</p>
             <p className="max-w-md text-sm">
               {searchQuery || statusFilter !== "all"
                 ? tr("Try a different search or filter.")
-                : tr("No pages yet. Create your first page to get started.")}
+                : tr("Create your first page to get started.")}
             </p>
             {(searchQuery || statusFilter !== "all") && (
               <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
@@ -390,9 +425,11 @@ export const PagesList: React.FC<PagesListProps> = ({
                 date={item.status === "published" && item.publishedAt ? item.publishedAt : item.status === "scheduled" && item.scheduledAt ? item.scheduledAt : item.updatedAt}
                 status={item.status}
                 onEdit={canEdit ? () => onNavigate(`/admin/pages/${item.id}`) : undefined}
+                editHref={canEdit ? `/admin/pages/${item.id}` : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(item) : undefined}
                 onDelete={canDelete ? () => requestDelete(item.id) : undefined}
-                onSelect={selectionEnabled ? (selected) => toggleSelection(item.id, selected) : undefined}
+                onSelect={selectionEnabled ? (selected) => { toggleSelection(item.id, selected); if (selected) setSelectionMode(true); } : undefined}
+                selectionMode={selectionMode}
                 selected={selectedIds.has(item.id)}
                 selectionLabel={`${tr("Select")}: ${item.title || tr("(Untitled)")}`}
               />

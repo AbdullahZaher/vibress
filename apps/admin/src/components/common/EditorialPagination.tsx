@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { EditorialChoiceMenu } from "./EditorialChoiceMenu";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Button } from "../ui/button";
 
@@ -31,19 +32,13 @@ export function EditorialPagination({
         {tr("Showing")} {formatNumber(firstItem)}–{formatNumber(lastItem)} {tr("of")} {formatNumber(total)}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>{tr("Rows per page")}</span>
-          <select
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            className="min-h-11 rounded-lg border border-border bg-card px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            aria-label={tr("Rows per page")}
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </label>
+        <EditorialChoiceMenu
+          label={`${formatNumber(pageSize)} ${tr("Rows per page")}`}
+          options={[25, 50, 100].map(size => ({ value: String(size), label: `${formatNumber(size)} ${tr("Rows per page")}` }))}
+          value={String(pageSize)}
+          onChange={(value) => onPageSizeChange(Number(value))}
+          compact
+        />
         <Button
           type="button"
           variant="outline"
