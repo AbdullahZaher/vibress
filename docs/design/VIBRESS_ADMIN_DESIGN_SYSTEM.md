@@ -265,3 +265,8 @@ Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github
 - Automated: TypeScript, lint, editorial row tests, mobile filter tests, and full existing CI.
 - Browser: compare real authenticated Posts/Pages screenshots at 320, 390, 768, 1024 and 1440px; Arabic RTL and English LTR, both themes, 200% zoom, many items, zero items, reload, failed image, failed list fetch, last-row menu and bulk actions.
 - This is a reviewable implementation, **not** a certified 9.5/10 score until the browser gates above pass.
+
+
+### Final editorial copy polish
+- Ghost-style resource lists start with the resource name and a single primary **New Post / New Page** action; remove lengthy descriptive subtitle from those two high-frequency screens only.
+- Status selects show **All Posts** and **All Pages**, not an ambiguous unqualified `All`, especially on 320px Arabic screens. Keys remain localized with the existing Arabic dictionary.

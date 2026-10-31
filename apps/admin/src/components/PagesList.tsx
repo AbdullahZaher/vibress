@@ -38,7 +38,7 @@ interface PagesListProps {
 }
 
 const STATUS_FILTERS = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All Pages" },
   { value: "draft", label: "Drafts" },
   { value: "in_review", label: "In review" },
   { value: "changes_requested", label: "Changes requested" },
@@ -217,10 +217,9 @@ export const PagesList: React.FC<PagesListProps> = ({
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
         title={tr("Pages")}
-        description={tr("Manage standalone site pages, legal policies, and landing documents.")}
         actions={canCreate ? (
           <Button onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2 self-start text-sm sm:self-auto">
-            <Plus className="size-4" aria-hidden="true" /> {tr("Create Page")}
+            <Plus className="size-4" aria-hidden="true" /> {tr("New Page")}
           </Button>
         ) : undefined}
       />
@@ -357,7 +356,7 @@ export const PagesList: React.FC<PagesListProps> = ({
             )}
             {!debouncedSearch && !searchQuery && statusFilter === "all" && canCreate && (
               <Button size="sm" onClick={() => onNavigate("/admin/pages/new")} className="min-h-11 gap-2">
-                <Plus className="size-4" aria-hidden="true" /> {tr("Create Page")}
+                <Plus className="size-4" aria-hidden="true" /> {tr("New Page")}
               </Button>
             )}
           </div>

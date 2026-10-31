@@ -41,7 +41,7 @@ interface PostsListProps {
 }
 
 const STATUS_FILTERS = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All Posts" },
   { value: "draft", label: "Drafts" },
   { value: "in_review", label: "In review" },
   { value: "changes_requested", label: "Changes requested" },
@@ -220,10 +220,9 @@ export const PostsList: React.FC<PostsListProps> = ({
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
       <AdminPageHeader
         title={tr("Posts")}
-        description={tr("Manage editorial articles, revisions, and publication schedules.")}
         actions={canCreate ? (
           <Button onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2 self-start text-sm sm:self-auto">
-            <Plus className="size-4" aria-hidden="true" /> {tr("Create Post")}
+            <Plus className="size-4" aria-hidden="true" /> {tr("New Post")}
           </Button>
         ) : undefined}
       />
@@ -360,7 +359,7 @@ export const PostsList: React.FC<PostsListProps> = ({
             )}
             {!debouncedSearch && !searchQuery && statusFilter === "all" && canCreate && (
               <Button size="sm" onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2">
-                <Plus className="size-4" aria-hidden="true" /> {tr("Create Post")}
+                <Plus className="size-4" aria-hidden="true" /> {tr("New Post")}
               </Button>
             )}
           </div>
