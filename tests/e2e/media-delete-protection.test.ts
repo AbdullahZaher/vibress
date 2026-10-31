@@ -91,7 +91,10 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     );
     await confirm.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog", { name: "Asset Preview & Details" })).toBeVisible();
-    await expect(page.getByRole("img", { name: "dp-final.png" })).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Asset Preview & Details" })
+        .getByRole("img", { name: "dp-final.png" })
+    ).toBeVisible();
 
     // Backend verification as ground truth
     const delRes = await request.delete(

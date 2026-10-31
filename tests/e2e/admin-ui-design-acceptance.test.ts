@@ -10,7 +10,10 @@ const BASE = "http://localhost:7777";
 async function login(page: Page) {
   await page.goto(`${BASE}/admin`);
   const email = page.locator("#email");
-  if (await email.isVisible({ timeout: 10000 }).catch(() => false)) {
+  // Locator.isVisible() is instantaneous; wait for either the sign-in form
+  // or an already-authenticated shell before deciding which state we are in.
+  await expect(email.or(page.locator("#admin-main")).first()).toBeVisible({ timeout: 15000 });
+  if (await email.isVisible()) {
     await email.fill("owner@example.com");
     await page.locator("#password").fill("OwnerPass123!");
     await page.locator('button[type="submit"]').click();

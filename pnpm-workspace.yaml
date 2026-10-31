@@ -23,6 +23,9 @@ overrides:
   seroval-plugins: 1.6.11
   systeminformation: 5.33.16
   source-map-js: 1.2.2
+  # The gaxios -> rimraf@5 -> glob@10 chain carries two moderate advisories.
+  # Scope the upgrade to rimraf's glob edge to avoid changing unrelated tooling.
+  "rimraf@5>glob": 14.0.2
 allowBuilds:
   argon2: true
   esbuild: true
