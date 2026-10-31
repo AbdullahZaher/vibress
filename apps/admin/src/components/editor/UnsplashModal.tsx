@@ -370,10 +370,11 @@ export const UnsplashModal: React.FC<UnsplashModalProps> = ({
                     <div className="mt-8 text-center">
                       <Button
                         variant="outline"
-                        size="sm"
-                        disabled={isLoadingMore}
+                        size="default"
+                        loading={isLoadingMore}
+                        loadingLabel={tr("Loading...")}
                         onClick={() => performSearch(debouncedQuery, page + 1, true)}
-                        className="px-6 rounded-xl"
+                        className="px-6"
                       >
                         {isLoadingMore ? (
                           <>

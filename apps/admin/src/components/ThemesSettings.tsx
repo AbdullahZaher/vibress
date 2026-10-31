@@ -390,21 +390,22 @@ export const ThemesSettings: React.FC = () => {
 
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon-sm"
                       onClick={() => handlePreview(t.manifest.id)}
-                      className="h-8 px-2.5 text-xs border-border bg-card hover:bg-accent text-foreground gap-1"
+                      aria-label="Preview theme live"
                       title="Preview theme live"
                     >
-                      <Eye className="h-3.5 w-3.5" />
+                      <Eye className="size-4" aria-hidden="true" />
                     </Button>
 
                     {!t.isBuiltIn && !isActive && (
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={deleting === t.manifest.id}
+                        variant="destructive-outline"
+                        size="icon-sm"
+                        loading={deleting === t.manifest.id}
+                        loadingLabel="Uninstalling theme..."
                         onClick={() => handleDelete(t.manifest.id)}
-                        className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                        aria-label="Uninstall theme"
                         title="Uninstall theme"
                       >
                         {deleting === t.manifest.id ? (

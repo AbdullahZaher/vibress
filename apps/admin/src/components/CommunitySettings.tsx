@@ -73,7 +73,7 @@ export function CommunitySettings({ canModerate = false }: { canModerate?: boole
             variant="ghost"
             size="sm"
             onClick={refresh}
-            className="h-6 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/20"
+            className="shrink-0"
           >
             Retry
           </Button>
