@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
@@ -90,6 +90,22 @@ export function EditorialListRow({
     };
   }, [actionsOpen]);
 
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+    if (!buttons.length) return;
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      buttons[(index + delta + buttons.length) % buttons.length]?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      buttons[event.key === "Home" ? 0 : buttons.length - 1]?.focus();
+    } else if (event.key === "Tab") {
+      setActionsOpen(false);
+    }
+  };
+
   const displayTitle = title.trim() || tr("(Untitled)");
   const isPublished = status === "published";
   const publishLabel = isPublished ? tr("Unpublish") : tr("Publish");
@@ -171,6 +187,7 @@ export function EditorialListRow({
             aria-label={`${tr("More actions")}: ${displayTitle}`}
             aria-expanded={actionsOpen}
             aria-controls={actionsId}
+            aria-haspopup="menu"
             title={tr("More actions")}
             onClick={toggleMenu}
             className="inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
@@ -181,14 +198,16 @@ export function EditorialListRow({
             <div
               ref={menuRef}
               id={actionsId}
-              role="group"
+              role="menu"
               aria-label={tr("More actions")}
+              onKeyDown={handleMenuKeyDown}
               className="fixed z-[90] min-w-44 overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
               style={{ top: menuPosition.top, left: menuPosition.left, width: Math.min(192, window.innerWidth - 16), maxHeight: menuPosition.maxHeight }}
             >
               {onPublishToggle && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => { setActionsOpen(false); onPublishToggle(); }}
                   className="flex min-h-10 w-full items-center rounded-md px-3 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
@@ -198,6 +217,7 @@ export function EditorialListRow({
               {onDelete && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => { setActionsOpen(false); onDelete(); }}
                   className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-start text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-ring"
                 >

@@ -295,3 +295,7 @@ The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px).
 - Quick sidebar status views use distinct route keys and do not mutate the main Posts/Pages saved list state.
 - On every query transition, show only the loading skeleton, then the matching response or a retryable error. Previously loaded rows and bulk controls are unavailable until the new query succeeds, avoiding destructive actions against stale filters.
 - Pagination is suppressed during loading and failed requests; its count cannot suggest outdated results.
+
+
+### Accessible contextual menu — source-level review
+The row contextual actions now expose menu and menuitem semantics, a menu-capable trigger, and ArrowUp/ArrowDown/Home/End keyboard traversal. Existing viewport-aware portal positioning, outside-click dismissal and Escape focus return remain intact. A focused Vitest regression case checks keyboard behavior without adding a UI dependency.
