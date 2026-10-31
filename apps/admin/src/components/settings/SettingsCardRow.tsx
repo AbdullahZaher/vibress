@@ -27,28 +27,28 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
   disabled = false,
 }) => {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 transition-colors">
-      <div className="flex items-start gap-3.5 max-w-xl">
+    <div className="flex min-w-0 flex-col justify-between gap-4 px-4 py-4 transition-colors sm:flex-row sm:items-center sm:px-5">
+      <div className="flex min-w-0 max-w-2xl items-start gap-3">
         {icon && (
-          <div className="size-8 rounded-lg bg-muted/60 text-muted-foreground flex items-center justify-center shrink-0 mt-0.5 border border-border/40">
+          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
             {icon}
           </div>
         )}
-        <div className="space-y-0.5">
+        <div className="min-w-0 space-y-1">
           <h4 className="text-sm font-semibold text-foreground tracking-tight">
             {title}
           </h4>
           {description && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}
         </div>
       </div>
 
-      <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
         {currentValue && (
-          <div className="text-xs font-medium text-muted-foreground text-right">
+          <div className="min-w-0 break-words text-end text-sm font-medium text-muted-foreground">
             {currentValue}
           </div>
         )}
@@ -60,7 +60,7 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
             variant={actionVariant}
             onClick={onAction}
             disabled={disabled}
-            className="h-8 text-xs font-semibold px-3 cursor-pointer shrink-0 gap-1.5 transition-all bg-card/80 hover:bg-muted/80 border-border/80 text-foreground"
+            className="min-h-10 shrink-0 gap-1.5 px-3 text-sm"
           >
             <span>{actionLabel}</span>
             {isExpanded !== undefined &&

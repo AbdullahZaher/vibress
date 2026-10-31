@@ -265,7 +265,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-border/70 bg-card p-3 sm:p-4" aria-label={tr("Content filters")}>
+      <section className="space-y-4 rounded-xl border border-border/80 bg-card p-4 sm:p-5" aria-label={tr("Content filters")}>
         <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div role="group" aria-label={tr("Filter by status")} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
             {STATUS_FILTERS.map((status) => (
@@ -275,7 +275,7 @@ export const PostsList: React.FC<PostsListProps> = ({
                 onClick={() => { setStatusFilter(status.value); setPage(0); }}
                 aria-pressed={statusFilter === status.value}
                 className={statusFilter === status.value
-                  ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted px-3 text-sm font-semibold text-foreground shadow-2xs"
+                  ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted/70 px-3 text-sm font-semibold text-foreground"
                   : "min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"}
               >
                 {tr(status.label)}

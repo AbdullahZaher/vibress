@@ -20,7 +20,7 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   return (
-    <div className="space-y-3 px-4 pt-4 pb-2">
+    <div className="space-y-4 px-3.5 pb-2 pt-5">
       {/* Brand Logo + Wordmark + Actions */}
       <div className="flex items-center justify-between px-1 pt-1 pb-1">
         <button
@@ -81,7 +81,7 @@ export const AppSidebarHeader: React.FC<AppSidebarHeaderProps> = ({
           }
           onCloseSidebar?.();
         }}
-        className="w-full flex min-h-11 items-center justify-between rounded-xl border border-sidebar-border bg-muted/30 hover:bg-sidebar-accent text-sm text-muted-foreground hover:text-foreground px-3.5 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex min-h-11 w-full items-center justify-between rounded-lg border border-sidebar-border bg-card/60 px-3.5 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <div className="flex items-center gap-2">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
